@@ -734,8 +734,8 @@ public partial class SuflaeParser
                 TokenType.U8Literal,
                 TokenType.S128Literal,
                 TokenType.U128Literal,
-                TokenType.SaddrLiteral,
-                TokenType.UaddrLiteral,
+                TokenType.SAddrLiteral,
+                TokenType.UAddrLiteral,
                 TokenType.Decimal,
                 TokenType.F16Literal,
                 TokenType.F32Literal,
@@ -1222,11 +1222,11 @@ public partial class SuflaeParser
                 TokenType.S32Literal,
                 TokenType.S64Literal,
                 TokenType.S128Literal,
-                TokenType.SaddrLiteral,
+                TokenType.SAddrLiteral,
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
-                TokenType.UaddrLiteral))
+                TokenType.UAddrLiteral))
         {
             Token token = PeekToken(offset: -1);
             string cleanValue = token.Text

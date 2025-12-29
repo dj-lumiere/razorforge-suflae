@@ -194,11 +194,11 @@ public partial class SuflaeTokenizer
         [key: "s32"] = TokenType.S32Literal,
         [key: "s64"] = TokenType.S64Literal,
         [key: "s128"] = TokenType.S128Literal,
-        [key: "saddr"] = TokenType.SaddrLiteral,
+        [key: "saddr"] = TokenType.SAddrLiteral,
         [key: "u32"] = TokenType.U32Literal,
         [key: "u64"] = TokenType.U64Literal,
         [key: "u128"] = TokenType.U128Literal,
-        [key: "uaddr"] = TokenType.UaddrLiteral,
+        [key: "uaddr"] = TokenType.UAddrLiteral,
         [key: "f32"] = TokenType.F32Literal,
         [key: "f64"] = TokenType.F64Literal,
         [key: "d128"] = TokenType.D128Literal

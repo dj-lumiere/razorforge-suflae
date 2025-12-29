@@ -682,13 +682,13 @@ public partial class RazorForgeParser
                 TokenType.S32Literal,
                 TokenType.S64Literal,
                 TokenType.S128Literal,
-                TokenType.SaddrLiteral,
+                TokenType.SAddrLiteral,
                 TokenType.U8Literal,
                 TokenType.U16Literal,
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
-                TokenType.UaddrLiteral,
+                TokenType.UAddrLiteral,
                 TokenType.Decimal,
                 TokenType.F16Literal,
                 TokenType.F32Literal,
@@ -1225,13 +1225,13 @@ public partial class RazorForgeParser
                 TokenType.S32Literal,
                 TokenType.S64Literal,
                 TokenType.S128Literal,
-                TokenType.SaddrLiteral,
+                TokenType.SAddrLiteral,
                 TokenType.U8Literal,
                 TokenType.U16Literal,
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
-                TokenType.UaddrLiteral))
+                TokenType.UAddrLiteral))
         {
             Token token = PeekToken(offset: -1);
             string cleanValue = token.Text

@@ -487,8 +487,8 @@ public partial class RazorForgeParser
                 TokenType.U8Literal,
                 TokenType.S128Literal,
                 TokenType.U128Literal,
-                TokenType.SaddrLiteral,
-                TokenType.UaddrLiteral))
+                TokenType.SAddrLiteral,
+                TokenType.UAddrLiteral))
         {
             return Advance()
                .Text;

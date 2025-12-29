@@ -92,7 +92,7 @@ public enum TokenType
     S128Literal,
 
     /// <summary>System pointer-sized signed integer literal (42saddr)</summary>
-    SaddrLiteral,
+    SAddrLiteral,
 
     // Unsigned integers
     /// <summary>8-bit unsigned integer literal (255u8)</summary>
@@ -111,7 +111,7 @@ public enum TokenType
     U128Literal,
 
     /// <summary>System pointer-sized unsigned integer literal (42uaddr)</summary>
-    UaddrLiteral,
+    UAddrLiteral,
 
     // Floating point
     /// <summary>16-bit floating point literal (3.14f16)</summary>
