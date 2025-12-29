@@ -313,7 +313,7 @@ public partial class RazorForgeTokenizer
     /// <summary>
     /// Scans and validates an escape sequence.
     /// </summary>
-    /// <param name="bitWidth">The bit width for Unicode escape validation (8, 16, or 32).</param>
+    /// <param name="bitWidth">The bit width for Unicode escape validation (8 or 32).</param>
     /// <remarks>
     /// <para>
     /// This method validates the escape sequence without converting it.
@@ -329,7 +329,8 @@ public partial class RazorForgeTokenizer
     ///   <item><description>\" - double quote</description></item>
     ///   <item><description>\' - single quote</description></item>
     ///   <item><description>\0 - null character</description></item>
-    ///   <item><description>\uXX, \uXXXX, \uXXXXXXXX - Unicode (based on bit width)</description></item>
+    ///   <item><description>\xFF - hex byte escape (2 hex digits, for Byte/Bytes)</description></item>
+    ///   <item><description>\uFFFFFFFF - Unicode escape (up to 8 hex digits, for Letter/Text)</description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -347,9 +348,13 @@ public partial class RazorForgeTokenizer
             case 'n' or 't' or 'r' or '\\' or '"' or '\'' or '0':
                 Advance();
                 break;
+            case 'x':
+                Advance(); // consume 'x'
+                ScanHexByteEscape();
+                break;
             case 'u':
                 Advance(); // consume 'u'
-                ScanUnicodeEscape(bitWidth: bitWidth);
+                ScanUnicodeEscape();
                 break;
             default:
                 throw new LexerException(
@@ -358,37 +363,41 @@ public partial class RazorForgeTokenizer
     }
 
     /// <summary>
-    /// Scans and validates a Unicode escape sequence.
+    /// Scans and validates a hex byte escape sequence (\xFF).
     /// </summary>
-    /// <param name="bitWidth">The bit width determining the number of hex digits required.</param>
     /// <remarks>
-    /// <para>
-    /// The number of hex digits depends on the bit width:
-    /// <list type="bullet">
-    ///   <item><description>8-bit: 2 digits (\uXX)</description></item>
-    ///   <item><description>16-bit: 4 digits (\uXXXX)</description></item>
-    ///   <item><description>32-bit: 8 digits (\uXXXXXXXX)</description></item>
-    /// </list>
-    /// </para>
+    /// Requires exactly 2 hex digits for byte values (0x00-0xFF).
     /// </remarks>
     /// <exception cref="LexerException">Thrown when insufficient hex digits are provided.</exception>
-    private void ScanUnicodeEscape(int bitWidth)
+    private void ScanHexByteEscape()
     {
-        int hexDigits = bitWidth switch
-        {
-            8 => 2,
-            16 => 4,
-            32 => 8,
-            _ => 4
-        };
-
-        for (int i = 0; i < hexDigits; i += 1)
+        for (int i = 0; i < 2; i += 1)
         {
             if (!IsHexDigit(c: Peek()))
             {
                 throw new LexerException(
-                    message:
-                    $"Invalid Unicode escape sequence at line {_line}: expected {hexDigits} hex digits for {bitWidth}-bit character");
+                    message: $"Invalid hex byte escape at line {_line}: expected 2 hex digits (\\xFF)");
+            }
+
+            Advance();
+        }
+    }
+
+    /// <summary>
+    /// Scans and validates a Unicode escape sequence (\uXXXXXXXX).
+    /// </summary>
+    /// <remarks>
+    /// Requires exactly 8 hex digits for Unicode codepoints (U+00000000 to U+0010FFFF).
+    /// </remarks>
+    /// <exception cref="LexerException">Thrown when insufficient hex digits are provided.</exception>
+    private void ScanUnicodeEscape()
+    {
+        for (int i = 0; i < 8; i += 1)
+        {
+            if (!IsHexDigit(c: Peek()))
+            {
+                throw new LexerException(
+                    message: $"Invalid Unicode escape at line {_line}: expected 8 hex digits (\\uXXXXXXXX)");
             }
 
             Advance();
@@ -399,34 +408,35 @@ public partial class RazorForgeTokenizer
     /// Parses an escape sequence and returns the actual character value.
     /// </summary>
     /// <param name="escapeStart">The position in source where the backslash is located.</param>
-    /// <param name="bitWidth">The bit width for Unicode escape parsing (8, 16, or 32).</param>
+    /// <param name="bitWidth">The bit width for validation (8 for bytes, 32 for letters).</param>
     /// <returns>The character represented by the escape sequence.</returns>
     /// <remarks>
     /// This method reads from the source string at the specified position to
     /// parse and convert the escape sequence to its actual character value.
     /// </remarks>
-    /// <exception cref="LexerException">Thrown when a Unicode value exceeds the bit width range.</exception>
+    /// <exception cref="LexerException">Thrown when a value exceeds the valid range.</exception>
     private char ParseEscapeSequence(int escapeStart, int bitWidth = 32)
     {
         char c = _source[index: escapeStart + 1]; // character after backslash
 
+        if (c == 'x')
+        {
+            // Hex byte escape: \xFF (exactly 2 hex digits)
+            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 2);
+            int byteValue = Convert.ToInt32(value: hexStr, fromBase: 16);
+            return (char)byteValue;
+        }
+
         if (c == 'u')
         {
-            int hexDigits = bitWidth switch { 8 => 2, 16 => 4, 32 => 8, _ => 4 };
-            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: hexDigits);
+            // Unicode escape: \uXXXXXXXX (exactly 8 hex digits)
+            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 8);
             int codePoint = Convert.ToInt32(value: hexStr, fromBase: 16);
 
-            if (bitWidth == 8 && codePoint > 0xFF)
+            if (codePoint > 0x10FFFF)
             {
                 throw new LexerException(
-                    message:
-                    $"Unicode escape value {codePoint:X} exceeds 8-bit range at line {_line}");
-            }
-            else if (bitWidth == 16 && codePoint > 0xFFFF)
-            {
-                throw new LexerException(
-                    message:
-                    $"Unicode escape value {codePoint:X} exceeds 16-bit range at line {_line}");
+                    message: $"Unicode escape value U+{codePoint:X} exceeds valid Unicode range at line {_line}");
             }
 
             return (char)codePoint;
