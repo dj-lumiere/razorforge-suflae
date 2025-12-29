@@ -136,7 +136,7 @@ public partial class SuflaeTokenizer
         [key: "global"] = TokenType.Global,
         [key: "imported"] = TokenType.Imported,
         [key: "me"] = TokenType.Me,
-        [key: "MyType"] = TokenType.MyType,
+        [key: "Me"] = TokenType.MyType,
         [key: "if"] = TokenType.If,
         [key: "elseif"] = TokenType.Elseif,
         [key: "else"] = TokenType.Else,
