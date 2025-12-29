@@ -8,11 +8,11 @@ record Maybe<T> {
 }
 
 # Query
-routine Maybe<T>.is_valid() -> bool {
+routine Maybe<T>.is_valid() -> Bool {
     return me.state == VALID
 }
 
-routine Maybe<T>.is_none() -> bool {
+routine Maybe<T>.is_none() -> Bool {
     return me.state == ABSENT
 }
 
@@ -28,7 +28,7 @@ routine Maybe<T>.__unwrap__(default: T) -> T {
     return me.handle.unwrap()
 }
 
-routine Maybe<T>.__unwrap__(or_else: Routine<(MyType), T>) -> T {
+routine Maybe<T>.__unwrap__(or_else: Routine<Me, T>) -> T {
     if me.is_none() {
         return or_else()
     }

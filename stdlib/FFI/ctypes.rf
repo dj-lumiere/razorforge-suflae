@@ -2,20 +2,20 @@
 # Platform-dependent type aliases for C interop
 #
 # For C string types, see:
-# - cstr.rf  - null-terminated char* (narrow strings)
-# - cwstr.rf - null-terminated wchar_t* (wide strings)
+# - CStr.rf  - null-terminated char* (narrow strings)
+# - CWStr.rf - null-terminated wchar_t* (wide strings)
 
 # ============================================================================
 # Pointer/Special Types
 # ============================================================================
 namespace core
 # Marker type for void*
-record cvoid {
+record CVoid {
     pass
 }
 
 # Null pointer constant (raw address value)
-preset cnullptr: uaddr = 0uaddr
+preset C_NULLPTR: UAddr = 0uaddr
 
 # ============================================================================
 # Character Types
@@ -23,47 +23,47 @@ preset cnullptr: uaddr = 0uaddr
 
 # Wide character (platform-dependent)
 @config(target: "windows")
-define cwchar as u16
+define CWChar as U16
 
 @config(target: "unix")
-define cwchar as u32
+define CWChar as U32
 
 # ============================================================================
 # Numeric Types (platform-dependent)
 # ============================================================================
 
 # int types (typically 32-bit everywhere)
-define cint as s32
-define cuint as u32
+define CInt as S32
+define CUInt as U32
 
 # long types (32-bit Windows, 64-bit Unix)
 @config(target: "windows")
-define clong as s32
+define CLong as S32
 
 @config(target: "windows")
-define culong as u32
+define CULong as U32
 
 @config(target: "unix")
-define clong as s64
+define CLong as S64
 
 @config(target: "unix")
-define culong as u64
+define CULong as U64
 
 # long long types (64-bit everywhere)
-define clonglong as s64
-define culonglong as u64
+define CLongLong as S64
+define CULongLong as U64
 
 # short types (16-bit everywhere)
-define cshort as s16
-define cushort as u16
+define CShort as S16
+define CUShort as U16
 
 # char types
-define cchar as s8
-define cuchar as u8
+define CChar as S8
+define CUChar as U8
 
 # ============================================================================
 # Floating-point types
 # ============================================================================
 
-define cfloat as f32
-define cdouble as f64
+define CFloat as F32
+define CDouble as F64

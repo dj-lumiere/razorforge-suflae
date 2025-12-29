@@ -2,7 +2,7 @@
 # Record type - N elements of T stored inline, immutable, copied on assignment
 #
 # Usage:
-#   let coords: ValueList<f64, 3> = [1.0, 2.0, 3.0]
+#   let coords: ValueList<F64, 3> = [1.0, 2.0, 3.0]
 #   let x = coords[0]          # Read element
 #   let copy = coords          # Full copy (value semantics)
 #
@@ -16,7 +16,7 @@ namespace Collections
 # Fixed-size array with value semantics
 # Compiler lays out N elements of T inline
 record ValueList<T, N>
-requires N is uaddr {
+requires N is UAddr {
     # N elements of T stored inline by compiler - no explicit fields needed
 }
 
@@ -56,11 +56,11 @@ requires I follows Integral {
 # Query Operations
 # ============================================================================
 
-routine ValueList<T, N>.count(me: ValueList<T, N>) -> uaddr {
+routine ValueList<T, N>.count(me: ValueList<T, N>) -> UAddr {
     return N
 }
 
-routine ValueList<T, N>.is_empty(me: ValueList<T, N>) -> bool {
+routine ValueList<T, N>.is_empty(me: ValueList<T, N>) -> Bool {
     return N == 0uaddr
 }
 
@@ -78,7 +78,7 @@ routine ValueList<T, N>.last!(me: ValueList<T, N>) -> T {
     return me[N - 1uaddr]
 }
 
-routine ValueList<T, N>.contains(me: ValueList<T, N>, value: T) -> bool {
+routine ValueList<T, N>.contains(me: ValueList<T, N>, value: T) -> Bool {
     var i = 0uaddr
     while i < N {
         if me[i] == value {
@@ -89,7 +89,7 @@ routine ValueList<T, N>.contains(me: ValueList<T, N>, value: T) -> bool {
     return false
 }
 
-routine ValueList<T, N>.index_of!(me: ValueList<T, N>, value: T) -> uaddr {
+routine ValueList<T, N>.index_of!(me: ValueList<T, N>, value: T) -> UAddr {
     var i = 0uaddr
     while i < N {
         if me[i] == value {
@@ -110,7 +110,7 @@ routine ValueList<T, N>.iter(me: ValueList<T, N>) -> ValueListIterator<T, N> {
 
 record ValueListIterator<T, N> {
     list: ValueList<T, N>
-    index: uaddr
+    index: UAddr
 }
 
 routine ValueListIterator<T, N>.next!(me: ValueListIterator<T, N>) -> T {

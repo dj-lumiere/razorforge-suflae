@@ -11,11 +11,11 @@ import errors/MemoryError
 # Reference counting is handled separately by the wrapper type system.
 #
 record DynamicSlice {
-    private starting_address: uaddr
-    private allocated_bytes: uaddr
+    private starting_address: UAddr
+    private allocated_bytes: UAddr
 }
 
-# Creates a new heap slice with specified byte size
+# Creates a new heap slice with specified Byte size
 # @param size - MemorySize specifying bytes to allocate on heap
 # @return New DynamicSlice instance
 routine DynamicSlice.__create__(size: MemorySize) -> DynamicSlice {
@@ -62,19 +62,19 @@ routine DynamicSlice.__destroy__() {
 
 # Gets the total allocated bytes
 # @return Number of bytes allocated for this slice
-routine DynamicSlice.size() -> uaddr {
+routine DynamicSlice.size() -> UAddr {
     return me.allocated_bytes
 }
 
 # Gets the starting memory address
 # @return Memory address where slice data begins
-routine DynamicSlice.address() -> uaddr {
+routine DynamicSlice.address() -> UAddr {
     return me.starting_address
 }
 
 # Checks if this slice is valid (has allocated memory)
 # @return true if slice has valid memory allocation
-routine DynamicSlice.is_valid() -> bool {
+routine DynamicSlice.is_valid() -> Bool {
     return me.starting_address != 0
 }
 
@@ -82,7 +82,7 @@ routine DynamicSlice.is_valid() -> bool {
 # @param offset - Byte offset within the slice
 # @param dest - Destination address to copy bytes to
 # @param count - Number of bytes to read
-routine DynamicSlice.read_bytes!(offset: uaddr, dest: uaddr, count: uaddr) {
+routine DynamicSlice.read_bytes!(offset: UAddr, dest: UAddr, count: UAddr) {
     if offset + count > me.allocated_bytes {
         throw MemoryBoundsError(offset: offset, size: count, allocated: me.allocated_bytes)
     }
@@ -95,7 +95,7 @@ routine DynamicSlice.read_bytes!(offset: uaddr, dest: uaddr, count: uaddr) {
 # @param offset - Byte offset within the slice
 # @param src - Source address to copy bytes from
 # @param count - Number of bytes to write
-routine DynamicSlice.write_bytes!(offset: uaddr, src: uaddr, count: uaddr) {
+routine DynamicSlice.write_bytes!(offset: UAddr, src: UAddr, count: UAddr) {
     if offset + count > me.allocated_bytes {
         throw MemoryBoundsError(offset: offset, size: count, allocated: me.allocated_bytes)
     }
@@ -107,7 +107,7 @@ routine DynamicSlice.write_bytes!(offset: uaddr, src: uaddr, count: uaddr) {
 # Reads a typed value from the slice at given offset
 # @param offset - Byte offset within the slice
 # @return Value of type T read from the slice
-routine DynamicSlice.read!<T>(offset: uaddr) -> T {
+routine DynamicSlice.read!<T>(offset: UAddr) -> T {
     let type_size = @native.rf_sizeof<T>()
 
     if offset + type_size > me.allocated_bytes {
@@ -121,7 +121,7 @@ routine DynamicSlice.read!<T>(offset: uaddr) -> T {
 # Writes a typed value to the slice at given offset
 # @param offset - Byte offset within the slice
 # @param value - Value of type T to write to the slice
-routine DynamicSlice.write!<T>(offset: uaddr, value: T) {
+routine DynamicSlice.write!<T>(offset: UAddr, value: T) {
     let type_size = @native.rf_sizeof<T>()
 
     if offset + type_size > me.allocated_bytes {
@@ -135,15 +135,15 @@ routine DynamicSlice.write!<T>(offset: uaddr, value: T) {
 # Gets unsafe pointer to data at offset
 # @param offset - Byte offset within the slice
 # @return Raw memory address at the specified offset
-routine DynamicSlice.snatch!(offset: uaddr) -> uaddr {
+routine DynamicSlice.snatch(offset: UAddr) -> UAddr {
     return me.starting_address + offset
 }
 
 # Creates a sub-slice view of this slice (shares same memory)
-# @param offset - Starting byte offset for sub-slice
+# @param offset - Starting Byte offset for sub-slice
 # @param bytes - Number of bytes in sub-slice
 # @return New DynamicSlice representing the sub-range
-routine DynamicSlice.slice!(offset: uaddr, bytes: uaddr) -> DynamicSlice {
+routine DynamicSlice.slice!(offset: UAddr, bytes: UAddr) -> DynamicSlice {
     if offset + bytes > me.allocated_bytes {
         throw SliceBoundsError(offset: offset, length: bytes, allocated: me.allocated_bytes)
     }
@@ -157,7 +157,7 @@ routine DynamicSlice.slice!(offset: uaddr, bytes: uaddr) -> DynamicSlice {
 # Resizes the heap slice (may reallocate memory)
 # @param new_bytes - New size in bytes for the slice
 # @return Reference to this slice after resizing
-routine DynamicSlice.resize!(new_bytes: uaddr) -> DynamicSlice {
+routine DynamicSlice.resize!(new_bytes: UAddr) -> DynamicSlice {
     if new_bytes == 0 {
         me.__destroy__()
         return me
@@ -180,9 +180,9 @@ routine DynamicSlice.resize!(new_bytes: uaddr) -> DynamicSlice {
     return me
 }
 
-# Fills the slice with a byte pattern
+# Fills the slice with a Byte pattern
 # @param pattern - Byte value to fill the entire slice with
-routine DynamicSlice.fill!(pattern: u8) {
+routine DynamicSlice.fill!(pattern: U8) {
     @native.rf_memory_fill(me.starting_address, pattern, me.allocated_bytes)
 }
 
@@ -191,8 +191,8 @@ routine DynamicSlice.fill!(pattern: u8) {
 # @param src_offset - Starting offset in source slice
 # @param dest_offset - Starting offset in destination slice
 # @param count - Number of bytes to copy
-routine DynamicSlice.copy_from!(source: DynamicSlice, src_offset: uaddr,
-                       dest_offset: uaddr, count: uaddr) {
+routine DynamicSlice.copy_from!(source: DynamicSlice, src_offset: UAddr,
+                       dest_offset: UAddr, count: UAddr) {
     if src_offset + count > source.allocated_bytes {
         throw MemoryBoundsError(offset: src_offset, size: count, allocated: source.allocated_bytes)
     }
@@ -231,6 +231,6 @@ routine DynamicSlice.hijack!(other: DynamicSlice) -> DynamicSlice {
 
 # Gets a reference to the raw memory (for wrapper type system)
 # @return Raw memory address for wrapper type operations
-routine DynamicSlice.refer!() -> uaddr {
+routine DynamicSlice.refer!() -> UAddr {
     return me.starting_address
 }

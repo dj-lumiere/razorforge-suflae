@@ -5,7 +5,7 @@
 namespace core
 
 record Mutex follows LockPolicy {
-    private locked: Atomic<bool>
+    private locked: Atomic<Bool>
 }
 
 # Acquire exclusive lock (blocking)
@@ -20,7 +20,7 @@ routine Mutex.acquire() {
 }
 
 # Try to acquire lock (non-blocking)
-routine Mutex.try_acquire() -> bool {
+routine Mutex.try_acquire() -> Bool {
     return me.locked.compare_exchange(expected: false, desired: true)
 }
 
@@ -30,6 +30,6 @@ routine Mutex.release() {
 }
 
 # Check if locked (for debugging)
-routine Mutex.is_locked() -> bool {
+routine Mutex.is_locked() -> Bool {
     return me.locked.load()
 }

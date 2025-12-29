@@ -1,5 +1,5 @@
 record NegativeExponentError follows Crashable {
-    private exp: s128
+    private exp: S128
 }
 
 routine NegativeExponentError.crash_message() -> Text {

@@ -10,9 +10,9 @@ import Runtime/CompilerService
 namespace Collections
 
 entity List<T> {
-    private data: DynamicSlice      # Heap-allocated byte array (non-generic)
-    private count: u64              # Current number of elements
-    private capacity: u64           # Total allocated capacity
+    private data: DynamicSlice      # Heap-allocated Byte array (non-generic)
+    private count: U64              # Current number of elements
+    private capacity: U64           # Total allocated capacity
 }
 
 # Constructors
@@ -26,7 +26,7 @@ routine List<T>.__create__() -> List<T> {
     )
 }
 
-routine List<T>.__create__(capacity: u64) -> List<T> {
+routine List<T>.__create__(capacity: U64) -> List<T> {
     # Create list with pre-allocated capacity
     let byte_size = capacity * data_size<T>()
     return List<T>(
@@ -38,17 +38,17 @@ routine List<T>.__create__(capacity: u64) -> List<T> {
 
 # Core operations
 
-routine List<T>.count(me: List<T>) -> u64 {
+routine List<T>.count(me: List<T>) -> U64 {
     # Get current length
     return me.count
 }
 
-routine List<T>.capacity(me: List<T>) -> u64 {
+routine List<T>.capacity(me: List<T>) -> U64 {
     # Get current capacity
     return me.capacity
 }
 
-routine List<T>.is_empty(me: List<T>) -> bool {
+routine List<T>.is_empty(me: List<T>) -> Bool {
     return me.count == 0u64
 }
 
@@ -60,7 +60,7 @@ routine List<T>.push(me: List<T>, value: T) {
         me.reserve(new_capacity)
     }
 
-    # Store element at byte offset
+    # Store element at Byte offset
     let byte_offset = me.count * data_size<T>()
     me.data.write!<T>(byte_offset, value)
     me.count = me.count + 1u64
@@ -214,14 +214,14 @@ requires I follows Integral {
     me.__setitem__!(index, value)
 }
 
-routine List<T>.reserve(me: List<T>, new_capacity: u64) {
+routine List<T>.reserve(me: List<T>, new_capacity: U64) {
     # Ensure capacity is at least new_capacity
     if new_capacity > me.capacity {
         # Allocate new buffer
         let new_byte_size = new_capacity * data_size<T>()
         let new_data = DynamicSlice(MemorySize(new_byte_size))
 
-        # Copy existing elements byte-by-byte
+        # Copy existing elements Byte-by-Byte
         if me.count > 0u64 {
             let copy_bytes = me.count * data_size<T>()
             new_data.copy_from(me.data, 0, 0, copy_bytes)
@@ -248,7 +248,7 @@ routine List<T>.iter(me: List<T>) -> ListIterator<T> {
 
 entity ListIterator<T> {
     list: List<T>
-    index: u64
+    index: U64
 }
 
 routine ListIterator<T>.next!(me: ListIterator<T>) -> T {
@@ -278,7 +278,7 @@ routine List<T>.select<U>(me: List<T>, mapper: Routine<(T), U>) -> List<U> {
 }
 
 # Filter elements - requires(x => predicate(x))
-routine List<T>.requires(me: List<T>, predicate: Routine<(T), bool>) -> List<T> {
+routine List<T>.requires(me: List<T>, predicate: Routine<(T), Bool>) -> List<T> {
     let result = List<T>()
     let i = 0u64
     while i < me.count() {
@@ -292,7 +292,7 @@ routine List<T>.requires(me: List<T>, predicate: Routine<(T), bool>) -> List<T> 
 }
 
 # Filter out elements NOT matching predicate
-routine List<T>.requires_not(me: List<T>, predicate: Routine<(T), bool>) -> List<T> {
+routine List<T>.requires_not(me: List<T>, predicate: Routine<(T), Bool>) -> List<T> {
     let result = List<T>()
     let i = 0u64
     while i < me.count() {
@@ -323,7 +323,7 @@ routine List<T>.select_many<U>(me: List<T>, selector: Routine<(T), List<U>>) -> 
 }
 
 # Take first n elements
-routine List<T>.take(me: List<T>, count: u64) -> List<T> {
+routine List<T>.take(me: List<T>, count: U64) -> List<T> {
     let n = if count < me.count() then count else me.count()
     let result = List<T>(n)
     let i = 0u64
@@ -335,7 +335,7 @@ routine List<T>.take(me: List<T>, count: u64) -> List<T> {
 }
 
 # Take elements while predicate is true
-routine List<T>.take_while(me: List<T>, predicate: Routine<(T), bool>) -> List<T> {
+routine List<T>.take_while(me: List<T>, predicate: Routine<(T), Bool>) -> List<T> {
     let result = List<T>()
     let i = 0u64
     while i < me.count() {
@@ -350,7 +350,7 @@ routine List<T>.take_while(me: List<T>, predicate: Routine<(T), bool>) -> List<T
 }
 
 # Skip first n elements
-routine List<T>.skip(me: List<T>, count: u64) -> List<T> {
+routine List<T>.skip(me: List<T>, count: U64) -> List<T> {
     let start = if count < me.count() then count else me.count()
     let result = List<T>(me.count() - start)
     let i = start
@@ -362,7 +362,7 @@ routine List<T>.skip(me: List<T>, count: u64) -> List<T> {
 }
 
 # Skip elements while predicate is true
-routine List<T>.skip_while(me: List<T>, predicate: Routine<(T), bool>) -> List<T> {
+routine List<T>.skip_while(me: List<T>, predicate: Routine<(T), Bool>) -> List<T> {
     let result = List<T>()
     let skipping = true
     let i = 0u64
@@ -380,7 +380,7 @@ routine List<T>.skip_while(me: List<T>, predicate: Routine<(T), bool>) -> List<T
 }
 
 # Check if any element matches predicate
-routine List<T>.any(me: List<T>, predicate: Routine<(T), bool>) -> bool {
+routine List<T>.any(me: List<T>, predicate: Routine<(T), Bool>) -> Bool {
     let i = 0u64
     while i < me.count() {
         if predicate(me.get!(i)) {
@@ -392,7 +392,7 @@ routine List<T>.any(me: List<T>, predicate: Routine<(T), bool>) -> bool {
 }
 
 # Check if all elements match predicate
-routine List<T>.all(me: List<T>, predicate: Routine<(T), bool>) -> bool {
+routine List<T>.all(me: List<T>, predicate: Routine<(T), Bool>) -> Bool {
     let i = 0u64
     while i < me.count() {
         if not predicate(me.get!(i)) {
@@ -404,12 +404,12 @@ routine List<T>.all(me: List<T>, predicate: Routine<(T), bool>) -> bool {
 }
 
 # Check if no elements match predicate
-routine List<T>.none(me: List<T>, predicate: Routine<(T), bool>) -> bool {
+routine List<T>.none(me: List<T>, predicate: Routine<(T), Bool>) -> Bool {
     return not me.any(predicate)
 }
 
 # Count elements matching predicate
-routine List<T>.count(me: List<T>, predicate: Routine<(T), bool>) -> u64 {
+routine List<T>.count(me: List<T>, predicate: Routine<(T), Bool>) -> U64 {
     let result = 0u64
     let i = 0u64
     while i < me.count() {
@@ -440,7 +440,7 @@ routine List<T>.first_or_default(me: List<T>, default_value: T) -> T {
 }
 
 # Get first element matching predicate (absent if not found)
-routine List<T>.first!(me: List<T>, predicate: Routine<(T), bool>) -> T {
+routine List<T>.first!(me: List<T>, predicate: Routine<(T), Bool>) -> T {
     # Uses absent because no matching element means "not found"
     # Compiler generates: try_first(predicate) -> T?
     let i = 0u64
@@ -500,7 +500,7 @@ routine List<T>.extend(me: List<T>, other: List<T>) -> List<T> {
 }
 
 # Split into chunks of given size
-routine List<T>.chunk(me: List<T>, size: u64) -> List<List<T>> {
+routine List<T>.chunk(me: List<T>, size: U64) -> List<List<T>> {
     let result = List<List<T>>()
     let i = 0u64
     while i < me.count() {

@@ -16,7 +16,7 @@ namespace Collections
 # Fixed-size bit array with value semantics
 # Compiler lays out ceil(N/8) bytes inline to store N bits
 record ValueBitList<N>
-requires N is uaddr {
+requires N is UAddr {
     # N bits stored inline by compiler - no explicit fields needed
 }
 
@@ -24,7 +24,7 @@ requires N is uaddr {
 # Indexing with Integral (forward index) - read only
 # ============================================================================
 
-routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: I) -> bool
+routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: I) -> Bool
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= N {
@@ -37,7 +37,7 @@ requires I follows Integral {
 # Indexing with BackIndex (backward index using ^) - read only
 # ============================================================================
 
-routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: BackIndex<I>) -> bool
+routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: BackIndex<I>) -> Bool
 requires I follows Integral {
     let idx = index.resolve(N)
     return me[idx]
@@ -47,7 +47,7 @@ requires I follows Integral {
 # Legacy get method
 # ============================================================================
 
-routine ValueBitList<N>.get!<I>(me: ValueBitList<N>, index: I) -> bool
+routine ValueBitList<N>.get!<I>(me: ValueBitList<N>, index: I) -> Bool
 requires I follows Integral {
     return me.__getitem__!(index)
 }
@@ -56,15 +56,15 @@ requires I follows Integral {
 # Query Operations
 # ============================================================================
 
-routine ValueBitList<N>.count(me: ValueBitList<N>) -> uaddr {
+routine ValueBitList<N>.count(me: ValueBitList<N>) -> UAddr {
     return N
 }
 
-routine ValueBitList<N>.is_empty(me: ValueBitList<N>) -> bool {
+routine ValueBitList<N>.is_empty(me: ValueBitList<N>) -> Bool {
     return N == 0uaddr
 }
 
-routine ValueBitList<N>.count_ones(me: ValueBitList<N>) -> uaddr {
+routine ValueBitList<N>.count_ones(me: ValueBitList<N>) -> UAddr {
     var count = 0uaddr
     var i = 0uaddr
     while i < N {
@@ -76,11 +76,11 @@ routine ValueBitList<N>.count_ones(me: ValueBitList<N>) -> uaddr {
     return count
 }
 
-routine ValueBitList<N>.count_zeros(me: ValueBitList<N>) -> uaddr {
+routine ValueBitList<N>.count_zeros(me: ValueBitList<N>) -> UAddr {
     return N - me.count_ones()
 }
 
-routine ValueBitList<N>.any(me: ValueBitList<N>) -> bool {
+routine ValueBitList<N>.any(me: ValueBitList<N>) -> Bool {
     var i = 0uaddr
     while i < N {
         if me[i] {
@@ -91,7 +91,7 @@ routine ValueBitList<N>.any(me: ValueBitList<N>) -> bool {
     return false
 }
 
-routine ValueBitList<N>.all(me: ValueBitList<N>) -> bool {
+routine ValueBitList<N>.all(me: ValueBitList<N>) -> Bool {
     var i = 0uaddr
     while i < N {
         if not me[i] {
@@ -102,7 +102,7 @@ routine ValueBitList<N>.all(me: ValueBitList<N>) -> bool {
     return true
 }
 
-routine ValueBitList<N>.none(me: ValueBitList<N>) -> bool {
+routine ValueBitList<N>.none(me: ValueBitList<N>) -> Bool {
     return not me.any()
 }
 
@@ -116,10 +116,10 @@ routine ValueBitList<N>.iter(me: ValueBitList<N>) -> ValueBitListIterator<N> {
 
 record ValueBitListIterator<N> {
     list: ValueBitList<N>
-    index: uaddr
+    index: UAddr
 }
 
-routine ValueBitListIterator<N>.next!(me: ValueBitListIterator<N>) -> bool {
+routine ValueBitListIterator<N>.next!(me: ValueBitListIterator<N>) -> Bool {
     if me.index >= N {
         absent
     }

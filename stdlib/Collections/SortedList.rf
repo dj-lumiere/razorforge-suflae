@@ -4,7 +4,7 @@
 # Elements are always in sorted order, duplicates allowed
 #
 # Usage:
-#   let grades = SortedList<f64>()
+#   let grades = SortedList<F64>()
 #   grades.insert(85.5)
 #   grades.insert(85.5)    # Duplicates allowed
 #   grades.insert(92.0)
@@ -18,28 +18,28 @@ import Collections/List
 namespace Collections
 
 # B-tree order (max children per node)
-preset B_LIST: uaddr = 32uaddr
+preset B_LIST: UAddr = 32uaddr
 
 # B-tree node for SortedList
 entity BTreeListNode<T>
 requires T follows Comparable {
     keys: List<T>                        # Keys in this node
     children: List<BTreeListNode<T>>     # Child pointers (empty for leaf)
-    subtree_size: uaddr                  # Total elements in this subtree
-    is_leaf: bool
+    subtree_size: UAddr                  # Total elements in this subtree
+    is_leaf: Bool
 }
 
 entity SortedList<T>
 requires T follows Comparable {
     private root: BTreeListNode<T>
-    private count: uaddr
+    private count: UAddr
 }
 
 # ============================================================================
 # Node Constructors
 # ============================================================================
 
-routine BTreeListNode<T>.__create__(is_leaf: bool) -> BTreeListNode<T> {
+routine BTreeListNode<T>.__create__(is_leaf: Bool) -> BTreeListNode<T> {
     return BTreeListNode<T>(
         keys: List<T>(),
         children: List<BTreeListNode<T>>(),
@@ -63,11 +63,11 @@ routine SortedList<T>.__create__() -> SortedList<T> {
 # Core Operations
 # ============================================================================
 
-routine SortedList<T>.count(me: SortedList<T>) -> uaddr {
+routine SortedList<T>.count(me: SortedList<T>) -> UAddr {
     return me.count
 }
 
-routine SortedList<T>.is_empty(me: SortedList<T>) -> bool {
+routine SortedList<T>.is_empty(me: SortedList<T>) -> Bool {
     return me.count == 0uaddr
 }
 
@@ -80,14 +80,14 @@ routine SortedList<T>.clear(me: SortedList<T>) {
 # Search
 # ============================================================================
 
-routine SortedList<T>.contains(me: SortedList<T>, value: T) -> bool {
+routine SortedList<T>.contains(me: SortedList<T>, value: T) -> Bool {
     if me.root is None {
         return false
     }
     return me.search_node(me.root!, value)
 }
 
-routine SortedList<T>.search_node(me: SortedList<T>, node: BTreeListNode<T>, value: T) -> bool {
+routine SortedList<T>.search_node(me: SortedList<T>, node: BTreeListNode<T>, value: T) -> Bool {
     var i = 0uaddr
     while i < node.keys.count() and value > node.keys[i] {
         i = i + 1uaddr
@@ -104,7 +104,7 @@ routine SortedList<T>.search_node(me: SortedList<T>, node: BTreeListNode<T>, val
     return me.search_node(node.children[i], value)
 }
 
-routine SortedList<T>.count_of(me: SortedList<T>, value: T) -> uaddr {
+routine SortedList<T>.count_of(me: SortedList<T>, value: T) -> UAddr {
     # Count occurrences of value
     if me.root is None {
         return 0uaddr
@@ -112,7 +112,7 @@ routine SortedList<T>.count_of(me: SortedList<T>, value: T) -> uaddr {
     return me.count_in_node(me.root!, value)
 }
 
-routine SortedList<T>.count_in_node(me: SortedList<T>, node: BTreeListNode<T>, value: T) -> uaddr {
+routine SortedList<T>.count_in_node(me: SortedList<T>, node: BTreeListNode<T>, value: T) -> UAddr {
     var count = 0uaddr
     var i = 0uaddr
 
@@ -201,7 +201,7 @@ routine SortedList<T>.insert_non_full(me: SortedList<T>, node: BTreeListNode<T>,
     }
 }
 
-routine SortedList<T>.split_child(me: SortedList<T>, parent_node: BTreeListNode<T>, child_idx: uaddr) {
+routine SortedList<T>.split_child(me: SortedList<T>, parent_node: BTreeListNode<T>, child_idx: UAddr) {
     let child = parent_node.children[child_idx]
     let mid = (B_LIST - 1uaddr) / 2uaddr
 
@@ -293,7 +293,7 @@ routine SortedList<T>.update_subtree_size(me: SortedList<T>, node: BTreeListNode
 # Remove (removes first occurrence)
 # ============================================================================
 
-routine SortedList<T>.remove(me: SortedList<T>, value: T) -> bool {
+routine SortedList<T>.remove(me: SortedList<T>, value: T) -> Bool {
     if me.root is None {
         return false
     }
@@ -350,7 +350,7 @@ routine SortedList<T>.remove_from_node(me: SortedList<T>, node: BTreeListNode<T>
     }
 }
 
-routine SortedList<T>.get_predecessor(me: SortedList<T>, node: BTreeListNode<T>, idx: uaddr) -> T {
+routine SortedList<T>.get_predecessor(me: SortedList<T>, node: BTreeListNode<T>, idx: UAddr) -> T {
     var current = node.children[idx]
     while not current.is_leaf {
         current = current.children[current.children.count() - 1uaddr]
@@ -358,7 +358,7 @@ routine SortedList<T>.get_predecessor(me: SortedList<T>, node: BTreeListNode<T>,
     return current.keys[current.keys.count() - 1uaddr]
 }
 
-routine SortedList<T>.remove_all(me: SortedList<T>, value: T) -> uaddr {
+routine SortedList<T>.remove_all(me: SortedList<T>, value: T) -> UAddr {
     # Remove all occurrences of value, return count removed
     var removed = 0uaddr
     while me.remove(value) {
@@ -386,7 +386,7 @@ requires I follows Integral {
     return me.get_by_rank(me.root!, idx)
 }
 
-routine SortedList<T>.get_by_rank(me: SortedList<T>, node: BTreeListNode<T>, rank: uaddr) -> T {
+routine SortedList<T>.get_by_rank(me: SortedList<T>, node: BTreeListNode<T>, rank: UAddr) -> T {
     if node.is_leaf {
         return node.keys[rank]
     }
@@ -522,7 +522,7 @@ routine SortedList<T>.collect_inorder(me: SortedList<T>, node: BTreeListNode<T>,
 
 entity SortedListIterator<T> {
     list: SortedList<T>
-    index: uaddr
+    index: UAddr
 }
 
 routine SortedListIterator<T>.next!(me: SortedListIterator<T>) -> T {
@@ -538,7 +538,7 @@ routine SortedListIterator<T>.next!(me: SortedListIterator<T>) -> T {
 # Comparison
 # ============================================================================
 
-routine SortedList<T>.__eq__(me: SortedList<T>, other: SortedList<T>) -> bool {
+routine SortedList<T>.__eq__(me: SortedList<T>, other: SortedList<T>) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -552,6 +552,6 @@ routine SortedList<T>.__eq__(me: SortedList<T>, other: SortedList<T>) -> bool {
     return true
 }
 
-routine SortedList<T>.__ne__(me: SortedList<T>, other: SortedList<T>) -> bool {
+routine SortedList<T>.__ne__(me: SortedList<T>, other: SortedList<T>) -> Bool {
     return not (me == other)
 }

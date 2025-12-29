@@ -18,9 +18,9 @@ namespace Collections
 
 entity Deque<T> {
     private data: DynamicSlice    # Circular buffer
-    private start: uaddr          # Index of first element
-    private count: uaddr          # Number of elements
-    private capacity: uaddr       # Total allocated slots
+    private start: UAddr          # Index of first element
+    private count: UAddr          # Number of elements
+    private capacity: UAddr       # Total allocated slots
 }
 
 # ============================================================================
@@ -36,7 +36,7 @@ routine Deque<T>.__create__() -> Deque<T> {
     )
 }
 
-routine Deque<T>.__create__(capacity: uaddr) -> Deque<T> {
+routine Deque<T>.__create__(capacity: UAddr) -> Deque<T> {
     let byte_size = capacity * data_size<T>()
     return Deque<T>(
         data: DynamicSlice(MemorySize(byte_size)),
@@ -50,7 +50,7 @@ routine Deque<T>.__create__(capacity: uaddr) -> Deque<T> {
 # Internal Helpers
 # ============================================================================
 
-routine Deque<T>.wrap_index(me: Deque<T>, index: uaddr) -> uaddr {
+routine Deque<T>.wrap_index(me: Deque<T>, index: UAddr) -> UAddr {
     # Wrap index around the circular buffer
     if me.capacity == 0uaddr {
         return 0uaddr
@@ -58,17 +58,17 @@ routine Deque<T>.wrap_index(me: Deque<T>, index: uaddr) -> uaddr {
     return index % me.capacity
 }
 
-routine Deque<T>.physical_index(me: Deque<T>, logical_index: uaddr) -> uaddr {
+routine Deque<T>.physical_index(me: Deque<T>, logical_index: UAddr) -> UAddr {
     # Convert logical index (0 = front) to physical index in buffer
     return me.wrap_index(me.start + logical_index)
 }
 
-routine Deque<T>.read_at(me: Deque<T>, physical_idx: uaddr) -> T {
+routine Deque<T>.read_at(me: Deque<T>, physical_idx: UAddr) -> T {
     let byte_offset = physical_idx * data_size<T>()
     return me.data.read<T>(byte_offset)
 }
 
-routine Deque<T>.write_at(me: Deque<T>, physical_idx: uaddr, value: T) {
+routine Deque<T>.write_at(me: Deque<T>, physical_idx: UAddr, value: T) {
     let byte_offset = physical_idx * data_size<T>()
     me.data.write<T>(byte_offset, value)
 }
@@ -77,15 +77,15 @@ routine Deque<T>.write_at(me: Deque<T>, physical_idx: uaddr, value: T) {
 # Core Operations
 # ============================================================================
 
-routine Deque<T>.count(me: Deque<T>) -> uaddr {
+routine Deque<T>.count(me: Deque<T>) -> UAddr {
     return me.count
 }
 
-routine Deque<T>.capacity(me: Deque<T>) -> uaddr {
+routine Deque<T>.capacity(me: Deque<T>) -> UAddr {
     return me.capacity
 }
 
-routine Deque<T>.is_empty(me: Deque<T>) -> bool {
+routine Deque<T>.is_empty(me: Deque<T>) -> Bool {
     return me.count == 0uaddr
 }
 
@@ -166,7 +166,7 @@ routine Deque<T>.grow(me: Deque<T>) {
     me.reserve(new_capacity)
 }
 
-routine Deque<T>.reserve(me: Deque<T>, new_capacity: uaddr) {
+routine Deque<T>.reserve(me: Deque<T>, new_capacity: UAddr) {
     if new_capacity <= me.capacity {
         return
     }
@@ -249,7 +249,7 @@ requires I follows Integral {
 # Rotation
 # ============================================================================
 
-routine Deque<T>.rotate_left(me: Deque<T>, n: uaddr) {
+routine Deque<T>.rotate_left(me: Deque<T>, n: UAddr) {
     # Rotate elements left by n positions
     # Front elements move to back
     if me.count == 0uaddr {
@@ -259,7 +259,7 @@ routine Deque<T>.rotate_left(me: Deque<T>, n: uaddr) {
     me.start = me.wrap_index(me.start + shift)
 }
 
-routine Deque<T>.rotate_right(me: Deque<T>, n: uaddr) {
+routine Deque<T>.rotate_right(me: Deque<T>, n: UAddr) {
     # Rotate elements right by n positions
     # Back elements move to front
     if me.count == 0uaddr {
@@ -283,7 +283,7 @@ routine Deque<T>.iter(me: Deque<T>) -> DequeIterator<T> {
 
 entity DequeIterator<T> {
     deque: Deque<T>
-    index: uaddr
+    index: UAddr
 }
 
 routine DequeIterator<T>.next!(me: DequeIterator<T>) -> T {
@@ -321,7 +321,7 @@ routine Deque<T>.last_or_default(me: Deque<T>, default_value: T) -> T {
     return me.back!()
 }
 
-routine Deque<T>.contains(me: Deque<T>, value: T) -> bool {
+routine Deque<T>.contains(me: Deque<T>, value: T) -> Bool {
     var i = 0uaddr
     while i < me.count {
         if me[i] == value {
@@ -336,7 +336,7 @@ routine Deque<T>.contains(me: Deque<T>, value: T) -> bool {
 # Comparison Operations
 # ============================================================================
 
-routine Deque<T>.__eq__(me: Deque<T>, other: Deque<T>) -> bool {
+routine Deque<T>.__eq__(me: Deque<T>, other: Deque<T>) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -350,6 +350,6 @@ routine Deque<T>.__eq__(me: Deque<T>, other: Deque<T>) -> bool {
     return true
 }
 
-routine Deque<T>.__ne__(me: Deque<T>, other: Deque<T>) -> bool {
+routine Deque<T>.__ne__(me: Deque<T>, other: Deque<T>) -> Bool {
     return not (me == other)
 }

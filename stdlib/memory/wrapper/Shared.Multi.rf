@@ -62,13 +62,13 @@ routine Shared<T, P>.release!() {
 }
 
 # Get atomic reference counts for debugging
-routine Shared<T, P>.strong_count() -> s32 {
+routine Shared<T, P>.strong_count() -> S32 {
     danger! {
         return me.controller.strong_count()
     }
 }
 
-routine Shared<T, P>.weak_count() -> s32 {
+routine Shared<T, P>.weak_count() -> S32 {
     danger! {
         return me.controller.weak_count()
     }

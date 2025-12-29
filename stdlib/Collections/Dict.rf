@@ -4,7 +4,7 @@
 # Uses hash buckets with SortedDict for collision chains
 #
 # Usage:
-#   let ages = Dict<Text, s32>()
+#   let ages = Dict<Text, S32>()
 #   ages.insert("Alice", 30)
 #   ages["Bob"] = 25
 #   let alice_age = ages["Alice"]
@@ -17,9 +17,9 @@ import errors/IndexOutOfBoundsError
 namespace Collections
 
 # Initial number of buckets
-preset DICT_INITIAL_BUCKETS: uaddr = 16uaddr
+preset DICT_INITIAL_BUCKETS: UAddr = 16uaddr
 # Load factor threshold for rehashing (as percentage)
-preset DICT_LOAD_FACTOR: uaddr = 75uaddr
+preset DICT_LOAD_FACTOR: UAddr = 75uaddr
 
 # Key-value pair for iteration
 record DictEntry<K, V>
@@ -31,7 +31,7 @@ requires K follows Hashable, Comparable {
 entity Dict<K, V>
 requires K follows Hashable, Comparable {
     private var buckets: List<SortedDict<K, V>>
-    private var count: uaddr
+    private var count: UAddr
 }
 
 # ============================================================================
@@ -53,7 +53,7 @@ routine Dict<K, V>.__create__() -> Dict<K, V> {
     return dict
 }
 
-routine Dict<K, V>.__create__(capacity: uaddr) -> Dict<K, V> {
+routine Dict<K, V>.__create__(capacity: UAddr) -> Dict<K, V> {
     let bucket_count = if capacity < DICT_INITIAL_BUCKETS then DICT_INITIAL_BUCKETS else capacity
     let buckets = List<SortedDict<K, V>>(bucket_count)
     let dict = Dict<K, V>(
@@ -73,12 +73,12 @@ routine Dict<K, V>.__create__(capacity: uaddr) -> Dict<K, V> {
 # Internal Operations
 # ============================================================================
 
-routine Dict<K, V>.bucket_index(me: Dict<K, V>, key: K) -> uaddr {
+routine Dict<K, V>.bucket_index(me: Dict<K, V>, key: K) -> UAddr {
     let hash = key.__hash__()
     return hash % me.buckets.count()
 }
 
-routine Dict<K, V>.should_rehash(me: Dict<K, V>) -> bool {
+routine Dict<K, V>.should_rehash(me: Dict<K, V>) -> Bool {
     let load = (me.count * 100uaddr) / me.buckets.count()
     return load > DICT_LOAD_FACTOR
 }
@@ -116,11 +116,11 @@ routine Dict<K, V>.rehash(me: Dict<K, V>) {
 # Core Operations
 # ============================================================================
 
-routine Dict<K, V>.count(me: Dict<K, V>) -> uaddr {
+routine Dict<K, V>.count(me: Dict<K, V>) -> UAddr {
     return me.count
 }
 
-routine Dict<K, V>.is_empty(me: Dict<K, V>) -> bool {
+routine Dict<K, V>.is_empty(me: Dict<K, V>) -> Bool {
     return me.count == 0uaddr
 }
 
@@ -133,12 +133,12 @@ routine Dict<K, V>.clear(me: Dict<K, V>) {
     me.count = 0uaddr
 }
 
-routine Dict<K, V>.contains_key(me: Dict<K, V>, key: K) -> bool {
+routine Dict<K, V>.contains_key(me: Dict<K, V>, key: K) -> Bool {
     let idx = me.bucket_index(key)
     return me.buckets[idx].contains_key(key)
 }
 
-routine Dict<K, V>.insert(me: Dict<K, V>, key: K, value: V) -> bool {
+routine Dict<K, V>.insert(me: Dict<K, V>, key: K, value: V) -> Bool {
     # Returns true if inserted new, false if updated existing
     if me.should_rehash() {
         me.rehash()
@@ -154,7 +154,7 @@ routine Dict<K, V>.insert(me: Dict<K, V>, key: K, value: V) -> bool {
     return false
 }
 
-routine Dict<K, V>.remove(me: Dict<K, V>, key: K) -> bool {
+routine Dict<K, V>.remove(me: Dict<K, V>, key: K) -> Bool {
     # Returns true if removed, false if not found
     let idx = me.bucket_index(key)
     if me.buckets[idx].remove(key) {
@@ -255,8 +255,8 @@ routine Dict<K, V>.iter(me: Dict<K, V>) -> DictIterator<K, V> {
 
 entity DictIterator<K, V> {
     dict: Dict<K, V>
-    bucket_idx: uaddr
-    entry_idx: uaddr
+    bucket_idx: UAddr
+    entry_idx: UAddr
     current_keys: List<K>
 }
 
@@ -281,7 +281,7 @@ routine DictIterator<K, V>.next!(me: DictIterator<K, V>) -> DictEntry<K, V> {
 # Comparison
 # ============================================================================
 
-routine Dict<K, V>.__eq__(me: Dict<K, V>, other: Dict<K, V>) -> bool {
+routine Dict<K, V>.__eq__(me: Dict<K, V>, other: Dict<K, V>) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -305,6 +305,6 @@ routine Dict<K, V>.__eq__(me: Dict<K, V>, other: Dict<K, V>) -> bool {
     return true
 }
 
-routine Dict<K, V>.__ne__(me: Dict<K, V>, other: Dict<K, V>) -> bool {
+routine Dict<K, V>.__ne__(me: Dict<K, V>, other: Dict<K, V>) -> Bool {
     return not (me == other)
 }

@@ -18,9 +18,9 @@ import errors/IndexOutOfBoundsError
 namespace Collections
 
 entity BitList {
-    private data: DynamicSlice      # Heap-allocated byte array (8 bits per byte)
-    private count: u64              # Current number of bits
-    private capacity: u64           # Total bit capacity (in bits, not bytes)
+    private data: DynamicSlice      # Heap-allocated byte array (8 bits per Byte)
+    private count: U64              # Current number of bits
+    private capacity: U64           # Total bit capacity (in bits, not bytes)
 }
 
 # ============================================================================
@@ -36,7 +36,7 @@ routine BitList.__create__() -> BitList {
     )
 }
 
-routine BitList.__create__(capacity: u64) -> BitList {
+routine BitList.__create__(capacity: U64) -> BitList {
     # Create bit list with pre-allocated capacity (in bits)
     let byte_size = (capacity + 7u64) // 8u64  # Round up to nearest byte
     return BitList(
@@ -50,36 +50,36 @@ routine BitList.__create__(capacity: u64) -> BitList {
 # Internal Helpers
 # ============================================================================
 
-routine BitList.byte_index(bit_index: u64) -> u64 {
+routine BitList.byte_index(bit_index: U64) -> U64 {
     # Get the byte index for a given bit index
     return bit_index // 8u64
 }
 
-routine BitList.bit_offset(bit_index: u64) -> u8 {
+routine BitList.bit_offset(bit_index: U64) -> U8 {
     # Get the bit position within the byte (0-7)
-    return u8(bit_index % 8u64)
+    return U8(bit_index % 8u64)
 }
 
-routine BitList.get_bit_internal(me: BitList, index: u64) -> bool {
+routine BitList.get_bit_internal(index: U64) -> Bool {
     # Internal: get bit without bounds checking
     let byte_idx = BitList.byte_index(index)
     let bit_off = BitList.bit_offset(index)
-    let byte_val = me.data.read<u8>(byte_idx)
+    let byte_val = me.data.read<U8>(byte_idx)
     return (byte_val & (1u8 << bit_off)) != 0u8
 }
 
-routine BitList.set_bit_internal(me: BitList, index: u64, value: bool) {
+routine BitList.set_bit_internal(index: U64, value: Bool) {
     # Internal: set bit without bounds checking
     let byte_idx = BitList.byte_index(index)
     let bit_off = BitList.bit_offset(index)
-    let byte_val = me.data.read<u8>(byte_idx)
+    let byte_val = me.data.read<U8>(byte_idx)
 
     if value {
         # Set bit to 1
-        me.data.write<u8>(byte_idx, byte_val | (1u8 << bit_off))
+        me.data.write<U8>(byte_idx, byte_val | (1u8 << bit_off))
     } else {
         # Set bit to 0
-        me.data.write<u8>(byte_idx, byte_val & ~(1u8 << bit_off))
+        me.data.write<U8>(byte_idx, byte_val & ~(1u8 << bit_off))
     }
 }
 
@@ -87,21 +87,21 @@ routine BitList.set_bit_internal(me: BitList, index: u64, value: bool) {
 # Core Operations
 # ============================================================================
 
-routine BitList.count(me: BitList) -> u64 {
+routine BitList.count() -> U64 {
     # Get current number of bits
     return me.count
 }
 
-routine BitList.capacity(me: BitList) -> u64 {
+routine BitList.capacity() -> U64 {
     # Get current capacity in bits
     return me.capacity
 }
 
-routine BitList.is_empty(me: BitList) -> bool {
+routine BitList.is_empty() -> Bool {
     return me.count == 0u64
 }
 
-routine BitList.push(me: BitList, value: bool) {
+routine BitList.push(value: Bool) {
     # Append bit to end - O(1) amortized
     if me.count >= me.capacity {
         # Need to grow - double capacity (in bits)
@@ -113,7 +113,7 @@ routine BitList.push(me: BitList, value: bool) {
     me.count = me.count + 1u64
 }
 
-routine BitList.pop!(me: BitList) -> bool {
+routine BitList.pop!() -> Bool {
     # Remove and return last bit - O(1)
     # Uses absent because empty list means "no bit to pop"
     if me.is_empty() {
@@ -124,7 +124,7 @@ routine BitList.pop!(me: BitList) -> bool {
     return me.get_bit_internal(me.count)
 }
 
-routine BitList.reserve(me: BitList, new_capacity: u64) {
+routine BitList.reserve(new_capacity: U64) {
     # Ensure capacity is at least new_capacity (in bits)
     if new_capacity > me.capacity {
         let new_byte_size = (new_capacity + 7u64) / 8u64
@@ -142,7 +142,7 @@ routine BitList.reserve(me: BitList, new_capacity: u64) {
     }
 }
 
-routine BitList.clear(me: BitList) {
+routine BitList.clear() {
     # Remove all bits
     me.count = 0u64
 }
@@ -151,54 +151,54 @@ routine BitList.clear(me: BitList) {
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine BitList.__getitem__!<I>(me: BitList, index: I) -> bool
+routine BitList.__getitem__!<I>(index: I) -> Bool
 requires I follows Integral {
     # Get bit at index - O(1)
     let idx = index.to_uaddr()
     if idx >= me.count {
         throw IndexOutOfBoundsError(index: idx, count: me.count)
     }
-    return me.get_bit_internal(u64(idx))
+    return me.get_bit_internal(U64(idx))
 }
 
-routine BitList.__setitem__!<I>(me: BitList, index: I, value: bool)
+routine BitList.__setitem__!<I>(index: I, value: Bool)
 requires I follows Integral {
     # Set bit at index - O(1)
     let idx = index.to_uaddr()
     if idx >= me.count {
         throw IndexOutOfBoundsError(index: idx, count: me.count)
     }
-    me.set_bit_internal(u64(idx), value)
+    me.set_bit_internal(U64(idx), value)
 }
 
 # ============================================================================
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine BitList.__getitem__!<I>(me: BitList, index: BackIndex<I>) -> bool
+routine BitList.__getitem__!<I>(index: BackIndex<I>) -> Bool
 requires I follows Integral {
     # Get bit from end - ^1 is last, ^2 is second-to-last
     let idx = index.resolve(me.count)
-    return me.get_bit_internal(u64(idx))
+    return me.get_bit_internal(U64(idx))
 }
 
-routine BitList.__setitem__!<I>(me: BitList, index: BackIndex<I>, value: bool)
+routine BitList.__setitem__!<I>(index: BackIndex<I>, value: Bool)
 requires I follows Integral {
     # Set bit from end - ^1 is last, ^2 is second-to-last
     let idx = index.resolve(me.count)
-    me.set_bit_internal(u64(idx), value)
+    me.set_bit_internal(U64(idx), value)
 }
 
 # ============================================================================
 # Legacy get/set methods
 # ============================================================================
 
-routine BitList.get!<I>(me: BitList, index: I) -> bool
+routine BitList.get!<I>(index: I) -> Bool
 requires I follows Integral {
     return me.__getitem__!(index)
 }
 
-routine BitList.set!<I>(me: BitList, index: I, value: bool)
+routine BitList.set!<I>(index: I, value: Bool)
 requires I follows Integral {
     me.__setitem__!(index, value)
 }
@@ -207,36 +207,36 @@ requires I follows Integral {
 # Bit Operations
 # ============================================================================
 
-routine BitList.set_all(me: BitList, value: bool) {
+routine BitList.set_all(value: Bool) {
     # Set all bits to the same value
     let byte_count = (me.count + 7u64) / 8u64
     let fill_byte = if value then 0xFFu8 else 0x00u8
     me.data.fill!(fill_byte)
 }
 
-routine BitList.flip!<I>(me: BitList, index: I)
+routine BitList.flip!<I>(index: I)
 requires I follows Integral {
     # Toggle bit at index
     let idx = index.to_uaddr()
     if idx >= me.count {
         throw IndexOutOfBoundsError(index: idx, count: me.count)
     }
-    let current = me.get_bit_internal(u64(idx))
-    me.set_bit_internal(u64(idx), not current)
+    let current = me.get_bit_internal(U64(idx))
+    me.set_bit_internal(U64(idx), not current)
 }
 
-routine BitList.flip_all(me: BitList) {
+routine BitList.flip_all() {
     # Toggle all bits
     let byte_count = (me.count + 7u64) / 8u64
     var i = 0u64
     while i < byte_count {
-        let byte_val = me.data.read<u8>(i)
-        me.data.write<u8>(i, ~byte_val)
+        let byte_val = me.data.read<U8>(i)
+        me.data.write<U8>(i, ~byte_val)
         i = i + 1u64
     }
 }
 
-routine BitList.count_ones(me: BitList) -> u64 {
+routine BitList.count_ones() -> U64 {
     # Count number of bits set to 1 (popcount)
     var count = 0u64
     var i = 0u64
@@ -249,12 +249,12 @@ routine BitList.count_ones(me: BitList) -> u64 {
     return count
 }
 
-routine BitList.count_zeros(me: BitList) -> u64 {
+routine BitList.count_zeros() -> U64 {
     # Count number of bits set to 0
     return me.count - me.count_ones()
 }
 
-routine BitList.any(me: BitList) -> bool {
+routine BitList.any() -> Bool {
     # Check if any bit is set to 1
     var i = 0u64
     while i < me.count {
@@ -266,7 +266,7 @@ routine BitList.any(me: BitList) -> bool {
     return false
 }
 
-routine BitList.all(me: BitList) -> bool {
+routine BitList.all() -> Bool {
     # Check if all bits are set to 1
     var i = 0u64
     while i < me.count {
@@ -278,7 +278,7 @@ routine BitList.all(me: BitList) -> bool {
     return true
 }
 
-routine BitList.none(me: BitList) -> bool {
+routine BitList.none() -> Bool {
     # Check if no bits are set to 1
     return not me.any()
 }
@@ -287,7 +287,7 @@ routine BitList.none(me: BitList) -> bool {
 # Bitwise Operations (returns new BitList)
 # ============================================================================
 
-routine BitList.__and__(me: BitList, other: BitList) -> BitList {
+routine BitList.__and__(other: BitList) -> BitList {
     # Bitwise AND - returns new BitList with shorter length
     let min_count = if me.count < other.count then me.count else other.count
     var result = BitList(min_count)
@@ -301,7 +301,7 @@ routine BitList.__and__(me: BitList, other: BitList) -> BitList {
     return result
 }
 
-routine BitList.__or__(me: BitList, other: BitList) -> BitList {
+routine BitList.__or__(other: BitList) -> BitList {
     # Bitwise OR - returns new BitList with longer length
     let max_count = if me.count > other.count then me.count else other.count
     var result = BitList(max_count)
@@ -316,7 +316,7 @@ routine BitList.__or__(me: BitList, other: BitList) -> BitList {
     return result
 }
 
-routine BitList.__xor__(me: BitList, other: BitList) -> BitList {
+routine BitList.__xor__(other: BitList) -> BitList {
     # Bitwise XOR - returns new BitList with longer length
     let max_count = if me.count > other.count then me.count else other.count
     var result = BitList(max_count)
@@ -331,7 +331,7 @@ routine BitList.__xor__(me: BitList, other: BitList) -> BitList {
     return result
 }
 
-routine BitList.__not__(me: BitList) -> BitList {
+routine BitList.__not__() -> BitList {
     # Bitwise NOT - returns new BitList with flipped bits
     var result = BitList(me.count)
 
@@ -347,7 +347,7 @@ routine BitList.__not__(me: BitList) -> BitList {
 # Iteration Support
 # ============================================================================
 
-routine BitList.iter(me: BitList) -> BitListIterator {
+routine BitList.iter() -> BitListIterator {
     return BitListIterator(
         list: me,
         index: 0u64
@@ -356,10 +356,10 @@ routine BitList.iter(me: BitList) -> BitListIterator {
 
 entity BitListIterator {
     list: BitList
-    index: u64
+    index: U64
 }
 
-routine BitListIterator.next!(me: BitListIterator) -> bool {
+routine BitListIterator.next!(me: BitListIterator) -> Bool {
     if me.index >= me.list.count() {
         absent
     }
@@ -372,7 +372,7 @@ routine BitListIterator.next!(me: BitListIterator) -> bool {
 # Utility Operations
 # ============================================================================
 
-routine BitList.first!(me: BitList) -> bool {
+routine BitList.first!() -> Bool {
     # Get first bit (absent if empty)
     if me.is_empty() {
         absent
@@ -380,7 +380,7 @@ routine BitList.first!(me: BitList) -> bool {
     return me.get_bit_internal(0u64)
 }
 
-routine BitList.last!(me: BitList) -> bool {
+routine BitList.last!() -> Bool {
     # Get last bit (absent if empty)
     if me.is_empty() {
         absent
@@ -388,7 +388,7 @@ routine BitList.last!(me: BitList) -> bool {
     return me.get_bit_internal(me.count - 1u64)
 }
 
-routine BitList.reverse(me: BitList) -> BitList {
+routine BitList.reverse() -> BitList {
     # Return a reversed copy
     var result = BitList(me.count)
     var i = me.count
@@ -403,7 +403,7 @@ routine BitList.reverse(me: BitList) -> BitList {
 # Comparison Operations
 # ============================================================================
 
-routine BitList.__eq__(me: BitList, other: BitList) -> bool {
+routine BitList.__eq__(other: BitList) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -417,7 +417,7 @@ routine BitList.__eq__(me: BitList, other: BitList) -> bool {
     return true
 }
 
-routine BitList.__ne__(me: BitList, other: BitList) -> bool {
+routine BitList.__ne__(other: BitList) -> Bool {
     return not (me == other)
 }
 
@@ -425,56 +425,56 @@ routine BitList.__ne__(me: BitList, other: BitList) -> bool {
 # Conversion Operations
 # ============================================================================
 
-routine BitList.to_u8!(me: BitList) -> u8 {
-    # Convert first 8 bits to u8 (absent if fewer than 8 bits)
+routine BitList.to_u8!() -> U8 {
+    # Convert first 8 bits to U8 (absent if fewer than 8 bits)
     if me.count < 8u64 {
         absent
     }
-    return me.data.read<u8>(0u64)
+    return me.data.read<U8>(0u64)
 }
 
-routine BitList.to_u16!(me: BitList) -> u16 {
-    # Convert first 16 bits to u16 (absent if fewer than 16 bits)
+routine BitList.to_u16!() -> U16 {
+    # Convert first 16 bits to U16 (absent if fewer than 16 bits)
     if me.count < 16u64 {
         absent
     }
-    let low = u16(me.data.read<u8>(0u64))
-    let high = u16(me.data.read<u8>(1u64))
+    let low = U16(me.data.read<U8>(0u64))
+    let high = U16(me.data.read<U8>(1u64))
     return low | (high << 8u16)
 }
 
-routine BitList.to_u32!(me: BitList) -> u32 {
-    # Convert first 32 bits to u32 (absent if fewer than 32 bits)
+routine BitList.to_u32!() -> U32 {
+    # Convert first 32 bits to U32 (absent if fewer than 32 bits)
     if me.count < 32u64 {
         absent
     }
     var result = 0u32
     var i = 0u64
     while i < 4u64 {
-        let byte_val = u32(me.data.read<u8>(i))
-        result = result | (byte_val << u32(i * 8u64))
+        let byte_val = U32(me.data.read<U8>(i))
+        result = result | (byte_val << U32(i * 8u64))
         i = i + 1u64
     }
     return result
 }
 
-routine BitList.to_u64!(me: BitList) -> u64 {
-    # Convert first 64 bits to u64 (absent if fewer than 64 bits)
+routine BitList.to_u64!() -> U64 {
+    # Convert first 64 bits to U64 (absent if fewer than 64 bits)
     if me.count < 64u64 {
         absent
     }
     var result = 0u64
     var i = 0u64
     while i < 8u64 {
-        let byte_val = u64(me.data.read<u8>(i))
+        let byte_val = U64(me.data.read<U8>(i))
         result = result | (byte_val << (i * 8u64))
         i = i + 1u64
     }
     return result
 }
 
-routine BitList.from_u8(value: u8) -> BitList {
-    # Create BitList from u8 (8 bits)
+routine BitList.from_u8(value: U8) -> BitList {
+    # Create BitList from U8 (8 bits)
     var result = BitList(8u64)
     var i = 0u8
     while i < 8u8 {
@@ -484,8 +484,8 @@ routine BitList.from_u8(value: u8) -> BitList {
     return result
 }
 
-routine BitList.from_u16(value: u16) -> BitList {
-    # Create BitList from u16 (16 bits)
+routine BitList.from_u16(value: U16) -> BitList {
+    # Create BitList from U16 (16 bits)
     var result = BitList(16u64)
     var i = 0u16
     while i < 16u16 {
@@ -495,8 +495,8 @@ routine BitList.from_u16(value: u16) -> BitList {
     return result
 }
 
-routine BitList.from_u32(value: u32) -> BitList {
-    # Create BitList from u32 (32 bits)
+routine BitList.from_u32(value: U32) -> BitList {
+    # Create BitList from U32 (32 bits)
     var result = BitList(32u64)
     var i = 0u32
     while i < 32u32 {
@@ -506,8 +506,8 @@ routine BitList.from_u32(value: u32) -> BitList {
     return result
 }
 
-routine BitList.from_u64(value: u64) -> BitList {
-    # Create BitList from u64 (64 bits)
+routine BitList.from_u64(value: U64) -> BitList {
+    # Create BitList from U64 (64 bits)
     var result = BitList(64u64)
     var i = 0u64
     while i < 64u64 {

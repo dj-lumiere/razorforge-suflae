@@ -4,7 +4,7 @@
 # No heap allocation - storage is inline
 #
 # Usage:
-#   let buffer: FixedList<u8, 16> = FixedList()
+#   let buffer: FixedList<U8, 16> = FixedList()
 #   buffer.push!(42)
 #   buffer.push!(13)
 #   let first = buffer[0]
@@ -17,8 +17,8 @@ namespace Collections
 # Fixed-capacity list with reference semantics
 # N elements of T stored inline, count tracks active elements
 resident FixedList<T, N>
-requires N is uaddr {
-    private count: uaddr    # Current number of elements (0 to N)
+requires N is UAddr {
+    private count: UAddr    # Current number of elements (0 to N)
     # N elements of T stored inline by compiler
 }
 
@@ -34,23 +34,23 @@ routine FixedList<T, N>.__create__() -> FixedList<T, N> {
 # Core Operations
 # ============================================================================
 
-routine FixedList<T, N>.count(me: FixedList<T, N>) -> uaddr {
+routine FixedList<T, N>.count(me: FixedList<T, N>) -> UAddr {
     return me.count
 }
 
-routine FixedList<T, N>.capacity(me: FixedList<T, N>) -> uaddr {
+routine FixedList<T, N>.capacity(me: FixedList<T, N>) -> UAddr {
     return N
 }
 
-routine FixedList<T, N>.is_empty(me: FixedList<T, N>) -> bool {
+routine FixedList<T, N>.is_empty(me: FixedList<T, N>) -> Bool {
     return me.count == 0uaddr
 }
 
-routine FixedList<T, N>.is_full(me: FixedList<T, N>) -> bool {
+routine FixedList<T, N>.is_full(me: FixedList<T, N>) -> Bool {
     return me.count == N
 }
 
-routine FixedList<T, N>.remaining(me: FixedList<T, N>) -> uaddr {
+routine FixedList<T, N>.remaining(me: FixedList<T, N>) -> UAddr {
     return N - me.count
 }
 
@@ -185,7 +185,7 @@ routine FixedList<T, N>.iter(me: FixedList<T, N>) -> FixedListIterator<T, N> {
 
 record FixedListIterator<T, N> {
     list: FixedList<T, N>
-    index: uaddr
+    index: UAddr
 }
 
 routine FixedListIterator<T, N>.next!(me: FixedListIterator<T, N>) -> T {
@@ -229,7 +229,7 @@ routine FixedList<T, N>.last_or_default(me: FixedList<T, N>, default_value: T) -
     return me[me.count - 1uaddr]
 }
 
-routine FixedList<T, N>.contains(me: FixedList<T, N>, value: T) -> bool {
+routine FixedList<T, N>.contains(me: FixedList<T, N>, value: T) -> Bool {
     var i = 0uaddr
     while i < me.count {
         if me[i] == value {
@@ -240,7 +240,7 @@ routine FixedList<T, N>.contains(me: FixedList<T, N>, value: T) -> bool {
     return false
 }
 
-routine FixedList<T, N>.index_of!(me: FixedList<T, N>, value: T) -> uaddr {
+routine FixedList<T, N>.index_of!(me: FixedList<T, N>, value: T) -> UAddr {
     var i = 0uaddr
     while i < me.count {
         if me[i] == value {
@@ -265,7 +265,7 @@ routine FixedList<T, N>.fill(me: FixedList<T, N>, value: T) {
 # Comparison Operations
 # ============================================================================
 
-routine FixedList<T, N>.__eq__(me: FixedList<T, N>, other: FixedList<T, N>) -> bool {
+routine FixedList<T, N>.__eq__(me: FixedList<T, N>, other: FixedList<T, N>) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -279,6 +279,6 @@ routine FixedList<T, N>.__eq__(me: FixedList<T, N>, other: FixedList<T, N>) -> b
     return true
 }
 
-routine FixedList<T, N>.__ne__(me: FixedList<T, N>, other: FixedList<T, N>) -> bool {
+routine FixedList<T, N>.__ne__(me: FixedList<T, N>, other: FixedList<T, N>) -> Bool {
     return not (me == other)
 }

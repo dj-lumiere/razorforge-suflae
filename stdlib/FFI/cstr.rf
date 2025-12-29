@@ -1,7 +1,7 @@
-# RazorForge C String Type (cstr)
+# RazorForge C String Type (CStr)
 # Null-terminated char* wrapper for C FFI interop
 #
-# cstr is a value type that wraps a raw pointer (uaddr) to a null-terminated
+# CStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
 # sequence of bytes. It provides safe access to C strings without copying
 # unless explicitly requested.
 #
@@ -12,82 +12,81 @@
 # - Encoding-agnostic (typically ASCII or UTF-8 in modern code)
 #
 # Memory ownership:
-# - cstr(from_ptr: uaddr) - wraps existing memory, does NOT take ownership
-# - cstr(from_text: Bytes) - allocates NEW memory, caller owns it
-# - cstr.copy() - allocates NEW memory, caller owns it
+# - CStr(from_ptr: UAddr) - wraps existing memory, does NOT take ownership
+# - CStr(from_text: Bytes) - allocates NEW memory, caller owns it
+# - CStr.copy() - allocates NEW memory, caller owns it
 #
-# For wide character strings (wchar_t*), see cwstr.rf
+# For wide character strings (wchar_t*), see CWStr.rf
 # TODO: Add "namespace core" once Text<T> and List<T> dependencies are resolved
 import memory/DynamicSlice
 import memory/MemorySize
 import Collections/List
 import Text/Bytes
-import Text/byte
 
 # ============================================================================
-# cstr Record Definition
+# CStr Record Definition
 # ============================================================================
 
 # C string record (null-terminated char*)
 # Value type wrapper around raw pointer - no heap allocation for wrapper
-record cstr {
-    ptr: uaddr  # Raw pointer to null-terminated byte sequence
+record CStr {
+    ptr: UAddr  # Raw pointer to null-terminated Byte sequence
 }
 
-# Null pointer constant for cstr comparisons
-preset cstr_null: cstr = cstr(ptr: 0uaddr)
+# Null pointer constant for CStr comparisons
+preset CSTR_NULL: CStr = CStr(ptr: 0uaddr)
 
 # ============================================================================
 # Constructors
 # ============================================================================
 
-# Create cstr from raw pointer (wraps existing memory, does NOT copy)
-# WARNING: The pointed-to memory must remain valid for the lifetime of this cstr
-routine cstr.__create__(from_ptr: uaddr) -> cstr {
-    return cstr(ptr: from_ptr)
+# Create CStr from raw pointer (wraps existing memory, does NOT copy)
+# WARNING: The pointed-to memory must remain valid for the lifetime of this CStr
+routine CStr.__create__(from_ptr: UAddr) -> CStr {
+    return CStr(ptr: from_ptr)
 }
 
-# Create cstr from Bytes (allocates NEW memory with null terminator)
+# Create CStr from Bytes (allocates NEW memory with null terminator)
 # The caller is responsible for freeing this memory when done
-routine cstr.__create__(from_text: Bytes) -> cstr {
+routine CStr.__create__(from_text: Bytes) -> CStr {
     danger! {
         let len = from_text.count()
         let buffer = DynamicSlice(MemorySize(len + 1u64))
 
-        var i: u64 = 0u64
+        var i: U64 = 0u64
         loop {
             if i >= len {
                 break
             }
-            buffer.write<u8>(i, from_text[i].codepoint())
+            buffer.write<U8>(i, from_text[i].codepoint())
             i = i + 1u64
         }
         # Null terminator
-        buffer.write!<u8>(len, 0u8)
+        buffer.write!<U8>(len, 0u8)
 
-        return cstr(ptr: buffer.snatch!(0u64))
+        return CStr(ptr: buffer.snatch(0u64))
     }
 }
 
-# Create cstr from List<u8> (allocates NEW memory with null terminator)
+# Create CStr from List<U8> (allocates NEW memory with null terminator)
 # The caller is responsible for freeing this memory when done
-routine cstr.__create__(from_bytes: List<u8>) -> cstr {
+routine CStr.__create__(from_bytes: List<U8>) -> CStr {
     danger! {
         let len = from_bytes.count()
         let buffer = DynamicSlice(MemorySize(len + 1u64))
 
-        var i: u64 = 0u64
+        var i: U64 = 0u64
         loop {
             if i >= len {
                 break
             }
-            buffer.write!<u8>(i, from_bytes[i])
+            buffer.write!<U8>(i, from_bytes[i])
             i = i + 1u64
         }
         # Null terminator
-        buffer.write!<u8>(len, 0u8)
+        buffer.write!<U8>(len, 0u8)
 
-        return cstr(ptr: buffer.snatch(0u64))
+        return CStr(ptr: buffer.snatch(0u64))
     }
 }
 
@@ -96,25 +95,25 @@ routine cstr.__create__(from_bytes: List<u8>) -> cstr {
 # ============================================================================
 
 # Get raw pointer value
-routine cstr.raw(me: cstr) -> uaddr {
+routine CStr.raw() -> UAddr {
     return me.ptr
 }
 
 # Get length of C string (excluding null terminator)
 # O(n) - must scan for null terminator
-routine cstr.length(me: cstr) -> uaddr {
+routine CStr.length() -> UAddr {
     danger! {
         return @native.rf_strlen(me.ptr)
     }
 }
 
 # Check if C string pointer is null
-routine cstr.is_null(me: cstr) -> bool {
+routine CStr.is_null() -> Bool {
     return me.ptr == 0uaddr
 }
 
 # Check if C string is empty (null or zero-length)
-routine cstr.is_empty(me: cstr) -> bool {
+routine CStr.is_empty() -> Bool {
     return me.is_null() or me.length() == 0uaddr
 }
 
@@ -122,10 +121,10 @@ routine cstr.is_empty(me: cstr) -> bool {
 # Indexing
 # ============================================================================
 
-# Get byte at index (no bounds checking in danger zone)
-routine cstr.__getitem__!(me: cstr, index: uaddr) -> u8 {
+# Get Byte at index (no bounds checking in danger zone)
+routine CStr.__getitem__!(index: UAddr) -> U8 {
     danger! {
-        return read_as!<u8>(me.ptr + index)
+        return read_as!<U8>(me.ptr + index)
     }
 }
 
@@ -133,37 +132,23 @@ routine cstr.__getitem__!(me: cstr, index: uaddr) -> u8 {
 # Comparison
 # ============================================================================
 
-# Compare two C strings lexicographically
-# Returns: 0 if equal, negative if me < other, positive if me > other
-routine cstr.compare(me: cstr, other: cstr) -> s32 {
+routine CStr.__eq__(you: CStr) -> Bool {
     danger! {
-        return @native.rf_strcmp(me.ptr, other.ptr)
+        return @native.rf_strcmp(me.ptr, you.ptr) == 0s32
     }
 }
 
-# Equality check
-routine cstr.__eq__(me: cstr, other: cstr) -> bool {
-    return me.compare(other) == 0s32
-}
-
-routine cstr.__ne__(me: cstr, other: cstr) -> bool {
-    return me.compare(other) != 0s32
-}
-
-routine cstr.__lt__(me: cstr, other: cstr) -> bool {
-    return me.compare(other) < 0s32
-}
-
-routine cstr.__le__(me: cstr, other: cstr) -> bool {
-    return me.compare(other) <= 0s32
-}
-
-routine cstr.__gt__(me: cstr, other: cstr) -> bool {
-    return me.compare(other) > 0s32
-}
-
-routine cstr.__ge__(me: cstr, other: cstr) -> bool {
-    return me.compare(other) >= 0s32
+routine CStr.__cmp__(you: CStr) -> ComparisonSign {
+    danger! {
+        let cmp = @native.rf_strcmp(me.ptr, you.ptr)
+        if cmp < 0s32 {
+            return ME_SMALL
+        }
+        if cmp > 0s32 {
+            return ME_LARGE
+        }
+        return EQUAL
+    }
 }
 
 # ============================================================================
@@ -172,13 +157,13 @@ routine cstr.__ge__(me: cstr, other: cstr) -> bool {
 
 # Copy C string to new allocated memory
 # The caller is responsible for freeing the returned memory
-routine cstr.copy(me: cstr) -> cstr {
+routine CStr.copy() -> CStr {
     danger! {
         let len = me.length()
         let buffer = DynamicSlice(MemorySize(len + 1uaddr))
         let dest = buffer.snatch(0uaddr)
         @native.rf_strcpy(dest, me.ptr)
-        return cstr(ptr: dest)
+        return CStr(ptr: dest)
     }
 }
 
@@ -186,39 +171,39 @@ routine cstr.copy(me: cstr) -> cstr {
 # Conversion to RazorForge Types
 # ============================================================================
 
-# Convert cstr to Bytes (copies data, interprets as UTF-8)
-routine cstr.to_text(me: cstr) -> Bytes {
+# Convert CStr to Bytes (copies data, interprets as UTF-8)
+routine CStr.to_text() -> Bytes {
     danger! {
         let len = me.length()
         if len == 0uaddr {
             return Bytes()
         }
 
-        let list = List<byte>(len)
-        var i: uaddr = 0uaddr
+        let list = List<Byte>(len)
+        var i: UAddr = 0uaddr
         loop {
             if i >= len {
                 break
             }
-            let byte_val = read_as!<u8>(me.ptr + i)
-            list.push(byte(codepoint: byte_val))
+            let byte_val = read_as!<U8>(me.ptr + i)
+            list.push(Byte(codepoint: byte_val))
             i = i + 1uaddr
         }
         return Bytes(from_list: list)
     }
 }
 
-# Convert cstr to List<u8> (copies raw bytes, for binary data or legacy encodings)
-routine cstr.to_bytes(me: cstr) -> List<u8> {
+# Convert CStr to List<U8> (copies raw bytes, for binary data or legacy encodings)
+routine CStr.to_bytes() -> List<U8> {
     danger! {
         let len = me.length()
-        let list = List<u8>(len)
-        var i: uaddr = 0uaddr
+        let list = List<U8>(len)
+        var i: UAddr = 0uaddr
         loop {
             if i >= len {
                 break
             }
-            let byte_val = read_as!<u8>(me.ptr + i)
+            let byte_val = read_as!<U8>(me.ptr + i)
             list.push(byte_val)
             i = i + 1uaddr
         }
@@ -231,11 +216,11 @@ routine cstr.to_bytes(me: cstr) -> List<u8> {
 # ============================================================================
 
 # Get pointer offset by n bytes
-routine cstr.offset(me: cstr, n: uaddr) -> cstr {
-    return cstr(ptr: me.ptr + n)
+routine CStr.offset(n: UAddr) -> CStr {
+    return CStr(ptr: me.ptr + n)
 }
 
 # Get pointer to substring starting at index
-routine cstr.from_index(me: cstr, start: uaddr) -> cstr {
-    return cstr(ptr: me.ptr + start)
+routine CStr.from_index(start: UAddr) -> CStr {
+    return CStr(ptr: me.ptr + start)
 }

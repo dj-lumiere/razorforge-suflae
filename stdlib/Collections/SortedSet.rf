@@ -4,7 +4,7 @@
 # Elements are unique and always in sorted order
 #
 # Usage:
-#   let set = SortedSet<s32>()
+#   let set = SortedSet<S32>()
 #   set.insert(5)
 #   set.insert(1)
 #   set.insert(3)
@@ -21,29 +21,29 @@ namespace Collections
 
 # B-tree order (max children per node)
 # B = 32 means each node has 16-31 keys (except root)
-preset B: uaddr = 32uaddr
-preset MIN_KEYS: uaddr = 15uaddr  # B/2 - 1
+preset B: UAddr = 32uaddr
+preset MIN_KEYS: UAddr = 15uaddr  # B/2 - 1
 
 # B-tree node
 entity BTreeSetNode<T>
 requires T follows Comparable {
     keys: List<T>                       # Keys in this node
     children: List<BTreeSetNode<T>>     # Child pointers (empty for leaf)
-    subtree_size: uaddr                 # Total elements in this subtree
-    is_leaf: bool
+    subtree_size: UAddr                 # Total elements in this subtree
+    is_leaf: Bool
 }
 
 entity SortedSet<T>
 requires T follows Comparable {
     private root: BTreeSetNode<T>
-    private count: uaddr
+    private count: UAddr
 }
 
 # ============================================================================
 # Node Constructors
 # ============================================================================
 
-routine BTreeSetNode<T>.__create__(is_leaf: bool) -> BTreeSetNode<T> {
+routine BTreeSetNode<T>.__create__(is_leaf: Bool) -> BTreeSetNode<T> {
     return BTreeSetNode<T>(
         keys: List<T>(),
         children: List<BTreeSetNode<T>>(),
@@ -67,11 +67,11 @@ routine SortedSet<T>.__create__() -> SortedSet<T> {
 # Core Operations
 # ============================================================================
 
-routine SortedSet<T>.count(me: SortedSet<T>) -> uaddr {
+routine SortedSet<T>.count(me: SortedSet<T>) -> UAddr {
     return me.count
 }
 
-routine SortedSet<T>.is_empty(me: SortedSet<T>) -> bool {
+routine SortedSet<T>.is_empty(me: SortedSet<T>) -> Bool {
     return me.count == 0uaddr
 }
 
@@ -84,14 +84,14 @@ routine SortedSet<T>.clear(me: SortedSet<T>) {
 # Search
 # ============================================================================
 
-routine SortedSet<T>.contains(me: SortedSet<T>, value: T) -> bool {
+routine SortedSet<T>.contains(me: SortedSet<T>, value: T) -> Bool {
     if me.root is None {
         return false
     }
     return me.search_node(me.root!, value)
 }
 
-routine SortedSet<T>.search_node(me: SortedSet<T>, node: BTreeSetNode<T>, value: T) -> bool {
+routine SortedSet<T>.search_node(me: SortedSet<T>, node: BTreeSetNode<T>, value: T) -> Bool {
     # Binary search for position in keys
     var i = 0uaddr
     while i < node.keys.count() and value > node.keys[i] {
@@ -116,7 +116,7 @@ routine SortedSet<T>.search_node(me: SortedSet<T>, node: BTreeSetNode<T>, value:
 # Insert
 # ============================================================================
 
-routine SortedSet<T>.insert(me: SortedSet<T>, value: T) -> bool {
+routine SortedSet<T>.insert(me: SortedSet<T>, value: T) -> Bool {
     # Returns true if inserted, false if already exists
 
     if me.root is None {
@@ -188,7 +188,7 @@ routine SortedSet<T>.insert_non_full(me: SortedSet<T>, node: BTreeSetNode<T>, va
     }
 }
 
-routine SortedSet<T>.split_child(me: SortedSet<T>, parent_node: BTreeSetNode<T>, child_idx: uaddr) {
+routine SortedSet<T>.split_child(me: SortedSet<T>, parent_node: BTreeSetNode<T>, child_idx: UAddr) {
     let child = parent_node.children[child_idx]
     let mid = (B - 1uaddr) / 2uaddr
 
@@ -283,7 +283,7 @@ routine SortedSet<T>.update_subtree_size(me: SortedSet<T>, node: BTreeSetNode<T>
 # Remove
 # ============================================================================
 
-routine SortedSet<T>.remove(me: SortedSet<T>, value: T) -> bool {
+routine SortedSet<T>.remove(me: SortedSet<T>, value: T) -> Bool {
     # Returns true if removed, false if not found
     if me.root is None {
         return false
@@ -348,7 +348,7 @@ routine SortedSet<T>.remove_from_node(me: SortedSet<T>, node: BTreeSetNode<T>, v
     }
 }
 
-routine SortedSet<T>.get_predecessor(me: SortedSet<T>, node: BTreeSetNode<T>, idx: uaddr) -> T {
+routine SortedSet<T>.get_predecessor(me: SortedSet<T>, node: BTreeSetNode<T>, idx: UAddr) -> T {
     # Get the largest key in the left subtree of keys[idx]
     var current = node.children[idx]
     while not current.is_leaf {
@@ -376,7 +376,7 @@ requires I follows Integral {
     return me.get_by_rank(me.root!, idx)
 }
 
-routine SortedSet<T>.get_by_rank(me: SortedSet<T>, node: BTreeSetNode<T>, rank: uaddr) -> T {
+routine SortedSet<T>.get_by_rank(me: SortedSet<T>, node: BTreeSetNode<T>, rank: UAddr) -> T {
     # Get element at rank (0-indexed) in this subtree
     if node.is_leaf {
         return node.keys[rank]
@@ -520,7 +520,7 @@ routine SortedSet<T>.collect_inorder(me: SortedSet<T>, node: BTreeSetNode<T>, re
 
 entity SortedSetIterator<T> {
     set: SortedSet<T>
-    index: uaddr
+    index: UAddr
 }
 
 routine SortedSetIterator<T>.next!(me: SortedSetIterator<T>) -> T {
@@ -536,7 +536,7 @@ routine SortedSetIterator<T>.next!(me: SortedSetIterator<T>) -> T {
 # Comparison
 # ============================================================================
 
-routine SortedSet<T>.__eq__(me: SortedSet<T>, other: SortedSet<T>) -> bool {
+routine SortedSet<T>.__eq__(me: SortedSet<T>, other: SortedSet<T>) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -550,6 +550,6 @@ routine SortedSet<T>.__eq__(me: SortedSet<T>, other: SortedSet<T>) -> bool {
     return true
 }
 
-routine SortedSet<T>.__ne__(me: SortedSet<T>, other: SortedSet<T>) -> bool {
+routine SortedSet<T>.__ne__(me: SortedSet<T>, other: SortedSet<T>) -> Bool {
     return not (me == other)
 }

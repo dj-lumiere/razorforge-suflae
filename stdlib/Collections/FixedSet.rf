@@ -4,7 +4,7 @@
 # No heap allocation - uses open addressing with robin hood probing
 #
 # Usage:
-#   let ids: FixedSet<s32, 64> = FixedSet()
+#   let ids: FixedSet<S32, 64> = FixedSet()
 #   ids.insert(42)
 #   ids.insert(13)
 #   if ids.contains(42) { }
@@ -16,18 +16,18 @@ import Collections/List
 namespace Collections
 
 # Slot states for robin hood hashing
-preset SLOT_EMPTY: u8 = 0u8
-preset SLOT_OCCUPIED: u8 = 1u8
-preset SLOT_TOMBSTONE: u8 = 2u8
+preset SLOT_EMPTY: U8 = 0u8
+preset SLOT_OCCUPIED: U8 = 1u8
+preset SLOT_TOMBSTONE: U8 = 2u8
 
 # Fixed-capacity hash set with reference semantics
 # Uses robin hood open addressing for cache-friendly probing
 resident FixedSet<T, N>
 requires T follows Hashable
-requires N is uaddr {
-    private count: uaddr           # Current number of elements
-    private tombstones: uaddr      # Number of tombstones (for load factor)
-    # N slots of (T, u8 state, uaddr probe_distance) stored inline by compiler
+requires N is UAddr {
+    private count: UAddr           # Current number of elements
+    private tombstones: UAddr      # Number of tombstones (for load factor)
+    # N slots of (T, U8 state, UAddr probe_distance) stored inline by compiler
 }
 
 # ============================================================================
@@ -49,37 +49,37 @@ routine FixedSet<T, N>.__create__() -> FixedSet<T, N> {
 # Internal Slot Access
 # ============================================================================
 
-routine FixedSet<T, N>.get_value(me: FixedSet<T, N>, slot: uaddr) -> T {
+routine FixedSet<T, N>.get_value(me: FixedSet<T, N>, slot: UAddr) -> T {
     # Access slot value (internal)
     return me[slot * 3uaddr]
 }
 
-routine FixedSet<T, N>.set_value(me: FixedSet<T, N>, slot: uaddr, value: T) {
+routine FixedSet<T, N>.set_value(me: FixedSet<T, N>, slot: UAddr, value: T) {
     me[slot * 3uaddr] = value
 }
 
-routine FixedSet<T, N>.get_state(me: FixedSet<T, N>, slot: uaddr) -> u8 {
+routine FixedSet<T, N>.get_state(me: FixedSet<T, N>, slot: UAddr) -> U8 {
     return me[slot * 3uaddr + 1uaddr]
 }
 
-routine FixedSet<T, N>.set_state(me: FixedSet<T, N>, slot: uaddr, state: u8) {
+routine FixedSet<T, N>.set_state(me: FixedSet<T, N>, slot: UAddr, state: U8) {
     me[slot * 3uaddr + 1uaddr] = state
 }
 
-routine FixedSet<T, N>.get_probe_dist(me: FixedSet<T, N>, slot: uaddr) -> uaddr {
+routine FixedSet<T, N>.get_probe_dist(me: FixedSet<T, N>, slot: UAddr) -> UAddr {
     return me[slot * 3uaddr + 2uaddr]
 }
 
-routine FixedSet<T, N>.set_probe_dist(me: FixedSet<T, N>, slot: uaddr, dist: uaddr) {
+routine FixedSet<T, N>.set_probe_dist(me: FixedSet<T, N>, slot: UAddr, dist: UAddr) {
     me[slot * 3uaddr + 2uaddr] = dist
 }
 
-routine FixedSet<T, N>.hash_index(me: FixedSet<T, N>, value: T) -> uaddr {
+routine FixedSet<T, N>.hash_index(me: FixedSet<T, N>, value: T) -> UAddr {
     let hash = value.__hash__()
     return hash % N
 }
 
-routine FixedSet<T, N>.next_slot(slot: uaddr) -> uaddr {
+routine FixedSet<T, N>.next_slot(slot: UAddr) -> UAddr {
     return (slot + 1uaddr) % N
 }
 
@@ -87,23 +87,23 @@ routine FixedSet<T, N>.next_slot(slot: uaddr) -> uaddr {
 # Core Operations
 # ============================================================================
 
-routine FixedSet<T, N>.count(me: FixedSet<T, N>) -> uaddr {
+routine FixedSet<T, N>.count(me: FixedSet<T, N>) -> UAddr {
     return me.count
 }
 
-routine FixedSet<T, N>.capacity(me: FixedSet<T, N>) -> uaddr {
+routine FixedSet<T, N>.capacity(me: FixedSet<T, N>) -> UAddr {
     return N
 }
 
-routine FixedSet<T, N>.is_empty(me: FixedSet<T, N>) -> bool {
+routine FixedSet<T, N>.is_empty(me: FixedSet<T, N>) -> Bool {
     return me.count == 0uaddr
 }
 
-routine FixedSet<T, N>.is_full(me: FixedSet<T, N>) -> bool {
+routine FixedSet<T, N>.is_full(me: FixedSet<T, N>) -> Bool {
     return me.count == N
 }
 
-routine FixedSet<T, N>.remaining(me: FixedSet<T, N>) -> uaddr {
+routine FixedSet<T, N>.remaining(me: FixedSet<T, N>) -> UAddr {
     return N - me.count
 }
 
@@ -117,7 +117,7 @@ routine FixedSet<T, N>.clear(me: FixedSet<T, N>) {
     me.tombstones = 0uaddr
 }
 
-routine FixedSet<T, N>.contains(me: FixedSet<T, N>, value: T) -> bool {
+routine FixedSet<T, N>.contains(me: FixedSet<T, N>, value: T) -> Bool {
     var slot = me.hash_index(value)
     var probe_dist = 0uaddr
 
@@ -149,7 +149,7 @@ routine FixedSet<T, N>.contains(me: FixedSet<T, N>, value: T) -> bool {
     }
 }
 
-routine FixedSet<T, N>.insert!(me: FixedSet<T, N>, value: T) -> bool {
+routine FixedSet<T, N>.insert!(me: FixedSet<T, N>, value: T) -> Bool {
     # Returns true if inserted, false if already exists
     # Throws if full
     if me.count >= N {
@@ -207,7 +207,7 @@ routine FixedSet<T, N>.insert!(me: FixedSet<T, N>, value: T) -> bool {
     }
 }
 
-routine FixedSet<T, N>.remove(me: FixedSet<T, N>, value: T) -> bool {
+routine FixedSet<T, N>.remove(me: FixedSet<T, N>, value: T) -> Bool {
     # Returns true if removed, false if not found
     var slot = me.hash_index(value)
     var probe_dist = 0uaddr
@@ -241,7 +241,7 @@ routine FixedSet<T, N>.remove(me: FixedSet<T, N>, value: T) -> bool {
     }
 }
 
-routine FixedSet<T, N>.backward_shift_delete(me: FixedSet<T, N>, slot: uaddr) {
+routine FixedSet<T, N>.backward_shift_delete(me: FixedSet<T, N>, slot: UAddr) {
     # Shift elements backward to maintain robin hood invariant
     var current = slot
     var next = FixedSet<T, N>.next_slot(current)
@@ -291,7 +291,7 @@ routine FixedSet<T, N>.iter(me: FixedSet<T, N>) -> FixedSetIterator<T, N> {
 
 record FixedSetIterator<T, N> {
     set: FixedSet<T, N>
-    slot: uaddr
+    slot: UAddr
 }
 
 routine FixedSetIterator<T, N>.next!(me: FixedSetIterator<T, N>) -> T {
@@ -310,7 +310,7 @@ routine FixedSetIterator<T, N>.next!(me: FixedSetIterator<T, N>) -> T {
 # Comparison
 # ============================================================================
 
-routine FixedSet<T, N>.__eq__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> bool {
+routine FixedSet<T, N>.__eq__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> Bool {
     if me.count != other.count {
         return false
     }
@@ -327,6 +327,6 @@ routine FixedSet<T, N>.__eq__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> bool
     return true
 }
 
-routine FixedSet<T, N>.__ne__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> bool {
+routine FixedSet<T, N>.__ne__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> Bool {
     return not (me == other)
 }

@@ -1,17 +1,17 @@
 # RazorForge Snatched<T> - Unsafe raw pointer wrapper
 #
-# Snatched<T> is created ONLY via .snatch!() method inside danger! blocks.
+# Snatched<T> is created ONLY via .snatch() method inside danger! blocks.
 # It represents raw, unsafe memory access with NO safety guarantees.
 #
 # Syntax:
 #   danger! {
-#       let raw = obj.snatch!()  # Snatched<T>
+#       let raw = obj.snatch()  # Snatched<T>
 #       let value = raw.read()   # Type-safe read
 #       raw.write(new_value)     # Type-safe write
 #   }
 #
 # Properties:
-# - Created ONLY inside danger! blocks via .snatch!()
+# - Created ONLY inside danger! blocks via .snatch()
 # - NO lifetime tracking - can become dangling
 # - NO borrow checking - can alias freely
 # - NO reference counting - manual management required
@@ -22,10 +22,10 @@
 namespace core
 
 record Snatched<T> {
-    public address: uaddr  # Public direct address access
+    public address: UAddr  # Public direct address access
 }
 
-routine T.get_address() -> uaddr {
+routine T.get_address() -> UAddr {
     danger! {
         return @native.rf_address_of<T>(me)
     }
@@ -108,7 +108,7 @@ routine snatched_none<T>() -> Snatched<T> {
 }
 
 # Check if pointer is none
-routine Snatched<T>.is_none() -> bool {
+routine Snatched<T>.is_none() -> Bool {
     return me.address == 0_uaddr
 }
 
@@ -118,7 +118,7 @@ routine Snatched<T>.offset(bytes: MemorySize) -> Snatched<T> {
 }
 
 # Compare addresses
-routine Snatched<T>.__eq__(other: Snatched<T>) -> bool {
+routine Snatched<T>.__eq__(other: Snatched<T>) -> Bool {
     return me.address == other.address
 }
 

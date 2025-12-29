@@ -1,7 +1,7 @@
 # MemoryError - Error types for memory operations
 
 record MemoryAllocationError follows Crashable {
-    public requested_bytes: uaddr
+    public requested_bytes: UAddr
 }
 
 routine MemoryAllocationError.crash_message() -> Text {
@@ -9,9 +9,9 @@ routine MemoryAllocationError.crash_message() -> Text {
 }
 
 record MemoryBoundsError follows Crashable {
-    public offset: uaddr
-    public size: uaddr
-    public allocated: uaddr
+    public offset: UAddr
+    public size: UAddr
+    public allocated: UAddr
 }
 
 routine MemoryBoundsError.crash_message() -> Text {
@@ -19,9 +19,9 @@ routine MemoryBoundsError.crash_message() -> Text {
 }
 
 record SliceBoundsError follows Crashable {
-    public offset: uaddr
-    public length: uaddr
-    public allocated: uaddr
+    public offset: UAddr
+    public length: UAddr
+    public allocated: UAddr
 }
 
 routine SliceBoundsError.crash_message() -> Text {

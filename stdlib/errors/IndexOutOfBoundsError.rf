@@ -4,8 +4,8 @@
 import Text/Text
 
 record IndexOutOfBoundsError follows Crashable {
-    public index: u64
-    public count: u64
+    public index: U64
+    public count: U64
 }
 
 routine IndexOutOfBoundsError.crash_message() -> Text {

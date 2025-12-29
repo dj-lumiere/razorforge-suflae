@@ -28,7 +28,7 @@ namespace core
 
 record Inspected<T> {
     private ptr: Snatched<T>    # Generic type - use Snatched<T>
-    private lock_guard: uaddr   # Fixed type - use uaddr
+    private lock_guard: UAddr   # Fixed type - use UAddr
 }
 
 # NOTE: No constructors, no manual methods - all operations handled by compiler

@@ -1,15 +1,15 @@
-# RazorForge saddr (system-sized signed integer) native type implementation
-# Maps to LLVM pointer-sized integer - s32 on 32-bit, s64 on 64-bit platforms
+# RazorForge SAddr (system-sized signed integer) native type implementation
+# Maps to LLVM pointer-sized integer - S32 on 32-bit, S64 on 64-bit platforms
 #
-# SAFETY: saddr does NOT support base arithmetic operators (+, -, *, //, %, **, <<)
+# SAFETY: SAddr does NOT support base arithmetic operators (+, -, *, //, %, **, <<)
 # to prevent silent overflow bugs in pointer/offset calculations.
 # You must use explicit wrapping (+%, -%, etc.) or checked (+?, -?, etc.) variants.
 
 # TODO: Add "namespace core" once tuple destructuring is implemented in codegen
 # Currently blocked by functions using let (result, overflow) = @intrinsic.add.overflow<iptr>(...)
 namespace core
-# Core saddr type definition - maps to LLVM iptr/isize
-record saddr {
+# Core SAddr type definition - maps to LLVM iptr/isize
+record SAddr {
     public value: @intrinsic.iptr
 }
 
@@ -18,143 +18,143 @@ record saddr {
 # Since they are black hole types, all constructors are automatically wrapped.
 # ============================================================================
 
-routine saddr.__create__!(from_text: Text<Letter>) -> saddr {
+routine SAddr.__create__!(from_text: Text<Letter>) -> SAddr {
     danger! {
         return @native.rf_parse_saddr(from_text)
     }
 }
 
-# From s8 - sign extend
-routine saddr.__create__(from: s8) -> saddr {
+# From S8 - sign extend
+routine SAddr.__create__(from: S8) -> SAddr {
     danger! {
         return @intrinsic.sext<i8, iptr>(from)
     }
 }
 
-# From s16 - sign extend
-routine saddr.__create__(from: s16) -> saddr {
+# From S16 - sign extend
+routine SAddr.__create__(from: S16) -> SAddr {
     danger! {
         return @intrinsic.sext<i16, iptr>(from)
     }
 }
 
-# From s32 - sign extend or bitcast depending on platform
-routine saddr.__create__(from: s32) -> saddr {
+# From S32 - sign extend or bitcast depending on platform
+routine SAddr.__create__(from: S32) -> SAddr {
     danger! {
         return @intrinsic.sext<i32, iptr>(from)
     }
 }
 
-# From s64 - truncate or bitcast depending on platform (wraps on 32-bit)
-routine saddr.__create__(from: s64) -> saddr {
+# From S64 - truncate or bitcast depending on platform (wraps on 32-bit)
+routine SAddr.__create__(from: S64) -> SAddr {
     danger! {
         return @intrinsic.trunc<i64, iptr>(from)
     }
 }
 
-# From s128 - truncate (wraps)
-routine saddr.__create__(from: s128) -> saddr {
+# From S128 - truncate (wraps)
+routine SAddr.__create__(from: S128) -> SAddr {
     danger! {
         return @intrinsic.trunc<i128, iptr>(from)
     }
 }
 
-# From u8 - zero extend
-routine saddr.__create__(from: u8) -> saddr {
+# From U8 - zero extend
+routine SAddr.__create__(from: U8) -> SAddr {
     danger! {
         return @intrinsic.zext<i8, iptr>(from)
     }
 }
 
-# From u16 - zero extend
-routine saddr.__create__(from: u16) -> saddr {
+# From U16 - zero extend
+routine SAddr.__create__(from: U16) -> SAddr {
     danger! {
         return @intrinsic.zext<i16, iptr>(from)
     }
 }
 
-# From u32 - zero extend or bitcast depending on platform
-routine saddr.__create__(from: u32) -> saddr {
+# From U32 - zero extend or bitcast depending on platform
+routine SAddr.__create__(from: U32) -> SAddr {
     danger! {
         return @intrinsic.zext<i32, iptr>(from)
     }
 }
 
-# From u64 - truncate or bitcast depending on platform (wraps)
-routine saddr.__create__(from: u64) -> saddr {
+# From U64 - truncate or bitcast depending on platform (wraps)
+routine SAddr.__create__(from: U64) -> SAddr {
     danger! {
         return @intrinsic.trunc<i64, iptr>(from)
     }
 }
 
-# From u128 - truncate (wraps)
-routine saddr.__create__(from: u128) -> saddr {
+# From U128 - truncate (wraps)
+routine SAddr.__create__(from: U128) -> SAddr {
     danger! {
         return @intrinsic.trunc<i128, iptr>(from)
     }
 }
 
 # From floating point - truncates
-routine saddr.__create__(from: f16) -> saddr {
-    return from.f32().saddr()
+routine SAddr.__create__(from: F16) -> SAddr {
+    return from.F32().SAddr()
 }
 
-routine saddr.__create__(from: f32) -> saddr {
+routine SAddr.__create__(from: F32) -> SAddr {
     danger! {
         return @intrinsic.fptosi<float, iptr>(from)
     }
 }
 
-routine saddr.__create__(from: f64) -> saddr {
+routine SAddr.__create__(from: F64) -> SAddr {
     danger! {
         return @intrinsic.fptosi<double, iptr>(from)
     }
 }
 
-routine saddr.__create__(from: f128) -> saddr {
-    return from.f64().saddr()
+routine SAddr.__create__(from: F128) -> SAddr {
+    return from.F64().SAddr()
 }
 
 # From decimal - truncates fractional part (wraps on overflow)
-routine saddr.__create__(from: d32) -> saddr {
+routine SAddr.__create__(from: D32) -> SAddr {
     danger! {
         let bit_width = @intrinsic.bitwidth<iptr>()
         if bit_width == 32 {
-            return from.s32().saddr()
+            return from.S32().SAddr()
         } else {
-            return from.s64().saddr()
+            return from.S64().SAddr()
         }
     }
 }
 
-routine saddr.__create__(from: d64) -> saddr {
+routine SAddr.__create__(from: D64) -> SAddr {
     danger! {
         let bit_width = @intrinsic.bitwidth<iptr>()
         if bit_width == 32 {
-            return from.s32().saddr()
+            return from.S32().SAddr()
         } else {
-            return from.s64().saddr()
+            return from.S64().SAddr()
         }
     }
 }
 
-routine saddr.__create__(from: d128) -> saddr {
+routine SAddr.__create__(from: D128) -> SAddr {
     danger! {
         let bit_width = @intrinsic.bitwidth<iptr>()
         if bit_width == 32 {
-            return from.s32().saddr()
+            return from.S32().SAddr()
         } else {
-            return from.s64().saddr()
+            return from.S64().SAddr()
         }
     }
 }
 
-routine saddr.__create__(from: saddr) -> saddr {
+routine SAddr.__create__(from: SAddr) -> SAddr {
     return from
 }
 
-routine saddr.__create__(from: uaddr) -> saddr {
-    return from.s64().uaddr()
+routine SAddr.__create__(from: UAddr) -> SAddr {
+    return from.S64().UAddr()
 }
 
 # ============================================================================
@@ -162,31 +162,31 @@ routine saddr.__create__(from: uaddr) -> saddr {
 # These explicitly wrap on overflow - use when wrapping is intentional
 # ============================================================================
 
-routine saddr.__add_wrap__(you: saddr) -> saddr {
+routine SAddr.__add_wrap__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.add.wrapping<iptr>(me, you)
     }
 }
 
-routine saddr.__sub_wrap__(you: saddr) -> saddr {
+routine SAddr.__sub_wrap__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.sub.wrapping<iptr>(me, you)
     }
 }
 
-routine saddr.__mul_wrap__(you: saddr) -> saddr {
+routine SAddr.__mul_wrap__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.mul.wrapping<iptr>(me, you)
     }
 }
 
-routine saddr.__floordiv_wrap__(you: saddr) -> saddr {
+routine SAddr.__floordiv_wrap__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.sdiv<iptr>(me, you)
     }
 }
 
-routine saddr.__mod_wrap__(you: saddr) -> saddr {
+routine SAddr.__mod_wrap__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.srem<iptr>(me, you)
     }
@@ -194,31 +194,31 @@ routine saddr.__mod_wrap__(you: saddr) -> saddr {
 
 # ============================================================================
 # Checked Arithmetic Operations (+?, -?, *?, //?, %?, **?, <<?)
-# These return Maybe<saddr> - None on overflow
+# These return Maybe<SAddr> - None on overflow
 # ============================================================================
 
-routine saddr.__add_checked__(you: saddr) -> Maybe<saddr> {
+routine SAddr.__add_checked__(you: SAddr) -> Maybe<SAddr> {
     danger! {
         let (result, overflow) = @intrinsic.add.overflow<iptr>(me, you)
         return if overflow then None else result
     }
 }
 
-routine saddr.__sub_checked__(you: saddr) -> Maybe<saddr> {
+routine SAddr.__sub_checked__(you: SAddr) -> Maybe<SAddr> {
     danger! {
         let (result, overflow) = @intrinsic.sub.overflow<iptr>(me, you)
         return if overflow then None else result
     }
 }
 
-routine saddr.__mul_checked__(you: saddr) -> Maybe<saddr> {
+routine SAddr.__mul_checked__(you: SAddr) -> Maybe<SAddr> {
     danger! {
         let (result, overflow) = @intrinsic.mul.overflow<iptr>(me, you)
         return if overflow then None else result
     }
 }
 
-routine saddr.__floordiv_checked__(you: saddr) -> Maybe<saddr> {
+routine SAddr.__floordiv_checked__(you: SAddr) -> Maybe<SAddr> {
     # Division can overflow for MIN_VALUE / -1, and divide by zero
     if you == 0 {
         return None
@@ -232,7 +232,7 @@ routine saddr.__floordiv_checked__(you: saddr) -> Maybe<saddr> {
     }
 }
 
-routine saddr.__mod_checked__(you: saddr) -> Maybe<saddr> {
+routine SAddr.__mod_checked__(you: SAddr) -> Maybe<SAddr> {
     if you == 0 {
         return None
     }
@@ -241,7 +241,7 @@ routine saddr.__mod_checked__(you: saddr) -> Maybe<saddr> {
     }
 }
 
-routine saddr.__ashl_checked__(bits: u32) -> Maybe<saddr> {
+routine SAddr.__ashl_checked__(bits: U32) -> Maybe<SAddr> {
     danger! {
         # Check if shift would overflow
         let bit_width = @intrinsic.bitwidth<iptr>()
@@ -260,23 +260,23 @@ routine saddr.__ashl_checked__(bits: u32) -> Maybe<saddr> {
 
 # ============================================================================
 # Shift Operations (>>, <<<, >>>)
-# saddr does NOT have << (sign-preserving left shift) - use <<? or <<< instead
+# SAddr does NOT have << (sign-preserving left shift) - use <<? or <<< instead
 # ============================================================================
 
-routine saddr.__ashr__(bits: u32) -> saddr {
+routine SAddr.__ashr__(bits: U32) -> SAddr {
     danger! {
         # Arithmetic right shift - preserves sign
         return @intrinsic.ashr<iptr>(me, bits)
     }
 }
 
-routine saddr.__lshl__(bits: u32) -> saddr {
+routine SAddr.__lshl__(bits: U32) -> SAddr {
     danger! {
         return @intrinsic.shl<iptr>(me, bits)
     }
 }
 
-routine saddr.__lshr__(bits: u32) -> saddr {
+routine SAddr.__lshr__(bits: U32) -> SAddr {
     danger! {
         # Logical right shift - fills with zeros
         return @intrinsic.lshr<iptr>(me, bits)
@@ -288,25 +288,25 @@ routine saddr.__lshr__(bits: u32) -> saddr {
 # These cannot overflow
 # ============================================================================
 
-routine saddr.__and__(you: saddr) -> saddr {
+routine SAddr.__and__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.and<iptr>(me, you)
     }
 }
 
-routine saddr.__or__(you: saddr) -> saddr {
+routine SAddr.__or__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.or<iptr>(me, you)
     }
 }
 
-routine saddr.__xor__(you: saddr) -> saddr {
+routine SAddr.__xor__(you: SAddr) -> SAddr {
     danger! {
         return @intrinsic.xor<iptr>(me, you)
     }
 }
 
-routine saddr.__not__() -> saddr {
+routine SAddr.__not__() -> SAddr {
     danger! {
         return @intrinsic.not<iptr>(me)
     }
@@ -316,7 +316,7 @@ routine saddr.__not__() -> saddr {
 # Unary Operations
 # ============================================================================
 
-routine saddr.__neg__() -> saddr {
+routine SAddr.__neg__() -> SAddr {
     danger! {
         # Note: negation can overflow for MIN_VALUE, but we allow it (wraps)
         return @intrinsic.neg<iptr>(me)
@@ -324,30 +324,24 @@ routine saddr.__neg__() -> saddr {
 }
 
 # ============================================================================
-# Comparison Operations (non-overloadable, but provided for completeness)
+# Comparison Operations
 # ============================================================================
 
-routine saddr.__lt__(you: saddr) -> bool {
+routine SAddr.__eq__(you: SAddr) -> Bool {
     danger! {
-        return @intrinsic.icmp.slt<iptr>(me, you)
+        return @intrinsic.icmp.eq<iptr>(me, you)
     }
 }
 
-routine saddr.__le__(you: saddr) -> bool {
+routine SAddr.__cmp__(you: SAddr) -> ComparisonSign {
     danger! {
-        return @intrinsic.icmp.sle<iptr>(me, you)
-    }
-}
-
-routine saddr.__gt__(you: saddr) -> bool {
-    danger! {
-        return @intrinsic.icmp.sgt<iptr>(me, you)
-    }
-}
-
-routine saddr.__ge__(you: saddr) -> bool {
-    danger! {
-        return @intrinsic.icmp.sge<iptr>(me, you)
+        if @intrinsic.icmp.slt<iptr>(me, you) {
+            return ME_SMALL
+        }
+        if @intrinsic.icmp.sgt<iptr>(me, you) {
+            return ME_LARGE
+        }
+        return EQUAL
     }
 }
 
@@ -355,15 +349,15 @@ routine saddr.__ge__(you: saddr) -> bool {
 # Utility Methods
 # ============================================================================
 
-routine saddr.abs() -> saddr {
+routine SAddr.abs() -> SAddr {
     return if me >= 0 then me else (0 -% me)
 }
 
-routine saddr.min(you: saddr) -> saddr {
+routine SAddr.min(you: SAddr) -> SAddr {
     return if me <= you then me else you
 }
 
-routine saddr.max(you: saddr) -> saddr {
+routine SAddr.max(you: SAddr) -> SAddr {
     return if me >= you then me else you
 }
 
@@ -371,7 +365,7 @@ routine saddr.max(you: saddr) -> saddr {
 # String Conversion
 # ============================================================================
 
-routine saddr.to_text() -> Text {
+routine SAddr.to_text() -> Text {
     danger! {
         return @native.rf_format_saddr(me)
     }

@@ -1,110 +1,110 @@
-# RazorForge s16 (signed 16-bit integer) native type implementation
+# RazorForge S16 (signed 16-bit integer) native type implementation
 # Maps directly to LLVM i16 type using compiler intrinsics
 namespace core
-# Core s16 type definition - maps to LLVM i16
-record s16 {
+# Core S16 type definition - maps to LLVM i16
+record S16 {
     private value: @intrinsic.i16
 }
 
-# Constants for s16 limits
-preset S16_MIN: s16 = -32768_s16
-preset S16_MAX: s16 = 32767_s16
-preset S16_ZERO: s16 = 0_s16
-preset S16_ONE: s16 = 1_s16
+# Constants for S16 limits
+preset S16_MIN: S16 = -32768_s16
+preset S16_MAX: S16 = 32767_s16
+preset S16_ZERO: S16 = 0_s16
+preset S16_ONE: S16 = 1_s16
 
 # ============================================================================
 # Constructors
 # ============================================================================
 
-# Failable constructor from Text - called as s16!(text)
-# Compiler automatically generates try_s16.__create__(text) -> Maybe<s16>
-routine s16.__create__!(from_text: Text<Letter>) -> s16 {
+# Failable constructor from Text - called as S16!(text)
+# Compiler automatically generates try_s16.__create__(text) -> Maybe<S16>
+routine S16.__create__!(from_text: Text<Letter>) -> S16 {
     danger! {
         return @native.rf_parse_s16(from_text)
     }
 }
 
-routine s16.__create__(from: s8) -> s16 {
+routine S16.__create__(from: S8) -> S16 {
     danger! {
         return @intrinsic.sext<i8, i16>(from)
     }
 }
 
-routine s16.__create__(from: s16) -> s16 {
+routine S16.__create__(from: S16) -> S16 {
     return from
 }
 
-# From s32 - crashes if value out of s16 range
-routine s16.__create__!(from: s32) -> s16 {
+# From S32 - crashes if value out of S16 range
+routine S16.__create__!(from: S32) -> S16 {
     if not (S16_MIN <= from <= S16_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<i32, i16>(from)
     }
 }
 
-# From s64 - crashes if value out of s16 range
-routine s16.__create__!(from: s64) -> s16 {
+# From S64 - crashes if value out of S16 range
+routine S16.__create__!(from: S64) -> S16 {
     if not (S16_MIN <= from <= S16_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<i64, i16>(from)
     }
 }
 
-# From s128 - crashes if value out of s16 range
-routine s16.__create__!(from: s128) -> s16 {
+# From S128 - crashes if value out of S16 range
+routine S16.__create__!(from: S128) -> S16 {
     if not (S16_MIN <= from <= S16_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<i128, i16>(from)
     }
 }
 
-# From u8 - always fits, no check needed
-routine s16.__create__!(from: u8) -> s16 {
+# From U8 - always fits, no check needed
+routine S16.__create__!(from: U8) -> S16 {
     danger! {
         return @intrinsic.zext<i8, i16>(from)
     }
 }
 
-# From u16 - crashes if value > S16_MAX (bit 15 set)
-routine s16.__create__!(from: u16) -> s16 {
+# From U16 - crashes if value > S16_MAX (bit 15 set)
+routine S16.__create__!(from: U16) -> S16 {
     if from > 32767_u16 {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.bitcast<i16, i16>(from)
     }
 }
 
-# From u32 - crashes if value > S16_MAX
-routine s16.__create__!(from: u32) -> s16 {
+# From U32 - crashes if value > S16_MAX
+routine S16.__create__!(from: U32) -> S16 {
     if from > 32767_u32 {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<i32, i16>(from)
     }
 }
 
-# From u64 - crashes if value > S16_MAX
-routine s16.__create__!(from: u64) -> s16 {
+# From U64 - crashes if value > S16_MAX
+routine S16.__create__!(from: U64) -> S16 {
     if from > 32767_u64 {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<i64, i16>(from)
     }
 }
 
-# From u128 - crashes if value > S16_MAX
-routine s16.__create__!(from: u128) -> s16 {
+# From U128 - crashes if value > S16_MAX
+routine S16.__create__!(from: U128) -> S16 {
     if from > 32767_u128 {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<i128, i16>(from)
@@ -112,51 +112,51 @@ routine s16.__create__!(from: u128) -> s16 {
 }
 
 # From floating point - truncates fractional part and crashes if overflow
-routine s16.__create__!(from: f16) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: F16) -> S16 {
+    return from.S32!().S16!()
 }
 
-routine s16.__create__!(from: f32) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: F32) -> S16 {
+    return from.S32!().S16!()
 }
 
-routine s16.__create__!(from: f64) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: F64) -> S16 {
+    return from.S32!().S16!()
 }
 
-routine s16.__create__!(from: f128) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: F128) -> S16 {
+    return from.S32!().S16!()
 }
 
 # From decimal - truncates fractional part and crashes if overflow
-routine s16.__create__!(from: d32) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: D32) -> S16 {
+    return from.S32!().S16!()
 }
 
-routine s16.__create__!(from: d64) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: D64) -> S16 {
+    return from.S32!().S16!()
 }
 
-routine s16.__create__!(from: d128) -> s16 {
-    return from.s32!().s16!()
+routine S16.__create__!(from: D128) -> S16 {
+    return from.S32!().S16!()
 }
 
-# From saddr - crashes if value out of s16 range
-routine s16.__create__!(from: saddr) -> s16 {
-    let val_s64 = from.s64!()
+# From SAddr - crashes if value out of S16 range
+routine S16.__create__!(from: SAddr) -> S16 {
+    let val_s64 = from.S64!()
     if not (-32768_s64 <= val_s64 <= 32767_s64) {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<iptr, i16>(from)
     }
 }
 
-# From uaddr - crashes if value out of s16 range
-routine s16.__create__!(from: uaddr) -> s16 {
-    let val_u64 = from.u64!()
+# From UAddr - crashes if value out of S16 range
+routine S16.__create__!(from: UAddr) -> S16 {
+    let val_u64 = from.U64!()
     if val_u64 > 32767_u64 {
-        throw IntegerOverflowError(f"Cannot convert {from} to s16: value out of range [{S16_MIN}, {S16_MAX}]")
+        throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
     }
     danger! {
         return @intrinsic.trunc<uptr, i16>(from)
@@ -168,28 +168,28 @@ routine s16.__create__!(from: uaddr) -> s16 {
 # ============================================================================
 
 @crash_only
-routine s16.__add__!(you: s16) -> s16 {
+routine S16.__add__!(you: S16) -> S16 {
     danger! {
         return @intrinsic.add<i16>(me, you)
     }
 }
 
 @crash_only
-routine s16.__sub__(you: s16) -> s16 {
+routine S16.__sub__(you: S16) -> S16 {
     danger! {
         return @intrinsic.sub<i16>(me, you)
     }
 }
 
 @crash_only
-routine s16.__mul__(you: s16) -> s16 {
+routine S16.__mul__(you: S16) -> S16 {
     danger! {
         return @intrinsic.mul<i16>(me, you)
     }
 }
 
 @crash_only
-routine s16.__floordiv__(you: s16) -> s16 {
+routine S16.__floordiv__(you: S16) -> S16 {
     if you == 0 {
         throw DivisionByZeroError()
     }
@@ -199,14 +199,14 @@ routine s16.__floordiv__(you: s16) -> s16 {
 }
 
 @crash_only
-routine s16.__mod__(you: s16) -> s16 {
+routine S16.__mod__(you: S16) -> S16 {
     danger! {
         return @intrinsic.srem<i16>(me, you)
     }
 }
 
 @crash_only
-routine s16.__neg__() -> s16 {
+routine S16.__neg__() -> S16 {
     danger! {
         return @intrinsic.neg<i16>(me)
     }
@@ -216,19 +216,19 @@ routine s16.__neg__() -> s16 {
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine s16.__add_wrap__(you: s16) -> s16 {
+routine S16.__add_wrap__(you: S16) -> S16 {
     danger! {
         return @intrinsic.add.wrapping<i16>(me, you)
     }
 }
 
-routine s16.__sub_wrap__(you: s16) -> s16 {
+routine S16.__sub_wrap__(you: S16) -> S16 {
     danger! {
         return @intrinsic.sub.wrapping<i16>(me, you)
     }
 }
 
-routine s16.__mul_wrap__(you: s16) -> s16 {
+routine S16.__mul_wrap__(you: S16) -> S16 {
     danger! {
         return @intrinsic.mul.wrapping<i16>(me, you)
     }
@@ -238,19 +238,19 @@ routine s16.__mul_wrap__(you: s16) -> s16 {
 # Saturating Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine s16.__add_sat__(you: s16) -> s16 {
+routine S16.__add_sat__(you: S16) -> S16 {
     danger! {
         return @intrinsic.add.saturating<i16>(me, you)
     }
 }
 
-routine s16.__sub_sat__(you: s16) -> s16 {
+routine S16.__sub_sat__(you: S16) -> S16 {
     danger! {
         return @intrinsic.sub.saturating<i16>(me, you)
     }
 }
 
-routine s16.__mul_sat__(you: s16) -> s16 {
+routine S16.__mul_sat__(you: S16) -> S16 {
     danger! {
         return @intrinsic.mul.saturating<i16>(me, you)
     }
@@ -260,21 +260,21 @@ routine s16.__mul_sat__(you: s16) -> s16 {
 # Checked Arithmetic (+?, -?, *?) - returns Maybe<T>
 # ============================================================================
 
-routine s16.__add_checked__(you: s16) -> Maybe<s16> {
+routine S16.__add_checked__(you: S16) -> Maybe<S16> {
     danger! {
         let (result, overflow) = @intrinsic.add.overflow<i16>(me, you)
         return if overflow then None else result
     }
 }
 
-routine s16.__sub_checked__(you: s16) -> Maybe<s16> {
+routine S16.__sub_checked__(you: S16) -> Maybe<S16> {
     danger! {
         let (result, overflow) = @intrinsic.sub.overflow<i16>(me, you)
         return if overflow then None else result
     }
 }
 
-routine s16.__mul_checked__(you: s16) -> Maybe<s16> {
+routine S16.__mul_checked__(you: S16) -> Maybe<S16> {
     danger! {
         let (result, overflow) = @intrinsic.mul.overflow<i16>(me, you)
         return if overflow then None else result
@@ -287,11 +287,11 @@ routine s16.__mul_checked__(you: s16) -> Maybe<s16> {
 
 # Power operator (**) - can overflow
 @crash_only
-routine s16.__pow__!(exp: s16) -> s16 {
+routine S16.__pow__!(exp: S16) -> S16 {
     danger! {
-        var result: s16 = 1
-        var base: s16 = me
-        var e: u32 = exp
+        var result: S16 = 1
+        var base: S16 = me
+        var e: U32 = exp
         if me == 0 and exp == 0 {
             throw IndeterminateResultError()
         }
@@ -310,11 +310,11 @@ routine s16.__pow__!(exp: s16) -> s16 {
 }
 
 # Wrapping power (**%)
-routine s16.__pow_wrap__!(exp: s16) -> s16 {
+routine S16.__pow_wrap__!(exp: S16) -> S16 {
     danger! {
-        var result: s16 = 1
-        var base: s16 = me
-        var e: u32 = exp
+        var result: S16 = 1
+        var base: S16 = me
+        var e: U32 = exp
         if me == 0 and exp == 0 {
             throw IndeterminateResultError()
         }
@@ -333,11 +333,11 @@ routine s16.__pow_wrap__!(exp: s16) -> s16 {
 }
 
 # Saturating power (**^)
-routine s16.__pow_sat__!(exp: s16) -> s16 {
+routine S16.__pow_sat__!(exp: S16) -> S16 {
     danger! {
-        var result: s16 = 1
-        var base: s16 = me
-        var e: u32 = exp
+        var result: S16 = 1
+        var base: S16 = me
+        var e: U32 = exp
         if me == 0 and exp == 0 {
             throw IndeterminateResultError()
         }
@@ -355,12 +355,12 @@ routine s16.__pow_sat__!(exp: s16) -> s16 {
     }
 }
 
-# Checked power (**?) - returns Maybe<s16>
-routine s16.__pow_checked__(exp: s16) -> Maybe<s16> {
+# Checked power (**?) - returns Maybe<S16>
+routine S16.__pow_checked__(exp: S16) -> Maybe<S16> {
     danger! {
-        var result: s16 = 1
-        var base: s16 = me
-        var e: u32 = exp
+        var result: S16 = 1
+        var base: S16 = me
+        var e: U32 = exp
         if exp < 0 {
             return None
         }
@@ -390,25 +390,25 @@ routine s16.__pow_checked__(exp: s16) -> Maybe<s16> {
 # Bitwise Operations
 # ============================================================================
 
-routine s16.__and__(you: s16) -> s16 {
+routine S16.__and__(you: S16) -> S16 {
     danger! {
         return @intrinsic.and<i16>(me, you)
     }
 }
 
-routine s16.__or__(you: s16) -> s16 {
+routine S16.__or__(you: S16) -> S16 {
     danger! {
         return @intrinsic.or<i16>(me, you)
     }
 }
 
-routine s16.__xor__(you: s16) -> s16 {
+routine S16.__xor__(you: S16) -> S16 {
     danger! {
         return @intrinsic.xor<i16>(me, you)
     }
 }
 
-routine s16.__not__() -> s16 {
+routine S16.__not__() -> S16 {
     danger! {
         return @intrinsic.not<i16>(me)
     }
@@ -419,14 +419,14 @@ routine s16.__not__() -> s16 {
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving
-routine s16.__ashl__(bits: u32) -> s16 {
+routine S16.__ashl__(bits: U32) -> S16 {
     danger! {
         return @intrinsic.shl<i16>(me, bits)
     }
 }
 
-# Checked arithmetic left shift (<<?) - returns Maybe<s16>
-routine s16.__ashl_checked__(bits: u32) -> Maybe<s16> {
+# Checked arithmetic left shift (<<?) - returns Maybe<S16>
+routine S16.__ashl_checked__(bits: U32) -> Maybe<S16> {
     danger! {
         if bits >= 16 {
             return None
@@ -442,21 +442,21 @@ routine s16.__ashl_checked__(bits: u32) -> Maybe<s16> {
 }
 
 # Arithmetic right shift (>>) - preserves sign, always safe
-routine s16.__ashr__(bits: u32) -> s16 {
+routine S16.__ashr__(bits: U32) -> S16 {
     danger! {
         return @intrinsic.ashr<i16>(me, bits)
     }
 }
 
 # Logical left shift (<<<) - same as << but explicit
-routine s16.__lshl__(bits: u32) -> s16 {
+routine S16.__lshl__(bits: U32) -> S16 {
     danger! {
         return @intrinsic.shl<i16>(me, bits)
     }
 }
 
 # Logical right shift (>>>) - fills with zeros, ignores sign
-routine s16.__lshr__(bits: u32) -> s16 {
+routine S16.__lshr__(bits: U32) -> S16 {
     danger! {
         return @intrinsic.lshr<i16>(me, bits)
     }
@@ -466,39 +466,21 @@ routine s16.__lshr__(bits: u32) -> s16 {
 # Comparison Operations
 # ============================================================================
 
-routine s16.__eq__(you: s16) -> bool {
+routine S16.__eq__(you: S16) -> Bool {
     danger! {
         return @intrinsic.icmp.eq<i16>(me, you)
     }
 }
 
-routine s16.__ne__(you: s16) -> bool {
+routine S16.__cmp__(you: S16) -> ComparisonSign {
     danger! {
-        return @intrinsic.icmp.ne<i16>(me, you)
-    }
-}
-
-routine s16.__lt__(you: s16) -> bool {
-    danger! {
-        return @intrinsic.icmp.slt<i16>(me, you)
-    }
-}
-
-routine s16.__le__(you: s16) -> bool {
-    danger! {
-        return @intrinsic.icmp.sle<i16>(me, you)
-    }
-}
-
-routine s16.__gt__(you: s16) -> bool {
-    danger! {
-        return @intrinsic.icmp.sgt<i16>(me, you)
-    }
-}
-
-routine s16.__ge__(you: s16) -> bool {
-    danger! {
-        return @intrinsic.icmp.sge<i16>(me, you)
+        if @intrinsic.icmp.slt<i16>(me, you) {
+            return ME_SMALL
+        }
+        if @intrinsic.icmp.sgt<i16>(me, you) {
+            return ME_LARGE
+        }
+        return EQUAL
     }
 }
 
@@ -506,21 +488,21 @@ routine s16.__ge__(you: s16) -> bool {
 # Math Operations
 # ============================================================================
 
-routine s16.abs() -> s16 {
+routine S16.abs() -> S16 {
     danger! {
         return @intrinsic.abs<i16>(me)
     }
 }
 
-routine s16.min(you: s16) -> s16 {
+routine S16.min(you: S16) -> S16 {
     return if me <= you then me else you
 }
 
-routine s16.max(you: s16) -> s16 {
+routine S16.max(you: S16) -> S16 {
     return if me >= you then me else you
 }
 
-routine s16.clamp(min_val: s16, max_val: s16) -> s16 {
+routine S16.clamp(min_val: S16, max_val: S16) -> S16 {
     return me.min(max_val).max(min_val)
 }
 
@@ -528,43 +510,43 @@ routine s16.clamp(min_val: s16, max_val: s16) -> s16 {
 # Bit Manipulation
 # ============================================================================
 
-routine s16.count_ones() -> s16 {
+routine S16.count_ones() -> S16 {
     danger! {
         return @intrinsic.ctpop<i16>(me)
     }
 }
 
-routine s16.count_zeros() -> s16 {
+routine S16.count_zeros() -> S16 {
     return 16_s16 - me.count_ones()
 }
 
-routine s16.leading_zeros() -> s16 {
+routine S16.leading_zeros() -> S16 {
     danger! {
         return @intrinsic.ctlz<i16>(me)
     }
 }
 
-routine s16.trailing_zeros() -> s16 {
+routine S16.trailing_zeros() -> S16 {
     danger! {
         return @intrinsic.cttz<i16>(me)
     }
 }
 
-routine s16.leading_ones() -> s16 {
+routine S16.leading_ones() -> S16 {
     return me.__not__().leading_zeros()
 }
 
-routine s16.trailing_ones() -> s16 {
+routine S16.trailing_ones() -> S16 {
     return me.__not__().trailing_zeros()
 }
 
-routine s16.reverse_bits() -> s16 {
+routine S16.reverse_bits() -> S16 {
     danger! {
         return @intrinsic.bitreverse<i16>(me)
     }
 }
 
-routine s16.swap_bytes() -> s16 {
+routine S16.swap_bytes() -> S16 {
     danger! {
         return @intrinsic.bswap<i16>(me)
     }
@@ -574,30 +556,30 @@ routine s16.swap_bytes() -> s16 {
 # Utility Methods
 # ============================================================================
 
-routine s16.is_positive() -> bool {
+routine S16.is_positive() -> Bool {
     return me > 0_s16
 }
 
-routine s16.is_negative() -> bool {
+routine S16.is_negative() -> Bool {
     return me < 0_s16
 }
 
-routine s16.is_zero() -> bool {
+routine S16.is_zero() -> Bool {
     return me == 0_s16
 }
 
-routine s16.is_even() -> bool {
+routine S16.is_even() -> Bool {
     danger! {
         let result = @intrinsic.and<i16>(me, 1_s16)
         return @intrinsic.icmp.eq<i16>(result, 0_s16)
     }
 }
 
-routine s16.is_odd() -> bool {
+routine S16.is_odd() -> Bool {
     return not me.is_even()
 }
 
-routine s16.signum() -> s16 {
+routine S16.signum() -> S16 {
     when {
         me > 0_s16 => 1_s16,
         me < 0_s16 => -1_s16,
@@ -609,7 +591,7 @@ routine s16.signum() -> s16 {
 # String Conversion
 # ============================================================================
 
-routine s16.to_text() -> Text {
+routine S16.to_text() -> Text {
     danger! {
         return @native.rf_format_s16(me)
     }

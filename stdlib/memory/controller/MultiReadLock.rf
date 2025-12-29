@@ -5,8 +5,8 @@
 namespace core
 
 record MultiReadLock follows LockPolicy {
-    private readers: Atomic<s32>  # Number of active readers
-    private writer: Atomic<bool>  # Is a writer active?
+    private readers: Atomic<S32>  # Number of active readers
+    private writer: Atomic<Bool>  # Is a writer active?
 }
 
 routine MultiReadLock.__create__() -> MultiReadLock {
@@ -18,7 +18,7 @@ routine MultiReadLock.__create__() -> MultiReadLock {
 
 # Acquire shared read lock (blocking)
 # Multiple readers can hold this simultaneously
-routine MultiReadLock.acquire_read(me: MultiReadLock) {
+routine MultiReadLock.acquire_read() {
     loop {
         # Wait for no writer
         when me.writer.load() {
@@ -41,7 +41,7 @@ routine MultiReadLock.acquire_read(me: MultiReadLock) {
 }
 
 # Try to acquire shared read lock (non-blocking)
-routine MultiReadLock.try_acquire_read(me: MultiReadLock) -> bool {
+routine MultiReadLock.try_acquire_read() -> Bool {
     when me.writer.load() {
         false => {
             me.readers.fetch_add(1)
@@ -58,13 +58,13 @@ routine MultiReadLock.try_acquire_read(me: MultiReadLock) -> bool {
 }
 
 # Release shared read lock
-routine MultiReadLock.release_read(me: MultiReadLock) {
+routine MultiReadLock.release_read() {
     me.readers.fetch_sub(1)
 }
 
 # Acquire exclusive write lock (blocking)
 # Only one writer can hold this, blocks all readers
-routine MultiReadLock.acquire_write(me: MultiReadLock) {
+routine MultiReadLock.acquire_write() {
     # First, acquire writer flag
     loop {
         when me.writer.compare_exchange(expected: false, desired: true) {
@@ -83,7 +83,7 @@ routine MultiReadLock.acquire_write(me: MultiReadLock) {
 }
 
 # Try to acquire exclusive write lock (non-blocking)
-routine MultiReadLock.try_acquire_write(me: MultiReadLock) -> bool {
+routine MultiReadLock.try_acquire_write() -> Bool {
     # Try to acquire writer flag
     when me.writer.compare_exchange(expected: false, desired: true) {
         true => {
@@ -102,15 +102,15 @@ routine MultiReadLock.try_acquire_write(me: MultiReadLock) -> bool {
 }
 
 # Release exclusive write lock
-routine MultiReadLock.release_write(me: MultiReadLock) {
+routine MultiReadLock.release_write() {
     me.writer.store(false)
 }
 
 # Check status (for debugging)
-routine MultiReadLock.reader_count(me: MultiReadLock) -> s32 {
+routine MultiReadLock.reader_count() -> S32 {
     return me.readers.load()
 }
 
-routine MultiReadLock.is_write_locked(me: MultiReadLock) -> bool {
+routine MultiReadLock.is_write_locked() -> Bool {
     return me.writer.load()
 }

@@ -6,7 +6,7 @@ namespace core
 
 ### Generic atomic wrapper for lock-free operations
 ###
-### Supports atomic operations on primitive types (bool, integers, pointers)
+### Supports atomic operations on primitive types (Bool, integers, pointers)
 ### All operations use sequentially consistent memory ordering
 ###
 ### Example:
@@ -109,7 +109,7 @@ routine Atomic<T>.swap(new_value: T) -> T {
 ###       true => show("Lock acquired"),
 ###       false => show("Lock was already held")
 ###   }
-routine Atomic<T>.compare_exchange(expected: T, desired: T) -> bool {
+routine Atomic<T>.compare_exchange(expected: T, desired: T) -> Bool {
     danger! {
         # SAFETY: Atomic compare-exchange with seq_cst ordering
         # Returns true if successful, false otherwise
@@ -123,7 +123,7 @@ routine Atomic<T>.compare_exchange(expected: T, desired: T) -> bool {
 
 ### Atomically add to the value and return the old value
 ###
-### Only available for numeric types (s8, s16, s32, s64, u8, u16, u32, u64)
+### Only available for numeric types (S8, S16, S32, S64, U8, U16, U32, U64)
 ###
 ### Args:
 ###   delta: The amount to add
@@ -137,7 +137,7 @@ routine Atomic<T>.compare_exchange(expected: T, desired: T) -> bool {
 ###   let counter = Atomic(10)
 ###   let old = counter.fetch_add(5)  # old = 10, counter now 15
 routine Atomic<T>.fetch_add(delta: T) -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-add with seq_cst ordering
         # Hardware guarantees atomicity for supported integer types
@@ -147,7 +147,7 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 
 ### Atomically subtract from the value and return the old value
 ###
-### Only available for numeric types (s8, s16, s32, s64, u8, u16, u32, u64)
+### Only available for numeric types (S8, S16, S32, S64, U8, U16, U32, U64)
 ###
 ### Args:
 ###   delta: The amount to subtract
@@ -161,7 +161,7 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 ###   let counter = Atomic(10)
 ###   let old = counter.fetch_sub(3)  # old = 10, counter now 7
 routine Atomic<T>.fetch_sub(delta: T) -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-sub with seq_cst ordering
         # Hardware guarantees atomicity for supported integer types
@@ -185,7 +185,7 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 ###   let flags = Atomic(0b1111u8)
 ###   let old = flags.fetch_and(0b1100u8)  # old = 0b1111, flags now 0b1100
 routine Atomic<T>.fetch_and(mask: T) -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-and with seq_cst ordering
         return @intrinsic.atomic.and<T>(me.value.get_address(), mask)
@@ -208,7 +208,7 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 ###   let flags = Atomic(0b0011u8)
 ###   let old = flags.fetch_or(0b1100u8)  # old = 0b0011, flags now 0b1111
 routine Atomic<T>.fetch_or(mask: T) -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-or with seq_cst ordering
         return @intrinsic.atomic.or<T>(me.value.get_address(), mask)
@@ -231,7 +231,7 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 ###   let flags = Atomic(0b0011u8)
 ###   let old = flags.fetch_xor(0b1100u8)  # old = 0b0011, flags now 0b1111
 routine Atomic<T>.fetch_xor(mask: T) -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-xor with seq_cst ordering
         return @intrinsic.atomic.xor<T>(me.value.get_address(), mask)
@@ -250,7 +250,7 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 ###   let counter = Atomic(5)
 ###   let old = counter.fetch_inc()  # old = 5, counter now 6
 routine Atomic<T>.fetch_inc() -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     return me.fetch_add(1)
 }
 
@@ -266,6 +266,6 @@ requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
 ###   let counter = Atomic(5)
 ###   let old = counter.fetch_dec()  # old = 5, counter now 4
 routine Atomic<T>.fetch_dec() -> T
-requires T in [s8, s16, s32, s64, s128, u8, u16, u32, u64, u128, saddr, uaddr] {
+requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     return me.fetch_sub(1)
 }

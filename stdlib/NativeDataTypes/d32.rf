@@ -1,194 +1,194 @@
-# RazorForge d32 (decimal32 floating point) native type implementation
+# RazorForge D32 (decimal32 floating point) native type implementation
 # IEEE 754-2008 decimal floating point with 7 significant digits
 # Uses Intel DFP library via imported C functions
 namespace core
 
-import FFI/cstr
+import FFI/CStr
 
-# Core d32 type definition - stored as 32-bit value in BID encoding
-record d32 {
-    private value: u32
+# Core D32 type definition - stored as 32-bit value in BID encoding
+record D32 {
+    private value: U32
 }
 
-# Constants for d32
-preset D32_ZERO: d32 = 0.0_d32
-preset D32_ONE: d32 = 1.0_d32
+# Constants for D32
+preset D32_ZERO: D32 = 0.0_d32
+preset D32_ONE: D32 = 1.0_d32
 
 # ============================================================================
 # Constructors
 # ============================================================================
 
-routine d32.__create__!(from_text: Bytes) -> d32 {
+routine D32.__create__!(from_text: Bytes) -> D32 {
     danger! {
         let cstr_val = from_text.to_cstr()
         let bits = @native.rf_d32_from_string(cstr_val)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: s8) -> d32 {
+routine D32.__create__(from: S8) -> D32 {
     danger! {
-        let bits = @native.rf_d32_from_s32(s32(from))
-        return @intrinsic.bitcast<u32, d32>(bits)
+        let bits = @native.rf_d32_from_s32(S32(from))
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: s16) -> d32 {
+routine D32.__create__(from: S16) -> D32 {
     danger! {
-        let bits = @native.rf_d32_from_s32(s32(from))
-        return @intrinsic.bitcast<u32, d32>(bits)
+        let bits = @native.rf_d32_from_s32(S32(from))
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: s32) -> d32 {
+routine D32.__create__(from: S32) -> D32 {
     danger! {
         let bits = @native.rf_d32_from_s32(from)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: s64) -> d32 {
+routine D32.__create__(from: S64) -> D32 {
     danger! {
         let bits = @native.rf_d32_from_s64(from)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: s128) -> d32 {
-    # Convert through s64 - may lose precision
-    return from.s64!().d32()
+routine D32.__create__(from: S128) -> D32 {
+    # Convert through S64 - may lose precision
+    return from.S64!().D32()
 }
 
-routine d32.__create__(from: u8) -> d32 {
+routine D32.__create__(from: U8) -> D32 {
     danger! {
-        let bits = @native.rf_d32_from_u32(u32(from))
-        return @intrinsic.bitcast<u32, d32>(bits)
+        let bits = @native.rf_d32_from_u32(U32(from))
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: u16) -> d32 {
+routine D32.__create__(from: U16) -> D32 {
     danger! {
-        let bits = @native.rf_d32_from_u32(u32(from))
-        return @intrinsic.bitcast<u32, d32>(bits)
+        let bits = @native.rf_d32_from_u32(U32(from))
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: u32) -> d32 {
+routine D32.__create__(from: U32) -> D32 {
     danger! {
         let bits = @native.rf_d32_from_u32(from)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: u64) -> d32 {
+routine D32.__create__(from: U64) -> D32 {
     danger! {
         let bits = @native.rf_d32_from_u64(from)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: u128) -> d32 {
-    # Convert through u64 - may lose precision
-    return from.u64!().d32()
+routine D32.__create__(from: U128) -> D32 {
+    # Convert through U64 - may lose precision
+    return from.U64!().D32()
 }
 
-routine d32.__create__(from: f16) -> d32 {
-    return from.f32().d32()
+routine D32.__create__(from: F16) -> D32 {
+    return from.F32().D32()
 }
 
-routine d32.__create__(from: f32) -> d32 {
+routine D32.__create__(from: F32) -> D32 {
     danger! {
         let bits = @native.rf_f32_to_d32(from)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: f64) -> d32 {
+routine D32.__create__(from: F64) -> D32 {
     danger! {
         let bits = @native.rf_f64_to_d32(from)
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
-routine d32.__create__(from: f128) -> d32 {
-    return from.f64!().d32()
+routine D32.__create__(from: F128) -> D32 {
+    return from.F64!().D32()
 }
 
-routine d32.__create__(from: d32) -> d32 {
+routine D32.__create__(from: D32) -> D32 {
     return from
 }
 
-routine d32.__create__(from: d64) -> d32 {
+routine D32.__create__(from: D64) -> D32 {
     danger! {
         let bits = from.to_bits()
         let result_bits = @native.rf_d64_to_d32(bits)
-        return @intrinsic.bitcast<u32, d32>(result_bits)
+        return @intrinsic.bitcast<U32, D32>(result_bits)
     }
 }
 
-routine d32.__create__(from: d128) -> d32 {
+routine D32.__create__(from: D128) -> D32 {
     danger! {
         let result_bits = @native.rf_d128_to_d32(from.low_bits(), from.high_bits())
-        return @intrinsic.bitcast<u32, d32>(result_bits)
+        return @intrinsic.bitcast<U32, D32>(result_bits)
     }
 }
 
-# From saddr - convert through s64
-routine d32.__create__(from: saddr) -> d32 {
-    return from.s64().d32()
+# From SAddr - convert through S64
+routine D32.__create__(from: SAddr) -> D32 {
+    return from.S64().D32()
 }
 
-# From uaddr - convert through u64
-routine d32.__create__(from: uaddr) -> d32 {
-    return from.u64().d32()
+# From UAddr - convert through U64
+routine D32.__create__(from: UAddr) -> D32 {
+    return from.U64().D32()
 }
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-routine d32.__add__(me: d32, you: d32) -> d32 {
+routine D32.__add__(you: D32) -> D32 {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         let result = @native.rf_d32_add(a_bits, b_bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.__sub__(me: d32, you: d32) -> d32 {
+routine D32.__sub__(you: D32) -> D32 {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         let result = @native.rf_d32_sub(a_bits, b_bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.__mul__(me: d32, you: d32) -> d32 {
+routine D32.__mul__(you: D32) -> D32 {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         let result = @native.rf_d32_mul(a_bits, b_bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.__truediv__(me: d32, you: d32) -> d32 {
+routine D32.__truediv__(you: D32) -> D32 {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         let result = @native.rf_d32_div(a_bits, b_bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.__neg__(me: d32) -> d32 {
+routine D32.__neg__() -> D32 {
     danger! {
-        let zero_bits = @intrinsic.bitcast<d32, u32>(D32_ZERO)
-        let me_bits = @intrinsic.bitcast<d32, u32>(me)
+        let zero_bits = @intrinsic.bitcast<D32, U32>(D32_ZERO)
+        let me_bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_sub(zero_bits, me_bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
@@ -196,51 +196,26 @@ routine d32.__neg__(me: d32) -> d32 {
 # Comparison Operations
 # ============================================================================
 
-routine d32.__lt__(me: d32, you: d32) -> bool {
+routine D32.__eq__(you: D32) -> Bool {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
-        return @native.rf_d32_cmp(a_bits, b_bits) < 0
-    }
-}
-
-routine d32.__le__(me: d32, you: d32) -> bool {
-    danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
-        return @native.rf_d32_cmp(a_bits, b_bits) <= 0
-    }
-}
-
-routine d32.__gt__(me: d32, you: d32) -> bool {
-    danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
-        return @native.rf_d32_cmp(a_bits, b_bits) > 0
-    }
-}
-
-routine d32.__ge__(me: d32, you: d32) -> bool {
-    danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
-        return @native.rf_d32_cmp(a_bits, b_bits) >= 0
-    }
-}
-
-routine d32.__eq__(me: d32, you: d32) -> bool {
-    danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         return @native.rf_d32_cmp(a_bits, b_bits) == 0
     }
 }
 
-routine d32.__ne__(me: d32, you: d32) -> bool {
+routine D32.__cmp__(you: D32) -> ComparisonSign {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
-        return @native.rf_d32_cmp(a_bits, b_bits) != 0
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
+        let cmp = @native.rf_d32_cmp(a_bits, b_bits)
+        if cmp < 0 {
+            return ME_SMALL
+        }
+        if cmp > 0 {
+            return ME_LARGE
+        }
+        return EQUAL
     }
 }
 
@@ -248,51 +223,51 @@ routine d32.__ne__(me: d32, you: d32) -> bool {
 # Math Operations
 # ============================================================================
 
-routine d32.sqrt(me: d32) -> d32 {
+routine D32.sqrt() -> D32 {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_sqrt(bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.abs(me: d32) -> d32 {
+routine D32.abs() -> D32 {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_abs(bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.ceil(me: d32) -> d32 {
+routine D32.ceil() -> D32 {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_ceil(bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.floor(me: d32) -> d32 {
+routine D32.floor() -> D32 {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_floor(bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.round(me: d32) -> d32 {
+routine D32.round() -> D32 {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_round(bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
-routine d32.trunc(me: d32) -> d32 {
+routine D32.trunc() -> D32 {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let result = @native.rf_d32_trunc(bits)
-        return @intrinsic.bitcast<u32, d32>(result)
+        return @intrinsic.bitcast<U32, D32>(result)
     }
 }
 
@@ -300,54 +275,54 @@ routine d32.trunc(me: d32) -> d32 {
 # Utility Methods
 # ============================================================================
 
-routine d32.min(me: d32, you: d32) -> d32 {
+routine D32.min(you: D32) -> D32 {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         return (if @native.rf_d32_cmp(a_bits, b_bits) <= 0 then me else you)
     }
 }
 
-routine d32.max(me: d32, you: d32) -> d32 {
+routine D32.max(you: D32) -> D32 {
     danger! {
-        let a_bits = @intrinsic.bitcast<d32, u32>(me)
-        let b_bits = @intrinsic.bitcast<d32, u32>(you)
+        let a_bits = @intrinsic.bitcast<D32, U32>(me)
+        let b_bits = @intrinsic.bitcast<D32, U32>(you)
         return (if @native.rf_d32_cmp(a_bits, b_bits) >= 0 then me else you)
     }
 }
 
-routine d32.clamp(me: d32, min_val: d32, max_val: d32) -> d32 {
+routine D32.clamp(min_val: D32, max_val: D32) -> D32 {
     return me.min(max_val).max(min_val)
 }
 
-routine d32.is_positive(me: d32) -> bool {
+routine D32.is_positive() -> Bool {
     danger! {
-        let me_bits = @intrinsic.bitcast<d32, u32>(me)
-        let zero_bits = @intrinsic.bitcast<d32, u32>(D32_ZERO)
+        let me_bits = @intrinsic.bitcast<D32, U32>(me)
+        let zero_bits = @intrinsic.bitcast<D32, U32>(D32_ZERO)
         return @native.rf_d32_cmp(me_bits, zero_bits) > 0
     }
 }
 
-routine d32.is_negative(me: d32) -> bool {
+routine D32.is_negative() -> Bool {
     danger! {
-        let me_bits = @intrinsic.bitcast<d32, u32>(me)
-        let zero_bits = @intrinsic.bitcast<d32, u32>(D32_ZERO)
+        let me_bits = @intrinsic.bitcast<D32, U32>(me)
+        let zero_bits = @intrinsic.bitcast<D32, U32>(D32_ZERO)
         return @native.rf_d32_cmp(me_bits, zero_bits) < 0
     }
 }
 
-routine d32.is_zero(me: d32) -> bool {
+routine D32.is_zero() -> Bool {
     danger! {
-        let me_bits = @intrinsic.bitcast<d32, u32>(me)
-        let zero_bits = @intrinsic.bitcast<d32, u32>(D32_ZERO)
+        let me_bits = @intrinsic.bitcast<D32, U32>(me)
+        let zero_bits = @intrinsic.bitcast<D32, U32>(D32_ZERO)
         return @native.rf_d32_cmp(me_bits, zero_bits) == 0
     }
 }
 
-routine d32.signum(me: d32) -> d32 {
+routine D32.signum() -> D32 {
     danger! {
-        let me_bits = @intrinsic.bitcast<d32, u32>(me)
-        let zero_bits = @intrinsic.bitcast<d32, u32>(D32_ZERO)
+        let me_bits = @intrinsic.bitcast<D32, U32>(me)
+        let zero_bits = @intrinsic.bitcast<D32, U32>(D32_ZERO)
         let cmp = @native.rf_d32_cmp(me_bits, zero_bits)
         when {
             cmp > 0 => D32_ONE,
@@ -361,17 +336,17 @@ routine d32.signum(me: d32) -> d32 {
 # Type Conversions
 # ============================================================================
 
-# Reinterpret bits as u32 (type punning)
-routine d32.to_bits(me: d32) -> u32 {
+# Reinterpret bits as U32 (type punning)
+routine D32.to_bits() -> U32 {
     danger! {
-        return @intrinsic.bitcast<d32, u32>(me)
+        return @intrinsic.bitcast<D32, U32>(me)
     }
 }
 
-# Create d32 from u32 bits (type punning)
-routine d32.from_bits(bits: u32) -> d32 {
+# Create D32 from U32 bits (type punning)
+routine D32.from_bits(bits: U32) -> D32 {
     danger! {
-        return @intrinsic.bitcast<u32, d32>(bits)
+        return @intrinsic.bitcast<U32, D32>(bits)
     }
 }
 
@@ -379,9 +354,9 @@ routine d32.from_bits(bits: u32) -> d32 {
 # String Conversion
 # ============================================================================
 
-routine d32.to_text(me: d32) -> Text {
+routine D32.to_text() -> Text {
     danger! {
-        let bits = @intrinsic.bitcast<d32, u32>(me)
+        let bits = @intrinsic.bitcast<D32, U32>(me)
         let cstr_result = @native.rf_d32_to_string(bits)
         return Text.from_cstr(cstr_result)
     }

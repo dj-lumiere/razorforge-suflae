@@ -21,8 +21,8 @@ record Range<I>
 requires I follows Integral{
     start: I
     end: I
-    step: uaddr      # step size (always positive, direction determined by ascending)
-    ascending: bool  # true for 'to', false for 'downto'
+    step: UAddr      # step size (always positive, direction determined by ascending)
+    ascending: Bool  # true for 'to', false for 'downto'
 }
 
 # Constructor for ascending range (a to b) with default step 1
@@ -31,12 +31,12 @@ routine Range<I>(start: I, end: I) -> Range<I> {
 }
 
 # Constructor with explicit direction (a to b or a downto b) with default step 1
-routine Range<I>(start: I, end: I, ascending: bool) -> Range<I> {
+routine Range<I>(start: I, end: I, ascending: Bool) -> Range<I> {
     return Range<I>(start: start, end: end, step: 1uaddr, ascending: ascending)
 }
 
 # Constructor with step (a to b by c or a downto b by c)
-routine Range<I>(start: I, end: I, step: uaddr, ascending: bool) -> Range<I> {
+routine Range<I>(start: I, end: I, step: UAddr, ascending: Bool) -> Range<I> {
     if step == 0uaddr {
         stop!("Range step cannot be zero")
     }
@@ -44,7 +44,7 @@ routine Range<I>(start: I, end: I, step: uaddr, ascending: bool) -> Range<I> {
 }
 
 # Get the step size
-routine Range<I>.get_step(me: Range<I>) -> uaddr {
+routine Range<I>.get_step(me: Range<I>) -> UAddr {
     return me.step
 }
 
@@ -52,8 +52,8 @@ routine Range<I>.get_step(me: Range<I>) -> uaddr {
 # Range<Integral> - Forward index ranges
 # ============================================================================
 
-# Resolve Range<Integral> to start/end uaddr indices
-routine Range<I follows Integral>.resolve_start(me: Range<I>, length: uaddr) -> uaddr {
+# Resolve Range<Integral> to start/end UAddr indices
+routine Range<I follows Integral>.resolve_start(me: Range<I>, length: UAddr) -> UAddr {
     let idx = me.start.to_uaddr()
     if idx >= length {
         stop!("Range start out of bounds")
@@ -61,7 +61,7 @@ routine Range<I follows Integral>.resolve_start(me: Range<I>, length: uaddr) -> 
     return idx
 }
 
-routine Range<I follows Integral>.resolve_end(me: Range<I>, length: uaddr) -> uaddr {
+routine Range<I follows Integral>.resolve_end(me: Range<I>, length: UAddr) -> UAddr {
     let idx = me.end.to_uaddr()
     if idx >= length {
         stop!("Range end out of bounds")
@@ -70,7 +70,7 @@ routine Range<I follows Integral>.resolve_end(me: Range<I>, length: uaddr) -> ua
 }
 
 # Check if range is valid (start <= end for ascending, start >= end for descending)
-routine Range<I follows Integral>.is_valid(me: Range<I>) -> bool {
+routine Range<I follows Integral>.is_valid(me: Range<I>) -> Bool {
     let s = me.start.to_uaddr()
     let e = me.end.to_uaddr()
     if me.ascending {
@@ -81,7 +81,7 @@ routine Range<I follows Integral>.is_valid(me: Range<I>) -> bool {
 }
 
 # Get the number of elements in the range (inclusive, accounting for step)
-routine Range<I follows Integral>.count(me: Range<I>) -> uaddr {
+routine Range<I follows Integral>.count(me: Range<I>) -> UAddr {
     let s = me.start.to_uaddr()
     let e = me.end.to_uaddr()
     if me.ascending {
@@ -103,20 +103,20 @@ routine Range<I follows Integral>.count(me: Range<I>) -> uaddr {
 # Range<BackIndex> - Backward index ranges
 # These functions work with ranges of BackIndex values for backward slicing.
 # Since BackIndex is always parameterized by an Integral type, these functions
-# use BackIndex<uaddr> as the concrete type for simplicity.
+# use BackIndex<UAddr> as the concrete type for simplicity.
 # ============================================================================
 
-# Resolve Range<BackIndex<uaddr>> to start/end uaddr indices
-routine resolve_backindex_range_start(range: Range<BackIndex<uaddr>>, length: uaddr) -> uaddr {
+# Resolve Range<BackIndex<UAddr>> to start/end UAddr indices
+routine resolve_backindex_range_start(range: Range<BackIndex<UAddr>>, length: UAddr) -> UAddr {
     return range.start.resolve(length)
 }
 
-routine resolve_backindex_range_end(range: Range<BackIndex<uaddr>>, length: uaddr) -> uaddr {
+routine resolve_backindex_range_end(range: Range<BackIndex<UAddr>>, length: UAddr) -> UAddr {
     return range.end.resolve(length)
 }
 
 # Check if range is valid for a given length
-routine is_backindex_range_valid_for(range: Range<BackIndex<uaddr>>, length: uaddr) -> bool {
+routine is_backindex_range_valid_for(range: Range<BackIndex<UAddr>>, length: UAddr) -> Bool {
     let s = range.start.offset_uaddr()
     let e = range.end.offset_uaddr()
     # Both offsets must be within bounds
@@ -124,7 +124,7 @@ routine is_backindex_range_valid_for(range: Range<BackIndex<uaddr>>, length: uad
 }
 
 # Get the number of elements in the range (inclusive, accounting for step)
-routine count_backindex_range_for(range: Range<BackIndex<uaddr>>, length: uaddr) -> uaddr {
+routine count_backindex_range_for(range: Range<BackIndex<UAddr>>, length: UAddr) -> UAddr {
     let s = resolve_backindex_range_start(range, length)
     let e = resolve_backindex_range_end(range, length)
     if range.ascending {
@@ -147,11 +147,11 @@ routine count_backindex_range_for(range: Range<BackIndex<uaddr>>, length: uaddr)
 # ============================================================================
 
 record RangeIterator<I follows Integral> {
-    current: uaddr
-    end: uaddr
-    step: uaddr
-    ascending: bool
-    done: bool
+    current: UAddr
+    end: UAddr
+    step: UAddr
+    ascending: Bool
+    done: Bool
 }
 
 routine Range<I>.iter<I>(me: Range<I>) -> RangeIterator<I>
@@ -165,7 +165,7 @@ requires I follows Integral {
     )
 }
 
-routine RangeIterator<I>.next!<I>(me: RangeIterator<I>) -> uaddr
+routine RangeIterator<I>.next!<I>(me: RangeIterator<I>) -> UAddr
 requires I follows Integral {
     if me.done {
         absent

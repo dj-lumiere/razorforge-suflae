@@ -1,8 +1,8 @@
 # RazorForge Integral - Protocol for all integer types
 #
 # All integer types follow this protocol:
-# - Signed: s8, s16, s32, s64, s128, saddr
-# - Unsigned: u8, u16, u32, u64, u128, uaddr
+# - Signed: S8, S16, S32, S64, S128, SAddr
+# - Unsigned: U8, U16, U32, U64, U128, UAddr
 #
 # This enables generic indexing and numeric operations.
 namespace core

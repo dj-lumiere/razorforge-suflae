@@ -9,7 +9,7 @@ import ErrorHandling/Maybe
 # The actual memory is managed by the native runtime
 entity Integer
 follows Comparable {
-    private handle: uaddr
+    private handle: UAddr
 }
 
 # ============================================================================
@@ -24,8 +24,8 @@ routine Integer.__create__() -> Integer {
     }
 }
 
-# Create Integer from s64
-routine Integer.__create__(value: s64) -> Integer {
+# Create Integer from S64
+routine Integer.__create__(value: S64) -> Integer {
     danger! {
         let int = Integer(handle: @native.rf_bigint_new())
         @native.rf_bigint_set_i64(int.handle, value)
@@ -33,8 +33,8 @@ routine Integer.__create__(value: s64) -> Integer {
     }
 }
 
-# Create Integer from u64
-routine Integer.__create__(value: u64) -> Integer {
+# Create Integer from U64
+routine Integer.__create__(value: U64) -> Integer {
     danger! {
         let int = Integer(handle: @native.rf_bigint_new())
         @native.rf_bigint_set_u64(int.handle, value)
@@ -43,7 +43,7 @@ routine Integer.__create__(value: u64) -> Integer {
 }
 
 # Create Integer from string with base (2-36)
-routine Integer.__create__!(text: Text, radix: s32 = 10) -> Integer {
+routine Integer.__create__!(text: Text, radix: S32 = 10) -> Integer {
     danger! {
         let int = Integer(handle: @native.rf_bigint_new())
         let result = @native.rf_bigint_set_str(int.handle, text.to_cstr(), radix)
@@ -128,7 +128,7 @@ routine Integer.__neg__() -> Integer {
 # Comparison Operations
 # ============================================================================
 
-routine Integer.__eq__(you: Integer) -> bool {
+routine Integer.__eq__(you: Integer) -> Bool {
     danger! {
         return @native.rf_bigint_cmp(me.handle, other.handle) == 0
     }
@@ -174,7 +174,7 @@ routine Integer.__xor__(other: Integer) -> Integer {
     }
 }
 
-routine Integer.__shl__(bits: s32) -> Integer {
+routine Integer.__shl__(bits: S32) -> Integer {
     danger! {
         let result = Integer(handle: @native.rf_bigint_new())
         @native.rf_bigint_shl(result.handle, me.handle, bits)
@@ -182,7 +182,7 @@ routine Integer.__shl__(bits: s32) -> Integer {
     }
 }
 
-routine Integer.__shr__(bits: s32) -> Integer {
+routine Integer.__shr__(bits: S32) -> Integer {
     danger! {
         let result = Integer(handle: @native.rf_bigint_new())
         @native.rf_bigint_shr(result.handle, me.handle, bits)
@@ -202,7 +202,7 @@ routine Integer.abs() -> Integer {
     }
 }
 
-routine Integer.pow(exp: u32) -> Integer {
+routine Integer.__pow__(exp: U32) -> Integer {
     danger! {
         let result = Integer(handle: @native.rf_bigint_new())
         @native.rf_bigint_pow(result.handle, me.handle, exp)
@@ -238,23 +238,23 @@ routine Integer.lcm(other: Integer) -> Integer {
 # Utility Methods
 # ============================================================================
 
-routine Integer.is_zero() -> bool {
+routine Integer.is_zero() -> Bool {
     danger! {
         return @native.rf_bigint_is_zero(me.handle) != 0
     }
 }
 
-routine Integer.is_negative() -> bool {
+routine Integer.is_negative() -> Bool {
     danger! {
         return @native.rf_bigint_is_neg(me.handle) != 0
     }
 }
 
-routine Integer.is_positive() -> bool {
+routine Integer.is_positive() -> Bool {
     return not me.is_zero() and not me.is_negative()
 }
 
-routine Integer.signum() -> s32 {
+routine Integer.signum() -> S32 {
     when {
         me.is_positive() => 1,
         me.is_negative() => -1,
@@ -266,48 +266,28 @@ routine Integer.signum() -> s32 {
 # Conversions
 # ============================================================================
 
-# Convert to s64 (may overflow/truncate for large values)
-routine s64.__create__!(from: Integer) -> s64 {
+# Convert to S64 (may overflow/truncate for large values)
+routine S64.__create__!(from: Integer) -> S64 {
     danger! {
         return @native.rf_bigint_get_i64(from.handle)
     }
 }
 
-# Convert to u64 (may overflow/truncate for large values)
-routine u64.__create__!(from: Integer) -> u64 {
+# Convert to U64 (may overflow/truncate for large values)
+routine U64.__create__!(from: Integer) -> U64 {
     danger! {
         return @native.rf_bigint_get_u64(from.handle)
     }
 }
 
 # Convert to string with specified radix (2-36)
-routine Integer.to_text(radix: s32 = 10) -> Text {
+routine Integer.to_text(radix: S32 = 10) -> Text {
     danger! {
-        let cstr = @native.rf_bigint_get_str(me.handle, radix)
-        let text = Text.from_cstr(cstr)
-        @native.rf_free(cstr)
+        let CStr = @native.rf_bigint_get_str(me.handle, radix)
+        let text = Text.from_cstr(CStr)
+        @native.rf_free(CStr)
         return text
     }
-}
-
-# Default string conversion (base 10)
-routine Integer.to_string() -> Text {
-    return me.to_text(radix: 10)
-}
-
-# Convert to binary string
-routine Integer.to_binary() -> Text {
-    return me.to_text(radix: 2)
-}
-
-# Convert to hexadecimal string
-routine Integer.to_hex() -> Text {
-    return me.to_text(radix: 16)
-}
-
-# Convert to octal string
-routine Integer.to_octal() -> Text {
-    return me.to_text(radix: 8)
 }
 
 # ============================================================================
@@ -385,7 +365,7 @@ routine factorial(n: Integer) -> Integer {
 }
 
 # Fibonacci with arbitrary precision
-routine fibonacci_big(n: s64) -> Integer {
+routine fibonacci_big(n: S64) -> Integer {
     if n <= 1 {
         return Integer(n)
     }
@@ -393,7 +373,7 @@ routine fibonacci_big(n: s64) -> Integer {
     var a = Integer.zero()
     var b = Integer.one()
 
-    var i: s64 = 2
+    var i: S64 = 2
     while i <= n {
         let temp = a + b
         a = b

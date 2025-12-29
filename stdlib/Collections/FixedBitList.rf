@@ -17,8 +17,8 @@ namespace Collections
 # Fixed-capacity bit list with reference semantics
 # N bits stored inline, packed into bytes by compiler
 resident FixedBitList<N>
-requires N is uaddr {
-    count: uaddr    # Current number of bits (0 to N)
+requires N is UAddr {
+    count: UAddr    # Current number of bits (0 to N)
     # Bits stored inline by compiler - approximately (N + 7) / 8 bytes
 }
 
@@ -34,27 +34,27 @@ routine FixedBitList<N>.__create__() -> FixedBitList<N> {
 # Core Operations
 # ============================================================================
 
-routine FixedBitList<N>.count(me: FixedBitList<N>) -> uaddr {
+routine FixedBitList<N>.count(me: FixedBitList<N>) -> UAddr {
     return me.count
 }
 
-routine FixedBitList<N>.capacity(me: FixedBitList<N>) -> uaddr {
+routine FixedBitList<N>.capacity(me: FixedBitList<N>) -> UAddr {
     return N
 }
 
-routine FixedBitList<N>.is_empty(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.is_empty(me: FixedBitList<N>) -> Bool {
     return me.count == 0uaddr
 }
 
-routine FixedBitList<N>.is_full(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.is_full(me: FixedBitList<N>) -> Bool {
     return me.count == N
 }
 
-routine FixedBitList<N>.remaining(me: FixedBitList<N>) -> uaddr {
+routine FixedBitList<N>.remaining(me: FixedBitList<N>) -> UAddr {
     return N - me.count
 }
 
-routine FixedBitList<N>.push!(me: FixedBitList<N>, value: bool) {
+routine FixedBitList<N>.push!(me: FixedBitList<N>, value: Bool) {
     # Append bit to end - O(1)
     # Throws if full
     if me.count >= N {
@@ -64,7 +64,7 @@ routine FixedBitList<N>.push!(me: FixedBitList<N>, value: bool) {
     me.count = me.count + 1uaddr
 }
 
-routine FixedBitList<N>.pop!(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.pop!(me: FixedBitList<N>) -> Bool {
     # Remove and return last bit - O(1)
     if me.is_empty() {
         absent
@@ -81,15 +81,15 @@ routine FixedBitList<N>.clear(me: FixedBitList<N>) {
 # Internal bit access
 # ============================================================================
 
-routine FixedBitList<N>.get_bit(me: FixedBitList<N>, index: uaddr) -> bool {
+routine FixedBitList<N>.get_bit(me: FixedBitList<N>, index: UAddr) -> Bool {
     # Direct bit access (internal, no bounds check)
     let byte_idx = index / 8uaddr
     let bit_idx = index % 8uaddr
-    let byte_val = me[byte_idx]  # Access inline byte storage
+    let byte_val = me[byte_idx]  # Access inline Byte storage
     return (byte_val >> bit_idx) & 1u8 == 1u8
 }
 
-routine FixedBitList<N>.set_bit(me: FixedBitList<N>, index: uaddr, value: bool) {
+routine FixedBitList<N>.set_bit(me: FixedBitList<N>, index: UAddr, value: Bool) {
     # Direct bit set (internal, no bounds check)
     let byte_idx = index / 8uaddr
     let bit_idx = index % 8uaddr
@@ -105,7 +105,7 @@ routine FixedBitList<N>.set_bit(me: FixedBitList<N>, index: uaddr, value: bool) 
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine FixedBitList<N>.__getitem__!<I>(me: FixedBitList<N>, index: I) -> bool
+routine FixedBitList<N>.__getitem__!<I>(me: FixedBitList<N>, index: I) -> Bool
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= me.count {
@@ -114,7 +114,7 @@ requires I follows Integral {
     return me.get_bit(idx)
 }
 
-routine FixedBitList<N>.__setitem__!<I>(me: FixedBitList<N>, index: I, value: bool)
+routine FixedBitList<N>.__setitem__!<I>(me: FixedBitList<N>, index: I, value: Bool)
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= me.count {
@@ -127,13 +127,13 @@ requires I follows Integral {
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine FixedBitList<N>.__getitem__!<I>(me: FixedBitList<N>, index: BackIndex<I>) -> bool
+routine FixedBitList<N>.__getitem__!<I>(me: FixedBitList<N>, index: BackIndex<I>) -> Bool
 requires I follows Integral {
     let idx = index.resolve(me.count)
     return me.get_bit(idx)
 }
 
-routine FixedBitList<N>.__setitem__!<I>(me: FixedBitList<N>, index: BackIndex<I>, value: bool)
+routine FixedBitList<N>.__setitem__!<I>(me: FixedBitList<N>, index: BackIndex<I>, value: Bool)
 requires I follows Integral {
     let idx = index.resolve(me.count)
     me.set_bit(idx, value)
@@ -143,12 +143,12 @@ requires I follows Integral {
 # Legacy get/set methods
 # ============================================================================
 
-routine FixedBitList<N>.get!<I>(me: FixedBitList<N>, index: I) -> bool
+routine FixedBitList<N>.get!<I>(me: FixedBitList<N>, index: I) -> Bool
 requires I follows Integral {
     return me.__getitem__!(index)
 }
 
-routine FixedBitList<N>.set!<I>(me: FixedBitList<N>, index: I, value: bool)
+routine FixedBitList<N>.set!<I>(me: FixedBitList<N>, index: I, value: Bool)
 requires I follows Integral {
     me.__setitem__!(index, value)
 }
@@ -157,21 +157,21 @@ requires I follows Integral {
 # Utility Operations
 # ============================================================================
 
-routine FixedBitList<N>.first!(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.first!(me: FixedBitList<N>) -> Bool {
     if me.is_empty() {
         absent
     }
     return me.get_bit(0uaddr)
 }
 
-routine FixedBitList<N>.last!(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.last!(me: FixedBitList<N>) -> Bool {
     if me.is_empty() {
         absent
     }
     return me.get_bit(me.count - 1uaddr)
 }
 
-routine FixedBitList<N>.count_ones(me: FixedBitList<N>) -> uaddr {
+routine FixedBitList<N>.count_ones(me: FixedBitList<N>) -> UAddr {
     var result = 0uaddr
     var i = 0uaddr
     while i < me.count {
@@ -183,27 +183,27 @@ routine FixedBitList<N>.count_ones(me: FixedBitList<N>) -> uaddr {
     return result
 }
 
-routine FixedBitList<N>.count_zeros(me: FixedBitList<N>) -> uaddr {
+routine FixedBitList<N>.count_zeros(me: FixedBitList<N>) -> UAddr {
     return me.count - me.count_ones()
 }
 
-routine FixedBitList<N>.all_true(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.all_true(me: FixedBitList<N>) -> Bool {
     return me.count_ones() == me.count
 }
 
-routine FixedBitList<N>.all_false(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.all_false(me: FixedBitList<N>) -> Bool {
     return me.count_ones() == 0uaddr
 }
 
-routine FixedBitList<N>.any_true(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.any_true(me: FixedBitList<N>) -> Bool {
     return me.count_ones() > 0uaddr
 }
 
-routine FixedBitList<N>.any_false(me: FixedBitList<N>) -> bool {
+routine FixedBitList<N>.any_false(me: FixedBitList<N>) -> Bool {
     return me.count_zeros() > 0uaddr
 }
 
-routine FixedBitList<N>.fill(me: FixedBitList<N>, value: bool) {
+routine FixedBitList<N>.fill(me: FixedBitList<N>, value: Bool) {
     # Fill to capacity with value
     var i = 0uaddr
     while i < N {
@@ -240,10 +240,10 @@ routine FixedBitList<N>.iter(me: FixedBitList<N>) -> FixedBitListIterator<N> {
 
 record FixedBitListIterator<N> {
     list: FixedBitList<N>
-    index: uaddr
+    index: UAddr
 }
 
-routine FixedBitListIterator<N>.next!(me: FixedBitListIterator<N>) -> bool {
+routine FixedBitListIterator<N>.next!(me: FixedBitListIterator<N>) -> Bool {
     if me.index >= me.list.count() {
         absent
     }

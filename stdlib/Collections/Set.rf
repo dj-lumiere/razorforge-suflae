@@ -17,14 +17,14 @@ import errors/IndexOutOfBoundsError
 namespace Collections
 
 # Initial number of buckets
-preset SET_INITIAL_BUCKETS: uaddr = 16uaddr
+preset SET_INITIAL_BUCKETS: UAddr = 16uaddr
 # Load factor threshold for rehashing (as percentage)
-preset SET_LOAD_FACTOR: uaddr = 75uaddr
+preset SET_LOAD_FACTOR: UAddr = 75uaddr
 
 entity Set<T>
 requires T follows Hashable, Comparable {
     private buckets: List<SortedSet<T>>
-    private count: uaddr
+    private count: UAddr
 }
 
 # ============================================================================
@@ -46,7 +46,7 @@ routine Set<T>.__create__() -> Set<T> {
     return set
 }
 
-routine Set<T>.__create__(capacity: uaddr) -> Set<T> {
+routine Set<T>.__create__(capacity: UAddr) -> Set<T> {
     # Calculate bucket count for desired capacity
     let bucket_count = if capacity < SET_INITIAL_BUCKETS then SET_INITIAL_BUCKETS else capacity
     let set = Set<T>(
@@ -66,13 +66,13 @@ routine Set<T>.__create__(capacity: uaddr) -> Set<T> {
 # Internal Operations
 # ============================================================================
 
-routine Set<T>.bucket_index(me: Set<T>, value: T) -> uaddr {
+routine Set<T>.bucket_index(me: Set<T>, value: T) -> UAddr {
     # Get bucket index for value using hash
     let hash = value.__hash__()
     return hash % me.buckets.count()
 }
 
-routine Set<T>.should_rehash(me: Set<T>) -> bool {
+routine Set<T>.should_rehash(me: Set<T>) -> Bool {
     # Check if load factor exceeds threshold
     let load = (me.count * 100uaddr) / me.buckets.count()
     return load > SET_LOAD_FACTOR
@@ -110,11 +110,11 @@ routine Set<T>.rehash(me: Set<T>) {
 # Core Operations
 # ============================================================================
 
-routine Set<T>.count(me: Set<T>) -> uaddr {
+routine Set<T>.count(me: Set<T>) -> UAddr {
     return me.count
 }
 
-routine Set<T>.is_empty(me: Set<T>) -> bool {
+routine Set<T>.is_empty(me: Set<T>) -> Bool {
     return me.count == 0uaddr
 }
 
@@ -127,12 +127,12 @@ routine Set<T>.clear(me: Set<T>) {
     me.count = 0uaddr
 }
 
-routine Set<T>.contains(me: Set<T>, value: T) -> bool {
+routine Set<T>.contains(me: Set<T>, value: T) -> Bool {
     let idx = me.bucket_index(value)
     return me.buckets[idx].contains(value)
 }
 
-routine Set<T>.insert(me: Set<T>, value: T) -> bool {
+routine Set<T>.insert(me: Set<T>, value: T) -> Bool {
     # Returns true if inserted, false if already exists
     if me.should_rehash() {
         me.rehash()
@@ -146,7 +146,7 @@ routine Set<T>.insert(me: Set<T>, value: T) -> bool {
     return false
 }
 
-routine Set<T>.remove(me: Set<T>, value: T) -> bool {
+routine Set<T>.remove(me: Set<T>, value: T) -> Bool {
     # Returns true if removed, false if not found
     let idx = me.bucket_index(value)
     if me.buckets[idx].remove(value) {
@@ -270,7 +270,7 @@ routine Set<T>.symmetric_difference(me: Set<T>, other: Set<T>) -> Set<T> {
     return result
 }
 
-routine Set<T>.is_subset(me: Set<T>, other: Set<T>) -> bool {
+routine Set<T>.is_subset(me: Set<T>, other: Set<T>) -> Bool {
     # Check if all elements of me are in other
     if me.count > other.count {
         return false
@@ -291,11 +291,11 @@ routine Set<T>.is_subset(me: Set<T>, other: Set<T>) -> bool {
     return true
 }
 
-routine Set<T>.is_superset(me: Set<T>, other: Set<T>) -> bool {
+routine Set<T>.is_superset(me: Set<T>, other: Set<T>) -> Bool {
     return other.is_subset(me)
 }
 
-routine Set<T>.is_disjoint(me: Set<T>, other: Set<T>) -> bool {
+routine Set<T>.is_disjoint(me: Set<T>, other: Set<T>) -> Bool {
     # Check if no elements in common
     let smaller = if me.count < other.count then me else other
     let larger = if me.count < other.count then other else me
@@ -349,8 +349,8 @@ routine Set<T>.iter(me: Set<T>) -> SetIterator<T> {
 
 entity SetIterator<T> {
     set: Set<T>
-    bucket_idx: uaddr
-    element_idx: uaddr
+    bucket_idx: UAddr
+    element_idx: UAddr
     current_elements: List<T>
 }
 
@@ -374,13 +374,13 @@ routine SetIterator<T>.next!(me: SetIterator<T>) -> T {
 # Comparison
 # ============================================================================
 
-routine Set<T>.__eq__(me: Set<T>, other: Set<T>) -> bool {
+routine Set<T>.__eq__(me: Set<T>, other: Set<T>) -> Bool {
     if me.count != other.count {
         return false
     }
     return me.is_subset(other)
 }
 
-routine Set<T>.__ne__(me: Set<T>, other: Set<T>) -> bool {
+routine Set<T>.__ne__(me: Set<T>, other: Set<T>) -> Bool {
     return not (me == other)
 }

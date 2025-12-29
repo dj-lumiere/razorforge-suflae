@@ -7,7 +7,7 @@
 namespace Console
 
 import Text/Text
-import FFI/cstr
+import FFI/CStr
 
 # ============================================================================
 # Output: show() - Standard Output (stdout)
@@ -139,7 +139,7 @@ routine Console.get_all() -> Text {
 
 # Read exactly n codepoints from input
 @prelude
-routine Console.get_letters(count: uaddr) -> Text {
+routine Console.get_letters(count: UAddr) -> Text {
     danger! {
         let ptr = @native.rf_console_get_letters(count)
         let bytes = Bytes(ptr: ptr)
@@ -178,7 +178,7 @@ routine Console.get_raw() -> Bytes {
 
 # Read up to n bytes
 @prelude
-routine Console.get_bytes(count: uaddr) -> Bytes {
+routine Console.get_bytes(count: UAddr) -> Bytes {
     danger! {
         let ptr = @native.rf_console_get_bytes(count)
         return Bytes(ptr: ptr)

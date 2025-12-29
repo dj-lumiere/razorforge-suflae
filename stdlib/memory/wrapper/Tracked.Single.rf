@@ -16,7 +16,7 @@ routine Shared<T>.track() -> Tracked<T> {
 }
 
 # Check if the tracked data is still alive
-routine Tracked<T>.is_alive() -> bool {
+routine Tracked<T>.is_alive() -> Bool {
     danger! {
         return me.controller.strong_count() > 0
     }
@@ -44,13 +44,13 @@ routine Tracked<T>.release!() {
 }
 
 # Get reference counts for debugging
-routine Tracked<T>.strong_count() -> s32 {
+routine Tracked<T>.strong_count() -> S32 {
     danger! {
         return me.controller.strong_count()
     }
 }
 
-routine Tracked<T>.weak_count() -> s32 {
+routine Tracked<T>.weak_count() -> S32 {
     danger! {
         return me.controller.weak_count()
     }

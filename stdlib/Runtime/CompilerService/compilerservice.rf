@@ -19,7 +19,7 @@ routine data_size<T>() -> MemorySize
 routine align_size<T>() -> MemorySize
 
 # Returns the compile-time type name as it appears in source code
-# Example: T.type_name() returns "List<s32>" for List<s32>
+# Example: T.type_name() returns "List<S32>" for List<S32>
 @intrinsic("get_compile_type_name")
 routine type_name<T>() -> Text
 
@@ -29,7 +29,7 @@ routine field_names<T>() -> List<Text>
 
 # Returns the number of fields in the type
 @intrinsic("field_count")
-routine field_count<T>() -> s64
+routine field_count<T>() -> S64
 
 # ============================================================================
 # Source Location
@@ -37,11 +37,11 @@ routine field_count<T>() -> s64
 
 # Returns the current line number in source code
 @intrinsic("get_line_number")
-routine get_line_number() -> s64
+routine get_line_number() -> S64
 
 # Returns the current column position in source code
 @intrinsic("get_column_number")
-routine get_column_number() -> s64
+routine get_column_number() -> S64
 
 # Returns the current source file name
 @intrinsic("get_file_name")
@@ -70,4 +70,4 @@ routine get_current_module() -> Text
 
 # Checks if a type has a method with the given name at compile time
 @intrinsic("has_method")
-routine has_method<T>(name: Text) -> bool
+routine has_method<T>(name: Text) -> Bool

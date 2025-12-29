@@ -52,13 +52,13 @@ routine Shared<T>.release!() {
 }
 
 # Get reference counts for debugging
-routine Shared<T>.strong_count() -> s32 {
+routine Shared<T>.strong_count() -> S32 {
     danger! {
         return me.controller.strong_count()
     }
 }
 
-routine Shared<T>.weak_count() -> s32 {
+routine Shared<T>.weak_count() -> S32 {
     danger! {
         return me.controller.weak_count()
     }

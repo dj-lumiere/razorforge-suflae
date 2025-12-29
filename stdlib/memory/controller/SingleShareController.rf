@@ -2,8 +2,8 @@
 # Core reference counting mechanism for single-threaded Shared<T> memory management
 
 entity SingleShareController {
-    private strong_count: s32
-    private weak_count: s32
+    private strong_count: S32
+    private weak_count: S32
 }
 
 # Create new reference count controller with initial counts of 0
@@ -15,36 +15,36 @@ routine SingleShareController.__create__() -> SingleShareController {
 }
 
 # Simple non-atomic operations (single-threaded)
-routine SingleShareController.increase_strong_count(me: SingleShareController) {
+routine SingleShareController.increase_strong_count() {
     me.strong_count = me.strong_count + 1
 }
 
-routine SingleShareController.decrease_strong_count(me: SingleShareController) {
+routine SingleShareController.decrease_strong_count() {
     me.strong_count = me.strong_count - 1
 }
 
-routine SingleShareController.increase_weak_count(me: SingleShareController) {
+routine SingleShareController.increase_weak_count() {
     me.weak_count = me.weak_count + 1
 }
 
-routine SingleShareController.decrease_weak_count(me: SingleShareController) {
+routine SingleShareController.decrease_weak_count() {
     me.weak_count = me.weak_count - 1
 }
 
 # Read-only access to counts
-routine SingleShareController.strong_count(me: SingleShareController) -> s32 {
+routine SingleShareController.strong_count() -> S32 {
     return me.strong_count
 }
 
-routine SingleShareController.weak_count(me: SingleShareController) -> s32 {
+routine SingleShareController.weak_count() -> S32 {
     return me.weak_count
 }
 
 # Check if the controller should be deallocated
-routine SingleShareController.should_deallocate_data(me: SingleShareController) -> bool {
+routine SingleShareController.should_deallocate_data() -> Bool {
     return me.strong_count() == 0
 }
 
-routine SingleShareController.should_deallocate_controller(me: SingleShareController) -> bool {
+routine SingleShareController.should_deallocate_controller() -> Bool {
     return me.strong_count() == 0 and me.weak_count() == 0
 }

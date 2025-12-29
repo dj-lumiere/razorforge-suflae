@@ -1,6 +1,6 @@
-# Protocol method declarations not yet supported by parser
-# Temporarily empty - will be populated when parser supports abstract methods
+namespace core
+
 protocol Crashable {
     @readonly
-    routine Me.crash_message() -> Text
+    routine Me.crash_message() -> FixedText<256>
 }
