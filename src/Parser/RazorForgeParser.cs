@@ -121,11 +121,8 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                     continue;
                 }
 
-                IAstNode? decl = ParseDeclaration();
-                if (decl != null)
-                {
-                    declarations.Add(item: decl);
-                }
+                IAstNode decl = ParseDeclaration();
+                declarations.Add(item: decl);
             }
             catch (ParseException ex)
             {
@@ -148,8 +145,8 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// Handles all declaration types: namespace, import, define, using, preset,
     /// routines, entities, records, residents, choices, variants, mutants, and protocols.
     /// </summary>
-    /// <returns>The parsed declaration node, or null if no valid declaration was found.</returns>
-    private IAstNode? ParseDeclaration()
+    /// <returns>The parsed declaration node.</returns>
+    private IAstNode ParseDeclaration()
     {
         // Namespace declaration (must appear at top of file)
         if (Match(type: TokenType.Namespace))
@@ -299,7 +296,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// block statements, and expression statements.
     /// </summary>
     /// <returns>The parsed statement, or null if no valid statement was found.</returns>
-    private Statement? ParseStatement()
+    private Statement ParseStatement()
     {
         // Control flow
         if (Match(type: TokenType.If))

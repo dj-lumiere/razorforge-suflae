@@ -156,11 +156,8 @@ public partial class SuflaeParser
                     continue;
                 }
 
-                IAstNode? decl = ParseDeclaration();
-                if (decl != null)
-                {
-                    declarations.Add(item: decl);
-                }
+                IAstNode decl = ParseDeclaration();
+                declarations.Add(item: decl);
             }
             catch (ParseException ex)
             {
@@ -182,8 +179,9 @@ public partial class SuflaeParser
     /// Parses a single top-level or nested declaration.
     /// Handles: namespace, import, define, using, var/let, routine, entity, record, choice, variant, protocol, impl.
     /// </summary>
-    /// <returns>The parsed declaration node, or null if no valid declaration.</returns>
-    private IAstNode? ParseDeclaration()
+    /// <returns>The parsed declaration node.</returns>
+    /// <exception cref="ParseException">Thrown when no valid declaration or statement can be parsed.</exception>
+    private IAstNode ParseDeclaration()
     {
         // Namespace declaration (must appear at top of file)
         if (Match(type: TokenType.Namespace))
@@ -290,7 +288,7 @@ public partial class SuflaeParser
     /// Handles: if, while, for, when, return, throw, absent, break, continue, and expression statements.
     /// </summary>
     /// <returns>The parsed statement, or null if at end of block.</returns>
-    private Statement? ParseStatement()
+    private Statement ParseStatement()
     {
         // Handle dedent tokens
         if (Check(type: TokenType.Dedent))
@@ -300,11 +298,6 @@ public partial class SuflaeParser
 
         // Skip newlines
         while (Match(type: TokenType.Newline)) { }
-
-        if (IsAtEnd)
-        {
-            return null;
-        }
 
         // Control flow
         if (Match(type: TokenType.If))

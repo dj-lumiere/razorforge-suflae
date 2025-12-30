@@ -456,7 +456,9 @@ public partial class RazorForgeParser
     /// <returns>String representation of the attribute value.</returns>
     private string ParseAttributeValue()
     {
-        // TODO: Should it be really limited by string/number/bool/identifier?
+        // Attribute values are limited to compile-time constants:
+        // string, number, bool, or identifier (for enums/presets)
+
         // String literal
         if (Check(TokenType.TextLiteral, TokenType.BytesLiteral))
         {
@@ -778,9 +780,14 @@ public partial class RazorForgeParser
                 continue;
             }
 
-            if (ParseDeclaration() is Declaration member)
+            IAstNode node = ParseDeclaration();
+            if (node is Declaration member)
             {
                 members.Add(item: member);
+            }
+            else
+            {
+                throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
             }
         }
 
@@ -868,10 +875,14 @@ public partial class RazorForgeParser
                 continue;
             }
 
-            var member = ParseDeclaration() as Declaration;
-            if (member != null)
+            IAstNode node = ParseDeclaration();
+            if (node is Declaration member)
             {
                 members.Add(item: member);
+            }
+            else
+            {
+                throw new ParseException(message: $"Expected declaration inside record body, got {node.GetType().Name}");
             }
         }
 
@@ -957,10 +968,14 @@ public partial class RazorForgeParser
                 continue;
             }
 
-            var member = ParseDeclaration() as Declaration;
-            if (member != null)
+            IAstNode node = ParseDeclaration();
+            if (node is Declaration member)
             {
                 members.Add(item: member);
+            }
+            else
+            {
+                throw new ParseException(message: $"Expected declaration inside resident body, got {node.GetType().Name}");
             }
         }
 
