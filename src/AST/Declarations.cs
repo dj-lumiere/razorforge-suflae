@@ -23,15 +23,15 @@ public abstract record Declaration(SourceLocation Location) : AstNode(Location: 
 /// Specifies requirements that generic type arguments must satisfy.
 /// </summary>
 /// <param name="ParameterName">The name of the generic type parameter (e.g., "T")</param>
-/// <param name="ConstraintType">The type of constraint (follows, from, record, entity)</param>
+/// <param name="ConstraintType">The type of constraint (follows, record, entity)</param>
 /// <param name="ConstraintTypes">List of types that the parameter must satisfy</param>
 /// <remarks>
 /// Supports various constraint syntaxes:
 /// <list type="bullet">
-/// <item>Protocol constraint: T follows Comparable</item>
-/// <item>Inheritance constraint: T from BaseType</item>
-/// <item>Value type constraint: T: record</item>
-/// <item>Reference type constraint: T: entity</item>
+/// <item>Protocol constraint: where T follows Comparable</item>
+/// <item>Value type constraint: where T is record</item>
+/// <item>Reference type constraint: where T is entity</item>
+/// <item>Resident type constraint: where T is resident</item>
 /// </list>
 /// </remarks>
 public record GenericConstraintDeclaration(
@@ -52,17 +52,19 @@ public record GenericConstraintDeclaration(
 /// <param name="Name">Variable identifier name</param>
 /// <param name="Type">Optional type annotation; if null, type is inferred from initializer</param>
 /// <param name="Initializer">Optional initial value expression</param>
-/// <param name="Visibility">Access control modifier (public, private, etc.)</param>
+/// <param name="Visibility">Access control modifier for getter (public, private, etc.)</param>
+/// <param name="SetterVisibility">Optional separate setter access control; if null, same as Visibility</param>
 /// <param name="IsMutable">true for 'var' (mutable), false for 'let' (immutable)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Variable declarations support various patterns:
 /// <list type="bullet">
-/// <item>Type inference: var x = 42 (infers s32)</item>
+/// <item>Type inference: var x = 42 (infers s64 for RazorForge/Integer for Suflae)</item>
 /// <item>Explicit typing: var x: s64 = 42</item>
 /// <item>Uninitialized (requires type): var x: s32</item>
 /// <item>Immutable: let x = 42 (cannot be reassigned)</item>
 /// <item>Mutable: var x = 42 (can be reassigned)</item>
+/// <item>Getter/setter: public private(set) var x = 42 (public read, private write)</item>
 /// </list>
 /// </remarks>
 public record VariableDeclaration(
@@ -89,26 +91,26 @@ public record VariableDeclaration(
 /// <param name="ReturnType">Optional return type; null for void/procedure functions</param>
 /// <param name="Body">Function body statement (typically a BlockStatement)</param>
 /// <param name="Visibility">Access control modifier</param>
-/// <param name="Attributes">Decorators like @[everywhere get] for properties</param>
+/// <param name="Attributes">Decorators like @inline for properties</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <remarks>
 /// Function declarations support:
 /// <list type="bullet">
-/// <item>Generic functions: routine sort[T](items: Array[T])</item>
+/// <item>Generic functions: routine sort[T](items: List[T])</item>
 /// <item>Default parameters: routine greet(name: text = "World")</item>
 /// <item>Type inference: parameters and return types can be inferred</item>
-/// <item>Attributes: @[inline], @[everywhere get], etc.</item>
-/// <item>Visibility: public, private, protected, internal</item>
+/// <item>Attributes: @inline,etc.</item>
+/// <item>Visibility: public, private, internal</item>
 /// </list>
 /// </remarks>
-public record FunctionDeclaration(
+public record RoutineDeclaration(
     string Name,
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
     Statement Body,
     VisibilityModifier Visibility,
-    List<string> Attributes, // For decorators like @[everywhere get]
+    List<string> Attributes, // For decorators like @inline, @readonly
     SourceLocation Location,
     List<string>? GenericParameters = null,
     List<GenericConstraintDeclaration>? GenericConstraints = null,
@@ -131,18 +133,17 @@ public record FunctionDeclaration(
 /// </summary>
 /// <param name="Name">Class identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="BaseClass">Optional base class for inheritance (from Animal)</param>
-/// <param name="Interfaces">List of traits/interfaces to implement (follows/implements)</param>
+/// <param name="Protocols">List of protocols to implement (follows)</param>
 /// <param name="Members">List of member declarations (fields, methods, properties)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Entity declarations support:
 /// <list type="bullet">
-/// <item>Single inheritance: entity Dog from Animal</item>
-/// <item>Multiple interface implementation: entity Dog follows Nameable, Trainable</item>
+/// <item>Single protocol implementation: entity Dog follows Animal</item>
+/// <item>Multiple protocol implementation: entity Dog follows Nameable, Trainable</item>
 /// <item>Generic classes: entity Container[T]</item>
-/// <item>Member visibility: public, private, protected fields/methods</item>
+/// <item>Member visibility: public, private, internal fields/methods</item>
 /// <item>Constructors: defined as special routine methods</item>
 /// </list>
 /// </remarks>
@@ -168,6 +169,7 @@ public record EntityDeclaration(
 /// </summary>
 /// <param name="Name">Record identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
+/// <param name="Protocols">List of protocols to implement (follows)</param>
 /// <param name="Members">List of member declarations (fields and methods)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
@@ -175,7 +177,7 @@ public record EntityDeclaration(
 /// Record declarations provide:
 /// <list type="bullet">
 /// <item>Value semantics: equality based on field values, not identity</item>
-/// <item>Immutability: fields are typically readonly</item>
+/// <item>Immutability: fields are always readonly</item>
 /// <item>Stack allocation: stored inline rather than heap-allocated</item>
 /// <item>Generic records: record Point[T](x: T, y: T)</item>
 /// <item>Copy constructors: automatic with-expressions support</item>
@@ -237,7 +239,7 @@ public record ResidentDeclaration(
 /// Represents enumeration types with optional associated values.
 /// </summary>
 /// <param name="Name">Choice identifier name</param>
-/// <param name="Variants">List of choice variant definitions with optional values</param>
+/// <param name="Cases">List of choice variant definitions with optional values</param>
 /// <param name="Methods">List of methods that can be called on choice values</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
@@ -252,8 +254,8 @@ public record ResidentDeclaration(
 /// </remarks>
 public record ChoiceDeclaration(
     string Name,
-    List<EnumVariant> Variants,
-    List<FunctionDeclaration> Methods,
+    List<ChoiceCase> Cases,
+    List<RoutineDeclaration> Methods,
     VisibilityModifier Visibility,
     SourceLocation Location) : Declaration(Location: Location)
 {
@@ -330,72 +332,36 @@ public record MutantDeclaration(
 /// Protocol (trait/interface) declaration that defines behavioral contracts.
 /// Specifies method signatures that implementing types must provide.
 /// </summary>
-/// <param name="Name">Trait identifier name</param>
+/// <param name="Name">Protocol identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
+/// <param name="ParentProtocols">List of parent protocols this protocol extends (follows)</param>
 /// <param name="Methods">List of method signatures (without implementations)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Protocol declarations enable polymorphism and code reuse:
 /// <list type="bullet">
-/// <item>Interface contracts: protocol Drawable { routine draw() }</item>
-/// <item>Generic traits: protocol Comparable[T] { routine compare(other: T) -> s32 }</item>
+/// <item>Interface contracts: protocol Drawable { routine Me.draw() }</item>
+/// <item>Generic protocols: protocol Comparable[T] { routine Me.__cmp__(you: Me) -> ComparisonSign }</item>
 /// <item>Multiple implementation: types can implement multiple protocols</item>
 /// <item>Default methods: protocols can provide default implementations</item>
-/// <item>Trait bounds: generic constraints (where T: Comparable)</item>
+/// <item>Protocol bounds: generic constraints (where T follows Comparable)</item>
+/// <item>Protocol inheritance: protocol DetailedPrintable follows Printable { ... }</item>
 /// </list>
 /// </remarks>
 public record ProtocolDeclaration(
     string Name,
     List<string>? GenericParameters,
-    List<FunctionSignature> Methods,
+    List<TypeExpression> ParentProtocols,
+    List<RoutineSignature> Methods,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null,
-    List<FieldRequirement>? RequiredFields = null) : Declaration(Location: Location)
+    List<GenericConstraintDeclaration>? GenericConstraints = null
+    ) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitProtocolDeclaration(node: this);
-    }
-}
-
-/// <summary>
-/// Represents a required field in a protocol declaration.
-/// Types implementing the protocol must have this field.
-/// </summary>
-/// <param name="Name">The field name</param>
-/// <param name="Type">The required field type</param>
-/// <param name="Location">Source location</param>
-public record FieldRequirement(string Name, TypeExpression Type, SourceLocation Location);
-
-/// <summary>
-/// Implementation block that provides method implementations for types.
-/// Either inherent implementations (methods directly on type) or trait implementations.
-/// </summary>
-/// <param name="Type">The type being implemented (e.g., String, MyClass)</param>
-/// <param name="Trait">Optional trait being implemented; null for inherent implementations</param>
-/// <param name="Methods">List of method implementations</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Implementation blocks serve two purposes:
-/// <list type="bullet">
-/// <item>Inherent impls: String follows { routine length() -> uaddr }</item>
-/// <item>Trait impls: MyType follows Drawable { routine draw() { ... } }</item>
-/// <item>Extension methods: add methods to existing types</item>
-/// <item>Organized code: group related methods together</item>
-/// <item>Conditional compilation: different impls for different platforms</item>
-/// </list>
-/// </remarks>
-public record ImplementationDeclaration(
-    TypeExpression Type,
-    TypeExpression? Trait, // null for inherent impl
-    List<FunctionDeclaration> Methods,
-    SourceLocation Location) : Declaration(Location: Location)
-{
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitImplementationDeclaration(node: this);
     }
 }
 
@@ -407,14 +373,14 @@ public record ImplementationDeclaration(
 /// Namespace declaration that establishes the module path for all symbols in a file.
 /// Must appear at the top of a source file, before any other declarations.
 /// </summary>
-/// <param name="Path">Slash-separated namespace path (e.g., "standard/errors")</param>
+/// <param name="Path">Slash-separated namespace path (e.g., "Standard/Errors")</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Namespace declarations establish module identity:
 /// <list type="bullet">
-/// <item>Module path: namespace standard/errors</item>
-/// <item>Nested namespaces: namespace company/project/utils</item>
-/// <item>Symbol qualification: types become fully qualified as path.TypeName</item>
+/// <item>Module path: namespace Standard/Errors</item>
+/// <item>Nested namespaces: namespace Company/Project/Utils</item>
+/// <item>Symbol qualification: types become fully qualified as Path.TypeName</item>
 /// <item>Import resolution: other files import this namespace by path</item>
 /// </list>
 /// </remarks>
@@ -431,24 +397,23 @@ public record NamespaceDeclaration(string Path, SourceLocation Location)
 /// Import declaration that brings external modules and symbols into scope.
 /// Enables code organization and dependency management.
 /// </summary>
-/// <param name="ModulePath">Dot-separated module path (e.g., "std.collections.list")</param>
+/// <param name="ModulePath">Slash-separated module path (e.g., "Standard/Collections/List")</param>
 /// <param name="Alias">Optional alias for imported module (as collections)</param>
-/// <param name="SpecificImports">Optional list of specific symbols to import ({ List, Map })</param>
+/// <param name="SpecificImports">Optional list of specific symbols to import ([List, Dict])</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Import declarations support various patterns:
 /// <list type="bullet">
-/// <item>Full module: import std.collections</item>
-/// <item>With alias: import std.collections as col</item>
-/// <item>Specific items: import std.collections { List, Map }</item>
-/// <item>Wildcard: import std.collections { * }</item>
-/// <item>Nested modules: import company.project.utils.helpers</item>
+/// <item>Full module: import Standard/Collections</item>
+/// <item>With alias: import Standard/Collections as col</item>
+/// <item>Specific items: import Standard/Collections.[List, Dict]</item>
+/// <item>Nested modules: import Company/Project/Utils/Helpers</item>
 /// </list>
 /// </remarks>
 public record ImportDeclaration(
     string ModulePath,
     string? Alias, // as alias
-    List<string>? SpecificImports, // { item1, item2 }
+    List<string>? SpecificImports, // [item1, item2]
     SourceLocation Location) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -462,23 +427,23 @@ public record ImportDeclaration(
 #region Supporting Types and Enums
 
 /// <summary>
-/// Enum variant definition used within Menu (enum) declarations.
+/// Value assigning used within Choice (enum) declarations.
 /// Represents a single named constant with optional explicit value.
 /// </summary>
 /// <param name="Name">Variant identifier name</param>
-/// <param name="Value">Optional explicit integer value (e.g., Ok = 200)</param>
+/// <param name="Value">Optional explicit integer value (e.g., OK: 200)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Enum variants can have explicit or implicit values:
+/// Choice can have explicit or implicit values:
 /// <list type="bullet">
 /// <item>Implicit: variants are numbered 0, 1, 2, ...</item>
-/// <item>Explicit: Ok = 200, Error = 404</item>
+/// <item>Explicit: OK: 200, ERROR: 404</item>
 /// <item>Mixed: Some explicit, some implicit (increment from last)</item>
 /// </list>
 /// </remarks>
-public record EnumVariant(
+public record ChoiceCase(
     string Name,
-    int? Value, // For explicit values like Ok = 200
+    long? Value, // For explicit values like OK: 200
     SourceLocation Location);
 
 /// <summary>
@@ -491,19 +456,17 @@ public record EnumVariant(
 /// <remarks>
 /// Variant cases support associated data:
 /// <list type="bullet">
-/// <item>No data: None (unit case)</item>
-/// <item>Single type: Some(T) (single associated value)</item>
-/// <item>Multiple types: Error(code: s32, message: text) (tuple)</item>
-/// <item>Record-like: Point(x: f64, y: f64) (named fields)</item>
+/// <item>No data: NONE (unit case)</item>
+/// <item>Single type: SINGLE(T) (single associated value)</item>
 /// </list>
 /// </remarks>
 public record VariantCase(
     string Name,
-    List<TypeExpression>? AssociatedTypes, // Success(T), Error(String)
+    TypeExpression? AssociatedTypes,
     SourceLocation Location);
 
 /// <summary>
-/// Function signature used within Feature (trait) declarations.
+/// Routine (function) signature used within Protocol (trait) declarations.
 /// Specifies method contract without implementation.
 /// </summary>
 /// <param name="Name">Method identifier name</param>
@@ -519,7 +482,7 @@ public record VariantCase(
 /// <item>Default implementations: traits can provide default bodies</item>
 /// </list>
 /// </remarks>
-public record FunctionSignature(
+public record RoutineSignature(
     string Name,
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
@@ -531,7 +494,7 @@ public record FunctionSignature(
 #region Advanced Declarations
 
 /// <summary>
-/// Redefine declaration that creates an alias for an existing identifier.
+/// Define declaration that creates an alias for an existing identifier.
 /// Allows renaming symbols for disambiguation or clarity.
 /// </summary>
 /// <param name="OldName">Original identifier name to alias</param>
@@ -540,12 +503,12 @@ public record FunctionSignature(
 /// <remarks>
 /// Redefinition enables:
 /// <list type="bullet">
-/// <item>Disambiguation: redefine std.List as StdList</item>
+/// <item>Disambiguation: define standard/List as StdList</item>
 /// <item>Migration: gradually rename APIs</item>
 /// <item>Backward compatibility: keep old names working</item>
 /// </list>
 /// </remarks>
-public record RedefinitionDeclaration(string OldName, string NewName, SourceLocation Location)
+public record DefineDeclaration(string OldName, string NewName, SourceLocation Location)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -564,10 +527,10 @@ public record RedefinitionDeclaration(string OldName, string NewName, SourceLoca
 /// <remarks>
 /// Using declarations improve code readability:
 /// <list type="bullet">
-/// <item>Complex generics: using StringMap = Dictionary[text, text]</item>
+/// <item>Complex generics: using StringMap = Dict[Text, Text]</item>
 /// <item>Long names: using DB = DatabaseConnectionManager</item>
 /// <item>Scoped aliases: defined within specific modules</item>
-/// <item>Generic aliases: using Result[T] = variant { Ok(T), Error(text) }</item>
+/// <item>Generic aliases: using Result[T] = variant { OK: T, ERROR: Crashable }</item>
 /// </list>
 /// </remarks>
 public record UsingDeclaration(TypeExpression Type, string Alias, SourceLocation Location)
@@ -617,18 +580,19 @@ public record PresetDeclaration(
 /// <param name="Parameters">Function parameters with types</param>
 /// <param name="ReturnType">Return type of the function (null for void)</param>
 /// <param name="CallingConvention">Calling convention ("C", "stdcall", "fastcall", etc.)</param>
+/// <param name="IsVariadic">Whether the function accepts variable arguments (like C's printf with "...")</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Imported declarations link RazorForge to native runtime:
 /// <list type="bullet">
-/// <item>external("C") routine malloc(size: uaddr) -> cptr&lt;cvoid&gt;</item>
-/// <item>external("C") routine free(ptr: cptr&lt;cvoid&gt;)</item>
-/// <item>external routine heap_alloc!(bytes: uaddr) -> uaddr (default C convention)</item>
+/// <item>imported("C") routine malloc(size: uaddr) -> cptr&lt;cvoid&gt;</item>
+/// <item>imported("C") routine free(ptr: cptr&lt;cvoid&gt;)</item>
+/// <item>imported routine heap_alloc!(bytes: uaddr) -> uaddr (default C convention)</item>
 /// <item>No function body - implementation provided by native runtime</item>
 /// <item>Links to C functions at compile time</item>
 /// </list>
 /// </remarks>
-public record ExternalDeclaration(
+public record ImportedDeclaration(
     string Name,
     List<string>? GenericParameters,
     List<GenericConstraintDeclaration>? GenericConstraints,
@@ -642,30 +606,6 @@ public record ExternalDeclaration(
     {
         return visitor.VisitImportedDeclaration(node: this);
     }
-}
-
-/// <summary>
-/// Routine declaration - alias for FunctionDeclaration to support RazorForge "routine" keyword.
-/// Provides compatibility with test code that expects RoutineDeclaration type.
-/// </summary>
-public record RoutineDeclaration : FunctionDeclaration
-{
-    public RoutineDeclaration(string Name, List<Parameter> Parameters, TypeExpression? ReturnType,
-        Statement Body, VisibilityModifier Visibility, List<string> Attributes,
-        SourceLocation Location) : base(Name: Name,
-        Parameters: Parameters,
-        ReturnType: ReturnType,
-        Body: Body,
-        Visibility: Visibility,
-        Attributes: Attributes,
-        Location: Location)
-    {
-    }
-
-    /// <summary>
-    /// Convenience property to access the body as a BlockStatement
-    /// </summary>
-    public BlockStatement? BlockBody => Body as BlockStatement;
 }
 
 #endregion
