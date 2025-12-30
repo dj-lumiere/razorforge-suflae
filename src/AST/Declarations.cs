@@ -71,7 +71,8 @@ public record VariableDeclaration(
     Expression? Initializer,
     VisibilityModifier Visibility,
     bool IsMutable, // var vs let
-    SourceLocation Location) : Declaration(Location: Location)
+    SourceLocation Location,
+    VisibilityModifier? SetterVisibility = null) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
