@@ -1,3 +1,4 @@
+using Compilers.Analysis.Types;
 using Compilers.Shared.Lexer;
 
 namespace Compilers.Shared.AST;
@@ -46,16 +47,13 @@ public abstract record Expression(SourceLocation Location) : AstNode(Location: L
 /// <remarks>
 /// Supports the full range of RazorForge/Suflae literal types:
 /// <list type="bullet">
-/// <item>Integers: s8, s16, s32, s64, s128, saddr, u8, u16, u32, u64, u128, uaddr</item>
-/// <item>Floats: f16, f32, f64, f128</item>
-/// <item>Decimals: d32, d64, d128</item>
-/// <item>Text and characters: letter, text</item>
+/// <item>Integers: S8, S16, S32, S64, S128, SAddr, U8, U16, U32, U64, U128, UAddr</item>
+/// <item>Floats: F16, F32, F64, F128</item>
+/// <item>Decimals: D32, D64, D128</item>
+/// <item>Text and characters: Letter, Byte, Text, Bytes</item>
 /// <item>Booleans: true, false</item>
-/// <item>Duration: h, m, s, ms, us, ns</item>
-/// <item>MemorySize: b, kb, mb, gb, tb
-/// , pb, kbit, mbit, gbit, tbit, pbit
-/// , kib, mib, gib, tib, pib, kibit
-/// , mibit, gibit, tibit, pibit</item>
+/// <item>Duration: w, d, h, m, s, ms, us, ns</item>
+/// <item>MemorySize: b, kb, kib, mb, mib, gb, gib</item>
 /// </list>
 /// </remarks>
 public record LiteralExpression(object Value, TokenType LiteralType, SourceLocation Location)
@@ -170,7 +168,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 /// <item>Arithmetic: +, -, *, /, //, %, ** (with overflow variants)</item>
 /// <item>Comparison: ==, !=, ===, !==, &lt;, &lt;=, &gt;, &gt;=</item>
 /// <item>Logical: and, or</item>
-/// <item>Membership: in, notin, is, isnot, follows, notfollows, from, notfrom</item>
+/// <item>Membership: in, notin, is, isnot, follows, notfollows</item>
 /// <item>Bitwise: &amp;, |, ^, &lt;&lt;, &lt;&lt;?, &gt;&gt;, &lt;&lt;&lt;, &gt;&gt;&gt;</item>
 /// </list>
 /// </remarks>
@@ -223,10 +221,10 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 /// Supports various call patterns:
 /// <list type="bullet">
 /// <item>Function calls: routine(a, b, c)</item>
-/// <item>Method calls: obj.method(x, y)</item>
+/// <item>Method calls: me.method(x, y)</item>
 /// <item>Constructor calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
-/// <item>Operator method calls: obj.__add__(other)</item>
+/// <item>Operator method calls: me.__add__(you)</item>
 /// </list>
 /// </remarks>
 public record CallExpression(
@@ -288,7 +286,7 @@ public record NamedArgumentExpression(string Name, Expression Value, SourceLocat
 /// <list type="bullet">
 /// <item>Simple: Point(x: 10, y: 20)</item>
 /// <item>Generic: TextIterator&lt;T&gt;(text: me, index: 0)</item>
-/// <item>Nested: Node(value: 5, next: Node(value: 10, next: none))</item>
+/// <item>Nested: Node(value: 5, next: Node(value: 10, next: None))</item>
 /// </list>
 /// </remarks>
 public record ConstructorExpression(
@@ -384,7 +382,7 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
 
 /// <summary>
 /// Expression that selects between two values based on a boolean condition.
-/// Represents the ternary conditional operator (condition ? true_value : false_value).
+/// Represents the ternary conditional operator (if condition then true_value else false_value).
 /// </summary>
 /// <param name="Condition">Boolean expression to evaluate for selection</param>
 /// <param name="TrueExpression">Expression to evaluate and return if condition is true</param>
@@ -510,7 +508,7 @@ public record RangeExpression(
 /// <item>Closure capture: can access variables from enclosing scope</item>
 /// <item>Type inference: parameter and return types often inferred</item>
 /// <item>Higher-order functions: can be passed as arguments or returned</item>
-/// <item>Functional programming: enables map, filter, reduce patterns</item>
+/// <item>Itertools: enables select, where, aggregate functions</item>
 /// </list>
 /// </remarks>
 public record LambdaExpression(
@@ -560,16 +558,16 @@ public record Parameter(
 /// Expression that represents a type reference in type annotations and declarations.
 /// Supports simple types, generic types, and complex type constructions.
 /// </summary>
-/// <param name="Name">Base type name (s32, String, MyClass, etc.)</param>
+/// <param name="Name">Base type name (s32, Text, MyClass, etc.)</param>
 /// <param name="GenericArguments">Optional list of type arguments for generic types</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">
-/// <item>Primitive types: s32, f64, bool, text</item>
-/// <item>Entity types: String, MyClass, Point</item>
-/// <item>Generic types: Array[s32], Dictionary[String, s32]</item>
-/// <item>Nested generics: Array[Dictionary[String, s32]]</item>
+/// <item>Primitive types: s32, f64, bool, letter</item>
+/// <item>Entity types: Text, MyClass, Point</item>
+/// <item>Generic types: List[s32], Dictionary[Text, s32]</item>
+/// <item>Nested generics: List[Dictionary[Text, s32]]</item>
 /// </list>
 /// </remarks>
 public record TypeExpression(
@@ -620,36 +618,8 @@ public record TypeConversionExpression(
 #region Memory Operation Expressions
 
 /// <summary>
-/// Expression representing memory slice constructor calls (DynamicSlice, TemporarySlice).
-/// Creates new memory slice instances with specified byte sizes.
-/// </summary>
-/// <param name="SliceType">Type of slice to construct ("DynamicSlice" or "TemporarySlice")</param>
-/// <param name="SizeExpression">Expression evaluating to the size in bytes</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Memory slice constructors create low-level memory management objects:
-/// <list type="bullet">
-/// <item>DynamicSlice(64) - allocates 64 bytes on heap</item>
-/// <item>TemporarySlice(40) - allocates 40 bytes on stack</item>
-/// <item>Size expression must evaluate to uaddr type</item>
-/// <item>Constructor calls trigger runtime allocation functions</item>
-/// </list>
-/// </remarks>
-public record SliceConstructorExpression(
-    string SliceType,
-    Expression SizeExpression,
-    SourceLocation Location) : Expression(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitSliceConstructorExpression(node: this);
-    }
-}
-
-/// <summary>
 /// Expression representing generic method calls with type parameters.
-/// Used for slice operations like read&lt;T&gt;!() and write&lt;T&gt;!().
+/// Used for generic operations like read!&lt;T&gt;() and write!&lt;T&gt;().
 /// </summary>
 /// <param name="Object">Expression representing the object being called</param>
 /// <param name="MethodName">Name of the generic method</param>
@@ -660,10 +630,9 @@ public record SliceConstructorExpression(
 /// <remarks>
 /// Generic method calls enable type-safe slice operations:
 /// <list type="bullet">
-/// <item>buffer.read&lt;s32&gt;!(0) - read s32 at offset 0</item>
-/// <item>buffer.write&lt;f64&gt;!(8, 3.14) - write f64 at offset 8</item>
+/// <item>buffer.read!&lt;s32&gt;(0) - read s32 at offset 0</item>
+/// <item>buffer.write!&lt;f64&gt;(8, 3.14) - write f64 at offset 8</item>
 /// <item>Type arguments specify the data type for the operation</item>
-/// <item>Memory operations (!) require bounds checking at runtime</item>
 /// </list>
 /// </remarks>
 public record GenericMethodCallExpression(
@@ -699,37 +668,6 @@ public record GenericMemberExpression(
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitGenericMemberExpression(node: this);
-    }
-}
-
-/// <summary>
-/// Expression representing memory operations with ! syntax.
-/// Used for slice operations that can potentially crash on invalid access.
-/// </summary>
-/// <param name="Object">Expression representing the slice object</param>
-/// <param name="OperationName">Name of the memory operation (size, address, hijack, etc.)</param>
-/// <param name="Arguments">List of argument expressions for the operation</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Memory operations provide direct access to slice functionality:
-/// <list type="bullet">
-/// <item>buffer.size!() - get allocated byte size</item>
-/// <item>buffer.address!() - get raw memory address</item>
-/// <item>buffer.hijack!() - take exclusive ownership</item>
-/// <item>buffer.unsafe_ptr!(offset) - get unsafe pointer at offset</item>
-/// </list>
-/// All operations use ! to indicate potential runtime failures.
-/// </remarks>
-public record MemoryOperationExpression(
-    Expression Object,
-    string OperationName,
-    List<Expression> Arguments,
-    SourceLocation Location) : Expression(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitMemoryOperationExpression(node: this);
     }
 }
 

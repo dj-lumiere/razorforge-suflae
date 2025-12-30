@@ -100,25 +100,24 @@ public record AssignmentStatement(Expression Target, Expression Value, SourceLoc
 }
 
 /// <summary>
-/// Tuple destructuring statement: let (a, b, c) = expression
-/// Unpacks tuple values into multiple variables in a single declaration.
+/// Record/entity destructuring statement: let (field, field2) = expression
+/// Unpacks record/entity fields into multiple variables based on field names.
+/// Destructuring only works when ALL fields of the type are public.
 /// </summary>
-/// <param name="Variables">List of variable names to bind (e.g., ["result", "overflow"])</param>
-/// <param name="Types">Optional type annotations for each variable (parallel to Variables)</param>
-/// <param name="Initializer">Expression that evaluates to a tuple value</param>
+/// <param name="Pattern">The destructuring pattern with field bindings</param>
+/// <param name="Initializer">Expression that evaluates to a record/entity value</param>
 /// <param name="IsMutable">true for 'var' (mutable), false for 'let' (immutable)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>let (x, y) = point</item>
-/// <item>var (result, overflow) = @intrinsic.add.overflow&lt;i64&gt;(a, b)</item>
-/// <item>let (name: Text, age: s32) = person</item>
+/// <item>let (center, radius) = circle - field name matches binding name</item>
+/// <item>let (center: c, radius: r) = circle - aliased destructuring</item>
+/// <item>let ((x, y), radius) = circle - nested destructuring</item>
 /// </list>
 /// </remarks>
-public record TupleDestructuringStatement(
-    List<string> Variables,
-    List<TypeExpression?> Types,
+public record DestructuringStatement(
+    DestructuringPattern Pattern,
     Expression Initializer,
     bool IsMutable,
     SourceLocation Location) : Statement(Location: Location)
@@ -126,7 +125,7 @@ public record TupleDestructuringStatement(
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
-        return visitor.VisitTupleDestructuringStatement(node: this);
+        return visitor.VisitDestructuringStatement(node: this);
     }
 }
 
@@ -469,7 +468,7 @@ public record ContinueStatement(SourceLocation Location) : Statement(Location: L
 public abstract record Pattern(SourceLocation Location);
 
 /// <summary>
-/// Pattern that matches exact literal values like numbers, strings, or booleans.
+/// Pattern that matches exact literal values like numbers, texts, or booleans.
 /// Used for precise value comparison in pattern matching constructs.
 /// </summary>
 /// <param name="Value">The exact value to match against (42, "hello", true, etc.)</param>
@@ -488,7 +487,7 @@ public record LiteralPattern(object Value, TokenType LiteralType, SourceLocation
 /// <param name="Name">Variable name to bind the matched value to</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Example: when someValue { x => print(x) } binds someValue to x.
+/// Example: when someValue { x => show(x) } binds someValue to x.
 /// </remarks>
 public record IdentifierPattern(string Name, SourceLocation Location)
     : Pattern(Location: Location);
@@ -503,8 +502,8 @@ public record IdentifierPattern(string Name, SourceLocation Location)
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>when obj { String => ... } matches any string</item>
-/// <item>when obj { Point p => ... } matches Point and binds to p</item>
+/// <item>when obj { is Text => ... } matches any text</item>
+/// <item>when obj { is Point p => ... } matches Point and binds to p</item>
 /// </list>
 /// </remarks>
 public record TypePattern(TypeExpression Type, string? VariableName, SourceLocation Location)
@@ -714,27 +713,29 @@ public record DangerStatement(BlockStatement Body, SourceLocation Location)
     }
 }
 
+#endregion
+
 /// <summary>
 /// Represents a viewing block statement for scoped read-only access.
-/// Syntax: viewing &lt;expression&gt; as &lt;handle&gt; { &lt;body&gt; }
+/// Syntax: viewing &lt;expression&gt; as &lt;token&gt; { &lt;body&gt; }
 /// </summary>
 /// <param name="Source">The expression to view (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the Viewed&lt;T&gt; handle</param>
+/// <param name="Token">The variable name for the Viewed&lt;T&gt; token</param>
 /// <param name="Body">The block statement to execute with read-only access</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Viewing semantics:
 /// <list type="bullet">
 /// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle provides read-only access (Viewed&lt;T&gt;)</item>
-/// <item>Handle is copyable - can pass to multiple functions</item>
+/// <item>Token provides read-only access (Viewed&lt;T&gt;)</item>
+/// <item>Token is copyable - can pass to multiple functions</item>
 /// <item>Source is automatically restored when scope exits</item>
 /// <item>Prevents aliasing: can't hijack the source while viewing</item>
 /// </list>
 /// </remarks>
 public record ViewingStatement(
     Expression Source,
-    string Handle,
+    string Token,
     BlockStatement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
@@ -747,25 +748,25 @@ public record ViewingStatement(
 
 /// <summary>
 /// Represents a hijacking block statement for scoped exclusive access (single-threaded).
-/// Syntax: hijacking &lt;expression&gt; as &lt;handle&gt; { &lt;body&gt; }
+/// Syntax: hijacking &lt;expression&gt; as &lt;token&gt; { &lt;body&gt; }
 /// </summary>
 /// <param name="Source">The expression to hijack (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the Hijacked&lt;T&gt; handle</param>
+/// <param name="Token">The variable name for the Hijacked&lt;T&gt; token</param>
 /// <param name="Body">The block statement to execute with exclusive access</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Hijacking semantics:
 /// <list type="bullet">
 /// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle provides exclusive read/write access (Hijacked&lt;T&gt;)</item>
-/// <item>Handle is NOT copyable - unique access only</item>
+/// <item>Token provides exclusive read/write access (Hijacked&lt;T&gt;)</item>
+/// <item>Token is NOT copyable - unique access only</item>
 /// <item>Source is automatically restored when scope exits</item>
 /// <item>Prevents aliasing: can't view or hijack the source while hijacking</item>
 /// </list>
 /// </remarks>
 public record HijackingStatement(
     Expression Source,
-    string Handle,
+    string Token,
     BlockStatement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
@@ -778,25 +779,25 @@ public record HijackingStatement(
 
 /// <summary>
 /// Represents an inspecting block statement for thread-safe scoped read access.
-/// Syntax: inspecting &lt;handle&gt; from &lt;expression&gt;: { &lt;body&gt; }
+/// Syntax: inspecting &lt;handle&gt; as &lt;token&gt;: { &lt;body&gt; }
 /// </summary>
 /// <param name="Source">The Shared expression to inspect (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the thread-safe read handle (Inspected&lt;T&gt;)</param>
+/// <param name="Token">The variable name for the thread-safe read token (Inspected&lt;T&gt;)</param>
 /// <param name="Body">The block statement to execute with read access</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Inspecting semantics (for Shared with MultiReadLock policy):
 /// <list type="bullet">
 /// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle acquires read lock on Shared&lt;T, MultiReadLock&gt;, producing Inspected&lt;T&gt;</item>
-/// <item>Multiple inspecting handles can coexist</item>
+/// <item>Token acquires read lock on Shared&lt;T, MultiReadLock&gt;, producing Inspected&lt;T&gt;</item>
+/// <item>Multiple inspecting tokens can coexist</item>
 /// <item>Source is automatically restored when scope exits</item>
 /// <item>Blocks seizing attempts until released</item>
 /// </list>
 /// </remarks>
 public record InspectingStatement(
     Expression Source,
-    string Handle,
+    string Token,
     BlockStatement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
@@ -809,25 +810,25 @@ public record InspectingStatement(
 
 /// <summary>
 /// Represents a seizing block statement for thread-safe scoped exclusive access.
-/// Syntax: seizing &lt;handle&gt; from &lt;expression&gt;: { &lt;body&gt; }
+/// Syntax: seizing &lt;handle&gt; as &lt;token&gt;: { &lt;body&gt; }
 /// </summary>
 /// <param name="Source">The Shared expression to seize (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the thread-safe exclusive handle (Seized&lt;T&gt;)</param>
+/// <param name="Token">The variable name for the thread-safe exclusive token (Seized&lt;T&gt;)</param>
 /// <param name="Body">The block statement to execute with exclusive access</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Seizing semantics (for Shared&lt;T, Policy&gt;):
 /// <list type="bullet">
 /// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle acquires exclusive lock on Shared&lt;T, Policy&gt;, producing Seized&lt;T&gt;</item>
+/// <item>Token acquires exclusive lock on Shared&lt;T, Policy&gt;, producing Seized&lt;T&gt;</item>
 /// <item>Blocks all other access (inspecting and seizing) until released</item>
-/// <item>Handle is NOT copyable - unique access only</item>
+/// <item>Token is NOT copyable - unique access only</item>
 /// <item>Source is automatically restored when scope exits</item>
 /// </list>
 /// </remarks>
 public record SeizingStatement(
     Expression Source,
-    string Handle,
+    string Token,
     BlockStatement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
@@ -837,5 +838,3 @@ public record SeizingStatement(
         return visitor.VisitSeizingStatement(node: this);
     }
 }
-
-#endregion
