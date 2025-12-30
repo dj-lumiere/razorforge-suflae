@@ -1,7 +1,7 @@
 {
-  "name": "RazorForge",
-  "scopeName": "source.razorforge",
-  "fileTypes": ["rf", "razorforge"],
+  "name": "Suflae",
+  "scopeName": "source.sf",
+  "fileTypes": ["sf", "suflae"],
   "patterns": [
     { "include": "#comments" },
     { "include": "#keywords" },
@@ -14,12 +14,13 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.block.documentation.razorforge",
-          "begin": "###",
-          "end": "###"
+          "comment": "Documentation comment",
+          "name": "comment.block.documentation.sf",
+          "match": "###.*$"
         },
         {
-          "name": "comment.line.razorforge",
+          "comment": "Line comment",
+          "name": "comment.line.sf",
           "match": "#.*$"
         }
       ]
@@ -28,78 +29,78 @@
       "patterns": [
         {
           "comment": "Type declarations",
-          "name": "storage.type.razorforge",
-          "match": "\\b(routine|entity|record|resident|choice|variant|mutant|protocol)\\b"
+          "name": "storage.type.sf",
+          "match": "\\b(routine|entity|record|variant|choice|protocol)\\b"
         },
         {
           "comment": "Variable declarations",
-          "name": "keyword.declaration.razorforge",
+          "name": "keyword.declaration.sf",
           "match": "\\b(let|var|preset|common|define)\\b"
         },
         {
           "comment": "Access modifiers",
-          "name": "keyword.modifier.razorforge",
+          "name": "keyword.modifier.sf",
           "match": "\\b(private|internal|public|global|imported)\\b"
         },
         {
           "comment": "Control flow",
-          "name": "keyword.control.razorforge",
+          "name": "keyword.control.sf",
           "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent)\\b"
         },
         {
           "comment": "Type operations",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "\\b(is|isnot|follows|notfollows|in|notin)\\b"
         },
         {
           "comment": "Module system",
-          "name": "keyword.control.import.razorforge",
+          "name": "keyword.control.import.sf",
           "match": "\\b(import|namespace)\\b"
         },
         {
-          "comment": "Memory access scopes",
-          "name": "keyword.control.razorforge",
-          "match": "\\b(viewing|hijacking|seizing|inspecting|using)\\b"
+          "comment": "Memory access scope",
+          "name": "keyword.control.sf",
+          "match": "\\b(using)\\b"
         },
         {
           "comment": "Async/generator",
-          "name": "keyword.control.razorforge",
+          "name": "keyword.control.sf",
           "match": "\\b(generate|suspended|waitfor)\\b"
         },
         {
           "comment": "Compile-time checking",
-          "name": "keyword.other.razorforge",
+          "name": "keyword.other.sf",
           "match": "\\b(requires)\\b"
         },
         {
           "comment": "Logical operators",
-          "name": "keyword.operator.logical.razorforge",
+          "name": "keyword.operator.logical.sf",
           "match": "\\b(and|or|not)\\b"
         },
         {
           "comment": "Self reference",
-          "name": "variable.language.razorforge",
+          "name": "variable.language.sf",
           "match": "\\b(me|Me)\\b"
         },
         {
           "comment": "Range keywords",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "\\b(to|downto|by)\\b"
         },
         {
           "comment": "Special keywords",
-          "name": "keyword.other.razorforge",
-          "match": "\\b(as|pass|danger|with)\\b"
+          "name": "keyword.other.sf",
+          "match": "\\b(as|pass|with)\\b"
         },
         {
           "comment": "Boolean literals",
-          "name": "constant.language.boolean.razorforge",
-          "match": "\\b(true|false)\\b"
+          "name": "constant.language.boolean.sf",
+          "match": "\\b(True|False)\\b"
         },
         {
           "comment": "None literal",
-          "name": "constant.language.null.razorforge",
-          "match": "\\b(none)\\b"
+          "name": "constant.language.null.sf",
+          "match": "\\b(None)\\b"
         }
       ]
     },
@@ -107,17 +108,17 @@
       "patterns": [
         {
           "comment": "Prefixed text literals (brf, br, bf, rf, b, r, f)",
-          "name": "string.quoted.double.razorforge",
+          "name": "string.quoted.double.sf",
           "begin": "(brf|br|bf|rf|b|r|f)\"",
           "beginCaptures": {
-            "1": { "name": "storage.modifier.razorforge" }
+            "1": { "name": "storage.modifier.sf" }
           },
           "end": "\"",
           "patterns": [{ "include": "#escapes" }]
         },
         {
           "comment": "Text literal",
-          "name": "string.quoted.double.razorforge",
+          "name": "string.quoted.double.sf",
           "begin": "\"",
           "end": "\"",
           "patterns": [{ "include": "#escapes" }]
@@ -128,17 +129,17 @@
       "patterns": [
         {
           "comment": "Unicode escape \\uXXXXXXXX (8 hex)",
-          "name": "constant.character.escape.razorforge",
+          "name": "constant.character.escape.sf",
           "match": "\\\\u[0-9a-fA-F]{8}"
         },
         {
           "comment": "Hex byte escape \\xFF (2 hex)",
-          "name": "constant.character.escape.razorforge",
+          "name": "constant.character.escape.sf",
           "match": "\\\\x[0-9a-fA-F]{2}"
         },
         {
           "comment": "Simple escapes",
-          "name": "constant.character.escape.razorforge",
+          "name": "constant.character.escape.sf",
           "match": "\\\\[nrt0\\\\\"']"
         }
       ]
@@ -146,16 +147,24 @@
     "letter-literals": {
       "patterns": [
         {
-          "comment": "Byte literal b'x'",
-          "name": "string.quoted.single.razorforge",
-          "begin": "b'",
-          "beginCaptures": { "0": { "name": "storage.modifier.razorforge" } },
+          "comment": "Byte literal byte'x'",
+          "name": "string.quoted.single.sf",
+          "begin": "byte'",
+          "beginCaptures": { "0": { "name": "storage.modifier.sf" } },
+          "end": "'",
+          "patterns": [{ "include": "#escapes" }]
+        },
+        {
+          "comment": "Letter literal letter'x'",
+          "name": "string.quoted.single.sf",
+          "begin": "letter'",
+          "beginCaptures": { "0": { "name": "storage.modifier.sf" } },
           "end": "'",
           "patterns": [{ "include": "#escapes" }]
         },
         {
           "comment": "Letter literal 'x'",
-          "name": "string.quoted.single.razorforge",
+          "name": "string.quoted.single.sf",
           "begin": "'",
           "end": "'",
           "patterns": [{ "include": "#escapes" }]
@@ -166,32 +175,32 @@
       "patterns": [
         {
           "comment": "Hex number",
-          "name": "constant.numeric.razorforge",
+          "name": "constant.numeric.sf",
           "match": "\\b0x[0-9a-fA-F_]+([a-z0-9]+)?\\b"
         },
         {
           "comment": "Binary number",
-          "name": "constant.numeric.razorforge",
+          "name": "constant.numeric.sf",
           "match": "\\b0b[01_]+([a-z0-9]+)?\\b"
         },
         {
           "comment": "Octal number",
-          "name": "constant.numeric.razorforge",
+          "name": "constant.numeric.sf",
           "match": "\\b0o[0-7_]+([a-z0-9]+)?\\b"
         },
         {
           "comment": "Quaternary number",
-          "name": "constant.numeric.razorforge",
+          "name": "constant.numeric.sf",
           "match": "\\b0q[0-3_]+([a-z0-9]+)?\\b"
         },
         {
           "comment": "Float with suffix",
-          "name": "constant.numeric.razorforge",
+          "name": "constant.numeric.sf",
           "match": "\\b[0-9][0-9_]*\\.[0-9_]+([eE][+-]?[0-9_]+)?([a-z0-9]+)?\\b"
         },
         {
           "comment": "Integer with suffix",
-          "name": "constant.numeric.razorforge",
+          "name": "constant.numeric.sf",
           "match": "\\b[0-9][0-9_]*([a-z]+)?\\b"
         }
       ]
@@ -200,63 +209,68 @@
       "patterns": [
         {
           "comment": "Intrinsic/Native calls",
-          "name": "keyword.other.razorforge",
+          "name": "keyword.other.sf",
           "match": "@(intrinsic|native)\\b"
         },
         {
           "comment": "Annotation",
-          "name": "storage.modifier.annotation.razorforge",
+          "name": "storage.modifier.annotation.sf",
           "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
         },
         {
           "comment": "Arrows",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "(->|=>)"
         },
         {
           "comment": "Three-way comparison",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "<=>"
         },
         {
           "comment": "Shift operators",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "(<<<|>>>|<<\\?|<<|>>)"
         },
         {
           "comment": "Comparison",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "(===|!==|==|!=|<=|>=|<|>)"
         },
         {
           "comment": "Power operators",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "(\\*\\*[%^?]?=?)"
         },
         {
           "comment": "Integer division",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "//[?=]?"
         },
         {
           "comment": "Overflow arithmetic",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "[+\\-*][%^?]=?"
         },
         {
           "comment": "None coalesce",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "(\\?\\?=?|\\?)"
         },
         {
           "comment": "Assignment",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "[+\\-*/%&|^]=|="
         },
         {
           "comment": "Basic operators",
-          "name": "keyword.operator.razorforge",
+          "name": "keyword.operator.sf",
           "match": "[+\\-*/%&|^~!]"
+        },
+        {
+          "comment": "Colon for block start",
+          "name": "punctuation.separator.sf",
+          "match": ":"
         }
       ]
     }
