@@ -184,11 +184,11 @@ public record EntityDeclaration(
 public record RecordDeclaration(
     string Name,
     List<string>? GenericParameters,
+    List<TypeExpression> Protocols,
     List<Declaration> Members,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null,
-    List<TypeExpression>? Interfaces = null) : Declaration(Location: Location)
+    List<GenericConstraintDeclaration>? GenericConstraints = null) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
