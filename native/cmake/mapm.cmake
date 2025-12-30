@@ -1,0 +1,68 @@
+# MAPM - Mike's Arbitrary Precision Math Library
+# https://github.com/LuaDist/mapm
+# License: Freeware (see LICENSE in source)
+#
+# MAPM provides:
+# - Arbitrary precision decimal floating-point arithmetic
+# - Trigonometric functions (sin, cos, tan, etc.)
+# - Exponential and logarithmic functions
+# - Square root, factorial, and more
+# - Used by: RazorForge's decimal/bigdecimal types
+#
+# To install:
+#   git clone https://github.com/LuaDist/mapm.git native/mapm
+
+set(MAPM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mapm")
+
+# Check for MAPM source structure from GitHub
+if(EXISTS "${MAPM_DIR}/m_apm.h")
+    message(STATUS "Found MAPM sources")
+
+    # Collect MAPM source files
+    file(GLOB MAPM_SOURCES
+        "${MAPM_DIR}/mapm*.c"
+        "${MAPM_DIR}/m_apm*.c"
+        "${MAPM_DIR}/mapm_*.c"
+    )
+
+    # Alternative naming patterns
+    if(NOT MAPM_SOURCES)
+        file(GLOB MAPM_SOURCES "${MAPM_DIR}/*.c")
+        # Exclude test and example files
+        list(FILTER MAPM_SOURCES EXCLUDE REGEX ".*test.*\\.c$")
+        list(FILTER MAPM_SOURCES EXCLUDE REGEX ".*example.*\\.c$")
+        list(FILTER MAPM_SOURCES EXCLUDE REGEX ".*demo.*\\.c$")
+    endif()
+
+    if(MAPM_SOURCES)
+        add_library(mapm STATIC ${MAPM_SOURCES})
+
+        target_include_directories(mapm PUBLIC ${MAPM_DIR})
+
+        # Platform-specific configurations
+        if(WIN32)
+            target_compile_definitions(mapm PRIVATE _CRT_SECURE_NO_WARNINGS)
+        endif()
+
+        # Link math library on Unix
+        if(UNIX AND NOT APPLE)
+            target_link_libraries(mapm m)
+            target_compile_options(mapm PUBLIC -fPIC)
+        endif()
+
+        set(HAVE_MAPM TRUE)
+    else()
+        add_library(mapm INTERFACE)
+        set(HAVE_MAPM FALSE)
+    endif()
+
+else()
+    # No MAPM sources found - create interface library
+    add_library(mapm INTERFACE)
+    set(HAVE_MAPM FALSE)
+
+    message(STATUS "")
+    message(STATUS "MAPM not found. To enable arbitrary precision decimals:")
+    message(STATUS "  git clone https://github.com/LuaDist/mapm.git native/mapm")
+    message(STATUS "")
+endif()
