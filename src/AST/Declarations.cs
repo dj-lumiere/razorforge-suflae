@@ -40,23 +40,6 @@ public record GenericConstraintDeclaration(
     List<TypeExpression>? ConstraintTypes = null,
     SourceLocation Location = default);
 
-/// <summary>
-/// Types of generic constraints
-/// </summary>
-public enum ConstraintKind
-{
-    /// <summary>Protocol/interface implementation (T follows Comparable)</summary>
-    Follows,
-
-    /// <summary>Type inheritance (T from BaseType)</summary>
-    From,
-
-    /// <summary>Value type constraint (T: record)</summary>
-    ValueType,
-
-    /// <summary>Reference type constraint (T: entity)</summary>
-    ReferenceType
-}
 
 #endregion
 
@@ -241,23 +224,6 @@ public record ChoiceDeclaration(
     {
         return visitor.VisitChoiceDeclaration(node: this);
     }
-}
-
-/// <summary>
-/// Enumeration defining the kind of variant/union type.
-/// Controls memory layout and safety guarantees.
-/// </summary>
-/// <remarks>
-/// RazorForge provides three variant kinds with different safety/performance tradeoffs:
-/// <list type="bullet">
-/// <item>Variant: All fields must be records (value types) - safe, no danger! needed</item>
-/// <item>Mutant: Raw memory union - requires danger! block, no safety guarantees</item>
-/// </list>
-/// </remarks>
-public enum VariantKind
-{
-    Variant, // All fields must be records (value types)
-    Mutant // Raw memory union - requires danger! block
 }
 
 /// <summary>
@@ -496,53 +462,6 @@ public record FunctionSignature(
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
     SourceLocation Location);
-
-/// <summary>
-/// Visibility modifiers controlling access to declarations.
-/// Supports both Suflae's descriptive keywords and RazorForge's traditional modifiers.
-/// </summary>
-/// <remarks>
-/// The visibility system is designed to be intuitive while providing precise control:
-///
-/// Suflae visibility (descriptive):
-/// <list type="bullet">
-/// <item>onlyme - Only the declaring entity can access</item>
-/// <item>onlyfamily - Only the declaring entity and its subclasses can access</item>
-/// <item>onlyhere - Only code in the same module/package can access</item>
-/// <item>everywhere - Any code can access</item>
-/// </list>
-///
-/// RazorForge visibility (traditional):
-/// <list type="bullet">
-/// <item>private - Entity-private access only</item>
-/// <item>protected - Entity and subclass access</item>
-/// <item>internal - Module/assembly-private access</item>
-/// <item>public - Unrestricted access</item>
-/// </list>
-///
-/// The 'global' modifier is available in both languages for symbols that
-/// should be accessible from any module without explicit import.
-/// </remarks>
-public enum VisibilityModifier
-{
-    // RazorForge traditional visibility
-    /// <summary>Only accessible within the declaring entity (RazorForge: private)</summary>
-    Private,
-
-    /// <summary>Accessible within the declaring entity and its subclasses (RazorForge: protected)</summary>
-    Family,
-
-    /// <summary>Accessible within the same module/assembly (RazorForge: internal)</summary>
-    Internal,
-
-    /// <summary>Accessible from anywhere (RazorForge: public)</summary>
-    Public,
-
-    // Common to both languages
-    /// <summary>Globally accessible without import (both languages: global)</summary>
-    Global,
-    External
-}
 
 #endregion
 
