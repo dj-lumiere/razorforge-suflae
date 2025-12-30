@@ -111,7 +111,8 @@ public record FunctionDeclaration(
     List<string> Attributes, // For decorators like @[everywhere get]
     SourceLocation Location,
     List<string>? GenericParameters = null,
-    List<GenericConstraintDeclaration>? GenericConstraints = null)
+    List<GenericConstraintDeclaration>? GenericConstraints = null,
+    bool IsFailable = false)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
