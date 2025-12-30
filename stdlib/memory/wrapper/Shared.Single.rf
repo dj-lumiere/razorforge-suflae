@@ -1,6 +1,6 @@
 # RazorForge Shared<T> - Single-threaded reference counting
 # Equivalent to Rc<T> in Rust
-namespace core
+namespace Core
 
 record Shared<T> {
     private controller: Snatched<SingleShareController>

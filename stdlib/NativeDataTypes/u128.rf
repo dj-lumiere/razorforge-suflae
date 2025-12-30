@@ -1,6 +1,6 @@
 # RazorForge U128 (unsigned 128-bit integer) native type implementation
 # Maps directly to LLVM i128 type using compiler intrinsics
-namespace core
+namespace Core
 # Core U128 type definition - maps to LLVM i128
 record U128 {
     public value: @intrinsic.i128

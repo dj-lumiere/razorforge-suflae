@@ -1,7 +1,7 @@
 # RazorForge D128 (decimal128 floating point) native type implementation
 # IEEE 754-2008 decimal floating point with 34 significant digits
 # Uses Intel DFP library via imported C functions
-namespace core
+namespace Core
 
 import FFI/CStr
 

@@ -1,6 +1,6 @@
 # RazorForge F32 (single precision floating point) native type implementation
 # Maps directly to LLVM float type using compiler intrinsics
-namespace core
+namespace Core
 # Core F32 type definition - maps to LLVM float
 record F32 {
     private value: @intrinsic.f32

@@ -5,7 +5,7 @@
 # - Unsigned: U8, U16, U32, U64, U128, UAddr
 #
 # This enables generic indexing and numeric operations.
-namespace core
+namespace Core
 
 protocol Integral {
     pass

@@ -6,7 +6,7 @@
 # to prevent silent overflow bugs in pointer/size calculations.
 # You must use explicit wrapping (+%, -%, etc.) or checked (+?, -?, etc.) variants.
 
-namespace core
+namespace Core
 
 import Text/Text
 import FFI/CStr

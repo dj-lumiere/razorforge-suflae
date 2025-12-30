@@ -15,7 +15,7 @@
 #   list[^3 to ^1]       # last 3 elements
 #   list[5 downto 3]     # elements 5, 4, 3 in reverse order
 #   list[0 to 8 by 2]    # every other element (0, 2, 4, 6, 8)
-namespace core
+namespace Core
 
 record Range<I>
 requires I follows Integral{

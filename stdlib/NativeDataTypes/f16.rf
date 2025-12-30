@@ -1,6 +1,6 @@
 # RazorForge F16 (half precision floating point) native type implementation
 # Maps directly to LLVM half type using compiler intrinsics
-namespace core
+namespace Core
 # Core F16 type definition - maps to LLVM half
 record F16 {
     private value: @intrinsic.f16

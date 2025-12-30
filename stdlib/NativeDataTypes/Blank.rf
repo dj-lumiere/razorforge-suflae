@@ -1,8 +1,9 @@
 # Blank - Unit type representing "completed with no value"
 # Used for void failable functions: Maybe<Blank>, Result<Blank>, Lookup<Blank>
-namespace core
+namespace Core
 
 record Blank {
+    pass
 }
 
 routine Blank.to_text() -> Text {

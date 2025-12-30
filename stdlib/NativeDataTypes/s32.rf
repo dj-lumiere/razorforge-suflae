@@ -1,6 +1,6 @@
 # RazorForge S32 (signed 32-bit integer) native type implementation
 # Maps directly to LLVM i32 type and native machine integers
-namespace core
+namespace Core
 # Core S32 type definition - maps to LLVM i32
 record S32 {
     private value: @intrinsic.i32

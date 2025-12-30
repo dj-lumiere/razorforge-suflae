@@ -1,6 +1,6 @@
 # RazorForge S8 (signed 8-bit integer) native type implementation
 # Maps directly to LLVM i8 type using compiler intrinsics
-namespace core
+namespace Core
 # Core S8 type definition - maps to LLVM i8
 record S8 {
     private value: @intrinsic.i8

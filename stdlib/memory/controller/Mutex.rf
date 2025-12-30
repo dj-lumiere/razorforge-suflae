@@ -2,7 +2,7 @@
 # Exclusive locking - only one thread can access at a time
 # Equivalent to std::mutex or pthread_mutex
 
-namespace core
+namespace Core
 
 record Mutex follows LockPolicy {
     private locked: Atomic<Bool>

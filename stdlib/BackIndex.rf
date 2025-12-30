@@ -7,7 +7,7 @@
 #   list[^1]     # last element
 #   list[^2]     # second-to-last
 #   text[^1]     # last character
-namespace core
+namespace Core
 
 import NativeDataTypes/UAddr
 

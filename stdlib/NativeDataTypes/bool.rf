@@ -1,4 +1,16 @@
-namespace core
+namespace Core
+
 record Bool {
     private value: @intrinsic.i1
+}
+
+routine Bool.__eq__(you: Bool) {
+    return me.value == you.value
+}
+
+routine Bool.to_text() -> Text {
+    if me.value == 1 {
+        return "true"
+    }
+    return "false"
 }

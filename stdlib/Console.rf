@@ -7,7 +7,6 @@
 namespace Console
 
 import Text/Text
-import FFI/CStr
 
 # ============================================================================
 # Output: show() - Standard Output (stdout)
@@ -19,16 +18,14 @@ import FFI/CStr
 # show for Text
 @prelude
 routine Console.show(value: Text, end: Text = "\n") {
-    let bytes_value: Bytes = value.to_utf8()
-    let ptr = bytes_value.to_cstr()
+    let bytes_value: Bytes = value.to_utf8_bytes()
     danger! {
-        @native.rf_console_print_cstr(ptr)
+        @native.rf_console_print(bytes_value.ptr, bytes_value.count())
     }
     if end.count() > 0u64 {
-        let end_bytes = end.to_utf8()
-        let end_ptr = end_bytes.to_cstr()
+        let end_bytes = end.to_utf8_bytes()
         danger! {
-            @native.rf_console_print_cstr(end_ptr)
+            @native.rf_console_print(end_bytes.ptr, end_bytes.count())
         }
     }
 }
@@ -36,15 +33,13 @@ routine Console.show(value: Text, end: Text = "\n") {
 # show for Bytes (writes raw bytes directly)
 @prelude
 routine Console.show(value: Bytes, end: Text = "\n") {
-    let ptr = value.to_cstr()
     danger! {
-        @native.rf_console_print_cstr(ptr)
+        @native.rf_console_print(value.ptr, value.count())
     }
     if end.count() > 0u64 {
-        let end_bytes = end.to_utf8()
-        let end_ptr = end_bytes.to_cstr()
+        let end_bytes = end.to_utf8_bytes()
         danger! {
-            @native.rf_console_print_cstr(end_ptr)
+            @native.rf_console_print(end_bytes.ptr, end_bytes.count())
         }
     }
 }
@@ -65,16 +60,14 @@ where T follows Representable {
 # alert for Text
 @prelude
 routine Console.alert(value: Text, end: Text = "\n") {
-    let bytes_value: Bytes = value.to_utf8()
-    let ptr = bytes_value.to_cstr()
+    let bytes_value: Bytes = value.to_utf8_bytes()
     danger! {
-        @native.rf_console_alert_cstr(ptr)
+        @native.rf_console_alert(bytes_value.ptr, bytes_value.count())
     }
     if end.count() > 0u64 {
-        let end_bytes = end.to_utf8()
-        let end_ptr = end_bytes.to_cstr()
+        let end_bytes = end.to_utf8_bytes()
         danger! {
-            @native.rf_console_alert_cstr(end_ptr)
+            @native.rf_console_alert(end_bytes.ptr, end_bytes.count())
         }
     }
 }
@@ -82,15 +75,13 @@ routine Console.alert(value: Text, end: Text = "\n") {
 # alert for Bytes (writes raw bytes directly)
 @prelude
 routine Console.alert(value: Bytes, end: Text = "\n") {
-    let ptr = value.to_cstr()
     danger! {
-        @native.rf_console_alert_cstr(ptr)
+        @native.rf_console_alert(value.ptr, value.count())
     }
     if end.count() > 0u64 {
-        let end_bytes = end.to_utf8()
-        let end_ptr = end_bytes.to_cstr()
+        let end_bytes = end.to_utf8_bytes()
         danger! {
-            @native.rf_console_alert_cstr(end_ptr)
+            @native.rf_console_alert(end_bytes.ptr, end_bytes.count())
         }
     }
 }
@@ -98,7 +89,7 @@ routine Console.alert(value: Bytes, end: Text = "\n") {
 # Generic alert for any type that implements Representable
 @prelude
 routine Console.alert<T>(value: T, end: Text = "\n")
-where T follows Representable{
+where T follows Representable {
     let text_value: Text = value.to_text()
     Console.alert(text_value, end: end)
 }

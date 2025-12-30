@@ -1,6 +1,6 @@
 # RazorForge Standard Library - Memory Management
 # DynamicSlice: Non-generic heap-allocated contiguous memory slice
-namespace core
+namespace Core
 import memory/MemorySize
 import memory/wrapper/Snatched
 import errors/MemoryError

@@ -21,7 +21,7 @@
 # - CWStr.copy() - allocates NEW memory, caller owns it
 #
 # For narrow character strings (char*), see CStr.rf
-# TODO: Add "namespace core" once Text<T> and List<T> dependencies are resolved
+# TODO: Add "namespace Core" once Text<T> and List<T> dependencies are resolved
 import memory/DynamicSlice
 import memory/MemorySize
 import Collections/List

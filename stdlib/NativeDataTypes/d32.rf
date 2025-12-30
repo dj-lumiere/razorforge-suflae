@@ -1,7 +1,7 @@
 # RazorForge D32 (decimal32 floating point) native type implementation
 # IEEE 754-2008 decimal floating point with 7 significant digits
 # Uses Intel DFP library via imported C functions
-namespace core
+namespace Core
 
 import FFI/CStr
 
@@ -141,6 +141,11 @@ routine D32.__create__(from: SAddr) -> D32 {
 # From UAddr - convert through U64
 routine D32.__create__(from: UAddr) -> D32 {
     return from.U64().D32()
+}
+
+# From Bool
+routine D32.__create__(from: Bool) -> D32 {
+    return if from then 1d32 else 0d32
 }
 
 # ============================================================================

@@ -1,6 +1,6 @@
 # RazorForge S16 (signed 16-bit integer) native type implementation
 # Maps directly to LLVM i16 type using compiler intrinsics
-namespace core
+namespace Core
 # Core S16 type definition - maps to LLVM i16
 record S16 {
     private value: @intrinsic.i16

@@ -1,4 +1,4 @@
-namespace core
+namespace Core
 
 record Result<T> {
     private state: DataState

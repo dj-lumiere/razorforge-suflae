@@ -1,6 +1,6 @@
 # RazorForge S128 (signed 128-bit integer) native type implementation
 # Maps directly to LLVM i128 type using compiler intrinsics
-namespace core
+namespace Core
 # Core S128 type definition - maps to LLVM i128
 record S128 {
     public value: LlvmNativeI128

@@ -8,7 +8,7 @@
 # ============================================================================
 # Pointer/Special Types
 # ============================================================================
-namespace core
+namespace Core
 # Marker type for void*
 record CVoid {
     pass
