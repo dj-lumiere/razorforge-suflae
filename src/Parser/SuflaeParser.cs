@@ -258,7 +258,7 @@ public partial class SuflaeParser
 
         if (Match(type: TokenType.Variant))
         {
-            return ParseVariantDeclaration(kind: VariantKind.Variant);
+            return ParseVariantDeclaration();
         }
 
         if (Match(type: TokenType.Protocol))

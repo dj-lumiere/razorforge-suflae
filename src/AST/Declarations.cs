@@ -229,21 +229,18 @@ public record ChoiceDeclaration(
 /// <summary>
 /// Variant declaration that defines tagged unions with multiple possible value types.
 /// Represents algebraic data types with multiple cases and associated data.
+/// All fields must be records or memory handles - safe, no danger! needed.
 /// </summary>
 /// <param name="Name">Variant identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Cases">List of variant cases with associated types</param>
-/// <param name="Methods">List of methods that can be called on variant values</param>
-/// <param name="Visibility">Access control modifier</param>
-/// <param name="Kind">Variant kind (Chimera, Variant, or Mutant)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Variant declarations enable powerful type-safe unions:
 /// <list type="bullet">
-/// <item>Tagged unions: variant Result[T, E] { Success(T), Error(E) }</item>
+/// <item>Tagged unions: variant MyResult[T, E] { SUCCESS(T), TIMEOUT, ERROR(E) }</item>
 /// <item>Pattern matching: exhaustive case analysis with when statements</item>
-/// <item>Generic variants: variant Option[T] { Some(T), None }</item>
-/// <item>Safety levels: Chimera (safe), Variant (value-only), Mutant (unsafe)</item>
+/// <item>Generic variants: variant MyOption[T] { OPTION1(T), OPTION2 }</item>
 /// <item>Associated data: each case can carry different typed data</item>
 /// </list>
 /// </remarks>
@@ -251,9 +248,6 @@ public record VariantDeclaration(
     string Name,
     List<string>? GenericParameters,
     List<VariantCase> Cases,
-    List<FunctionDeclaration> Methods,
-    VisibilityModifier Visibility,
-    VariantKind Kind, // Track which keyword was used
     SourceLocation Location,
     List<GenericConstraintDeclaration>? GenericConstraints = null)
     : Declaration(Location: Location)
@@ -261,6 +255,37 @@ public record VariantDeclaration(
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitVariantDeclaration(node: this);
+    }
+}
+
+/// <summary>
+/// Mutant declaration that defines untagged unions (raw memory unions).
+/// Requires danger! block for access, no safety guarantees.
+/// </summary>
+/// <param name="Name">Mutant identifier name</param>
+/// <param name="GenericParameters">Optional list of generic type parameter names</param>
+/// <param name="Cases">List of mutant cases with associated types</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Mutant declarations enable unsafe memory unions:
+/// <list type="bullet">
+/// <item>Untagged unions: mutant RawData { AS_INT(S32), AS_FLOAT(F32) }</item>
+/// <item>Requires danger! block for access</item>
+/// <item>No runtime tag - caller must track which case is active</item>
+/// <item>Used for FFI and low-level memory manipulation</item>
+/// </list>
+/// </remarks>
+public record MutantDeclaration(
+    string Name,
+    List<string>? GenericParameters,
+    List<VariantCase> Cases,
+    SourceLocation Location,
+    List<GenericConstraintDeclaration>? GenericConstraints = null)
+    : Declaration(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitMutantDeclaration(node: this);
     }
 }
 

@@ -592,13 +592,12 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses a variant (Rust-style tagged union) declaration.
+    /// Parses a variant (tagged union) declaration.
     /// Syntax: <c>variant Name:</c> followed by indented cases with optional associated types.
     /// Variants are sum types where each case can carry different data.
     /// </summary>
-    /// <param name="kind">Whether this is a Variant or Mutant (mutable variant).</param>
     /// <returns>A <see cref="VariantDeclaration"/> AST node.</returns>
-    private VariantDeclaration ParseVariantDeclaration(VariantKind kind = VariantKind.Variant)
+    private VariantDeclaration ParseVariantDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -645,7 +644,6 @@ public partial class SuflaeParser
             return new VariantDeclaration(Name: name,
                 GenericParameters: genericParams,
                 Cases: cases,
-                Kind: kind,
                 Location: location);
         }
 
@@ -690,7 +688,6 @@ public partial class SuflaeParser
         return new VariantDeclaration(Name: name,
             GenericParameters: genericParams,
             Cases: cases,
-            Kind: kind,
             Location: location);
     }
 

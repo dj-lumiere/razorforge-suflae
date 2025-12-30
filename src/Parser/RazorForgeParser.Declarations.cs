@@ -1054,12 +1054,11 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses a variant declaration (Rust-style tagged union with associated data).
-    /// Syntax: <c>variant Name&lt;T&gt; { Case1, Case2(Type) }</c>
+    /// Parses a variant declaration (tagged union with associated data).
+    /// Syntax: <c>variant Name&lt;T&gt; { Case1, Case2: Type }</c>
     /// </summary>
-    /// <param name="kind">The variant kind: Variant (immutable) or Mutant (mutable).</param>
     /// <returns>A <see cref="VariantDeclaration"/> AST node.</returns>
-    private VariantDeclaration ParseVariantDeclaration(VariantKind kind = VariantKind.Variant)
+    private VariantDeclaration ParseVariantDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1130,7 +1129,85 @@ public partial class RazorForgeParser
             GenericParameters: genericParams,
             GenericConstraints: constraints,
             Cases: cases,
-            Kind: kind,
+            Location: location);
+    }
+
+    /// <summary>
+    /// Parses a mutant declaration (untagged union / raw memory union).
+    /// Syntax: <c>mutant Name&lt;T&gt; { Case1, Case2: Type }</c>
+    /// </summary>
+    /// <returns>A <see cref="MutantDeclaration"/> AST node.</returns>
+    private MutantDeclaration ParseMutantDeclaration()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        string name = ConsumeIdentifier(errorMessage: "Expected mutant name");
+
+        // Register this type name
+        _knownTypeNames.Add(item: name);
+
+        // Generic parameters with inline constraints
+        List<string>? genericParams = null;
+        List<GenericConstraintDeclaration>? inlineConstraints = null;
+        if (Match(type: TokenType.Less))
+        {
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
+
+            ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic parameters");
+        }
+
+        // Parse generic constraints (where clause) - merge with inline constraints
+        List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
+
+        // Push generic parameters into scope
+        if (genericParams != null && genericParams.Count > 0)
+        {
+            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+        }
+
+        Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after mutant header");
+
+        var cases = new List<VariantCase>();
+
+        while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
+        {
+            if (Match(type: TokenType.Newline))
+            {
+                continue;
+            }
+
+            // Parse mutant case
+            string caseName = ConsumeIdentifier(errorMessage: "Expected mutant case name");
+
+            // CASE: Type syntax for associated types
+            TypeExpression? associatedType = null;
+            if (Match(type: TokenType.Colon))
+            {
+                associatedType = ParseType();
+            }
+
+            cases.Add(item: new VariantCase(Name: caseName, AssociatedTypes: associatedType, Location: GetLocation()));
+
+            if (!Match(type: TokenType.Comma))
+            {
+                Match(type: TokenType.Newline);
+            }
+        }
+
+        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after mutant body");
+
+        // Pop generic parameter scope
+        if (genericParams != null && genericParams.Count > 0)
+        {
+            _genericParameterScopes.Pop();
+        }
+
+        return new MutantDeclaration(Name: name,
+            GenericParameters: genericParams,
+            GenericConstraints: constraints,
+            Cases: cases,
             Location: location);
     }
 

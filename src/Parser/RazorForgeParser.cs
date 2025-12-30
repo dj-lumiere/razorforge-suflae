@@ -264,13 +264,13 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // Variant declarations (tagged unions/sum types)
         if (Match(type: TokenType.Variant))
         {
-            return ParseVariantDeclaration(kind: VariantKind.Variant);
+            return ParseVariantDeclaration();
         }
 
-        // Mutant declarations (mutable variants)
+        // Mutant declarations (untagged unions)
         if (Match(type: TokenType.Mutant))
         {
-            return ParseVariantDeclaration(kind: VariantKind.Mutant);
+            return ParseMutantDeclaration();
         }
 
         // Protocol declarations (interface/trait definitions)
