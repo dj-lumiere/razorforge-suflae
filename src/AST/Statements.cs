@@ -205,7 +205,7 @@ public record ThrowStatement(Expression Error, SourceLocation Location)
 ///     return database.get(id)
 /// }
 /// </code>
-/// Compiler generates: try_get_user() -> User?, find_get_user() -> Lookup&lt;User>
+/// Compiler generates: try_get_user() -> User?, lookup_get_user() -> Lookup&lt;User>
 /// Pattern matching: is Crashable e / is None / else user
 /// </remarks>
 public record AbsentStatement(SourceLocation Location) : Statement(Location: Location)
