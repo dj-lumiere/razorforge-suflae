@@ -24,26 +24,41 @@ endif()
 
 # Include directories
 include_directories(include)
-include_directories(libtommath)
-include_directories(mapm)
 
 # ============================================================================
+# Third-party libraries (sources are gitignored, download separately)
+# Build configurations are in cmake/*.cmake (tracked in git)
+# ============================================================================
+
+# LibBF - Arbitrary precision floating point with transcendentals
+# https://bellard.org/libbf/ (MIT)
+include(cmake/libbf.cmake)
+
 # Intel Decimal Floating-Point Math Library (libbid)
-# IEEE 754-2008 decimal floating point (cross-platform)
-# ============================================================================
-add_subdirectory(inteldecimal)
+# https://www.intel.com/content/www/us/en/developer/articles/tool/intel-decimal-floating-point-math-library.html (BSD-3-Clause)
+include(cmake/inteldecimal.cmake)
 
-# ============================================================================
 # LibTomMath - Arbitrary precision integer arithmetic
 # https://github.com/libtom/libtommath (Public Domain)
-# ============================================================================
-add_subdirectory(libtommath)
+include(cmake/libtommath.cmake)
 
-# ============================================================================
 # MAPM - Arbitrary precision decimal arithmetic
 # https://github.com/LuaDist/mapm (Freeware)
+include(cmake/mapm.cmake)
+
 # ============================================================================
-add_subdirectory(mapm)
+# Compiler-RT shim for 128-bit integer operations (Windows)
+# LibBF uses __int128 which requires __udivti3 etc. from compiler-rt/libgcc
+# ============================================================================
+if(WIN32)
+    add_library(compiler_rt_shim STATIC
+        runtime/compiler_rt_shim.c
+    )
+    # Ensure these symbols are exported
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(compiler_rt_shim PRIVATE -fvisibility=default)
+    endif()
+endif()
 
 # ============================================================================
 # Runtime library for memory management, error handling, and math
@@ -56,7 +71,9 @@ add_library(razorforge_runtime SHARED
     runtime/decimal_functions.c
     runtime/bignum_functions.c
     runtime/f16_functions.c
+    runtime/f128_functions.c
     runtime/text_functions.c
+    runtime/csharp_interop.c
     runtime/types.h
 )
 
@@ -65,6 +82,16 @@ target_include_directories(razorforge_runtime PUBLIC include)
 # Link math library
 if(UNIX AND NOT APPLE)
     target_link_libraries(razorforge_runtime m)
+endif()
+
+# Link LibBF (f128 support with transcendentals)
+if(HAVE_LIBBF)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBBF)
+    target_link_libraries(razorforge_runtime libbf)
+    # On Windows, link the compiler-rt shim for 128-bit integer operations
+    if(WIN32)
+        target_link_libraries(razorforge_runtime compiler_rt_shim)
+    endif()
 endif()
 
 # Link Intel Decimal if available
@@ -105,12 +132,22 @@ add_library(razorforge_math STATIC
     runtime/decimal_functions.c
     runtime/bignum_functions.c
     runtime/f16_functions.c
+    runtime/f128_functions.c
 )
 
 target_include_directories(razorforge_math PUBLIC include)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(razorforge_math m)
+endif()
+
+if(HAVE_LIBBF)
+    target_compile_definitions(razorforge_math PRIVATE HAVE_LIBBF)
+    target_link_libraries(razorforge_math libbf)
+    # On Windows, link the compiler-rt shim for 128-bit integer operations
+    if(WIN32)
+        target_link_libraries(razorforge_math compiler_rt_shim)
+    endif()
 endif()
 
 if(HAVE_INTELDECIMAL)
@@ -153,8 +190,9 @@ install(FILES include/razorforge_math.h
 # Print configuration summary
 message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
-message(STATUS "  Intel Decimal (IEEE 754): ${HAVE_INTELDECIMAL}")
-message(STATUS "  LibTomMath (bigint):      ${HAVE_LIBTOMMATH}")
-message(STATUS "  MAPM (bigdecimal):        ${HAVE_MAPM}")
+message(STATUS "  LibBF (f128 + transcendentals): ${HAVE_LIBBF}")
+message(STATUS "  Intel Decimal (d32/d64/d128):   ${HAVE_INTELDECIMAL}")
+message(STATUS "  LibTomMath (bigint):            ${HAVE_LIBTOMMATH}")
+message(STATUS "  MAPM (bigdecimal):              ${HAVE_MAPM}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "")
