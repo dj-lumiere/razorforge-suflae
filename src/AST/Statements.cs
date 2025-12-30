@@ -533,6 +533,156 @@ public record WildcardPattern(SourceLocation Location) : Pattern(Location: Locat
 public record ExpressionPattern(Expression Expression, SourceLocation Location)
     : Pattern(Location: Location);
 
+/// <summary>
+/// Pattern for matching variant cases with optional destructuring.
+/// Supports both qualified (Variant.CASE) and unqualified (CASE) syntax.
+/// </summary>
+/// <param name="VariantType">Optional type qualifier (e.g., "Message" in Message.TEXT)</param>
+/// <param name="CaseName">The variant case name (e.g., "TEXT", "NUMBER")</param>
+/// <param name="Bindings">Optional field bindings for destructuring the case data</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is TEXT content => ... (unqualified, binds data to 'content')</item>
+/// <item>is Message.TEXT content => ... (qualified, explicit type)</item>
+/// <item>is CIRCLE (center, radius) => ... (destructuring)</item>
+/// <item>is Shape.RECTANGLE (top_left: corner, size: s) => ... (aliased destructuring)</item>
+/// </list>
+/// </remarks>
+public record VariantPattern(
+    string? VariantType,
+    string CaseName,
+    List<DestructuringBinding>? Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Represents a single binding in destructuring patterns.
+/// Supports both direct field-name binding and aliased binding.
+/// </summary>
+/// <param name="FieldName">The field name to extract (null for positional binding)</param>
+/// <param name="BindingName">The variable name to bind the value to</param>
+/// <param name="NestedPattern">Optional nested pattern for deep destructuring</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>(center, radius) - field name matches binding name</item>
+/// <item>(center: c, radius: r) - explicit alias</item>
+/// <item>((x, y), radius) - nested destructuring</item>
+/// </list>
+/// </remarks>
+public record DestructuringBinding(
+    string? FieldName,
+    string? BindingName,
+    Pattern? NestedPattern,
+    SourceLocation Location);
+
+/// <summary>
+/// Pattern that adds a guard condition to another pattern.
+/// Matches when both the inner pattern matches and the guard evaluates to true.
+/// </summary>
+/// <param name="InnerPattern">The pattern to match first</param>
+/// <param name="Guard">Boolean expression that must be true for the pattern to match</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is s32 n where n > 0 => ... (type with guard)</item>
+/// <item>is NetworkError e where e.code == 404 => ... (error type with guard)</item>
+/// </list>
+/// </remarks>
+public record GuardPattern(Pattern InnerPattern, Expression Guard, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for matching the None/absent value in Maybe, Result, or Lookup types.
+/// </summary>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is None => ... (matches Maybe.None or Lookup.None)</item>
+/// </list>
+/// </remarks>
+public record NonePattern(SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for matching Crashable errors in Result or Lookup types.
+/// Optionally binds the error to a variable for inspection.
+/// </summary>
+/// <param name="ErrorType">Optional specific error type to match (null matches any Crashable)</param>
+/// <param name="VariableName">Optional variable name to bind the error to</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is Crashable e => ... (matches any error)</item>
+/// <item>is FileNotFoundError e => ... (matches specific error type)</item>
+/// <item>is Crashable => ... (matches error without binding)</item>
+/// </list>
+/// </remarks>
+public record CrashablePattern(
+    TypeExpression? ErrorType,
+    string? VariableName,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Else pattern that matches any remaining value and optionally binds it.
+/// Must be the last pattern in a when statement.
+/// </summary>
+/// <param name="VariableName">Optional variable name to bind the matched value to</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>else => ... (catch-all without binding)</item>
+/// <item>else user => ... (catch-all with binding)</item>
+/// </list>
+/// </remarks>
+public record ElsePattern(string? VariableName, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for destructuring records and similar types.
+/// Used in let bindings and pattern matching for extracting fields.
+/// </summary>
+/// <param name="Bindings">List of field bindings to extract</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>let (center, radius) = circle</item>
+/// <item>let (x, y) = point</item>
+/// <item>let ((x, y), radius) = circle (nested)</item>
+/// </list>
+/// </remarks>
+public record DestructuringPattern(
+    List<DestructuringBinding> Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for type checking with simultaneous destructuring.
+/// Used in is expressions like: value is Point (x, y)
+/// </summary>
+/// <param name="Type">The type to check and destructure</param>
+/// <param name="Bindings">List of field bindings to extract from the matched value</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>value is Point (x, y) - positional, field names match binding names</item>
+/// <item>value is Point (x: a, y: b) - named, field 'x' binds to 'a', 'y' binds to 'b'</item>
+/// <item>value is Line ((x: x1, y: y1), (x: x2, y: y2)) - nested destructuring</item>
+/// <item>value is Rectangle (topLeft, _) - partial destructuring with wildcard</item>
+/// </list>
+/// Destructuring is only allowed when ALL fields of the type are public.
+/// </remarks>
+public record TypeDestructuringPattern(
+    TypeExpression Type,
+    List<DestructuringBinding> Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
 #endregion
 
 #region Unsafe Statements
