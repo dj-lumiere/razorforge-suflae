@@ -305,6 +305,33 @@ public record ConstructorExpression(
 }
 
 /// <summary>
+/// Expression for functional update - creating a modified copy of a value with specified changes.
+/// Represents the 'with' keyword for immutable updates.
+/// </summary>
+/// <param name="Base">The base expression to copy and modify</param>
+/// <param name="Updates">List of field/index updates (name/index, value)</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// With expression patterns:
+/// <list type="bullet">
+/// <item>Field update: record with (field: newValue)</item>
+/// <item>Multiple fields: record with (x: 1, y: 2)</item>
+/// </list>
+/// Only valid on record types - creates a copy with specified fields modified.
+/// </remarks>
+public record WithExpression(
+    Expression Base,
+    List<(string FieldName, Expression Value)> Updates,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitWithExpression(node: this);
+    }
+}
+
+/// <summary>
 /// Expression that accesses a member (field, property, or method) of an object.
 /// Represents the dot notation for accessing object members.
 /// </summary>
