@@ -196,6 +196,42 @@ public record RecordDeclaration(
 }
 
 /// <summary>
+/// Resident declaration for permanent fixed-size reference types.
+/// Residents combine record's fixed size with entity's reference semantics.
+/// </summary>
+/// <param name="Name">Resident identifier name</param>
+/// <param name="GenericParameters">Optional list of generic type parameter names</param>
+/// <param name="Protocols">List of protocols to implement (follows)</param>
+/// <param name="Members">Field and method declarations within the resident</param>
+/// <param name="Visibility">Access control modifier</param>
+/// <param name="Location">Source location information</param>
+/// <param name="GenericConstraints">Optional generic type constraints (where clause)</param>
+/// <remarks>
+/// Residents are permanent, foundational objects with:
+/// <list type="bullet">
+/// <item>Fixed size at compile time (like records)</item>
+/// <item>Reference semantics (like entities)</item>
+/// <item>Internal mutability (like entities)</item>
+/// <item>Persistent memory allocation</item>
+/// <item>Stable memory addresses (no moving GC)</item>
+/// </list>
+/// </remarks>
+public record ResidentDeclaration(
+    string Name,
+    List<string>? GenericParameters,
+    List<TypeExpression> Protocols,
+    List<Declaration> Members,
+    VisibilityModifier Visibility,
+    SourceLocation Location,
+    List<GenericConstraintDeclaration>? GenericConstraints = null) : Declaration(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitResidentDeclaration(node: this);
+    }
+}
+
+/// <summary>
 /// Choice declaration that defines discriminated unions of named constants.
 /// Represents enumeration types with optional associated values.
 /// </summary>
