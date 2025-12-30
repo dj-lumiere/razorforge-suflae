@@ -768,3 +768,38 @@ public record NativeCallExpression(
 }
 
 #endregion
+
+#region Pattern Matching Expressions
+
+/// <summary>
+/// Expression that performs pattern matching with 'is' or 'isnot' operators.
+/// Supports type checking, variable binding, and destructuring.
+/// </summary>
+/// <param name="Expression">The expression being matched against the pattern</param>
+/// <param name="Pattern">The pattern to match (TypePattern, DestructuringPattern, etc. from Statements.cs)</param>
+/// <param name="IsNegated">True for 'isnot', false for 'is'</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Pattern matching expression examples:
+/// <list type="bullet">
+/// <item>value is s32 - type check</item>
+/// <item>value is Text t - type check with binding</item>
+/// <item>value is Point (x, y) - destructuring</item>
+/// <item>value isnot None - negated type check</item>
+/// </list>
+/// Note: 'isnot' cannot have bindings or destructuring (what would you bind to if not matched?).
+/// </remarks>
+public record IsPatternExpression(
+    Expression Expression,
+    Pattern Pattern,
+    bool IsNegated,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitIsPatternExpression(node: this);
+    }
+}
+
+#endregion
