@@ -148,8 +148,7 @@ public record FunctionDeclaration(
 public record EntityDeclaration(
     string Name,
     List<string>? GenericParameters,
-    TypeExpression? BaseClass, // from Animal
-    List<TypeExpression> Interfaces, // implements/follows
+    List<TypeExpression> Protocols,
     List<Declaration> Members,
     VisibilityModifier Visibility,
     SourceLocation Location,
