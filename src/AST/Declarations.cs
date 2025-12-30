@@ -523,6 +523,7 @@ public record FunctionSignature(
     string Name,
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
+    List<string>? Attributes,
     SourceLocation Location);
 
 #endregion
