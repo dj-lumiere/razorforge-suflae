@@ -275,7 +275,8 @@ f"{if x > 0 then "+" else "-"}"  # Level 5: Complex - OK?
 
 ### Recommendation
 
-**Level 3 (method calls)** - identifiers, field access, method calls allowed; operators and complex expressions require temp variables.
+**Level 3 (method calls)** - identifiers, field access, method calls allowed; operators and complex expressions require
+temp variables.
 
 ### Related Docs
 
@@ -355,7 +356,8 @@ How should Suflae's `Shared<T>` (actors) interact with itertools operations?
 
 ### The Problem
 
-In Suflae, `Shared<T>` creates an **actor** - a thread-safe entity with isolated internal state accessible only via message passing. This means you can't directly apply itertools to actor fields:
+In Suflae, `Shared<T>` creates an **actor** - a thread-safe entity with isolated internal state accessible only via
+message passing. This means you can't directly apply itertools to actor fields:
 
 ```suflae
 entity DataHolder:
@@ -381,9 +383,9 @@ This is verbose and requires defining methods for every itertools operation you 
 
 ### Options
 
-| Option                                    | Behavior                                          | Pros                              | Cons                                                            |
-|-------------------------------------------|---------------------------------------------------|-----------------------------------|-----------------------------------------------------------------|
-| **A. `.ask()` helper**                    | `holder.ask(h => h.items.where(...).to_list())`   | Explicit, safe                    | Still verbose, closure syntax                                   |
+| Option                                   | Behavior                                          | Pros                              | Cons                                                            |
+|------------------------------------------|---------------------------------------------------|-----------------------------------|-----------------------------------------------------------------|
+| **A. `.ask()` helper**                   | `holder.ask(h => h.items.where(...).to_list())`   | Explicit, safe                    | Still verbose, closure syntax                                   |
 | **B. Read-only field access (snapshot)** | `holder.items` returns a snapshot `List<Integer>` | Most intuitive, familiar syntax   | Hidden copy (performance?), might mislead users about isolation |
 | **C. Get snapshot first**                | `let snapshot = holder.snapshot(); ...`           | Explicit about copying            | Extra step, verbose                                             |
 | **D. Don't mix actors with itertools**   | Require explicit design patterns                  | Clear separation, forces good API | Limits convenience, steep learning curve                        |
