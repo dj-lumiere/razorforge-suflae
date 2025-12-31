@@ -8,19 +8,19 @@ For resolved decisions, see [DESIGN-DECISIONS.md](archive/DESIGN-DECISIONS.md).
 
 ## 1. Generator Routines (`generate` keyword)
 
-**Status:** Open
-**Date:** 2025-12-30
+**Status:** ⏳ Open
+**Date:** 2025-12-31
 
 ### The Question
 
 How should generator routines work in RazorForge and Suflae?
 
-### Current Design Decision
+### Design Decision
 
-**Implicit conversion**: Any routine using `generate` becomes a generator. Return type must be `Iterator<T>`.
+**Implicit conversion**: Any routine using `generate` becomes a generator. Return type must be `Sequence<T>`.
 
 ```razorforge
-routine fibonacci() -> Iterator<S32> {
+routine fibonacci() -> Sequence<S32> {
     let a = 0
     let b = 1
     loop {
@@ -30,25 +30,66 @@ routine fibonacci() -> Iterator<S32> {
 }
 
 for num in fibonacci() {
-    if num > 100 { break }
+    if num > 100 {
+        break
+    }
     show(num)
 }
 ```
 
-### Open Questions
+### Resolved Questions
 
-| Issue                     | Question                                                                 | Possible Solutions                                                  |
-|---------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------|
-| **Return type mismatch**  | What if `generate` is used but return type is `S32` not `Iterator<S32>`? | Compile error: "routine using `generate` must return `Iterator<T>`" |
-| **Mixed return/generate** | Can you `return` early from a generator?                                 | Allow it (ends iteration, like Python) or forbid it?                |
-| **Nested lambdas**        | Does `generate` inside a lambda yield from outer generator?              | Probably compile error - `generate` only valid at routine level     |
-| **State storage**         | Generator must preserve state between `.next()` calls. Where?            | Heap-allocated coroutine frame (has memory cost)                    |
-| **Error handling**        | If generator throws mid-iteration, what happens?                         | Iteration stops, error propagates to caller                         |
+| Issue                     | Decision                                                                                  |
+|---------------------------|-------------------------------------------------------------------------------------------|
+| **Return type mismatch**  | **CE**: routine using `generate` must return `Sequence<T>`                                |
+| **Mixed return/generate** | `return`, `throw`, or `absent` ends iteration                                             |
+| **Nested lambdas**        | **CE**: `generate` only valid at generator routine level, not inside lambdas/closures     |
+| **State storage**         | Heap-allocated coroutine frame, single allocation when generator created, NOT thread-safe |
+| **Error handling**        | Iteration stops, runtime error propagates to caller                                       |
+
+### Naming
+
+- `Iterator<T>` renamed to `Sequence<T>` (represents a sequence of values)
+- `Itertools` renamed to `Seqtools` (methods operating on sequences)
+
+### Additional Open Questions
+
+| Issue                   | Question                                                             | Status |
+|-------------------------|----------------------------------------------------------------------|--------|
+| **Capture semantics**   | Can generators capture variables like lambdas with `given`?          | ⏳ Open |
+| **Delegation**          | Should there be `generate from seq` to delegate to another sequence? | ⏳ Open |
+| **Cleanup**             | What happens to generator state when iteration stops early (break)?  | ⏳ Open |
+| **Infinite generators** | Are infinite generators allowed? (fibonacci example suggests yes)    | ⏳ Open |
+| **Bidirectional**       | Can generators receive values back? (like Python's `send()`)         | ⏳ Open |
+
+#### Capture Example (if allowed)
+
+```razorforge
+routine make_counter(start: S32) -> Sequence<S32> {
+    var n = start  # Can generator capture/mutate this?
+    loop {
+        generate n
+        n += 1
+    }
+}
+```
+
+#### Delegation Example (if allowed)
+
+```razorforge
+routine flatten(lists: List<List<S32>>) -> Sequence<S32> {
+    for list in lists {
+        generate from list  # Yield all elements from inner list
+    }
+}
+```
 
 ### Related Docs
 
 - [RazorForge Routines](../wiki/RazorForge-Routines.md)
 - [Suflae Routines](../wiki/Suflae-Routines.md)
+- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
+- [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
 
 ---
 
@@ -108,48 +149,79 @@ suspended routine start() {
 
 ## 3. Lambda/Closure Capture Semantics
 
-**Status:** Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-31
 
 ### The Question
 
 How do closures capture variables from their enclosing scope?
 
-### The Problem
+### Design Decision
+
+**Explicit capture with `given` keyword.** Captures are required, by name, from immediate scope only.
 
 ```razorforge
-var counter = 0
-let increment = () => counter += 1
-increment()
-show(counter)  # 0 or 1? Depends on capture semantics
+# Syntax: (params) given (captures) => expr
+let threshold = 100
+let data = MyData().share()
+
+# Single capture
+let check = x given threshold => x > threshold
+
+# Multiple captures
+let process = (x, y) given (data, threshold) => x.value > threshold and y.check(data)
+
+# No captures - 'given' omitted
+let double = x => x * 2
+
+# Comparison chaining supported
+let in_range = x given (min, max) => min <= x < max
 ```
 
-### Options
+### Resolved Questions
 
-| Option                  | Behavior                                     | Pros                   | Cons                         |
-|-------------------------|----------------------------------------------|------------------------|------------------------------|
-| **A. By value (copy)**  | Captured variables copied at lambda creation | Safe, no aliasing      | Can't mutate outer scope     |
-| **B. By reference**     | Captured variables referenced                | Can mutate outer scope | Lifetime issues (RazorForge) |
-| **C. Explicit capture** | `[x, &y]` syntax like C++                    | Maximum control        | More syntax complexity       |
-| **D. Hybrid**           | Immutable by value, mutable by reference     | Intuitive              | Magic behavior               |
+| Issue                    | Decision                                                   |
+|--------------------------|------------------------------------------------------------|
+| **Capture syntax**       | `given` keyword (not `with` or `in`)                       |
+| **Capture scope**        | Immediate routine scope only (not outer nested scopes)     |
+| **Required vs optional** | Required - CE if variable used but not declared in `given` |
+| **By name**              | Captures matched by name, not position                     |
+| **Parentheses**          | Optional for single param/capture: `x given y => expr`     |
 
-### Suflae vs RazorForge
+### Capture Behavior by Type
 
-**Suflae (GC-based):** Reference capture is safe (GC handles lifetimes)
+**RazorForge:**
 
-**RazorForge (ownership-based):** Reference capture has lifetime implications, must integrate with token system
+- `Shared<T>`, `Tracked<T>`, `Snatched<T>` - Reference captured (refcount++)
+- Value types (`record`, `variant`, `choice`) - Copied by value
+- **Cannot capture:** Raw `entity`/`resident`, scope-bound tokens (`Viewed`, `Hijacked`, etc.)
 
-### Open Questions
+**Suflae:**
 
-1. Should capture semantics differ between Suflae and RazorForge?
-2. How do captures interact with `var` vs `let` bindings?
-3. Can closures outlive captured references? (escape analysis)
-4. How do captures work with `Shared<T>` (does it increment refcount)?
+- `record`, `variant`, `choice` - Copied by value
+- `entity` - Reference shared (refcount++)
+- `shared entity` - Thread-safe reference (atomic refcount)
+
+### No Nested Routines
+
+Nested routine definitions are banned. Use module-level private routines instead.
+
+```razorforge
+# ❌ BANNED
+routine outer() {
+    routine inner() { }  # CE: Nested routines not allowed
+}
+
+# ✅ OK
+private routine helper(x: S32) -> S32 { return x * 2 }
+routine outer() { let result = helper(5) }
+```
 
 ### Related Docs
 
 - [RazorForge Routines](../wiki/RazorForge-Routines.md)
-- [RazorForge Itertools](../wiki/RazorForge-Itertools.md)
+- [Suflae Routines](../wiki/Suflae-Routines.md)
+- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
 
 ---
 
@@ -345,7 +417,7 @@ Possible solutions: `then` keyword, require `return`, or discourage the pattern.
 
 ---
 
-## 8. Suflae Actor Field Access for Itertools
+## 8. Suflae Actor Field Access for Seqtools
 
 **Status:** Open
 **Date:** 2025-12-31
@@ -416,7 +488,75 @@ copy.push(100)  # Only affects the copy, not the actor
 ### Related Docs
 
 - [Suflae Concurrency Model](../wiki/Suflae-Concurrency-Model.md)
-- [Suflae Itertools](../wiki/Suflae-Itertools.md)
+- [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
+
+---
+
+## 9. Zip Return Type
+
+**Status:** ⏳ Open
+**Date:** 2025-12-31
+
+### The Question
+
+What type does `zip` return when combining two sequences?
+
+### Current Docs
+
+The Seqtools docs say:
+```razorforge
+seq1.zip(with: seq2)  # Combine parallel elements into records
+```
+
+But what exactly is that "record"?
+
+### Options
+
+| Option | Return Type | Example | Pros | Cons |
+|--------|-------------|---------|------|------|
+| **A. Anonymous record** | `{ first: A, second: B }` | `for pair in a.zip(with: b) { pair.first + pair.second }` | Clear field names | Verbose access |
+| **B. Pair<A, B> type** | `Pair<A, B>` | `for pair in a.zip(with: b) { pair.a + pair.b }` | Explicit type | Another stdlib type |
+| **C. Destructuring only** | Unnamed pair | `for (x, y) in a.zip(with: b) { x + y }` | Clean syntax | Can't access without destructuring |
+| **D. Indexed-style** | `Zipped<A, B>` with `.left`/`.right` | `for z in a.zip(with: b) { z.left + z.right }` | Consistent with `Indexed<T>` | New type needed |
+
+### Multi-Zip
+
+What about `zip` with 3+ sequences?
+
+```razorforge
+seq1.zip(with: seq2, with: seq3)  # Three-way zip - what type?
+```
+
+### Cartesian Product
+
+Same question for `product`:
+
+```razorforge
+seq1.product(with: seq2)              # All combinations (a1,b1), (a1,b2), ... - what type?
+seq1.product(with: seq2, with: seq3)  # Three-way product - what type?
+```
+
+### Related to Combinatorics
+
+Similar question for `combinations` and `permutations`:
+
+```razorforge
+[1, 2, 3].combinations(pick: 2)  # Returns Sequence<???> - pairs of what type?
+[1, 2, 3].permutations(pick: 2)  # Same question
+```
+
+### Open Questions
+
+1. Should `zip`/`product` return a named type (`Pair`, `Zipped`) or anonymous record?
+2. How does destructuring work with the chosen type?
+3. Should multi-way operations (3+ sequences) be supported? What type?
+4. Same question applies to `combinations`/`permutations` - what's the element type?
+5. Should all these operations share the same return type pattern for consistency?
+
+### Related Docs
+
+- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
+- [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
 
 ---
 
