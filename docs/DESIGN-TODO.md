@@ -510,53 +510,165 @@ seq1.zip(with: seq2)  # Combine parallel elements into records
 
 But what exactly is that "record"?
 
-### Options
+### Proposed Design
 
-| Option | Return Type | Example | Pros | Cons |
-|--------|-------------|---------|------|------|
-| **A. Anonymous record** | `{ first: A, second: B }` | `for pair in a.zip(with: b) { pair.first + pair.second }` | Clear field names | Verbose access |
-| **B. Pair<A, B> type** | `Pair<A, B>` | `for pair in a.zip(with: b) { pair.a + pair.b }` | Explicit type | Another stdlib type |
-| **C. Destructuring only** | Unnamed pair | `for (x, y) in a.zip(with: b) { x + y }` | Clean syntax | Can't access without destructuring |
-| **D. Indexed-style** | `Zipped<A, B>` with `.left`/`.right` | `for z in a.zip(with: b) { z.left + z.right }` | Consistent with `Indexed<T>` | New type needed |
-
-### Multi-Zip
-
-What about `zip` with 3+ sequences?
+**Heterogeneous operations (`zip`, `product`):** Use `Zipped<A, B, ...>` variadic generic
 
 ```razorforge
-seq1.zip(with: seq2, with: seq3)  # Three-way zip - what type?
+# Zipped<A, B> for two sequences
+let pairs: Sequence<Zipped<S32, Text>> = numbers.zip(with: names)
+for z in pairs {
+    show(f"{z.0}: {z.1}")  # Indexed access?
+}
+for (num, name) in pairs {  # Destructuring
+    show(f"{num}: {name}")
+}
+
+# Zipped<A, B, C> for three sequences
+let triples: Sequence<Zipped<S32, Text, Bool>> = a.zip(with: b, with: c)
+
+# Same for product
+let grid: Sequence<Zipped<S32, S32>> = rows.product(with: cols)
 ```
 
-### Cartesian Product
-
-Same question for `product`:
+**Homogeneous operations (`combinations`, `permutations`):** Use `List<T>`
 
 ```razorforge
-seq1.product(with: seq2)              # All combinations (a1,b1), (a1,b2), ... - what type?
-seq1.product(with: seq2, with: seq3)  # Three-way product - what type?
+# combinations/permutations pick from same type → List<T>
+let pairs: Sequence<List<S32>> = [1, 2, 3].combinations(pick: 2)
+# pairs: [[1, 2], [1, 3], [2, 3]]
+
+let perms: Sequence<List<S32>> = [1, 2, 3].permutations(pick: 2)
+# perms: [[1, 2], [1, 3], [2, 1], [2, 3], [3, 1], [3, 2]]
+
+for combo in [1, 2, 3].combinations(pick: 2) {
+    show(combo)  # List<S32>
+}
 ```
 
-### Related to Combinatorics
+### Product vs Permutations with Replacement
 
-Similar question for `combinations` and `permutations`:
+These are mathematically similar but semantically different:
 
 ```razorforge
-[1, 2, 3].combinations(pick: 2)  # Returns Sequence<???> - pairs of what type?
-[1, 2, 3].permutations(pick: 2)  # Same question
+# product: combines DIFFERENT sequences → Zipped<A, B>
+[1, 2].product(with: ["a", "b"])
+# → Sequence<Zipped<S32, Text>>: (1,"a"), (1,"b"), (2,"a"), (2,"b")
+
+# permutations_with_replacement: picks from SAME sequence → List<T>
+[1, 2].permutations_with_replacement(pick: 2)
+# → Sequence<List<S32>>: [1,1], [1,2], [2,1], [2,2]
 ```
+
+**Keep separate** for type consistency - even when values match, return types differ.
+
+### Naming: Math-Inspired Names
+
+**Proposed renaming:**
+
+| Old Name | New Name | Description |
+|----------|----------|-------------|
+| `combinations(pick: n)` | `choose(n)` | n-combinations without replacement |
+| `combinations_with_replacement` | `multichoose(n)` | n-combinations with replacement |
+| `permutations(pick: n)` | `arrange(n)` | n-permutations without replacement |
+| `permutations_with_replacement` | `multiarrange(n)` | n-permutations with replacement |
+
+```razorforge
+# Clean, math-inspired API
+[1, 2, 3].choose(2)        # [[1,2], [1,3], [2,3]]
+[1, 2, 3].multichoose(2)   # [[1,1], [1,2], [1,3], [2,2], [2,3], [3,3]]
+[1, 2, 3].arrange(2)       # [[1,2], [1,3], [2,1], [2,3], [3,1], [3,2]]
+[1, 2, 3].multiarrange(2)  # [[1,1], [1,2], ...all 9 pairs...]
+```
+
+**Note:** `pick` reserved for random selection (see Random stdlib below)
 
 ### Open Questions
 
-1. Should `zip`/`product` return a named type (`Pair`, `Zipped`) or anonymous record?
-2. How does destructuring work with the chosen type?
-3. Should multi-way operations (3+ sequences) be supported? What type?
-4. Same question applies to `combinations`/`permutations` - what's the element type?
-5. Should all these operations share the same return type pattern for consistency?
+1. **Zipped access:** Indexed (`.0`, `.1`) or named (`.first`, `.second`, `.third`)?
+2. **Variadic generics:** Does the compiler support `Zipped<A, B, ...>` with arbitrary arity?
+3. **Destructuring:** How does `for (a, b, c) in zipped` work with `Zipped<A, B, C>`?
+4. **List overhead:** Is `List<T>` too heavy for small combinations? Use fixed-size array?
+5. **Replacement naming:** Which naming scheme for `_with_replacement` operations?
 
 ### Related Docs
 
 - [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
 - [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
+
+---
+
+## 10. Random Standard Library
+
+**Status:** ⏳ Open
+**Date:** 2025-12-31
+
+### The Question
+
+What should the random number generation and selection API look like?
+
+### Proposed API
+
+**Random number generation:**
+
+```razorforge
+# Basic random
+Random.integer()                    # Random S64
+Random.integer(0 to 100)            # Random S64 in range
+Random.float()                      # Random F64 in [0, 1)
+Random.float(0.0 to 10.0)           # Random F64 in range
+Random.bool()                       # Random Bool
+Random.byte()                       # Random U8
+Random.bytes(count: 16)             # List<U8> of random bytes
+```
+
+**Collection operations:**
+
+```razorforge
+# Single selection
+list.pick()                         # Random element from list
+list.pick_or_default()              # Random element or default if empty
+
+# Multiple selection
+list.pick(3)                        # 3 random elements (no replacement)
+list.pick(3, replace: true)         # 3 random elements (with replacement)
+
+# Shuffling
+list.shuffle()                      # Return new shuffled list
+list.shuffle!()                     # Shuffle in place
+```
+
+**Weighted selection:**
+
+```razorforge
+# Weighted random
+choices.pick_weighted(by: c => c.weight)
+choices.pick_weighted(3, by: c => c.weight)
+```
+
+**Seeded RNG:**
+
+```razorforge
+# Reproducible randomness
+let rng = Random(seed: 12345)
+rng.integer(0 to 100)
+list.pick(using: rng)
+list.shuffle(using: rng)
+```
+
+### Open Questions
+
+1. **Global vs instance:** Should `Random.integer()` use global state or require RNG instance?
+2. **Thread safety:** Is global RNG thread-local or shared (with locks)?
+3. **Cryptographic:** Separate `SecureRandom` for crypto-safe randomness?
+4. **Distribution:** Support for normal, exponential, etc. distributions?
+5. **Naming:** `pick` vs `sample` vs `choose` (but `choose` is now combinatorics)
+6. **Range syntax:** `Random.integer(0 to 100)` - inclusive or exclusive end?
+
+### Related Docs
+
+- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
+- [Standard Libraries](../wiki/Standard-Libraries.md)
 
 ---
 
