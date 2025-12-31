@@ -344,6 +344,80 @@ Possible solutions: `then` keyword, require `return`, or discourage the pattern.
 
 ---
 
+## 8. Suflae Actor Field Access for Itertools
+
+**Status:** Open
+**Date:** 2025-12-31
+
+### The Question
+
+How should Suflae's `Shared<T>` (actors) interact with itertools operations?
+
+### The Problem
+
+In Suflae, `Shared<T>` creates an **actor** - a thread-safe entity with isolated internal state accessible only via message passing. This means you can't directly apply itertools to actor fields:
+
+```suflae
+entity DataHolder:
+    var items: List<Integer>
+
+let holder = DataHolder(items: [1, 2, 3, 4, 5]).share()
+
+# Cannot access fields on Shared<T> (actor)
+# holder.items.where(x => x > 2)  # ERROR: Can't access fields on actors
+```
+
+Currently, the only way is to define methods on the entity that perform itertools operations internally:
+
+```suflae
+routine DataHolder.get_filtered(pred: (Integer) -> Bool) -> List<Integer>:
+    return me.items.where(pred).to_list()
+
+# Then:
+let filtered = holder.get_filtered(x => x > 2)
+```
+
+This is verbose and requires defining methods for every itertools operation you might need.
+
+### Options
+
+| Option                                    | Behavior                                          | Pros                              | Cons                                                            |
+|-------------------------------------------|---------------------------------------------------|-----------------------------------|-----------------------------------------------------------------|
+| **A. `.ask()` helper**                    | `holder.ask(h => h.items.where(...).to_list())`   | Explicit, safe                    | Still verbose, closure syntax                                   |
+| **B. Read-only field access (snapshot)** | `holder.items` returns a snapshot `List<Integer>` | Most intuitive, familiar syntax   | Hidden copy (performance?), might mislead users about isolation |
+| **C. Get snapshot first**                | `let snapshot = holder.snapshot(); ...`           | Explicit about copying            | Extra step, verbose                                             |
+| **D. Don't mix actors with itertools**   | Require explicit design patterns                  | Clear separation, forces good API | Limits convenience, steep learning curve                        |
+
+### Leaning Toward: Option B
+
+**Proposed behavior:** Read-only field access on `Shared<T>` returns a **snapshot** (copy) of the field value:
+
+```suflae
+let holder = DataHolder(items: [1, 2, 3, 4, 5]).share()
+
+# Reading 'items' returns a snapshot (copy)
+let result = holder.items.where(x => x > 2).to_list()
+
+# Modifications to the copy don't affect the actor
+let copy = holder.items
+copy.push(100)  # Only affects the copy, not the actor
+```
+
+### Open Questions
+
+1. **Performance:** Is the implicit copy acceptable? Should there be a warning/lint?
+2. **Mutability:** What about writing? `holder.items.push(100)` - should this be an error?
+3. **Deep copy:** For nested entities, is it a shallow or deep copy?
+4. **Consistency:** Does this break the actor isolation model conceptually?
+5. **Alternatives:** Should there be `.ask()` for complex operations that need atomicity?
+
+### Related Docs
+
+- [Suflae Concurrency Model](../wiki/Suflae-Concurrency-Model.md)
+- [Suflae Itertools](../wiki/Suflae-Itertools.md)
+
+---
+
 ## Template for Future TODOs
 
 ```markdown
