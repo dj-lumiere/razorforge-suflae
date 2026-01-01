@@ -175,7 +175,8 @@ public partial class SuflaeTokenizer
         [key: "none"] = TokenType.None,
         [key: "generate"] = TokenType.Generate,
         [key: "suspended"] = TokenType.Suspended,
-        [key: "waitfor"] = TokenType.Waitfor
+        [key: "waitfor"] = TokenType.Waitfor,
+        [key: "given"] = TokenType.Given
     };
 
     #endregion

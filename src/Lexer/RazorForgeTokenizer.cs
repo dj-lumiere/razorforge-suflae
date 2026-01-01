@@ -190,7 +190,8 @@ public partial class RazorForgeTokenizer
         [key: "viewing"] = TokenType.Viewing,
         [key: "hijacking"] = TokenType.Hijacking,
         [key: "seizing"] = TokenType.Seizing,
-        [key: "inspecting"] = TokenType.Inspecting
+        [key: "inspecting"] = TokenType.Inspecting,
+        [key: "given"] = TokenType.Given
     };
 
     #endregion

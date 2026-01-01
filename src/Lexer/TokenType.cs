@@ -344,6 +344,11 @@ public enum TokenType
     /// <summary>With clause keyword for record modify and generation keyword (ex, a = a with (x: 42))</summary>
     With,
 
+    /// <summary>
+    /// Given clause keyword for lambda captures (ex, x given (lo, hi) => lo &lt;= x &lt; hi)
+    /// </summary>
+    Given,
+
     /// <summary>In keyword for iterating/contains (ex, for i in 1 to 10 step 2)</summary>
     In,
 
