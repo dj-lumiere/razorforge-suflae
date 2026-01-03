@@ -127,71 +127,99 @@ public partial class RazorForgeTokenizer
     /// </remarks>
     private readonly Dictionary<string, TokenType> _keywords = new()
     {
+        // Type declarations
         [key: "routine"] = TokenType.Routine,
-        [key: "resident"] = TokenType.Resident,
+        [key: "entity"] = TokenType.Entity,
+        [key: "record"] = TokenType.Record,
         [key: "choice"] = TokenType.Choice,
         [key: "variant"] = TokenType.Variant,
         [key: "mutant"] = TokenType.Mutant,
+        [key: "resident"] = TokenType.Resident,
+        [key: "protocol"] = TokenType.Protocol,
+
+        // Variable declarations
         [key: "let"] = TokenType.Let,
         [key: "var"] = TokenType.Var,
         [key: "preset"] = TokenType.Preset,
-        [key: "common"] = TokenType.Common,
+
+        // Access modifiers
         [key: "private"] = TokenType.Private,
         [key: "internal"] = TokenType.Internal,
         [key: "public"] = TokenType.Public,
-        [key: "global"] = TokenType.Global,
         [key: "imported"] = TokenType.Imported,
+        [key: "global"] = TokenType.Global,
+        [key: "common"] = TokenType.Common,
+
+        // Self references
         [key: "me"] = TokenType.Me,
         [key: "Me"] = TokenType.MyType,
+
+        // Protocol implementation
+        [key: "follows"] = TokenType.Follows,
+        [key: "notfollows"] = TokenType.NotFollows,
+
+        // Control flow
         [key: "if"] = TokenType.If,
         [key: "elseif"] = TokenType.Elseif,
         [key: "else"] = TokenType.Else,
         [key: "then"] = TokenType.Then,
         [key: "unless"] = TokenType.Unless,
+        [key: "when"] = TokenType.When,
+        [key: "is"] = TokenType.Is,
+        [key: "loop"] = TokenType.Loop,
+        [key: "while"] = TokenType.While,
+        [key: "for"] = TokenType.For,
         [key: "break"] = TokenType.Break,
         [key: "continue"] = TokenType.Continue,
         [key: "return"] = TokenType.Return,
         [key: "throw"] = TokenType.Throw,
         [key: "absent"] = TokenType.Absent,
-        [key: "for"] = TokenType.For,
-        [key: "loop"] = TokenType.Loop,
-        [key: "while"] = TokenType.While,
-        [key: "when"] = TokenType.When,
-        [key: "is"] = TokenType.Is,
-        [key: "follows"] = TokenType.Follows,
+
+        // Module system
         [key: "import"] = TokenType.Import,
         [key: "namespace"] = TokenType.Namespace,
-        [key: "define"] = TokenType.Define,
+
+        // Special keywords
         [key: "using"] = TokenType.Using,
         [key: "as"] = TokenType.As,
+        [key: "define"] = TokenType.Define,
         [key: "pass"] = TokenType.Pass,
         [key: "danger"] = TokenType.Danger,
         [key: "with"] = TokenType.With,
-        [key: "isnot"] = TokenType.IsNot,
-        [key: "notin"] = TokenType.NotIn,
-        [key: "notfollows"] = TokenType.NotFollows,
+        [key: "given"] = TokenType.Given,
+        [key: "steal"] = TokenType.Steal,
         [key: "in"] = TokenType.In,
+        [key: "notin"] = TokenType.NotIn,
+        [key: "isnot"] = TokenType.IsNot,
         [key: "to"] = TokenType.To,
         [key: "downto"] = TokenType.Downto,
         [key: "by"] = TokenType.By,
+
+        // Logical operators
         [key: "and"] = TokenType.And,
         [key: "or"] = TokenType.Or,
         [key: "not"] = TokenType.Not,
+
+        // Literals
         [key: "true"] = TokenType.True,
         [key: "false"] = TokenType.False,
         [key: "none"] = TokenType.None,
-        [key: "entity"] = TokenType.Entity,
-        [key: "record"] = TokenType.Record,
-        [key: "protocol"] = TokenType.Protocol,
+
+        // Generic constraints
         [key: "requires"] = TokenType.Requires,
+
+        // Async/generator
         [key: "generate"] = TokenType.Generate,
         [key: "suspended"] = TokenType.Suspended,
         [key: "waitfor"] = TokenType.Waitfor,
+
+        // Scoped access (single-threaded)
         [key: "viewing"] = TokenType.Viewing,
         [key: "hijacking"] = TokenType.Hijacking,
+
+        // Scoped access (multi-threaded)
         [key: "seizing"] = TokenType.Seizing,
-        [key: "inspecting"] = TokenType.Inspecting,
-        [key: "given"] = TokenType.Given
+        [key: "inspecting"] = TokenType.Inspecting
     };
 
     #endregion
@@ -207,26 +235,39 @@ public partial class RazorForgeTokenizer
     /// </remarks>
     private readonly Dictionary<string, TokenType> _numericSuffixToTokenType = new()
     {
+        // Signed integers
         [key: "s8"] = TokenType.S8Literal,
         [key: "s16"] = TokenType.S16Literal,
         [key: "s32"] = TokenType.S32Literal,
         [key: "s64"] = TokenType.S64Literal,
         [key: "s128"] = TokenType.S128Literal,
         [key: "saddr"] = TokenType.SAddrLiteral,
+
+        // Unsigned integers
         [key: "u8"] = TokenType.U8Literal,
         [key: "u16"] = TokenType.U16Literal,
         [key: "u32"] = TokenType.U32Literal,
         [key: "u64"] = TokenType.U64Literal,
         [key: "u128"] = TokenType.U128Literal,
         [key: "uaddr"] = TokenType.UAddrLiteral,
+
+        // Floating-point
         [key: "f16"] = TokenType.F16Literal,
         [key: "f32"] = TokenType.F32Literal,
         [key: "f64"] = TokenType.F64Literal,
         [key: "f128"] = TokenType.F128Literal,
+
+        // Decimal floating-point
         [key: "d32"] = TokenType.D32Literal,
         [key: "d64"] = TokenType.D64Literal,
         [key: "d128"] = TokenType.D128Literal
     };
+
+    /// <summary>
+    /// The suffix for arbitrary precision numbers.
+    /// Maps to Integer (whole numbers) or Decimal (floating-point).
+    /// </summary>
+    private const string ArbitraryPrecisionSuffix = "n";
 
     /// <summary>
     /// Maps memory size suffixes to their corresponding token types.

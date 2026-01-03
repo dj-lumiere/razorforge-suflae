@@ -21,6 +21,8 @@ namespace Compilers.Shared.Lexer;
 /// </remarks>
 public enum TokenType
 {
+    #region Literals
+
     #region Basic Literals
 
     // Suflae default number types (arbitrary precision)
@@ -30,13 +32,7 @@ public enum TokenType
     /// <summary>Arbitrary precision decimal in Suflae - unsuffixed decimals (3.14, 2.718)</summary>
     Decimal,
 
-    /// <summary>Variant declaration keyword (tagged union)</summary>
-    Variant,
-
-    /// <summary>Mutant declaration keyword (untagged union)</summary>
-    Mutant,
-
-    /// <summary> Byte letter literal with prefix (b'a') </summary>
+    /// <summary>Byte letter literal with prefix (b'a')</summary>
     ByteLetterLiteral,
 
     /// <summary>Single character literal - default for plain quotes ('a', '\n')</summary>
@@ -194,6 +190,8 @@ public enum TokenType
 
     #endregion
 
+    #endregion
+
     #region Identifiers
 
     /// <summary>Regular identifier prefixed with let/var/nothing</summary>
@@ -204,64 +202,136 @@ public enum TokenType
 
     #endregion
 
+    #region Keywords
+
     #region Keywords - Declarations
 
-    /// <summary>Routine(function) declaration keyword</summary>
+    #region Type Declarations
+
+    /// <summary>
+    /// Routine (function) declaration keyword.
+    /// Defines a callable unit of code with optional parameters and return type.
+    /// </summary>
     Routine,
 
-    /// <summary>Entity declaration keyword</summary>
+    /// <summary>
+    /// Entity declaration keyword.
+    /// Reference type for complex, dynamically-sized objects with identity semantics.
+    /// Uses theatrical memory model (.view(), .hijack(), .share(), steal).
+    /// </summary>
     Entity,
 
-    /// <summary>Record declaration keyword</summary>
+    /// <summary>
+    /// Record declaration keyword.
+    /// Value type for simple, fixed-size, immutable data. Copied on assignment.
+    /// Use 'with' for modified copies (record with (field: value)).
+    /// </summary>
     Record,
 
-    /// <summary>Choice declaration keyword</summary>
+    /// <summary>
+    /// Choice declaration keyword.
+    /// Simple enumeration of discrete, stateless options (type-safe enum).
+    /// Perfect for pattern matching with 'when'.
+    /// </summary>
     Choice,
 
-    /// <summary>Resident declaration keyword</summary>
+    /// <summary>
+    /// Variant declaration keyword.
+    /// Tagged union - each case can hold different data types.
+    /// Requires pattern matching to unpack. Cases are immediately disposed after unpacking.
+    /// </summary>
+    Variant,
+
+    /// <summary>
+    /// Mutant declaration keyword.
+    /// Untagged union - raw memory reinterpretation without runtime tag.
+    /// Requires danger! blocks for access. Each case must have unique type.
+    /// </summary>
+    Mutant,
+
+    /// <summary>
+    /// Resident declaration keyword (RazorForge only).
+    /// Hybrid fixed-size reference type for permanent, foundational objects.
+    /// Lives in persistent memory space with stable address.
+    /// </summary>
     Resident,
 
-    /// <summary>Feature declaration keyword</summary>
+    /// <summary>
+    /// Protocol declaration keyword.
+    /// Interface/trait contract defining method signatures that types must implement.
+    /// Types use 'follows' keyword to implement protocols.
+    /// </summary>
     Protocol,
 
-    /// <summary>Immutable variable declaration keyword</summary>
+    #endregion
+
+    #region Variable Declarations
+
+    /// <summary>Immutable variable binding - value cannot be reassigned after initialization</summary>
     Let,
 
-    /// <summary>Mutable variable declaration keyword</summary>
+    /// <summary>Mutable variable binding - value can be reassigned</summary>
     Var,
 
-    /// <summary>Preset configuration keyword</summary>
+    /// <summary>
+    /// Compile-time constant declaration.
+    /// Immutable, compile-time evaluated. Use SCREAMING_SNAKE_CASE by convention.
+    /// </summary>
     Preset,
 
-    /// <summary>Private access modifier keyword</summary>
+    #endregion
+
+    #region Access Modifiers
+
+    /// <summary>Private access modifier - visible only within the declaring type</summary>
     Private,
 
-    /// <summary>local access modifier keyword</summary>
+    /// <summary>Internal access modifier - visible within the same module/namespace</summary>
     Internal,
 
-    /// <summary>Public access modifier keyword</summary>
+    /// <summary>Public access modifier - visible everywhere</summary>
     Public,
 
-    /// <summary>Imported linkage modifier keyword</summary>
+    /// <summary>Imported linkage modifier - marks externally-linked declarations (FFI)</summary>
     Imported,
 
-    /// <summary>Global scope modifier keyword</summary>
+    /// <summary>Global scope modifier - declares module-level global variable</summary>
     Global,
 
-    /// <summary>Static modifier keyword</summary>
+    /// <summary>
+    /// Static/class-level routine modifier.
+    /// No receiver (no 'me'), accessed via Type.method() syntax.
+    /// </summary>
     Common,
 
-    /// <summary>Self reference keyword (me)</summary>
+    #endregion
+
+    #region Self References
+
+    /// <summary>Self reference keyword (me) - refers to the current instance in methods</summary>
     Me,
 
-    /// <summary>Self type keyword (Me) - the type of 'me' in protocols and methods</summary>
+    /// <summary>Self type keyword (Me) - the type of 'me', used in protocols for associated types</summary>
     MyType,
 
-    /// <summary>Follows keyword for ordering constraints</summary>
+    #endregion
+
+    #region Protocol Implementation
+
+    /// <summary>
+    /// Protocol implementation keyword.
+    /// Declares that a type implements a protocol (record Foo follows Bar).
+    /// Similar to 'implements' in Java or ': Trait' in Rust.
+    /// </summary>
     Follows,
 
-    /// <summary>Not follows keyword - negated ordering constraint (notfollows)</summary>
+    /// <summary>
+    /// Negated protocol constraint.
+    /// Asserts a type does NOT implement a protocol (requires T notfollows SomeTrait).
+    /// </summary>
     NotFollows,
+
+    #endregion
 
     #endregion
 
@@ -329,42 +399,48 @@ public enum TokenType
     /// <summary>Using statement keyword for resource management (using obj as o { })</summary>
     Using,
 
-    /// <summary>Type alias as keyword</summary>
+    /// <summary>Type alias as keyword (type Foo as Bar, or 'as' in scoped access blocks)</summary>
     As,
 
     /// <summary>Method/Type redefinition keyword (define A as B)</summary>
     Define,
 
-    /// <summary>No-operation pass keyword</summary>
+    /// <summary>No-operation pass keyword - placeholder for empty blocks</summary>
     Pass,
 
-    /// <summary>Danger mode keyword for unsafe operations</summary>
+    /// <summary>Danger mode keyword for unsafe operations (danger! { ... })</summary>
     Danger,
 
-    /// <summary>With clause keyword for record modify and generation keyword (ex, a = a with (x: 42))</summary>
+    /// <summary>With clause keyword for record copying with modifications (a with (x: 42))</summary>
     With,
 
-    /// <summary>
-    /// Given clause keyword for lambda captures (ex, x given (lo, hi) => lo &lt;= x &lt; hi)
-    /// </summary>
+    /// <summary>Given clause keyword for lambda captures (x given a => x + a)</summary>
     Given,
 
-    /// <summary>In keyword for iterating/contains (ex, for i in 1 to 10 step 2)</summary>
+    /// <summary>
+    /// Ownership transfer keyword (RazorForge only).
+    /// Transfers ownership and invalidates the source (becomes deadref).
+    /// Used for: single entity transfer (steal node), container push (list.push(steal node)),
+    /// and consuming iteration (for item in steal list).
+    /// </summary>
+    Steal,
+
+    /// <summary>In keyword for iteration and containment (for i in list, x in set)</summary>
     In,
 
-    /// <summary>Not in keyword - negated containment check (notin)</summary>
+    /// <summary>Not in keyword - negated containment check (x notin set)</summary>
     NotIn,
 
-    /// <summary>Is not keyword - negated type check (isnot)</summary>
+    /// <summary>Is not keyword - negated type/pattern check (x isnot Type)</summary>
     IsNot,
 
-    /// <summary>To keyword for Range object (ex, for i in 1 to 10 by 2)</summary>
+    /// <summary>To keyword for ascending Range (for i in 1 to 10)</summary>
     To,
 
-    /// <summary>Downto keyword for reverse Range object (ex, for i in 10 downto 1 by 2)</summary>
+    /// <summary>Downto keyword for descending Range (for i in 10 downto 1)</summary>
     Downto,
 
-    /// <summary>By keyword for Range object step (ex, for i in 1 to 10 by 2)</summary>
+    /// <summary>By keyword for Range step size (for i in 1 to 10 by 2)</summary>
     By,
 
     #endregion
@@ -394,6 +470,10 @@ public enum TokenType
     None,
 
     #endregion
+
+    #endregion`
+
+    #region Operators
 
     #region Operators - Basic Arithmetic
 
@@ -631,6 +711,10 @@ public enum TokenType
 
     #endregion
 
+    #endregion
+
+    #region Delimiters
+
     #region Delimiters - Brackets and Braces
 
     /// <summary>Left parenthesis delimiter (</summary>
@@ -669,7 +753,11 @@ public enum TokenType
 
     #endregion
 
+    #endregion
+
     #region Special Tokens
+
+    #region Whitespace Tokens
 
     /// <summary>Significant newline token (statement terminator)</summary>
     Newline,
@@ -683,35 +771,89 @@ public enum TokenType
     /// <summary>Documentation comment token (###)</summary>
     DocComment,
 
-    /// <summary>Requires keyword for protocol/interface requirements</summary>
+    #endregion
+
+    #region Generic Constraints
+
+    /// <summary>
+    /// Generic type constraint keyword.
+    /// Enforces compile-time protocol requirements on generic types.
+    /// Example: routine sort&lt;T&gt;() requires T follows Comparable
+    /// </summary>
     Requires,
 
-    /// <summary>Generate keyword for coroutine/generator functions</summary>
+    #endregion
+
+    #region Async/Generator Keywords
+
+    /// <summary>
+    /// Generator yield keyword.
+    /// Yields values from generator/iterator functions (coroutine mechanism).
+    /// Similar to 'yield' in Python/C#.
+    /// </summary>
     Generate,
 
-    /// <summary>Suspended keyword for suspended computation state</summary>
+    /// <summary>
+    /// Async function declaration keyword.
+    /// Marks a function as asynchronous, returning a suspended computation.
+    /// Similar to 'async' in Rust/JavaScript.
+    /// </summary>
     Suspended,
 
-    /// <summary>Waitfor keyword for awaiting async operations</summary>
+    /// <summary>
+    /// Await keyword for async operations.
+    /// Waits for a suspended computation to complete and extracts the value.
+    /// Similar to 'await' in Rust/JavaScript.
+    /// </summary>
     Waitfor,
 
-    /// <summary>Scoped read-only access keyword (viewing obj as v { })</summary>
+    #endregion
+
+    #region Scoped Access Keywords (Single-Threaded)
+
+    /// <summary>
+    /// Scoped read-only access keyword (viewing entity as v { }).
+    /// Creates a Viewed&lt;T&gt; token for read-only access.
+    /// Multiple viewers allowed; source preserved after scope.
+    /// </summary>
     Viewing,
 
-    /// <summary>Scoped exclusive access keyword (hijacking obj as h { })</summary>
+    /// <summary>
+    /// Scoped exclusive access keyword (hijacking entity as h { }).
+    /// Creates a Hijacked&lt;T&gt; token for exclusive write access.
+    /// Single accessor only; source preserved after scope.
+    /// </summary>
     Hijacking,
 
-    /// <summary>Thread-safe exclusive lock keyword for Shared (seizing ts as ts { })</summary>
+    #endregion
+
+    #region Scoped Access Keywords (Multi-Threaded)
+
+    /// <summary>
+    /// Thread-safe exclusive lock keyword (seizing shared as s { }).
+    /// Acquires mutex/write-lock on Shared&lt;T, Policy&gt;.
+    /// Creates a Seized&lt;T&gt; token; lock auto-releases at scope end.
+    /// </summary>
     Seizing,
 
-    /// <summary>Thread-safe shared read lock keyword for Shared with MultiReadLock policy (inspecting ts as tw { })</summary>
+    /// <summary>
+    /// Thread-safe shared read lock keyword (inspecting shared as i { }).
+    /// Acquires read-lock on Shared&lt;T, MultiReadLock&gt;.
+    /// Creates an Inspected&lt;T&gt; token; multiple concurrent readers allowed.
+    /// </summary>
     Inspecting,
+
+    #endregion
+
+    #region Terminal Tokens
 
     /// <summary>End of file marker token</summary>
     Eof,
 
     /// <summary>Unknown or invalid token</summary>
     Unknown
+
+    #endregion
 
     #endregion
 }

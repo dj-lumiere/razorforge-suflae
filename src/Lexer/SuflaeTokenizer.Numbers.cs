@@ -7,18 +7,19 @@ using Compilers.Shared.Lexer;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Suflae has a simplified numeric type system compared to RazorForge.
-/// Only 32-bit and larger types are directly supported:
+/// Suflae supports all RazorForge numeric type suffixes for interoperability:
 /// </para>
 /// <list type="bullet">
-///   <item><description>Integers: s32, s64, s128, saddr, u32, u64, u128, uaddr</description></item>
-///   <item><description>Floats: f32, f64</description></item>
-///   <item><description>Decimals: d128</description></item>
+///   <item><description>Integers: s8, s16, s32, s64, s128, saddr, u8, u16, u32, u64, u128, uaddr</description></item>
+///   <item><description>Floats: f16, f32, f64, f128</description></item>
+///   <item><description>Decimals: d32, d64, d128</description></item>
+///   <item><description>Arbitrary precision: n suffix (42n → Integer, 3.14n → Decimal)</description></item>
 ///   <item><description>Memory sizes: b, kb, kib, mb, mib, gb, gib</description></item>
 ///   <item><description>Durations: w, d, h, m, s, ms, us, ns</description></item>
 /// </list>
 /// <para>
-/// The 8-bit and 16-bit types (s8, s16, u8, u16, f16) are not available in Suflae.
+/// Key difference from RazorForge: Suflae defaults to arbitrary precision (Integer/Decimal)
+/// for unsuffixed literals, while RazorForge defaults to fixed-width (S64/F64).
 /// </para>
 /// </remarks>
 public partial class SuflaeTokenizer
@@ -32,9 +33,14 @@ public partial class SuflaeTokenizer
     /// <para>
     /// In Suflae, unsuffixed integers default to Integer type and unsuffixed
     /// floating-point numbers default to Decimal type (arbitrary precision).
+    /// This differs from RazorForge which defaults to S64/F64.
     /// </para>
     /// <para>
-    /// The 'd' suffix explicitly marks a Decimal literal.
+    /// The 'n' suffix explicitly marks arbitrary precision:
+    /// <list type="bullet">
+    ///   <item><description>42n → Integer (arbitrary precision integer)</description></item>
+    ///   <item><description>3.14n → Decimal (arbitrary precision decimal)</description></item>
+    /// </list>
     /// </para>
     /// </remarks>
     /// <exception cref="LexerException">Thrown when an unknown suffix is encountered.</exception>
@@ -92,7 +98,12 @@ public partial class SuflaeTokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            if (_numericSuffixToTokenType.TryGetValue(key: suffix,
+            // Handle arbitrary precision suffix (n) - maps to Integer or Decimal based on decimal point
+            if (suffix == ArbitraryPrecisionSuffix)
+            {
+                AddToken(type: isFloat ? TokenType.Decimal : TokenType.Integer);
+            }
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                     value: out TokenType numericType))
             {
                 AddToken(type: numericType);
@@ -107,10 +118,6 @@ public partial class SuflaeTokenizer
             {
                 AddToken(type: durationToken);
             }
-            else if (suffix == "d")
-            {
-                AddToken(type: TokenType.Decimal); // explicit Decimal suffix
-            }
             else
             {
                 throw new LexerException(message: $"Unknown suffix '{suffix}' at line {_line}");
@@ -119,6 +126,7 @@ public partial class SuflaeTokenizer
         else
         {
             // Suflae defaults: Integer for whole numbers, Decimal for floating point
+            // (differs from RazorForge which defaults to S64/F64)
             AddToken(type: isFloat
                 ? TokenType.Decimal
                 : TokenType.Integer);
@@ -176,7 +184,12 @@ public partial class SuflaeTokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
+            // Handle arbitrary precision suffix (n) - always Integer for hex/binary
+            if (suffix == ArbitraryPrecisionSuffix)
+            {
+                AddToken(type: TokenType.Integer);
+            }
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
             {
                 AddToken(type: tokenType);
             }
@@ -191,7 +204,7 @@ public partial class SuflaeTokenizer
         }
         else
         {
-            // Default to Integer
+            // Default to Integer (Suflae defaults to arbitrary precision)
             AddToken(type: TokenType.Integer);
         }
     }

@@ -43,8 +43,15 @@ public partial class RazorForgeTokenizer
     /// <para>
     /// If no suffix is provided, the literal defaults to:
     /// <list type="bullet">
-    ///   <item><description>Integer for whole numbers</description></item>
-    ///   <item><description>Decimal for floating-point numbers</description></item>
+    ///   <item><description>S64 for whole numbers</description></item>
+    ///   <item><description>F64 for floating-point numbers</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Use the 'n' suffix for arbitrary precision:
+    /// <list type="bullet">
+    ///   <item><description>42n → Integer (arbitrary precision integer)</description></item>
+    ///   <item><description>3.14n → Decimal (arbitrary precision decimal)</description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -103,7 +110,12 @@ public partial class RazorForgeTokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            if (_numericSuffixToTokenType.TryGetValue(key: suffix,
+            // Handle arbitrary precision suffix (n) - maps to Integer or Decimal based on decimal point
+            if (suffix == ArbitraryPrecisionSuffix)
+            {
+                AddToken(type: isFloat ? TokenType.Decimal : TokenType.Integer);
+            }
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                     value: out TokenType numericType))
             {
                 AddToken(type: numericType);
@@ -125,10 +137,10 @@ public partial class RazorForgeTokenizer
         }
         else
         {
-            // No suffix - use default type based on presence of decimal point
+            // No suffix - default to S64/F64 (fixed-width types)
             AddToken(type: isFloat
-                ? TokenType.Decimal
-                : TokenType.Integer);
+                ? TokenType.F64Literal
+                : TokenType.S64Literal);
         }
     }
 
@@ -190,7 +202,12 @@ public partial class RazorForgeTokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
+            // Handle arbitrary precision suffix (n) - always Integer for hex/binary
+            if (suffix == ArbitraryPrecisionSuffix)
+            {
+                AddToken(type: TokenType.Integer);
+            }
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
             {
                 AddToken(type: tokenType);
             }
@@ -205,8 +222,8 @@ public partial class RazorForgeTokenizer
         }
         else
         {
-            // No suffix - default to Integer
-            AddToken(type: TokenType.Integer);
+            // No suffix - default to S64 (matching decimal literal behavior)
+            AddToken(type: TokenType.S64Literal);
         }
     }
 
