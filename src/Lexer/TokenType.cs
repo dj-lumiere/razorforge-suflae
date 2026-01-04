@@ -471,7 +471,7 @@ public enum TokenType
 
     #endregion
 
-    #endregion`
+    #endregion
 
     #region Operators
 
@@ -806,6 +806,18 @@ public enum TokenType
     /// Similar to 'await' in Rust/JavaScript.
     /// </summary>
     Waitfor,
+
+    /// <summary>
+    /// Until keyword for await timeout settings.
+    /// </summary>
+    Until,
+
+    /// <summary>
+    /// OS thread function declaration keyword.
+    /// Marks a function as running on a dedicated OS thread (heavyweight, CPU-bound).
+    /// Counterpart to 'suspended' which uses green threads (lightweight, I/O-bound).
+    /// </summary>
+    Threaded,
 
     #endregion
 

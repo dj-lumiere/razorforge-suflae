@@ -212,6 +212,8 @@ public partial class RazorForgeTokenizer
         [key: "generate"] = TokenType.Generate,
         [key: "suspended"] = TokenType.Suspended,
         [key: "waitfor"] = TokenType.Waitfor,
+        [key: "until"] = TokenType.Until,
+        [key: "threaded"] = TokenType.Threaded,
 
         // Scoped access (single-threaded)
         [key: "viewing"] = TokenType.Viewing,
