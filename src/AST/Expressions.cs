@@ -500,12 +500,14 @@ public record RangeExpression(
 /// </summary>
 /// <param name="Parameters">List of parameters the lambda accepts</param>
 /// <param name="Body">Expression that forms the body of the lambda (returned value)</param>
+/// <param name="Captures">Optional explicit captures from 'given' clause (null = implicit capture)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Lambda expression features:
 /// <list type="bullet">
 /// <item>Anonymous functions: (x, y) => x + y</item>
 /// <item>Closure capture: can access variables from enclosing scope</item>
+/// <item>Explicit captures: x given (lo, hi) => lo &lt;= x &lt; hi</item>
 /// <item>Type inference: parameter and return types often inferred</item>
 /// <item>Higher-order functions: can be passed as arguments or returned</item>
 /// <item>Itertools: enables select, where, aggregate functions</item>
@@ -514,6 +516,7 @@ public record RangeExpression(
 public record LambdaExpression(
     List<Parameter> Parameters,
     Expression Body,
+    List<string>? Captures,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -729,6 +732,68 @@ public record NativeCallExpression(
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitNativeCallExpression(node: this);
+    }
+}
+
+#endregion
+
+#region Ownership Transfer Expressions
+
+/// <summary>
+/// Expression that transfers ownership of an entity (RazorForge only).
+/// The steal keyword moves ownership from the source to the destination,
+/// invalidating the source (it becomes a deadref).
+/// </summary>
+/// <param name="Operand">Expression being stolen from (must be stealable)</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Steal expression rules:
+/// <list type="bullet">
+/// <item>Can steal: raw entities, Shared&lt;T&gt;, Tracked&lt;T&gt;</item>
+/// <item>Cannot steal: Viewed&lt;T&gt;, Hijacked&lt;T&gt;, Inspected&lt;T&gt;, Seized&lt;T&gt;, Snatched&lt;T&gt;</item>
+/// <item>After stealing, source becomes deadref (using it is a compile error)</item>
+/// <item>Used for: ownership transfer (steal node), container push (list.push(steal node)),
+/// and consuming iteration (for item in steal list)</item>
+/// </list>
+/// </remarks>
+public record StealExpression(Expression Operand, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitStealExpression(node: this);
+    }
+}
+
+#endregion
+
+#region Back Index Expressions
+
+/// <summary>
+/// Expression that creates an index from the end of a sequence.
+/// The ^ prefix operator creates a back-index value that counts from the end.
+/// </summary>
+/// <param name="Operand">The index offset from the end (^1 = last, ^2 = second to last)</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Back index expression examples:
+/// <list type="bullet">
+/// <item>^1 - last element</item>
+/// <item>^2 - second to last element</item>
+/// <item>list[^1] - access last element of list</item>
+/// <item>text[^3] - access third to last character</item>
+/// </list>
+/// The operand must be a non-negative integer. ^0 is valid but refers to "one past the end".
+/// Used with IndexExpression for end-relative indexing.
+/// </remarks>
+public record BackIndexExpression(Expression Operand, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitBackIndexExpression(node: this);
     }
 }
 

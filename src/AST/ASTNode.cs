@@ -232,6 +232,18 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the is-pattern expression</returns>
     T VisitIsPatternExpression(IsPatternExpression node);
 
+    /// <summary>Visits a steal expression node (ownership transfer like 'steal node')</summary>
+    /// <param name="node">The steal expression to visit</param>
+    /// <returns>Result of visiting the steal expression</returns>
+    /// <remarks>RazorForge only - transfers ownership and invalidates the source</remarks>
+    T VisitStealExpression(StealExpression node);
+
+    /// <summary>Visits a back index expression node (end-relative indexing like '^1')</summary>
+    /// <param name="node">The back index expression to visit</param>
+    /// <returns>Result of visiting the back index expression</returns>
+    /// <remarks>^n creates an index that counts from the end of a sequence</remarks>
+    T VisitBackIndexExpression(BackIndexExpression node);
+
     // Statement visitor methods - handle all statement node types
 
     /// <summary>Visits an expression statement node (expressions executed for side effects)</summary>
