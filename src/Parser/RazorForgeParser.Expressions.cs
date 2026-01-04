@@ -65,29 +65,42 @@ public partial class RazorForgeParser
     /// Parses inline conditional expressions.
     /// Syntax: <c>if condition then thenExpr else elseExpr</c>
     /// Note: This is expression-level only; block-level if uses ParseIfStatement.
+    /// Nested inline conditionals are forbidden for readability.
     /// </summary>
     /// <returns>The parsed expression, possibly a conditional.</returns>
     private Expression ParseInlineConditional()
     {
         // Check for inline if-then-else expression
-        if (!Match(type: TokenType.If))
+        // Skip if already inside an inline conditional (prevents nesting for readability)
+        if (_parsingInlineConditional || !Match(type: TokenType.If))
         {
             return ParseNoneCoalesce();
         }
 
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
-        Expression condition = ParseNoneCoalesce();
 
-        Consume(type: TokenType.Then, errorMessage: "Expected 'then' after condition in inline if");
-        Expression thenExpr = ParseNoneCoalesce();
+        // Set flag to prevent nested inline conditionals
+        _parsingInlineConditional = true;
 
-        Consume(type: TokenType.Else, errorMessage: "Expected 'else' in inline if expression");
-        Expression elseExpr = ParseNoneCoalesce();
+        try
+        {
+            Expression condition = ParseNoneCoalesce();
 
-        return new ConditionalExpression(Condition: condition,
-            TrueExpression: thenExpr,
-            FalseExpression: elseExpr,
-            Location: location);
+            Consume(type: TokenType.Then, errorMessage: "Expected 'then' after condition in inline if");
+            Expression thenExpr = ParseExpression(); // Full expression, but flag prevents nested inline if
+
+            Consume(type: TokenType.Else, errorMessage: "Expected 'else' in inline if expression");
+            Expression elseExpr = ParseExpression(); // Full expression, but flag prevents nested inline if
+
+            return new ConditionalExpression(Condition: condition,
+                TrueExpression: thenExpr,
+                FalseExpression: elseExpr,
+                Location: location);
+        }
+        finally
+        {
+            _parsingInlineConditional = false;
+        }
     }
 
     /// <summary>
@@ -660,12 +673,28 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses unary prefix expressions.
-    /// Syntax: <c>-x</c>, <c>not x</c>, <c>~x</c>
+    /// Syntax: <c>-x</c>, <c>not x</c>, <c>~x</c>, <c>steal x</c>, <c>^n</c>
     /// Special handling for unary minus on numeric literals to support min values.
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParseUnary()
     {
+        // Handle steal keyword (RazorForge only - ownership transfer)
+        if (Match(type: TokenType.Steal))
+        {
+            SourceLocation stealLocation = GetLocation(token: PeekToken(offset: -1));
+            Expression operand = ParseUnary(); // Right-associative, can chain: steal steal x (though unusual)
+            return new StealExpression(Operand: operand, Location: stealLocation);
+        }
+
+        // Handle backindex operator (^n = index from end)
+        if (Match(type: TokenType.Caret))
+        {
+            SourceLocation caretLocation = GetLocation(token: PeekToken(offset: -1));
+            Expression operand = ParseUnary(); // Right-associative
+            return new BackIndexExpression(Operand: operand, Location: caretLocation);
+        }
+
         if (!Match(TokenType.Minus, TokenType.Not, TokenType.Tilde))
         {
             return ParsePostfix();
@@ -702,7 +731,7 @@ public partial class RazorForgeParser
             Expression literal = ParsePostfix();
 
             // If it's a literal expression, apply the sign directly to the value
-            if (literal is LiteralExpression { Value: not null } litExpr)
+            if (literal is LiteralExpression litExpr)
             {
                 if (op.Type != TokenType.Minus)
                 {
@@ -1147,9 +1176,9 @@ public partial class RazorForgeParser
             return durationExpr!;
         }
 
-        // Arrow lambda expression: x => expr (single parameter, no parens)
-        if (!_inWhenPatternContext && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-               .Type == TokenType.FatArrow)
+        // Arrow lambda expression: x => expr or x given y => expr (single parameter, no parens)
+        if (!_inWhenPatternContext && Check(type: TokenType.Identifier) &&
+            (PeekToken(offset: 1).Type == TokenType.FatArrow || PeekToken(offset: 1).Type == TokenType.Given))
         {
             return ParseArrowLambdaExpression(location: location);
         }

@@ -10,15 +10,49 @@ namespace Compilers.Suflae.Parser;
 public partial class SuflaeParser
 {
     /// <summary>
-    /// Parse arrow lambda with single unparenthesized parameter: x => expr
-    /// Syntax: <c>x => expression</c>
+    /// Parse the 'given' clause for explicit lambda captures.
+    /// Supports both forms:
+    /// - given x          (single capture without parentheses)
+    /// - given (x, y, z)  (multiple captures with parentheses)
+    /// </summary>
+    private List<string> ParseGivenClause()
+    {
+        var captures = new List<string>();
+
+        // Check if parenthesized or single identifier
+        if (Match(type: TokenType.LeftParen))
+        {
+            // Parenthesized form: given (x, y, z)
+            if (!Check(type: TokenType.RightParen))
+            {
+                do
+                {
+                    string captureName = ConsumeIdentifier(errorMessage: "Expected capture variable name");
+                    captures.Add(item: captureName);
+                } while (Match(type: TokenType.Comma));
+            }
+
+            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after capture list");
+        }
+        else
+        {
+            // Single identifier form: given x
+            string captureName = ConsumeIdentifier(errorMessage: "Expected capture variable name after 'given'");
+            captures.Add(item: captureName);
+        }
+
+        return captures;
+    }
+
+    /// <summary>
+    /// Parse arrow lambda with single unparenthesized parameter: x => expr or x given y => expr
+    /// Syntax: <c>x => expression</c> or <c>x given (a, b) => expression</c>
     /// Lambda bodies must be single expressions (one-liner only).
     /// </summary>
     private LambdaExpression ParseArrowLambdaExpression(SourceLocation location)
     {
-        // Single parameter without parentheses: x => expr
+        // Single parameter without parentheses: x => expr or x given y => expr
         string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
-        Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' in lambda expression");
 
         var parameters = new List<Parameter>
         {
@@ -28,13 +62,24 @@ public partial class SuflaeParser
                 Location: location)
         };
 
+        // Check for 'given' clause for explicit captures
+        List<string>? captures = null;
+        if (Match(type: TokenType.Given))
+        {
+            captures = ParseGivenClause();
+        }
+
+        Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' in lambda expression");
+
         Expression body = ParseExpression();
-        return new LambdaExpression(Parameters: parameters, Body: body, Location: location);
+        return new LambdaExpression(Parameters: parameters, Body: body, Captures: captures, Location: location);
     }
 
     /// <summary>
     /// Check if we're inside parenthesized lambda parameters.
-    /// Called after consuming '(' - scans ahead to see if we have: identifier [, identifier]* ) =>
+    /// Called after consuming '(' - scans ahead to see if we have:
+    /// - identifier [, identifier]* ) =>
+    /// - identifier [, identifier]* ) given ... =>
     /// </summary>
     private bool IsArrowLambdaParameters()
     {
@@ -42,16 +87,16 @@ public partial class SuflaeParser
 
         try
         {
-            // Empty params case: () =>
+            // Empty params case: () => or () given ... =>
             if (Check(type: TokenType.RightParen))
             {
                 Advance(); // consume )
-                bool result = Check(type: TokenType.FatArrow);
+                bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
                 Position = savedPosition;
                 return result;
             }
 
-            // Look for pattern: identifier [: type]? [, identifier [: type]?]* ) =>
+            // Look for pattern: identifier [: type]? [, identifier [: type]?]* ) [given ...] =>
             while (true)
             {
                 // Must start with identifier
@@ -96,7 +141,8 @@ public partial class SuflaeParser
                 else if (Check(type: TokenType.RightParen))
                 {
                     Advance(); // consume )
-                    bool result = Check(type: TokenType.FatArrow);
+                    // Accept either direct => or given ... =>
+                    bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
                     Position = savedPosition;
                     return result;
                 }
@@ -116,7 +162,7 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parse arrow lambda with parenthesized parameters: () => expr, (x) => expr, or (x, y) => expr
+    /// Parse arrow lambda with parenthesized parameters: () => expr, (x) => expr, or (x, y) given (a, b) => expr
     /// Called after '(' has been consumed and IsArrowLambdaParameters() returned true.
     /// Lambda bodies must be single expressions (one-liner only).
     /// </summary>
@@ -144,10 +190,18 @@ public partial class SuflaeParser
         }
 
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after lambda parameters");
+
+        // Check for 'given' clause for explicit captures
+        List<string>? captures = null;
+        if (Match(type: TokenType.Given))
+        {
+            captures = ParseGivenClause();
+        }
+
         Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after lambda parameters");
 
         Expression body = ParseExpression();
-        return new LambdaExpression(Parameters: parameters, Body: body, Location: location);
+        return new LambdaExpression(Parameters: parameters, Body: body, Captures: captures, Location: location);
     }
 
     /// <summary>

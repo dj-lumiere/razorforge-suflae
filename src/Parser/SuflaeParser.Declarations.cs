@@ -214,6 +214,12 @@ public partial class SuflaeParser
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     private RoutineDeclaration ParseRoutineDeclaration(VisibilityModifier visibility = VisibilityModifier.Public, List<string>? attributes = null)
     {
+        // Reject nested routine declarations
+        if (_inRoutineBody)
+        {
+            throw new ParseException(message: "Nested routine declarations are not allowed. Define routines at module or type level.");
+        }
+
         // Visibility: public, internal, private, common, global, imported
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -260,7 +266,16 @@ public partial class SuflaeParser
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after routine header");
 
         // Body (indented block)
-        Statement body = ParseIndentedBlock();
+        _inRoutineBody = true;
+        Statement body;
+        try
+        {
+            body = ParseIndentedBlock();
+        }
+        finally
+        {
+            _inRoutineBody = false;
+        }
 
         return new RoutineDeclaration(Name: name,
             Parameters: parameters,

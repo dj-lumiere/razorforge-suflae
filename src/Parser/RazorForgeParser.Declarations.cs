@@ -517,6 +517,12 @@ public partial class RazorForgeParser
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     private RoutineDeclaration ParseRoutineDeclaration(VisibilityModifier visibility = VisibilityModifier.Public, List<string>? attributes = null, bool allowNoBody = false)
     {
+        // Reject nested routine declarations
+        if (_inRoutineBody)
+        {
+            throw new ParseException(message: "Nested routine declarations are not allowed. Define routines at module or type level.");
+        }
+
         // Visibility: public, internal, private, common, global, imported
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -683,7 +689,15 @@ public partial class RazorForgeParser
         BlockStatement? body = null;
         if (Check(type: TokenType.LeftBrace))
         {
-            body = ParseBlockStatement();
+            _inRoutineBody = true;
+            try
+            {
+                body = ParseBlockStatement();
+            }
+            finally
+            {
+                _inRoutineBody = false;
+            }
         }
         else if (!canSkipBody)
         {

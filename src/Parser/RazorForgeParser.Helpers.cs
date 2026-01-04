@@ -191,15 +191,22 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Consumes statement terminators (newlines).
+    /// Consumes statement terminators.
+    /// RazorForge doesn't use explicit newline tokens - statements are separated by whitespace.
     /// </summary>
     private void ConsumeStatementTerminator()
     {
-        // Accept newline as statement terminator
-        if (!Check(type: TokenType.RightBrace) && !Check(type: TokenType.Else) && !IsAtEnd)
+        // Valid implicit terminators: }, else, elseif, EOF
+        if (Check(type: TokenType.RightBrace) ||
+            Check(type: TokenType.Else) ||
+            Check(type: TokenType.Elseif) ||
+            IsAtEnd)
         {
-            Match(type: TokenType.Newline);
+            return;
         }
+
+        // Optionally consume a newline if present (from semicolon)
+        Match(type: TokenType.Newline);
     }
 
     /// <summary>

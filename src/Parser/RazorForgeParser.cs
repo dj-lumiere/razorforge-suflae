@@ -26,6 +26,22 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// </summary>
     private readonly List<CompileWarning> Warnings = [];
 
+    /// <summary>
+    /// Collection of parse errors encountered during parsing.
+    /// Errors are accumulated during error recovery.
+    /// </summary>
+    private readonly List<string> Errors = [];
+
+    /// <summary>
+    /// Returns true if any parse errors occurred during parsing.
+    /// </summary>
+    public bool HasErrors => Errors.Count > 0;
+
+    /// <summary>
+    /// Gets all parse errors encountered during parsing.
+    /// </summary>
+    public IReadOnlyList<string> GetErrors() => Errors;
+
     #endregion
 
     #region RazorForge-specific Fields
@@ -44,7 +60,9 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
 
     /// <summary>
     /// Prevents nested inline conditionals (if-then-else expressions).
-    /// When true, prevents parsing another inline conditional within the current one.
+    /// When true, 'if' at expression level is not parsed as inline conditional.
+    /// This improves readability by forbidding constructs like:
+    /// <c>if a then (if b then c else d) else e</c>
     /// </summary>
     private bool _parsingInlineConditional;
 
@@ -53,6 +71,12 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// When true, allows field declarations without var/let keywords.
     /// </summary>
     private bool _parsingRecordBody;
+
+    /// <summary>
+    /// Indicates whether we're currently parsing inside a routine body.
+    /// When true, nested routine declarations are rejected.
+    /// </summary>
+    private bool _inRoutineBody;
 
     /// <summary>
     /// Set of known type names for generic disambiguation.
@@ -132,7 +156,9 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                 string location = !string.IsNullOrEmpty(value: fileName)
                     ? $"[{fileName}:{errorToken.Line}:{errorToken.Column}]"
                     : $"[{errorToken.Line}:{errorToken.Column}]";
-                Console.Error.WriteLine(value: $"Parse error{location}: {ex.Message}");
+                string errorMessage = $"Parse error{location}: {ex.Message}";
+                Errors.Add(item: errorMessage);
+                Console.Error.WriteLine(value: errorMessage);
                 Synchronize();
             }
         }

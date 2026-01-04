@@ -109,29 +109,42 @@ public partial class SuflaeParser
     /// Parses inline conditional expressions.
     /// Syntax: <c>if condition then thenExpr else elseExpr</c>
     /// Note: This is expression-level only; block-level if uses ParseIfStatement.
+    /// Nested inline conditionals are forbidden for readability.
     /// </summary>
     /// <returns>The parsed expression, possibly a conditional.</returns>
     private Expression ParseInlineConditional()
     {
         // Check for inline if-then-else expression
-        if (Match(type: TokenType.If))
+        // Skip if already inside an inline conditional (prevents nesting for readability)
+        if (_parsingInlineConditional || !Match(type: TokenType.If))
         {
-            SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+            return ParseNoneCoalesce();
+        }
+
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // Set flag to prevent nested inline conditionals
+        _parsingInlineConditional = true;
+
+        try
+        {
             Expression condition = ParseNoneCoalesce();
 
             Consume(type: TokenType.Then, errorMessage: "Expected 'then' after condition in inline if");
-            Expression thenExpr = ParseNoneCoalesce();
+            Expression thenExpr = ParseExpression(); // Full expression, but flag prevents nested inline if
 
             Consume(type: TokenType.Else, errorMessage: "Expected 'else' in inline if expression");
-            Expression elseExpr = ParseNoneCoalesce();
+            Expression elseExpr = ParseExpression(); // Full expression, but flag prevents nested inline if
 
             return new ConditionalExpression(Condition: condition,
                 TrueExpression: thenExpr,
                 FalseExpression: elseExpr,
                 Location: location);
         }
-
-        return ParseNoneCoalesce();
+        finally
+        {
+            _parsingInlineConditional = false;
+        }
     }
 
     /// <summary>
@@ -707,12 +720,20 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses unary prefix expressions.
-    /// Syntax: <c>-x</c> (negation), <c>not x</c> (logical not), <c>~x</c> (bitwise not).
+    /// Syntax: <c>-x</c> (negation), <c>not x</c> (logical not), <c>~x</c> (bitwise not), <c>^n</c> (backindex).
     /// Special handling for unary minus on numeric literals to support min values.
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParseUnary()
     {
+        // Handle backindex operator (^n = index from end)
+        if (Match(type: TokenType.Caret))
+        {
+            SourceLocation caretLocation = GetLocation(token: PeekToken(offset: -1));
+            Expression operand = ParseUnary(); // Right-associative
+            return new BackIndexExpression(Operand: operand, Location: caretLocation);
+        }
+
         if (!Match(TokenType.Minus, TokenType.Not, TokenType.Tilde))
         {
             return ParsePostfix();
@@ -749,7 +770,7 @@ public partial class SuflaeParser
             Expression literal = ParsePostfix();
 
             // If it's a literal expression, apply the sign directly to the value
-            if (literal is LiteralExpression { Value: not null } litExpr)
+            if (literal is LiteralExpression litExpr)
             {
                 return litExpr.Value switch
                 {
@@ -1150,9 +1171,9 @@ public partial class SuflaeParser
             return durationExpr!;
         }
 
-        // Arrow lambda expression: x => expr (single parameter, no parens)
-        if (!_inWhenPatternContext && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-               .Type == TokenType.FatArrow)
+        // Arrow lambda expression: x => expr or x given y => expr (single parameter, no parens)
+        if (!_inWhenPatternContext && Check(type: TokenType.Identifier) &&
+            (PeekToken(offset: 1).Type == TokenType.FatArrow || PeekToken(offset: 1).Type == TokenType.Given))
         {
             return ParseArrowLambdaExpression(location: location);
         }

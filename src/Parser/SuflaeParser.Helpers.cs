@@ -236,13 +236,18 @@ public partial class SuflaeParser
         // Check for unnecessary closing braces
         CheckUnnecessaryBrace();
 
-        // Accept newline as statement terminator
-        if (!Check(type: TokenType.Dedent) && !Check(type: TokenType.Else) && !IsAtEnd)
+        // Valid implicit terminators: DEDENT, else, elseif, EOF
+        if (Check(type: TokenType.Dedent) ||
+            Check(type: TokenType.Else) ||
+            Check(type: TokenType.Elseif) ||
+            IsAtEnd)
         {
-            Match(type: TokenType.Newline);
+            return;
         }
-    }
 
+        // Optionally consume a newline if present
+        Match(type: TokenType.Newline);
+    }
     /// <summary>
     /// Consumes an identifier token and returns its text.
     /// </summary>

@@ -50,14 +50,23 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Prevents nested inline conditionals (if-then-else expressions).
+    /// When true, 'if' at expression level is not parsed as inline conditional.
+    /// This improves readability by forbidding constructs like:
+    /// <c>if a then (if b then c else d) else e</c>
     /// </summary>
-    private bool _parsingInlineConditional = false;
+    private bool _parsingInlineConditional;
 
     /// <summary>
     /// Indicates whether we're currently parsing inside a record body.
     /// When true, allows field declarations without var/let keywords.
     /// </summary>
     private bool _parsingRecordBody = false;
+
+    /// <summary>
+    /// Indicates whether we're currently parsing inside a routine body.
+    /// When true, nested routine declarations are rejected.
+    /// </summary>
+    private bool _inRoutineBody = false;
 
     /// <summary>
     /// Indicates whether we are currently parsing within a 'when' pattern context.
