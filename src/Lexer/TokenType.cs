@@ -382,6 +382,9 @@ public enum TokenType
     /// <summary>Absent statement keyword - indicates value not found (triggers Lookup generation)</summary>
     Absent,
 
+    /// <summary>Becomes statement keyword (block result value)</summary>
+    Becomes,
+
     #endregion
 
     #region Keywords - Module System

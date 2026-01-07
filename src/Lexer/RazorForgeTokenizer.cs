@@ -174,6 +174,7 @@ public partial class RazorForgeTokenizer
         [key: "return"] = TokenType.Return,
         [key: "throw"] = TokenType.Throw,
         [key: "absent"] = TokenType.Absent,
+        [key: "becomes"] = TokenType.Becomes,
 
         // Module system
         [key: "import"] = TokenType.Import,
