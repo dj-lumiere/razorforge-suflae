@@ -135,6 +135,7 @@ public partial class SuflaeTokenizer
         // Access modifiers
         [key: "private"] = TokenType.Private,
         [key: "internal"] = TokenType.Internal,
+        [key: "published"] = TokenType.Published,
         [key: "public"] = TokenType.Public,
         [key: "imported"] = TokenType.Imported,
         [key: "global"] = TokenType.Global,

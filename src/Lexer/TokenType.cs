@@ -289,6 +289,9 @@ public enum TokenType
     /// <summary>Internal access modifier - visible within the same module/namespace</summary>
     Internal,
 
+    /// <summary>Published access modifier - public get, private set</summary>
+    Published,
+
     /// <summary>Public access modifier - visible everywhere</summary>
     Public,
 
