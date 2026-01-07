@@ -1,4 +1,3 @@
-using System.Numerics;
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
@@ -18,29 +17,29 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// <summary>
     /// Current position in the token stream. Advances as tokens are consumed during parsing.
     /// </summary>
-    private int Position = 0;
+    private int _position = 0;
 
     /// <summary>
     /// Collection of non-fatal warnings generated during parsing.
     /// Retrieved via <see cref="GetWarnings"/>.
     /// </summary>
-    private readonly List<CompileWarning> Warnings = [];
+    private readonly List<CompileWarning> _warnings = [];
 
     /// <summary>
     /// Collection of parse errors encountered during parsing.
     /// Errors are accumulated during error recovery.
     /// </summary>
-    private readonly List<string> Errors = [];
+    private readonly List<string> _errors = [];
 
     /// <summary>
     /// Returns true if any parse errors occurred during parsing.
     /// </summary>
-    public bool HasErrors => Errors.Count > 0;
+    public bool HasErrors => _errors.Count > 0;
 
     /// <summary>
     /// Gets all parse errors encountered during parsing.
     /// </summary>
-    public IReadOnlyList<string> GetErrors() => Errors;
+    public IReadOnlyList<string> GetErrors() => _errors;
 
     #endregion
 
@@ -114,15 +113,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         }
 
         // Check generic parameter scopes (e.g., K, V within Dict<K, V>)
-        foreach (HashSet<string> scope in _genericParameterScopes)
-        {
-            if (scope.Contains(item: name))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return _genericParameterScopes.Any(scope => scope.Contains(item: name));
     }
 
     /// <summary>
@@ -150,14 +141,14 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             }
             catch (ParseException ex)
             {
-                Token errorToken = Position < tokens.Count
-                    ? tokens[index: Position]
+                Token errorToken = _position < tokens.Count
+                    ? tokens[index: _position]
                     : tokens[^1];
                 string location = !string.IsNullOrEmpty(value: fileName)
                     ? $"[{fileName}:{errorToken.Line}:{errorToken.Column}]"
                     : $"[{errorToken.Line}:{errorToken.Column}]";
                 string errorMessage = $"Parse error{location}: {ex.Message}";
-                Errors.Add(item: errorMessage);
+                _errors.Add(item: errorMessage);
                 Console.Error.WriteLine(value: errorMessage);
                 Synchronize();
             }
@@ -207,12 +198,12 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // Parse attributes (e.g., @crash_only, @inline, @config)
         List<string> attributes = ParseAttributes();
 
-        // Parse visibility modifier (with optional setter visibility)
-        (VisibilityModifier getterVisibility, VisibilityModifier? setterVisibility) = ParseGetterSetterVisibility();
+        // Parse visibility modifier
+        VisibilityModifier visibility = ParseVisibilityModifier();
 
         // Imported declaration with optional calling convention
         // Supports: imported routine foo() or imported("C") routine foo()
-        if (getterVisibility == VisibilityModifier.Imported)
+        if (visibility == VisibilityModifier.Imported)
         {
             string? callingConvention = null;
 
@@ -238,7 +229,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
         {
-            return ParseVariableDeclaration(visibility: getterVisibility, setterVisibility: setterVisibility);
+            return ParseVariableDeclaration(visibility: visibility);
         }
 
         // Pass statement/declaration (empty placeholder)
@@ -263,37 +254,37 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         if (_parsingRecordBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
-            return ParseFieldDeclaration(visibility: getterVisibility, setterVisibility: setterVisibility);
+            return ParseFieldDeclaration(visibility: visibility);
         }
 
         // Routine declaration (access modifiers: private, family, internal, public)
         if (Match(type: TokenType.Routine))
         {
-            return ParseRoutineDeclaration(visibility: getterVisibility, attributes: attributes);
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes);
         }
 
         // Entity declarations (heap-allocated reference types)
         if (Match(type: TokenType.Entity))
         {
-            return ParseEntityDeclaration(visibility: getterVisibility);
+            return ParseEntityDeclaration(visibility: visibility);
         }
 
         // Record declarations (stack-allocated value types)
         if (Match(type: TokenType.Record))
         {
-            return ParseRecordDeclaration(visibility: getterVisibility);
+            return ParseRecordDeclaration(visibility: visibility);
         }
 
         // Resident declarations (singleton static types)
         if (Match(type: TokenType.Resident))
         {
-            return ParseResidentDeclaration(visibility: getterVisibility);
+            return ParseResidentDeclaration(visibility: visibility);
         }
 
         // Choice declarations (simple enumerations with integer values)
         if (Match(type: TokenType.Choice))
         {
-            return ParseChoiceDeclaration(visibility: getterVisibility);
+            return ParseChoiceDeclaration(visibility: visibility);
         }
 
         // Variant declarations (tagged unions/sum types)
@@ -311,13 +302,15 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // Protocol declarations (interface/trait definitions)
         if (Match(type: TokenType.Protocol))
         {
-            return ParseProtocolDeclaration(visibility: getterVisibility);
+            return ParseProtocolDeclaration(visibility: visibility);
         }
 
         // If we parsed a visibility modifier but no declaration follows, it's an error
-        if (getterVisibility != VisibilityModifier.Public)
+        if (visibility != VisibilityModifier.Public)
         {
-            throw new ParseException(message: $"Visibility modifier '{getterVisibility}' must be followed by a declaration " + $"(routine, entity, record, resident, choice, variant, mutant, protocol, preset," + $" var, or let)");
+            throw new ParseException(message: $"Visibility modifier '{visibility}' must be followed by a declaration "
+                                              + $"(routine, entity, record, resident, choice, variant, mutant, protocol, preset,"
+                                              + $" var, or let)");
         }
 
         // Otherwise parse as statement

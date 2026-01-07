@@ -221,7 +221,7 @@ public partial class RazorForgeParser
     /// </summary>
     private void InsertToken(Token token)
     {
-        tokens.Insert(index: Position, item: token);
+        tokens.Insert(index: _position, item: token);
     }
 
     /// <summary>
@@ -319,7 +319,7 @@ public partial class RazorForgeParser
                     TypeExpression constType = ParseType();
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                         ConstraintType: ConstraintKind.ConstGeneric,
-                        ConstraintTypes: new List<TypeExpression> { constType },
+                        ConstraintTypes: [constType],
                         Location: location));
                 }
                 else
@@ -365,8 +365,8 @@ public partial class RazorForgeParser
         }
 
         List<GenericConstraintDeclaration> constraints = existingConstraints != null
-            ? new List<GenericConstraintDeclaration>(collection: existingConstraints)
-            : new List<GenericConstraintDeclaration>();
+            ? [..existingConstraints]
+            : [];
 
         // Parse requires clauses: requires T follows Protocol
         // Each parameter can have its own requires clause or they can be comma-separated
@@ -457,7 +457,7 @@ public partial class RazorForgeParser
                         TypeExpression constType = ParseType();
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                             ConstraintType: ConstraintKind.ConstGeneric,
-                            ConstraintTypes: new List<TypeExpression> { constType },
+                            ConstraintTypes: [constType],
                             Location: location));
                     }
                     else

@@ -54,40 +54,6 @@ public partial class RazorForgeParser
             Location: location);
     }
 
-    /// <summary>
-    /// Creates a method call expression that desugars a unary operator.
-    /// Converts: -a → a.__neg__()
-    /// </summary>
-    /// <param name="op">The unary operator to desugar.</param>
-    /// <param name="operand">The operand.</param>
-    /// <param name="location">Source location for error reporting.</param>
-    /// <returns>A CallExpression representing the desugared operator, or null if operator is not desugared.</returns>
-    private Expression? TryDesugarUnaryOperator(UnaryOperator op, Expression operand, SourceLocation location)
-    {
-        string? methodName = op.GetMethodName();
-        if (methodName == null)
-        {
-            // Operator is not overloadable (logical not stays as UnaryExpression)
-            return null;
-        }
-
-        // Create: operand.__methodName__()
-        MemberExpression memberExpr = new(Object: operand, PropertyName: methodName, Location: location);
-
-        return new CallExpression(Callee: memberExpr, Arguments: [], Location: location);
-    }
-
-    /// <summary>
-    /// Creates either a desugared method call or a UnaryExpression based on whether the operator is overloadable.
-    /// </summary>
-    private Expression CreateUnaryExpression(UnaryOperator op, Expression operand, SourceLocation location)
-    {
-        // Try to desugar to method call for overloadable operators
-        Expression? desugared = TryDesugarUnaryOperator(op: op, operand: operand, location: location);
-        // Non-overloadable operators stay as UnaryExpression
-        return desugared ?? new UnaryExpression(Operator: op, Operand: operand, Location: location);
-    }
-
     #endregion
 
     /// <summary>
@@ -234,7 +200,6 @@ public partial class RazorForgeParser
         if (allowKeywords)
         {
             // Check if current token is a keyword (And, Or, Not, From, etc.)
-            Token current = CurrentToken;
             if (Match(TokenType.And,
                     TokenType.Or,
                     TokenType.Not,
@@ -267,7 +232,6 @@ public partial class RazorForgeParser
         {
             // Could be named argument, check that what follows isn't a type (for ternary with typed vars)
             // Named arguments: name: expression
-            int savedPos = Position;
             string potentialName = CurrentToken.Text;
             Advance(); // consume identifier
             Advance(); // consume colon
@@ -311,31 +275,6 @@ public partial class RazorForgeParser
         while (Match(type: TokenType.Newline)) { }
 
         return args;
-    }
-
-    /// <summary>
-    /// Parses field initializers for record/entity literals: (field1: value1, field2: value2)
-    /// Called after '(' has been consumed.
-    /// </summary>
-    private List<(string Name, Expression Value)> ParseAllArgsConstructorFields()
-    {
-        var fields = new List<(string Name, Expression Value)>();
-
-        if (!Check(type: TokenType.RightParen))
-        {
-            do
-            {
-                // Parse field name
-                string fieldName = ConsumeIdentifier(errorMessage: "Expected field name in record/entity literal");
-                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after field name");
-
-                // Parse field value
-                Expression value = ParseExpression();
-                fields.Add(item: (fieldName, value));
-            } while (Match(type: TokenType.Comma));
-        }
-
-        return fields;
     }
 
     /// <summary>

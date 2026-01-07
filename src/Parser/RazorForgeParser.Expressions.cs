@@ -801,13 +801,13 @@ public partial class RazorForgeParser
                 // Lookahead to check if this is likely a generic or a comparison
                 // Strategy: scan forward to see if we have pattern like <T>() which is definitely a generic call
                 // This handles both uppercase types and lowercase intrinsic functions like sizeof<T>()
-                int savedPos = Position;
+                int savedPos = _position;
                 Advance(); // consume '<'
 
                 // Scan forward to find > followed by ( to definitively identify generic calls
                 // This disambiguates: sizeof<T>() (generic) vs i < N (comparison)
                 bool isLikelyGeneric = false;
-                int scanPos = Position;
+                int scanPos = _position;
                 int depth = 1; // We already consumed one <
 
                 while (scanPos < tokens.Count && depth > 0)
@@ -860,7 +860,7 @@ public partial class RazorForgeParser
                     scanPos++;
                 }
 
-                Position = savedPos; // restore position
+                _position = savedPos; // restore position
 
                 if (!isLikelyGeneric)
                 {
@@ -965,7 +965,7 @@ public partial class RazorForgeParser
                 {
                     // Lookahead to check if this is likely a generic or a comparison
                     // Check if the token after '<' is a known type name
-                    int savedPos = Position;
+                    int savedPos = _position;
                     Advance(); // consume '<'
 
                     // Check if the next token is a known type
@@ -980,7 +980,7 @@ public partial class RazorForgeParser
                             // Looks like a type, but we need to verify the pattern matches a generic call
                             // by scanning forward for > followed by ( or )
                             // This disambiguates between: me.slot<N>() (generic) vs me.slot < N (comparison)
-                            int scanPos = Position;
+                            int scanPos = _position;
                             int depth = 1; // We already consumed one <
                             while (scanPos < tokens.Count && depth > 0)
                             {
@@ -1014,7 +1014,7 @@ public partial class RazorForgeParser
                         }
                     }
 
-                    Position = savedPos; // restore position
+                    _position = savedPos; // restore position
 
                     if (isLikelyGeneric)
                     {

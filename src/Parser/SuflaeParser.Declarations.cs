@@ -321,7 +321,7 @@ public partial class SuflaeParser
         // Push generic parameters into scope before parsing body
         if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         // Parse interfaces/protocols the entity follows
@@ -441,7 +441,7 @@ public partial class SuflaeParser
         // Push generic parameters into scope before parsing body
         if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         // Parse interfaces/protocols the record follows
@@ -625,7 +625,7 @@ public partial class SuflaeParser
         List<string>? genericParams = null;
         if (Match(type: TokenType.Less))
         {
-            genericParams = new List<string>();
+            genericParams = [];
             do
             {
                 genericParams.Add(item: ConsumeIdentifier(errorMessage: "Expected generic parameter name"));
@@ -637,7 +637,7 @@ public partial class SuflaeParser
         // Push generic parameters into scope before parsing body
         if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         // Colon to start indented block
@@ -970,7 +970,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a visibility modifier keyword.
-    /// Supports: public, internal, private, common, global, imported.
+    /// Supports: public, published, internal, private, common, global, imported.
     /// </summary>
     /// <returns>The parsed <see cref="VisibilityModifier"/> enum value.</returns>
     private VisibilityModifier ParseVisibilityModifier()
@@ -978,6 +978,11 @@ public partial class SuflaeParser
         if (Match(type: TokenType.Public))
         {
             return VisibilityModifier.Public;
+        }
+
+        if (Match(type: TokenType.Published))
+        {
+            return VisibilityModifier.Published;
         }
 
         if (Match(type: TokenType.Internal))
@@ -1006,122 +1011,5 @@ public partial class SuflaeParser
         }
 
         return VisibilityModifier.Public; // Default
-    }
-
-    /// <summary>
-    /// Parses getter/setter visibility modifiers.
-    /// Supports syntax like: public private(set) var x
-    /// Returns tuple of (getterVisibility, setterVisibility)
-    /// If no setter specified, setterVisibility is null (same as getter)
-    /// Only private, internal, public are valid for setter visibility.
-    /// </summary>
-    private (VisibilityModifier getter, VisibilityModifier? setter) ParseGetterSetterVisibility()
-    {
-        VisibilityModifier getterVisibility = ParseVisibilityModifier();
-        VisibilityModifier? setterVisibility = null;
-
-        // Check for setter visibility: private(set), internal(set), public(set)
-        // Other modifiers like common(set), global(set), imported(set) are invalid
-        bool isValidSetterModifier = Check(TokenType.Private, TokenType.Internal, TokenType.Public);
-        bool isKnownInvalidSetterModifier = Check(TokenType.Common, TokenType.Global, TokenType.Imported);
-
-        // Handle case like "asdf(set)" - any identifier followed by (set) is invalid
-        // We need lookahead to detect this pattern
-        if (!isValidSetterModifier && !isKnownInvalidSetterModifier)
-        {
-            // Check for identifier(set) pattern - this catches things like "asdf(set)"
-            if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-                   .Type == TokenType.LeftParen)
-            {
-                int savedPos = Position;
-                Token unknownToken = CurrentToken;
-                Advance(); // skip identifier
-                Advance(); // skip (
-                if (Check(type: TokenType.Identifier) && CurrentToken.Text == "set")
-                {
-                    throw new ParseException(message: $"'{unknownToken.Text}' is not a valid setter visibility. Only 'private', 'internal', or 'public' can be used with (set).");
-                }
-
-                Position = savedPos; // Not a (set) pattern, backtrack
-            }
-
-            return (getterVisibility, setterVisibility);
-        }
-
-        int savedPosition = Position;
-
-        if (isKnownInvalidSetterModifier)
-        {
-            // Lookahead to check if this is modifier(set) pattern
-            Token invalidToken = CurrentToken;
-            Advance();
-            if (Match(type: TokenType.LeftParen))
-            {
-                if (Check(type: TokenType.Identifier) && CurrentToken.Text == "set")
-                {
-                    throw new ParseException(message: $"'{invalidToken.Text}' is not a valid setter visibility. Only 'private', 'internal', or 'public' can be used with (set).");
-                }
-            }
-
-            // Not a setter pattern, backtrack
-            Position = savedPosition;
-            return (getterVisibility, setterVisibility);
-        }
-
-        VisibilityModifier possibleSetter = ParseVisibilityModifier();
-
-        // Must be followed by (set)
-        if (Match(type: TokenType.LeftParen))
-        {
-            if (Check(type: TokenType.Identifier) && CurrentToken.Text == "set")
-            {
-                Advance(); // consume 'set'
-                if (Match(type: TokenType.RightParen))
-                {
-                    // Valid setter syntax
-                    setterVisibility = possibleSetter;
-
-                    // Validate hierarchy: setter must be more restrictive than getter
-                    // private(2) > internal(1) > public(0)
-                    int getterLevel = getterVisibility switch
-                    {
-                        VisibilityModifier.Public => 0,
-                        VisibilityModifier.Internal => 1,
-                        VisibilityModifier.Private => 2,
-                        _ => 0
-                    };
-
-                    int setterLevel = possibleSetter switch
-                    {
-                        VisibilityModifier.Public => 0,
-                        VisibilityModifier.Internal => 1,
-                        VisibilityModifier.Private => 2,
-                        _ => 0
-                    };
-
-                    if (setterLevel < getterLevel)
-                    {
-                        throw new ParseException(message: $"Setter visibility '{possibleSetter}' cannot be less restrictive than getter visibility '{getterVisibility}'");
-                    }
-                }
-                else
-                {
-                    // Not valid, backtrack
-                    Position = savedPosition;
-                }
-            }
-            else
-            {
-                // Not 'set', backtrack
-                Position = savedPosition;
-            }
-        }
-        else
-        {
-            // No parenthesis, backtrack
-            Position = savedPosition;
-        }
-
-        return (getterVisibility, setterVisibility);
     }
 }

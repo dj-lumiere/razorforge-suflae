@@ -13,23 +13,23 @@ public partial class SuflaeParser
 {
     #region Token Management
 
-    protected Token CurrentToken => Position < Tokens.Count
+    private Token CurrentToken => Position < Tokens.Count
         ? Tokens[index: Position]
         : Tokens[^1];
 
-    protected Token PeekToken(int offset = 1)
+    private Token PeekToken(int offset = 1)
     {
         return Position + offset < Tokens.Count
             ? Tokens[index: Position + offset]
             : Tokens[^1];
     }
 
-    protected bool IsAtEnd => Position >= Tokens.Count || CurrentToken.Type == TokenType.Eof;
+    private bool IsAtEnd => Position >= Tokens.Count || CurrentToken.Type == TokenType.Eof;
 
     /// <summary>
     /// Advance to the next token and return the current one
     /// </summary>
-    protected Token Advance()
+    private Token Advance()
     {
         Token token = CurrentToken;
         if (!IsAtEnd)
@@ -43,7 +43,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Check if current token matches the expected type
     /// </summary>
-    protected bool Check(TokenType type)
+    private bool Check(TokenType type)
     {
         return !IsAtEnd && CurrentToken.Type == type;
     }
@@ -51,7 +51,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Check if current token matches any of the expected types
     /// </summary>
-    protected bool Check(params TokenType[] types)
+    private bool Check(params TokenType[] types)
     {
         return types.Any(predicate: Check);
     }
@@ -59,7 +59,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Consume token if it matches expected type, otherwise throw error
     /// </summary>
-    protected Token Consume(TokenType type, string errorMessage)
+    private Token Consume(TokenType type, string errorMessage)
     {
         if (Check(type: type))
         {
@@ -73,7 +73,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Consume token if it matches expected type, return whether successful
     /// </summary>
-    protected bool Match(TokenType type)
+    private bool Match(TokenType type)
     {
         if (!Check(type: type))
         {

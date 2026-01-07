@@ -1,6 +1,5 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -122,7 +121,7 @@ public partial class RazorForgeParser
 
         string modulePath = "";
         string? alias = null;
-        var specificImports = (List<string>?)null;
+        List<string>? specificImports = null;
 
         // Parse module path - could be multiple identifiers separated by slashes
         // Dot marks a specific type within the module: import Standard/Collection.List
@@ -161,7 +160,7 @@ public partial class RazorForgeParser
         if (modulePath.Contains(value: '/'))
         {
             // Specific type import: Collections/SortedDict
-            string typeName = modulePath.Substring(startIndex: modulePath.LastIndexOf(value: '/') + 1);
+            string typeName = modulePath[(modulePath.LastIndexOf(value: '/') + 1)..];
             _knownTypeNames.Add(item: typeName);
         }
         else
@@ -199,7 +198,7 @@ public partial class RazorForgeParser
     /// Syntax: <c>using Type as Alias</c>
     /// </summary>
     /// <returns>A <see cref="UsingDeclaration"/> AST node.</returns>
-    private IAstNode ParseUsingDeclaration()
+    private UsingDeclaration ParseUsingDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -235,19 +234,8 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Checks for 'pass' statement in empty body context.
-    /// If found, consumes it and returns true.
-    /// </summary>
-    private bool SkipPassStatement()
-    {
-        if (!Match(type: TokenType.Pass)) return false;
-        ConsumeStatementTerminator();
-        return true;
-    }
-
-    /// <summary>
     /// Parses a visibility modifier keyword.
-    /// Supported modifiers: public, internal, private, common, global, imported.
+    /// Supported modifiers: public, published, internal, private, common, global, imported.
     /// </summary>
     /// <returns>The parsed visibility modifier, or Public if none found.</returns>
     private VisibilityModifier ParseVisibilityModifier()
@@ -255,6 +243,11 @@ public partial class RazorForgeParser
         if (Match(type: TokenType.Public))
         {
             return VisibilityModifier.Public;
+        }
+
+        if (Match(type: TokenType.Published))
+        {
+            return VisibilityModifier.Published;
         }
 
         if (Match(type: TokenType.Internal))
@@ -286,124 +279,6 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses getter/setter visibility modifiers.
-    /// Supports syntax like: public private(set) var x
-    /// Returns tuple of (getterVisibility, setterVisibility)
-    /// If no setter specified, setterVisibility is null (same as getter)
-    /// Only private, internal, public are valid for setter visibility.
-    /// </summary>
-    private (VisibilityModifier getter, VisibilityModifier? setter) ParseGetterSetterVisibility()
-    {
-        VisibilityModifier getterVisibility = ParseVisibilityModifier();
-        VisibilityModifier? setterVisibility = null;
-
-        // Check for setter visibility: private(set), internal(set), public(set)
-        // Other modifiers like common(set), global(set), imported(set) are invalid
-        bool isValidSetterModifier = Check(TokenType.Private, TokenType.Internal, TokenType.Public);
-        bool isKnownInvalidSetterModifier = Check(TokenType.Common, TokenType.Global, TokenType.Imported);
-
-        // Handle case like "asdf(set)" - any identifier followed by (set) is invalid
-        // We need lookahead to detect this pattern
-        if (!isValidSetterModifier && !isKnownInvalidSetterModifier)
-        {
-            // Check for identifier(set) pattern - this catches things like "asdf(set)"
-            if (!Check(type: TokenType.Identifier) || PeekToken(offset: 1)
-                   .Type != TokenType.LeftParen)
-            {
-                return (getterVisibility, setterVisibility);
-            }
-
-            int savedPos = Position;
-            Token unknownToken = CurrentToken;
-            Advance(); // skip identifier
-            Advance(); // skip (
-            if (Check(type: TokenType.Identifier) && CurrentToken.Text == "set")
-            {
-                throw new ParseException(message: $"'{unknownToken.Text}' is not a valid setter visibility. Only 'private', 'internal', or 'public' can be used with (set).");
-            }
-
-            Position = savedPos; // Not a (set) pattern, backtrack
-            return (getterVisibility, setterVisibility);
-        }
-
-        int savedPosition = Position;
-
-        if (isKnownInvalidSetterModifier)
-        {
-            // Lookahead to check if this is modifier(set) pattern
-            Token invalidToken = CurrentToken;
-            Advance();
-            if (Match(type: TokenType.LeftParen))
-            {
-                if (Check(type: TokenType.Identifier) && CurrentToken.Text == "set")
-                {
-                    throw new ParseException(message: $"'{invalidToken.Text}' is not a valid setter visibility. Only 'private', 'internal', or 'public' can be used with (set).");
-                }
-            }
-
-            // Not a setter pattern, backtrack
-            Position = savedPosition;
-            return (getterVisibility, setterVisibility);
-        }
-
-        VisibilityModifier possibleSetter = ParseVisibilityModifier();
-
-        // Must be followed by (set)
-        if (Match(type: TokenType.LeftParen))
-        {
-            if (Check(type: TokenType.Identifier) && CurrentToken.Text == "set")
-            {
-                Advance(); // consume 'set'
-                if (Match(type: TokenType.RightParen))
-                {
-                    // Valid setter syntax
-                    setterVisibility = possibleSetter;
-
-                    // Validate hierarchy: setter must be more restrictive than getter
-                    // private(2) > internal(1) > public(0)
-                    int getterLevel = getterVisibility switch
-                    {
-                        VisibilityModifier.Public => 0,
-                        VisibilityModifier.Internal => 1,
-                        VisibilityModifier.Private => 2,
-                        _ => 0
-                    };
-
-                    int setterLevel = possibleSetter switch
-                    {
-                        VisibilityModifier.Public => 0,
-                        VisibilityModifier.Internal => 1,
-                        VisibilityModifier.Private => 2,
-                        _ => 0
-                    };
-
-                    if (setterLevel < getterLevel)
-                    {
-                        throw new ParseException(message: $"Setter visibility '{possibleSetter}' cannot be less restrictive than getter visibility '{getterVisibility}'");
-                    }
-                }
-                else
-                {
-                    // Not valid, backtrack
-                    Position = savedPosition;
-                }
-            }
-            else
-            {
-                // Not 'set', backtrack
-                Position = savedPosition;
-            }
-        }
-        else
-        {
-            // No parenthesis, backtrack
-            Position = savedPosition;
-        }
-
-        return (getterVisibility, setterVisibility);
-    }
-
-    /// <summary>
     /// Parses attributes like @crash_only, @inline, @intrinsic("name"), etc.
     /// Attributes are prefixed with @ and followed by an identifier, optionally with arguments.
     /// </summary>
@@ -431,7 +306,7 @@ public partial class RazorForgeParser
                 break; // No more attributes
             }
 
-            // Check for attribute arguments: @intrinsic.size_of() or @config(name: "value", count: 5)
+            // Check for attribute arguments: @intrinsic.sitofp() or @config(name: "value", count: 5)
             if (Match(type: TokenType.LeftParen))
             {
                 var arguments = new List<string>();
@@ -567,7 +442,7 @@ public partial class RazorForgeParser
             string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
 
             // If we just parsed generic params before the dot, include them in the name
-            if (hasGenericParams && !name.Contains(value: "."))
+            if (hasGenericParams && !name.Contains(value: '.') && genericParams != null)
             {
                 name = name + "<" + string.Join(separator: ", ", values: genericParams) + ">." + part;
                 hasGenericParams = false; // Only add once
@@ -596,7 +471,7 @@ public partial class RazorForgeParser
 
             // CRITICAL: Merge method generic params with type generic params
             // For List<T>.__setitem__!<I>, we need both T (from List) and I (from method)
-            if (genericParams != null && genericParams.Count > 0)
+            if (genericParams is { Count: > 0 })
             {
                 // Merge: type params first, then method params
                 genericParams = new List<string>(collection: genericParams);
@@ -628,10 +503,10 @@ public partial class RazorForgeParser
         bool isFailable = Match(type: TokenType.Bang);
 
         // Also check if the name already ends with ! (from ConsumeMethodName in method case)
-        if (name.EndsWith("!"))
+        if (name.EndsWith('!'))
         {
             isFailable = true;
-            name = name.Substring(0, name.Length - 1);
+            name = name[..^1];
         }
 
         // Parameters
@@ -705,7 +580,7 @@ public partial class RazorForgeParser
         bool hasIntrinsicAttribute = attributes != null && attributes.Any(predicate: a => a.StartsWith(value: "intrinsic"));
         bool canSkipBody = allowNoBody || hasIntrinsicAttribute;
 
-        BlockStatement? body = null;
+        BlockStatement? body;
         if (Check(type: TokenType.LeftBrace))
         {
             _inRoutineBody = true;
@@ -722,17 +597,17 @@ public partial class RazorForgeParser
         {
             // If no body and not allowed, it's an error
             Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after routine signature");
-            body = new BlockStatement(Statements: new List<Statement>(), Location: location);
+            body = new BlockStatement(Statements: [], Location: location);
         }
         else
         {
             // No body - this is a signature-only declaration (protocol or intrinsic)
             ConsumeStatementTerminator();
-            body = new BlockStatement(Statements: new List<Statement>(), Location: location);
+            body = new BlockStatement(Statements: [], Location: location);
         }
 
         // Pop generic parameter scope after parsing body
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }
@@ -742,7 +617,7 @@ public partial class RazorForgeParser
             ReturnType: returnType,
             Body: body,
             Visibility: visibility,
-            Attributes: attributes ?? new List<string>(),
+            Attributes: attributes ?? [],
             Location: location,
             GenericParameters: genericParams,
             GenericConstraints: constraints,
@@ -780,9 +655,9 @@ public partial class RazorForgeParser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         var protocols = new List<TypeExpression>();
@@ -833,7 +708,7 @@ public partial class RazorForgeParser
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after entity body");
 
         // Pop generic parameter scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }
@@ -878,9 +753,9 @@ public partial class RazorForgeParser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         // Parse interfaces/protocols the record follows
@@ -930,7 +805,7 @@ public partial class RazorForgeParser
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after record body");
 
         // Pop generic parameter scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }
@@ -975,9 +850,9 @@ public partial class RazorForgeParser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         // Parse interfaces/protocols the resident follows
@@ -1021,7 +896,7 @@ public partial class RazorForgeParser
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after resident body");
 
         // Pop generic parameter scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }
@@ -1069,7 +944,7 @@ public partial class RazorForgeParser
             {
                 Expression expr = ParseExpression();
                 // RazorForge uses s64 (long) for integer literals
-                if (expr is LiteralExpression literal && literal.Value is long longVal)
+                if (expr is LiteralExpression { Value: long longVal })
                 {
                     value = longVal;
                 }
@@ -1087,7 +962,7 @@ public partial class RazorForgeParser
 
         return new ChoiceDeclaration(Name: name,
             Cases: variants,
-            Methods: new List<RoutineDeclaration>(),
+            Methods: [],
             Visibility: visibility,
             Location: location);
     }
@@ -1122,9 +997,9 @@ public partial class RazorForgeParser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after variant header");
@@ -1159,7 +1034,7 @@ public partial class RazorForgeParser
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after variant body");
 
         // Pop generic parameter scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }
@@ -1201,9 +1076,9 @@ public partial class RazorForgeParser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after mutant header");
@@ -1237,7 +1112,7 @@ public partial class RazorForgeParser
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after mutant body");
 
         // Pop generic parameter scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }
@@ -1281,9 +1156,9 @@ public partial class RazorForgeParser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
-            _genericParameterScopes.Push(item: new HashSet<string>(collection: genericParams));
+            _genericParameterScopes.Push(item: [..genericParams]);
         }
 
         // Parse parent protocols (protocol X follows Y, Z)
@@ -1404,7 +1279,7 @@ public partial class RazorForgeParser
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after protocol body");
 
         // Pop generic parameter scope
-        if (genericParams != null && genericParams.Count > 0)
+        if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
         }

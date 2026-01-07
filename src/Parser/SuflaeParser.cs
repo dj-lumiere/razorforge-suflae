@@ -27,7 +27,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Collection of warnings generated during parsing.
     /// </summary>
-    protected readonly List<CompileWarning> Warnings = new();
+    protected readonly List<CompileWarning> Warnings = [];
 
     /// <summary>
     /// The source file name for error reporting.
@@ -225,8 +225,8 @@ public partial class SuflaeParser
         // Parse attributes (e.g., @inline, @crash_only, @intrinsic("name"))
         List<string> attributes = ParseAttributes();
 
-        // Parse visibility modifier (with optional setter visibility)
-        (VisibilityModifier getterVisibility, VisibilityModifier? setterVisibility) = ParseGetterSetterVisibility();
+        // Parse visibility modifier
+        VisibilityModifier visibility = ParseVisibilityModifier();
 
         // Field declaration in records: public name: Type or name: Type
         // Detected by identifier followed by colon (no var/let keyword needed)
@@ -234,35 +234,35 @@ public partial class SuflaeParser
         if (_parsingRecordBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
-            return ParseFieldDeclaration(visibility: getterVisibility, setterVisibility: setterVisibility);
+            return ParseFieldDeclaration(visibility: visibility);
         }
 
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
         {
-            return ParseVariableDeclaration(visibility: getterVisibility, setterVisibility: setterVisibility);
+            return ParseVariableDeclaration(visibility: visibility);
         }
 
         // Routine (function) declaration - using 'routine' keyword in Suflae
         if (Match(type: TokenType.Routine))
         {
-            return ParseRoutineDeclaration(visibility: getterVisibility, attributes: attributes);
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes);
         }
 
         // Entity/Record/Choice declarations
         if (Match(type: TokenType.Entity))
         {
-            return ParseEntityDeclaration(visibility: getterVisibility);
+            return ParseEntityDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Record))
         {
-            return ParseRecordDeclaration(visibility: getterVisibility);
+            return ParseRecordDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Choice))
         {
-            return ParseChoiceDeclaration(visibility: getterVisibility);
+            return ParseChoiceDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Variant))
@@ -272,14 +272,14 @@ public partial class SuflaeParser
 
         if (Match(type: TokenType.Protocol))
         {
-            return ParseProtocolDeclaration(visibility: getterVisibility);
+            return ParseProtocolDeclaration(visibility: visibility);
         }
 
         // If we parsed a visibility modifier but no declaration follows, it's an error (unless
         // it is an record or protocol)
-        if (getterVisibility != VisibilityModifier.Public)
+        if (visibility != VisibilityModifier.Public)
         {
-            throw new ParseException(message: $"Visibility modifier '{getterVisibility}' must be followed by a declaration " + $"(routine, entity, record, choice, variant, protocol, var, preset, or let)");
+            throw new ParseException(message: $"Visibility modifier '{visibility}' must be followed by a declaration " + $"(routine, entity, record, choice, variant, protocol, var, preset, or let)");
         }
 
         // If we have attributes but no declaration, that's an error

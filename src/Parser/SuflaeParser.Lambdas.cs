@@ -236,7 +236,7 @@ public partial class SuflaeParser
         // Empty braces -> empty set
         if (Match(type: TokenType.RightBrace))
         {
-            return new SetLiteralExpression(Elements: new List<Expression>(), ElementType: null, Location: location);
+            return new SetLiteralExpression(Elements: [], ElementType: null, Location: location);
         }
 
         // Parse first element to determine if set or dict

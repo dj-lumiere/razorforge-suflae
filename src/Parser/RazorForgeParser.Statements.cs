@@ -18,14 +18,14 @@ public partial class RazorForgeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Statement? thenBranch = ParseStatement();
+        Statement thenBranch = ParseStatement();
         Statement? elseBranch = null;
 
         // Handle elseif chain
         while (Match(type: TokenType.Elseif))
         {
             Expression elseifCondition = ParseExpression();
-            Statement? elseifBranch = ParseStatement();
+            Statement elseifBranch = ParseStatement();
 
             // Convert elseif to nested if-else
             var nestedIf = new IfStatement(Condition: elseifCondition,
@@ -46,7 +46,7 @@ public partial class RazorForgeParser
 
         if (Match(type: TokenType.Else))
         {
-            Statement? finalElse = ParseStatement();
+            Statement finalElse = ParseStatement();
 
             if (elseBranch == null)
             {
@@ -84,7 +84,7 @@ public partial class RazorForgeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Statement? thenBranch = ParseStatement();
+        Statement thenBranch = ParseStatement();
         Statement? elseBranch = null;
 
         if (Match(type: TokenType.Else))
@@ -111,7 +111,7 @@ public partial class RazorForgeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Statement? body = ParseStatement();
+        Statement body = ParseStatement();
 
         return new WhileStatement(Condition: condition, Body: body, Location: location);
     }
@@ -127,7 +127,7 @@ public partial class RazorForgeParser
 
         // loop { body } is equivalent to while true { body }
         Expression trueCondition = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
-        Statement? body = ParseStatement();
+        Statement body = ParseStatement();
 
         return new WhileStatement(Condition: trueCondition, Body: body, Location: location);
     }
@@ -144,7 +144,7 @@ public partial class RazorForgeParser
         string variable = ConsumeIdentifier(errorMessage: "Expected variable name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in for loop");
         Expression iterable = ParseExpression();
-        Statement? body = ParseStatement();
+        Statement body = ParseStatement();
 
         return new ForStatement(Variable: variable,
             Iterable: iterable,
@@ -241,7 +241,7 @@ public partial class RazorForgeParser
 
             // Set flag to prevent 'is' expression parsing in when clause bodies
             _inWhenClauseBody = true;
-            Statement? body = ParseStatement();
+            Statement body = ParseStatement();
             _inWhenClauseBody = false;
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
@@ -465,44 +465,13 @@ public partial class RazorForgeParser
                 continue;
             }
 
-            Statement? stmt = ParseStatement();
-            if (stmt != null)
-            {
-                statements.Add(item: stmt);
-            }
+            Statement stmt = ParseStatement();
+            statements.Add(item: stmt);
         }
 
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}'");
 
         return new BlockStatement(Statements: statements, Location: location);
-    }
-
-    /// <summary>
-    /// Parses a block expression: { expr } or { statements\nexpr }
-    /// The block evaluates to the last expression.
-    /// </summary>
-    private Expression ParseBlockExpression()
-    {
-        SourceLocation location = GetLocation();
-        Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{'");
-
-        // Skip leading newlines
-        while (Match(type: TokenType.Newline))
-        {
-        }
-
-        // Parse the expression (which will be the block's value)
-        Expression expr = ParseExpression();
-
-        // Skip trailing newlines
-        while (Match(type: TokenType.Newline))
-        {
-        }
-
-        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}'");
-
-        // Return the expression wrapped in a BlockExpression
-        return new BlockExpression(Value: expr, Location: location);
     }
 
     /// <summary>

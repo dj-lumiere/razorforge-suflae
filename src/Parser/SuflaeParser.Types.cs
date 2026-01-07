@@ -290,7 +290,7 @@ public partial class SuflaeParser
                     TypeExpression constType = ParseType();
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                         ConstraintType: ConstraintKind.ConstGeneric,
-                        ConstraintTypes: new List<TypeExpression> { constType },
+                        ConstraintTypes: [constType],
                         Location: location));
                 }
                 else
@@ -415,7 +415,7 @@ public partial class SuflaeParser
                         TypeExpression constType = ParseType();
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                             ConstraintType: ConstraintKind.ConstGeneric,
-                            ConstraintTypes: new List<TypeExpression> { constType },
+                            ConstraintTypes: [constType],
                             Location: location));
                     }
                     else

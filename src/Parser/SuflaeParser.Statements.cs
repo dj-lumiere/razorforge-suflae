@@ -420,11 +420,8 @@ public partial class SuflaeParser
                 continue;
             }
 
-            Statement? stmt = ParseStatement();
-            if (stmt != null)
-            {
-                statements.Add(item: stmt);
-            }
+            Statement stmt = ParseStatement();
+            statements.Add(item: stmt);
         }
 
         // Process dedent tokens

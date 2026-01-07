@@ -80,7 +80,7 @@ public partial class RazorForgeParser
     /// </summary>
     private bool IsArrowLambdaParameters()
     {
-        int savedPosition = Position;
+        int savedPosition = _position;
 
         try
         {
@@ -89,7 +89,7 @@ public partial class RazorForgeParser
             {
                 Advance(); // consume )
                 bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                Position = savedPosition;
+                _position = savedPosition;
                 return result;
             }
 
@@ -99,7 +99,7 @@ public partial class RazorForgeParser
                 // Must start with identifier
                 if (!Check(type: TokenType.Identifier))
                 {
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return false;
                 }
 
@@ -140,20 +140,20 @@ public partial class RazorForgeParser
                     Advance(); // consume )
                     // Accept either direct => or given ... =>
                     bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return result;
                 }
                 else
                 {
                     // Not a valid lambda parameter list
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return false;
                 }
             }
         }
         catch
         {
-            Position = savedPosition;
+            _position = savedPosition;
             return false;
         }
     }
@@ -232,7 +232,7 @@ public partial class RazorForgeParser
         // Empty braces -> empty set
         if (Match(type: TokenType.RightBrace))
         {
-            return new SetLiteralExpression(Elements: new List<Expression>(), ElementType: null, Location: location);
+            return new SetLiteralExpression(Elements: [], ElementType: null, Location: location);
         }
 
         // Parse first element to determine if set or dict

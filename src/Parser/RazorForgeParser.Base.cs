@@ -15,8 +15,8 @@ public partial class RazorForgeParser
     /// <summary>
     /// Gets the token at the current position, or the last token if past the end.
     /// </summary>
-    protected Token CurrentToken => Position < tokens.Count
-        ? tokens[index: Position]
+    protected Token CurrentToken => _position < tokens.Count
+        ? tokens[index: _position]
         : tokens[^1];
 
     /// <summary>
@@ -26,8 +26,8 @@ public partial class RazorForgeParser
     /// <returns>The token at the specified offset, or the last token if past the end.</returns>
     protected Token PeekToken(int offset = 1)
     {
-        return Position + offset < tokens.Count
-            ? tokens[index: Position + offset]
+        return _position + offset < tokens.Count
+            ? tokens[index: _position + offset]
             : tokens[^1];
     }
 
@@ -35,7 +35,7 @@ public partial class RazorForgeParser
     /// Gets whether the parser has reached the end of the token stream.
     /// True if position is past the last token or if current token is EOF.
     /// </summary>
-    protected bool IsAtEnd => Position >= tokens.Count || CurrentToken.Type == TokenType.Eof;
+    protected bool IsAtEnd => _position >= tokens.Count || CurrentToken.Type == TokenType.Eof;
 
     /// <summary>
     /// Advances to the next token and returns the current one.
@@ -47,7 +47,7 @@ public partial class RazorForgeParser
         Token token = CurrentToken;
         if (!IsAtEnd)
         {
-            Position++;
+            _position++;
         }
 
         return token;
@@ -214,8 +214,10 @@ public partial class RazorForgeParser
             // Comparison operators
             TokenType.In or TokenType.Is or TokenType.Follows => Precedence.Comparison,
             TokenType.NotIn or TokenType.IsNot or TokenType.NotFollows => Precedence.Comparison,
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual => Precedence.Comparison,
-            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence.Comparison,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual =>
+                Precedence.Comparison,
+            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence
+               .Comparison,
 
             // Bitwise operators
             TokenType.Pipe => Precedence.BitwiseOr,
@@ -223,21 +225,27 @@ public partial class RazorForgeParser
             TokenType.Ampersand => Precedence.BitwiseAnd,
 
             // Shift operators
-            TokenType.LeftShift or TokenType.LeftShiftChecked or TokenType.RightShift or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
+            TokenType.LeftShift or TokenType.LeftShiftChecked or TokenType.RightShift
+                or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
 
             // Additive operators
             TokenType.Plus or TokenType.Minus => Precedence.Additive,
-            TokenType.PlusWrap or TokenType.PlusSaturate or TokenType.PlusChecked => Precedence.Additive,
-            TokenType.MinusWrap or TokenType.MinusSaturate or TokenType.MinusChecked => Precedence.Additive,
+            TokenType.PlusWrap or TokenType.PlusSaturate or TokenType.PlusChecked => Precedence
+               .Additive,
+            TokenType.MinusWrap or TokenType.MinusSaturate or TokenType.MinusChecked => Precedence
+               .Additive,
 
             // Multiplicative operators
-            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent => Precedence.Multiplicative,
-            TokenType.MultiplyWrap or TokenType.MultiplySaturate or TokenType.MultiplyChecked => Precedence.Multiplicative,
+            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent =>
+                Precedence.Multiplicative,
+            TokenType.MultiplyWrap or TokenType.MultiplySaturate or TokenType.MultiplyChecked =>
+                Precedence.Multiplicative,
             TokenType.DivideChecked or TokenType.ModuloChecked => Precedence.Multiplicative,
 
             // Power operators
             TokenType.Power => Precedence.Power,
-            TokenType.PowerWrap or TokenType.PowerSaturate or TokenType.PowerChecked => Precedence.Power,
+            TokenType.PowerWrap or TokenType.PowerSaturate or TokenType.PowerChecked => Precedence
+               .Power,
 
             _ => Precedence.None
         };
@@ -255,7 +263,8 @@ public partial class RazorForgeParser
     {
         return type switch
         {
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual or TokenType.Equal => true,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual
+                or TokenType.Equal => true,
             _ => false
         };
     }
@@ -292,8 +301,10 @@ public partial class RazorForgeParser
             return true;
         }
 
-        var directions = operators.Select(selector: op => GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
-                                  .ToList();
+        var directions = operators
+                        .Select(selector: op =>
+                             GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
+                        .ToList();
 
         // All equality is valid
         if (directions.All(predicate: d => d == 0))
@@ -413,6 +424,11 @@ public partial class RazorForgeParser
     /// <returns>A <see cref="SourceLocation"/> with the token's file, line, column, and position.</returns>
     protected SourceLocation GetLocation(Token token)
     {
+        if (fileName == null)
+        {
+            throw new ParseException(message: "Unable to find file name");
+        }
+
         return new SourceLocation(FileName: fileName,
             Line: token.Line,
             Column: token.Column,
@@ -603,7 +619,7 @@ public partial class RazorForgeParser
     {
         // Remove the type suffix
         string cleanText = text.EndsWith(value: suffix)
-            ? text.Substring(startIndex: 0, length: text.Length - suffix.Length)
+            ? text[..^suffix.Length]
             : text;
         if (typeof(T) == typeof(Half))
         {
@@ -612,19 +628,6 @@ public partial class RazorForgeParser
         }
 
         return (T)Convert.ChangeType(value: cleanText, conversionType: typeof(T));
-    }
-
-    /// <summary>
-    /// Parses an arbitrary precision decimal literal.
-    /// Currently uses C# decimal as a placeholder; a proper BigDecimal implementation is needed.
-    /// </summary>
-    /// <param name="text">The decimal literal text.</param>
-    /// <returns>The parsed decimal value.</returns>
-    private decimal ParseBigDecimal(string text)
-    {
-        // For now, use C#'s decimal as a placeholder for arbitrary precision decimal
-        // In a real implementation, this would use a proper BigDecimal library
-        return decimal.Parse(s: text);
     }
 
     #endregion
@@ -641,7 +644,7 @@ public partial class RazorForgeParser
     protected void AddWarning(string message, Token token, string warningCode,
         WarningSeverity severity = WarningSeverity.Warning)
     {
-        Warnings.Add(item: new CompileWarning(message: message,
+        _warnings.Add(item: new CompileWarning(message: message,
             line: token.Line,
             column: token.Column,
             severity: severity,
@@ -654,7 +657,7 @@ public partial class RazorForgeParser
     /// <returns>A read-only list of compile warnings.</returns>
     public IReadOnlyList<CompileWarning> GetWarnings()
     {
-        return Warnings.AsReadOnly();
+        return _warnings.AsReadOnly();
     }
 
     #endregion
@@ -671,15 +674,6 @@ public class ParseException : Exception
     /// </summary>
     /// <param name="message">A description of the parse error.</param>
     public ParseException(string message) : base(message: message)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new ParseException with the specified error message and inner exception.
-    /// </summary>
-    /// <param name="message">A description of the parse error.</param>
-    /// <param name="innerException">The exception that caused this parse error.</param>
-    public ParseException(string message, Exception innerException) : base(message: message, innerException: innerException)
     {
     }
 }
