@@ -1,0 +1,63 @@
+﻿# RazorForge C FFI Type Definitions
+# Type aliases for C integer types used in FFI
+#
+# For character and string types, see:
+# - CChar.rf  - single char wrapper record
+# - CWChar.rf - single wchar_t wrapper record (platform-dependent)
+# - CStr.rf   - null-terminated char* (narrow strings)
+# - CWStr.rf  - null-terminated wchar_t* (wide strings)
+
+namespace CSubsystem
+
+# ============================================================================
+# Pointer/Special Types
+# ============================================================================
+
+# Marker type for void*
+# Use Snatched<CVoid> for void* pointers
+public record CVoid {
+    pass
+}
+
+# Null pointer constant
+public preset C_NULLPTR: UAddr = 0uaddr
+
+# ============================================================================
+# Character Type Aliases
+# ============================================================================
+
+# C char (alias for Byte - both are U8 wrappers for 8-bit characters)
+define CChar as Byte
+
+# Signed char (for when C code explicitly uses `signed char`)
+define CSChar as S8
+
+# Unsigned char (for when C code explicitly uses `unsigned char`)
+define CUChar as U8
+
+# ============================================================================
+# Integer Type Aliases
+# ============================================================================
+
+# int / unsigned int (32-bit on all modern platforms)
+define CInt as S32
+define CUInt as U32
+
+# long / unsigned long (platform-dependent!)
+# Windows x64: 32-bit
+# Unix/Linux x64: 64-bit
+@config(target: "windows")
+define CLong as S32
+
+@config(target: "windows")
+define CULong as U32
+
+@config(target: "unix")
+define CLong as S64
+
+@config(target: "unix")
+define CULong as U64
+
+# long long / unsigned long long (64-bit everywhere)
+define CLongLong as S64
+define CULongLong as U64

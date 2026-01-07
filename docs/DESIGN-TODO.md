@@ -8,8 +8,9 @@ For resolved decisions, see [DESIGN-DECISIONS.md](archive/DESIGN-DECISIONS.md).
 
 ## 1. Generator Routines (`generate` keyword)
 
-**Status:** ⏳ Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-31
+**Resolved:** 2026-01-04
 
 ### The Question
 
@@ -18,6 +19,9 @@ How should generator routines work in RazorForge and Suflae?
 ### Design Decision
 
 **Implicit conversion**: Any routine using `generate` becomes a generator. Return type must be `Sequence<T>`.
+
+**Generators are pure iteration machines, not closures.** They cannot capture variables, delegate to other sequences, or
+receive values back. This keeps them simple and predictable.
 
 ```razorforge
 routine fibonacci() -> Sequence<S32> {
@@ -46,27 +50,25 @@ for num in fibonacci() {
 | **Nested lambdas**        | **CE**: `generate` only valid at generator routine level, not inside lambdas/closures     |
 | **State storage**         | Heap-allocated coroutine frame, single allocation when generator created, NOT thread-safe |
 | **Error handling**        | Iteration stops, runtime error propagates to caller                                       |
+| **Captures**              | **No** — generators cannot capture variables; pass state as parameters instead            |
+| **Delegation**            | **No** — no `generate from seq` syntax; use explicit loops                                |
+| **Infinite generators**   | **Yes** — allowed (fibonacci example)                                                     |
+| **Bidirectional**         | **No** — one-way only, no `send()` equivalent                                             |
+| **Cleanup**               | **N/A** — token system prevents generators from holding resources across yields           |
 
 ### Naming
 
 - `Iterator<T>` renamed to `Sequence<T>` (represents a sequence of values)
-- `Itertools` renamed to `Seqtools` (methods operating on sequences)
+- `Itertools` renamed to `SeqTools` (methods operating on sequences)
 
-### Additional Open Questions
+### Design Rationale
 
-| Issue                   | Question                                                             | Status |
-|-------------------------|----------------------------------------------------------------------|--------|
-| **Capture semantics**   | Can generators capture variables like lambdas with `given`?          | ⏳ Open |
-| **Delegation**          | Should there be `generate from seq` to delegate to another sequence? | ⏳ Open |
-| **Cleanup**             | What happens to generator state when iteration stops early (break)?  | ⏳ Open |
-| **Infinite generators** | Are infinite generators allowed? (fibonacci example suggests yes)    | ⏳ Open |
-| **Bidirectional**       | Can generators receive values back? (like Python's `send()`)         | ⏳ Open |
-
-#### Capture Example (if allowed)
+**No captures:** Generators are pure iteration, not closures. If you need state, pass it as parameters:
 
 ```razorforge
-routine make_counter(start: S32) -> Sequence<S32> {
-    var n = start  # Can generator capture/mutate this?
+# ✅ Pass state as parameter
+routine count_from(start: S32) -> Sequence<S32> {
+    var n = start
     loop {
         generate n
         n += 1
@@ -74,76 +76,226 @@ routine make_counter(start: S32) -> Sequence<S32> {
 }
 ```
 
-#### Delegation Example (if allowed)
+**No delegation:** Use explicit loops for clarity:
 
 ```razorforge
+# ✅ Explicit loop
 routine flatten(lists: List<List<S32>>) -> Sequence<S32> {
     for list in lists {
-        generate from list  # Yield all elements from inner list
+        for item in list {
+            generate item
+        }
     }
 }
 ```
+
+**Cleanup handled by token system:** Resources accessed via `viewing`/`hijacking` blocks are scope-bound tokens that
+cannot escape. Generators naturally can't hold resources across yields because tokens can't be stored or returned.
 
 ### Related Docs
 
 - [RazorForge Routines](../wiki/RazorForge-Routines.md)
 - [Suflae Routines](../wiki/Suflae-Routines.md)
-- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
-- [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
+- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
+- [Suflae SeqTools](../wiki/Suflae-SeqTools.md)
 
 ---
 
-## 2. Async Routines and Task Spawning
+## 2. Concurrency Model (suspended/threaded routines)
 
-**Status:** Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-30
+**Resolved:** 2026-01-04
 
 ### The Question
 
-How should async routines (`suspended`), awaiting (`waitfor`), and task spawning (`run_as_task`) work?
+How should async routines, OS threads, awaiting (`waitfor`), and task spawning work?
 
-### Current Design
+### Design Decision
+
+**Unified concurrency model** with two routine modifiers:
+
+- `suspended routine` → Green thread (lightweight, I/O-bound)
+- `threaded routine` → OS thread (heavyweight, CPU-bound)
+
+Both use the same `Task<T>` return type and `waitfor` keyword.
+
+### Resolved Questions
+
+| Issue                      | Decision                                                                        |
+|----------------------------|---------------------------------------------------------------------------------|
+| **`suspended` keyword**    | Kept — marks routines that run on green threads                                 |
+| **`threaded` keyword**     | **New** — marks routines that run on OS threads                                 |
+| **`waitfor` keyword**      | Kept — waits for task completion, works with both thread types                  |
+| **`until` keyword**        | **New** — timeout for waitfor: `waitfor task until 5s`                          |
+| **Task spawning**          | Implicit — calling without `waitfor` returns `Task<T>`                          |
+| **Fire-and-forget**        | Blank-returning routines auto-spawn, `Task<Blank>` discarded                    |
+| **Cancellation**           | Cooperative — `task.cancel()` sets flag, routine checks `is_cancelled()`        |
+| **Structured concurrency** | Yes — cancelling parent cancels all child tasks                                 |
+| **Progress reporting**     | Optional — `report_progress(F64)` inside routine, `task.try_progress()` outside |
+| **Function coloring**      | Accepted — `suspended`/`threaded` creates explicit divide                       |
+
+### Calling Concurrent Routines
+
+| Call Pattern                | Returns     | Thread    | Behavior                |
+|-----------------------------|-------------|-----------|-------------------------|
+| `waitfor fetch(url)`        | `T`         | Same      | Blocks until done       |
+| `fetch(url)`                | `Task<T>`   | New green | Runs in parallel        |
+| `waitfor compute(data)`     | `T`         | Same      | Blocks until done       |
+| `compute(data)`             | `Task<T>`   | New OS    | Runs in parallel        |
+| `send_email(to)` (Blank)    | discarded   | New       | Fire-and-forget         |
+| `waitfor task until 5s`     | `T?`        | —         | Timeout, returns `none` |
+| `waitfor (t1, t2)`          | `(T1, T2)`  | —         | Wait for multiple       |
+| `waitfor (t1, t2) until 5s` | `(T1, T2)?` | —         | Multiple with timeout   |
+
+### Task<T> Type
+
+`Task<T>` is a **record** (handle) wrapping runtime-managed state:
 
 ```razorforge
-suspended routine fetch_data(url: Text) -> Text {
-    let response = waitfor http.get(url)
-    return response.body
-}
+record Task<T>:
+    # Status
+    routine is_done() -> Bool
+    routine is_cancelled() -> Bool
+    routine is_running() -> Bool
 
-suspended routine start() {
-    run_as_task(fetch_data("https://example.com"))  # Fire-and-forget
-    let data = waitfor fetch_data("https://api.example.com")  # Wait for result
-    show(data)
-}
+    # Control
+    routine cancel()
+
+    # Progress (returns none if routine doesn't report progress)
+    routine try_progress() -> F64?
 ```
 
-### The Big Question: Fire-and-Forget Error Handling
+### Error Handling Integration
 
-**What happens when a `run_as_task` task crashes?**
+Error handling is chosen at spawn time using the standard `!`/`try_`/`check_`/`lookup_` variants:
 
-| Option                    | Behavior                              | Pros                         | Cons                                 |
-|---------------------------|---------------------------------------|------------------------------|--------------------------------------|
-| **A. Crash program**      | One task failure kills all            | Simple, errors can't hide    | Too brutal for production            |
-| **B. Isolated + logged**  | Task crashes logged, others continue  | Simple, resilient            | Errors may go unnoticed              |
-| **C. Linked tasks**       | Caller + task crash together          | Predictable                  | Fire-and-forget still crashes caller |
-| **D. Supervisor pattern** | Parent decides: restart/stop/escalate | Most flexible, battle-tested | Complex to implement                 |
+```razorforge
+# Spawning with different error handling
+let t1 = compute!(data)        # Task<S64> — crashes on error
+let t2 = try_compute(data)     # Task<S64?> — none on error/cancel
+let t3 = check_compute(data)   # Task<Result<S64>> — error info preserved
+let t4 = lookup_compute(data)  # Task<Lookup<S64>> — error/absent/value
 
-**Suggested:** Default isolated + logged, with `run_as_linked_task` for strict mode.
+# Waiting just extracts the value
+let result = waitfor t2  # S64? — error handling was decided at spawn
+```
 
-### Additional Open Questions
+### Cooperative Cancellation
 
-| Issue                 | Question                                                                              |
-|-----------------------|---------------------------------------------------------------------------------------|
-| **Return value**      | `run_as_task` is fire-and-forget. Should there be `spawn_task` that returns a handle? |
-| **Cancellation**      | How to cancel a running task? Need `TaskHandle` with `.cancel()` method?              |
-| **Task limits**       | What if thousands of tasks spawned? Backpressure mechanism?                           |
-| **Function coloring** | `suspended` creates async/sync divide. Accepted tradeoff?                             |
-| **Suflae actors**     | How does `suspended`/`waitfor` interact with actor model?                             |
+```razorforge
+threaded routine compute!(data: List<S64>) -> S64:
+    var sum: S64 = 0
+    let total = data.count()
+
+    for i, item in data.enumerate():
+        if is_cancelled():
+            absent  # Becomes none in try_, error in check_
+
+        report_progress(F64(i) / F64(total))
+        sum += process(item)
+
+    return sum
+
+# Usage
+let task = compute(data)
+task.cancel()  # Sets flag, routine checks on next iteration
+
+let result = waitfor try_compute(data)
+when result:
+    is none => show("Cancelled or failed")
+    else value => show(f"Got: {value}")
+```
+
+### Structured Concurrency
+
+Cancelling a parent task cancels all child tasks:
+
+```razorforge
+threaded routine parent!() -> S64:
+    let child1 = compute(data1)  # Child task
+    let child2 = compute(data2)  # Child task
+    return waitfor child1 + waitfor child2
+
+let task = parent()
+task.cancel()  # Cancels parent AND child1, child2
+```
+
+### Timeout
+
+```razorforge
+let task = compute(data)
+let result = waitfor task until 5s  # Returns S64?
+
+when result:
+    is none => show("Timed out")
+    else value => show(f"Result: {value}")
+```
+
+Timeout automatically calls `task.cancel()` when time expires.
+
+### Example
+
+```razorforge
+# Green thread (I/O-bound)
+suspended routine fetch(url: Text) -> Text:
+    return waitfor http.get(url)
+
+# OS thread (CPU-bound)
+threaded routine compute(data: List<S64>) -> S64:
+    var sum: S64 = 0
+    for item in data:
+        if is_cancelled():
+            absent
+        sum += process(item)
+    return sum
+
+routine main():
+    # Sequential
+    let a = waitfor fetch("url1")
+    let b = waitfor compute(data)
+
+    # Parallel (mixed green + OS threads)
+    let t1 = fetch("url1")       # Task<Text>, green thread
+    let t2 = compute(data)       # Task<S64>, OS thread
+    let (text, num) = waitfor (t1, t2)
+
+    # With timeout
+    let result = waitfor compute(big_data) until 10s
+
+    # Fire-and-forget
+    send_email("user@example.com")  # Spawns, returns immediately
+
+    # Progress tracking
+    let task = compute(huge_data)
+    while task.is_running():
+        let p = task.try_progress() ?? 0.0
+        show(f"Progress: {p * 100}%")
+        sleep(100ms)
+    let final = waitfor task
+```
+
+### Stdlib Primitives
+
+In addition to core language features, the concurrency stdlib provides:
+
+| Primitive      | Purpose             | Key Feature                          |
+|----------------|---------------------|--------------------------------------|
+| `Channel<T>`   | Message passing     | Point-to-point, buffered/unbuffered  |
+| `SignalCaster` | Condition variables | **Broadcast** to all waiting threads |
+
+**Channel API:** `send!/try_send/check_send`, `receive!/try_receive/check_receive` with `until` timeout.
+
+**SignalCaster API:** `wait(guard)`, `wait_while(guard, pred)`, `cast_one()`, `cast_all()`.
+
+SignalCaster exists specifically for broadcast capability — it's the only way to wake ALL waiting threads at once.
 
 ### Related Docs
 
-- [RazorForge Routines](../wiki/RazorForge-Routines.md)
+- [RazorForge Concurrency Model](../wiki/RazorForge-Concurrency-Model.md)
+- [RazorForge Concurrency Primitives](../wiki/RazorForge-Concurrency-Primitives.md) — Channel, SignalCaster
 - [Suflae Concurrency Model](../wiki/Suflae-Concurrency-Model.md)
+- [RazorForge Routines](../wiki/RazorForge-Routines.md)
 
 ---
 
@@ -221,49 +373,131 @@ routine outer() { let result = helper(5) }
 
 - [RazorForge Routines](../wiki/RazorForge-Routines.md)
 - [Suflae Routines](../wiki/Suflae-Routines.md)
-- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
+- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
 
 ---
 
 ## 4. Generic Variance
 
-**Status:** Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-31
+**Resolved:** 2026-01-04
 
 ### The Question
 
 Should generic types support variance (covariance/contravariance)?
 
-### The Problem
+### Design Decision
+
+**Invariant only — N/A without inheritance.**
+
+RazorForge/Suflae has no entity inheritance. Entities use `follows` for protocol conformance, which is interface
+implementation, not subtyping. Without subtype relationships, variance is irrelevant:
 
 ```razorforge
-entity Animal { }
-entity Dog follows Animal { }
+protocol Animal { }
+entity Dog follows Animal { }  # Dog FOLLOWS Animal, not IS-A Animal
+entity Cat follows Animal { }
 
-let dogs: List<Dog> = List<Dog>()
-let animals: List<Animal> = dogs  # Allowed? (covariance)
-
-routine feed(animals: List<Animal>) { }
-feed(dogs)  # Allowed?
+# Dog and Cat are completely unrelated types
+# List<Dog> and List<Cat> have no relationship by definition
+# Variance only matters when types form hierarchies — they don't here
 ```
 
-### Options
+### Why This Works
 
-| Option                                   | Behavior                             | Pros             | Cons                        |
-|------------------------------------------|--------------------------------------|------------------|-----------------------------|
-| **A. Invariant only**                    | `List<Dog>` ≠ `List<Animal>`         | Safest, simplest | Less flexible               |
-| **B. Use-site variance**                 | `List<out Animal>` for covariant use | Flexible         | Complex at call sites       |
-| **C. Declaration-site variance**         | `entity List<out T>`                 | Cleaner usage    | Complex to define correctly |
-| **D. Implicit covariance for read-only** | Covariant if only reading            | Intuitive        | Hard to enforce             |
+| Concept                       | With Inheritance          | Without Inheritance (RazorForge)                |
+|-------------------------------|---------------------------|-------------------------------------------------|
+| `Dog` and `Animal`            | Dog IS-A Animal (subtype) | Dog FOLLOWS Animal (conformance)                |
+| `List<Dog>` vs `List<Animal>` | Variance question         | N/A - Animal is a protocol, not a concrete type |
+| `List<Dog>` vs `List<Cat>`    | Related via Animal        | Completely unrelated types                      |
 
-### Recommendation
-
-Start with **Option A (Invariant only)** for simplicity. Add variance later if needed.
+**Generics are invariant by definition** — no design decision needed.
 
 ### Related Docs
 
 - [RazorForge Generics](../wiki/RazorForge-Generics.md)
 - [RazorForge Protocols](../wiki/RazorForge-Protocols.md)
+
+---
+
+## 4b. Type Erasure (`Erased<T>`)
+
+**Status:** ✅ Resolved
+**Date:** 2026-01-04
+
+### The Question
+
+Without inheritance, how do we support polymorphic collections (e.g., a list of different types that all follow the
+same protocol)?
+
+### Design Decision
+
+**`Erased<T>` is a compiler primitive that only accepts protocols.**
+
+```razorforge
+# Valid - Widget is a protocol
+let widgets: List<Erased<Widget>> = List()
+widgets.add_last(button.erase())   # Button follows Widget
+widgets.add_last(label.erase())    # Label follows Widget
+
+# Compile error - S32 is not a protocol
+let nums: List<Erased<S32>> = List()  # CE: S32 is not a protocol
+
+# Compile error - Button is an entity, not a protocol
+let btns: List<Erased<Button>> = List()  # CE: Button is not a protocol
+```
+
+### How It Works
+
+`Erased<T>` is a **fat pointer** (two pointers):
+
+1. **Data pointer** — Points to the heap-allocated concrete instance
+2. **VTable pointer** — Points to the method table for the protocol
+
+```
+┌─────────────────┐
+│  Erased<Widget> │
+├─────────────────┤
+│ data: ──────────┼──► [Button instance on heap]
+│ vtable: ────────┼──► [Widget vtable for Button]
+└─────────────────┘
+```
+
+The compiler generates:
+
+- Allocation code when calling `.erase()` on a concrete type
+- A vtable for each (ConcreteType, Protocol) pair
+- Dynamic dispatch through the vtable for protocol method calls
+- Proper destructor invocation when `Erased<T>` is dropped
+
+### Constraint
+
+```
+Erased<T> where T is protocol
+```
+
+This is enforced at compile time. Only protocol types are valid type arguments.
+
+### Why Compiler Primitive
+
+`Erased<T>` cannot be composed from other wrapper types like `Snatched<T>` because:
+
+1. `Snatched<T>` requires knowing `T` at compile time
+2. Type erasure means we don't know the concrete type statically
+3. The vtable is static data, not heap-allocated
+
+### Language Difference
+
+| Language   | Erasure                                |
+|------------|----------------------------------------|
+| RazorForge | Explicit — `Erased<T>` wrapper         |
+| Suflae     | Automatic — protocol types auto-erased |
+
+### Related Docs
+
+- [RazorForge Protocols](../wiki/RazorForge-Protocols.md)
+- [RazorForge Generics](../wiki/RazorForge-Generics.md)
 
 ---
 
@@ -288,11 +522,11 @@ routine test_addition() {
 @test
 routine test_list_operations() {
     let list = List<S32>()
-    list.push(1)
-    list.push(2)
+    list.add_last(1)
+    list.add_last(2)
 
-    verify!(list.length() == 2)
-    verify!(list.get!(0) == 1)
+    verify!(list.count() == 2)
+    verify!(list[0] == 1)
 }
 
 @test
@@ -320,35 +554,45 @@ routine test_missing_file() {
 
 ## 6. String Interpolation Expression Limits
 
-**Status:** Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-31
+**Resolved:** 2026-01-04
 
 ### The Question
 
 What expressions are allowed inside f-string interpolation `{}`?
 
-### Options
+### Design Decision
 
-| Option                    | Allowed Expressions                         | Pros                | Cons                             |
-|---------------------------|---------------------------------------------|---------------------|----------------------------------|
-| **A. Any expression**     | Identifiers, operators, calls, conditionals | Maximum flexibility | Complex parsing, potential abuse |
-| **B. Simple expressions** | Identifiers, field access, method calls     | Readable            | Limited                          |
-| **C. Identifiers only**   | Just `{x}`, no `{x.y}` or `{foo()}`         | Simplest            | Too restrictive                  |
+**Level 3 (method calls)** — identifiers, field access, and method calls allowed. Operators and complex expressions
+require temp variables.
 
-### Expression Examples
+### Allowed Expressions
 
 ```razorforge
-f"{name}"                # Level 1: Identifiers - OK
-f"{user.name}"           # Level 2: Member access - OK?
-f"{list.length()}"       # Level 3: Method calls - OK?
-f"{a + b}"               # Level 4: Operators - OK?
-f"{if x > 0 then "+" else "-"}"  # Level 5: Complex - OK?
+f"{name}"           # ✅ Identifiers
+f"{user.name}"      # ✅ Field access
+f"{list.count()}"   # ✅ Method calls
+f"{a + b}"          # ❌ CE: Use temp variable
+f"{if x > 0 ...}"   # ❌ CE: Use temp variable
 ```
 
-### Recommendation
+### Workaround for Complex Expressions
 
-**Level 3 (method calls)** - identifiers, field access, method calls allowed; operators and complex expressions require
-temp variables.
+```razorforge
+# ❌ Not allowed
+f"Result: {a + b * c}"
+
+# ✅ Use temp variable
+let result = a + b * c
+f"Result: {result}"
+```
+
+### Rationale
+
+- **Readability:** F-strings should be readable at a glance
+- **Parsing simplicity:** No need to handle operator precedence inside `{}`
+- **Encourages clarity:** Complex logic belongs in named variables
 
 ### Related Docs
 
@@ -357,58 +601,79 @@ temp variables.
 
 ---
 
-## 7. Result/Lookup Unwrapping Ergonomics
+## 7. Block Result Keyword (`becomes`)
 
-**Status:** Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-31
+**Resolved:** 2026-01-07
 
 ### The Question
 
-Is the current `when` pattern for unwrapping `Result<T>` too verbose for common cases?
-
-### The Problem
-
-```suflae
-# Current pattern - verbose
-let num = when check_parse(input):
-    is Crashable e:
-        alert(e.crash_message())
-        0
-    else v => v
-```
-
-### Possible Solutions
-
-**Option A: Method-based unwrapping**
-
-```suflae
-let num = check_parse(input).or_default(0)
-let num = check_parse(input).or_else(handle_error)
-```
-
-**Option B: Operator-based**
-
-```suflae
-let num = check_parse(input) ?? 0
-```
-
-**Complication:** `Lookup<T>` has three cases (Error | None | Value) - operators become ambiguous.
-
-### The "Trailing Value" Problem
+How to handle "do something AND return a value" in multi-statement branches? The trailing value pattern looks like a
+bug:
 
 ```suflae
 is Crashable e:
     alert(f"Error: {e.crash_message()}")
-    0  # Looks like a stray value, not intentional return
+    0  # Looks like stray value, not intentional result
 ```
 
-Possible solutions: `then` keyword, require `return`, or discourage the pattern.
+### Design Decision
 
-### Open Questions
+**`becomes` keyword for explicit block results in multi-statement branches.**
 
-1. Should we add `.or_default()` / `.or_else()` methods to Result/Lookup?
-2. Should there be an operator like `??` for Result unwrapping?
-3. How to handle "do something AND return a value" in Suflae's indentation syntax?
+```suflae
+let num = when result:
+    is Crashable e:
+        show(f"Error: {e.crash_message()}")
+        becomes 0
+    else value:
+        show(f"Success: {value}")
+        becomes value
+```
+
+### Resolved Questions
+
+| Issue                     | Decision                                                            |
+|---------------------------|---------------------------------------------------------------------|
+| **Keyword choice**        | `becomes` — reads naturally ("this block becomes 0")                |
+| **Single expressions**    | Use `=>` syntax: `is none => 0`                                     |
+| **Multi-statement**       | Require `becomes` when block has statements AND produces a value    |
+| **Stray value detection** | CE if trailing value without `becomes` (catches accidental bugs)    |
+| **No conflict**           | `becomes` is unique, doesn't conflict with generators or other uses |
+
+### Why `becomes`
+
+Considered alternatives:
+
+- `yield` — too confusing, commonly associated with generators in other languages
+- `then` — conflicts with `if...then...else`
+- `result` — conflicts with `Result<T>` type name
+
+`becomes` reads naturally: "handle error, becomes 0" = "this block becomes 0"
+
+### Grammar
+
+```
+block_result := 'becomes' expression
+```
+
+### Examples
+
+```suflae
+# ✅ Single expression - use =>
+is none => 0
+
+# ✅ Multi-statement - use becomes
+is Crashable e:
+    log_error(e)
+    becomes default_value
+
+# ❌ CE: Stray value without 'becomes'
+is Crashable e:
+    log_error(e)
+    0  # Error: use 'becomes 0' or remove this line
+```
 
 ### Related Docs
 
@@ -417,78 +682,71 @@ Possible solutions: `then` keyword, require `return`, or discourage the pattern.
 
 ---
 
-## 8. Suflae Actor Field Access for Seqtools
+## 8. Suflae Actor Field Access for SeqTools
 
-**Status:** Open
+**Status:** ✅ Resolved
 **Date:** 2025-12-31
+**Resolved:** 2026-01-02
 
 ### The Question
 
-How should Suflae's `Shared<T>` (actors) interact with itertools operations?
+How should Suflae's actor type interact with itertools operations?
 
-### The Problem
+### Design Decision
 
-In Suflae, `Shared<T>` creates an **actor** - a thread-safe entity with isolated internal state accessible only via
-message passing. This means you can't directly apply itertools to actor fields:
+**Option D: Strict actor isolation.** Field access is forbidden on actors. Must use methods.
 
-```suflae
-entity DataHolder:
-    var items: List<Integer>
+**Naming decision:** `Actor<T>` with `.act()` method.
 
-let holder = DataHolder(items: [1, 2, 3, 4, 5]).share()
+This differentiates Suflae's actor model from RazorForge's:
 
-# Cannot access fields on Shared<T> (actor)
-# holder.items.where(x => x > 2)  # ERROR: Can't access fields on actors
-```
+- `Shared<T>` (RazorForge) - Single-threaded reference counting
+- `Shared<T, Policy>` (RazorForge) - Multi-threaded with locks (Arc+Lock)
+- `Actor<T>` (Suflae) - Actor model with message passing
 
-Currently, the only way is to define methods on the entity that perform itertools operations internally:
+### Resolved Questions
 
-```suflae
-routine DataHolder.get_filtered(pred: (Integer) -> Bool) -> List<Integer>:
-    return me.items.where(pred).to_list()
+| Issue                  | Decision                                                                 |
+|------------------------|--------------------------------------------------------------------------|
+| **Naming**             | `Actor<T>` with `.act()` method (standard actor model terminology)       |
+| **Field access**       | **CE**: Cannot access fields on `Actor<T>`, must use methods             |
+| **Zero-copy views**    | Impossible in actor model; use RazorForge locks if zero-copy is required |
+| **SeqTools on actors** | Define methods on entity that perform operations internally              |
 
-# Then:
-let filtered = holder.get_filtered(x => x > 2)
-```
-
-This is verbose and requires defining methods for every itertools operation you might need.
-
-### Options
-
-| Option                                   | Behavior                                          | Pros                              | Cons                                                            |
-|------------------------------------------|---------------------------------------------------|-----------------------------------|-----------------------------------------------------------------|
-| **A. `.ask()` helper**                   | `holder.ask(h => h.items.where(...).to_list())`   | Explicit, safe                    | Still verbose, closure syntax                                   |
-| **B. Read-only field access (snapshot)** | `holder.items` returns a snapshot `List<Integer>` | Most intuitive, familiar syntax   | Hidden copy (performance?), might mislead users about isolation |
-| **C. Get snapshot first**                | `let snapshot = holder.snapshot(); ...`           | Explicit about copying            | Extra step, verbose                                             |
-| **D. Don't mix actors with itertools**   | Require explicit design patterns                  | Clear separation, forces good API | Limits convenience, steep learning curve                        |
-
-### Leaning Toward: Option B
-
-**Proposed behavior:** Read-only field access on `Shared<T>` returns a **snapshot** (copy) of the field value:
+### Example
 
 ```suflae
-let holder = DataHolder(items: [1, 2, 3, 4, 5]).share()
+entity Counter:
+    var value: S32
 
-# Reading 'items' returns a snapshot (copy)
-let result = holder.items.where(x => x > 2).to_list()
+routine Counter.get_value() -> S32:
+    return me.value
 
-# Modifications to the copy don't affect the actor
-let copy = holder.items
-copy.push(100)  # Only affects the copy, not the actor
+routine Counter.increment():
+    me.value += 1
+
+let counter = Counter(value: 0).act()  # Type: Actor<Counter>
+
+counter.increment()                     # Fire-and-forget message
+let val = counter.get_value()           # Sends message, waits for response
+
+# Field access forbidden:
+# counter.value        # CE: Cannot access fields on Actor<T>
+# counter.value = 10   # CE: Cannot access fields on Actor<T>
 ```
 
-### Open Questions
+### Rationale
 
-1. **Performance:** Is the implicit copy acceptable? Should there be a warning/lint?
-2. **Mutability:** What about writing? `holder.items.push(100)` - should this be an error?
-3. **Deep copy:** For nested entities, is it a shallow or deep copy?
-4. **Consistency:** Does this break the actor isolation model conceptually?
-5. **Alternatives:** Should there be `.ask()` for complex operations that need atomicity?
+- **Consistency:** Actor isolation is the core value proposition - hidden copies would violate this
+- **Simplicity:** One rule: "Actors use methods, not fields" - no exceptions
+- **Clarity:** If you need shared data with direct field access, use RazorForge's `Shared<T, Mutex>` instead
+- **Performance:** No hidden copies; explicit method calls make data flow visible
+- **API design:** Forces good actor API design - methods that encapsulate operations
 
 ### Related Docs
 
 - [Suflae Concurrency Model](../wiki/Suflae-Concurrency-Model.md)
-- [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
+- [Suflae SeqTools](../wiki/Suflae-SeqTools.md)
 
 ---
 
@@ -503,7 +761,8 @@ What type does `zip` return when combining two sequences?
 
 ### Current Docs
 
-The Seqtools docs say:
+The SeqTools docs say:
+
 ```razorforge
 seq1.zip(with: seq2)  # Combine parallel elements into records
 ```
@@ -555,8 +814,8 @@ These are mathematically similar but semantically different:
 [1, 2].product(with: ["a", "b"])
 # → Sequence<Zipped<S32, Text>>: (1,"a"), (1,"b"), (2,"a"), (2,"b")
 
-# permutations_with_replacement: picks from SAME sequence → List<T>
-[1, 2].permutations_with_replacement(pick: 2)
+# multiarrange: picks from SAME sequence → List<T>
+[1, 2].multiarrange(pick: 2)
 # → Sequence<List<S32>>: [1,1], [1,2], [2,1], [2,2]
 ```
 
@@ -566,12 +825,12 @@ These are mathematically similar but semantically different:
 
 **Proposed renaming:**
 
-| Old Name | New Name | Description |
-|----------|----------|-------------|
-| `combinations(pick: n)` | `choose(n)` | n-combinations without replacement |
-| `combinations_with_replacement` | `multichoose(n)` | n-combinations with replacement |
-| `permutations(pick: n)` | `arrange(n)` | n-permutations without replacement |
-| `permutations_with_replacement` | `multiarrange(n)` | n-permutations with replacement |
+| Old Name                        | New Name          | Description                        |
+|---------------------------------|-------------------|------------------------------------|
+| `combinations(pick: n)`         | `choose(n)`       | n-combinations without replacement |
+| `combinations_with_replacement` | `multichoose(n)`  | n-combinations with replacement    |
+| `permutations(pick: n)`         | `arrange(n)`      | n-permutations without replacement |
+| `permutations_with_replacement` | `multiarrange(n)` | n-permutations with replacement    |
 
 ```razorforge
 # Clean, math-inspired API
@@ -593,8 +852,8 @@ These are mathematically similar but semantically different:
 
 ### Related Docs
 
-- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
-- [Suflae Seqtools](../wiki/Suflae-Seqtools.md)
+- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
+- [Suflae SeqTools](../wiki/Suflae-SeqTools.md)
 
 ---
 
@@ -667,8 +926,91 @@ list.shuffle(using: rng)
 
 ### Related Docs
 
-- [RazorForge Seqtools](../wiki/RazorForge-Seqtools.md)
+- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
 - [Standard Libraries](../wiki/Standard-Libraries.md)
+
+---
+
+## 11. Membership Operators (`in`, `notin`)
+
+**Status:** ✅ Resolved
+**Date:** 2026-01-07
+
+### The Question
+
+How should membership testing work for collections and ranges?
+
+### Design Decision
+
+**`in` operator calls `__contains__` on right operand. `notin` is syntactic sugar for `not (a in b)`.**
+
+```razorforge
+# Collection membership
+let fruits = ["apple", "banana", "cherry"]
+"banana" in fruits      # true
+"grape" notin fruits    # true
+
+# Range membership (step-aware)
+5 in 0 to 10            # true
+10 in 0 to 10           # false (exclusive end)
+5 in 0 to 10 by 2       # false (5 not in [0, 2, 4, 6, 8])
+4 in 0 to 10 by 2       # true
+```
+
+### Resolved Questions
+
+| Issue                  | Decision                                                             |
+|------------------------|----------------------------------------------------------------------|
+| **Operator semantics** | `a in b` calls `b.__contains__(a)` and returns Bool                  |
+| **Negation**           | `notin` keyword is `not (a in b)`, not a separate `__notcontains__`  |
+| **Range membership**   | Step-aware O(1) check using remainder: `(value - start) % step == 0` |
+| **Range bounds**       | Ranges are exclusive on end: `0 to 10` contains `[0, 1, ..., 9]`     |
+| **Downto membership**  | Also step-aware: `(start - value) % step == 0` for descending ranges |
+
+### Range `__contains__` Implementation
+
+```razorforge
+routine Range.__contains__(value: S64) -> Bool {
+    if me.ascending {
+        if value < me.start or value >= me.end {
+            return false
+        }
+        return (value - me.start) % me.step == 0
+    } else {
+        if value > me.start or value <= me.end {
+            return false
+        }
+        return (me.start - value) % me.step == 0
+    }
+}
+```
+
+### Overloading for Custom Types
+
+```razorforge
+entity Set<T> {
+    private var elements: List<T>
+}
+
+routine Set<T>.__contains__(value: T) -> Bool {
+    for elem in me.elements {
+        if elem == value {
+            return true
+        }
+    }
+    return false
+}
+
+let numbers = Set<S32>()
+1 in numbers    # Calls Set<S32>.__contains__(1)
+```
+
+### Related Docs
+
+- [RazorForge Operators](../RazorForge-Wiki/docs/Operators.md)
+- [RazorForge Range Records](../RazorForge-Wiki/docs/Range-Records.md)
+- [Suflae Operators](../Suflae-Wiki/docs/Operators.md)
+- [Suflae Range Records](../Suflae-Wiki/docs/Range-Records.md)
 
 ---
 

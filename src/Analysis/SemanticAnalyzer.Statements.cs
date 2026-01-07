@@ -1,492 +1,626 @@
-using Compilers.Shared.AST;
+namespace Compilers.Analysis;
 
-namespace Compilers.Shared.Analysis;
+using Compilers.Analysis.Enums;
+using Compilers.Analysis.Scopes;
+using Compilers.Analysis.Symbols;
+using Compilers.Analysis.Types;
+using Compilers.Shared.AST;
+using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
 
 /// <summary>
-/// Partial class containing statement visitors (if, while, for, when, return, etc.).
+/// Phase 3: Statement analysis.
 /// </summary>
-public partial class SemanticAnalyzer
+public sealed partial class SemanticAnalyzer
 {
+    #region Phase 3: Body Analysis
+
     /// <summary>
-    /// Visits an expression statement that evaluates an expression for its side effects.
+    /// Analyzes routine bodies and expressions for type correctness.
     /// </summary>
-    /// <param name="node">Expression statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitExpressionStatement(ExpressionStatement node)
+    /// <param name="program">The program to analyze.</param>
+    private void AnalyzeBodies(Program program)
     {
-        node.Expression.Accept(visitor: this);
-        return null;
+        foreach (IAstNode declaration in program.Declarations)
+        {
+            AnalyzeDeclaration(node: declaration);
+        }
+    }
+
+    private void AnalyzeDeclaration(IAstNode node)
+    {
+        switch (node)
+        {
+            case RoutineDeclaration func:
+                AnalyzeFunctionBody(routine: func);
+                break;
+
+            case RecordDeclaration record:
+                AnalyzeTypeMembers(members: record.Members);
+                break;
+
+            case EntityDeclaration entity:
+                AnalyzeTypeMembers(members: entity.Members);
+                break;
+
+            case ResidentDeclaration resident:
+                AnalyzeTypeMembers(members: resident.Members);
+                break;
+        }
+    }
+
+    private void AnalyzeTypeMembers(List<Declaration> members)
+    {
+        foreach (Declaration member in members)
+        {
+            if (member is RoutineDeclaration method)
+            {
+                AnalyzeFunctionBody(routine: method);
+            }
+        }
+    }
+
+    private void AnalyzeFunctionBody(RoutineDeclaration routine)
+    {
+        // The AST already stores names without the '!' suffix
+        // (e.g., "get!" is stored as Name="get", IsFailable=true)
+        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routine.Name);
+        if (routineInfo == null)
+        {
+            return;
+        }
+
+        RoutineInfo? previousRoutine = _currentRoutine;
+        _currentRoutine = routineInfo;
+
+        _registry.EnterScope(kind: ScopeKind.Function, name: routine.Name);
+
+        // Declare parameters in scope
+        foreach (ParameterInfo param in routineInfo.Parameters)
+        {
+            _registry.DeclareVariable(name: param.Name, type: param.Type, isMutable: false);
+        }
+
+        // Analyze body statement
+        AnalyzeStatement(statement: routine.Body);
+
+        // Store routine body for error handling variant generation (Phase 5)
+        if (routineInfo.IsFailable)
+        {
+            StoreRoutineBody(routine: routineInfo, body: routine.Body);
+        }
+
+        _registry.ExitScope();
+
+        _currentRoutine = previousRoutine;
+    }
+
+    private void AnalyzeStatement(Statement statement)
+    {
+        switch (statement)
+        {
+            case BlockStatement block:
+                AnalyzeBlockStatement(block: block);
+                break;
+
+            case DeclarationStatement decl:
+                AnalyzeDeclarationStatement(decl: decl);
+                break;
+
+            case ExpressionStatement expr:
+                AnalyzeExpressionStatement(expr: expr);
+                break;
+
+            case AssignmentStatement assign:
+                AnalyzeAssignmentStatement(assign: assign);
+                break;
+
+            case IfStatement ifStmt:
+                AnalyzeIfStatement(ifStmt: ifStmt);
+                break;
+
+            case WhileStatement whileStmt:
+                AnalyzeWhileStatement(whileStmt: whileStmt);
+                break;
+
+            case ForStatement forStmt:
+                AnalyzeForStatement(forStmt: forStmt);
+                break;
+
+            case WhenStatement whenStmt:
+                AnalyzeWhenStatement(whenStmt: whenStmt);
+                break;
+
+            case ReturnStatement ret:
+                AnalyzeReturnStatement(ret: ret);
+                break;
+
+            case BecomesStatement becomesStmt:
+                AnalyzeBecomesStatement(becomesStmt: becomesStmt);
+                break;
+
+            case ThrowStatement throwStmt:
+                AnalyzeThrowStatement(throwStmt: throwStmt);
+                break;
+
+            case AbsentStatement absent:
+                AnalyzeAbsentStatement(absent: absent);
+                break;
+
+            case BreakStatement:
+            case ContinueStatement:
+            case PassStatement:
+                // These are simple control flow statements with no type analysis needed
+                break;
+
+            case DestructuringStatement destruct:
+                AnalyzeDestructuringStatement(destruct: destruct);
+                break;
+
+            case DangerStatement danger:
+                AnalyzeDangerStatement(danger: danger);
+                break;
+
+            case ViewingStatement viewing:
+                AnalyzeViewingStatement(viewing: viewing);
+                break;
+
+            case HijackingStatement hijacking:
+                AnalyzeHijackingStatement(hijacking: hijacking);
+                break;
+
+            case InspectingStatement inspecting:
+                AnalyzeInspectingStatement(inspecting: inspecting);
+                break;
+
+            case SeizingStatement seizing:
+                AnalyzeSeizingStatement(seizing: seizing);
+                break;
+
+            default:
+                ReportWarning(
+                    message: $"Unknown statement type: {statement.GetType().Name}",
+                    location: statement.Location);
+                break;
+        }
+    }
+
+    #endregion
+
+    #region Statement Analysis Methods
+
+    private void AnalyzeBlockStatement(BlockStatement block)
+    {
+        _registry.EnterScope(kind: ScopeKind.Block, name: null);
+
+        foreach (Statement stmt in block.Statements)
+        {
+            AnalyzeStatement(statement: stmt);
+        }
+
+        _registry.ExitScope();
+    }
+
+    private void AnalyzeDeclarationStatement(DeclarationStatement decl)
+    {
+        switch (decl.Declaration)
+        {
+            case VariableDeclaration varDecl:
+                AnalyzeVariableDeclaration(varDecl: varDecl);
+                break;
+
+            case RoutineDeclaration func:
+                // Nested function declaration
+                AnalyzeFunctionBody(routine: func);
+                break;
+
+            default:
+                ReportWarning(
+                    message: $"Unexpected declaration in statement context: {decl.Declaration.GetType().Name}",
+                    location: decl.Location);
+                break;
+        }
+    }
+
+    private void AnalyzeVariableDeclaration(VariableDeclaration varDecl)
+    {
+        TypeSymbol varType;
+
+        if (varDecl.Type != null)
+        {
+            // Explicit type annotation
+            varType = ResolveType(typeExpr: varDecl.Type);
+        }
+        else if (varDecl.Initializer != null)
+        {
+            // Type inference from initializer
+            varType = AnalyzeExpression(expression: varDecl.Initializer);
+        }
+        else
+        {
+            ReportError(
+                message: $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
+                location: varDecl.Location);
+            varType = ErrorTypeInfo.Instance;
+        }
+
+        // If we have both type annotation and initializer, verify compatibility
+        if (varDecl.Type != null && varDecl.Initializer != null)
+        {
+            TypeSymbol initType = AnalyzeExpression(expression: varDecl.Initializer);
+            if (!IsAssignableTo(source: initType, target: varType))
+            {
+                ReportError(
+                    message: $"Cannot assign value of type '{initType.Name}' to variable of type '{varType.Name}'.",
+                    location: varDecl.Location);
+            }
+        }
+
+        // Register variable in current scope
+        _registry.DeclareVariable(
+            name: varDecl.Name,
+            type: varType,
+            isMutable: varDecl.IsMutable);
+    }
+
+    private void AnalyzeExpressionStatement(ExpressionStatement expr)
+    {
+        // Analyze the expression for side effects and type validation
+        AnalyzeExpression(expression: expr.Expression);
+    }
+
+    private void AnalyzeAssignmentStatement(AssignmentStatement assign)
+    {
+        TypeSymbol targetType = AnalyzeExpression(expression: assign.Target);
+        TypeSymbol valueType = AnalyzeExpression(expression: assign.Value);
+
+        // Check if target is assignable (variable, field, or index)
+        if (!IsAssignableTarget(target: assign.Target))
+        {
+            ReportError(
+                message: "Invalid assignment target.",
+                location: assign.Target.Location);
+            return;
+        }
+
+        // Check mutability
+        if (assign.Target is IdentifierExpression id)
+        {
+            VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+            if (varInfo is { IsMutable: false })
+            {
+                ReportError(
+                    message: $"Cannot assign to immutable variable '{id.Name}'.",
+                    location: assign.Location);
+            }
+        }
+
+        // Validate field write access (setter visibility)
+        if (assign.Target is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+            ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: assign.Location);
+        }
+
+        // Check type compatibility
+        if (!IsAssignableTo(source: valueType, target: targetType))
+        {
+            ReportError(
+                message: $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
+                location: assign.Location);
+        }
+    }
+
+    private void AnalyzeIfStatement(IfStatement ifStmt)
+    {
+        TypeSymbol conditionType = AnalyzeExpression(expression: ifStmt.Condition);
+
+        // Condition must be boolean
+        if (!IsBoolType(type: conditionType))
+        {
+            ReportError(
+                message: $"If condition must be boolean, got '{conditionType.Name}'.",
+                location: ifStmt.Condition.Location);
+        }
+
+        // Analyze then branch
+        AnalyzeStatement(statement: ifStmt.ThenStatement);
+
+        // Analyze else branch if present
+        if (ifStmt.ElseStatement != null)
+        {
+            AnalyzeStatement(statement: ifStmt.ElseStatement);
+        }
+    }
+
+    private void AnalyzeWhileStatement(WhileStatement whileStmt)
+    {
+        TypeSymbol conditionType = AnalyzeExpression(expression: whileStmt.Condition);
+
+        // Condition must be boolean
+        if (!IsBoolType(type: conditionType))
+        {
+            ReportError(
+                message: $"While condition must be boolean, got '{conditionType.Name}'.",
+                location: whileStmt.Condition.Location);
+        }
+
+        // Analyze loop body
+        _registry.EnterScope(kind: ScopeKind.Block, name: "while");
+        AnalyzeStatement(statement: whileStmt.Body);
+        _registry.ExitScope();
+    }
+
+    private void AnalyzeForStatement(ForStatement forStmt)
+    {
+        _registry.EnterScope(kind: ScopeKind.Block, name: "for");
+
+        // Analyze iterable expression
+        TypeSymbol iterableType = AnalyzeExpression(expression: forStmt.Iterable);
+
+        // Get element type from iterable
+        TypeSymbol elementType = GetIterableElementType(iterableType: iterableType, location: forStmt.Location);
+
+        // Declare loop variable with element type
+        _registry.DeclareVariable(
+            name: forStmt.Variable,
+            type: elementType,
+            isMutable: false); // Loop variables are immutable
+
+        // Analyze loop body
+        AnalyzeStatement(statement: forStmt.Body);
+
+        _registry.ExitScope();
+    }
+
+    private void AnalyzeWhenStatement(WhenStatement whenStmt)
+    {
+        TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
+
+        foreach (WhenClause clause in whenStmt.Clauses)
+        {
+            _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
+
+            // Analyze pattern and bind variables
+            AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
+
+            // Analyze clause body
+            AnalyzeStatement(statement: clause.Body);
+
+            _registry.ExitScope();
+        }
+    }
+
+    private void AnalyzeReturnStatement(ReturnStatement ret)
+    {
+        if (_currentRoutine == null)
+        {
+            ReportError(
+                message: "Return statement outside of function.",
+                location: ret.Location);
+            return;
+        }
+
+        if (ret.Value != null)
+        {
+            // Pass expected return type for contextual literal inference
+            TypeSymbol returnType = AnalyzeExpression(expression: ret.Value, expectedType: _currentRoutine.ReturnType);
+
+            // Validate that tokens cannot be returned (RazorForge only)
+            ValidateNotTokenReturnType(type: returnType, location: ret.Location);
+
+            if (_currentRoutine.ReturnType != null &&
+                !IsAssignableTo(source: returnType, target: _currentRoutine.ReturnType))
+            {
+                ReportError(
+                    message: $"Cannot return value of type '{returnType.Name}' from function expecting '{_currentRoutine.ReturnType.Name}'.",
+                    location: ret.Location);
+            }
+        }
     }
 
     /// <summary>
-    /// Visits a declaration statement and registers the variable in the symbol table.
-    /// Performs type checking and memory safety analysis.
+    /// Analyzes a becomes statement (block result value).
+    /// Becomes is used in multi-statement when/if branches to explicitly indicate the branch's result.
     /// </summary>
-    /// <param name="node">Declaration statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitDeclarationStatement(DeclarationStatement node)
+    private void AnalyzeBecomesStatement(BecomesStatement becomesStmt)
     {
-        node.Declaration.Accept(visitor: this);
-        return null;
+        // Analyze the becomes expression
+        // For now, we just validate the expression type - context validation
+        // (checking that becomes appears in an appropriate block context) can be
+        // added in a future phase when we track block expression contexts
+        TypeSymbol becomesType = AnalyzeExpression(expression: becomesStmt.Value);
+
+        // Validate that tokens cannot be block results (RazorForge only)
+        ValidateNotTokenReturnType(type: becomesType, location: becomesStmt.Location);
     }
 
-    /// <summary>
-    /// Analyze assignment statements with language-specific memory model handling.
-    ///
-    /// This method demonstrates the fundamental difference between RazorForge and Suflae:
-    ///
-    /// RazorForge: Assignments use move semantics - objects are transferred and source may become invalid.
-    /// The analyzer needs sophisticated analysis to determine when moves occur vs copies.
-    ///
-    /// Suflae: Assignments use automatic reference counting - both source and target share the object
-    /// with automatic RC increment. No invalidation occurs, promoting safe sharing.
-    ///
-    /// This difference reflects each language's memory management philosophy:
-    /// explicit control vs automatic safety.
-    /// </summary>
-    public object? VisitTupleDestructuringStatement(TupleDestructuringStatement node)
+    private void AnalyzeThrowStatement(ThrowStatement throwStmt)
     {
-        // Visit the initializer to get its type
-        var initializerType = node.Initializer.Accept(visitor: this) as TypeInfo;
-
-        // For now, we'll do basic validation
-        // TODO: Add proper tuple type checking when tuple types are implemented
-
-        // Register all variables in the symbol table
-        for (int i = 0; i < node.Variables.Count; i++)
+        if (_currentRoutine == null || !_currentRoutine.IsFailable)
         {
-            string varName = node.Variables[index: i];
-            TypeExpression? declaredType = node.Types[index: i];
-
-            // If a type was declared, use it; otherwise use a placeholder
-            TypeInfo varType;
-            if (declaredType != null)
-            {
-                varType = ResolveType(typeExpr: declaredType);
-            }
-            else
-            {
-                // TODO: Infer type from tuple element
-                varType = new TypeInfo(Name: "unknown", IsReference: false);
-            }
-
-            // Register the variable in the symbol table
-            var varSymbol = new VariableSymbol(Name: varName, Type: varType, IsMutable: node.IsMutable, Visibility: VisibilityModifier.Private);
-            _symbolTable.TryDeclare(symbol: varSymbol);
+            ReportError(
+                message: "Throw statement is only allowed in failable functions (marked with !).",
+                location: throwStmt.Location);
+            return;
         }
 
-        return null;
+        TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
+
+        // Error must implement Crashable protocol
+        if (!ImplementsProtocol(type: errorType, protocolName: "Crashable"))
+        {
+            ReportError(
+                message: $"Thrown value must implement Crashable protocol, got '{errorType.Name}'.",
+                location: throwStmt.Error.Location);
+        }
+
+        // Mark routine as having throw statements (for variant generation)
+        _currentRoutine.HasThrow = true;
     }
 
-    public object? VisitAssignmentStatement(AssignmentStatement node)
+    private void AnalyzeAbsentStatement(AbsentStatement absent)
     {
-        // Standard type compatibility checking
-        var targetType = node.Target.Accept(visitor: this) as TypeInfo;
-        var valueType = node.Value.Accept(visitor: this) as TypeInfo;
-
-        if (targetType != null && valueType != null &&
-            !IsAssignable(target: targetType, source: valueType))
+        if (_currentRoutine == null || !_currentRoutine.IsFailable)
         {
-            AddError(message: $"Cannot assign {valueType.Name} to {targetType.Name}",
-                location: node.Location);
+            ReportError(
+                message: "Absent statement is only allowed in failable functions (marked with !).",
+                location: absent.Location);
+            return;
         }
 
-        // CRITICAL: Check for inline-only method calls (.view(), .hijack())
-        // These produce temporary tokens that cannot be stored via assignment
-        if (IsInlineOnlyMethodCall(expr: node.Value, methodName: out string? methodName))
-        {
-            AddError(message: $"Cannot assign result of '.{methodName}()' to a variable. " +
-                              $"Inline tokens must be used directly (e.g., 'obj.{methodName}().field') " +
-                              $"or use scoped syntax (e.g., '{(methodName == "view" ? "viewing" : "hijacking")} obj as handle {{ ... }}').",
-                location: node.Location);
-        }
-
-        // CRITICAL: Prevent mutation through read-only wrapper types
-        // Viewed<T> and Inspected<T> provide read-only access - cannot mutate through them
-        if (node.Target is MemberExpression memberTarget)
-        {
-            var objectType = memberTarget.Object.Accept(visitor: this) as TypeInfo;
-            if (objectType != null && IsReadOnlyWrapperType(typeName: objectType.Name))
-            {
-                AddError(
-                    message:
-                    $"Cannot mutate field through read-only wrapper '{objectType.Name}'. " +
-                    $"Read-only wrappers (Viewed<T>, Inspected<T>) do not allow mutation. " +
-                    $"Use hijacking or seizing for mutable access.",
-                    location: node.Location);
-            }
-        }
-
-        // CRITICAL: Prevent scoped tokens from escaping their scope
-        // Scoped tokens (Viewed, Hijacked, Seized, Inspected) cannot be assigned to variables
-        if (node.Value is IdentifierExpression valIdent &&
-            IsScopedToken(variableName: valIdent.Name))
-        {
-            AddError(message: $"Cannot assign scoped token '{valIdent.Name}' to a variable. " +
-                              $"Scoped tokens are bound to their declaring scope and cannot escape. " +
-                              $"Use the token directly within the scoped statement block.",
-                location: node.Location);
-        }
-
-        // CRITICAL: Language-specific memory model handling for assignments
-        if (node.Target is IdentifierExpression targetId &&
-            node.Value is IdentifierExpression valueId)
-        {
-            if (_language == Language.Suflae)
-            {
-                // Suflae: Automatic reference counting - both variables share the same object
-                // Source remains valid, RC is incremented, no invalidation occurs
-                _memoryAnalyzer.HandleSuflaeAssignment(target: targetId.Name,
-                    source: valueId.Name,
-                    location: node.Location);
-            }
-            else if (_language == Language.RazorForge)
-            {
-                // RazorForge: Move semantics - determine if assignment is copy or move
-                if (targetType != null)
-                {
-                    bool isMove =
-                        DetermineMoveSemantics(valueExpr: node.Value, targetType: targetType);
-
-                    if (isMove)
-                    {
-                        // Move operation: Transfer ownership from source to target
-                        if (node.Value is IdentifierExpression sourceId)
-                        {
-                            // In move semantics, the source is invalidated
-                            // For now, we register the target and note that ownership transferred
-                            // TODO: Add validation to prevent use-after-move for the source
-                        }
-
-                        // Register new object with ownership transferred
-                        _memoryAnalyzer.RegisterObject(name: targetId.Name,
-                            type: targetType,
-                            location: node.Location);
-                    }
-                    else
-                    {
-                        // Copy operation: Create new reference
-                        _memoryAnalyzer.RegisterObject(name: targetId.Name,
-                            type: targetType,
-                            location: node.Location);
-                    }
-                }
-            }
-        }
-
-        return null;
+        // Mark routine as having absent statements (for variant generation)
+        _currentRoutine.HasAbsent = true;
     }
 
-    /// <summary>
-    /// Visits a return statement and validates the return value type.
-    /// </summary>
-    /// <param name="node">Return statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitReturnStatement(ReturnStatement node)
+    private void AnalyzeDestructuringStatement(DestructuringStatement destruct)
     {
-        if (node.Value != null)
-        {
-            var returnType = node.Value.Accept(visitor: this) as TypeInfo;
+        TypeSymbol initType = AnalyzeExpression(expression: destruct.Initializer);
 
-            // CRITICAL: Prevent inline-only tokens from being returned (no-return rule)
-            // .view() and .hijack() produce tokens that cannot escape the immediate expression
-            if (IsInlineOnlyMethodCall(expr: node.Value, methodName: out string? methodName))
-            {
-                AddError(message: $"Cannot return result of '.{methodName}()' from a routine. " +
-                                  $"Inline tokens (Viewed<T>, Hijacked<T>) cannot escape their usage context. " +
-                                  $"Return the extracted value instead, or use a callback pattern.",
-                    location: node.Location);
-            }
-
-            // CRITICAL: Prevent scoped tokens from escaping via return
-            // Only usurping functions can return Hijacked<T> tokens
-            // Viewed, Seized, Inspected tokens can NEVER escape (even from usurping functions)
-            if (node.Value is IdentifierExpression returnId &&
-                IsScopedToken(variableName: returnId.Name))
-            {
-                // Check if this is a Hijacked<T> token and we're in a usurping function
-                if (returnType != null && returnType.Name.StartsWith(value: "Hijacked<") &&
-                    _isInUsurpingFunction)
-                {
-                    // Allowed: usurping functions can return Hijacked<T>
-                }
-                else
-                {
-                    string tokenType = returnType?.Name ?? "scoped token";
-                    AddError(
-                        message:
-                        $"Cannot return scoped token '{returnId.Name}' of type {tokenType}. " +
-                        $"Scoped tokens are bound to their declaring scope and cannot escape. " +
-                        $"Only usurping functions can return Hijacked<T> tokens. " +
-                        $"Viewed, Seized, and Inspected tokens can never escape.",
-                        location: node.Location);
-                }
-            }
-        }
-
-        return null;
+        // Analyze the destructuring pattern and bind variables
+        AnalyzeDestructuringPattern(pattern: destruct.Pattern, sourceType: initType, isMutable: destruct.IsMutable);
     }
 
-    /// <summary>
-    /// Visits an if statement and validates the condition and branches.
-    /// </summary>
-    /// <param name="node">If statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitIfStatement(IfStatement node)
+    private void AnalyzeDangerStatement(DangerStatement danger)
     {
-        // Check condition is boolean (accept both Bool and bool for compatibility)
-        var conditionType = node.Condition.Accept(visitor: this) as TypeInfo;
-        if (conditionType != null && conditionType.Name != "Bool" && conditionType.Name != "bool")
+        if (_registry.Language == Language.Suflae)
         {
-            AddError(message: $"If condition must be boolean, got {conditionType.Name}",
-                location: node.Location);
+            ReportError(
+                message: "Danger blocks are not available in Suflae.",
+                location: danger.Location);
+            return;
         }
 
-        node.ThenStatement.Accept(visitor: this);
-        node.ElseStatement?.Accept(visitor: this);
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a while loop statement and validates the condition and body.
-    /// </summary>
-    /// <param name="node">While statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitWhileStatement(WhileStatement node)
-    {
-        // Check condition is boolean (accept both Bool and bool for compatibility)
-        var conditionType = node.Condition.Accept(visitor: this) as TypeInfo;
-        if (conditionType != null && conditionType.Name != "Bool" && conditionType.Name != "bool")
+        // Danger blocks cannot be nested
+        if (InDangerBlock)
         {
-            AddError(message: $"While condition must be boolean, got {conditionType.Name}",
-                location: node.Location);
+            ReportError(
+                message: "Danger blocks cannot be nested.",
+                location: danger.Location);
+            return;
         }
 
-        node.Body.Accept(visitor: this);
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a for loop statement and validates the iterator and body.
-    /// </summary>
-    /// <param name="node">For statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitForStatement(ForStatement node)
-    {
-        // Enter new scope for loop variable
-        _symbolTable.EnterScope();
+        // Enter danger scope
+        _registry.EnterScope(kind: ScopeKind.Block, name: "danger");
+        _dangerBlockDepth = 1;
 
         try
         {
-            // Check iterable type
-            var iterableType = node.Iterable.Accept(visitor: this) as TypeInfo;
-            // TODO: Check if iterable implements Iterable interface
-
-            // Add loop variable to scope
-            var loopVarSymbol = new VariableSymbol(Name: node.Variable,
-                Type: null,
-                IsMutable: false,
-                Visibility: VisibilityModifier.Private);
-            _symbolTable.TryDeclare(symbol: loopVarSymbol);
-
-            node.Body.Accept(visitor: this);
+            AnalyzeBlockStatement(block: danger.Body);
         }
         finally
         {
-            _symbolTable.ExitScope();
+            _dangerBlockDepth = 0;
+            _registry.ExitScope();
         }
-
-        return null;
     }
 
-    /// <summary>
-    /// Visits a when (pattern matching) statement and validates all pattern clauses.
-    /// </summary>
-    /// <param name="node">When statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitWhenStatement(WhenStatement node)
+    private void AnalyzeViewingStatement(ViewingStatement viewing)
     {
-        // Set context flag - operations like try_seize/check_seize must be in when condition
-        bool wasInWhenCondition = _isInWhenCondition;
-        _isInWhenCondition = true;
-
-        var expressionType = node.Expression.Accept(visitor: this) as TypeInfo;
-
-        // Reset context after evaluating the condition
-        _isInWhenCondition = wasInWhenCondition;
-
-        foreach (WhenClause clause in node.Clauses)
+        if (_registry.Language == Language.Suflae)
         {
-            // Enter new scope for pattern variables and scoped tokens
-            _symbolTable.EnterScope();
-            _memoryAnalyzer.EnterScope();
-            _scopeDepth++;
-
-            try
-            {
-                // Type check pattern against expression and bind pattern variables
-                // This may register scoped tokens from fallible lock operations
-                ValidatePatternMatch(pattern: clause.Pattern,
-                    expressionType: expressionType,
-                    location: clause.Location);
-
-                clause.Body.Accept(visitor: this);
-            }
-            finally
-            {
-                // Clean up scoped tokens and restore sources when clause exits
-                RestoreInvalidatedSources();
-                ExitScopeCleanupTokens();
-                _scopeDepth--;
-                _memoryAnalyzer.ExitScope();
-                _symbolTable.ExitScope();
-            }
+            ReportError(
+                message: "Viewing blocks are not available in Suflae.",
+                location: viewing.Location);
+            return;
         }
 
-        return null;
+        TypeSymbol sourceType = AnalyzeExpression(expression: viewing.Source);
+
+        _registry.EnterScope(kind: ScopeKind.Block, name: "viewing");
+
+        // Create Viewed<T> token type
+        TypeSymbol tokenType = CreateViewedType(innerType: sourceType);
+
+        _registry.DeclareVariable(
+            name: viewing.Token,
+            type: tokenType,
+            isMutable: false);
+
+        AnalyzeBlockStatement(block: viewing.Body);
+
+        _registry.ExitScope();
     }
 
-    /// <summary>
-    /// Analyze block statements with proper scope management for both symbols and memory objects.
-    /// Block scopes are fundamental to memory safety - when a scope exits, all objects declared
-    /// within become invalid (deadref protection). This prevents use-after-scope errors.
-    ///
-    /// The memory analyzer automatically invalidates all objects in the scope when it exits,
-    /// implementing the core principle that objects cannot outlive their lexical scope.
-    /// </summary>
-    public object? VisitBlockStatement(BlockStatement node)
+    private void AnalyzeHijackingStatement(HijackingStatement hijacking)
     {
-        // Enter new lexical scope for both symbol resolution and memory tracking
-        _symbolTable.EnterScope();
-        _memoryAnalyzer.EnterScope();
-
-        try
+        if (_registry.Language == Language.Suflae)
         {
-            // Analyze all statements within the protected scope
-            foreach (Statement statement in node.Statements)
-            {
-                statement.Accept(visitor: this);
-            }
+            ReportError(
+                message: "Hijacking blocks are not available in Suflae.",
+                location: hijacking.Location);
+            return;
         }
-        finally
+
+        TypeSymbol sourceType = AnalyzeExpression(expression: hijacking.Source);
+
+        _registry.EnterScope(kind: ScopeKind.Block, name: "hijacking");
+
+        // Create Hijacked<T> token type
+        TypeSymbol tokenType = CreateHijackedType(innerType: sourceType);
+
+        _registry.DeclareVariable(
+            name: hijacking.Token,
+            type: tokenType,
+            isMutable: false);
+
+        AnalyzeBlockStatement(block: hijacking.Body);
+
+        _registry.ExitScope();
+    }
+
+    private void AnalyzeInspectingStatement(InspectingStatement inspecting)
+    {
+        if (_registry.Language == Language.Suflae)
         {
-            // CRITICAL: Scope cleanup automatically invalidates all objects in this scope
-            // This is a fundamental memory safety mechanism preventing use-after-scope
-            _symbolTable.ExitScope();
-            _memoryAnalyzer.ExitScope(); // Invalidates all objects declared in this scope
+            ReportError(
+                message: "Inspecting blocks are not available in Suflae.",
+                location: inspecting.Location);
+            return;
         }
 
-        return null;
+        TypeSymbol sourceType = AnalyzeExpression(expression: inspecting.Source);
+
+        _registry.EnterScope(kind: ScopeKind.Block, name: "inspecting");
+
+        // Create Inspected<T> token type
+        TypeSymbol tokenType = CreateInspectedType(innerType: sourceType);
+
+        _registry.DeclareVariable(
+            name: inspecting.Token,
+            type: tokenType,
+            isMutable: false);
+
+        AnalyzeBlockStatement(block: inspecting.Body);
+
+        _registry.ExitScope();
     }
 
-    /// <summary>
-    /// Visits a break statement that exits a loop.
-    /// </summary>
-    /// <param name="node">Break statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitBreakStatement(BreakStatement node)
+    private void AnalyzeSeizingStatement(SeizingStatement seizing)
     {
-        return null;
-    }
-    /// <summary>
-    /// Visits a continue statement that skips to the next loop iteration.
-    /// </summary>
-    /// <param name="node">Continue statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitContinueStatement(ContinueStatement node)
-    {
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a throw statement that returns an error via Result.
-    /// Validates that only Crashable types can be thrown.
-    /// </summary>
-    /// <param name="node">Throw statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitThrowStatement(ThrowStatement node)
-    {
-        // Visit the error expression
-        node.Error.Accept(visitor: this);
-
-        // Validate that throw only accepts Crashable types, not string literals
-        if (node.Error is LiteralExpression literal)
+        if (_registry.Language == Language.Suflae)
         {
-            if (literal.Value is string)
-            {
-                AddError(
-                    message:
-                    "Cannot throw a string literal. Use a Crashable error type instead (e.g., throw MyError())",
-                    location: node.Location);
-            }
-            else
-            {
-                AddError(
-                    message: "Cannot throw a literal value. Use a Crashable error type instead",
-                    location: node.Location);
-            }
-
-            return null;
+            ReportError(
+                message: "Seizing blocks are not available in Suflae.",
+                location: seizing.Location);
+            return;
         }
 
-        // Check if it's a call expression to a Crashable type constructor
-        if (node.Error is CallExpression callExpr)
-        {
-            string? typeName = null;
-            if (callExpr.Callee is IdentifierExpression ident)
-            {
-                typeName = ident.Name;
-            }
+        TypeSymbol sourceType = AnalyzeExpression(expression: seizing.Source);
 
-            if (typeName != null)
-            {
-                Symbol? symbol = _symbolTable.Lookup(name: typeName);
-                if (symbol is RecordSymbol structSymbol)
-                {
-                    if (!structSymbol.IsCrashable)
-                    {
-                        AddError(
-                            message:
-                            $"Cannot throw '{typeName}': type does not implement Crashable feature",
-                            location: node.Location);
-                    }
-                }
-                else if (symbol == null)
-                {
-                    // Type not found - will be caught by other semantic checks
-                }
-                else
-                {
-                    AddError(
-                        message:
-                        $"Cannot throw '{typeName}': only Crashable record types can be thrown",
-                        location: node.Location);
-                }
-            }
-        }
+        _registry.EnterScope(kind: ScopeKind.Block, name: "seizing");
 
-        return null;
+        // Create Seized<T> token type
+        TypeSymbol tokenType = CreateSeizedType(innerType: sourceType);
+
+        _registry.DeclareVariable(
+            name: seizing.Token,
+            type: tokenType,
+            isMutable: false);
+
+        AnalyzeBlockStatement(block: seizing.Body);
+
+        _registry.ExitScope();
     }
 
-    /// <summary>
-    /// Visits an absent statement that indicates value not found.
-    /// </summary>
-    /// <param name="node">Absent statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitAbsentStatement(AbsentStatement node)
-    {
-        // No expression to visit for absent
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a pass statement (empty placeholder).
-    /// </summary>
-    /// <param name="node">Pass statement node</param>
-    /// <returns>Null</returns>
-    public object? VisitPassStatement(PassStatement node)
-    {
-        // Pass is a no-op placeholder
-        return null;
-    }
+    #endregion
 }

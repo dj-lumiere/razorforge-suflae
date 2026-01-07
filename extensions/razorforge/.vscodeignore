@@ -1,0 +1,12 @@
+.vscode/**
+.vscode-test/**
+out/**
+src/**
+node_modules/**
+.gitignore
+.prettierignore
+tsconfig.json
+*.vsix
+*.md
+!README.md
+!dist/**

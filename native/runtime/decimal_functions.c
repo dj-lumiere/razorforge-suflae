@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "../include/razorforge_math.h"
 
 // Intel Decimal Library configuration
@@ -400,6 +401,179 @@ uint32_t rf_d128_to_d32(d128_t x)
 uint64_t rf_d128_to_d64(d128_t x)
 {
     return bid128_to_bid64(to_bid128(x));
+}
+
+// ============================================================================
+// d128 <-> f128 conversion
+// Intel DFP's BINARY128 is the same layout as f128_t (two uint64_t)
+// ============================================================================
+
+f128_t rf_d128_to_f128(d128_t x)
+{
+    BID_UINT128 bid = to_bid128(x);
+    BID_UINT128 binary;  // BINARY128 = BID_UINT128 when USE_COMPILER_F128_TYPE=0
+    binary = bid128_to_binary128(bid);
+    f128_t result;
+    result.low = binary.w[0];
+    result.high = binary.w[1];
+    return result;
+}
+
+d128_t rf_f128_to_d128(f128_t x)
+{
+    BID_UINT128 binary;
+    binary.w[0] = x.low;
+    binary.w[1] = x.high;
+    return from_bid128(binary128_to_bid128(binary));
+}
+
+// ============================================================================
+// d128 transcendental functions - FULL PRECISION via LibBF
+//
+// Strategy: d128 -> f128 -> LibBF transcendental -> f128 -> d128
+// LibBF provides arbitrary precision transcendentals with exact rounding.
+// Both d128 and f128 have ~34 significant digits.
+// ============================================================================
+
+d128_t rf_d128_sin(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_sin(f));
+}
+
+d128_t rf_d128_cos(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_cos(f));
+}
+
+d128_t rf_d128_tan(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_tan(f));
+}
+
+d128_t rf_d128_asin(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_asin(f));
+}
+
+d128_t rf_d128_acos(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_acos(f));
+}
+
+d128_t rf_d128_atan(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_atan(f));
+}
+
+d128_t rf_d128_atan2(d128_t y, d128_t x)
+{
+    f128_t fy = rf_d128_to_f128(y);
+    f128_t fx = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_atan2(fy, fx));
+}
+
+d128_t rf_d128_sinh(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_sinh(f));
+}
+
+d128_t rf_d128_cosh(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_cosh(f));
+}
+
+d128_t rf_d128_tanh(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_tanh(f));
+}
+
+d128_t rf_d128_asinh(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_asinh(f));
+}
+
+d128_t rf_d128_acosh(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_acosh(f));
+}
+
+d128_t rf_d128_atanh(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_atanh(f));
+}
+
+d128_t rf_d128_exp(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_exp(f));
+}
+
+d128_t rf_d128_exp2(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_exp2(f));
+}
+
+d128_t rf_d128_expm1(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_expm1(f));
+}
+
+d128_t rf_d128_log(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_log(f));
+}
+
+d128_t rf_d128_log2(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_log2(f));
+}
+
+d128_t rf_d128_log10(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_log10(f));
+}
+
+d128_t rf_d128_log1p(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_log1p(f));
+}
+
+d128_t rf_d128_pow(d128_t base, d128_t exp)
+{
+    f128_t fb = rf_d128_to_f128(base);
+    f128_t fe = rf_d128_to_f128(exp);
+    return rf_f128_to_d128(rf_f128_pow(fb, fe));
+}
+
+d128_t rf_d128_cbrt(d128_t x)
+{
+    f128_t f = rf_d128_to_f128(x);
+    return rf_f128_to_d128(rf_f128_cbrt(f));
+}
+
+d128_t rf_d128_hypot(d128_t x, d128_t y)
+{
+    f128_t fx = rf_d128_to_f128(x);
+    f128_t fy = rf_d128_to_f128(y);
+    return rf_f128_to_d128(rf_f128_hypot(fx, fy));
 }
 
 // ============================================================================

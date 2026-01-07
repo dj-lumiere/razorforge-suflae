@@ -3,7 +3,7 @@
 namespace Core
 # Core F64 type definition - maps to LLVM double
 record F64 {
-    private value: @intrinsic.f64
+    private value: @intrinsic.double
 }
 
 # IEEE 754 double precision constants

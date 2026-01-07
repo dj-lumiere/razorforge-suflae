@@ -9,7 +9,7 @@
 #   # To "modify", use with statement or create new:
 #   let moved = coords with { [0]: 5.0 }
 
-import errors/IndexOutOfBoundsError
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 
@@ -41,15 +41,6 @@ routine ValueList<T, N>.__getitem__!<I>(me: ValueList<T, N>, index: BackIndex<I>
 requires I follows Integral {
     let idx = index.resolve(N)
     return me[idx]
-}
-
-# ============================================================================
-# Legacy get method
-# ============================================================================
-
-routine ValueList<T, N>.get!<I>(me: ValueList<T, N>, index: I) -> T
-requires I follows Integral {
-    return me.__getitem__!(index)
 }
 
 # ============================================================================

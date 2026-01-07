@@ -12,10 +12,10 @@
 #   let last = set[^1]     # 5
 #   let range = set.range(1, 10)
 
-import memory/DynamicSlice
-import memory/MemorySize
-import errors/IndexOutOfBoundsError
-import Collections/List
+import memory.DynamicSlice
+import memory.MemorySize
+import errors.IndexOutOfBoundsError
+import Collections.List
 
 namespace Collections
 
@@ -408,11 +408,6 @@ routine SortedSet<T>.get_by_rank(me: SortedSet<T>, node: BTreeSetNode<T>, rank: 
 
     # Should not reach here if rank is valid
     return node.keys[0]
-}
-
-routine SortedSet<T>.get!<I>(me: SortedSet<T>, index: I) -> T
-requires I follows Integral {
-    return me.__getitem__!(index)
 }
 
 # ============================================================================

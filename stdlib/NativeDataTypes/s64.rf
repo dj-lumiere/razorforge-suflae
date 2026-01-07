@@ -8,8 +8,8 @@ import Text/Text
 import FFI/CStr
 
 # Core S64 type definition - maps to LLVM i64
-record S64 {
-    private value: LlvmNativeI64
+record S64 follows Integral {
+    private value: @intrinsic.i64
 }
 
 # Constants for S64 limits
@@ -247,19 +247,19 @@ routine S64.__mul_wrap__(you: S64) -> S64 {
 
 routine S64.__add_sat__(you: S64) -> S64 {
     danger! {
-        return @intrinsic.add.saturating<i64>(me, you)
+        return @intrinsic.add.saturate<i64>(me, you)
     }
 }
 
 routine S64.__sub_sat__(you: S64) -> S64 {
     danger! {
-        return @intrinsic.sub.saturating<i64>(me, you)
+        return @intrinsic.sub.saturate<i64>(me, you)
     }
 }
 
 routine S64.__mul_sat__(you: S64) -> S64 {
     danger! {
-        return @intrinsic.mul.saturating<i64>(me, you)
+        return @intrinsic.mul.saturate<i64>(me, you)
     }
 }
 
@@ -362,9 +362,9 @@ routine S64.__pow_sat__!(exp: S64) -> S64 {
         }
         while exp > 0 {
             if (exp & 1) == 1 {
-                result = @intrinsic.mul.saturating<i64>(result, base)
+                result = @intrinsic.mul.saturate<i64>(result, base)
             }
-            base = @intrinsic.mul.saturating<i64>(base, base)
+            base = @intrinsic.mul.saturate<i64>(base, base)
             exp = exp >> 1
         }
         return result

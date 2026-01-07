@@ -10,7 +10,7 @@
 #   let first = flags[0]
 #   if flags.is_full() { }
 
-import errors/IndexOutOfBoundsError
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 
@@ -137,20 +137,6 @@ routine FixedBitList<N>.__setitem__!<I>(me: FixedBitList<N>, index: BackIndex<I>
 requires I follows Integral {
     let idx = index.resolve(me.count)
     me.set_bit(idx, value)
-}
-
-# ============================================================================
-# Legacy get/set methods
-# ============================================================================
-
-routine FixedBitList<N>.get!<I>(me: FixedBitList<N>, index: I) -> Bool
-requires I follows Integral {
-    return me.__getitem__!(index)
-}
-
-routine FixedBitList<N>.set!<I>(me: FixedBitList<N>, index: I, value: Bool)
-requires I follows Integral {
-    me.__setitem__!(index, value)
 }
 
 # ============================================================================

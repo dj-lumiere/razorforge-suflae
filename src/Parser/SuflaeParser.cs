@@ -344,6 +344,11 @@ public partial class SuflaeParser
             return ParseReturnStatement();
         }
 
+        if (Match(type: TokenType.Becomes))
+        {
+            return ParseBecomesStatement();
+        }
+
         if (Match(type: TokenType.Throw))
         {
             return ParseThrowStatement();

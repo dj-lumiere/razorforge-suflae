@@ -1293,14 +1293,19 @@ public partial class RazorForgeParser
                 TokenType.D128Literal))
         {
             Token token = PeekToken(offset: -1);
+
+            // For F128, D32, D64, D128 - store raw string, semantic analysis will parse them
+            // using NumericLiteralParser which calls native C libraries (LibBF, Intel DFP)
+            if (token.Type is TokenType.F128Literal or TokenType.D32Literal or TokenType.D64Literal or TokenType.D128Literal)
+            {
+                result = new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+                return true;
+            }
+
             string cleanValue = token.Text
                                      .Replace(oldValue: "f16", newValue: "")
                                      .Replace(oldValue: "f32", newValue: "")
                                      .Replace(oldValue: "f64", newValue: "")
-                                     .Replace(oldValue: "f128", newValue: "")
-                                     .Replace(oldValue: "d32", newValue: "")
-                                     .Replace(oldValue: "d64", newValue: "")
-                                     .Replace(oldValue: "d128", newValue: "")
                                      .Replace(oldValue: "_", newValue: "");
 
             if (double.TryParse(s: cleanValue, result: out double floatVal))
@@ -1317,9 +1322,17 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses an integer value from a cleaned string, handling hex, binary, and decimal formats.
+    /// For 128-bit literals, stores the string value for later semantic analysis.
     /// </summary>
     private static LiteralExpression ParseIntegerValue(string cleanValue, Token token, SourceLocation location)
     {
+        // For 128-bit integers, store the raw string - semantic analysis will parse them
+        // using NumericLiteralParser which handles arbitrary precision
+        if (token.Type is TokenType.S128Literal or TokenType.U128Literal)
+        {
+            return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+        }
+
         // Handle hexadecimal literals (0x prefix)
         if (cleanValue.StartsWith(value: "0x") || cleanValue.StartsWith(value: "0X"))
         {

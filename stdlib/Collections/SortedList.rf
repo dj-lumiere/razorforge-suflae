@@ -10,10 +10,10 @@
 #   grades.insert(92.0)
 #   let median = grades[grades.count() / 2]  # O(log n) access
 
-import memory/DynamicSlice
-import memory/MemorySize
-import errors/IndexOutOfBoundsError
-import Collections/List
+import memory.DynamicSlice
+import memory.MemorySize
+import errors.IndexOutOfBoundsError
+import Collections.List
 
 namespace Collections
 
@@ -414,11 +414,6 @@ routine SortedList<T>.get_by_rank(me: SortedList<T>, node: BTreeListNode<T>, ran
     }
 
     return node.keys[0]
-}
-
-routine SortedList<T>.get!<I>(me: SortedList<T>, index: I) -> T
-requires I follows Integral {
-    return me.__getitem__!(index)
 }
 
 # ============================================================================

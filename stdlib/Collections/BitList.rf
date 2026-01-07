@@ -11,9 +11,9 @@
 #   let first = bits[0]  # true
 #   let last = bits[^1]  # true
 
-import memory/DynamicSlice
-import memory/MemorySize
-import errors/IndexOutOfBoundsError
+import memory.DynamicSlice
+import memory.MemorySize
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 
@@ -190,20 +190,6 @@ requires I follows Integral {
 }
 
 # ============================================================================
-# Legacy get/set methods
-# ============================================================================
-
-routine BitList.get!<I>(index: I) -> Bool
-requires I follows Integral {
-    return me.__getitem__!(index)
-}
-
-routine BitList.set!<I>(index: I, value: Bool)
-requires I follows Integral {
-    me.__setitem__!(index, value)
-}
-
-# ============================================================================
 # Bit Operations
 # ============================================================================
 
@@ -363,7 +349,7 @@ routine BitListIterator.next!(me: BitListIterator) -> Bool {
     if me.index >= me.list.count() {
         absent
     }
-    let value = me.list.get!(me.index)
+    let value = me.list[me.index]
     me.index = me.index + 1u64
     return value
 }

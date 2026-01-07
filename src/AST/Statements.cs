@@ -160,6 +160,40 @@ public record ReturnStatement(Expression? Value, SourceLocation Location)
 }
 
 /// <summary>
+/// Becomes statement that produces a block result value without exiting the function.
+/// Used in multi-statement when/if branches to explicitly indicate the branch's result.
+/// </summary>
+/// <param name="Value">Expression whose value becomes the block result</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// The becomes statement solves the "stray value" problem in indentation-based blocks:
+/// <code>
+/// let num = when result:
+///     is Crashable e:
+///         show(f"Error: {e.crash_message()}")
+///         becomes 0  // Explicit: this block produces 0
+///     else value:
+///         show(f"Success: {value}")
+///         becomes value
+/// </code>
+/// Rules:
+/// <list type="bullet">
+/// <item>Required when a multi-statement block needs to produce a value</item>
+/// <item>Single-expression branches can use => syntax instead</item>
+/// <item>CE if a block has statements followed by a trailing value without becomes</item>
+/// </list>
+/// </remarks>
+public record BecomesStatement(Expression Value, SourceLocation Location)
+    : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitBecomesStatement(node: this);
+    }
+}
+
+/// <summary>
 /// Statement that fails the current function with an error, returning it via Result&lt;T>.
 /// Used in RazorForge and Suflae for recoverable errors that should be handled by the caller.
 /// </summary>

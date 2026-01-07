@@ -3,7 +3,7 @@
 namespace Core
 # Core F32 type definition - maps to LLVM float
 record F32 {
-    private value: @intrinsic.f32
+    private value: @intrinsic.float
 }
 
 # IEEE 754 single precision constants

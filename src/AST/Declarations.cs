@@ -19,6 +19,21 @@ namespace Compilers.Shared.AST;
 public abstract record Declaration(SourceLocation Location) : AstNode(Location: Location);
 
 /// <summary>
+/// Empty placeholder declaration used inside type bodies.
+/// Equivalent to Python's 'pass' statement but as a declaration.
+/// </summary>
+/// <param name="Location">Source location information</param>
+public record PassDeclaration(SourceLocation Location) : Declaration(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        // PassDeclaration is a no-op, just return default
+        return default!;
+    }
+}
+
+/// <summary>
 /// Generic constraint declaration for type parameters.
 /// Specifies requirements that generic type arguments must satisfy.
 /// </summary>

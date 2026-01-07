@@ -10,7 +10,7 @@
 #   let first = buffer[0]
 #   if buffer.is_full() { }
 
-import errors/IndexOutOfBoundsError
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 
@@ -113,20 +113,6 @@ routine FixedList<T, N>.__setitem__!<I>(me: FixedList<T, N>, index: BackIndex<I>
 requires I follows Integral {
     let idx = index.resolve(me.count)
     me[idx] = value
-}
-
-# ============================================================================
-# Legacy get/set methods
-# ============================================================================
-
-routine FixedList<T, N>.get!<I>(me: FixedList<T, N>, index: I) -> T
-requires I follows Integral {
-    return me.__getitem__!(index)
-}
-
-routine FixedList<T, N>.set!<I>(me: FixedList<T, N>, index: I, value: T)
-requires I follows Integral {
-    me.__setitem__!(index, value)
 }
 
 # ============================================================================

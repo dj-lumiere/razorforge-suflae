@@ -3,7 +3,7 @@
 namespace Core
 # Core F16 type definition - maps to LLVM half
 record F16 {
-    private value: @intrinsic.f16
+    private value: @intrinsic.half
 }
 
 # IEEE 754 half precision constants

@@ -69,6 +69,23 @@ public partial class RazorForgeParser
             return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
         }
 
+        // Intrinsic type: @intrinsic.i1, @intrinsic.i32, @intrinsic.f64, etc.
+        // These map directly to LLVM IR types
+        if (Match(type: TokenType.Intrinsic))
+        {
+            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
+
+            // Allow any identifier as intrinsic type name (i1, i8, i16, i32, i64, i128, f16, f32, f64, f128, ptr, etc.)
+            if (!Match(TokenType.Identifier, TokenType.TypeIdentifier))
+            {
+                throw new ParseException(
+                    message: $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}");
+            }
+
+            string intrinsicName = PeekToken(offset: -1).Text;
+            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}", GenericArguments: null, Location: location);
+        }
+
         // Named type (identifier or type identifier)
         if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
         {
@@ -351,7 +368,7 @@ public partial class RazorForgeParser
             ? new List<GenericConstraintDeclaration>(collection: existingConstraints)
             : new List<GenericConstraintDeclaration>();
 
-        // Parse requires clauses: requires T follows Protocol requires U is record
+        // Parse requires clauses: requires T follows Protocol
         // Each parameter can have its own requires clause or they can be comma-separated
         while (Match(type: TokenType.Requires))
         {

@@ -1,798 +1,1679 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+namespace Compilers.Analysis;
 
-namespace Compilers.Shared.Analysis;
+using Compilers.Analysis.Enums;
+using Compilers.Analysis.Results;
+using Compilers.Shared.Analysis.Native;
+using Compilers.Analysis.Scopes;
+using Compilers.Analysis.Symbols;
+using Compilers.Analysis.Types;
+using Compilers.Shared.Lexer;
+using Compilers.Shared.AST;
+using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
 
 /// <summary>
-/// Partial class containing expression visitors (literal, binary, unary, member, etc.).
+/// Phase 3: Expression analysis.
 /// </summary>
-public partial class SemanticAnalyzer
+public sealed partial class SemanticAnalyzer
 {
+    #region Expression Analysis
+
     /// <summary>
-    /// Visits a literal expression and infers its type.
+    /// Analyzes an expression and returns its resolved type.
+    /// Also sets the ResolvedType property on the expression.
     /// </summary>
-    /// <param name="node">Literal expression node</param>
-    /// <returns>TypeInfo representing the literal type</returns>
-    public object? VisitLiteralExpression(LiteralExpression node)
+    /// <param name="expression">The expression to analyze.</param>
+    /// <param name="expectedType">Optional expected type for contextual inference (e.g., return type, parameter type).</param>
+    /// <returns>The resolved type of the expression.</returns>
+    private TypeSymbol AnalyzeExpression(Expression expression, TypeSymbol? expectedType = null)
     {
-        // Use the explicit LiteralType from the token to determine the type
-        // This is more accurate than inferring from C# runtime type
-        TypeInfo? resultType = node.LiteralType switch
+        TypeSymbol resultType = expression switch
         {
-            // Explicitly typed integer literals (same for both languages)
-            TokenType.S8Literal => GetPrimitiveTypeInfo("s8"),
-            TokenType.S16Literal => GetPrimitiveTypeInfo("s16"),
-            TokenType.S32Literal => GetPrimitiveTypeInfo("s32"),
-            TokenType.S64Literal => GetPrimitiveTypeInfo("s64"),
-            TokenType.S128Literal => GetPrimitiveTypeInfo("s128"),
-            TokenType.SyssintLiteral => GetPrimitiveTypeInfo("saddr"),
-            TokenType.U8Literal => GetPrimitiveTypeInfo("u8"),
-            TokenType.U16Literal => GetPrimitiveTypeInfo("u16"),
-            TokenType.U32Literal => GetPrimitiveTypeInfo("u32"),
-            TokenType.U64Literal => GetPrimitiveTypeInfo("u64"),
-            TokenType.U128Literal => GetPrimitiveTypeInfo("u128"),
-            TokenType.SysuintLiteral => GetPrimitiveTypeInfo("uaddr"),
-
-            // BUGFIX 12.10: Untyped integer - use expected type if available and is integer type
-            TokenType.Integer => (_expectedType != null && IsIntegerType(_expectedType.Name))
-                ? _expectedType
-                : (_language == Language.Suflae
-                    ? new TypeInfo(Name: "Integer", IsReference: false)
-                    : GetPrimitiveTypeInfo("s64")),
-
-            // Explicitly typed floating-point literals (same for both languages)
-            TokenType.F16Literal => GetPrimitiveTypeInfo("f16"),
-            TokenType.F32Literal => GetPrimitiveTypeInfo("f32"),
-            TokenType.F64Literal => GetPrimitiveTypeInfo("f64"),
-            TokenType.F128Literal => GetPrimitiveTypeInfo("f128"),
-            TokenType.D32Literal => GetPrimitiveTypeInfo("d32"),
-            TokenType.D64Literal => GetPrimitiveTypeInfo("d64"),
-            TokenType.D128Literal => GetPrimitiveTypeInfo("d128"),
-
-            // Untyped decimal: RazorForge defaults to f64, Suflae defaults to Decimal (arbitrary precision)
-            TokenType.Decimal => _language == Language.Suflae
-                ? new TypeInfo(Name: "Decimal", IsReference: false)
-                : GetPrimitiveTypeInfo("f64"),
-
-            // Text literals: RazorForge has Text<letter>/Text<letter8>/Text<letter16>, Suflae has Text (UTF-8) and Bytes (no Text16)
-            TokenType.TextLiteral or TokenType.FormattedText or TokenType.RawText
-                or TokenType.RawFormattedText => new TypeInfo(Name: _language == Language.Suflae
-                        ? "Text"
-                        : "Text<letter>",
-                    IsReference: false),
-            TokenType.Text8Literal or TokenType.Text8FormattedText or TokenType.Text8RawText
-                or TokenType.Text8RawFormattedText => new TypeInfo(
-                    Name: _language == Language.Suflae
-                        ? "Bytes"
-                        : "Text<letter8>",
-                    IsReference: false),
-            // Text16 literals: Only supported in RazorForge, not in Suflae
-            TokenType.Text16Literal or TokenType.Text16FormattedText or TokenType.Text16RawText
-                or TokenType.Text16RawFormattedText => HandleText16Literal(node: node),
-
-            // Suflae-only bytes literals (b"", br"", bf"", brf"")
-            TokenType.BytesLiteral or TokenType.BytesRawLiteral or TokenType.BytesFormatted
-                or TokenType.BytesRawFormatted => HandleBytesLiteral(node: node),
-
-            // Duration literals - all produce Duration type
-            TokenType.WeekLiteral or TokenType.DayLiteral or TokenType.HourLiteral
-                or TokenType.MinuteLiteral or TokenType.SecondLiteral
-                or TokenType.MillisecondLiteral or TokenType.MicrosecondLiteral
-                or TokenType.NanosecondLiteral => new TypeInfo(Name: "Duration",
-                    IsReference: false),
-
-            // Memory size literals - all produce MemorySize type
-            TokenType.ByteLiteral or TokenType.KilobyteLiteral or TokenType.KibibyteLiteral
-                or TokenType.KilobitLiteral or TokenType.KibibitLiteral
-                or TokenType.MegabyteLiteral or TokenType.MebibyteLiteral
-                or TokenType.MegabitLiteral or TokenType.MebibitLiteral
-                or TokenType.GigabyteLiteral or TokenType.GibibyteLiteral
-                or TokenType.GigabitLiteral or TokenType.GibibitLiteral
-                or TokenType.TerabyteLiteral or TokenType.TebibyteLiteral
-                or TokenType.TerabitLiteral or TokenType.TebibitLiteral
-                or TokenType.PetabyteLiteral or TokenType.PebibyteLiteral
-                or TokenType.PetabitLiteral
-                or TokenType.PebibitLiteral =>
-                new TypeInfo(Name: "MemorySize", IsReference: false),
-
-            // Boolean and none literals (same for both languages)
-            TokenType.True or TokenType.False => GetPrimitiveTypeInfo("bool"),
-            TokenType.None => new TypeInfo(Name: "none", IsReference: false),
-            _ => InferLiteralType(value: node.Value) // Fallback to runtime type inference
+            LiteralExpression literal => AnalyzeLiteralExpression(literal: literal, expectedType: expectedType),
+            IdentifierExpression id => AnalyzeIdentifierExpression(id: id),
+            BinaryExpression binary => AnalyzeBinaryExpression(binary: binary),
+            UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
+            CallExpression call => AnalyzeCallExpression(call: call),
+            MemberExpression member => AnalyzeMemberExpression(member: member),
+            IndexExpression index => AnalyzeIndexExpression(index: index),
+            ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
+            LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda),
+            RangeExpression range => AnalyzeRangeExpression(range: range),
+            ConstructorExpression ctor => AnalyzeConstructorExpression(ctor: ctor),
+            ListLiteralExpression list => AnalyzeListLiteralExpression(list: list),
+            SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set),
+            DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict),
+            TypeConversionExpression conv => AnalyzeTypeConversionExpression(conv: conv),
+            ChainedComparisonExpression chain => AnalyzeChainedComparisonExpression(chain: chain),
+            BlockExpression block => AnalyzeBlockExpression(block: block),
+            WithExpression with => AnalyzeWithExpression(with: with),
+            NamedArgumentExpression named => AnalyzeExpression(expression: named.Value),
+            GenericMethodCallExpression generic => AnalyzeGenericMethodCallExpression(generic: generic),
+            GenericMemberExpression genericMember => AnalyzeGenericMemberExpression(genericMember: genericMember),
+            IntrinsicCallExpression intrinsic => AnalyzeIntrinsicCallExpression(intrinsic: intrinsic),
+            NativeCallExpression native => AnalyzeNativeCallExpression(native: native),
+            IsPatternExpression isPat => AnalyzeIsPatternExpression(isPat: isPat),
+            StealExpression steal => AnalyzeStealExpression(steal: steal),
+            BackIndexExpression back => AnalyzeBackIndexExpression(back: back),
+            TypeExpression typeExpr => ResolveType(typeExpr: typeExpr),
+            _ => HandleUnknownExpression(expression: expression)
         };
 
-        return SetResolvedType(node, resultType);
+        // Set the resolved type directly (no conversion needed)
+        expression.ResolvedType = resultType;
+        return resultType;
+    }
+
+    private TypeSymbol AnalyzeLiteralExpression(LiteralExpression literal, TypeSymbol? expectedType = null)
+    {
+        // Map token type to the corresponding type (PascalCase)
+        string? typeName = literal.LiteralType switch
+        {
+            // Signed integers
+            TokenType.S8Literal => "S8",
+            TokenType.S16Literal => "S16",
+            TokenType.S32Literal => "S32",
+            TokenType.S64Literal => "S64",
+            TokenType.S128Literal => "S128",
+            TokenType.SAddrLiteral => "SAddr",
+
+            // Unsigned integers
+            TokenType.U8Literal => "U8",
+            TokenType.U16Literal => "U16",
+            TokenType.U32Literal => "U32",
+            TokenType.U64Literal => "U64",
+            TokenType.U128Literal => "U128",
+            TokenType.UAddrLiteral => "UAddr",
+
+            // Floating-point
+            TokenType.F16Literal => "F16",
+            TokenType.F32Literal => "F32",
+            TokenType.F64Literal => "F64",
+            TokenType.F128Literal => "F128",
+
+            // Decimal floating-point
+            TokenType.D32Literal => "D32",
+            TokenType.D64Literal => "D64",
+            TokenType.D128Literal => "D128",
+
+            // Arbitrary precision
+            TokenType.Integer => "Integer",
+            TokenType.Decimal => "Decimal",
+
+            // Boolean
+            TokenType.True or TokenType.False => "Bool",
+
+            // Text and characters
+            TokenType.TextLiteral => "Text",
+            TokenType.BytesLiteral => "Bytes",
+            TokenType.BytesRawLiteral => "Bytes",
+            TokenType.ByteLetterLiteral => "Byte",
+            TokenType.LetterLiteral => "Letter",
+
+            // Memory size literals (all map to MemorySize type)
+            TokenType.ByteLiteral or
+            TokenType.KilobyteLiteral or TokenType.KibibyteLiteral or
+            TokenType.MegabyteLiteral or TokenType.MebibyteLiteral or
+            TokenType.GigabyteLiteral or TokenType.GibibyteLiteral => "MemorySize",
+
+            // Duration literals (all map to Duration type)
+            TokenType.WeekLiteral or TokenType.DayLiteral or
+            TokenType.HourLiteral or TokenType.MinuteLiteral or
+            TokenType.SecondLiteral or TokenType.MillisecondLiteral or
+            TokenType.MicrosecondLiteral or TokenType.NanosecondLiteral => "Duration",
+
+            // Unknown literal type - error
+            _ => null
+        };
+
+        // Report error for unknown literal types
+        if (typeName == null)
+        {
+            ReportError(
+                message: $"Unknown literal type '{literal.LiteralType}'.",
+                location: literal.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Contextual type inference for unsuffixed integer literals
+        // If expected type is an integer type and literal is S64 (default unsuffixed), infer to expected type
+        if (expectedType != null && literal.LiteralType == TokenType.S64Literal && IsFixedWidthIntegerType(expectedType))
+        {
+            // Check if the literal value fits in the expected type
+            if (LiteralFitsInType(literal, expectedType))
+            {
+                typeName = expectedType.Name;
+            }
+        }
+
+        // Parse and validate deferred numeric types using native libraries
+        if (literal.Value is string rawValue)
+        {
+            ParsedLiteral? parsed = ParseDeferredLiteral(literal: literal, rawValue: rawValue);
+            if (parsed != null)
+            {
+                _parsedLiterals[literal.Location] = parsed;
+            }
+        }
+
+        TypeSymbol? type = _registry.LookupType(name: typeName);
+        if (type == null)
+        {
+            ReportError(
+                message: $"Type '{typeName}' is not defined.",
+                location: literal.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        return type;
     }
 
     /// <summary>
-    /// Visits a list literal expression [1, 2, 3] and infers its type.
+    /// Checks if a type is a fixed-width integer type (S8-S128, U8-U128, SAddr, UAddr).
     /// </summary>
-    public object? VisitListLiteralExpression(ListLiteralExpression node)
+    private static bool IsFixedWidthIntegerType(TypeSymbol type)
     {
-        TypeInfo? elementType = null;
-
-        // Analyze each element and infer element type from first element
-        foreach (Expression element in node.Elements)
-        {
-            var type = element.Accept(visitor: this) as TypeInfo;
-            if (elementType == null && type != null)
-            {
-                elementType = type;
-            }
-            // TODO: Check that all elements have compatible types
-        }
-
-        // Use explicit type annotation if provided
-        if (node.ElementType != null)
-        {
-            elementType = ResolveType(typeExpr: node.ElementType);
-        }
-
-        string typeName = elementType?.Name ?? "unknown";
-        var resultType = new TypeInfo(Name: "List",
-            IsReference: true,
-            GenericArguments: [new TypeInfo(Name: typeName, IsReference: false)]);
-        return SetResolvedType(node, resultType);
+        return type.Name is "S8" or "S16" or "S32" or "S64" or "S128"
+            or "U8" or "U16" or "U32" or "U64" or "U128"
+            or "SAddr" or "UAddr";
     }
 
     /// <summary>
-    /// Visits a set literal expression {1, 2, 3} and infers its type.
+    /// Checks if an integer literal value fits within the range of the target type.
     /// </summary>
-    public object? VisitSetLiteralExpression(SetLiteralExpression node)
+    private static bool LiteralFitsInType(LiteralExpression literal, TypeSymbol targetType)
     {
-        TypeInfo? elementType = null;
-
-        foreach (Expression element in node.Elements)
+        // Get the numeric value from the literal
+        if (literal.Value is not long value)
         {
-            var type = element.Accept(visitor: this) as TypeInfo;
-            if (elementType == null && type != null)
-            {
-                elementType = type;
-            }
+            // For string-stored values (large numbers), we'd need more sophisticated checking
+            // For now, allow inference and let runtime handle overflow
+            return true;
         }
 
-        if (node.ElementType != null)
+        return targetType.Name switch
         {
-            elementType = ResolveType(typeExpr: node.ElementType);
-        }
-
-        string typeName = elementType?.Name ?? "unknown";
-        var resultType = new TypeInfo(Name: "Set",
-            IsReference: true,
-            GenericArguments: [new TypeInfo(Name: typeName, IsReference: false)]);
-        return SetResolvedType(node, resultType);
+            "S8" => value >= sbyte.MinValue && value <= sbyte.MaxValue,
+            "S16" => value >= short.MinValue && value <= short.MaxValue,
+            "S32" => value >= int.MinValue && value <= int.MaxValue,
+            "S64" => true, // Any long fits in S64
+            "S128" => true, // Any long fits in S128
+            "U8" => value >= 0 && value <= byte.MaxValue,
+            "U16" => value >= 0 && value <= ushort.MaxValue,
+            "U32" => value >= 0 && value <= uint.MaxValue,
+            "U64" => value >= 0, // Any non-negative long fits in U64
+            "U128" => value >= 0,
+            "SAddr" or "UAddr" => true, // System-dependent, allow for now
+            _ => false
+        };
     }
 
     /// <summary>
-    /// Visits a dict literal expression {k: v} and infers its type.
+    /// Parses a deferred numeric literal using native libraries.
+    /// Called for f128, d32, d64, d128, Integer, and Decimal literals.
     /// </summary>
-    public object? VisitDictLiteralExpression(DictLiteralExpression node)
+    /// <param name="literal">The literal expression.</param>
+    /// <param name="rawValue">The raw string value to parse.</param>
+    /// <returns>The parsed literal, or null if parsing failed.</returns>
+    private ParsedLiteral? ParseDeferredLiteral(LiteralExpression literal, string rawValue)
     {
-        TypeInfo? keyType = null;
-        TypeInfo? valueType = null;
-
-        foreach ((Expression key, Expression value) in node.Pairs)
+        try
         {
-            var kt = key.Accept(visitor: this) as TypeInfo;
-            var vt = value.Accept(visitor: this) as TypeInfo;
-            if (keyType == null && kt != null)
+            return literal.LiteralType switch
             {
-                keyType = kt;
-            }
-
-            if (valueType == null && vt != null)
-            {
-                valueType = vt;
-            }
+                TokenType.F128Literal => ParseF128Literal(literal: literal, rawValue: rawValue),
+                TokenType.D32Literal => ParseD32Literal(literal: literal, rawValue: rawValue),
+                TokenType.D64Literal => ParseD64Literal(literal: literal, rawValue: rawValue),
+                TokenType.D128Literal => ParseD128Literal(literal: literal, rawValue: rawValue),
+                TokenType.Integer => ParseIntegerLiteral(literal: literal, rawValue: rawValue),
+                TokenType.Decimal => ParseDecimalLiteral(literal: literal, rawValue: rawValue),
+                _ => null
+            };
         }
-
-        if (node.KeyType != null)
+        catch (Exception ex)
         {
-            keyType = ResolveType(typeExpr: node.KeyType);
-        }
-
-        if (node.ValueType != null)
-        {
-            valueType = ResolveType(typeExpr: node.ValueType);
-        }
-
-        string keyTypeName = keyType?.Name ?? "unknown";
-        string valueTypeName = valueType?.Name ?? "unknown";
-        var resultType = new TypeInfo(Name: "Dict",
-            IsReference: true,
-            GenericArguments:
-            [
-                new TypeInfo(Name: keyTypeName, IsReference: false),
-                new TypeInfo(Name: valueTypeName, IsReference: false)
-            ]);
-        return SetResolvedType(node, resultType);
-    }
-
-    /// <summary>
-    /// Visits an identifier expression and looks up its type in the symbol table.
-    /// </summary>
-    /// <param name="node">Identifier expression node</param>
-    /// <returns>TypeInfo of the identifier</returns>
-    public object? VisitIdentifierExpression(IdentifierExpression node)
-    {
-        Symbol? symbol = _symbolTable.Lookup(name: node.Name);
-        if (symbol == null)
-        {
-            AddError(message: $"Undefined identifier '{node.Name}'", location: node.Location);
+            ReportError(message: $"Failed to parse numeric literal '{rawValue}': {ex.Message}", location: literal.Location);
             return null;
         }
+    }
 
-        // CRITICAL: Check if this source variable is invalidated by a scoped access statement
-        if (IsSourceInvalidated(sourceName: node.Name))
+    private ParsedLiteral ParseF128Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: rawValue);
+        return new ParsedF128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
+    }
+
+    private ParsedLiteral ParseD32Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.D32 result = NumericLiteralParser.ParseD32(str: rawValue);
+        return new ParsedD32(Location: literal.Location, Value: result.Value);
+    }
+
+    private ParsedLiteral ParseD64Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.D64 result = NumericLiteralParser.ParseD64(str: rawValue);
+        return new ParsedD64(Location: literal.Location, Value: result.Value);
+    }
+
+    private ParsedLiteral ParseD128Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.D128 result = NumericLiteralParser.ParseD128(str: rawValue);
+        return new ParsedD128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
+    }
+
+    private ParsedLiteral ParseIntegerLiteral(LiteralExpression literal, string rawValue)
+    {
+        (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: rawValue);
+        if (bytes.Length == 0)
         {
-            string? accessType = GetInvalidationAccessType(sourceName: node.Name);
-            AddError(
-                message:
-                $"Cannot access '{node.Name}' while it is being accessed via {accessType} statement. " +
-                $"The source is temporarily unavailable while the scoped token exists. " +
-                $"Access the data through the scoped token instead.",
-                location: node.Location);
+            ReportError(message: $"Invalid Integer literal: '{rawValue}'", location: literal.Location);
+            return new ParsedInteger(Location: literal.Location, Limbs: [], Sign: 0, Exponent: 0);
         }
 
-        return SetResolvedType(node, symbol.Type);
+        return new ParsedInteger(Location: literal.Location, Limbs: bytes, Sign: sign, Exponent: 0);
+    }
+
+    private ParsedLiteral ParseDecimalLiteral(LiteralExpression literal, string rawValue)
+    {
+        (string value, int sign, int exponent, int significantDigits, bool isInteger) =
+            NumericLiteralParser.ParseDecimalInfo(str: rawValue);
+
+        if (string.IsNullOrEmpty(value: value))
+        {
+            ReportError(message: $"Invalid Decimal literal: '{rawValue}'", location: literal.Location);
+            return new ParsedDecimal(Location: literal.Location, StringValue: rawValue, Sign: 0, Exponent: 0, SignificantDigits: 0, IsInteger: false);
+        }
+
+        return new ParsedDecimal(Location: literal.Location, StringValue: value, Sign: sign, Exponent: exponent, SignificantDigits: significantDigits, IsInteger: isInteger);
+    }
+
+    private TypeSymbol AnalyzeIdentifierExpression(IdentifierExpression id)
+    {
+        // Special identifiers
+        if (id.Name == "me")
+        {
+            if (_currentType != null)
+            {
+                return _currentType;
+            }
+
+            ReportError(message: "'me' can only be used inside a type method.", location: id.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        if (id.Name == "None")
+        {
+            // None represents Maybe.None - return a generic Maybe type
+            return ErrorHandlingTypeInfo.WellKnown.MaybeDefinition;
+        }
+
+        // Try to look up as variable first
+        VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+        if (varInfo != null)
+        {
+            return varInfo.Type;
+        }
+
+        // Try to look up as routine (function reference)
+        RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
+        if (routine != null)
+        {
+            // Return the function type for first-class function references
+            return GetRoutineType(routine);
+        }
+
+        // Try to look up as type (for static access)
+        TypeSymbol? type = _registry.LookupType(name: id.Name);
+        if (type != null)
+        {
+            return type;
+        }
+
+        ReportError(message: $"Unknown identifier '{id.Name}'.", location: id.Location);
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
+    {
+        TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
+        TypeSymbol rightType = AnalyzeExpression(expression: binary.Right);
+
+        // Handle comparison operators - always return bool
+        if (IsComparisonOperator(op: binary.Operator))
+        {
+            ValidateComparisonOperands(left: leftType, right: rightType, op: binary.Operator, location: binary.Location);
+            return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // Handle logical operators - require bool operands, return bool
+        if (IsLogicalOperator(op: binary.Operator))
+        {
+            if (!IsBoolType(type: leftType) || !IsBoolType(type: rightType))
+            {
+                ReportError(message: $"Logical operator '{binary.Operator.ToStringRepresentation()}' requires boolean operands.", location: binary.Location);
+            }
+
+            return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // Validate division operators
+        if (binary.Operator == BinaryOperator.TrueDivide)
+        {
+            if (!SupportsTrueDivision(type: leftType))
+            {
+                ReportError(
+                    message: $"True division operator '/' is not supported on '{leftType.Name}'. Use floor division '//' for integers.",
+                    location: binary.Location);
+            }
+        }
+        else if (binary.Operator == BinaryOperator.FloorDivide)
+        {
+            if (!SupportsFloorDivision(type: leftType))
+            {
+                ReportError(
+                    message: $"Floor division operator '//' is not supported on '{leftType.Name}'.",
+                    location: binary.Location);
+            }
+        }
+
+        // Validate overflow arithmetic operators (+%, -%, *%, +^, -^, *^, +?, -?, *?)
+        if (IsOverflowOperator(op: binary.Operator, out string? overflowKind))
+        {
+            if (!SupportsOverflowArithmetic(type: leftType, operatorSuffix: overflowKind))
+            {
+                ReportError(
+                    message: $"Overflow arithmetic operator '{binary.Operator.ToStringRepresentation()}' is only supported on fixed-width integer types, not '{leftType.Name}'.",
+                    location: binary.Location);
+            }
+        }
+
+        // Validate operand types match (no implicit conversions)
+        if (!IsAssignableTo(source: rightType, target: leftType) && !IsAssignableTo(source: leftType, target: rightType))
+        {
+            // Allow error types to pass through
+            if (leftType.Category != TypeCategory.Error && rightType.Category != TypeCategory.Error)
+            {
+                ReportError(
+                    message: $"Binary operator '{binary.Operator.ToStringRepresentation()}' cannot be applied to operands of type '{leftType.Name}' and '{rightType.Name}'.",
+                    location: binary.Location);
+            }
+        }
+
+        // Handle arithmetic/bitwise operators - look for operator method
+        string? methodName = binary.Operator.GetMethodName();
+        if (methodName != null)
+        {
+            // Try to find operator method on left type (both regular and crashable versions)
+            RoutineInfo? opMethod = _registry.LookupRoutine(fullName: $"{leftType.Name}.{methodName}")
+                ?? _registry.LookupRoutine(fullName: $"{leftType.Name}.{methodName}!");
+
+            if (opMethod?.ReturnType != null)
+            {
+                return opMethod.ReturnType;
+            }
+
+            // If no method found but types are numeric, return left type (basic inference)
+            if (IsNumericType(type: leftType) && IsNumericType(type: rightType))
+            {
+                // Checked operators return Maybe<T>
+                if (IsCheckedOperator(op: binary.Operator))
+                {
+                    TypeSymbol? maybeDef = _registry.LookupType(name: "Maybe");
+                    if (maybeDef != null)
+                    {
+                        return _registry.GetOrCreateInstantiation(genericDef: maybeDef, typeArguments: [leftType]);
+                    }
+                }
+
+                return leftType;
+            }
+        }
+
+        // Handle none coalescing operator
+        if (binary.Operator == BinaryOperator.NoneCoalesce)
+        {
+            // Returns the non-optional type
+            return rightType;
+        }
+
+        // Default: return left type
+        return leftType;
     }
 
     /// <summary>
-    /// Visits a binary expression and validates operand types.
+    /// Checks if an operator is an overflow-handling operator and returns the overflow kind.
     /// </summary>
-    /// <param name="node">Binary expression node</param>
-    /// <returns>TypeInfo of the result</returns>
-    public object? VisitBinaryExpression(BinaryExpression node)
+    private static bool IsOverflowOperator(BinaryOperator op, out string? overflowKind)
     {
-        // BUGFIX 12.10: Infer integer literal types from context
-        // Check if we have untyped literals that need type inference
-        bool leftIsUntypedInt = IsUntypedIntegerLiteral(node.Left);
-        bool rightIsUntypedInt = IsUntypedIntegerLiteral(node.Right);
-
-        TypeInfo? leftType;
-        TypeInfo? rightType;
-
-        // Strategy: Visit the typed operand first to get its type, then use that as expected type for the untyped operand
-        if (leftIsUntypedInt && !rightIsUntypedInt)
+        overflowKind = op switch
         {
-            // Right is typed, left is untyped - visit right first to get its type
-            rightType = node.Right.Accept(visitor: this) as TypeInfo;
+            BinaryOperator.AddWrap or BinaryOperator.SubtractWrap or
+            BinaryOperator.MultiplyWrap or BinaryOperator.PowerWrap => "wrap",
 
-            // Set expected type for left operand if right is an integer type
-            var savedExpectedType = _expectedType;
-            if (rightType != null && IsIntegerType(rightType.Name))
-            {
-                _expectedType = rightType;
-            }
-            leftType = node.Left.Accept(visitor: this) as TypeInfo;
-            _expectedType = savedExpectedType;
+            BinaryOperator.AddSaturate or BinaryOperator.SubtractSaturate or
+            BinaryOperator.MultiplySaturate or BinaryOperator.PowerSaturate => "sat",
+
+            BinaryOperator.AddChecked or BinaryOperator.SubtractChecked or
+            BinaryOperator.MultiplyChecked or BinaryOperator.FloorDivideChecked or
+            BinaryOperator.ModuloChecked or BinaryOperator.PowerChecked => "checked",
+
+            _ => null
+        };
+
+        return overflowKind != null;
+    }
+
+    /// <summary>
+    /// Checks if an operator is a checked operator that returns Maybe&lt;T&gt;.
+    /// </summary>
+    private static bool IsCheckedOperator(BinaryOperator op)
+    {
+        return op is BinaryOperator.AddChecked or BinaryOperator.SubtractChecked or
+            BinaryOperator.MultiplyChecked or BinaryOperator.FloorDivideChecked or
+            BinaryOperator.ModuloChecked or BinaryOperator.PowerChecked or
+            BinaryOperator.ArithmeticLeftShiftChecked;
+    }
+
+    private TypeSymbol AnalyzeUnaryExpression(UnaryExpression unary)
+    {
+        TypeSymbol operandType = AnalyzeExpression(expression: unary.Operand);
+
+        switch (unary.Operator)
+        {
+            case UnaryOperator.Not:
+                if (!IsBoolType(type: operandType))
+                {
+                    ReportError(message: "Logical 'not' operator requires a boolean operand.", location: unary.Location);
+                }
+
+                return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+
+            case UnaryOperator.Minus:
+                if (!IsNumericType(type: operandType))
+                {
+                    ReportError(message: "Negation operator requires a numeric operand.", location: unary.Location);
+                }
+
+                return operandType;
+
+            case UnaryOperator.BitwiseNot:
+                if (!IsIntegerType(type: operandType))
+                {
+                    ReportError(message: "Bitwise 'not' operator requires an integer operand.", location: unary.Location);
+                }
+
+                return operandType;
+
+            default:
+                return operandType;
         }
-        else if (rightIsUntypedInt && !leftIsUntypedInt)
-        {
-            // Left is typed, right is untyped - visit left first to get its type
-            leftType = node.Left.Accept(visitor: this) as TypeInfo;
+    }
 
-            // Set expected type for right operand if left is an integer type
-            var savedExpectedType = _expectedType;
-            if (leftType != null && IsIntegerType(leftType.Name))
+    private TypeSymbol AnalyzeCallExpression(CallExpression call)
+    {
+        // Get the callee type/routine
+        if (call.Callee is IdentifierExpression id)
+        {
+            RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
+            if (routine != null)
             {
-                _expectedType = leftType;
+                // Validate routine access
+                ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
+
+                AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
+
+                // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+                return routine.ReturnType ?? ErrorTypeInfo.Instance;
             }
-            rightType = node.Right.Accept(visitor: this) as TypeInfo;
-            _expectedType = savedExpectedType;
+
+            // Could be a type constructor
+            TypeSymbol? type = _registry.LookupType(name: id.Name);
+            if (type != null)
+            {
+                // Constructor call - also validate token uniqueness
+                foreach (Expression arg in call.Arguments)
+                {
+                    AnalyzeExpression(expression: arg);
+                }
+
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+                return type;
+            }
+        }
+
+        if (call.Callee is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+            RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
+            if (method != null)
+            {
+                // Validate method access
+                ValidateRoutineAccess(routine: method, accessLocation: call.Location);
+
+                AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
+
+                // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+                return method.ReturnType ?? ErrorTypeInfo.Instance;
+            }
+        }
+
+        // Analyze callee expression (lambda or other callable)
+        TypeSymbol calleeType = AnalyzeExpression(expression: call.Callee);
+
+        // Analyze arguments
+        foreach (Expression arg in call.Arguments)
+        {
+            AnalyzeExpression(expression: arg);
+        }
+
+        // Validate exclusive token uniqueness for dynamic calls too
+        ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+        return calleeType;
+    }
+
+    private TypeSymbol AnalyzeMemberExpression(MemberExpression member)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+        // Look up the field/property on the type
+        if (objectType is RecordTypeInfo record)
+        {
+            FieldInfo? field = record.LookupField(fieldName: member.PropertyName);
+            if (field != null)
+            {
+                // Validate field access (read access)
+                ValidateFieldAccess(field: field, isWrite: false, accessLocation: member.Location);
+                return field.Type;
+            }
+        }
+        else if (objectType is EntityTypeInfo entity)
+        {
+            FieldInfo? field = entity.LookupField(fieldName: member.PropertyName);
+            if (field != null)
+            {
+                // Validate field access (read access)
+                ValidateFieldAccess(field: field, isWrite: false, accessLocation: member.Location);
+                return field.Type;
+            }
+        }
+        else if (objectType is ResidentTypeInfo resident)
+        {
+            FieldInfo? field = resident.LookupField(fieldName: member.PropertyName);
+            if (field != null)
+            {
+                // Validate field access (read access)
+                ValidateFieldAccess(field: field, isWrite: false, accessLocation: member.Location);
+                return field.Type;
+            }
+        }
+        // Wrapper type forwarding: Viewed<T>, Hijacked<T>, Shared<T>, etc.
+        else if (IsWrapperType(type: objectType))
+        {
+            // Try to forward field access to the inner type
+            FieldInfo? innerField = LookupFieldOnWrapperInnerType(wrapperType: objectType, fieldName: member.PropertyName);
+            if (innerField != null)
+            {
+                // Validate field access on the inner type
+                ValidateFieldAccess(field: innerField, isWrite: false, accessLocation: member.Location);
+                return innerField.Type;
+            }
+
+            // Try to forward method access to the inner type
+            RoutineInfo? innerMethod = LookupMethodOnWrapperInnerType(wrapperType: objectType, methodName: member.PropertyName);
+            if (innerMethod != null)
+            {
+                // Validate read-only wrapper restrictions
+                ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType, method: innerMethod, location: member.Location);
+                // Validate method access
+                ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
+                return innerMethod.ReturnType ?? ErrorTypeInfo.Instance;
+            }
+        }
+
+        // Could be a method reference - use LookupMethod which handles generic instantiations
+        RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: member.PropertyName);
+        if (method != null)
+        {
+            // Validate method access
+            ValidateRoutineAccess(routine: method, accessLocation: member.Location);
+
+            // For generic instantiations, substitute type parameters in return type
+            TypeSymbol? returnType = method.ReturnType;
+            if (returnType != null && objectType.IsGenericInstantiation && objectType.TypeArguments != null)
+            {
+                returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
+            }
+
+            return returnType ?? ErrorTypeInfo.Instance;
+        }
+
+        ReportError(message: $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.", location: member.Location);
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeIndexExpression(IndexExpression index)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
+        TypeSymbol indexType = AnalyzeExpression(expression: index.Index);
+
+        // Look for __getitem__ method
+        RoutineInfo? getItem = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getitem__");
+        if (getItem?.ReturnType != null)
+        {
+            return getItem.ReturnType;
+        }
+
+        // For generic types like List<T>, return the element type
+        if (objectType.TypeArguments is { Count: > 0 })
+        {
+            return objectType.TypeArguments[0];
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond)
+    {
+        TypeSymbol conditionType = AnalyzeExpression(expression: cond.Condition);
+
+        if (!IsBoolType(type: conditionType))
+        {
+            ReportError(message: $"Conditional expression requires a boolean condition, got '{conditionType.Name}'.", location: cond.Condition.Location);
+        }
+
+        TypeSymbol trueType = AnalyzeExpression(expression: cond.TrueExpression);
+        TypeSymbol falseType = AnalyzeExpression(expression: cond.FalseExpression);
+
+        // Both branches must be compatible
+        if (!IsAssignableTo(source: trueType, target: falseType) && !IsAssignableTo(source: falseType, target: trueType))
+        {
+            ReportError(message: $"Conditional expression branches have incompatible types: '{trueType.Name}' and '{falseType.Name}'.", location: cond.Location);
+        }
+
+        // Return the common type (for now, use the true branch type)
+        return trueType;
+    }
+
+    private TypeSymbol AnalyzeLambdaExpression(LambdaExpression lambda)
+    {
+        // Collect variables from enclosing scope that might be captured
+        var enclosingScopeVariables = _registry.GetAllVariablesInScope();
+
+        _registry.EnterScope(kind: ScopeKind.Function, name: "lambda");
+
+        // Register lambda parameters and collect their types
+        var parameterNames = new HashSet<string>();
+        var parameterTypes = new List<TypeSymbol>();
+        foreach (Parameter param in lambda.Parameters)
+        {
+            TypeSymbol paramType = param.Type != null
+                ? ResolveType(typeExpr: param.Type)
+                : ErrorTypeInfo.Instance;
+
+            _registry.DeclareVariable(name: param.Name, type: paramType, isMutable: false);
+            parameterNames.Add(item: param.Name);
+            parameterTypes.Add(paramType);
+        }
+
+        // Analyze body and get return type
+        TypeSymbol returnType = AnalyzeExpression(expression: lambda.Body);
+
+        // Validate captured variables (RazorForge only)
+        // Lambda bodies can reference variables from enclosing scope - these are captures
+        ValidateLambdaCaptures(
+            lambda: lambda,
+            enclosingScopeVariables: enclosingScopeVariables,
+            parameterNames: parameterNames);
+
+        _registry.ExitScope();
+
+        // Create a proper function type: (ParamTypes) -> ReturnType
+        return _registry.GetOrCreateRoutineType(
+            parameterTypes: parameterTypes,
+            returnType: returnType,
+            isFailable: false);
+    }
+
+    /// <summary>
+    /// Validates that lambda captures don't include forbidden types.
+    /// In RazorForge, lambdas cannot capture:
+    /// - Memory tokens (Viewed, Hijacked, Inspected, Seized) - scope-bound
+    /// - Raw entities - must use handles for capture
+    /// </summary>
+    /// <param name="lambda">The lambda expression being analyzed.</param>
+    /// <param name="enclosingScopeVariables">Variables available in the enclosing scope.</param>
+    /// <param name="parameterNames">Names of lambda parameters (not captures).</param>
+    private void ValidateLambdaCaptures(
+        LambdaExpression lambda,
+        IReadOnlyDictionary<string, VariableInfo> enclosingScopeVariables,
+        HashSet<string> parameterNames)
+    {
+        // Find all identifier expressions in the lambda body
+        var identifiers = CollectIdentifiers(expression: lambda.Body);
+
+        foreach (IdentifierExpression id in identifiers)
+        {
+            // Skip if it's a parameter (not a capture)
+            if (parameterNames.Contains(item: id.Name))
+            {
+                continue;
+            }
+
+            // Skip special identifiers
+            if (id.Name is "me" or "none")
+            {
+                continue;
+            }
+
+            // Check if this identifier refers to a captured variable
+            if (enclosingScopeVariables.TryGetValue(key: id.Name, out VariableInfo? varInfo))
+            {
+                // Validate that the captured type is allowed
+                ValidateCapturedType(varName: id.Name, varType: varInfo.Type, location: id.Location);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates that a captured variable's type is allowed in lambda captures.
+    /// </summary>
+    /// <param name="varName">Name of the captured variable.</param>
+    /// <param name="varType">Type of the captured variable.</param>
+    /// <param name="location">Source location for error reporting.</param>
+    private void ValidateCapturedType(string varName, TypeSymbol varType, SourceLocation location)
+    {
+        // Check for memory tokens (scope-bound, cannot be captured)
+        if (IsMemoryToken(type: varType))
+        {
+            string tokenKind = GetMemoryTokenKind(type: varType);
+            ReportError(
+                message: $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
+                         $"scope-bound tokens cannot escape their scope. " +
+                         $"Use a handle type (Shared<T> or Tracked<T>) instead.",
+                location: location);
+            return;
+        }
+
+        // Check for raw entities (must use handles for capture)
+        if (IsRawEntityType(type: varType))
+        {
+            ReportError(
+                message: $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
+                         $"raw entities cannot be captured. " +
+                         $"Wrap in a handle type (Shared<T> or Tracked<T>) before capturing.",
+                location: location);
+        }
+    }
+
+    /// <summary>
+    /// Checks if a type is a raw entity (not wrapped in a handle or token).
+    /// </summary>
+    private bool IsRawEntityType(TypeSymbol type)
+    {
+        // Raw entities are entity types that are not wrapped
+        return type.Category == TypeCategory.Entity
+            && !IsMemoryToken(type: type)
+            && !IsStealableHandle(type: type)
+            && !IsSnatched(type: type);
+    }
+
+    /// <summary>
+    /// Collects all identifier expressions in an expression tree.
+    /// </summary>
+    private static List<IdentifierExpression> CollectIdentifiers(Expression expression)
+    {
+        var identifiers = new List<IdentifierExpression>();
+        CollectIdentifiersRecursive(expression: expression, identifiers: identifiers);
+        return identifiers;
+    }
+
+    /// <summary>
+    /// Recursively collects identifier expressions.
+    /// </summary>
+    private static void CollectIdentifiersRecursive(Expression expression, List<IdentifierExpression> identifiers)
+    {
+        switch (expression)
+        {
+            case IdentifierExpression id:
+                identifiers.Add(item: id);
+                break;
+
+            case BinaryExpression binary:
+                CollectIdentifiersRecursive(expression: binary.Left, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: binary.Right, identifiers: identifiers);
+                break;
+
+            case UnaryExpression unary:
+                CollectIdentifiersRecursive(expression: unary.Operand, identifiers: identifiers);
+                break;
+
+            case StealExpression steal:
+                CollectIdentifiersRecursive(expression: steal.Operand, identifiers: identifiers);
+                break;
+
+            case BackIndexExpression back:
+                CollectIdentifiersRecursive(expression: back.Operand, identifiers: identifiers);
+                break;
+
+            case CallExpression call:
+                CollectIdentifiersRecursive(expression: call.Callee, identifiers: identifiers);
+                foreach (Expression arg in call.Arguments)
+                {
+                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
+                }
+                break;
+
+            case MemberExpression member:
+                CollectIdentifiersRecursive(expression: member.Object, identifiers: identifiers);
+                break;
+
+            case IndexExpression index:
+                CollectIdentifiersRecursive(expression: index.Object, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: index.Index, identifiers: identifiers);
+                break;
+
+            case ConditionalExpression cond:
+                CollectIdentifiersRecursive(expression: cond.Condition, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: cond.TrueExpression, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: cond.FalseExpression, identifiers: identifiers);
+                break;
+
+            case LambdaExpression lambda:
+                // Don't descend into nested lambdas - they have their own capture context
+                break;
+
+            case RangeExpression range:
+                CollectIdentifiersRecursive(expression: range.Start, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: range.End, identifiers: identifiers);
+                if (range.Step != null)
+                {
+                    CollectIdentifiersRecursive(expression: range.Step, identifiers: identifiers);
+                }
+                break;
+
+            case ConstructorExpression ctor:
+                foreach ((_, Expression value) in ctor.Fields)
+                {
+                    CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
+                }
+                break;
+
+            case ListLiteralExpression list:
+                foreach (Expression elem in list.Elements)
+                {
+                    CollectIdentifiersRecursive(expression: elem, identifiers: identifiers);
+                }
+                break;
+
+            case SetLiteralExpression set:
+                foreach (Expression elem in set.Elements)
+                {
+                    CollectIdentifiersRecursive(expression: elem, identifiers: identifiers);
+                }
+                break;
+
+            case DictLiteralExpression dict:
+                foreach ((Expression key, Expression value) in dict.Pairs)
+                {
+                    CollectIdentifiersRecursive(expression: key, identifiers: identifiers);
+                    CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
+                }
+                break;
+
+            case BlockExpression block:
+                CollectIdentifiersRecursive(expression: block.Value, identifiers: identifiers);
+                break;
+
+            case WithExpression with:
+                CollectIdentifiersRecursive(expression: with.Base, identifiers: identifiers);
+                foreach ((_, Expression value) in with.Updates)
+                {
+                    CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
+                }
+                break;
+
+            case IsPatternExpression isPat:
+                CollectIdentifiersRecursive(expression: isPat.Expression, identifiers: identifiers);
+                break;
+
+            case NamedArgumentExpression named:
+                CollectIdentifiersRecursive(expression: named.Value, identifiers: identifiers);
+                break;
+
+            case GenericMethodCallExpression generic:
+                CollectIdentifiersRecursive(expression: generic.Object, identifiers: identifiers);
+                foreach (Expression arg in generic.Arguments)
+                {
+                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
+                }
+                break;
+
+            case GenericMemberExpression genericMember:
+                CollectIdentifiersRecursive(expression: genericMember.Object, identifiers: identifiers);
+                break;
+
+            case IntrinsicCallExpression intrinsic:
+                foreach (Expression arg in intrinsic.Arguments)
+                {
+                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
+                }
+                break;
+
+            case NativeCallExpression native:
+                foreach (Expression arg in native.Arguments)
+                {
+                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
+                }
+                break;
+
+            case TypeConversionExpression conv:
+                CollectIdentifiersRecursive(expression: conv.Expression, identifiers: identifiers);
+                break;
+
+            case ChainedComparisonExpression chain:
+                foreach (Expression operand in chain.Operands)
+                {
+                    CollectIdentifiersRecursive(expression: operand, identifiers: identifiers);
+                }
+                break;
+
+            // Literal expressions and type expressions have no identifiers to collect
+            case LiteralExpression:
+            case TypeExpression:
+                break;
+        }
+    }
+
+    private TypeSymbol AnalyzeRangeExpression(RangeExpression range)
+    {
+        TypeSymbol startType = AnalyzeExpression(expression: range.Start);
+        TypeSymbol endType = AnalyzeExpression(expression: range.End);
+
+        if (range.Step != null)
+        {
+            AnalyzeExpression(expression: range.Step);
+        }
+
+        // Range types must be compatible
+        if (!IsNumericType(type: startType) || !IsNumericType(type: endType))
+        {
+            ReportError(message: "Range bounds must be numeric types.", location: range.Location);
+        }
+
+        // Return Range type
+        return _registry.LookupType(name: "Range") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeConstructorExpression(ConstructorExpression ctor)
+    {
+        TypeSymbol? type = _registry.LookupType(name: ctor.TypeName);
+        if (type == null)
+        {
+            ReportError(message: $"Unknown type '{ctor.TypeName}'.", location: ctor.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Handle generic type arguments
+        if (ctor.TypeArguments is { Count: > 0 })
+        {
+            var typeArgs = new List<TypeSymbol>();
+            foreach (TypeExpression typeArg in ctor.TypeArguments)
+            {
+                typeArgs.Add(item: ResolveType(typeExpr: typeArg));
+            }
+
+            type = _registry.GetOrCreateInstantiation(genericDef: type, typeArguments: typeArgs);
+        }
+
+        // Validate field initializers
+        ValidateConstructorFields(type: type, fields: ctor.Fields, location: ctor.Location);
+
+        return type;
+    }
+
+    /// <summary>
+    /// Validates constructor field initializers:
+    /// - Each provided field exists on the type
+    /// - Value types are assignable to field types
+    /// - No duplicate field assignments
+    /// - All required fields are provided
+    /// </summary>
+    private void ValidateConstructorFields(
+        TypeSymbol type,
+        List<(string Name, Expression Value)> fields,
+        SourceLocation location)
+    {
+        // Get the type's fields
+        IReadOnlyList<FieldInfo>? typeFields = type switch
+        {
+            RecordTypeInfo record => record.Fields,
+            EntityTypeInfo entity => entity.Fields,
+            ResidentTypeInfo resident => resident.Fields,
+            _ => null
+        };
+
+        if (typeFields == null)
+        {
+            if (fields.Count > 0)
+            {
+                ReportError(
+                    message: $"Type '{type.Name}' does not support field initialization.",
+                    location: location);
+            }
+            return;
+        }
+
+        // Build a lookup for expected fields
+        var fieldLookup = new Dictionary<string, FieldInfo>();
+        foreach (FieldInfo field in typeFields)
+        {
+            fieldLookup[field.Name] = field;
+        }
+
+        // Track which fields have been provided (to detect duplicates and missing fields)
+        var providedFields = new HashSet<string>();
+
+        // Validate each provided field
+        foreach ((string fieldName, Expression value) in fields)
+        {
+            // Check for duplicates
+            if (!providedFields.Add(fieldName))
+            {
+                ReportError(
+                    message: $"Duplicate field initializer for '{fieldName}'.",
+                    location: value.Location);
+                continue;
+            }
+
+            // Check if field exists
+            if (!fieldLookup.TryGetValue(fieldName, out FieldInfo? expectedField))
+            {
+                ReportError(
+                    message: $"Type '{type.Name}' does not have a field named '{fieldName}'.",
+                    location: value.Location);
+                AnalyzeExpression(expression: value); // Still analyze the value
+                continue;
+            }
+
+            // Analyze value with expected type for contextual inference
+            TypeSymbol fieldType = expectedField.Type;
+
+            // For generic instantiations, substitute type parameters in field type
+            if (type.IsGenericInstantiation && type.TypeArguments != null)
+            {
+                fieldType = SubstituteTypeParameters(type: fieldType, genericType: type);
+            }
+
+            TypeSymbol valueType = AnalyzeExpression(expression: value, expectedType: fieldType);
+
+            // Check type compatibility
+            if (!IsAssignableTo(source: valueType, target: fieldType))
+            {
+                ReportError(
+                    message: $"Cannot assign '{valueType.Name}' to field '{fieldName}' of type '{fieldType.Name}'.",
+                    location: value.Location);
+            }
+        }
+
+        // Check for missing required fields (fields without default values)
+        foreach (FieldInfo field in typeFields)
+        {
+            if (!providedFields.Contains(field.Name) && !field.HasDefaultValue)
+            {
+                ReportError(
+                    message: $"Missing required field '{field.Name}' in constructor for '{type.Name}'.",
+                    location: location);
+            }
+        }
+    }
+
+    private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list)
+    {
+        TypeSymbol? elementType = null;
+
+        if (list.ElementType != null)
+        {
+            elementType = ResolveType(typeExpr: list.ElementType);
+        }
+        else if (list.Elements.Count > 0)
+        {
+            // Infer from first element
+            elementType = AnalyzeExpression(expression: list.Elements[0]);
+
+            // Validate all elements have compatible types
+            for (int i = 1; i < list.Elements.Count; i++)
+            {
+                TypeSymbol elemType = AnalyzeExpression(expression: list.Elements[i]);
+                if (!IsAssignableTo(source: elemType, target: elementType))
+                {
+                    ReportError(message: $"List element type mismatch: expected '{elementType.Name}', got '{elemType.Name}'.", location: list.Elements[i].Location);
+                }
+            }
         }
         else
         {
-            // Both are typed or both are untyped - visit both normally
-            leftType = node.Left.Accept(visitor: this) as TypeInfo;
-            rightType = node.Right.Accept(visitor: this) as TypeInfo;
+            ReportError(message: "Cannot infer element type from empty list literal without type annotation.", location: list.Location);
+            elementType = ErrorTypeInfo.Instance;
         }
 
-        // Check for mixed-type arithmetic (REJECTED per user requirement)
-        if (leftType != null && rightType != null && IsArithmeticOperator(op: node.Operator))
+        // Return List<T> type
+        TypeSymbol? listDef = _registry.LookupType(name: "List");
+        if (listDef != null && elementType != null)
         {
-            if (!AreTypesCompatible(left: leftType, right: rightType))
+            return _registry.GetOrCreateInstantiation(genericDef: listDef, typeArguments: [elementType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeSetLiteralExpression(SetLiteralExpression set)
+    {
+        TypeSymbol? elementType = null;
+
+        if (set.ElementType != null)
+        {
+            elementType = ResolveType(typeExpr: set.ElementType);
+        }
+        else if (set.Elements.Count > 0)
+        {
+            elementType = AnalyzeExpression(expression: set.Elements[0]);
+        }
+        else
+        {
+            ReportError(message: "Cannot infer element type from empty set literal without type annotation.", location: set.Location);
+            elementType = ErrorTypeInfo.Instance;
+        }
+
+        // Analyze all elements
+        foreach (Expression elem in set.Elements)
+        {
+            AnalyzeExpression(expression: elem);
+        }
+
+        // Return Set<T> type
+        TypeSymbol? setDef = _registry.LookupType(name: "Set");
+        if (setDef != null && elementType != null)
+        {
+            return _registry.GetOrCreateInstantiation(genericDef: setDef, typeArguments: [elementType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict)
+    {
+        TypeSymbol? keyType = null;
+        TypeSymbol? valueType = null;
+
+        if (dict.KeyType != null && dict.ValueType != null)
+        {
+            keyType = ResolveType(typeExpr: dict.KeyType);
+            valueType = ResolveType(typeExpr: dict.ValueType);
+        }
+        else if (dict.Pairs.Count > 0)
+        {
+            keyType = AnalyzeExpression(expression: dict.Pairs[0].Key);
+            valueType = AnalyzeExpression(expression: dict.Pairs[0].Value);
+        }
+        else
+        {
+            ReportError(message: "Cannot infer types from empty dict literal without type annotation.", location: dict.Location);
+            keyType = ErrorTypeInfo.Instance;
+            valueType = ErrorTypeInfo.Instance;
+        }
+
+        // Analyze all pairs
+        foreach ((Expression Key, Expression Value) pair in dict.Pairs)
+        {
+            AnalyzeExpression(expression: pair.Key);
+            AnalyzeExpression(expression: pair.Value);
+        }
+
+        // Return Dict<K, V> type
+        TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
+        if (dictDef != null && keyType != null && valueType != null)
+        {
+            return _registry.GetOrCreateInstantiation(genericDef: dictDef, typeArguments: [keyType, valueType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeTypeConversionExpression(TypeConversionExpression conv)
+    {
+        AnalyzeExpression(expression: conv.Expression);
+
+        TypeSymbol? targetType = _registry.LookupType(name: conv.TargetType);
+        if (targetType == null)
+        {
+            ReportError(message: $"Unknown conversion target type '{conv.TargetType}'.", location: conv.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        return targetType;
+    }
+
+    private TypeSymbol AnalyzeChainedComparisonExpression(ChainedComparisonExpression chain)
+    {
+        // Validate that operators don't mix ascending and descending
+        ValidateComparisonChain(chain: chain, location: chain.Location);
+
+        // Analyze all operands and validate comparisons between consecutive pairs
+        var operandTypes = new List<TypeSymbol>();
+        foreach (Expression operand in chain.Operands)
+        {
+            operandTypes.Add(item: AnalyzeExpression(expression: operand));
+        }
+
+        // Validate each comparison pair
+        for (int i = 0; i < chain.Operators.Count; i++)
+        {
+            ValidateComparisonOperands(
+                left: operandTypes[i],
+                right: operandTypes[i + 1],
+                op: chain.Operators[i],
+                location: chain.Location);
+        }
+
+        // Chained comparisons always return bool
+        return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeBlockExpression(BlockExpression block)
+    {
+        // Block expression evaluates to its contained value expression
+        return AnalyzeExpression(expression: block.Value);
+    }
+
+    private TypeSymbol AnalyzeWithExpression(WithExpression with)
+    {
+        TypeSymbol baseType = AnalyzeExpression(expression: with.Base);
+
+        // Validate that base is a record type
+        if (baseType.Category != TypeCategory.Record)
+        {
+            ReportError(message: $"'with' expression requires a record type, got '{baseType.Name}'.", location: with.Location);
+        }
+
+        // Analyze update expressions
+        foreach ((string FieldName, Expression Value) update in with.Updates)
+        {
+            AnalyzeExpression(expression: update.Value);
+            // TODO: Validate field exists and types match
+        }
+
+        // Returns the same type as the base
+        return baseType;
+    }
+
+    private TypeSymbol AnalyzeGenericMethodCallExpression(GenericMethodCallExpression generic)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: generic.Object);
+
+        // Resolve type arguments
+        var typeArgs = new List<TypeSymbol>();
+        foreach (TypeExpression typeArg in generic.TypeArguments)
+        {
+            typeArgs.Add(item: ResolveType(typeExpr: typeArg));
+        }
+
+        // Look up the method
+        RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{generic.MethodName}");
+        if (method?.ReturnType != null)
+        {
+            // Substitute type arguments in return type
+            return method.ReturnType;
+        }
+
+        // Analyze arguments
+        foreach (Expression arg in generic.Arguments)
+        {
+            AnalyzeExpression(expression: arg);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeGenericMemberExpression(GenericMemberExpression genericMember)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: genericMember.Object);
+
+        // Resolve type arguments
+        foreach (TypeExpression typeArg in genericMember.TypeArguments)
+        {
+            ResolveType(typeExpr: typeArg);
+        }
+
+        // Look up the member with type arguments
+        // TODO: Implement proper generic member resolution
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeIntrinsicCallExpression(IntrinsicCallExpression intrinsic)
+    {
+        // Intrinsic calls require being in a danger block
+        if (!InDangerBlock)
+        {
+            ReportError(
+                message: $"Intrinsic call '@intrinsic.{intrinsic.IntrinsicName}' can only be used inside a danger block.",
+                location: intrinsic.Location);
+        }
+
+        foreach (Expression arg in intrinsic.Arguments)
+        {
+            AnalyzeExpression(expression: arg);
+        }
+
+        // Return type depends on the specific intrinsic
+        // For now, return based on type arguments if available
+        if (intrinsic.TypeArguments.Count > 0)
+        {
+            TypeSymbol? type = _registry.LookupType(name: intrinsic.TypeArguments[0]);
+            if (type != null)
             {
-                AddError(
-                    message:
-                    $"Mixed-type arithmetic is not allowed. Cannot perform {node.Operator} between {leftType.Name} and {rightType.Name}. Use explicit type conversion with {rightType.Name}!(x) or x.{rightType.Name}!().",
-                    location: node.Location);
-                return SetResolvedType(node, null);
+                return type;
             }
         }
 
-        // TrueDivide (/) is only allowed for floating-point types
-        // For integer division, use FloorDivide (//)
-        if (node.Operator == BinaryOperator.TrueDivide && leftType != null)
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeNativeCallExpression(NativeCallExpression native)
+    {
+        // Native calls require being in a danger block
+        if (!InDangerBlock)
         {
-            if (leftType.IsInteger || IsIntegerType(typeName: leftType.Name))
+            ReportError(
+                message: $"Native call '@native.{native.FunctionName}' can only be used inside a danger block.",
+                location: native.Location);
+        }
+
+        foreach (Expression arg in native.Arguments)
+        {
+            AnalyzeExpression(expression: arg);
+        }
+
+        // Native calls return platform-dependent types
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeIsPatternExpression(IsPatternExpression isPat)
+    {
+        TypeSymbol exprType = AnalyzeExpression(expression: isPat.Expression);
+
+        // Analyze the pattern (may bind variables)
+        AnalyzePattern(pattern: isPat.Pattern, matchedType: exprType);
+
+        // 'is' expressions always return bool
+        return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol HandleUnknownExpression(Expression expression)
+    {
+        ReportWarning(message: $"Unknown expression type: {expression.GetType().Name}", location: expression.Location);
+        return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Substitutes type parameters in a type based on a generic instantiation.
+    /// For example, if genericType is List&lt;S32&gt; and type is T, returns S32.
+    /// </summary>
+    /// <param name="type">The type that may contain type parameters.</param>
+    /// <param name="genericType">The instantiated generic type providing type argument bindings.</param>
+    /// <returns>The substituted type.</returns>
+    private TypeSymbol SubstituteTypeParameters(TypeSymbol type, TypeSymbol genericType)
+    {
+        if (genericType.TypeArguments == null || genericType.TypeArguments.Count == 0)
+        {
+            return type;
+        }
+
+        // Get the generic definition to find type parameter names
+        TypeSymbol? genericDef = GetGenericDefinition(instantiation: genericType);
+        if (genericDef == null)
+        {
+            return type;
+        }
+
+        // Build a mapping from type parameter names to actual types
+        IReadOnlyList<string>? typeParamNames = genericDef.GenericParameters;
+        if (typeParamNames == null || typeParamNames.Count != genericType.TypeArguments.Count)
+        {
+            return type;
+        }
+
+        var substitutions = new Dictionary<string, TypeSymbol>();
+        for (int i = 0; i < typeParamNames.Count; i++)
+        {
+            substitutions[typeParamNames[i]] = genericType.TypeArguments[i];
+        }
+
+        return SubstituteWithMapping(type: type, substitutions: substitutions);
+    }
+
+    /// <summary>
+    /// Gets the generic definition from an instantiation.
+    /// </summary>
+    private TypeSymbol? GetGenericDefinition(TypeSymbol instantiation)
+    {
+        if (!instantiation.IsGenericInstantiation)
+        {
+            return null;
+        }
+
+        // Extract base name (e.g., "List" from "List<S32>")
+        string baseName = GetBaseTypeName(typeName: instantiation.Name);
+        return _registry.LookupType(name: baseName);
+    }
+
+    /// <summary>
+    /// Substitutes type parameters using a mapping.
+    /// </summary>
+    private TypeSymbol SubstituteWithMapping(TypeSymbol type, Dictionary<string, TypeSymbol> substitutions)
+    {
+        // Direct type parameter replacement
+        if (substitutions.TryGetValue(type.Name, out TypeSymbol? replacement))
+        {
+            return replacement;
+        }
+
+        // For generic instantiations, recursively substitute in type arguments
+        if (type.IsGenericInstantiation && type.TypeArguments != null)
+        {
+            var substitutedArgs = new List<TypeSymbol>();
+            bool anyChanged = false;
+
+            foreach (TypeSymbol arg in type.TypeArguments)
             {
-                AddError(
-                    message:
-                    $"True division (/) is not supported for integer type '{leftType.Name}'. " +
-                    $"Use floor division (//) for integer division, or convert to a floating-point type first.",
-                    location: node.Location);
-                return SetResolvedType(node, null);
-            }
-        }
-
-        // Comparison operators return Bool
-        if (IsComparisonOperator(op: node.Operator))
-        {
-            return SetResolvedType(node, GetPrimitiveTypeInfo("bool"));
-        }
-
-        // Logical operators return Bool
-        if (IsLogicalOperator(op: node.Operator))
-        {
-            return SetResolvedType(node, GetPrimitiveTypeInfo("bool"));
-        }
-
-        // Return the common type (they should be the same if we reach here)
-        return SetResolvedType(node, leftType ?? rightType);
-    }
-
-    private bool IsArithmeticOperator(BinaryOperator op)
-    {
-        return op switch
-        {
-            BinaryOperator.Add or BinaryOperator.Subtract or BinaryOperator.Multiply
-                or BinaryOperator.TrueDivide or BinaryOperator.FloorDivide or BinaryOperator.Modulo
-                or BinaryOperator.Power or BinaryOperator.AddWrap or BinaryOperator.SubtractWrap
-                or BinaryOperator.MultiplyWrap or BinaryOperator.PowerWrap
-                or BinaryOperator.AddSaturate or BinaryOperator.SubtractSaturate
-                or BinaryOperator.MultiplySaturate or BinaryOperator.PowerSaturate
-                or BinaryOperator.AddChecked or BinaryOperator.SubtractChecked
-                or BinaryOperator.MultiplyChecked or BinaryOperator.FloorDivideChecked
-                or BinaryOperator.ModuloChecked or BinaryOperator.PowerChecked => true,
-            _ => false
-        };
-    }
-
-    private bool IsComparisonOperator(BinaryOperator op)
-    {
-        return op switch
-        {
-            BinaryOperator.Equal or BinaryOperator.NotEqual or BinaryOperator.Less
-                or BinaryOperator.LessEqual or BinaryOperator.Greater
-                or BinaryOperator.GreaterEqual or BinaryOperator.In or BinaryOperator.NotIn
-                or BinaryOperator.Is or BinaryOperator.IsNot or BinaryOperator.From
-                or BinaryOperator.NotFrom or BinaryOperator.Follows
-                or BinaryOperator.NotFollows => true,
-            _ => false
-        };
-    }
-
-    private bool IsLogicalOperator(BinaryOperator op)
-    {
-        return op switch
-        {
-            BinaryOperator.And or BinaryOperator.Or => true,
-            _ => false
-        };
-    }
-
-    /// <summary>
-    /// Checks if an expression is an untyped integer literal (would default to s64).
-    /// Used for type inference from context.
-    /// </summary>
-    private bool IsUntypedIntegerLiteral(Expression expr)
-    {
-        return expr is LiteralExpression literal && literal.LiteralType == TokenType.Integer;
-    }
-
-    private bool AreTypesCompatible(TypeInfo left, TypeInfo right)
-    {
-        // If either type is a generic parameter, they are compatible
-        // (concrete type checking happens at instantiation time)
-        if (left.IsGenericParameter || right.IsGenericParameter)
-        {
-            return true;
-        }
-
-        // Types are compatible if they are exactly the same
-        if (left.Name == right.Name && left.IsReference == right.IsReference)
-        {
-            return true;
-        }
-
-        // Allow arithmetic between pointer-sized types and their fixed-size equivalents
-        // uaddr is the unsigned address type (platform-specific), compatible with u64/u32
-        // saddr is the signed address type (platform-specific), compatible with s64/s32
-        if (IsPointerSizedType(typeName: left.Name) || IsPointerSizedType(typeName: right.Name))
-        {
-            // Check both are integers of the same signedness
-            bool leftUnsigned = IsUnsignedIntegerType(typeName: left.Name);
-            bool rightUnsigned = IsUnsignedIntegerType(typeName: right.Name);
-            bool leftSigned = IsSignedIntegerType(typeName: left.Name);
-            bool rightSigned = IsSignedIntegerType(typeName: right.Name);
-
-            // Both unsigned (u64 * uaddr) or both signed (s64 * saddr)
-            if ((leftUnsigned && rightUnsigned) || (leftSigned && rightSigned))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if the type is a pointer-sized integer type.
-    /// </summary>
-    private static bool IsPointerSizedType(string typeName)
-    {
-        return typeName == "uaddr" || typeName == "saddr";
-    }
-
-    /// <summary>
-    /// Checks if the type is an unsigned integer type.
-    /// </summary>
-    private static bool IsUnsignedIntegerType(string typeName)
-    {
-        return typeName == "u8" || typeName == "u16" || typeName == "u32" ||
-               typeName == "u64" || typeName == "u128" || typeName == "uaddr";
-    }
-
-    /// <summary>
-    /// Checks if the type is a signed integer type.
-    /// </summary>
-    private static bool IsSignedIntegerType(string typeName)
-    {
-        return typeName == "s8" || typeName == "s16" || typeName == "s32" ||
-               typeName == "s64" || typeName == "s128" || typeName == "saddr";
-    }
-
-    /// <summary>
-    /// Visits a unary expression and validates the operand type.
-    /// </summary>
-    /// <param name="node">Unary expression node</param>
-    /// <returns>TypeInfo of the result</returns>
-    public object? VisitUnaryExpression(UnaryExpression node)
-    {
-        var operandType = node.Operand.Accept(visitor: this) as TypeInfo;
-        // TODO: Check unary operator compatibility
-        return SetResolvedType(node, operandType);
-    }
-
-    /// <summary>
-    /// Visits a member access expression and validates the member exists.
-    /// </summary>
-    /// <param name="node">Member expression node</param>
-    /// <returns>TypeInfo of the member</returns>
-    public object? VisitMemberExpression(MemberExpression node)
-    {
-        var objectType = node.Object.Accept(visitor: this) as TypeInfo;
-
-        if (objectType == null)
-        {
-            return SetResolvedType(node, null);
-        }
-
-        string typeName = objectType.Name;
-
-        // Check if accessing field through a wrapper type that allows transparent access
-        // Hijacked<T>, Viewed<T>, Retained<T> all allow direct field access on inner type T
-        if (IsTransparentWrapperType(typeName: objectType.Name,
-                innerType: out string? innerTypeName))
-        {
-            // Unwrap to get the inner type and check member on that type
-            typeName = innerTypeName ?? objectType.Name;
-        }
-
-        // Look up field type from type definition cache
-        TypeInfo? fieldType = LookupFieldType(typeName: typeName, fieldName: node.PropertyName);
-        if (fieldType != null)
-        {
-            return SetResolvedType(node, fieldType);
-        }
-
-        // Handle special "me" reference - we may not have cached the current type yet
-        // In this case, allow the access and return unknown (it will be validated at code gen)
-        if (node.Object is IdentifierExpression idExpr && idExpr.Name == "me")
-        {
-            // Allow member access on "me" - type checking will happen at code gen time
-            return SetResolvedType(node, new TypeInfo(Name: "unknown", IsReference: false));
-        }
-
-        // For generic types or types not in cache, allow access but return unknown
-        // This handles cases like slice types (DynamicSlice) which have built-in methods
-        if (objectType.Name == "DynamicSlice" || objectType.Name == "TemporarySlice")
-        {
-            // Slice types have built-in fields/methods handled elsewhere
-            return SetResolvedType(node, new TypeInfo(Name: "unknown", IsReference: false));
-        }
-
-        // Return unknown type to allow compilation to continue
-        // Full member validation would require complete type information
-        return SetResolvedType(node, new TypeInfo(Name: "unknown", IsReference: false));
-    }
-
-    /// <summary>
-    /// Checks if a type is a transparent wrapper that allows direct field access.
-    /// Transparent wrappers: Hijacked&lt;T&gt;, Viewed&lt;T&gt;, Retained&lt;T&gt;, Inspected&lt;T&gt;, Seized&lt;T&gt;
-    /// Note: Snatched&lt;T&gt; requires explicit .reveal_as&lt;U&gt;() - not transparent
-    /// </summary>
-    private bool IsTransparentWrapperType(string typeName, out string? innerType)
-    {
-        // Match patterns: Hijacked<T>, Viewed<T>, Retained<T>, Inspected<T>, Seized<T>
-        foreach (string wrapperPrefix in new[]
-                 {
-                     "Hijacked<",
-                     "Viewed<",
-                     "Retained<",
-                     "Inspected<",
-                     "Seized<"
-                 })
-        {
-            if (typeName.StartsWith(value: wrapperPrefix) && typeName.EndsWith(value: ">"))
-            {
-                // Extract inner type T from Wrapper<T>
-                innerType = typeName.Substring(startIndex: wrapperPrefix.Length,
-                    length: typeName.Length - wrapperPrefix.Length - 1);
-                return true;
-            }
-        }
-
-        innerType = null;
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if a type is a read-only wrapper that does not allow mutation.
-    /// Read-only wrappers: Viewed&lt;T>, Inspected&lt;T>
-    /// </summary>
-    private bool IsReadOnlyWrapperType(string typeName)
-    {
-        return typeName.StartsWith(value: "Viewed<") || typeName.StartsWith(value: "Inspected<");
-    }
-
-    /// <summary>
-    /// Visits an index expression and validates the indexing operation.
-    /// </summary>
-    /// <param name="node">Index expression node</param>
-    /// <returns>TypeInfo of the indexed element</returns>
-    public object? VisitIndexExpression(IndexExpression node)
-    {
-        var objectType = node.Object.Accept(visitor: this) as TypeInfo;
-        var indexType = node.Index.Accept(visitor: this) as TypeInfo;
-        // TODO: Check indexing compatibility and infer element type
-        return SetResolvedType(node, null);
-    }
-
-    /// <summary>
-    /// Visits a conditional (ternary) expression and validates all branches.
-    /// </summary>
-    /// <param name="node">Conditional expression node</param>
-    /// <returns>TypeInfo of the result</returns>
-    public object? VisitConditionalExpression(ConditionalExpression node)
-    {
-        var conditionType = node.Condition.Accept(visitor: this) as TypeInfo;
-        var trueType = node.TrueExpression.Accept(visitor: this) as TypeInfo;
-        var falseType = node.FalseExpression.Accept(visitor: this) as TypeInfo;
-
-        // Accept both Bool and bool for compatibility
-        if (conditionType != null && conditionType.Name != "Bool" && conditionType.Name != "bool")
-        {
-            AddError(message: $"Conditional expression condition must be boolean",
-                location: node.Location);
-        }
-
-        // TODO: Return common type of true/false branches
-        return SetResolvedType(node, trueType);
-    }
-
-    /// <summary>
-    /// Visits a block expression and returns the type of its value expression.
-    /// </summary>
-    /// <param name="node">Block expression node</param>
-    /// <returns>TypeInfo of the block's value expression</returns>
-    public object? VisitBlockExpression(BlockExpression node)
-    {
-        // A block expression evaluates to its inner expression
-        var resultType = node.Value.Accept(visitor: this) as TypeInfo;
-        return SetResolvedType(node, resultType);
-    }
-
-    /// <summary>
-    /// Visits a lambda expression and validates parameter and return types.
-    /// </summary>
-    /// <param name="node">Lambda expression node</param>
-    /// <returns>TypeInfo representing the function type</returns>
-    public object? VisitLambdaExpression(LambdaExpression node)
-    {
-        // Enter scope for lambda parameters
-        _symbolTable.EnterScope();
-
-        try
-        {
-            foreach (Parameter param in node.Parameters)
-            {
-                TypeInfo? paramType = ResolveType(typeExpr: param.Type);
-                var paramSymbol = new VariableSymbol(Name: param.Name,
-                    Type: paramType,
-                    IsMutable: false,
-                    Visibility: VisibilityModifier.Private);
-                _symbolTable.TryDeclare(symbol: paramSymbol);
-            }
-
-            var bodyType = node.Body.Accept(visitor: this) as TypeInfo;
-            return SetResolvedType(node, bodyType);
-        }
-        finally
-        {
-            _symbolTable.ExitScope();
-        }
-    }
-
-    /// <summary>
-    /// Visits a chained comparison expression (e.g., a &lt; b &lt; c).
-    /// </summary>
-    /// <param name="node">Chained comparison expression node</param>
-    /// <returns>TypeInfo of bool</returns>
-    public object? VisitChainedComparisonExpression(ChainedComparisonExpression node)
-    {
-        // Check that all operands are comparable
-        TypeInfo? prevType = null;
-
-        foreach (Expression operand in node.Operands)
-        {
-            var operandType = operand.Accept(visitor: this) as TypeInfo;
-
-            if (prevType != null && operandType != null)
-            {
-                // TODO: Check if types are comparable
-                if (!AreComparable(type1: prevType, type2: operandType))
+                TypeSymbol substitutedArg = SubstituteWithMapping(type: arg, substitutions: substitutions);
+                substitutedArgs.Add(substitutedArg);
+                if (!ReferenceEquals(substitutedArg, arg))
                 {
-                    AddError(message: $"Cannot compare {prevType.Name} with {operandType.Name}",
-                        location: node.Location);
+                    anyChanged = true;
                 }
             }
 
-            prevType = operandType;
-        }
-
-        // Chained comparisons always return boolean
-        return SetResolvedType(node, GetPrimitiveTypeInfo("bool"));
-    }
-
-    /// <summary>
-    /// Visits a range expression and validates the start and end values.
-    /// </summary>
-    /// <param name="node">Range expression node</param>
-    /// <returns>TypeInfo representing the range type</returns>
-    public object? VisitRangeExpression(RangeExpression node)
-    {
-        // Check start and end are numeric
-        var startType = node.Start.Accept(visitor: this) as TypeInfo;
-        var endType = node.End.Accept(visitor: this) as TypeInfo;
-
-        if (startType != null && !IsNumericType(type: startType))
-        {
-            AddError(message: $"Range start must be numeric, got {startType.Name}",
-                location: node.Location);
-        }
-
-        if (endType != null && !IsNumericType(type: endType))
-        {
-            AddError(message: $"Range end must be numeric, got {endType.Name}",
-                location: node.Location);
-        }
-
-        // Check step if present
-        if (node.Step != null)
-        {
-            var stepType = node.Step.Accept(visitor: this) as TypeInfo;
-            if (stepType != null && !IsNumericType(type: stepType))
+            if (anyChanged)
             {
-                AddError(message: $"Range step must be numeric, got {stepType.Name}",
-                    location: node.Location);
+                // Create a new instantiation with substituted arguments
+                TypeSymbol? baseDef = GetGenericDefinition(instantiation: type);
+                if (baseDef != null)
+                {
+                    return _registry.GetOrCreateInstantiation(genericDef: baseDef, typeArguments: substitutedArgs);
+                }
             }
         }
 
-        // Range expressions return a Range<T> type
-        return SetResolvedType(node, new TypeInfo(Name: "Range", IsReference: false));
+        return type;
     }
 
     /// <summary>
-    /// Visits a type expression and resolves it to a TypeInfo.
+    /// Analyzes a steal expression (RazorForge only).
+    /// Validates that the operand can be stolen and returns the stolen type.
     /// </summary>
-    /// <param name="node">Type expression node</param>
-    /// <returns>TypeInfo</returns>
-    public object? VisitTypeExpression(TypeExpression node)
+    /// <param name="steal">The steal expression to analyze.</param>
+    /// <returns>The type of the stolen value.</returns>
+    /// <remarks>
+    /// Stealable types:
+    /// - Raw entities (direct entity references)
+    /// - Shared&lt;T&gt; (shared ownership handle)
+    /// - Tracked&lt;T&gt; (reference-counted handle)
+    ///
+    /// Non-stealable types (compile error):
+    /// - Viewed&lt;T&gt; (read-only token, scope-bound)
+    /// - Hijacked&lt;T&gt; (exclusive token, scope-bound)
+    /// - Inspected&lt;T&gt; (thread-safe read token, scope-bound)
+    /// - Seized&lt;T&gt; (thread-safe exclusive token, scope-bound)
+    /// - Snatched&lt;T&gt; (internal ownership, not for user code)
+    /// </remarks>
+    private TypeSymbol AnalyzeStealExpression(StealExpression steal)
     {
-        // Type expressions are handled during semantic analysis
-        return SetResolvedType(node, null);
+        // Analyze the operand
+        TypeSymbol operandType = AnalyzeExpression(expression: steal.Operand);
+
+        // Check if the type is a memory token (cannot be stolen)
+        if (IsMemoryToken(type: operandType))
+        {
+            string tokenKind = GetMemoryTokenKind(type: operandType);
+            ReportError(
+                message: $"Cannot steal '{tokenKind}' - scope-bound tokens cannot be stolen. " +
+                         $"Only raw entities, Shared<T>, and Tracked<T> can be stolen.",
+                location: steal.Location);
+            return operandType;
+        }
+
+        // Check for Snatched<T> (internal ownership, not for user code)
+        if (IsSnatched(type: operandType))
+        {
+            ReportError(
+                message: "Cannot steal 'Snatched<T>' - internal ownership type cannot be stolen.",
+                location: steal.Location);
+            return operandType;
+        }
+
+        // For Shared<T> or Tracked<T>, return the inner type
+        if (IsStealableHandle(type: operandType))
+        {
+            // Unwrap the handle to get the inner type
+            if (operandType.TypeArguments is { Count: > 0 })
+            {
+                return operandType.TypeArguments[0];
+            }
+        }
+
+        // For raw entities (not wrapped), return the same type
+        // The steal operation moves ownership, making the source a deadref
+        return operandType;
     }
 
     /// <summary>
-    /// Visits a type conversion expression and validates the conversion.
+    /// Checks if a type is a memory token (Viewed, Hijacked, Inspected, Seized).
+    /// Memory tokens are scope-bound and cannot be stolen.
     /// </summary>
-    /// <param name="node">Type conversion expression node</param>
-    /// <returns>TypeInfo of the target type</returns>
-    public object? VisitTypeConversionExpression(TypeConversionExpression node)
+    private static bool IsMemoryToken(TypeSymbol type)
     {
-        // Analyze the source expression
-        var sourceType = node.Expression.Accept(visitor: this) as TypeInfo;
-
-        // Validate the target type exists
-        string targetTypeName = node.TargetType;
-        if (!IsValidType(typeName: targetTypeName))
-        {
-            _errors.Add(item: new SemanticError(Message: $"Unknown type: {targetTypeName}",
-                Location: node.Location));
-            return SetResolvedType(node, null);
-        }
-
-        // Check if the conversion is valid
-        if (!IsValidConversion(sourceType: sourceType?.Name ?? "unknown",
-                targetType: targetTypeName))
-        {
-            _errors.Add(item: new SemanticError(
-                Message:
-                $"Cannot convert from {sourceType?.Name ?? "unknown"} to {targetTypeName}",
-                Location: node.Location));
-            return SetResolvedType(node, null);
-        }
-
-        // Return the target type
-        var resultType = PrimitiveTypes.IsPrimitive(targetTypeName)
-            ? GetPrimitiveTypeInfo(targetTypeName)
-            : new TypeInfo(Name: targetTypeName, IsReference: IsUnsignedType(typeName: targetTypeName));
-        return SetResolvedType(node, resultType);
+        return type.Name is "Viewed" or "Hijacked" or "Inspected" or "Seized"
+            || (type.Name.StartsWith(value: "Viewed<") ||
+                type.Name.StartsWith(value: "Hijacked<") ||
+                type.Name.StartsWith(value: "Inspected<") ||
+                type.Name.StartsWith(value: "Seized<"));
     }
 
     /// <summary>
-    /// Visits a named argument expression (name: value).
-    /// Named arguments allow explicit specification of which parameter receives which value.
+    /// Gets the kind of memory token for error messages.
     /// </summary>
-    public object? VisitNamedArgumentExpression(NamedArgumentExpression node)
+    private static string GetMemoryTokenKind(TypeSymbol type)
     {
-        // Type check the value expression
-        var resultType = node.Value.Accept(visitor: this) as TypeInfo;
-        return SetResolvedType(node, resultType);
+        if (type.Name.StartsWith(value: "Viewed")) return "Viewed<T>";
+        if (type.Name.StartsWith(value: "Hijacked")) return "Hijacked<T>";
+        if (type.Name.StartsWith(value: "Inspected")) return "Inspected<T>";
+        if (type.Name.StartsWith(value: "Seized")) return "Seized<T>";
+        return type.Name;
     }
 
     /// <summary>
-    /// Visits a constructor expression (Type(field: value, ...)).
-    /// Verifies the type exists and all fields are properly initialized.
+    /// Checks if a type is Snatched&lt;T&gt; (internal ownership type).
     /// </summary>
-    public object? VisitConstructorExpression(ConstructorExpression node)
+    private static bool IsSnatched(TypeSymbol type)
     {
-        // Type check all field value expressions
-        foreach ((string Name, Expression Value) field in node.Fields)
-        {
-            field.Value.Accept(visitor: this);
-        }
-
-        // Look up the type to verify it exists
-        Symbol? symbol = _symbolTable.Lookup(name: node.TypeName);
-
-        // Check if it's a TypeWithConstructors (type + constructors share name)
-        if (symbol is TypeWithConstructors typeWithCtors)
-        {
-            symbol = typeWithCtors.TypeSymbol;
-        }
-
-        if (symbol == null)
-        {
-            AddError(message: $"Unknown type '{node.TypeName}'", location: node.Location);
-            return SetResolvedType(node, null);
-        }
-
-        // Return the type info for the struct/entity/record
-        // Handle generic types by including type arguments
-        string typeName = node.TypeName;
-        if (node.TypeArguments != null && node.TypeArguments.Count > 0)
-        {
-            // For generic types, the full name includes type arguments
-            // e.g., List<T> or Dict<K, V>
-            typeName = node.TypeName;
-        }
-
-        // Determine if this is a reference type (entity) or value type (record)
-        bool isReference = symbol is EntitySymbol;
-
-        return SetResolvedType(node, new TypeInfo(Name: typeName, IsReference: isReference));
+        return type.Name == "Snatched" || type.Name.StartsWith(value: "Snatched<");
     }
+
+    /// <summary>
+    /// Checks if a type is a stealable handle (Shared&lt;T&gt; or Tracked&lt;T&gt;).
+    /// </summary>
+    private static bool IsStealableHandle(TypeSymbol type)
+    {
+        return type.Name is "Shared" or "Tracked"
+            || type.Name.StartsWith(value: "Shared<")
+            || type.Name.StartsWith(value: "Tracked<");
+    }
+
+    /// <summary>
+    /// Analyzes a backindex expression (^n = index from end).
+    /// Validates that the operand is a non-negative integer type.
+    /// </summary>
+    /// <param name="back">The back index expression to analyze.</param>
+    /// <returns>The BackIndex type.</returns>
+    /// <remarks>
+    /// BackIndex expressions create indices that count from the end of a sequence:
+    /// - ^1 = last element
+    /// - ^2 = second to last element
+    /// - ^0 = one past the end (valid for slicing, not indexing)
+    ///
+    /// Used with IndexExpression for end-relative indexing: list[^1], text[^3]
+    /// </remarks>
+    private TypeSymbol AnalyzeBackIndexExpression(BackIndexExpression back)
+    {
+        // Analyze the operand
+        TypeSymbol operandType = AnalyzeExpression(expression: back.Operand);
+
+        // Validate that the operand is an integer type
+        if (!IsIntegerType(type: operandType))
+        {
+            ReportError(
+                message: $"BackIndex operator '^' requires an integer operand, got '{operandType.Name}'.",
+                location: back.Location);
+        }
+
+        // Return a BackIndex type (or UAddr as the underlying representation)
+        // BackIndex is conceptually a wrapper around an offset from the end
+        TypeSymbol? backIndexType = _registry.LookupType(name: "BackIndex");
+        if (backIndexType != null)
+        {
+            return backIndexType;
+        }
+
+        // Fallback: return UAddr as the index representation
+        return _registry.LookupType(name: "UAddr") ?? operandType;
+    }
+
+    /// <summary>
+    /// Creates a RoutineTypeInfo from a RoutineInfo for first-class function references.
+    /// </summary>
+    /// <param name="routine">The routine to create a type for.</param>
+    /// <returns>The function type representing this routine's signature.</returns>
+    private RoutineTypeInfo GetRoutineType(RoutineInfo routine)
+    {
+        // Extract parameter types from ParameterInfo
+        List<TypeSymbol> parameterTypes = routine.Parameters
+            .Select(selector: p => p.Type)
+            .ToList();
+
+        // Get return type (null means Blank/void)
+        TypeSymbol? returnType = routine.ReturnType;
+
+        // Create or retrieve the cached function type
+        return _registry.GetOrCreateRoutineType(
+            parameterTypes: parameterTypes,
+            returnType: returnType,
+            isFailable: routine.IsFailable);
+    }
+
+    #endregion
 }

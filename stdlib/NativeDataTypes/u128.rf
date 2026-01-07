@@ -216,19 +216,19 @@ routine U128.__mul_wrap__(you: U128) -> U128 {
 
 routine U128.__add_sat__(you: U128) -> U128 {
     danger! {
-        return @intrinsic.add.saturating<i128>(me, you)
+        return @intrinsic.add.saturate<i128>(me, you)
     }
 }
 
 routine U128.__sub_sat__(you: U128) -> U128 {
     danger! {
-        return @intrinsic.sub.saturating<i128>(me, you)
+        return @intrinsic.sub.saturate<i128>(me, you)
     }
 }
 
 routine U128.__mul_sat__(you: U128) -> U128 {
     danger! {
-        return @intrinsic.mul.saturating<i128>(me, you)
+        return @intrinsic.mul.saturate<i128>(me, you)
     }
 }
 
@@ -315,9 +315,9 @@ routine U128.__pow_sat__!(exp: U128) -> U128 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturating<i128>(result, base)
+                result = @intrinsic.mul.saturate<i128>(result, base)
             }
-            base = @intrinsic.mul.saturating<i128>(base, base)
+            base = @intrinsic.mul.saturate<i128>(base, base)
             e = e >> 1
         }
         return result

@@ -245,19 +245,19 @@ routine S8.__mul_wrap__(you: S8) -> S8 {
 
 routine S8.__add_sat__(you: S8) -> S8 {
     danger! {
-        return @intrinsic.add.saturating<i8>(me, you)
+        return @intrinsic.add.saturate<i8>(me, you)
     }
 }
 
 routine S8.__sub_sat__(you: S8) -> S8 {
     danger! {
-        return @intrinsic.sub.saturating<i8>(me, you)
+        return @intrinsic.sub.saturate<i8>(me, you)
     }
 }
 
 routine S8.__mul_sat__(you: S8) -> S8 {
     danger! {
-        return @intrinsic.mul.saturating<i8>(me, you)
+        return @intrinsic.mul.saturate<i8>(me, you)
     }
 }
 
@@ -351,9 +351,9 @@ routine S8.__pow_sat__!(exp: S8) -> S8 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturating<i8>(result, base)
+                result = @intrinsic.mul.saturate<i8>(result, base)
             }
-            base = @intrinsic.mul.saturating<i8>(base, base)
+            base = @intrinsic.mul.saturate<i8>(base, base)
             e = e >> 1
         }
         return result

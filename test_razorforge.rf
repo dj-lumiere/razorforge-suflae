@@ -1,5 +1,4 @@
-# RazorForge equivalent of our Suflae program
-import stdlib/core
+import Console
 
 routine greet(name: Text) -> Text {
     return f"Hello, {name}!"
@@ -7,6 +6,5 @@ routine greet(name: Text) -> Text {
 
 routine start() {
     let message = greet("World")
-    display_line(message)
-    raise ProcessComplete()
+    show(message)
 }

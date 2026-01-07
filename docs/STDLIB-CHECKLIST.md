@@ -189,16 +189,38 @@ This document tracks the implementation status of all standard library component
 
 ## Text Types (`stdlib/Text/`)
 
-| Type               | Core Operations      | Unicode | Iteration | Status |
-|--------------------|----------------------|---------|-----------|--------|
-| Text<T>            | ⏳                    | ⏳       | ⏳         | ⏳      |
-| FixedText<T>       | ⏳                    | ⏳       | ⏳         | ⏳      |
-| ValueText<T>       | ⏳                    | ⏳       | ⏳         | ⏳      |
-| TextBuffer<T>      | ⏳                    | ⏳       | ⏳         | ⏳      |
-| FixedTextBuffer<T> | ⏳                    | ⏳       | ⏳         | ⏳      |
-| letter8            | ⏳ UTF-8 code unit    | -       | -         | ⏳      |
-| letter16           | ⏳ UTF-16 code unit   | -       | -         | ⏳      |
-| letter32           | ⏳ Unicode code point | -       | -         | ⏳      |
+**UTF-32 Text (default):**
+
+| Type               | Core Operations | Unicode | Iteration | Status |
+|--------------------|-----------------|---------|-----------|--------|
+| Text               | ⏳               | ⏳       | ⏳         | ⏳      |
+| TextBuffer         | ⏳               | ⏳       | ⏳         | ⏳      |
+| FixedText<N>       | ⏳               | ⏳       | ⏳         | ⏳      |
+| FixedTextBuffer<N> | ⏳               | ⏳       | ⏳         | ⏳      |
+| ValueText<N>       | ⏳               | ⏳       | ⏳         | ⏳      |
+
+**UTF-8 Bytes:**
+
+| Type                | Core Operations | Unicode | Iteration | Status |
+|---------------------|-----------------|---------|-----------|--------|
+| Bytes               | ⏳               | ⏳       | ⏳         | ⏳      |
+| BytesBuffer         | ⏳               | ⏳       | ⏳         | ⏳      |
+| FixedBytes<N>       | ⏳               | ⏳       | ⏳         | ⏳      |
+| FixedBytesBuffer<N> | ⏳               | ⏳       | ⏳         | ⏳      |
+| ValueBytes<N>       | ⏳               | ⏳       | ⏳         | ⏳      |
+
+**Character Types:**
+
+| Type   | Description              | Status |
+|--------|--------------------------|--------|
+| letter | 32-bit Unicode codepoint | ⏳      |
+| byte   | 8-bit UTF-8 code unit    | ⏳      |
+
+**Note:** `letter8`, `letter16`, `letter32` were **RENAMED/REMOVED**:
+
+- `letter32` → `letter` (32-bit Unicode codepoint)
+- `letter8` → `byte` (8-bit UTF-8 code unit)
+- `letter16` → **REMOVED** (UTF-16 handled via conversion methods)
 
 ---
 
@@ -206,31 +228,51 @@ This document tracks the implementation status of all standard library component
 
 ### Core Memory Types
 
-| Type              | Description            | Status |
-|-------------------|------------------------|--------|
-| DynamicSlice<T>   | Dynamic memory slice   | ⏳      |
-| TemporarySlice<T> | Stack-allocated slice  | ⏳      |
-| MemorySize        | Memory size with units | ✅      |
+| Type            | Description            | Status |
+|-----------------|------------------------|--------|
+| DynamicSlice<T> | Dynamic memory slice   | ⏳      |
+| MemorySize      | Memory size with units | ✅      |
+
+**Note:** `TemporarySlice<T>` was **REMOVED** - stack-allocated slices are no longer supported.
 
 ### Memory Wrappers (`stdlib/memory/wrapper/`)
 
-| Type        | Description                              | Status |
-|-------------|------------------------------------------|--------|
-| Inspected<T> | Read-only borrowed reference             | ⏳      |
-| Viewed<T>   | Read-write borrowed reference            | ⏳      |
-| Shared<T>   | Reference-counted shared ownership       | ⏳      |
-| Retained<T> | Strong reference (prevents deallocation) | ⏳      |
-| Tracked<T>  | Tracked lifetime reference               | ⏳      |
-| Seized<T>   | Exclusive ownership transfer             | ⏳      |
-| Snatched<T> | Temporary exclusive access               | ⏳      |
-| Hijacked<T> | Unsafe raw access                        | ⏳      |
+**Tokens (non-storable, temporary access):**
+
+| Type           | Description                                | Status |
+|----------------|--------------------------------------------|--------|
+| `Viewed<T>`    | Read-only access (single-threaded)         | ⏳      |
+| `Hijacked<T>`  | Exclusive mutable access (single-threaded) | ⏳      |
+| `Inspected<T>` | Read lock (multi-threaded)                 | ⏳      |
+| `Seized<T>`    | Write lock (multi-threaded)                | ⏳      |
+
+**Handles (storable, owning):**
+
+| Type            | Description                                         | Status |
+|-----------------|-----------------------------------------------------|--------|
+| `Shared<T>`     | Reference-counted (single-threaded)                 | ⏳      |
+| `Shared<T, P>`  | Reference-counted with lock policy (multi-threaded) | ⏳      |
+| `Tracked<T>`    | Weak reference to `Shared<T>`                       | ⏳      |
+| `Tracked<T, P>` | Weak reference to `Shared<T, P>`                    | ⏳      |
+| `Snatched<T>`   | Raw pointer (danger zone only)                      | ⏳      |
+
+**Note:** `Retained<T>` was **RENAMED** to `Shared<T>` (single-threaded reference counting).
 
 ### Memory Controllers (`stdlib/memory/controller/`)
 
-| Type             | Description                   | Status |
-|------------------|-------------------------------|--------|
-| RetainController | Reference counting controller | ⏳      |
-| ShareController  | Shared ownership controller   | ⏳      |
+| Type                    | Description                           | Status |
+|-------------------------|---------------------------------------|--------|
+| `SingleShareController` | Reference counting for `Shared<T>`    | ⏳      |
+| `MultiShareController`  | Reference counting for `Shared<T, P>` | ⏳      |
+
+### Lock Policies (`stdlib/memory/controller/`)
+
+| Type          | Description                  | Status |
+|---------------|------------------------------|--------|
+| LockPolicy    | Protocol for lock policies   | ⏳      |
+| Mutex         | Exclusive locking (~15-30ns) | ⏳      |
+| MultiReadLock | Read-write lock (~10-35ns)   | ⏳      |
+| RejectEdit    | Immutable (zero overhead)    | ⏳      |
 
 ---
 
@@ -249,7 +291,6 @@ This document tracks the implementation status of all standard library component
 | Function                        | Description                         | Status |
 |---------------------------------|-------------------------------------|--------|
 | show<T>(value)                  | Print value                         | ✅      |
-| show_line<T>(value)             | Print value with newline            | ✅      |
 | get_letters(prompt) -> Text     | Read individual letters             | ⏳      |
 | get_word(prompt) -> Text        | Read single word (whitespace delim) | ⏳      |
 | get_line(prompt) -> Text        | Read single line                    | ⏳      |
@@ -261,17 +302,17 @@ This document tracks the implementation status of all standard library component
 
 ## Atomic Types (`stdlib/AtomicDataTypes/`)
 
-| Type       | Description         | Status |
-|------------|---------------------|--------|
-| AtomicBool | Thread-safe boolean | ⏳      |
+| Type           | Description         | Status |
+|----------------|---------------------|--------|
+| `Atomic<Bool>` | Thread-safe boolean | ⏳      |
 
 ---
 
 ## Runtime (`stdlib/Runtime/`)
 
-| Component       | Description         | Status |
-|-----------------|---------------------|--------|
-| compilerservice | Compiler intrinsics | ⏳      |
+| Component         | Description         | Status |
+|-------------------|---------------------|--------|
+| `CompilerService` | Compiler intrinsics | ⏳      |
 
 ---
 
@@ -283,11 +324,7 @@ This document tracks the implementation status of all standard library component
 
 ---
 
-## C Subsystem (`stdlib/memory/CSubsystem.rf`)
-
-| Component | Description         | Status |
-|-----------|---------------------|--------|
-| C interop | C function bindings | ⏳      |
+**Note:** `CSubsystem.rf` was **REMOVED** - FFI bindings moved to respective files.
 
 ---
 

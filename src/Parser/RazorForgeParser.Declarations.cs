@@ -125,6 +125,7 @@ public partial class RazorForgeParser
         var specificImports = (List<string>?)null;
 
         // Parse module path - could be multiple identifiers separated by slashes
+        // Dot marks a specific type within the module: import Standard/Collection.List
         do
         {
             string part = ConsumeIdentifier(errorMessage: "Expected module name");
@@ -132,6 +133,13 @@ public partial class RazorForgeParser
             if (Match(type: TokenType.Slash))
             {
                 modulePath += "/";
+            }
+            else if (Match(type: TokenType.Dot))
+            {
+                // Dot marks specific type: CSubsystem.CStr → path "CSubsystem", type "CStr"
+                string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
+                modulePath += "/" + typeName;
+                break;
             }
             else
             {
@@ -224,6 +232,17 @@ public partial class RazorForgeParser
             Type: type,
             Value: value,
             Location: location);
+    }
+
+    /// <summary>
+    /// Checks for 'pass' statement in empty body context.
+    /// If found, consumes it and returns true.
+    /// </summary>
+    private bool SkipPassStatement()
+    {
+        if (!Match(type: TokenType.Pass)) return false;
+        ConsumeStatementTerminator();
+        return true;
     }
 
     /// <summary>
@@ -787,6 +806,10 @@ public partial class RazorForgeParser
 
         var members = new List<Declaration>();
 
+        // Enable field declaration syntax inside entity body (same as record)
+        bool wasParsingRecordBody = _parsingRecordBody;
+        _parsingRecordBody = true;
+
         while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
         {
             if (Match(type: TokenType.Newline))
@@ -804,6 +827,8 @@ public partial class RazorForgeParser
                 throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
             }
         }
+
+        _parsingRecordBody = wasParsingRecordBody;
 
         Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after entity body");
 
@@ -1191,7 +1216,6 @@ public partial class RazorForgeParser
             {
                 continue;
             }
-
             // Parse mutant case
             string caseName = ConsumeIdentifier(errorMessage: "Expected mutant case name");
 

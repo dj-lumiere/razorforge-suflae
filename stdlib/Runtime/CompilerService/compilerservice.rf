@@ -9,12 +9,12 @@ namespace Runtime/CompilerService
 
 # Returns the memory size of the type in bytes
 # Compiler intrinsic: replaced with constant at compile time
-# Called as: T.data_size() where T is a type
+# Called as: T.data_size() requires T is a type
 @intrinsic("size_of")
 routine data_size<T>() -> MemorySize
 
 # Returns the memory alignment requirement of the type
-# Called as: T.align_size() where T is a type
+# Called as: T.align_size() requires T is a type
 @intrinsic("align_of")
 routine align_size<T>() -> MemorySize
 

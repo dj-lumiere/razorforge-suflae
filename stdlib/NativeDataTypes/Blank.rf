@@ -2,10 +2,11 @@
 # Used for void failable functions: Maybe<Blank>, Result<Blank>, Lookup<Blank>
 namespace Core
 
-record Blank {
+record Blank
+follows Representable<Blank> {
     pass
 }
 
-routine Blank.to_text() -> Text {
+routine Text.__create__(from: Blank) -> Text {
     return "Blank"
 }

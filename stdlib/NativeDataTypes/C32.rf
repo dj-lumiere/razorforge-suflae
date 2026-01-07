@@ -1,0 +1,4 @@
+record C32 {
+    public real: F32
+    public imag: F32
+}

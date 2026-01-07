@@ -3,7 +3,7 @@
 namespace Core
 # Core F128 type definition - maps to LLVM fp128
 record F128 {
-    private value: @intrinsic.f128
+    private value: @intrinsic.fp128
 }
 
 # IEEE 754 quadruple precision constants

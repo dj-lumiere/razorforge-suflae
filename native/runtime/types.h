@@ -27,11 +27,8 @@ typedef uint64_t rf_u64;
 typedef intptr_t rf_saddr;   // Signed Pointer-Sized
 typedef uintptr_t rf_uaddr;  // Unsigned Pointer-Sized
 
-typedef uint8_t sf_byte;      // 'byte' is raw data (u8)
-typedef uint32_t sf_letter;   // 'letter' is Unicode Codepoint
-typedef uint32_t rf_letter32; // 'letter32' is Unicode Codepoint
-typedef uint16_t rf_letter16; // 'letter16' is Unicode Codepoint
-typedef uint8_t rf_letter8;   // 'letter8' is UTF-8 unit
+typedef uint8_t rf_byte;      // 'Byte' is raw 8-bit data
+typedef uint32_t rf_letter;   // 'Letter' is 32-bit Unicode codepoint
 
 typedef bool rf_bool;         // Standard boolean
 
@@ -74,16 +71,12 @@ typedef struct rf_DynamicSlice {
     rf_uaddr allocated_bytes;
 } rf_DynamicSlice;
 
-// List<T> / Text<letter8> structure
-// Text<letter8> is a thin wrapper for List<letter8>
+// List<T> structure
 typedef struct rf_List {
     rf_DynamicSlice data;
     rf_u64 count;
     rf_u64 capacity;
 } rf_List;
-
-// Alias for Text<letter8>
-typedef rf_List rf_Text8;
 
 // Variant (tagged union)
 typedef struct rf_Variant {
@@ -92,8 +85,8 @@ typedef struct rf_Variant {
 } rf_Variant;
 
 // Other types
-typedef rf_u32 rf_Enum;
-typedef void* rf_FnPtr;
+typedef rf_u32 rf_Choice;
+typedef void* rf_RoutineReference;
 
 // Note: None is NOT a runtime type. In RazorForge, None represents the absence
 // of a value and is encoded via discriminant fields (is_valid, state) in wrapper

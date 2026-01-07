@@ -366,6 +366,7 @@ routine SAddr.max(you: SAddr) -> SAddr {
 # ============================================================================
 
 routine SAddr.to_text() -> Text {
+    # TODO: Should format as hex.
     danger! {
         return @native.rf_format_saddr(me)
     }

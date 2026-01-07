@@ -162,10 +162,11 @@ public partial class RazorForgeParser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // Check for standalone when block (pattern matching without subject)
-        // when { pattern => body, ... }
+        // Check for standalone when block (condition-based without subject)
+        // when { condition => body, ... }  - like Lisp's cond
+        bool isConditionBased = Check(type: TokenType.LeftBrace);
         Expression expression;
-        if (Check(type: TokenType.LeftBrace))
+        if (isConditionBased)
         {
             // Standalone when - use 'true' as the implicit subject
             expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
@@ -190,15 +191,9 @@ public partial class RazorForgeParser
 
             Pattern pattern;
             SourceLocation clauseLocation = GetLocation();
-            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
-            if (Match(type: TokenType.Is))
-            {
-                _inWhenPatternContext = true;
-                pattern = ParsePattern();
-                _inWhenPatternContext = false;
-            }
+
             // Handle 'else' keyword for default case: else => body or else varName => body
-            else if (Match(type: TokenType.Else))
+            if (Match(type: TokenType.Else))
             {
                 // Check for variable binding: else varName =>
                 if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
@@ -212,6 +207,26 @@ public partial class RazorForgeParser
                     // Plain else without variable binding - treat as wildcard
                     pattern = new WildcardPattern(Location: clauseLocation);
                 }
+            }
+            // Handle wildcard: _ => body
+            else if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_" && PeekToken(offset: 1).Type == TokenType.FatArrow)
+            {
+                Advance(); // consume _
+                pattern = new WildcardPattern(Location: clauseLocation);
+            }
+            // Condition-based when: parse as expression, wrap in ExpressionPattern
+            else if (isConditionBased)
+            {
+                // Parse the condition as a full expression (e.g., me > 0)
+                Expression condition = ParseExpression();
+                pattern = new ExpressionPattern(Expression: condition, Location: clauseLocation);
+            }
+            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
+            else if (Match(type: TokenType.Is))
+            {
+                _inWhenPatternContext = true;
+                pattern = ParsePattern();
+                _inWhenPatternContext = false;
             }
             else
             {
@@ -330,6 +345,24 @@ public partial class RazorForgeParser
         ConsumeStatementTerminator();
 
         return new ReturnStatement(Value: value, Location: location);
+    }
+
+    /// <summary>
+    /// Parses a becomes statement (block result value).
+    /// Syntax: <c>becomes expression</c>
+    /// Used in multi-statement when/if branches to explicitly indicate the branch's result.
+    /// </summary>
+    /// <returns>A <see cref="BecomesStatement"/> AST node.</returns>
+    private BecomesStatement ParseBecomesStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // becomes requires an expression (unlike return which can be valueless)
+        Expression value = ParseExpression();
+
+        ConsumeStatementTerminator();
+
+        return new BecomesStatement(Value: value, Location: location);
     }
 
     /// <summary>

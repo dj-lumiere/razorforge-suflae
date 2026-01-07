@@ -235,19 +235,19 @@ routine U16.__mul_wrap__(you: U16) -> U16 {
 
 routine U16.__add_sat__(you: U16) -> U16 {
     danger! {
-        return @intrinsic.add.saturating<i16>(me, you)
+        return @intrinsic.add.saturate<i16>(me, you)
     }
 }
 
 routine U16.__sub_sat__(you: U16) -> U16 {
     danger! {
-        return @intrinsic.sub.saturating<i16>(me, you)
+        return @intrinsic.sub.saturate<i16>(me, you)
     }
 }
 
 routine U16.__mul_sat__(you: U16) -> U16 {
     danger! {
-        return @intrinsic.mul.saturating<i16>(me, you)
+        return @intrinsic.mul.saturate<i16>(me, you)
     }
 }
 
@@ -334,9 +334,9 @@ routine U16.__pow_sat__!(exp: U16) -> U16 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturating<i16>(result, base)
+                result = @intrinsic.mul.saturate<i16>(result, base)
             }
-            base = @intrinsic.mul.saturating<i16>(base, base)
+            base = @intrinsic.mul.saturate<i16>(base, base)
             e = e >> 1
         }
         return result

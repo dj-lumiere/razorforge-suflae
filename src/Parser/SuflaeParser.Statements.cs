@@ -300,6 +300,24 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Parses a becomes statement (block result value).
+    /// Syntax: <c>becomes expression</c>
+    /// Used in multi-statement when/if branches to explicitly indicate the branch's result.
+    /// </summary>
+    /// <returns>A <see cref="BecomesStatement"/> AST node.</returns>
+    private Statement ParseBecomesStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // becomes requires an expression (unlike return which can be valueless)
+        Expression value = ParseExpression();
+
+        ConsumeStatementTerminator();
+
+        return new BecomesStatement(Value: value, Location: location);
+    }
+
+    /// <summary>
     /// Parses a throw (fail) statement for error propagation.
     /// Syntax: <c>throw errorExpression</c>
     /// Used with Crashable types for error handling.

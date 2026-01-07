@@ -1,9 +1,10 @@
 # RazorForge D64 (decimal64 floating point) native type implementation
 # IEEE 754-2008 decimal floating point with 16 significant digits
 # Uses Intel DFP library via imported C functions
-namespace Core
 
-import FFI/CStr
+import CSubsystem.CStr
+
+namespace Core
 
 # Core D64 type definition - stored as 64-bit value in BID encoding
 record D64 {

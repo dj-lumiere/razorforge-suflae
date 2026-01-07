@@ -1,0 +1,5 @@
+# Minimal test - just declarations without operators
+
+routine start() {
+    let x = 42
+}

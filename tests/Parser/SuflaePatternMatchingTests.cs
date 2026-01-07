@@ -1,0 +1,564 @@
+﻿using Xunit;
+
+namespace RazorForge.Tests.Parser;
+
+using Compilers.Shared.AST;
+using static TestHelpers;
+
+/// <summary>
+/// Tests for parsing pattern matching in Suflae:
+/// when expressions, is keyword, guards, variant destructuring, literal patterns.
+/// Suflae uses indentation-based syntax with colons.
+/// </summary>
+public class SuflaePatternMatchingTests
+{
+    #region Basic When Statement Tests
+
+    [Fact]
+    public void ParseSuflae_SimpleWhen()
+    {
+        string source = """
+                        routine test(x: Integer):
+                            when x:
+                                1 => show("one")
+                                2 => show("two")
+                                else => show("other")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+        var body = routine.Body as BlockStatement;
+        Assert.NotNull(@object: body);
+        WhenStatement whenStmt = body.Statements
+                                     .OfType<WhenStatement>()
+                                     .First();
+        Assert.NotNull(@object: whenStmt);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenWithBlock()
+    {
+        string source = """
+                        routine test(x: Integer):
+                            when x:
+                                1:
+                                    show("one")
+                                    do_something()
+                                else => show("other")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenAsExpression()
+    {
+        string source = """
+                        routine describe(x: Integer) -> Text:
+                            return when x:
+                                0 => "zero"
+                                1 => "one"
+                                else => "many"
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenWithAssignment()
+    {
+        string source = """
+                        routine test(status: Status):
+                            let description = when status:
+                                is ACTIVE => "Running"
+                                else => "Not running"
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Is Type Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenIsType()
+    {
+        string source = """
+                        routine test(value: Any):
+                            when value:
+                                is Integer n => show(f"Integer: {n}")
+                                is Text t => show(f"Text: {t}")
+                                else => show("Unknown type")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenIsTypeWithoutBinding()
+    {
+        string source = """
+                        routine test(value: Any):
+                            when value:
+                                is Integer => show("It's an integer")
+                                is Text => show("It's text")
+                                else => show("Unknown")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenIsCustomType()
+    {
+        string source = """
+                        routine test(value: Any):
+                            when value:
+                                is Point p => show(f"Point: ({p.x}, {p.y})")
+                                is Circle c => show(f"Circle: r={c.radius}")
+                                else => show("Unknown shape")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Choice Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenChoice()
+    {
+        string source = """
+                        routine handle(status: Status):
+                            when status:
+                                is Status.PENDING => show("Waiting...")
+                                is Status.ACTIVE => show("In progress")
+                                is Status.COMPLETED => show("Done!")
+                                is Status.CANCELLED => show("Cancelled")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenChoiceShorthand()
+    {
+        string source = """
+                        routine handle(status: Status):
+                            when status:
+                                is PENDING => show("Waiting...")
+                                is ACTIVE => show("In progress")
+                                is COMPLETED => show("Done!")
+                                is CANCELLED => show("Cancelled")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Variant Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenVariant()
+    {
+        string source = """
+                        routine handle(msg: Message):
+                            when msg:
+                                is TEXT (content) => process(content)
+                                is NUMBER (n) => compute(n)
+                                is QUIT => exit()
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenVariantDestructuring()
+    {
+        string source = """
+                        routine handle(shape: Shape):
+                            when shape:
+                                is CIRCLE (center, radius):
+                                    show(f"Circle at ({center.x}, {center.y}) with radius {radius}")
+                                is RECTANGLE (top_left, size):
+                                    show(f"Rectangle at ({top_left.x}, {top_left.y})")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenVariantDestructuringWithAlias()
+    {
+        string source = """
+                        routine handle(shape: Shape):
+                            when shape:
+                                is CIRCLE (center: c, radius: r):
+                                    show(f"Circle: center={c}, r={r}")
+                                else => show("Not a circle")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenNestedDestructuring()
+    {
+        string source = """
+                        routine handle(shape: Shape):
+                            when shape:
+                                is CIRCLE ((x, y), radius):
+                                    show(f"Circle at ({x}, {y}) with radius {radius}")
+                                is RECTANGLE ((x, y), (width, height)):
+                                    show(f"Rectangle at ({x}, {y}), {width}x{height}")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Guard Clause Tests
+
+    [Fact]
+    public void ParseSuflae_WhenWithGuard()
+    {
+        string source = """
+                        routine classify(n: Integer):
+                            when n:
+                                is Integer x if x > 0 => show("Positive")
+                                is Integer x if x < 0 => show("Negative")
+                                is Integer x => show("Zero")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenLiteralWithGuard()
+    {
+        string source = """
+                        routine test(x: Integer, y: Integer):
+                            when x:
+                                0 if y > 0 => show("x=0, y positive")
+                                0 => show("x=0, y non-positive")
+                                else => show("x not zero")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenTypeWithComplexGuard()
+    {
+        string source = """
+                        routine handle(error: Crashable):
+                            when error:
+                                is NetworkError e if e.code == 404 => show("Not found")
+                                is NetworkError e if e.code >= 500 => show("Server error")
+                                is Crashable e => show(f"Error: {e.message()}")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Maybe/Result/Lookup Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenMaybe()
+    {
+        string source = """
+                        routine handle(value: User?):
+                            when value:
+                                is None => show("User not found")
+                                else user => show(f"Found: {user.name}")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenResult()
+    {
+        string source = """
+                        routine handle(result: Result<User>):
+                            when result:
+                                is Crashable err => show(f"Error: {err.message()}")
+                                else user => show(f"Found: {user.name}")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenResultSpecificError()
+    {
+        string source = """
+                        routine handle(result: Result<File>):
+                            when result:
+                                is FileNotFoundError e => show(f"Not found: {e.path}")
+                                is PermissionError e => show(f"Access denied: {e.path}")
+                                is Crashable e => show(f"Unknown error: {e.message()}")
+                                else file => file.read()
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenLookup()
+    {
+        string source = """
+                        routine handle(result: Lookup<User>):
+                            when result:
+                                is Crashable e => show(f"Error: {e.message()}")
+                                is None => show("User not found")
+                                else user => show(f"Found: {user.name}")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenLookupSpecificErrors()
+    {
+        string source = """
+                        routine handle(result: Lookup<Config>):
+                            when result:
+                                is ValidationError e => stop!(f"Invalid config name: {e.message}")
+                                is IOError e => show(f"IO error: {e.message}")
+                                is Crashable e => breach!()
+                                is None => use_default_config()
+                                else config => apply(config)
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Literal Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenLiteralInteger()
+    {
+        string source = """
+                        routine describe(n: Integer) -> Text:
+                            return when n:
+                                0 => "zero"
+                                1 => "one"
+                                2 => "two"
+                                else => "many"
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenLiteralText()
+    {
+        string source = """
+                        routine handle(cmd: Text):
+                            when cmd:
+                                "help" => show_help()
+                                "version" => show_version()
+                                "quit" => exit()
+                                else => show("Unknown command")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenLiteralBool()
+    {
+        string source = """
+                        routine test(flag: bool):
+                            when flag:
+                                true => show("enabled")
+                                false => show("disabled")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Wildcard Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenWildcard()
+    {
+        string source = """
+                        routine handle(result: Result<Integer>):
+                            when result:
+                                is Crashable => absent
+                                else value => value
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenWildcardInDestructuring()
+    {
+        string source = """
+                        routine handle(shape: Shape):
+                            when shape:
+                                is CIRCLE (_, radius):
+                                    show(f"Radius: {radius}")
+                                else => show("Not a circle")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Else Binding Tests
+
+    [Fact]
+    public void ParseSuflae_WhenElseWithBinding()
+    {
+        string source = """
+                        routine handle(value: Maybe<User>):
+                            when value:
+                                is None => show("Not found")
+                                else u => show(u.name)
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenElseWithBlock()
+    {
+        string source = """
+                        routine handle(value: Maybe<User>):
+                            when value:
+                                is None:
+                                    show("Not found")
+                                    return
+                                else user:
+                                    show(user.name)
+                                    process(user)
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Let Destructuring Tests
+
+    [Fact]
+    public void ParseSuflae_LetDestructuringRecord()
+    {
+        string source = """
+                        routine test():
+                            let (x, y) = Point(x: 5, y: 6)
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_LetDestructuringWithAlias()
+    {
+        string source = """
+                        routine test():
+                            let (center: c, radius: r) = Circle(center: Point(5, 6), radius: 7)
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_LetNestedDestructuring()
+    {
+        string source = """
+                        routine test():
+                            let ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Multi-line Arm Tests
+
+    [Fact]
+    public void ParseSuflae_WhenMultiLineArm()
+    {
+        string source = """
+                        routine test(value: Integer):
+                            let result = when value:
+                                is A:
+                                    let x = compute()
+                                    transform(x)
+                                else => default()
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Complex Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_ComplexNestedPatterns()
+    {
+        string source = """
+                        routine process(result: Lookup<Shape>):
+                            when result:
+                                is Crashable e:
+                                    log_error(e)
+                                    return
+                                is None:
+                                    show("No shape found")
+                                    return
+                                else shape:
+                                    when shape:
+                                        is CIRCLE (center, radius) if radius > 10:
+                                            show("Large circle")
+                                        is CIRCLE (center, radius):
+                                            show("Small circle")
+                                        is RECTANGLE ((x, y), (w, h)) if w == h:
+                                            show("Square")
+                                        else => show("Other shape")
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenWithMultipleStatements()
+    {
+        string source = """
+                        routine handle(event: Event):
+                            when event:
+                                is CLICK pos:
+                                    let x = pos.x
+                                    let y = pos.y
+                                    handle_click(x, y)
+                                is KEY (code, modifiers):
+                                    if modifiers.ctrl:
+                                        handle_ctrl_key(code)
+                                    else:
+                                        handle_key(code)
+                                else:
+                                    pass
+                        """;
+
+        Program program = AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+}

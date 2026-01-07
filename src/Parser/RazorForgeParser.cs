@@ -241,10 +241,19 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseVariableDeclaration(visibility: getterVisibility, setterVisibility: setterVisibility);
         }
 
-        // Pass statement (empty placeholder in records/protocols)
+        // Pass statement/declaration (empty placeholder)
+        // Inside type bodies, returns PassDeclaration (a Declaration subtype)
+        // Outside type bodies, returns PassStatement (a Statement subtype)
         if (Match(type: TokenType.Pass))
         {
             ConsumeStatementTerminator();
+
+            // Inside type bodies, return a PassDeclaration (extends Declaration)
+            if (_parsingRecordBody)
+            {
+                return new PassDeclaration(Location: GetLocation());
+            }
+
             return new PassStatement(Location: GetLocation());
         }
 
@@ -358,6 +367,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         if (Match(type: TokenType.Return))
         {
             return ParseReturnStatement();
+        }
+
+        if (Match(type: TokenType.Becomes))
+        {
+            return ParseBecomesStatement();
         }
 
         if (Match(type: TokenType.Break))

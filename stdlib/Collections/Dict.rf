@@ -10,9 +10,9 @@
 #   let alice_age = ages["Alice"]
 #   if ages.contains_key("Charlie") { }
 
-import Collections/List
-import Collections/SortedDict
-import errors/IndexOutOfBoundsError
+import Collections.List
+import Collections.SortedDict
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 
@@ -164,15 +164,15 @@ routine Dict<K, V>.remove(me: Dict<K, V>, key: K) -> Bool {
     return false
 }
 
-routine Dict<K, V>.get!(me: Dict<K, V>, key: K) -> V {
+routine Dict<K, V>.__getitem__!(me: Dict<K, V>, key: K) -> V {
     let idx = me.bucket_index(key)
-    return me.buckets[idx].get!(key)
+    return me.buckets[idx][key]
 }
 
 routine Dict<K, V>.get_or_default(me: Dict<K, V>, key: K, default_value: V) -> V {
     let idx = me.bucket_index(key)
     if me.buckets[idx].contains_key(key) {
-        return me.buckets[idx].get!(key)
+        return me.buckets[idx][key]
     }
     return default_value
 }
@@ -186,7 +186,8 @@ routine Dict<K, V>.__getitem__!(me: Dict<K, V>, key: K) -> V {
 }
 
 routine Dict<K, V>.__setitem__(me: Dict<K, V>, key: K, value: V) {
-    me.insert(key, value)
+    let idx = me.bucket_index(key)
+    me.buckets[idx][key] = value
 }
 
 # ============================================================================

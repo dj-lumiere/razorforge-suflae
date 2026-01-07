@@ -814,7 +814,7 @@ public partial class SuflaeParser
         {
             // Handle standalone generic function calls like routine!<T>(args) or routine<T>(args)
             // The ! must come BEFORE < if present: func!<T>() not func<T>!()
-            if (expr is IdentifierExpression beforeExpr && (Check(type: TokenType.Less) || Check(type: TokenType.Bang) && PeekToken(offset: 1)
+            if (expr is IdentifierExpression expression && (Check(type: TokenType.Less) || Check(type: TokenType.Bang) && PeekToken(offset: 1)
                    .Type == TokenType.Less))
             {
                 // Check for failable marker ! before generic parameters: func!<T>
@@ -900,18 +900,18 @@ public partial class SuflaeParser
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
 
-                    string methodName = ((IdentifierExpression)expr).Name;
+                    string methodName = expression.Name;
                     if (isMemoryOperation)
                     {
                         methodName += "!";
                     }
 
-                    expr = new GenericMethodCallExpression(Object: expr,
+                    expr = new GenericMethodCallExpression(Object: expression,
                         MethodName: methodName,
                         TypeArguments: typeArgs,
                         Arguments: args,
                         IsMemoryOperation: isMemoryOperation,
-                        Location: expr.Location);
+                        Location: expression.Location);
                 }
                 else
                 {
@@ -1267,15 +1267,28 @@ public partial class SuflaeParser
 
         // Float literals
         if (Match(TokenType.Decimal,
+                TokenType.F16Literal,
                 TokenType.F32Literal,
                 TokenType.F64Literal,
+                TokenType.F128Literal,
+                TokenType.D32Literal,
+                TokenType.D64Literal,
                 TokenType.D128Literal))
         {
             Token token = PeekToken(offset: -1);
+
+            // For F128, D32, D64, D128 - store raw string, semantic analysis will parse them
+            // using NumericLiteralParser which calls native C libraries (LibBF, Intel DFP)
+            if (token.Type is TokenType.F128Literal or TokenType.D32Literal or TokenType.D64Literal or TokenType.D128Literal)
+            {
+                result = new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+                return true;
+            }
+
             string cleanValue = token.Text
+                                     .Replace(oldValue: "f16", newValue: "")
                                      .Replace(oldValue: "f32", newValue: "")
                                      .Replace(oldValue: "f64", newValue: "")
-                                     .Replace(oldValue: "d128", newValue: "")
                                      .Replace(oldValue: "_", newValue: "");
 
             if (double.TryParse(s: cleanValue, result: out double floatVal))
@@ -1299,6 +1312,13 @@ public partial class SuflaeParser
     /// <returns>A <see cref="LiteralExpression"/> representing the integer value.</returns>
     private static LiteralExpression ParseIntegerValue(string cleanValue, Token token, SourceLocation location)
     {
+        // For 128-bit integers, store the raw string - semantic analysis will parse them
+        // using NumericLiteralParser which handles arbitrary precision
+        if (token.Type is TokenType.S128Literal or TokenType.U128Literal)
+        {
+            return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+        }
+
         // Handle hexadecimal literals (0x prefix)
         if (cleanValue.StartsWith(value: "0x") || cleanValue.StartsWith(value: "0X"))
         {

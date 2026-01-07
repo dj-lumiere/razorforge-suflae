@@ -1,0 +1,4 @@
+record C128 {
+    public real: F128
+    public imag: F128
+}

@@ -1,0 +1,206 @@
+# Codegen test - arithmetic, control flow, loops, pattern matching
+
+# === Basic Arithmetic ===
+
+routine add_s64(a: S64, b: S64) -> S64 {
+    return a + b
+}
+
+routine sub_s64(a: S64, b: S64) -> S64 {
+    return a - b
+}
+
+routine mul_s64(a: S64, b: S64) -> S64 {
+    return a * b
+}
+
+routine div_s64(a: S64, b: S64) -> S64 {
+    return a // b
+}
+
+routine add_f64(x: F64, y: F64) -> F64 {
+    return x + y
+}
+
+# === Comparisons ===
+
+routine is_positive(n: S64) -> Bool {
+    return n > 0
+}
+
+routine is_equal(a: S64, b: S64) -> Bool {
+    return a == b
+}
+
+# === Control Flow ===
+
+routine max_s64(a: S64, b: S64) -> S64 {
+    if a > b {
+        return a
+    } else {
+        return b
+    }
+}
+
+routine min_s64(a: S64, b: S64) -> S64 {
+    if a < b {
+        return a
+    } else {
+        return b
+    }
+}
+
+routine abs_s64(n: S64) -> S64 {
+    if n < 0 {
+        return 0 - n
+    }
+    return n
+}
+
+routine clamp(value: S64, low: S64, high: S64) -> S64 {
+    if value < low {
+        return low
+    }
+    if value > high {
+        return high
+    }
+    return value
+}
+
+# === Recursion ===
+
+routine factorial(n: S64) -> S64 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+routine fibonacci(n: S64) -> S64 {
+    if n <= 1 {
+        return n
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+# === While Loops ===
+
+routine sum_to_n(n: S64) -> S64 {
+    var total: S64 = 0
+    var i: S64 = 1
+    while i <= n {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+
+routine factorial_iter(n: S64) -> S64 {
+    var result: S64 = 1
+    var i: S64 = 2
+    while i <= n {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+routine count_digits(n: S64) -> S64 {
+    var num: S64 = abs_s64(n)
+    var count: S64 = 0
+    if num == 0 {
+        return 1
+    }
+    while num > 0 {
+        num = num // 10
+        count = count + 1
+    }
+    return count
+}
+
+# === For Loops ===
+
+routine sum_range(start: S64, finish: S64) -> S64 {
+    var total: S64 = 0
+    for i in start to finish {
+        total = total + i
+    }
+    return total
+}
+
+routine power(base: S64, exp: S64) -> S64 {
+    var result: S64 = 1
+    for i in 0 to exp {
+        result = result * base
+    }
+    return result
+}
+
+# === Nested Control Flow ===
+
+routine gcd(a: S64, b: S64) -> S64 {
+    var x: S64 = abs_s64(a)
+    var y: S64 = abs_s64(b)
+    while y > 0 {
+        let temp = y
+        y = x - (x // y) * y
+        x = temp
+    }
+    return x
+}
+
+routine is_prime(n: S64) -> Bool {
+    if n < 2 {
+        return false
+    }
+    if n == 2 {
+        return true
+    }
+    var i: S64 = 2
+    while i * i <= n {
+        if n - (n // i) * i == 0 {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+# === Entry Point ===
+
+routine start() {
+    # Basic arithmetic
+    let sum = add_s64(10, 20)
+    let diff = sub_s64(50, 30)
+    let prod = mul_s64(5, 6)
+    let quot = div_s64(100, 4)
+
+    let fsum = add_f64(3.14, 2.86)
+
+    # Comparisons
+    let pos = is_positive(42)
+    let eq = is_equal(5, 5)
+
+    # Control flow
+    let max_val = max_s64(10, 20)
+    let min_val = min_s64(10, 20)
+    let abs_val = abs_s64(-42)
+    let clamped = clamp(150, 0, 100)
+
+    # Recursion
+    let fact5 = factorial(5)
+    let fib10 = fibonacci(10)
+
+    # While loops
+    let sum_10 = sum_to_n(10)
+    let fact5_iter = factorial_iter(5)
+    let digits = count_digits(12345)
+
+    # For loops
+    let range_sum = sum_range(1, 5)
+    let pow_result = power(2, 10)
+
+    # Nested control flow
+    let gcd_val = gcd(48, 18)
+    let prime_check = is_prime(17)
+}

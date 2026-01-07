@@ -24,7 +24,7 @@ record Atomic<T> {
 ###
 ### Returns:
 ###   A new Atomic<T> wrapping the initial value
-###
+#
 ### Example:
 ###   let flag = Atomic(false)
 ###   let counter = Atomic(0)

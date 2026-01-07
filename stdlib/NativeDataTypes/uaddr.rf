@@ -8,8 +8,7 @@
 
 namespace Core
 
-import Text/Text
-import FFI/CStr
+import Text.Text
 
 # Core UAddr type definition - maps to LLVM iptr/usize
 record UAddr {
@@ -351,9 +350,9 @@ routine UAddr.is_power_of_two() -> Bool {
 # String Conversion
 # ============================================================================
 
-routine UAddr.to_text() -> Bytes {
+routine UAddr.to_text() -> Text {
     danger! {
         let ptr = @native.rf_format_u64(me)
-        return Bytes(ptr: CStr(ptr: ptr))
+        return Bytes(ptr: CStr(ptr: ptr)).decode_as_utf8!()
     }
 }

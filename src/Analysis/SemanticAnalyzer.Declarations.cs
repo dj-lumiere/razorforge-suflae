@@ -1,813 +1,914 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+namespace Compilers.Analysis;
 
-namespace Compilers.Shared.Analysis;
+using Compilers.Analysis.Enums;
+using Compilers.Analysis.Symbols;
+using Compilers.Analysis.Types;
+using Compilers.Shared.AST;
+using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
 
 /// <summary>
-/// Partial class containing declaration visitors (variable, function, class, struct, variant, etc.).
+/// Phase 1 &amp; 2: Declaration collection and type body resolution.
 /// </summary>
-public partial class SemanticAnalyzer
+public sealed partial class SemanticAnalyzer
 {
+    #region Phase 1: Declaration Collection
+
     /// <summary>
-    /// Registers declarations from a prelude module into the symbol table.
+    /// Collects all type and routine declarations without resolving bodies.
+    /// Creates placeholder entries in the type registry for forward references.
     /// </summary>
-    private void RegisterPreludeDeclarations(AST.Program ast)
+    /// <param name="program">The program to collect declarations from.</param>
+    private void CollectDeclarations(Program program)
     {
-        foreach (IAstNode declaration in ast.Declarations)
+        foreach (IAstNode declaration in program.Declarations)
         {
-            switch (declaration)
-            {
-                case FunctionDeclaration funcDecl:
-                {
-                    var funcSymbol = new FunctionSymbol(Name: funcDecl.Name,
-                        Parameters: funcDecl.Parameters,
-                        ReturnType: ResolveType(typeExpr: funcDecl.ReturnType),
-                        Visibility: funcDecl.Visibility,
-                        GenericParameters: funcDecl.GenericParameters);
-                    _symbolTable.TryDeclare(symbol: funcSymbol);
-                    break;
-                }
-                case ExternalDeclaration externalDecl:
-                {
-                    // Handle external C function declarations
-                    TypeInfo? returnType = externalDecl.ReturnType != null
-                        ? ResolveTypeExpression(typeExpr: externalDecl.ReturnType)
-                        : new TypeInfo(Name: "void", IsReference: false);
-
-                    var funcSymbol = new FunctionSymbol(Name: externalDecl.Name,
-                        Parameters: externalDecl.Parameters,
-                        ReturnType: returnType,
-                        Visibility: VisibilityModifier.External,
-                        IsUsurping: false,
-                        GenericParameters: externalDecl.GenericParameters,
-                        GenericConstraints: new List<GenericConstraint>(),
-                        CallingConvention: externalDecl.CallingConvention,
-                        IsExternal: true);
-
-                    _symbolTable.TryDeclare(symbol: funcSymbol);
-                    break;
-                }
-                case RecordDeclaration recordDecl:
-                {
-                    var interfaceNames = recordDecl.Interfaces
-                                                  ?.Select(selector: i => i.Name)
-                                                   .ToList();
-                    var recordSymbol = new RecordSymbol(Name: recordDecl.Name,
-                        Visibility: recordDecl.Visibility,
-                        GenericParameters: recordDecl.GenericParameters,
-                        Interfaces: interfaceNames);
-                    _symbolTable.TryDeclare(symbol: recordSymbol);
-                    // Cache field information for member access resolution
-                    CacheTypeFields(typeName: recordDecl.Name, members: recordDecl.Members);
-                    break;
-                }
-                case EntityDeclaration entityDecl:
-                {
-                    var entitySymbol = new EntitySymbol(Name: entityDecl.Name,
-                        BaseClass: entityDecl.BaseClass,
-                        Interfaces: entityDecl.Interfaces,
-                        Visibility: entityDecl.Visibility,
-                        GenericParameters: entityDecl.GenericParameters);
-                    _symbolTable.TryDeclare(symbol: entitySymbol);
-                    // Cache field information for member access resolution
-                    CacheTypeFields(typeName: entityDecl.Name, members: entityDecl.Members);
-                    break;
-                }
-                case ProtocolDeclaration featureDecl:
-                {
-                    var featureSymbol = new ProtocolSymbol(Name: featureDecl.Name,
-                        Visibility: featureDecl.Visibility,
-                        GenericParameters: featureDecl.GenericParameters);
-                    _symbolTable.TryDeclare(symbol: featureSymbol);
-                    break;
-                }
-                case VariantDeclaration variantDecl:
-                {
-                    var variantSymbol = new VariantSymbol(Name: variantDecl.Name,
-                        Visibility: variantDecl.Visibility,
-                        GenericParameters: variantDecl.GenericParameters);
-                    _symbolTable.TryDeclare(symbol: variantSymbol);
-                    break;
-                }
-            }
+            CollectDeclaration(node: declaration);
         }
     }
 
-    // Declarations
     /// <summary>
-    /// Analyze variable declarations with integrated memory safety tracking.
-    /// Performs traditional type checking while registering objects in the memory analyzer
-    /// for ownership tracking. This is where objects enter the memory model and become
-    /// subject to memory safety rules.
-    ///
-    /// RazorForge: Objects start as Owned with direct ownership
-    /// Suflae: Objects start as Shared with automatic reference counting
+    /// Collects a single declaration.
     /// </summary>
-    public object? VisitVariableDeclaration(VariableDeclaration node)
+    /// <param name="node">The declaration node to collect.</param>
+    private void CollectDeclaration(IAstNode node)
     {
-        // Type check initializer expression if present
-        if (node.Initializer != null)
+        // TODO: Are these all?
+        switch (node)
         {
-            // CRITICAL: Check for inline-only method calls (.view(), .hijack())
-            // These produce temporary tokens that cannot be stored in variables
-            if (IsInlineOnlyMethodCall(expr: node.Initializer, methodName: out string? methodName))
-            {
-                AddError(message: $"Cannot store result of '.{methodName}()' in a variable. " +
-                                  $"Inline tokens must be used directly (e.g., 'obj.{methodName}().field') " +
-                                  $"or use scoped syntax (e.g., '{(methodName == "view" ? "viewing" : "hijacking")} obj as handle {{ ... }}').",
-                    location: node.Location);
-            }
-
-            // BUGFIX 12.10: Set expected type from variable declaration for type inference
-            var savedExpectedType = _expectedType;
-            if (node.Type != null)
-            {
-                _expectedType = ResolveType(typeExpr: node.Type);
-            }
-
-            var initType = node.Initializer.Accept(visitor: this) as TypeInfo;
-
-            // Restore expected type
-            _expectedType = savedExpectedType;
-
-            // Validate type compatibility when explicit type is declared
-            if (node.Type != null)
-            {
-                TypeInfo? declaredType = ResolveType(typeExpr: node.Type);
-                if (declaredType != null && !IsAssignable(target: declaredType, source: initType))
-                {
-                    AddError(
-                        message:
-                        $"Cannot assign {initType?.Name ?? "unknown"} to {declaredType.Name}",
-                        location: node.Location);
-                }
-            }
-
-            // CRITICAL: Register object in memory analyzer for ownership tracking
-            // This is where objects enter the memory model and become subject to safety rules
-            TypeInfo type = ResolveType(typeExpr: node.Type) ??
-                            initType ?? new TypeInfo(Name: "Unknown", IsReference: false);
-            _memoryAnalyzer.RegisterObject(name: node.Name, type: type, location: node.Location);
-        }
-
-        // Add variable symbol to symbol table for name resolution
-        // Use inferred type from initializer if no explicit type is specified
-        TypeInfo? variableType = null;
-        if (node.Type != null)
-        {
-            variableType = ResolveType(typeExpr: node.Type);
-        }
-        else if (node.Initializer != null)
-        {
-            // Infer type from initializer for auto variables
-            variableType = node.Initializer.Accept(visitor: this) as TypeInfo;
-        }
-
-        var symbol = new VariableSymbol(Name: node.Name,
-            Type: variableType,
-            IsMutable: node.IsMutable,
-            Visibility: node.Visibility);
-        if (!_symbolTable.TryDeclare(symbol: symbol))
-        {
-            AddError(message: $"Variable '{node.Name}' is already declared in current scope",
-                location: node.Location);
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Analyze function declarations with usurping function detection and memory scope management.
-    /// Handles the special case of usurping functions that are allowed to return Hijacked&lt;T&gt; objects.
-    /// Manages both symbol table and memory analyzer scopes for proper isolation of function context.
-    ///
-    /// Usurping functions are RazorForge-only and must be explicitly marked to return exclusive tokens.
-    /// This prevents accidental exclusive token leakage from regular functions.
-    /// </summary>
-    public object? VisitFunctionDeclaration(FunctionDeclaration node)
-    {
-        // Check for reserved function name prefixes (compiler-generated variants)
-        if (node.Name.StartsWith(value: "try_"))
-        {
-            AddError(
-                message:
-                $"Function name '{node.Name}' uses reserved prefix 'try_'. This prefix is reserved for compiler-generated safe variants.",
-                location: node.Location);
-        }
-        else if (node.Name.StartsWith(value: "check_"))
-        {
-            AddError(
-                message:
-                $"Function name '{node.Name}' uses reserved prefix 'check_'. This prefix is reserved for compiler-generated safe variants.",
-                location: node.Location);
-        }
-        else if (node.Name.StartsWith(value: "find_"))
-        {
-            AddError(
-                message:
-                $"Function name '{node.Name}' uses reserved prefix 'find_'. This prefix is reserved for compiler-generated safe variants.",
-                location: node.Location);
-        }
-
-        // Check for reserved entry point names
-        // 'start!' is NEVER allowed - the entry point is always 'start' (always crash-capable)
-        if (node.Name == "start!")
-        {
-            AddError(
-                message:
-                "Function name 'start!' is not allowed. The entry point must be named 'start' (without !) " +
-                "as it is always crash-capable by default.",
-                location: node.Location);
-        }
-
-        // 'start' is reserved for the application entry point only
-        // Only a zero-parameter function in the global namespace can be named 'start'
-        if (node.Name == "start")
-        {
-            // If it has required parameters, it's not a valid entry point
-            if (node.Parameters.Any(p => p.DefaultValue == null))
-            {
-                AddError(
-                    message:
-                    "Function name 'start' is reserved for the application entry point. " +
-                    "Only a zero-parameter routine can be named 'start'. Use a different name for this function.",
-                    location: node.Location);
-            }
-
-            // If we're in a namespace (not global), reject it
-            if (_currentNamespace != null)
-            {
-                AddError(
-                    message:
-                    $"Entry point 'start' must be in the global namespace (project root files), " +
-                    $"not in namespace '{_currentNamespace}'. Use a different function name or move to a root file.",
-                    location: node.Location);
-            }
-        }
-
-        // Detect usurping functions that can return exclusive tokens (Hijacked<T>)
-        // TODO: This should be replaced with an IsUsurping property on FunctionDeclaration
-        bool isUsurping = node.Name.Contains(value: "usurping") ||
-                          CheckIfUsurpingFunction(node: node);
-
-        if (isUsurping)
-        {
-            // Enable usurping mode for exclusive token returns
-            _memoryAnalyzer.EnterUsurpingFunction();
-            _isInUsurpingFunction = true;
-        }
-
-        // Enter new lexical scopes for function parameters and body isolation
-        _symbolTable.EnterScope();
-        _memoryAnalyzer.EnterScope();
-
-        try
-        {
-            // Register generic type parameters if this is a generic function
-            if (node.GenericParameters != null && node.GenericParameters.Count > 0)
-            {
-                foreach (string typeParam in node.GenericParameters)
-                {
-                    // Register type parameter as a special type symbol
-                    var typeParamSymbol = new TypeParameterSymbol(Name: typeParam);
-                    _symbolTable.TryDeclare(symbol: typeParamSymbol);
-                }
-            }
-
-            // Add implicit "me" parameter for methods (functions with receiver type like f64.__add__)
-            // Methods are identified by having a dot in the name (e.g., "TypeName.methodName")
-            if (node.Name.Contains('.'))
-            {
-                // Extract the type name before the dot (e.g., "f64" from "f64.__add__")
-                string receiverTypeName = node.Name.Substring(0, node.Name.IndexOf('.'));
-                TypeInfo meType = new TypeInfo(Name: receiverTypeName, IsReference: false);
-
-                var meSymbol = new VariableSymbol(
-                    Name: "me",
-                    Type: meType,
-                    IsMutable: false,
-                    Visibility: VisibilityModifier.Private);
-
-                _symbolTable.TryDeclare(symbol: meSymbol);
-                _memoryAnalyzer.RegisterObject(name: "me", type: meType, location: node.Location);
-            }
-
-            // Process function parameters - add to both symbol table and memory analyzer
-            foreach (Parameter param in node.Parameters)
-            {
-                TypeInfo? paramType = ResolveType(typeExpr: param.Type);
-                var paramSymbol = new VariableSymbol(Name: param.Name,
-                    Type: paramType,
-                    IsMutable: false,
-                    Visibility: VisibilityModifier.Private);
-                _symbolTable.TryDeclare(symbol: paramSymbol);
-
-                // Register parameter objects in memory analyzer for ownership tracking
-                // Parameters enter the function with appropriate wrapper types based on language
-                if (paramType != null)
-                {
-                    _memoryAnalyzer.RegisterObject(name: param.Name,
-                        type: paramType,
-                        location: node.Location);
-                }
-            }
-
-            // CRITICAL: Validate return type against usurping function rules
-            // Only usurping functions can return Hijacked<T> (exclusive tokens)
-            if (node.ReturnType != null)
-            {
-                TypeInfo? funcReturnType = ResolveType(typeExpr: node.ReturnType);
-                if (funcReturnType != null)
-                {
-                    _memoryAnalyzer.ValidateFunctionReturn(returnType: funcReturnType,
-                        location: node.Location);
-                }
-            }
-
-            // Analyze function body with full memory safety checking
-            if (node.Body != null)
-            {
-                node.Body.Accept(visitor: this);
-            }
-        }
-        finally
-        {
-            _symbolTable.ExitScope();
-            _memoryAnalyzer.ExitScope();
-
-            if (isUsurping)
-            {
-                _memoryAnalyzer.ExitUsurpingFunction();
-                _isInUsurpingFunction = false;
-            }
-        }
-
-        // Add function to symbol table (with generic parameters if present)
-        TypeInfo? returnType = ResolveType(typeExpr: node.ReturnType);
-        var funcSymbol = new FunctionSymbol(Name: node.Name,
-            Parameters: node.Parameters,
-            ReturnType: returnType,
-            Visibility: node.Visibility,
-            IsUsurping: isUsurping,
-            GenericParameters: node.GenericParameters?.ToList());
-        if (!_symbolTable.TryDeclare(symbol: funcSymbol))
-        {
-            AddError(message: $"Function '{node.Name}' is already declared",
-                location: node.Location);
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a class declaration and registers it in the symbol table.
-    /// Validates class members and inheritance relationships.
-    /// </summary>
-    /// <param name="node">Class declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitEntityDeclaration(EntityDeclaration node)
-    {
-        // Enter entity scope
-        _symbolTable.EnterScope();
-
-        try
-        {
-            // Process entity members
-            foreach (Declaration member in node.Members)
-            {
-                member.Accept(visitor: this);
-            }
-        }
-        finally
-        {
-            _symbolTable.ExitScope();
-        }
-
-        // Add entity to symbol table
-        var classSymbol = new EntitySymbol(Name: node.Name,
-            BaseClass: node.BaseClass,
-            Interfaces: node.Interfaces,
-            Visibility: node.Visibility);
-        if (!_symbolTable.TryDeclare(symbol: classSymbol))
-        {
-            AddError(message: $"Entity '{node.Name}' is already declared",
-                location: node.Location);
-        }
-
-        // Cache field information for member access resolution
-        CacheTypeFields(typeName: node.Name, members: node.Members);
-
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a struct (record) declaration and registers it in the symbol table.
-    /// Validates struct fields and their types.
-    /// </summary>
-    /// <param name="node">Struct declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitRecordDeclaration(RecordDeclaration node)
-    {
-        // Similar to entity but with value semantics
-        // Extract interface names for the symbol
-        var interfaceNames = node.Interfaces
-                                ?.Select(selector: i => i.Name)
-                                 .ToList();
-
-        var structSymbol = new RecordSymbol(Name: node.Name,
-            Visibility: node.Visibility,
-            GenericParameters: node.GenericParameters,
-            GenericConstraints: null,
-            Interfaces: interfaceNames);
-        if (!_symbolTable.TryDeclare(symbol: structSymbol))
-        {
-            AddError(message: $"Record '{node.Name}' is already declared",
-                location: node.Location);
-        }
-
-        // Cache field information for member access resolution
-        CacheTypeFields(typeName: node.Name, members: node.Members);
-
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a menu declaration and validates its structure.
-    /// Menus define user interface navigation and commands.
-    /// </summary>
-    /// <param name="node">Menu declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitChoiceDeclaration(ChoiceDeclaration node)
-    {
-        var menuSymbol = new MenuSymbol(Name: node.Name, Visibility: node.Visibility);
-        if (!_symbolTable.TryDeclare(symbol: menuSymbol))
-        {
-            AddError(message: $"Option '{node.Name}' is already declared",
-                location: node.Location);
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a variant (tagged union/enum) declaration and registers it in the symbol table.
-    /// Validates variant cases and their associated data types.
-    /// </summary>
-    /// <param name="node">Variant declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitVariantDeclaration(VariantDeclaration node)
-    {
-        // Validation based on variant kind
-        switch (node.Kind)
-        {
-            case VariantKind.Mutant:
-                // TODO: Check if we're in a danger! block
-                // For now, we'll add a warning
-                if (!IsInDangerBlock())
-                {
-                    AddError(
-                        message:
-                        $"{node.Kind} '{node.Name}' must be declared inside a danger! block",
-                        location: node.Location);
-                }
-
+            case RecordDeclaration record:
+                CollectRecordDeclaration(record: record);
                 break;
 
-            case VariantKind.Variant:
-                // Validate that all fields in all cases are records (value types)
-                foreach (VariantCase variantCase in node.Cases)
-                {
-                    if (variantCase.AssociatedTypes != null)
-                    {
-                        foreach (TypeExpression type in variantCase.AssociatedTypes)
-                        {
-                            // Check if type is an entity (reference type)
-                            if (IsEntityType(type: type))
-                            {
-                                AddError(
-                                    message:
-                                    $"Variant '{node.Name}' case '{variantCase.Name}' contains entity type '{type}'. All variant fields must be records (value types)",
-                                    location: node.Location);
-                            }
-                        }
-                    }
-                }
+            case EntityDeclaration entity:
+                CollectEntityDeclaration(entity: entity);
+                break;
 
+            case ResidentDeclaration resident:
+                CollectResidentDeclaration(resident: resident);
+                break;
+
+            case ChoiceDeclaration choice:
+                CollectChoiceDeclaration(choice: choice);
+                break;
+
+            case VariantDeclaration variant:
+                CollectVariantDeclaration(variant: variant);
+                break;
+
+            case MutantDeclaration mutant:
+                CollectMutantDeclaration(mutant: mutant);
+                break;
+
+            case ProtocolDeclaration protocol:
+                CollectProtocolDeclaration(protocol: protocol);
+                break;
+
+            case RoutineDeclaration func:
+                CollectFunctionDeclaration(routine: func);
+                break;
+
+            case ImportedDeclaration imported:
+                CollectImportedDeclaration(imported: imported);
+                break;
+
+            case VariableDeclaration variable:
+                CollectFieldDeclaration(field: variable);
+                break;
+
+            case NamespaceDeclaration ns:
+                ValidateNamespaceDeclaration(ns: ns);
+                break;
+
+            case ImportDeclaration import:
+                ProcessImportDeclaration(import: import);
                 break;
         }
+    }
 
-        var variantSymbol = new VariantSymbol(Name: node.Name, Visibility: node.Visibility);
-        if (!_symbolTable.TryDeclare(symbol: variantSymbol))
+    /// <summary>
+    /// Validates a namespace declaration.
+    /// Rejects "namespace Core" as it's reserved for stdlib.
+    /// </summary>
+    private void ValidateNamespaceDeclaration(NamespaceDeclaration ns)
+    {
+        // Namespace "Core" is reserved for stdlib only
+        if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase))
         {
-            AddError(message: $"Variant '{node.Name}' is already declared",
-                location: node.Location);
+            ReportError(
+                message: "Namespace 'Core' is reserved for the standard library and cannot be used in user code.",
+                location: ns.Location);
+        }
+    }
+
+    /// <summary>
+    /// Processes an import declaration.
+    /// Triggers on-demand module loading for the imported module.
+    /// </summary>
+    private void ProcessImportDeclaration(ImportDeclaration import)
+    {
+        // Load the module on-demand
+        // This handles both Core modules and non-Core modules (Collections, ErrorHandling, etc.)
+        bool success = _registry.LoadModule(
+            importPath: import.ModulePath,
+            currentFile: _currentFilePath,
+            location: import.Location);
+
+        if (!success)
+        {
+            ReportError(
+                message: $"Cannot resolve import '{import.ModulePath}'. Module not found.",
+                location: import.Location);
+        }
+    }
+
+    private void CollectFieldDeclaration(VariableDeclaration field)
+    {
+        // Fields are VariableDeclarations within type members
+        // Validate that the field type is not an inline-only token type
+
+        // Validate getter/setter visibility combinations
+        ValidateGetterSetterVisibility(
+            getterVisibility: field.Visibility,
+            setterVisibility: field.SetterVisibility,
+            fieldName: field.Name,
+            location: field.Location);
+
+        if (field.Type == null)
+        {
+            return; // Type inference will be handled later
         }
 
-        return null;
+        TypeSymbol fieldType = ResolveType(typeExpr: field.Type);
+
+        // Validate that tokens cannot be stored in fields
+        ValidateNotTokenFieldType(type: fieldType, fieldName: field.Name, location: field.Location);
+
+        // TODO: Register field in the current type's field list when type body resolution is implemented
     }
 
-    /// <summary>
-    /// Visits a feature (interface/trait) declaration and registers it in the symbol table.
-    /// Features define contracts that types can implement.
-    /// </summary>
-    /// <param name="node">Feature declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitProtocolDeclaration(ProtocolDeclaration node)
+    private void CollectRecordDeclaration(RecordDeclaration record)
     {
-        var featureSymbol = new ProtocolSymbol(Name: node.Name, Visibility: node.Visibility);
-        if (!_symbolTable.TryDeclare(symbol: featureSymbol))
+        var typeInfo = new RecordTypeInfo(name: record.Name)
         {
-            AddError(message: $"Feature '{node.Name}' is already declared",
-                location: node.Location);
+            GenericParameters = record.GenericParameters,
+            GenericConstraints = record.GenericConstraints,
+            Visibility = record.Visibility,
+            Location = record.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: record.Location);
+    }
+
+    private void CollectEntityDeclaration(EntityDeclaration entity)
+    {
+        var typeInfo = new EntityTypeInfo(name: entity.Name)
+        {
+            GenericParameters = entity.GenericParameters,
+            GenericConstraints = entity.GenericConstraints,
+            Visibility = entity.Visibility,
+            Location = entity.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: entity.Location);
+    }
+
+    private void CollectResidentDeclaration(ResidentDeclaration resident)
+    {
+        if (_registry.Language == Language.Suflae)
+        {
+            ReportError(
+                message: "Resident types are not available in Suflae.",
+                location: resident.Location);
+            return;
         }
 
-        return null;
+        var typeInfo = new ResidentTypeInfo(name: resident.Name)
+        {
+            GenericParameters = resident.GenericParameters,
+            GenericConstraints = resident.GenericConstraints,
+            Visibility = resident.Visibility,
+            Location = resident.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: resident.Location);
     }
 
-    /// <summary>
-    /// Visits an implementation declaration that implements a feature for a type.
-    /// Validates that all feature requirements are satisfied.
-    /// </summary>
-    /// <param name="node">Implementation declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitImplementationDeclaration(ImplementationDeclaration node)
+    private void CollectChoiceDeclaration(ChoiceDeclaration choice)
     {
-        // Implementation blocks don't create new symbols but verify interfaces
-        return null;
+        var typeInfo = new ChoiceTypeInfo(name: choice.Name)
+        {
+            Visibility = choice.Visibility,
+            Location = choice.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: choice.Location);
     }
 
-    /// <summary>
-    /// Visits an import declaration and handles module imports.
-    /// Registers imported symbols in the current scope.
-    /// </summary>
-    /// <param name="node">Import declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitImportDeclaration(ImportDeclaration node)
+    private void CollectVariantDeclaration(VariantDeclaration variant)
+    {
+        var typeInfo = new VariantTypeInfo(name: variant.Name)
+        {
+            GenericParameters = variant.GenericParameters,
+            GenericConstraints = variant.GenericConstraints,
+            Location = variant.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: variant.Location);
+    }
+
+    private void CollectMutantDeclaration(MutantDeclaration mutant)
+    {
+        var typeInfo = new MutantTypeInfo(name: mutant.Name)
+        {
+            GenericParameters = mutant.GenericParameters,
+            GenericConstraints = mutant.GenericConstraints,
+            Location = mutant.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: mutant.Location);
+    }
+
+    private void CollectProtocolDeclaration(ProtocolDeclaration protocol)
+    {
+        var typeInfo = new ProtocolTypeInfo(name: protocol.Name)
+        {
+            GenericParameters = protocol.GenericParameters,
+            GenericConstraints = protocol.GenericConstraints,
+            Visibility = protocol.Visibility,
+            Location = protocol.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: protocol.Location);
+    }
+
+    private void CollectFunctionDeclaration(RoutineDeclaration routine)
+    {
+        RoutineKind kind = _currentType != null
+            ? (routine.Name == "__create__" ? RoutineKind.Constructor : RoutineKind.Method)
+            : RoutineKind.Function;
+
+        // The AST already stores names without the '!' suffix
+        // (e.g., "get!" is parsed as Name="get", IsFailable=true)
+        var routineInfo = new RoutineInfo(name: routine.Name)
+        {
+            Kind = kind,
+            OwnerType = _currentType,
+            IsFailable = routine.IsFailable,
+            GenericParameters = routine.GenericParameters,
+            GenericConstraints = routine.GenericConstraints,
+            Visibility = routine.Visibility,
+            Location = routine.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        _registry.RegisterRoutine(routine: routineInfo);
+    }
+
+    private void CollectImportedDeclaration(ImportedDeclaration imported)
+    {
+        var routineInfo = new RoutineInfo(name: imported.Name)
+        {
+            Kind = RoutineKind.Imported,
+            CallingConvention = imported.CallingConvention,
+            IsVariadic = imported.IsVariadic,
+            Visibility = VisibilityModifier.Public, // Imported declarations are always public
+            Location = imported.Location,
+            Namespace = GetCurrentNamespace()
+        };
+
+        _registry.RegisterRoutine(routine: routineInfo);
+    }
+
+    private void TryRegisterType(TypeSymbol type, SourceLocation location)
     {
         try
         {
-            // Load the module and all its dependencies (for transitive parsing)
-            // But only expose the directly imported module's symbols
-            List<ModuleResolver.ModuleInfo> modules =
-                _moduleResolver.LoadModuleWithDependencies(importPath: node.ModulePath);
-
-            // Find the directly imported module (the last one in the list, or the one matching the import path)
-            ModuleResolver.ModuleInfo? directModule = modules.Find(
-                match: m => m.ModulePath == node.ModulePath);
-
-            if (directModule == null)
-            {
-                AddError(message: $"Module '{node.ModulePath}' not found in loaded modules",
-                    location: node.Location);
-                return null;
-            }
-
-            // Only process the directly imported module - transitive dependencies
-            // are parsed and available internally but NOT exposed to the importer
-            // This follows the design principle: "Transitive imports are not visible"
-            if (_processedModules.Contains(item: directModule.ModulePath))
-            {
-                return null; // Already processed, skip to avoid duplicate symbols
-            }
-
-            _processedModules.Add(item: directModule.ModulePath);
-            ProcessImportedModule(moduleInfo: directModule, importDecl: node);
-
-            return null;
+            _registry.RegisterType(type: type);
         }
-        catch (ModuleException ex)
+        catch (InvalidOperationException)
         {
-            AddError(message: $"Failed to import module '{node.ModulePath}': {ex.Message}",
-                location: node.Location);
-            return null;
+            ReportError(
+                message: $"Type '{type.Name}' is already defined.",
+                location: location);
         }
     }
 
+    #endregion
+
+    #region Phase 2: Type Body Resolution
+
     /// <summary>
-    /// Processes an imported module by adding its symbols to the symbol table.
+    /// Resolves type bodies including fields and method signatures.
     /// </summary>
-    private void ProcessImportedModule(ModuleResolver.ModuleInfo moduleInfo,
-        ImportDeclaration importDecl)
+    /// <param name="program">The program to resolve.</param>
+    private void ResolveTypeBodies(Program program)
     {
-        // Analyze the imported module's AST to extract symbols
-        foreach (IAstNode declaration in moduleInfo.Ast.Declarations)
+        foreach (IAstNode declaration in program.Declarations)
         {
-            // Skip import declarations in the imported module (already handled by transitive loading)
-            if (declaration is ImportDeclaration)
+            ResolveTypeBody(node: declaration);
+        }
+    }
+
+    private void ResolveTypeBody(IAstNode node)
+    {
+        switch (node)
+        {
+            case RecordDeclaration record:
+                ResolveRecordBody(record: record);
+                break;
+
+            case EntityDeclaration entity:
+                ResolveEntityBody(entity: entity);
+                break;
+
+            case ResidentDeclaration resident:
+                ResolveResidentBody(resident: resident);
+                break;
+
+            case ProtocolDeclaration protocol:
+                ResolveProtocolBody(protocol: protocol);
+                break;
+
+            case VariantDeclaration variant:
+                ResolveVariantBody(variant: variant);
+                break;
+
+            case MutantDeclaration mutant:
+                ResolveMutantBody(mutant: mutant);
+                break;
+        }
+    }
+
+    private void ResolveRecordBody(RecordDeclaration record)
+    {
+        TypeSymbol? previousType = _currentType;
+        _currentType = _registry.LookupType(name: record.Name);
+
+        // Resolve implemented protocols
+        if (_currentType is RecordTypeInfo recordInfo && record.Protocols.Count > 0)
+        {
+            var resolvedProtocols = new List<TypeInfo>();
+            foreach (TypeExpression protoExpr in record.Protocols)
+            {
+                TypeSymbol protoType = ResolveType(typeExpr: protoExpr);
+                if (protoType is ProtocolTypeInfo proto)
+                {
+                    resolvedProtocols.Add(item: proto);
+                }
+                else if (protoType is not ErrorTypeInfo)
+                {
+                    ReportError(
+                        message: $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        location: protoExpr.Location);
+                }
+            }
+
+            // Update the type with resolved protocols
+            _registry.UpdateRecordProtocols(recordName: record.Name, protocols: resolvedProtocols);
+        }
+
+        foreach (Declaration member in record.Members)
+        {
+            CollectDeclaration(node: member);
+        }
+
+        _currentType = previousType;
+    }
+
+    private void ResolveEntityBody(EntityDeclaration entity)
+    {
+        TypeSymbol? previousType = _currentType;
+        _currentType = _registry.LookupType(name: entity.Name);
+
+        foreach (Declaration member in entity.Members)
+        {
+            CollectDeclaration(node: member);
+        }
+
+        _currentType = previousType;
+    }
+
+    private void ResolveResidentBody(ResidentDeclaration resident)
+    {
+        TypeSymbol? previousType = _currentType;
+        _currentType = _registry.LookupType(name: resident.Name);
+
+        foreach (Declaration member in resident.Members)
+        {
+            CollectDeclaration(node: member);
+        }
+
+        _currentType = previousType;
+    }
+
+    private void ResolveProtocolBody(ProtocolDeclaration protocol)
+    {
+        // Look up the registered protocol type
+        TypeSymbol? protoType = _registry.LookupType(name: protocol.Name);
+        if (protoType is not ProtocolTypeInfo protocolInfo)
+        {
+            return;
+        }
+
+        // Resolve parent protocols (protocol X follows Y, Z)
+        var parentProtocols = new List<ProtocolTypeInfo>();
+        foreach (TypeExpression parentExpr in protocol.ParentProtocols)
+        {
+            TypeSymbol parentType = ResolveType(typeExpr: parentExpr);
+            if (parentType is ProtocolTypeInfo parentProtocol)
+            {
+                parentProtocols.Add(item: parentProtocol);
+            }
+            else if (parentType is not ErrorTypeInfo)
+            {
+                ReportError(
+                    message: $"'{parentExpr}' is not a protocol. Only protocols can be inherited with 'follows'.",
+                    location: parentExpr.Location);
+            }
+        }
+
+        // Convert method signatures to ProtocolMethodInfo
+        var methods = new List<ProtocolMethodInfo>();
+        foreach (RoutineSignature sig in protocol.Methods)
+        {
+            bool isFailable = sig.Name.EndsWith(value: '!');
+            string fullName = isFailable ? sig.Name[..^1] : sig.Name;
+
+            // Check if this is an instance method (has "Me." prefix)
+            // Protocol methods: "Me.methodName" = instance, "methodName" = type-level
+            bool isInstanceMethod = fullName.StartsWith(value: "Me.");
+            string methodName = isInstanceMethod ? fullName[3..] : fullName;
+
+            // Resolve parameter types (skip 'me' if it appears as explicit parameter)
+            var paramTypes = new List<TypeSymbol>();
+            var paramNames = new List<string>();
+            foreach (Parameter param in sig.Parameters)
+            {
+                // Skip the 'me' parameter - it's implicit for instance methods
+                if (param.Name == "me")
+                {
+                    continue;
+                }
+
+                TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+                paramTypes.Add(item: paramType);
+                paramNames.Add(item: param.Name);
+            }
+
+            // Resolve return type
+            TypeSymbol? returnType = sig.ReturnType != null
+                ? ResolveType(typeExpr: sig.ReturnType)
+                : null;
+
+            // Extract mutation category from attributes
+            // @readonly -> Readonly, @writable -> Writable, default/no annotation -> Migratable
+            MutationCategory mutation = MutationCategory.Migratable; // Default
+            if (sig.Attributes != null)
+            {
+                if (sig.Attributes.Contains(item: "readonly"))
+                {
+                    mutation = MutationCategory.Readonly;
+                }
+                else if (sig.Attributes.Contains(item: "writable"))
+                {
+                    mutation = MutationCategory.Writable;
+                }
+                // else: "migratable" or no annotation = Migratable (default)
+            }
+
+            var methodInfo = new ProtocolMethodInfo(name: methodName)
+            {
+                IsInstanceMethod = isInstanceMethod,
+                Mutation = mutation,
+                ParameterTypes = paramTypes,
+                ParameterNames = paramNames,
+                ReturnType = returnType,
+                IsFailable = isFailable,
+                HasDefaultImplementation = false, // Abstract protocol methods have no default
+                Location = sig.Location
+            };
+
+            methods.Add(item: methodInfo);
+        }
+
+        // Update the protocol with resolved methods and parent protocols
+        var updatedProtocol = new ProtocolTypeInfo(name: protocol.Name)
+        {
+            Methods = methods,
+            ParentProtocols = parentProtocols,
+            GenericParameters = protocolInfo.GenericParameters,
+            GenericConstraints = protocolInfo.GenericConstraints,
+            Visibility = protocolInfo.Visibility,
+            Location = protocolInfo.Location,
+            Namespace = protocolInfo.Namespace
+        };
+
+        // Replace the protocol in the registry
+        _registry.UpdateType(oldType: protocolInfo, newType: updatedProtocol);
+    }
+
+    private void ResolveVariantBody(VariantDeclaration variant)
+    {
+        // Validate each variant case's payload type
+        foreach (VariantCase variantCase in variant.Cases)
+        {
+            if (variantCase.AssociatedTypes == null)
+            {
+                continue; // No payload for this case
+            }
+
+            TypeSymbol payloadType = ResolveType(typeExpr: variantCase.AssociatedTypes);
+
+            // Validate that tokens cannot be used as variant payloads
+            ValidateNotTokenVariantPayload(
+                type: payloadType,
+                caseName: variantCase.Name,
+                location: variantCase.Location);
+        }
+    }
+
+    private void ResolveMutantBody(MutantDeclaration mutant)
+    {
+        // Track seen types for uniqueness validation
+        var seenTypes = new Dictionary<string, string>(); // type name -> case name
+
+        foreach (VariantCase mutantCase in mutant.Cases)
+        {
+            // Rule 1: All mutant cases must have an associated type
+            if (mutantCase.AssociatedTypes == null)
+            {
+                ReportError(
+                    message: $"Mutant case '{mutantCase.Name}' must have an associated type. " +
+                             "Empty cases are not allowed in mutants.",
+                    location: mutantCase.Location);
+                continue;
+            }
+
+            TypeSymbol payloadType = ResolveType(typeExpr: mutantCase.AssociatedTypes);
+
+            // Skip further validation if type resolution failed
+            if (payloadType is ErrorTypeInfo)
             {
                 continue;
             }
 
-            // Add the declaration's symbols to our symbol table
-            if (declaration is FunctionDeclaration funcDecl)
+            // Rule 2: All types must be unique within the mutant
+            string typeName = payloadType.Name;
+            if (seenTypes.TryGetValue(key: typeName, value: out string? existingCase))
             {
-                // Create function symbol (reuse the Parameter objects from AST)
-                var funcSymbol = new FunctionSymbol(Name: funcDecl.Name,
-                    Parameters: funcDecl.Parameters,
-                    ReturnType: funcDecl.ReturnType != null
-                        ? ResolveTypeExpression(typeExpr: funcDecl.ReturnType)
-                        : new TypeInfo(Name: "void", IsReference: false),
-                    Visibility: funcDecl.Visibility,
-                    IsUsurping: false,
-                    GenericParameters: funcDecl.GenericParameters,
-                    GenericConstraints: new List<GenericConstraint>());
-
-                if (!_symbolTable.TryDeclare(symbol: funcSymbol))
-                {
-                    AddError(
-                        message:
-                        $"Imported symbol '{funcDecl.Name}' conflicts with existing declaration",
-                        location: importDecl.Location);
-                }
+                ReportError(
+                    message: $"Mutant case '{mutantCase.Name}' has type '{typeName}' which is already " +
+                             $"used by case '{existingCase}'. All mutant case types must be unique.",
+                    location: mutantCase.Location);
             }
-            else if (declaration is EntityDeclaration classDecl)
+            else
             {
-                // Create class/entity symbol
-                var classSymbol = new EntitySymbol(Name: classDecl.Name,
-                    BaseClass: null,
-                    Interfaces: new List<TypeExpression>(),
-                    Visibility: classDecl.Visibility,
-                    GenericParameters: classDecl.GenericParameters,
-                    GenericConstraints: new List<GenericConstraint>());
-
-                if (!_symbolTable.TryDeclare(symbol: classSymbol))
-                {
-                    AddError(
-                        message:
-                        $"Imported type '{classDecl.Name}' conflicts with existing declaration",
-                        location: importDecl.Location);
-                }
-
-                // Cache field information for member access resolution
-                CacheTypeFields(typeName: classDecl.Name, members: classDecl.Members);
+                seenTypes[key: typeName] = mutantCase.Name;
             }
-            else if (declaration is RecordDeclaration structDecl)
-            {
-                // Create struct/record symbol with interfaces
-                var interfaceNames = structDecl.Interfaces
-                                              ?.Select(selector: i => i.Name)
-                                               .ToList();
-                var structSymbol = new RecordSymbol(Name: structDecl.Name,
-                    Visibility: structDecl.Visibility,
-                    GenericParameters: structDecl.GenericParameters,
-                    GenericConstraints: null,
-                    Interfaces: interfaceNames);
 
-                if (!_symbolTable.TryDeclare(symbol: structSymbol))
+            // Validate that tokens cannot be used as mutant payloads
+            ValidateNotTokenVariantPayload(
+                type: payloadType,
+                caseName: mutantCase.Name,
+                location: mutantCase.Location);
+        }
+    }
+
+    #endregion
+
+    #region Phase 2.5: Routine Signature Resolution
+
+    /// <summary>
+    /// Resolves routine signatures including parameter types.
+    /// Performs protocol-as-type desugaring (routine foo(x: Displayable) → routine foo&lt;T follows Displayable&gt;(x: T)).
+    /// </summary>
+    /// <param name="program">The program to resolve.</param>
+    private void ResolveRoutineSignatures(Program program)
+    {
+        foreach (IAstNode declaration in program.Declarations)
+        {
+            ResolveRoutineSignature(node: declaration);
+        }
+    }
+
+    private void ResolveRoutineSignature(IAstNode node)
+    {
+        switch (node)
+        {
+            case RoutineDeclaration routine:
+                ResolveRoutineParameters(routine: routine);
+                break;
+
+            case RecordDeclaration record:
+                foreach (Declaration member in record.Members)
                 {
-                    AddError(
-                        message:
-                        $"Imported type '{structDecl.Name}' conflicts with existing declaration",
-                        location: importDecl.Location);
+                    ResolveRoutineSignature(node: member);
                 }
+                break;
 
-                // Cache field information for member access resolution
-                CacheTypeFields(typeName: structDecl.Name, members: structDecl.Members);
-            }
-            else if (declaration is VariantDeclaration variantDecl)
-            {
-                // Create variant symbol (chimera/variant/mutant)
-                var variantSymbol = new EntitySymbol(Name: variantDecl.Name,
-                    BaseClass: null,
-                    Interfaces: new List<TypeExpression>(),
-                    Visibility: variantDecl.Visibility,
-                    GenericParameters: variantDecl.GenericParameters,
-                    GenericConstraints: new List<GenericConstraint>());
-
-                if (!_symbolTable.TryDeclare(symbol: variantSymbol))
+            case EntityDeclaration entity:
+                foreach (Declaration member in entity.Members)
                 {
-                    AddError(
-                        message:
-                        $"Imported type '{variantDecl.Name}' conflicts with existing declaration",
-                        location: importDecl.Location);
+                    ResolveRoutineSignature(node: member);
                 }
-            }
-            else if (declaration is ExternalDeclaration externalDecl)
-            {
-                // Create function symbol for external declaration with calling convention info
-                TypeInfo? returnType = externalDecl.ReturnType != null
-                    ? ResolveTypeExpression(typeExpr: externalDecl.ReturnType)
-                    : new TypeInfo(Name: "void", IsReference: false);
+                break;
 
-                var funcSymbol = new FunctionSymbol(Name: externalDecl.Name,
-                    Parameters: externalDecl.Parameters,
-                    ReturnType: returnType,
-                    Visibility: VisibilityModifier.External,
-                    IsUsurping: false,
-                    GenericParameters: externalDecl.GenericParameters,
-                    GenericConstraints: new List<GenericConstraint>(),
-                    CallingConvention: externalDecl.CallingConvention,
-                    IsExternal: true);
-
-                if (!_symbolTable.TryDeclare(symbol: funcSymbol))
+            case ResidentDeclaration resident:
+                foreach (Declaration member in resident.Members)
                 {
-                    AddError(
-                        message:
-                        $"Imported external function '{externalDecl.Name}' conflicts with existing declaration",
-                        location: importDecl.Location);
+                    ResolveRoutineSignature(node: member);
                 }
-            }
-            // TODO: Handle other declaration types (FeatureDeclaration, MenuDeclaration, etc.)
+                break;
+
+            case ImportedDeclaration imported:
+                ResolveImportedParameters(imported: imported);
+                break;
         }
     }
 
     /// <summary>
-    /// Visits a namespace declaration that establishes the module path for the file.
+    /// Resolves parameters for a routine declaration, performing protocol-as-type desugaring.
     /// </summary>
-    /// <param name="node">Namespace declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitNamespaceDeclaration(NamespaceDeclaration node)
+    private void ResolveRoutineParameters(RoutineDeclaration routine)
     {
-        // Namespace declarations establish the module path for symbol resolution
-        // Store the namespace so we can distinguish namespace functions from type methods
-        _currentNamespace = node.Path;
-        _symbolTable.RegisterNamespace(node.Path);
-        return null;
-    }
+        bool isFailable = routine.Name.EndsWith(value: '!');
+        string routineName = isFailable ? routine.Name[..^1] : routine.Name;
 
-    /// <summary>
-    /// Visits a redefinition declaration that redefines an existing function.
-    /// Validates that the original function exists and signatures match.
-    /// </summary>
-    /// <param name="node">Redefinition declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitDefineDeclaration(RedefinitionDeclaration node)
-    {
-        // TODO: Handle method redefinition
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a using declaration that brings items into scope.
-    /// Similar to C# using static directive.
-    /// </summary>
-    /// <param name="node">Using declaration node</param>
-    /// <returns>Null</returns>
-    public object? VisitUsingDeclaration(UsingDeclaration node)
-    {
-        // TODO: Handle type alias
-        return null;
-    }
-
-    /// <summary>
-    /// Caches field type information for a type declaration.
-    /// Used by VisitMemberExpression to resolve field types.
-    /// </summary>
-    /// <param name="typeName">Name of the type being cached</param>
-    /// <param name="members">List of member declarations (fields and methods)</param>
-    private void CacheTypeFields(string typeName, List<Declaration> members)
-    {
-        if (_typeFieldCache.ContainsKey(key: typeName))
+        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routineName);
+        if (routineInfo == null)
         {
-            // Already cached - avoid duplicate processing
             return;
         }
 
-        var fieldTypes = new Dictionary<string, TypeInfo>();
+        var parameters = new List<ParameterInfo>();
+        var implicitGenerics = new List<string>();
+        var implicitConstraints = new List<GenericConstraintDeclaration>();
+        int implicitGenericCounter = 0;
 
-        foreach (Declaration member in members)
+        foreach (Parameter param in routine.Parameters)
         {
-            if (member is VariableDeclaration varDecl)
+            if (param.Type == null)
             {
-                // This is a field declaration
-                TypeInfo? fieldType = varDecl.Type != null
-                    ? ResolveType(typeExpr: varDecl.Type)
-                    : null;
+                // Type inference required - handle later
+                parameters.Add(item: new ParameterInfo(name: param.Name, type: ErrorTypeInfo.Instance));
+                continue;
+            }
 
-                if (fieldType != null)
+            TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+
+            // Protocol-as-type desugaring: routine foo(x: Displayable) → routine foo<T follows Displayable>(x: T)
+            if (paramType is ProtocolTypeInfo protocol)
+            {
+                // Generate implicit generic parameter name
+                string implicitGenericName = $"__T{implicitGenericCounter++}";
+                implicitGenerics.Add(item: implicitGenericName);
+
+                // Create "follows" constraint for the implicit generic
+                var constraint = new GenericConstraintDeclaration(
+                    ParameterName: implicitGenericName,
+                    ConstraintType: ConstraintKind.Follows,
+                    ConstraintTypes: [param.Type],
+                    Location: param.Location);
+                implicitConstraints.Add(item: constraint);
+
+                // Use the implicit generic as the parameter type
+                var genericParamType = new GenericParameterTypeInfo(name: implicitGenericName)
                 {
-                    fieldTypes[key: varDecl.Name] = fieldType;
-                }
+                    Location = param.Location
+                };
+
+                parameters.Add(item: new ParameterInfo(name: param.Name, type: genericParamType)
+                {
+                    DefaultValue = param.DefaultValue
+                });
+            }
+            else
+            {
+                parameters.Add(item: new ParameterInfo(name: param.Name, type: paramType)
+                {
+                    DefaultValue = param.DefaultValue
+                });
             }
         }
 
-        _typeFieldCache[key: typeName] = fieldTypes;
+        // Resolve return type
+        TypeSymbol? returnType = routine.ReturnType != null
+            ? ResolveType(typeExpr: routine.ReturnType)
+            : null;
+
+        // Merge implicit generics with explicit generics
+        List<string>? allGenericParams = routineInfo.GenericParameters?.ToList() ?? [];
+        allGenericParams.AddRange(collection: implicitGenerics);
+
+        // Merge implicit constraints with explicit constraints
+        List<GenericConstraintDeclaration>? allConstraints = routineInfo.GenericConstraints?.ToList() ?? [];
+        allConstraints.AddRange(collection: implicitConstraints);
+
+        // Update the routine info with resolved parameters
+        _registry.UpdateRoutine(
+            routine: routineInfo,
+            parameters: parameters,
+            returnType: returnType,
+            genericParameters: allGenericParams.Count > 0 ? allGenericParams : null,
+            genericConstraints: allConstraints.Count > 0 ? allConstraints : null);
     }
 
     /// <summary>
-    /// Looks up the type of a field on a given type.
+    /// Resolves parameters for an imported declaration.
     /// </summary>
-    /// <param name="typeName">Name of the type to look up</param>
-    /// <param name="fieldName">Name of the field to find</param>
-    /// <returns>TypeInfo if field exists, null otherwise</returns>
-    public TypeInfo? LookupFieldType(string typeName, string fieldName)
+    private void ResolveImportedParameters(ImportedDeclaration imported)
     {
-        // Strip generic arguments for lookup (e.g., List<T> -> List)
-        string baseTypeName = typeName;
-        int genericStart = typeName.IndexOf(value: '<');
-        if (genericStart > 0)
+        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: imported.Name);
+        if (routineInfo == null)
         {
-            baseTypeName = typeName.Substring(startIndex: 0, length: genericStart);
+            return;
         }
 
-        if (_typeFieldCache.TryGetValue(key: baseTypeName, value: out Dictionary<string, TypeInfo>? fields))
+        var parameters = new List<ParameterInfo>();
+
+        foreach (Parameter param in imported.Parameters)
         {
-            if (fields.TryGetValue(key: fieldName, value: out TypeInfo? fieldType))
+            TypeSymbol paramType = param.Type != null
+                ? ResolveType(typeExpr: param.Type)
+                : ErrorTypeInfo.Instance;
+
+            parameters.Add(item: new ParameterInfo(name: param.Name, type: paramType)
             {
-                return fieldType;
-            }
+                DefaultValue = param.DefaultValue
+            });
         }
 
-        return null;
+        // Resolve return type
+        TypeSymbol? returnType = imported.ReturnType != null
+            ? ResolveType(typeExpr: imported.ReturnType)
+            : null;
+
+        // Update the routine info with resolved parameters
+        _registry.UpdateRoutine(
+            routine: routineInfo,
+            parameters: parameters,
+            returnType: returnType,
+            genericParameters: null,
+            genericConstraints: null);
     }
+
+    #endregion
+
+    #region Phase 2.6: Derived Operator Generation
+
+    /// <summary>
+    /// Generates derived comparison operators from __eq__ and __cmp__ methods.
+    /// </summary>
+    private void GenerateDerivedOperators()
+    {
+        foreach (TypeSymbol type in _registry.GetTypesWithMethods())
+        {
+            GenerateDerivedOperatorsForType(type: type);
+        }
+    }
+
+    /// <summary>
+    /// Generates derived operators for a specific type.
+    /// </summary>
+    /// <param name="type">The type to generate operators for.</param>
+    private void GenerateDerivedOperatorsForType(TypeSymbol type)
+    {
+        IEnumerable<RoutineInfo> methods = _registry.GetMethodsForType(type: type);
+        List<RoutineInfo> methodList = methods.ToList();
+
+        // Look for __eq__ method
+        RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "__eq__");
+        if (eqMethod != null)
+        {
+            GenerateNeFromEq(type: type, eqMethod: eqMethod, existingMethods: methodList);
+        }
+
+        // Look for __cmp__ method
+        RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "__cmp__");
+        if (cmpMethod != null)
+        {
+            GenerateComparisonOperatorsFromCmp(type: type, cmpMethod: cmpMethod, existingMethods: methodList);
+        }
+    }
+
+    /// <summary>
+    /// Generates __ne__ from __eq__.
+    /// __ne__(you) = not __eq__(you)
+    /// </summary>
+    private void GenerateNeFromEq(TypeSymbol type, RoutineInfo eqMethod, List<RoutineInfo> existingMethods)
+    {
+        RoutineInfo? existingNe = existingMethods.FirstOrDefault(predicate: m => m.Name == "__ne__");
+
+        if (existingNe != null)
+        {
+            // User cannot override derived operators
+            if (!existingNe.IsSynthesized)
+            {
+                ReportError(
+                    message: $"Cannot define '__ne__' when '__eq__' is defined. " +
+                             "'__ne__' is auto-generated from '__eq__'.",
+                    location: existingNe.Location);
+            }
+
+            return;
+        }
+
+        // Generate __ne__
+        TypeSymbol? boolType = _registry.LookupType(name: "Bool");
+        if (boolType == null)
+        {
+            return; // Bool type not available
+        }
+
+        var neMethod = new RoutineInfo(name: "__ne__")
+        {
+            Kind = RoutineKind.Method,
+            OwnerType = type,
+            Parameters = eqMethod.Parameters,
+            ReturnType = boolType,
+            IsFailable = false,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
+            Visibility = eqMethod.Visibility,
+            Location = eqMethod.Location,
+            Namespace = eqMethod.Namespace,
+            Attributes = ["readonly"],
+            IsSynthesized = true
+        };
+
+        _registry.RegisterRoutine(routine: neMethod);
+    }
+
+    /// <summary>
+    /// Generates __lt__, __le__, __gt__, __ge__ from __cmp__.
+    /// __lt__(you) = __cmp__(you) is ME_SMALL
+    /// __le__(you) = __cmp__(you) isnot ME_LARGE
+    /// __gt__(you) = __cmp__(you) is ME_LARGE
+    /// __ge__(you) = __cmp__(you) isnot ME_SMALL
+    /// </summary>
+    private void GenerateComparisonOperatorsFromCmp(TypeSymbol type, RoutineInfo cmpMethod,
+        List<RoutineInfo> existingMethods)
+    {
+        TypeSymbol? boolType = _registry.LookupType(name: "Bool");
+        if (boolType == null)
+        {
+            return; // Bool type not available
+        }
+
+        // Define the derived operators
+        var derivedOps = new[]
+        {
+            ("__lt__", "ME_SMALL", true),   // is ME_SMALL
+            ("__le__", "ME_LARGE", false),  // isnot ME_LARGE
+            ("__gt__", "ME_LARGE", true),   // is ME_LARGE
+            ("__ge__", "ME_SMALL", false)   // isnot ME_SMALL
+        };
+
+        foreach ((string opName, string _, bool _) in derivedOps)
+        {
+            RoutineInfo? existing = existingMethods.FirstOrDefault(predicate: m => m.Name == opName);
+
+            if (existing != null)
+            {
+                // User cannot override derived operators
+                if (!existing.IsSynthesized)
+                {
+                    ReportError(
+                        message: $"Cannot define '{opName}' when '__cmp__' is defined. " +
+                                 $"'{opName}' is auto-generated from '__cmp__'.",
+                        location: existing.Location);
+                }
+
+                continue;
+            }
+
+            // Generate the derived operator
+            var derivedMethod = new RoutineInfo(name: opName)
+            {
+                Kind = RoutineKind.Method,
+                OwnerType = type,
+                Parameters = cmpMethod.Parameters,
+                ReturnType = boolType,
+                IsFailable = false,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
+                Visibility = cmpMethod.Visibility,
+                Location = cmpMethod.Location,
+                Namespace = cmpMethod.Namespace,
+                Attributes = ["readonly"],
+                IsSynthesized = true
+            };
+
+            _registry.RegisterRoutine(routine: derivedMethod);
+        }
+    }
+
+    #endregion
 }

@@ -9,8 +9,8 @@
 #   tasks.push(low_priority_task, 10)    # Priority 10 (low)
 #   let next = tasks.pop!()              # Gets priority 1 task first
 
-import Collections/List
-import errors/IndexOutOfBoundsError
+import Collections.List
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 

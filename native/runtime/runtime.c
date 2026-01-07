@@ -20,30 +20,8 @@ void rf_runtime_init()
 // ============================================================================
 
 // ============================================================================
-// Text<letter8> / cstr conversion
+// C String Helpers
 // ============================================================================
-
-// Convert cstr to Text<letter8> (List<letter8>)
-// This creates a Text that wraps the cstr pointer - does NOT copy memory
-rf_Text8 rf_text8_from_cstr(const char* cstr)
-{
-    rf_Text8 text;
-    rf_u64 len = (rf_u64)strlen(cstr);
-
-    text.data.starting_address = (rf_uaddr)cstr;
-    text.data.allocated_bytes = len;
-    text.count = len;
-    text.capacity = len;
-
-    return text;
-}
-
-// Convert Text<letter8> to cstr
-// Returns pointer to the underlying data (must be null-terminated!)
-const char* rf_cstr_from_text8(rf_Text8 text)
-{
-    return (const char*)text.data.starting_address;
-}
 
 // Get length of cstr
 rf_uaddr rf_strlen(const char* cstr)
@@ -63,26 +41,17 @@ rf_s32 rf_strcmp(const char* s1, const char* s2)
 // Console I/O Operations
 // ============================================================================
 
-// Print C string to stdout (null-terminated)
-void rf_console_print_cstr(const char* str) { printf("%s", str); }
-void rf_console_print_line_cstr(const char* str) { printf("%s\n", str); }
+// Count-based print to stdout (preferred - no null-termination required)
+void rf_console_print(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stdout); }
+void rf_console_print_line(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stdout); putchar('\n'); }
 
-// Aliases for text8 (same as cstr for now)
-void rf_console_print_text8(const char* str) { printf("%s", str); }
-void rf_console_print_line_text8(const char* str) { printf("%s\n", str); }
-void rf_console_print_line_empty() { putchar('\n'); }
+// Count-based print to stderr (preferred - no null-termination required)
+void rf_console_alert(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stderr); }
+void rf_console_alert_line(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stderr); fputc('\n', stderr); }
 
-// Print C string to stderr (null-terminated)
-void rf_console_alert_cstr(const char* str) { fprintf(stderr, "%s", str); }
-void rf_console_alert_line_cstr(const char* str) { fprintf(stderr, "%s\n", str); }
-
-// Aliases for text8 (same as cstr for now)
-void rf_console_alert_text8(const char* str) { fprintf(stderr, "%s", str); }
-void rf_console_alert_line_text8(const char* str) { fprintf(stderr, "%s\n", str); }
-void rf_console_alert_line_empty() { fprintf(stderr, "\n"); }
-
-// Print empty line to stdout
-void rf_console_print_line() { putchar('\n'); }
+// Print empty line
+void rf_console_print_newline() { putchar('\n'); }
+void rf_console_alert_newline() { fputc('\n', stderr); }
 
 // Input operations - get single character
 char rf_console_get_char()

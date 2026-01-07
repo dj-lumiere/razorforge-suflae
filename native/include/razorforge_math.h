@@ -19,6 +19,9 @@ typedef struct d128_t {
     uint64_t high;
 } d128_t;
 
+// Forward declaration of f128_t (defined later in this header)
+typedef struct f128_t f128_t;
+
 // ============================================================================
 // d32 operations (decimal32 - 7 significant digits)
 // ============================================================================
@@ -36,14 +39,14 @@ uint32_t d32_from_string(const char* str);
 char* d32_to_string(uint32_t val);
 
 // Conversion from integers
-uint32_t d32_from_i32(int32_t val);
-uint32_t d32_from_i64(int64_t val);
+uint32_t d32_from_s32(int32_t val);
+uint32_t d32_from_s64(int64_t val);
 uint32_t d32_from_u32(uint32_t val);
 uint32_t d32_from_u64(uint64_t val);
 
 // Conversion to integers
-int32_t d32_to_i32(uint32_t val);
-int64_t d32_to_i64(uint32_t val);
+int32_t d32_to_s32(uint32_t val);
+int64_t d32_to_s64(uint32_t val);
 uint32_t d32_to_u32(uint32_t val);
 uint64_t d32_to_u64(uint32_t val);
 
@@ -68,14 +71,14 @@ uint64_t d64_from_string(const char* str);
 char* d64_to_string(uint64_t val);
 
 // Conversion from integers
-uint64_t d64_from_i32(int32_t val);
-uint64_t d64_from_i64(int64_t val);
+uint64_t d64_from_s32(int32_t val);
+uint64_t d64_from_s64(int64_t val);
 uint64_t d64_from_u32(uint32_t val);
 uint64_t d64_from_u64(uint64_t val);
 
 // Conversion to integers
-int32_t d64_to_i32(uint64_t val);
-int64_t d64_to_i64(uint64_t val);
+int32_t d64_to_s32(uint64_t val);
+int64_t d64_to_s64(uint64_t val);
 
 // Conversion to other decimal types
 uint32_t d64_to_d32(uint64_t x);
@@ -98,14 +101,14 @@ d128_t d128_from_string(const char* str);
 char* d128_to_string(d128_t val);
 
 // Conversion from integers
-d128_t d128_from_i32(int32_t val);
-d128_t d128_from_i64(int64_t val);
+d128_t d128_from_s32(int32_t val);
+d128_t d128_from_s64(int64_t val);
 d128_t d128_from_u32(uint32_t val);
 d128_t d128_from_u64(uint64_t val);
 
 // Conversion to integers
-int32_t d128_to_i32(d128_t val);
-int64_t d128_to_i64(d128_t val);
+int32_t d128_to_s32(d128_t val);
+int64_t d128_to_s64(d128_t val);
 
 // Conversion to other decimal types
 uint32_t d128_to_d32(d128_t x);
@@ -220,6 +223,39 @@ int32_t rf_d128_iszero(d128_t x);
 int32_t rf_d128_signbit(d128_t x);
 
 // ============================================================================
+// d128 <-> f128 conversion
+// Both types have ~34 decimal digits precision
+// ============================================================================
+
+f128_t rf_d128_to_f128(d128_t x);
+d128_t rf_f128_to_d128(f128_t x);
+
+// ============================================================================
+// d128 transcendental functions (via f128 conversion)
+// These convert d128 -> f128, compute using SoftFloat, then convert back.
+// Both d128 and f128 have ~34 decimal digits precision.
+// ============================================================================
+
+d128_t rf_d128_sin(d128_t x);
+d128_t rf_d128_cos(d128_t x);
+d128_t rf_d128_tan(d128_t x);
+d128_t rf_d128_asin(d128_t x);
+d128_t rf_d128_acos(d128_t x);
+d128_t rf_d128_atan(d128_t x);
+d128_t rf_d128_atan2(d128_t y, d128_t x);
+d128_t rf_d128_sinh(d128_t x);
+d128_t rf_d128_cosh(d128_t x);
+d128_t rf_d128_tanh(d128_t x);
+d128_t rf_d128_exp(d128_t x);
+d128_t rf_d128_exp2(d128_t x);
+d128_t rf_d128_log(d128_t x);
+d128_t rf_d128_log2(d128_t x);
+d128_t rf_d128_log10(d128_t x);
+d128_t rf_d128_pow(d128_t base, d128_t exp);
+d128_t rf_d128_cbrt(d128_t x);
+d128_t rf_d128_hypot(d128_t x, d128_t y);
+
+// ============================================================================
 // Special values
 // ============================================================================
 
@@ -280,12 +316,12 @@ int rf_bigint_copy(rf_bigint* dest, rf_bigint* src);
 int rf_bigint_init(rf_bigint* a);
 
 // Initialization from primitives
-int rf_bigint_set_i64(rf_bigint* a, int64_t val);
+int rf_bigint_set_s64(rf_bigint* a, int64_t val);
 int rf_bigint_set_u64(rf_bigint* a, uint64_t val);
 int rf_bigint_set_str(rf_bigint* a, const char* str, int radix);
 
 // Conversion to primitives
-int64_t rf_bigint_get_i64(rf_bigint* a);
+int64_t rf_bigint_get_s64(rf_bigint* a);
 uint64_t rf_bigint_get_u64(rf_bigint* a);
 char* rf_bigint_get_str(rf_bigint* a, int radix);
 
@@ -300,7 +336,7 @@ int rf_bigint_abs(rf_bigint* result, rf_bigint* a);
 
 // Comparison
 int rf_bigint_cmp(rf_bigint* a, rf_bigint* b); // -1, 0, 1
-int rf_bigint_cmp_i64(rf_bigint* a, int64_t b);
+int rf_bigint_cmp_s64(rf_bigint* a, int64_t b);
 int rf_bigint_is_zero(rf_bigint* a);
 int rf_bigint_is_neg(rf_bigint* a);
 
@@ -332,12 +368,12 @@ void rf_bigdec_free(rf_bigdecimal a);
 rf_bigdecimal rf_bigdec_copy(rf_bigdecimal a);
 
 // Initialization
-void rf_bigdec_set_i64(rf_bigdecimal a, int64_t val);
+void rf_bigdec_set_s64(rf_bigdecimal a, int64_t val);
 void rf_bigdec_set_f64(rf_bigdecimal a, double val);
 void rf_bigdec_set_str(rf_bigdecimal a, const char* str);
 
 // Conversion
-int64_t rf_bigdec_get_i64(rf_bigdecimal a);
+int64_t rf_bigdec_get_s64(rf_bigdecimal a);
 double rf_bigdec_get_f64(rf_bigdecimal a);
 char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places);
 
@@ -564,6 +600,128 @@ int32_t rf_f64_isinf(double x);
 int32_t rf_f64_isfinite(double x);
 int32_t rf_f64_isnormal(double x);
 int32_t rf_f64_signbit(double x);
+
+// ============================================================================
+// f128 (quad-precision float) math functions
+// IEEE 754 binary128: 1 sign, 15 exponent, 112 mantissa bits
+// Range: ~3.4e-4932 to ~1.2e4932, ~34 decimal digits precision
+//
+// NOTE: f128 is implemented via Berkeley SoftFloat library.
+// All operations are software-emulated for cross-platform compatibility.
+// ============================================================================
+
+// f128 type (quad precision - 128 bits)
+typedef struct f128_t {
+    uint64_t low;
+    uint64_t high;
+} f128_t;
+
+// Conversion functions
+f128_t rf_f128_from_f32(float x);
+f128_t rf_f128_from_f64(double x);
+float rf_f128_to_f32(f128_t x);
+double rf_f128_to_f64(f128_t x);
+
+// Conversion from/to integers
+f128_t rf_f128_from_s32(int32_t x);
+f128_t rf_f128_from_s64(int64_t x);
+f128_t rf_f128_from_u32(uint32_t x);
+f128_t rf_f128_from_u64(uint64_t x);
+int32_t rf_f128_to_s32(f128_t x);
+int64_t rf_f128_to_s64(f128_t x);
+uint32_t rf_f128_to_u32(f128_t x);
+uint64_t rf_f128_to_u64(f128_t x);
+
+// Conversion from/to string
+f128_t rf_f128_from_string(const char* str);
+char* rf_f128_to_string(f128_t x);
+
+// Arithmetic
+f128_t rf_f128_add(f128_t a, f128_t b);
+f128_t rf_f128_sub(f128_t a, f128_t b);
+f128_t rf_f128_mul(f128_t a, f128_t b);
+f128_t rf_f128_div(f128_t a, f128_t b);
+f128_t rf_f128_neg(f128_t x);
+
+// Comparison
+int32_t rf_f128_eq(f128_t a, f128_t b);
+int32_t rf_f128_ne(f128_t a, f128_t b);
+int32_t rf_f128_lt(f128_t a, f128_t b);
+int32_t rf_f128_le(f128_t a, f128_t b);
+int32_t rf_f128_gt(f128_t a, f128_t b);
+int32_t rf_f128_ge(f128_t a, f128_t b);
+int32_t rf_f128_cmp(f128_t a, f128_t b);  // Returns -1, 0, 1
+
+// Basic math
+f128_t rf_f128_abs(f128_t x);
+f128_t rf_f128_copysign(f128_t x, f128_t y);
+f128_t rf_f128_min(f128_t x, f128_t y);
+f128_t rf_f128_max(f128_t x, f128_t y);
+
+// Rounding
+f128_t rf_f128_ceil(f128_t x);
+f128_t rf_f128_floor(f128_t x);
+f128_t rf_f128_trunc(f128_t x);
+f128_t rf_f128_round(f128_t x);
+
+// Square root and FMA
+f128_t rf_f128_sqrt(f128_t x);
+f128_t rf_f128_fma(f128_t x, f128_t y, f128_t z);
+f128_t rf_f128_fmod(f128_t x, f128_t y);
+
+// Classification predicates
+int32_t rf_f128_isnan(f128_t x);
+int32_t rf_f128_isinf(f128_t x);
+int32_t rf_f128_isfinite(f128_t x);
+int32_t rf_f128_isnormal(f128_t x);
+int32_t rf_f128_iszero(f128_t x);
+int32_t rf_f128_signbit(f128_t x);
+
+// Special values
+f128_t rf_f128_nan(void);
+f128_t rf_f128_inf(void);
+f128_t rf_f128_neg_inf(void);
+f128_t rf_f128_epsilon(void);
+f128_t rf_f128_min_positive(void);
+f128_t rf_f128_max_value(void);
+
+// Transcendental functions - full precision via LibBF
+f128_t rf_f128_sin(f128_t x);
+f128_t rf_f128_cos(f128_t x);
+f128_t rf_f128_tan(f128_t x);
+f128_t rf_f128_asin(f128_t x);
+f128_t rf_f128_acos(f128_t x);
+f128_t rf_f128_atan(f128_t x);
+f128_t rf_f128_atan2(f128_t y, f128_t x);
+
+// Hyperbolic functions
+f128_t rf_f128_sinh(f128_t x);
+f128_t rf_f128_cosh(f128_t x);
+f128_t rf_f128_tanh(f128_t x);
+f128_t rf_f128_asinh(f128_t x);
+f128_t rf_f128_acosh(f128_t x);
+f128_t rf_f128_atanh(f128_t x);
+
+// Exponential and logarithmic functions
+f128_t rf_f128_exp(f128_t x);
+f128_t rf_f128_exp2(f128_t x);
+f128_t rf_f128_expm1(f128_t x);
+f128_t rf_f128_log(f128_t x);
+f128_t rf_f128_log2(f128_t x);
+f128_t rf_f128_log10(f128_t x);
+f128_t rf_f128_log1p(f128_t x);
+
+// Power functions
+f128_t rf_f128_pow(f128_t base, f128_t exp);
+f128_t rf_f128_cbrt(f128_t x);
+f128_t rf_f128_hypot(f128_t x, f128_t y);
+
+// Rounding functions
+f128_t rf_f128_floor(f128_t x);
+f128_t rf_f128_ceil(f128_t x);
+f128_t rf_f128_trunc(f128_t x);
+f128_t rf_f128_round(f128_t x);
+f128_t rf_f128_fmod(f128_t x, f128_t y);
 
 #ifdef __cplusplus
 }

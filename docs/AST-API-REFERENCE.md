@@ -196,7 +196,7 @@ public record BinaryExpression(
 **Supported Operators:**
 
 - **Arithmetic**: `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `Power`
-- **Comparison**: `Equal`, `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual`
+- **Comparison**: `Equal`, `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual`, `ThreeWayComparison`
 - **Logical**: `And`, `Or`
 - **Bitwise**: `BitwiseAnd`, `BitwiseOr`, `BitwiseXor`, `LeftShift`, `RightShift`
 - **Membership**: `In`, `NotIn`, `Is`, `IsNot`, `Follows`, `NotFollows`
@@ -234,7 +234,6 @@ public record UnaryExpression(
 
 **Supported Operators:**
 
-- `Plus`: Unary plus
 - `Minus`: Negation
 - `Not`: Logical NOT
 - `BitwiseNot`: Bitwise complement
@@ -254,7 +253,7 @@ public record ChainedComparisonExpression(
 **Example in RazorForge:**
 
 ```razorforge
-1 < x < 10  // Equivalent to: 1 < x && x < 10
+1 < x < 10  # Equivalent to: 1 < x and x < 10
 ```
 
 **Usage:**
@@ -332,7 +331,7 @@ public record ConditionalExpression(
 ) : Expression(Location);
 ```
 
-**Example:** `condition ? trueValue : falseValue`
+**Example:** `if condition then trueValue else falseValue`
 
 #### LambdaExpression
 
@@ -938,8 +937,10 @@ public record ExternalDeclaration(
 **Example:**
 
 ```razorforge
-external("C") routine malloc(size: uaddr) -> cptr<cvoid>
+imported("C") routine malloc(size: uaddr) -> Snatched<cvoid>
 ```
+
+**Note:** The language keyword is `imported`, but the AST node is still named `ExternalDeclaration`.
 
 ---
 
@@ -1049,7 +1050,7 @@ var declaration = new VariableDeclaration(
         Right: new LiteralExpression(2, TokenType.IntLiteral, location),
         Location: location
     ),
-    Visibility: VisibilityModifier.Private,
+    Visibility: VisibilityModifier.Public,
     IsMutable: true,
     Location: location
 );

@@ -9,9 +9,9 @@
 #   let front = queue.pop_front!()
 #   let back = queue.pop_back!()
 
-import memory/DynamicSlice
-import memory/MemorySize
-import errors/IndexOutOfBoundsError
+import memory.DynamicSlice
+import memory.MemorySize
+import errors.IndexOutOfBoundsError
 import Runtime/CompilerService
 
 namespace Collections
@@ -229,20 +229,6 @@ requires I follows Integral {
     let idx = index.resolve(me.count)
     let physical_idx = me.physical_index(idx)
     me.write_at(physical_idx, value)
-}
-
-# ============================================================================
-# Legacy get/set methods
-# ============================================================================
-
-routine Deque<T>.get!<I>(me: Deque<T>, index: I) -> T
-requires I follows Integral {
-    return me.__getitem__!(index)
-}
-
-routine Deque<T>.set!<I>(me: Deque<T>, index: I, value: T)
-requires I follows Integral {
-    me.__setitem__!(index, value)
 }
 
 # ============================================================================

@@ -247,19 +247,19 @@ routine S32.__mul_wrap__(you: S32) -> S32 {
 
 routine S32.__add_sat__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.add.saturating<i32>(me, you)
+        return @intrinsic.add.saturate<i32>(me, you)
     }
 }
 
 routine S32.__sub_sat__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.sub.saturating<i32>(me, you)
+        return @intrinsic.sub.saturate<i32>(me, you)
     }
 }
 
 routine S32.__mul_sat__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.mul.saturating<i32>(me, you)
+        return @intrinsic.mul.saturate<i32>(me, you)
     }
 }
 
@@ -353,9 +353,9 @@ routine S32.__pow_sat__!(exp: S32) -> S32 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturating<i32>(result, base)
+                result = @intrinsic.mul.saturate<i32>(result, base)
             }
-            base = @intrinsic.mul.saturating<i32>(base, base)
+            base = @intrinsic.mul.saturate<i32>(base, base)
             e = e >> 1
         }
         return result

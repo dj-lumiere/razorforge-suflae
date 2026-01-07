@@ -229,19 +229,19 @@ routine U64.__mul_wrap__(you: U64) -> U64 {
 
 routine U64.__add_sat__(you: U64) -> U64 {
     danger! {
-        return @intrinsic.add.saturating<i64>(me, you)
+        return @intrinsic.add.saturate<i64>(me, you)
     }
 }
 
 routine U64.__sub_sat__(you: U64) -> U64 {
     danger! {
-        return @intrinsic.sub.saturating<i64>(me, you)
+        return @intrinsic.sub.saturate<i64>(me, you)
     }
 }
 
 routine U64.__mul_sat__(you: U64) -> U64 {
     danger! {
-        return @intrinsic.mul.saturating<i64>(me, you)
+        return @intrinsic.mul.saturate<i64>(me, you)
     }
 }
 
@@ -328,9 +328,9 @@ routine U64.__pow_sat__!(exp: U64) -> U64 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturating<i64>(result, base)
+                result = @intrinsic.mul.saturate<i64>(result, base)
             }
-            base = @intrinsic.mul.saturating<i64>(base, base)
+            base = @intrinsic.mul.saturate<i64>(base, base)
             e = e >> 1
         }
         return result

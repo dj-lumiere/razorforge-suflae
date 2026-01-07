@@ -3,7 +3,7 @@
 namespace Core
 # Core S128 type definition - maps to LLVM i128
 record S128 {
-    public value: LlvmNativeI128
+    public value: @intrinsic.i128
 }
 
 # Constants for S128 limits
@@ -215,19 +215,19 @@ routine S128.__mul_wrap__(you: S128) -> S128 {
 
 routine S128.__add_sat__(you: S128) -> S128 {
     danger! {
-        return @intrinsic.add.saturating<i128>(me, you)
+        return @intrinsic.add.saturate<i128>(me, you)
     }
 }
 
 routine S128.__sub_sat__(you: S128) -> S128 {
     danger! {
-        return @intrinsic.sub.saturating<i128>(me, you)
+        return @intrinsic.sub.saturate<i128>(me, you)
     }
 }
 
 routine S128.__mul_sat__(you: S128) -> S128 {
     danger! {
-        return @intrinsic.mul.saturating<i128>(me, you)
+        return @intrinsic.mul.saturate<i128>(me, you)
     }
 }
 
@@ -323,9 +323,9 @@ routine S128.__pow_sat__!(exp: S128) -> S128 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturating<i128>(result, base)
+                result = @intrinsic.mul.saturate<i128>(result, base)
             }
-            base = @intrinsic.mul.saturating<i128>(base, base)
+            base = @intrinsic.mul.saturate<i128>(base, base)
             e = e >> 1
         }
         return result

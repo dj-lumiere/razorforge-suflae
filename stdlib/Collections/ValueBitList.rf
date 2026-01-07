@@ -9,7 +9,7 @@
 #   # To "modify", use with statement:
 #   let toggled = flags with { [0]: true }
 
-import errors/IndexOutOfBoundsError
+import errors.IndexOutOfBoundsError
 
 namespace Collections
 
@@ -41,15 +41,6 @@ routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: BackIndex<I>
 requires I follows Integral {
     let idx = index.resolve(N)
     return me[idx]
-}
-
-# ============================================================================
-# Legacy get method
-# ============================================================================
-
-routine ValueBitList<N>.get!<I>(me: ValueBitList<N>, index: I) -> Bool
-requires I follows Integral {
-    return me.__getitem__!(index)
 }
 
 # ============================================================================

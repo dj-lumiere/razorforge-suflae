@@ -1,502 +1,182 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+namespace Compilers.Analysis;
 
-namespace Compilers.Shared.Analysis;
+using Compilers.Analysis.Enums;
+using Compilers.Analysis.Inference;
+using Compilers.Analysis.Results;
+using Compilers.Analysis.Scopes;
+using Compilers.Analysis.Symbols;
+using Compilers.Analysis.Types;
+using Compilers.Shared.AST;
+using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
 
 /// <summary>
-/// Comprehensive semantic analyzer for RazorForge and Suflae languages.
-///
-/// This analyzer performs multi-phase semantic analysis combining:
-/// <list type="bullet">
-/// <item>Traditional type checking and symbol resolution</item>
-/// <item>Advanced memory safety analysis with ownership tracking</item>
-/// <item>Language-specific behavior handling (RazorForge vs Suflae)</item>
-/// <item>Memory operation validation (retain, share, track, etc.)</item>
-/// <item>Cross-language compatibility checking</item>
-/// </list>
-///
-/// The analyzer integrates tightly with the MemoryAnalyzer to enforce
-/// RazorForge's explicit memory model and Suflae's automatic RC model.
-/// It validates memory operations, tracks object ownership, and prevents
-/// use-after-invalidation errors during compilation.
-///
-/// Key responsibilities:
-/// <list type="bullet">
-/// <item>Type compatibility checking with mixed-type arithmetic rejection</item>
-/// <item>Symbol table management with proper lexical scoping</item>
-/// <item>Memory operation method call detection and validation</item>
-/// <item>Usurping function rule enforcement</item>
-/// <item>Container move semantics vs automatic RC handling</item>
-/// <item>Wrapper type creation and transformation tracking</item>
-/// </list>
+/// Semantic analyzer for RazorForge and Suflae programs.
+/// Performs type checking, scope analysis, and inference for:
+/// - Method mutation (readonly/writable/migratable)
+/// - Migratable modification tracking (buffer relocation detection)
+/// - Error handling variant generation (try_/check_/lookup_)
 /// </summary>
-public partial class SemanticAnalyzer : IAstVisitor<object?>
+public sealed partial class SemanticAnalyzer
 {
-    #region field and property definition
+    #region Fields
 
-    /// <summary>Symbol table for variable, function, and type declarations</summary>
-    private readonly SymbolTable _symbolTable;
+    /// <summary>The type registry for storing and looking up types.</summary>
+    private readonly TypeRegistry _registry;
 
-    /// <summary>Memory safety analyzer for ownership tracking and memory operations</summary>
-    private readonly MemoryAnalyzer _memoryAnalyzer;
+    /// <summary>Call graph for mutation inference.</summary>
+    private readonly CallGraph _callGraph = new();
 
-    /// <summary>List of semantic errors found during analysis</summary>
-    private readonly List<SemanticError> _errors;
+    /// <summary>Mutation inference engine.</summary>
+    private MutationInference? _mutationInference;
 
-    /// <summary>Target language (RazorForge or Suflae) for language-specific behavior</summary>
-    private readonly Language _language;
+    /// <summary>Current call graph node for the routine being analyzed.</summary>
+    private CallGraphNode? _currentCallGraphNode;
 
-    /// <summary>Language mode for additional behavior customization</summary>
-    private readonly LanguageMode _mode;
+    /// <summary>Errors collected during analysis.</summary>
+    private readonly List<SemanticError> _errors = [];
 
-    /// <summary>Module resolver for handling imports</summary>
-    private readonly ModuleResolver _moduleResolver;
-
-    /// <summary>Source file name for error reporting</summary>
-    public readonly string? _fileName;
-
-    /// <summary>Tracks whether we're currently inside a danger block</summary>
-    private bool _isInDangerMode = false;
-
-    /// <summary>Tracks whether we're currently inside a 'when' expression condition</summary>
-    private bool _isInWhenCondition = false;
-
-    /// <summary>Tracks whether we're currently inside a usurping function that can return Hijacked tokens</summary>
-    private bool _isInUsurpingFunction = false;
+    /// <summary>Warnings collected during analysis.</summary>
+    private readonly List<SemanticWarning> _warnings = [];
 
     /// <summary>
-    /// Tracks scoped token variables that cannot escape their scope.
-    /// Maps token variable name to the scope depth where it was created.
-    /// These tokens (Viewed, Hijacked, Seized, Inspected) cannot be:
-    /// - Assigned to variables outside the scoped statement
-    /// - Returned from non-usurping functions
-    /// - Passed to functions (unless consumed immediately)
+    /// Parsed literal values for types requiring native library parsing.
+    /// Keyed by source location for code generator lookup.
     /// </summary>
-    private readonly Dictionary<string, int> _scopedTokens = new();
+    private readonly Dictionary<SourceLocation, ParsedLiteral> _parsedLiterals = new();
 
-    /// <summary>Current scope depth for tracking scoped tokens</summary>
-    private int _scopeDepth = 0;
+    /// <summary>Current function being analyzed (for return type checking).</summary>
+    private RoutineInfo? _currentRoutine;
 
-    /// <summary>
-    /// Tracks source variables that are temporarily invalidated during scoped access.
-    /// Maps source variable name to (scope depth, access type).
-    /// When a source is invalidated, it cannot be used until the scoped statement exits.
-    ///
-    /// Examples:
-    /// - viewing x as v { ... } - x is invalidated (cannot read or write)
-    /// - hijacking x as h { ... } - x is invalidated (cannot read or write)
-    /// - seizing shared_x as s { ... } - shared_x is invalidated (lock held)
-    /// - inspecting shared_x as o { ... } - shared_x is invalidated (lock held)
-    /// </summary>
-    private readonly Dictionary<string, (int scopeDepth, string accessType)> _invalidatedSources =
-        new();
+    /// <summary>Current type being analyzed (for me reference resolution).</summary>
+    private TypeSymbol? _currentType;
+
+    /// <summary>Danger block nesting depth (0 = not in danger block, >0 = inside danger block).</summary>
+    private int _dangerBlockDepth;
+
+    /// <summary>Gets whether we're currently inside a danger block.</summary>
+    private bool InDangerBlock => _dangerBlockDepth > 0;
+
+    /// <summary>The source file path of the program being analyzed (for import resolution).</summary>
+    private string _currentFilePath = string.Empty;
+
+    #endregion
+
+    #region Constructor
 
     /// <summary>
-    /// Tracks modules whose symbols have already been registered to prevent duplicate registration.
-    /// This is needed because transitive dependencies may be imported multiple times through different paths.
+    /// Initializes a new instance of the <see cref="SemanticAnalyzer"/> class.
     /// </summary>
-    private readonly HashSet<string> _processedModules = new();
-
-    /// <summary>
-    /// Expected type context for type inference (e.g., inferring literal types from context).
-    /// When visiting an expression, this contains the expected type if known.
-    /// Used for Bug 12.10 fix: integer literal type inference.
-    /// </summary>
-    private TypeInfo? _expectedType = null;
-
-    /// <summary>
-    /// Cache of type field declarations for member access resolution.
-    /// Maps type name to a dictionary of field name -> field type info.
-    /// Used by VisitMemberExpression to look up field types.
-    /// </summary>
-    private readonly Dictionary<string, Dictionary<string, TypeInfo>> _typeFieldCache = new();
-
-    /// <summary>
-    /// Current namespace for the file being analyzed.
-    /// Set by NamespaceDeclaration at the top of a file.
-    /// Used to distinguish namespace-qualified functions from type methods.
-    /// </summary>
-    private string? _currentNamespace = null;
-
-    /// <summary>
-    /// Gets the symbol table containing all resolved symbols.
-    /// Useful for code generation to access function and type information.
-    /// </summary>
-    public SymbolTable SymbolTable => _symbolTable;
-
-    /// <summary>
-    /// Gets the current namespace for the file being analyzed.
-    /// Returns null if no namespace is declared.
-    /// </summary>
-    public string? CurrentNamespace => _currentNamespace;
-
-    /// <summary>
-    /// Gets the loaded module information including ASTs.
-    /// Used by code generator to compile imported module functions.
-    /// </summary>
-    public IReadOnlyDictionary<string, ModuleResolver.ModuleInfo> LoadedModules =>
-        _moduleResolver.ModuleCache;
-
-    /// <summary>
-    /// Get all semantic and memory safety errors discovered during analysis.
-    /// Combines traditional semantic errors with memory safety violations
-    /// from the integrated memory analyzer for comprehensive error reporting.
-    /// </summary>
-    public List<SemanticError> Errors
+    /// <param name="language">The language being analyzed (RazorForge or Suflae).</param>
+    public SemanticAnalyzer(Language language)
     {
-        get
-        {
-            var allErrors = new List<SemanticError>(collection: _errors);
-            // Convert memory safety violations to semantic errors for unified reporting
-            allErrors.AddRange(collection: _memoryAnalyzer.Errors.Select(selector: me =>
-                new SemanticError(Message: me.Message, Location: me.Location)));
-            return allErrors;
-        }
+        _registry = new TypeRegistry(language: language);
     }
 
     #endregion
 
-    /// <summary>
-    /// Initialize semantic analyzer with integrated memory safety analysis.
-    /// Sets up both traditional semantic analysis and memory model enforcement
-    /// based on the target language's memory management strategy.
-    /// </summary>
-    /// <param name="language">Target language (RazorForge or Suflae)</param>
-    /// <param name="mode">Language mode for behavior customization</param>
-    /// <param name="searchPaths">Optional custom search paths for module resolution</param>
-    /// <param name="fileName">Source file name for error reporting</param>
-    public SemanticAnalyzer(Language language, LanguageMode mode, List<string>? searchPaths = null,
-        string? fileName = null)
-    {
-        _symbolTable = new SymbolTable();
-        _memoryAnalyzer = new MemoryAnalyzer(language: language, mode: mode);
-        _moduleResolver =
-            new ModuleResolver(language: language, mode: mode, searchPaths: searchPaths);
-        _errors = new List<SemanticError>();
-        _language = language;
-        _mode = mode;
-        _fileName = fileName;
+    #region Public API
 
-        InitializeBuiltInTypes();
-        LoadCorePrelude(searchPaths);
+    /// <summary>
+    /// Analyzes a complete program AST.
+    /// </summary>
+    /// <param name="program">The program to analyze.</param>
+    /// <param name="filePath">Optional source file path for import resolution.</param>
+    /// <returns>Analysis result containing errors, warnings, and the populated type registry.</returns>
+    public AnalysisResult Analyze(Program program, string? filePath = null)
+    {
+        // Store file path for import resolution
+        _currentFilePath = filePath ?? program.Location.FileName ?? string.Empty;
+
+        // Phase 1: Collect all type and routine declarations (forward declarations)
+        CollectDeclarations(program: program);
+
+        // Phase 2: Resolve type bodies (fields, method signatures)
+        ResolveTypeBodies(program: program);
+
+        // Phase 2.5: Resolve routine signatures (parameter types, protocol-as-type desugaring)
+        ResolveRoutineSignatures(program: program);
+
+        // Phase 2.6: Generate derived comparison operators (__ne__ from __eq__, __lt__/__le__/__gt__/__ge__ from __cmp__)
+        GenerateDerivedOperators();
+
+        // Phase 3: Analyze routine bodies and expressions
+        AnalyzeBodies(program: program);
+
+        // Phase 4: Mutation inference (call graph propagation)
+        InferMutationCategories();
+
+        // Phase 5: Error handling variant generation
+        GenerateErrorHandlingVariants();
+
+        return new AnalysisResult(
+            Registry: _registry,
+            Errors: _errors.AsReadOnly(),
+            Warnings: _warnings.AsReadOnly(),
+            ParsedLiterals: _parsedLiterals);
     }
 
     /// <summary>
-    /// Initialize built-in types for the RazorForge language.
-    /// Registers primitive types only - stdlib types are loaded via imports.
+    /// Gets the type registry after analysis.
     /// </summary>
-    private void InitializeBuiltInTypes()
+    public TypeRegistry Registry => _registry;
+
+    /// <summary>
+    /// Gets all errors collected during analysis.
+    /// </summary>
+    public IReadOnlyList<SemanticError> Errors => _errors;
+
+    /// <summary>
+    /// Gets all warnings collected during analysis.
+    /// </summary>
+    public IReadOnlyList<SemanticWarning> Warnings => _warnings;
+
+    #endregion
+
+    #region Error Reporting
+
+    /// <summary>
+    /// Reports a semantic error.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="location">The source location of the error.</param>
+    private void ReportError(string message, SourceLocation location)
     {
-        // Note: DynamicSlice and TemporarySlice are now loaded from stdlib imports
-        // They are no longer registered as built-in types to avoid conflicts.
-
-        // Register primitive types
-        RegisterPrimitiveType(typeName: "uaddr");
-        RegisterPrimitiveType(typeName: "saddr");
-        RegisterPrimitiveType(typeName: "u8");
-        RegisterPrimitiveType(typeName: "u16");
-        RegisterPrimitiveType(typeName: "u32");
-        RegisterPrimitiveType(typeName: "u64");
-        RegisterPrimitiveType(typeName: "u128");
-        RegisterPrimitiveType(typeName: "s8");
-        RegisterPrimitiveType(typeName: "s16");
-        RegisterPrimitiveType(typeName: "s32");
-        RegisterPrimitiveType(typeName: "s64");
-        RegisterPrimitiveType(typeName: "s128");
-        RegisterPrimitiveType(typeName: "f16");
-        RegisterPrimitiveType(typeName: "f32");
-        RegisterPrimitiveType(typeName: "f64");
-        RegisterPrimitiveType(typeName: "f128");
-        RegisterPrimitiveType(typeName: "d32");
-        RegisterPrimitiveType(typeName: "d64");
-        RegisterPrimitiveType(typeName: "d128");
-        RegisterPrimitiveType(typeName: "bool");
-        RegisterPrimitiveType(typeName: "letter");
-        RegisterPrimitiveType(typeName: "letter8");
-        RegisterPrimitiveType(typeName: "letter16");
-
-        // Note: Crashable, Maybe, and error types are loaded from prelude modules
-        // (ErrorHandling/Maybe, errors/Crashable, errors/common, etc.)
-        // They are no longer hardcoded here.
+        _errors.Add(item: new SemanticError(Message: message, Location: location));
     }
 
     /// <summary>
-    /// Helper method to register a primitive type.
+    /// Reports a semantic warning.
     /// </summary>
-    private void RegisterPrimitiveType(string typeName)
+    /// <param name="message">The warning message.</param>
+    /// <param name="location">The source location of the warning.</param>
+    private void ReportWarning(string message, SourceLocation location)
     {
-        var typeInfo = PrimitiveTypes.GetTypeInfo(typeName);
-        var typeSymbol = new TypeSymbol(Name: typeName,
-            TypeInfo: typeInfo,
-            Visibility: VisibilityModifier.Public);
-        _symbolTable.TryDeclare(symbol: typeSymbol);
+        _warnings.Add(item: new SemanticWarning(Message: message, Location: location));
     }
 
-    /// <summary>
-    /// Sets the ResolvedType on an expression node and returns the type.
-    /// This should be called at the end of each expression visitor to ensure
-    /// type information flows through to code generation.
-    /// </summary>
-    /// <param name="expr">The expression node to set the type on</param>
-    /// <param name="type">The resolved type (may be null)</param>
-    /// <returns>The type that was set</returns>
-    protected TypeInfo? SetResolvedType(Expression expr, TypeInfo? type)
+    #endregion
+
+    #region Helper Methods
+
+    private string? GetCurrentNamespace()
     {
-        expr.ResolvedType = type;
-        return type;
-    }
+        Scope? current = _registry.CurrentScope;
+        var namespaces = new List<string>();
 
-    /// <summary>
-    /// Creates a TypeInfo for a primitive type with proper protocol information.
-    /// </summary>
-    protected TypeInfo GetPrimitiveTypeInfo(string typeName)
-    {
-        return PrimitiveTypes.GetTypeInfo(typeName);
-    }
-
-    /// <summary>
-    /// Performs semantic analysis on the entire program.
-    /// Validates all declarations, statements, and expressions in the AST.
-    /// </summary>
-    /// <param name="program">The program AST to analyze</param>
-    /// <returns>List of semantic errors found during analysis</returns>
-    public List<SemanticError> Analyze(AST.Program program)
-    {
-        program.Accept(visitor: this);
-        return Errors;
-    }
-
-    // Program
-    /// <summary>
-    /// Visits a program node and analyzes all top-level declarations.
-    /// Automatically loads prelude modules before processing user code.
-    /// </summary>
-    /// <param name="node">Program node containing all declarations</param>
-    /// <returns>Null</returns>
-    public object? VisitProgram(AST.Program node)
-    {
-        // Validate namespace rules BEFORE processing declarations
-        ValidateNamespaceRules(node);
-
-        // Load prelude modules (Maybe, Crashable, common error types)
-        LoadPrelude();
-
-        foreach (IAstNode declaration in node.Declarations)
+        while (current != null)
         {
-            declaration.Accept(visitor: this);
-        }
-
-        // Validate entry point after processing all declarations
-        ValidateEntryPoint(node);
-
-        return null;
-    }
-
-    /// <summary>
-    /// Validates that the program has a valid entry point named 'start'.
-    /// The entry point is always crash-capable (can use throw/absent without special attributes).
-    /// </summary>
-    /// <param name="node">The program node</param>
-    private void ValidateEntryPoint(AST.Program node)
-    {
-        // Look for a function named 'start'
-        var startFunction = node.Declarations
-            .OfType<FunctionDeclaration>()
-            .FirstOrDefault(f => f.Name == "start");
-
-        if (startFunction == null)
-        {
-            // No entry point found - this might be a library, so just warn
-            // (We could make this an error for executables vs libraries based on compilation mode)
-            return;
-        }
-
-        // Validate signature: start() should have no required parameters
-        if (startFunction.Parameters.Any(p => p.DefaultValue == null))
-        {
-            AddError(location: startFunction.Location,
-                message: "Entry point 'start()' must not have required parameters. All parameters must have default values.");
-        }
-
-        // Validate return type: start() should return Blank (void) or have no explicit return type
-        if (startFunction.ReturnType != null && startFunction.ReturnType is TypeExpression typeExpr)
-        {
-            string returnTypeName = typeExpr.Name;
-            if (returnTypeName != "Blank" && returnTypeName != "void")
+            if (current is { Kind: ScopeKind.Namespace, Name: not null })
             {
-                AddError(location: startFunction.Location,
-                    message: $"Entry point 'start()' must return Blank or have no return type, found '{returnTypeName}'.");
-            }
-        }
-
-        // Note: start() is ALWAYS crash-capable, so using throw/absent is allowed without special attributes
-    }
-
-    /// <summary>
-    /// Validates namespace rules for the file being analyzed.
-    /// - Stdlib files MUST have explicit namespace declaration (compile error if missing)
-    /// - Project root files have global namespace (null) if no declaration
-    /// - Project subdirectory files get inferred namespace from path if no declaration
-    /// </summary>
-    /// <param name="node">The program node</param>
-    private void ValidateNamespaceRules(AST.Program node)
-    {
-        // Check if file has an explicit namespace declaration
-        var namespaceDecl = node.Declarations
-            .OfType<NamespaceDeclaration>()
-            .FirstOrDefault();
-
-        bool hasExplicitNamespace = namespaceDecl != null;
-
-        // Determine if this is a stdlib file
-        bool isStdlib = _fileName != null && _moduleResolver.IsStdlibFile(_fileName);
-
-        if (isStdlib)
-        {
-            // Stdlib files MUST have explicit namespace
-            if (!hasExplicitNamespace)
-            {
-                AddError(
-                    location: new SourceLocation(FileName: _fileName ?? "", Line: 1, Column: 1, Position: 0),
-                    message: $"Standard library file '{Path.GetFileName(_fileName)}' must declare an explicit namespace. " +
-                             "Add 'namespace YourNamespace' at the top of the file.");
-                return;
+                namespaces.Insert(index: 0, item: current.Name);
             }
 
-            // Use the explicitly declared namespace
-            _currentNamespace = namespaceDecl!.Path;
+            current = current.Parent;
         }
-        else
-        {
-            // Project file
-            if (hasExplicitNamespace)
-            {
-                // Use the explicitly declared namespace
-                _currentNamespace = namespaceDecl!.Path;
-            }
-            else
-            {
-                // Infer namespace from file path
-                if (_fileName != null)
-                {
-                    _currentNamespace = _moduleResolver.InferNamespaceFromPath(_fileName);
-                }
-                // else: stays null (global namespace)
-            }
-        }
+
+        return namespaces.Count > 0
+            ? string.Join(separator: ".", values: namespaces)
+            : null;
     }
 
-    /// <summary>
-    /// Loads prelude modules that are automatically available without explicit import.
-    /// Includes Maybe, Crashable, and common error types.
-    /// For Suflae, also includes Integer, Decimal, Console, and Collections.
-    /// Note: Result/Lookup are NOT preluded as they are for immediate pattern matching, not storage.
-    /// </summary>
-    private void LoadPrelude()
-    {
-        // Common prelude modules for both languages
-        // NOTE: Complex modules like Text, List, Range are NOT loaded by default
-        // because the code generator doesn't yet handle all their constructs.
-        // Users must explicitly import them when needed.
-        var preludeModules = new List<string>
-        {
-            // Memory types (simple records)
-            "memory/DynamicSlice",
-            "memory/MemorySize",
-            // Error handling (simple types)
-            "ErrorHandling/Maybe",
-            "errors/Crashable",
-            "errors/common"
-        };
-
-        // Suflae-specific prelude: auto-import Integer, Decimal, Console, and Collections
-        // These are the default types for Suflae's high-level programming model
-        if (_language == Language.Suflae)
-        {
-            preludeModules.AddRange(collection: new[]
-            {
-                // Arbitrary precision numeric types (Suflae defaults)
-                "Integer",
-                "Decimal",
-                "Fraction",
-                // Console I/O
-                "Console",
-                // Text
-                "Text/Text",
-                // Collections - Dynamic (heap-allocated, growable)
-                "Collections/List",
-                "Collections/Dict",
-                "Collections/Set",
-                "Collections/Deque",
-                "Collections/BitList",
-                "Collections/PriorityQueue",
-                "Collections/SortedDict",
-                "Collections/SortedList",
-                "Collections/SortedSet",
-                // Collections - Fixed capacity (heap-allocated, fixed size)
-                "Collections/FixedList",
-                "Collections/FixedDict",
-                "Collections/FixedSet",
-                "Collections/FixedDeque",
-                "Collections/FixedBitList",
-                // Collections - Value types (stack-allocated)
-                "Collections/ValueList",
-                "Collections/ValueBitList",
-                "Collections/ValueTuple",
-                // Collections - Tuple
-                "Collections/Tuple"
-            });
-        }
-
-        foreach (string modulePath in preludeModules)
-        {
-            try
-            {
-                // Load module with all its transitive dependencies
-                // This ensures types like DataHandle (imported by Maybe) are available
-                List<ModuleResolver.ModuleInfo> modules =
-                    _moduleResolver.LoadModuleWithDependencies(importPath: modulePath);
-
-                // Register declarations from all loaded modules
-                foreach (ModuleResolver.ModuleInfo moduleInfo in modules)
-                {
-                    RegisterPreludeDeclarations(ast: moduleInfo.Ast);
-                }
-            }
-            catch (ModuleException)
-            {
-                // Silently ignore missing prelude modules during development
-                // In production, these should always exist
-            }
-        }
-    }
-
-    /// <summary>
-    /// Loads the core prelude - all files that declare "namespace core".
-    /// These files are automatically available without explicit imports.
-    /// Includes primitive type wrappers (uaddr, saddr, s64, etc.), core protocols, and fundamental error types.
-    /// </summary>
-    private void LoadCorePrelude(List<string>? searchPaths)
-    {
-        // Find the stdlib path from search paths
-        string? stdlibPath = searchPaths?.FirstOrDefault();
-        if (stdlibPath == null)
-        {
-            // No stdlib path provided - core prelude won't be loaded
-            return;
-        }
-
-        var preludeLoader = new CorePreludeLoader(stdlibPath, _language);
-        var coreModules = preludeLoader.LoadCorePrelude();
-
-        // Register all core prelude modules into the module cache
-        foreach (var (moduleKey, moduleInfo) in coreModules)
-        {
-            // Add to module resolver's cache so they're available for imports
-            _moduleResolver.AddToCache(moduleKey, moduleInfo);
-
-            // Register all declarations from the core module into the symbol table
-            RegisterPreludeDeclarations(ast: moduleInfo.Ast);
-        }
-    }
+    #endregion
 }

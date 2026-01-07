@@ -13,10 +13,10 @@
 #       # Iterates in sorted key order
 #   }
 
-import memory/DynamicSlice
-import memory/MemorySize
-import errors/IndexOutOfBoundsError
-import Collections/List
+import memory.DynamicSlice
+import memory.MemorySize
+import errors.IndexOutOfBoundsError
+import Collections.List
 
 namespace Collections
 
