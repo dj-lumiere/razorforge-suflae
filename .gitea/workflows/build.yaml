@@ -24,6 +24,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build
 
+      - name: Download native libraries
+        run: |
+          cd native
+
+          # Intel Decimal Floating-Point Math Library (BSD-3-Clause)
+          echo "Downloading Intel Decimal..."
+          curl -L -o inteldecimal.tar.gz "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/72d90ce0-e6ed-40f0-8a44-2fd52b66e649/intelr-decimal-floating-point-math-library-2.2-update-2.tar.gz"
+          mkdir -p inteldecimal
+          tar -xzf inteldecimal.tar.gz -C inteldecimal --strip-components=1
+          rm inteldecimal.tar.gz
+
+          # LibBF - Arbitrary precision floating point (MIT)
+          echo "Downloading LibBF..."
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2021-04-10.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+
+          # LibTomMath - Arbitrary precision integers (Public Domain)
+          echo "Cloning LibTomMath..."
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+
+          # MAPM - Arbitrary precision decimals (Freeware)
+          echo "Cloning MAPM..."
+          git clone --depth 1 https://github.com/LuaDist/mapm.git mapm
+
       - name: Restore dependencies
         run: dotnet restore
 
