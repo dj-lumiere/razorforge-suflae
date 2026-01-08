@@ -29,8 +29,9 @@ jobs:
           cd native
 
           # Intel Decimal Floating-Point Math Library (BSD-3-Clause)
+          # Using netlib mirror since Intel's download center requires authentication
           echo "Downloading Intel Decimal..."
-          curl -L -o inteldecimal.tar.gz "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/72d90ce0-e6ed-40f0-8a44-2fd52b66e649/intelr-decimal-floating-point-math-library-2.2-update-2.tar.gz"
+          curl -L -o inteldecimal.tar.gz "https://netlib.org/misc/intel/IntelRDFPMathLib20U2.tar.gz"
           mkdir -p inteldecimal
           tar -xzf inteldecimal.tar.gz -C inteldecimal --strip-components=1
           rm inteldecimal.tar.gz
