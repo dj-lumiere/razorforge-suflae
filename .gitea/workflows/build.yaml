@@ -31,14 +31,14 @@ jobs:
           # Intel Decimal Floating-Point Math Library (BSD-3-Clause)
           # Using netlib mirror since Intel's download center requires authentication
           echo "Downloading Intel Decimal..."
-          curl -L -o inteldecimal.tar.gz "https://netlib.org/misc/intel/IntelRDFPMathLib20U2.tar.gz"
+          curl -L -o inteldecimal.tar.gz "http://www.netlib.org/misc/intel/IntelRDFPMathLib20U2.tar.gz"
           mkdir -p inteldecimal
           tar -xzf inteldecimal.tar.gz -C inteldecimal --strip-components=1
           rm inteldecimal.tar.gz
 
           # LibBF - Arbitrary precision floating point (MIT)
           echo "Downloading LibBF..."
-          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2021-04-10.tar.gz"
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
           mkdir -p libbf
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
