@@ -19,38 +19,24 @@
 /// </remarks>
 public enum VisibilityModifier
 {
-    // RazorForge traditional visibility
-    /// <summary>Only accessible within the declaring entity</summary>
+    /// <summary>Only accessible within the declaring file</summary>
     Private,
 
-    /// <summary>Accessible within the same module/assembly</summary>
+    /// <summary>Accessible within the same module/namespace</summary>
     Internal,
 
-    /// <summary>
-    ///
-    /// </summary>
-    InternalPrivateSet,
+    /// <summary>Public read, private write (public getter, private setter)</summary>
+    Published,
 
     /// <summary>Accessible from anywhere</summary>
     Public,
-    /// <summary>
-    ///
-    /// </summary>
-    PublicInternalSet,
-    /// <summary>
-    ///
-    /// </summary>
-    PublicPrivateSet,
 
-    // Common to both languages
-    /// <summary>Globally accessible without import (both languages: global)</summary>
+    /// <summary>Globally accessible without import</summary>
     Global,
-    /// <summary>
-    ///
-    /// </summary>
+
+    /// <summary>Type-level static (class static equivalent)</summary>
     Common,
-    /// <summary>
-    ///
-    /// </summary>
+
+    /// <summary>External/FFI linkage</summary>
     Imported
 }

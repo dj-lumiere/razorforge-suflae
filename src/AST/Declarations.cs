@@ -79,7 +79,7 @@ public record GenericConstraintDeclaration(
 /// <item>Uninitialized (requires type): var x: s32</item>
 /// <item>Immutable: let x = 42 (cannot be reassigned)</item>
 /// <item>Mutable: var x = 42 (can be reassigned)</item>
-/// <item>Getter/setter: public private(set) var x = 42 (public read, private write)</item>
+/// <item>Published: published var x = 42 (public read, private write)</item>
 /// </list>
 /// </remarks>
 public record VariableDeclaration(
