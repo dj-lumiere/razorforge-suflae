@@ -1,10 +1,10 @@
 ﻿namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Symbols;
+using Types;
+using Shared.AST;
+using TypeSymbol = Types.TypeInfo;
 
 #region Numeric Type Classification
 
@@ -946,10 +946,8 @@ public sealed partial class SemanticAnalyzer
         {
             VisibilityModifier.Private => 0,
             VisibilityModifier.Internal => 1,
-            VisibilityModifier.InternalPrivateSet => 1, // Getter level is internal
+            VisibilityModifier.Published => 2, // Published has public read access
             VisibilityModifier.Public => 2,
-            VisibilityModifier.PublicInternalSet => 2, // Getter level is public
-            VisibilityModifier.PublicPrivateSet => 2, // Getter level is public
             VisibilityModifier.Global => 2,
             VisibilityModifier.Common => 2,
             VisibilityModifier.Imported => 2,
@@ -959,13 +957,11 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Validates that a field's setter visibility is equal to or more restrictive than its getter visibility.
-    /// The 6 valid combinations are:
+    /// The 4 valid combinations are:
     /// 1. public (getter: public, setter: public)
-    /// 2. public internal(set) (getter: public, setter: internal)
-    /// 3. public private(set) (getter: public, setter: private)
-    /// 4. internal (getter: internal, setter: internal)
-    /// 5. internal private(set) (getter: internal, setter: private)
-    /// 6. private (getter: private, setter: private)
+    /// 2. published (getter: public, setter: private)
+    /// 3. internal (getter: internal, setter: internal)
+    /// 4. private (getter: private, setter: private)
     /// </summary>
     /// <param name="getterVisibility">The getter/read visibility.</param>
     /// <param name="setterVisibility">The setter/write visibility (null means same as getter).</param>
@@ -992,7 +988,7 @@ public sealed partial class SemanticAnalyzer
         {
             ReportError(
                 message: $"Invalid visibility combination for field '{fieldName}': setter visibility ({setterVisibility.Value}) cannot be less restrictive than getter visibility ({getterVisibility}). " +
-                         "Valid combinations: public, public internal(set), public private(set), internal, internal private(set), private.",
+                         "Valid combinations: public, published, internal, private.",
                 location: location);
         }
     }
@@ -1074,7 +1070,6 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case VisibilityModifier.Internal:
-            case VisibilityModifier.InternalPrivateSet:
                 // Internal members are accessible within the same namespace
                 if (!IsAccessingFromSameNamespace(memberNamespace: ownerType?.Namespace))
                 {
@@ -1085,13 +1080,12 @@ public sealed partial class SemanticAnalyzer
                 }
                 break;
 
+            case VisibilityModifier.Published:
             case VisibilityModifier.Public:
-            case VisibilityModifier.PublicInternalSet:
-            case VisibilityModifier.PublicPrivateSet:
             case VisibilityModifier.Global:
             case VisibilityModifier.Common:
             case VisibilityModifier.Imported:
-                // Public/Global/Common/Imported members are accessible from anywhere
+                // Public/Published/Global/Common/Imported members are accessible from anywhere for reading
                 break;
         }
     }
