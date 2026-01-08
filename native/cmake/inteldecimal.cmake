@@ -65,6 +65,7 @@ if(EXISTS "${INTELDECIMAL_SRC_DIR}/bid_functions.h")
             -Wno-sometimes-uninitialized
             -Wno-unused-but-set-variable
             -Wno-unknown-pragmas
+            -fPIC
         )
     elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
         target_compile_options(inteldecimal PRIVATE

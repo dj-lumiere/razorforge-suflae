@@ -32,6 +32,7 @@ elseif(EXISTS "${LIBBF_DIR}/libbf.c")
         -Wall
         -Wno-unused-function
         -Wno-unused-variable
+        -fPIC
     )
 
     # Link math library on Unix
