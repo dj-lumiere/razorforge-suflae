@@ -424,12 +424,7 @@ public partial class RazorForgeParser
     /// <returns>A <see cref="SourceLocation"/> with the token's file, line, column, and position.</returns>
     protected SourceLocation GetLocation(Token token)
     {
-        if (fileName == null)
-        {
-            throw new ParseException(message: "Unable to find file name");
-        }
-
-        return new SourceLocation(FileName: fileName,
+        return new SourceLocation(FileName: fileName ?? "<unknown>",
             Line: token.Line,
             Column: token.Column,
             Position: token.Position);
