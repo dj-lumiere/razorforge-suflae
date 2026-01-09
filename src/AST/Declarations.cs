@@ -89,7 +89,8 @@ public record VariableDeclaration(
     VisibilityModifier Visibility,
     bool IsMutable, // var vs let
     SourceLocation Location,
-    VisibilityModifier? SetterVisibility = null) : Declaration(Location: Location)
+    VisibilityModifier? SetterVisibility = null,
+    StorageClass Storage = StorageClass.None) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
@@ -129,7 +130,8 @@ public record RoutineDeclaration(
     SourceLocation Location,
     List<string>? GenericParameters = null,
     List<GenericConstraintDeclaration>? GenericConstraints = null,
-    bool IsFailable = false)
+    bool IsFailable = false,
+    StorageClass Storage = StorageClass.None)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
