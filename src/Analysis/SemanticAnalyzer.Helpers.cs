@@ -948,8 +948,6 @@ public sealed partial class SemanticAnalyzer
             VisibilityModifier.Internal => 1,
             VisibilityModifier.Published => 2, // Published has public read access
             VisibilityModifier.Public => 2,
-            VisibilityModifier.Global => 2,
-            VisibilityModifier.Common => 2,
             VisibilityModifier.Imported => 2,
             _ => 2
         };
@@ -1082,10 +1080,8 @@ public sealed partial class SemanticAnalyzer
 
             case VisibilityModifier.Published:
             case VisibilityModifier.Public:
-            case VisibilityModifier.Global:
-            case VisibilityModifier.Common:
             case VisibilityModifier.Imported:
-                // Public/Published/Global/Common/Imported members are accessible from anywhere for reading
+                // Public/Published/Imported members are accessible from anywhere for reading
                 break;
         }
     }
