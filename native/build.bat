@@ -23,12 +23,19 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo Copying libraries to project directories...
-if not exist ..\..\bin\Debug\net9.0 mkdir ..\..\bin\Debug\net9.0
-if not exist ..\..\bin\Release\net9.0 mkdir ..\..\bin\Release\net9.0
+if not exist ..\..\bin\Debug\net10.0 mkdir ..\..\bin\Debug\net10.0
+if not exist ..\..\bin\Release\net10.0 mkdir ..\..\bin\Release\net10.0
 
-copy lib\Release\*.dll ..\..\bin\Debug\net9.0\ 2>nul
-copy lib\Release\*.dll ..\..\bin\Release\net9.0\ 2>nul
-copy bin\Release\*.dll ..\..\bin\Debug\net9.0\ 2>nul
-copy bin\Release\*.dll ..\..\bin\Release\net9.0\ 2>nul
+REM With Ninja generator, output is directly in lib\ and bin\ (no Release subfolder)
+copy lib\*.dll ..\..\bin\Debug\net10.0\ 2>nul
+copy lib\*.dll ..\..\bin\Release\net10.0\ 2>nul
+copy bin\*.dll ..\..\bin\Debug\net10.0\ 2>nul
+copy bin\*.dll ..\..\bin\Release\net10.0\ 2>nul
+
+REM Also try Release subfolder in case using Visual Studio generator
+copy lib\Release\*.dll ..\..\bin\Debug\net10.0\ 2>nul
+copy lib\Release\*.dll ..\..\bin\Release\net10.0\ 2>nul
+copy bin\Release\*.dll ..\..\bin\Debug\net10.0\ 2>nul
+copy bin\Release\*.dll ..\..\bin\Release\net10.0\ 2>nul
 
 echo Native libraries built successfully!
