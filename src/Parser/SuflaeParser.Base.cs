@@ -66,7 +66,8 @@ public partial class SuflaeParser
         }
 
         Token current = CurrentToken;
-        throw new ParseException(message: $"{errorMessage}. Expected {type}, got {current.Type}.");
+        throw new ParseException($"{errorMessage}. Expected {type}, got {current.Type}.",
+            fileName, current.Line, current.Column);
     }
 
     /// <summary>
@@ -378,6 +379,28 @@ public partial class SuflaeParser
             Line: token.Line,
             Column: token.Column,
             Position: token.Position);
+    }
+
+    /// <summary>
+    /// Throws a ParseException with the current token's location information.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <exception cref="ParseException">Always thrown with location info.</exception>
+    protected void ThrowParseError(string message)
+    {
+        var token = CurrentToken;
+        throw new ParseException(message, fileName, token.Line, token.Column);
+    }
+
+    /// <summary>
+    /// Throws a ParseException with the specified token's location information.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="token">The token where the error occurred.</param>
+    /// <exception cref="ParseException">Always thrown with location info.</exception>
+    protected void ThrowParseError(string message, Token token)
+    {
+        throw new ParseException(message, fileName, token.Line, token.Column);
     }
 
     #endregion

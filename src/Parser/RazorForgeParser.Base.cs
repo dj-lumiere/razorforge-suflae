@@ -88,7 +88,8 @@ public partial class RazorForgeParser
         }
 
         Token current = CurrentToken;
-        throw new ParseException(message: $"{errorMessage}. Expected {type}, got {current.Type}.");
+        throw new ParseException($"{errorMessage}. Expected {type}, got {current.Type}.",
+            fileName, current.Line, current.Column);
     }
 
     /// <summary>
@@ -430,6 +431,28 @@ public partial class RazorForgeParser
             Position: token.Position);
     }
 
+    /// <summary>
+    /// Throws a ParseException with the current token's location information.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <exception cref="ParseException">Always thrown with location info.</exception>
+    protected void ThrowParseError(string message)
+    {
+        var token = CurrentToken;
+        throw new ParseException(message, fileName, token.Line, token.Column);
+    }
+
+    /// <summary>
+    /// Throws a ParseException with the specified token's location information.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="token">The token where the error occurred.</param>
+    /// <exception cref="ParseException">Always thrown with location info.</exception>
+    protected void ThrowParseError(string message, Token token)
+    {
+        throw new ParseException(message, fileName, token.Line, token.Column);
+    }
+
     #endregion
 
     #region Operator Conversion
@@ -662,15 +685,56 @@ public partial class RazorForgeParser
 
 /// <summary>
 /// Exception thrown when a parsing error occurs that cannot be recovered from.
-/// Contains the error message describing what went wrong.
+/// Contains the error message and optional source location information.
 /// </summary>
 public class ParseException : Exception
 {
     /// <summary>
-    /// Initializes a new ParseException with the specified error message.
+    /// The source file where the error occurred (null if unknown).
+    /// </summary>
+    public string? FileName { get; }
+
+    /// <summary>
+    /// The 1-based line number where the error occurred (0 if unknown).
+    /// </summary>
+    public int Line { get; }
+
+    /// <summary>
+    /// The 1-based column number where the error occurred (0 if unknown).
+    /// </summary>
+    public int Column { get; }
+
+    /// <summary>
+    /// Initializes a new ParseException with the specified error message and optional location info.
     /// </summary>
     /// <param name="message">A description of the parse error.</param>
-    public ParseException(string message) : base(message: message)
+    /// <param name="fileName">Optional source file name.</param>
+    /// <param name="line">Optional 1-based line number.</param>
+    /// <param name="column">Optional 1-based column number.</param>
+    public ParseException(string message, string? fileName = null, int line = 0, int column = 0)
+        : base(message: FormatMessage(message, fileName, line, column))
     {
+        FileName = fileName;
+        Line = line;
+        Column = column;
+    }
+
+    /// <summary>
+    /// Formats the error message with location information if available.
+    /// </summary>
+    private static string FormatMessage(string message, string? fileName, int line, int column)
+    {
+        if (fileName is null && line == 0)
+            return message;
+
+        var location = fileName ?? "unknown";
+        if (line > 0)
+        {
+            location += $":{line}";
+            if (column > 0)
+                location += $":{column}";
+        }
+
+        return $"{location}: {message}";
     }
 }
