@@ -65,7 +65,6 @@ if(EXISTS "${INTELDECIMAL_SRC_DIR}/bid_functions.h")
             -Wno-sometimes-uninitialized
             -Wno-unused-but-set-variable
             -Wno-unknown-pragmas
-            -fPIC
         )
     elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
         target_compile_options(inteldecimal PRIVATE
@@ -73,10 +72,14 @@ if(EXISTS "${INTELDECIMAL_SRC_DIR}/bid_functions.h")
             -Wno-incompatible-pointer-types
             -Wno-parentheses
             -Wno-unknown-pragmas
-            -fPIC
         )
     elseif(MSVC)
         target_compile_options(inteldecimal PRIVATE /W0)
+    endif()
+
+    # -fPIC is needed for shared libraries on Unix, but not on Windows
+    if(NOT WIN32 AND NOT MSVC)
+        target_compile_options(inteldecimal PRIVATE -fPIC)
     endif()
 
     set(HAVE_INTELDECIMAL TRUE)

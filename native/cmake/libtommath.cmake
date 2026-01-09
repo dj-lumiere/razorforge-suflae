@@ -44,7 +44,8 @@ if(EXISTS "${LIBTOMMATH_DIR}/tommath.h")
             target_compile_definitions(tommath PRIVATE MP_NO_FILE)
         endif()
 
-        if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        # -fPIC is needed for shared libraries on Unix, but not on Windows
+        if(NOT WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
             target_compile_options(tommath PRIVATE -fPIC)
         endif()
 

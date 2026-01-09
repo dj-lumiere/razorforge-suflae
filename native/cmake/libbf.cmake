@@ -32,8 +32,11 @@ elseif(EXISTS "${LIBBF_DIR}/libbf.c")
         -Wall
         -Wno-unused-function
         -Wno-unused-variable
-        -fPIC
     )
+    # -fPIC is needed for shared libraries on Unix, but not on Windows
+    if(NOT WIN32)
+        target_compile_options(libbf PRIVATE -fPIC)
+    endif()
 
     # Link math library on Unix
     if(UNIX AND NOT APPLE)
