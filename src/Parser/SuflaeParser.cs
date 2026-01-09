@@ -1,4 +1,3 @@
-using System.Numerics;
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
@@ -57,10 +56,17 @@ public partial class SuflaeParser
     private bool _parsingInlineConditional;
 
     /// <summary>
-    /// Indicates whether we're currently parsing inside a record body.
+    /// Indicates whether we're currently parsing inside a type body (record, entity).
     /// When true, allows field declarations without var/let keywords.
     /// </summary>
-    private bool _parsingRecordBody = false;
+    private bool _parsingTypeBody = false;
+
+    /// <summary>
+    /// Indicates whether we're parsing inside a strict record body (actual record, not entity).
+    /// When true, field modifiers (public/private/internal/published/var/let) are disallowed.
+    /// Records are immutable value types with all-public fields.
+    /// </summary>
+    private bool _parsingStrictRecordBody = false;
 
     /// <summary>
     /// Indicates whether we're currently parsing inside a routine body.
@@ -225,28 +231,49 @@ public partial class SuflaeParser
         // Parse attributes (e.g., @inline, @crash_only, @intrinsic("name"))
         List<string> attributes = ParseAttributes();
 
-        // Parse visibility modifier
-        VisibilityModifier visibility = ParseVisibilityModifier();
+        // Parse visibility and storage class modifiers
+        var (visibility, storage) = ParseModifiers();
 
-        // Field declaration in records: public name: Type or name: Type
+        // Field declaration in type bodies: name: Type
         // Detected by identifier followed by colon (no var/let keyword needed)
-        // Only allowed inside record bodies
-        if (_parsingRecordBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+        // Only allowed inside type bodies (record, entity)
+        if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
+            // In strict record bodies, access modifiers are not allowed
+            if (_parsingStrictRecordBody && visibility != VisibilityModifier.Public)
+            {
+                throw new ParseException(
+                    message: "Record fields cannot have access modifiers. " +
+                             "Records are immutable with all-public fields. Use 'entity' if you need access-controlled fields.");
+            }
             return ParseFieldDeclaration(visibility: visibility);
         }
 
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
         {
-            return ParseVariableDeclaration(visibility: visibility);
+            // In strict record bodies, var/let/preset are not allowed
+            if (_parsingStrictRecordBody)
+            {
+                throw new ParseException(
+                    message: "Record fields cannot use 'var', 'let', or 'preset'. " +
+                             "Records are immutable with all-public fields. Use 'field: Type' syntax instead.");
+            }
+            return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
 
         // Routine (function) declaration - using 'routine' keyword in Suflae
         if (Match(type: TokenType.Routine))
         {
-            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes);
+            // Validate: global storage is not allowed for routines
+            if (storage == StorageClass.Global)
+            {
+                throw new ParseException(
+                    message: "'global' storage class is not valid for routines. " +
+                             "'global' can only be used for file-scope static variables.");
+            }
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage);
         }
 
         // Entity/Record/Choice declarations

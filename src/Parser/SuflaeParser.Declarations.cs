@@ -1,6 +1,5 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
 using Compilers.RazorForge.Parser;
 
 namespace Compilers.Suflae.Parser;
@@ -137,8 +136,12 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for the getter (default private).</param>
     /// <param name="setterVisibility">Optional separate visibility for the setter.</param>
+    /// <param name="storage">Storage class modifier (default: None).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
-    private VariableDeclaration ParseVariableDeclaration(VisibilityModifier visibility = VisibilityModifier.Public, VisibilityModifier? setterVisibility = null)
+    private VariableDeclaration ParseVariableDeclaration(
+        VisibilityModifier visibility = VisibilityModifier.Public,
+        VisibilityModifier? setterVisibility = null,
+        StorageClass storage = StorageClass.None)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         bool isMutable = PeekToken(offset: -1)
@@ -166,7 +169,8 @@ public partial class SuflaeParser
             Visibility: visibility,
             IsMutable: isMutable,
             Location: location,
-            SetterVisibility: setterVisibility);
+            SetterVisibility: setterVisibility,
+            Storage: storage);
     }
 
     /// <summary>
@@ -211,8 +215,12 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for the routine.</param>
     /// <param name="attributes">List of attributes applied to the routine.</param>
+    /// <param name="storage">Storage class modifier (default: None, can be Common for type-level static).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
-    private RoutineDeclaration ParseRoutineDeclaration(VisibilityModifier visibility = VisibilityModifier.Public, List<string>? attributes = null)
+    private RoutineDeclaration ParseRoutineDeclaration(
+        VisibilityModifier visibility = VisibilityModifier.Public,
+        List<string>? attributes = null,
+        StorageClass storage = StorageClass.None)
     {
         // Reject nested routine declarations
         if (_inRoutineBody)
@@ -220,7 +228,7 @@ public partial class SuflaeParser
             throw new ParseException(message: "Nested routine declarations are not allowed. Define routines at module or type level.");
         }
 
-        // Visibility: public, internal, private, common, global, imported
+        // Visibility: public, internal, private + Storage: common (type-level static)
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
@@ -284,7 +292,8 @@ public partial class SuflaeParser
             Visibility: visibility,
             Attributes: attributes ?? [],
             Location: location,
-            IsFailable: isFailable);
+            IsFailable: isFailable,
+            Storage: storage);
     }
 
     /// <summary>
@@ -339,9 +348,19 @@ public partial class SuflaeParser
 
         var members = new List<Declaration>();
 
+        // Enable field declaration syntax inside entity body
+        // Entities allow modifiers on fields (unlike records)
+        bool wasParsingTypeBody = _parsingTypeBody;
+        bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
+        _parsingTypeBody = true;
+        _parsingStrictRecordBody = false;  // Entities allow modifiers
+
         // Parse indented members
         if (!Match(type: TokenType.Indent))
         {
+            _parsingTypeBody = wasParsingTypeBody;
+            _parsingStrictRecordBody = wasParsingStrictRecordBody;
+
             // Pop generic parameter scope
             if (genericParams is { Count: > 0 })
             {
@@ -374,6 +393,9 @@ public partial class SuflaeParser
                 throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
             }
         }
+
+        _parsingTypeBody = wasParsingTypeBody;
+        _parsingStrictRecordBody = wasParsingStrictRecordBody;
 
         // Pop generic parameter scope
         if (genericParams is { Count: > 0 })
@@ -463,8 +485,11 @@ public partial class SuflaeParser
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
 
         // Enable field declaration syntax inside record body
-        bool wasParsingRecordBody = _parsingRecordBody;
-        _parsingRecordBody = true;
+        // Records are strict: no modifiers allowed on fields
+        bool wasParsingTypeBody = _parsingTypeBody;
+        bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
+        _parsingTypeBody = true;
+        _parsingStrictRecordBody = true;  // Records disallow modifiers on fields
 
         if (Check(type: TokenType.Indent))
         {
@@ -498,7 +523,8 @@ public partial class SuflaeParser
             }
         }
 
-        _parsingRecordBody = wasParsingRecordBody;
+        _parsingTypeBody = wasParsingTypeBody;
+        _parsingStrictRecordBody = wasParsingStrictRecordBody;
 
         // Pop generic parameter scope
         if (genericParams is { Count: > 0 })
@@ -969,47 +995,76 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses a visibility modifier keyword.
-    /// Supports: public, published, internal, private, common, global, imported.
+    /// Parses visibility and storage class modifiers.
+    /// Visibility: public, published, internal, private, imported
+    /// Storage: common, global
+    /// These are orthogonal and can be combined: public common, private common, etc.
     /// </summary>
-    /// <returns>The parsed <see cref="VisibilityModifier"/> enum value.</returns>
+    /// <returns>A tuple of (visibility, storage) modifiers.</returns>
+    private (VisibilityModifier Visibility, StorageClass Storage) ParseModifiers()
+    {
+        var visibility = VisibilityModifier.Public; // Default
+        var storage = StorageClass.None; // Default
+        bool hasVisibility = false;
+        bool hasStorage = false;
+
+        // Parse modifiers in any order (visibility and storage can appear in any order)
+        while (true)
+        {
+            // Visibility modifiers
+            if (!hasVisibility && Match(type: TokenType.Public))
+            {
+                visibility = VisibilityModifier.Public;
+                hasVisibility = true;
+            }
+            else if (!hasVisibility && Match(type: TokenType.Published))
+            {
+                visibility = VisibilityModifier.Published;
+                hasVisibility = true;
+            }
+            else if (!hasVisibility && Match(type: TokenType.Internal))
+            {
+                visibility = VisibilityModifier.Internal;
+                hasVisibility = true;
+            }
+            else if (!hasVisibility && Match(type: TokenType.Private))
+            {
+                visibility = VisibilityModifier.Private;
+                hasVisibility = true;
+            }
+            else if (!hasVisibility && Match(type: TokenType.Imported))
+            {
+                visibility = VisibilityModifier.Imported;
+                hasVisibility = true;
+            }
+            // Storage class modifiers
+            else if (!hasStorage && Match(type: TokenType.Common))
+            {
+                storage = StorageClass.Common;
+                hasStorage = true;
+            }
+            else if (!hasStorage && Match(type: TokenType.Global))
+            {
+                storage = StorageClass.Global;
+                hasStorage = true;
+            }
+            else
+            {
+                break; // No more modifiers
+            }
+        }
+
+        return (visibility, storage);
+    }
+
+    /// <summary>
+    /// Parses a visibility modifier keyword (backward compatibility wrapper).
+    /// Supported modifiers: public, published, internal, private, imported.
+    /// </summary>
+    /// <returns>The parsed visibility modifier, or Public if none found.</returns>
     private VisibilityModifier ParseVisibilityModifier()
     {
-        if (Match(type: TokenType.Public))
-        {
-            return VisibilityModifier.Public;
-        }
-
-        if (Match(type: TokenType.Published))
-        {
-            return VisibilityModifier.Published;
-        }
-
-        if (Match(type: TokenType.Internal))
-        {
-            return VisibilityModifier.Internal;
-        }
-
-        if (Match(type: TokenType.Private))
-        {
-            return VisibilityModifier.Private;
-        }
-
-        if (Match(type: TokenType.Common))
-        {
-            return VisibilityModifier.Common;
-        }
-
-        if (Match(type: TokenType.Global))
-        {
-            return VisibilityModifier.Global;
-        }
-
-        if (Match(type: TokenType.Imported))
-        {
-            return VisibilityModifier.Imported;
-        }
-
-        return VisibilityModifier.Public; // Default
+        var (visibility, _) = ParseModifiers();
+        return visibility;
     }
 }
