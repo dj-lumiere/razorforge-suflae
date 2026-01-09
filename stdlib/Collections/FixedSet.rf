@@ -326,7 +326,3 @@ routine FixedSet<T, N>.__eq__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> Bool
     }
     return true
 }
-
-routine FixedSet<T, N>.__ne__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> Bool {
-    return not (me == other)
-}

@@ -215,30 +215,3 @@ routine FixedBitList<N>.flip_all(me: FixedBitList<N>) {
         i = i + 1uaddr
     }
 }
-
-# ============================================================================
-# Iteration Support
-# ============================================================================
-
-routine FixedBitList<N>.iter(me: FixedBitList<N>) -> FixedBitListIterator<N> {
-    return FixedBitListIterator<N>(list: me, index: 0uaddr)
-}
-
-record FixedBitListIterator<N> {
-    list: FixedBitList<N>
-    index: UAddr
-}
-
-routine FixedBitListIterator<N>.next!(me: FixedBitListIterator<N>) -> Bool {
-    if me.index >= me.list.count() {
-        absent
-    }
-    let value = me.list[me.index]
-    me.index = me.index + 1uaddr
-    return value
-}
-
-# ============================================================================
-# Comparison Operations
-# Note: __eq__ and __ne__ are auto-generated using memcmp
-# ============================================================================

@@ -551,7 +551,3 @@ routine SortedDict<K, V>.__eq__(me: SortedDict<K, V>, other: SortedDict<K, V>) -
     }
     return true
 }
-
-routine SortedDict<K, V>.__ne__(me: SortedDict<K, V>, other: SortedDict<K, V>) -> Bool {
-    return not (me == other)
-}

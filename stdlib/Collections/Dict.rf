@@ -305,7 +305,3 @@ routine Dict<K, V>.__eq__(me: Dict<K, V>, other: Dict<K, V>) -> Bool {
     }
     return true
 }
-
-routine Dict<K, V>.__ne__(me: Dict<K, V>, other: Dict<K, V>) -> Bool {
-    return not (me == other)
-}

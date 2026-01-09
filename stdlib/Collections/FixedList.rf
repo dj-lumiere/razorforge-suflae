@@ -264,7 +264,3 @@ routine FixedList<T, N>.__eq__(me: FixedList<T, N>, other: FixedList<T, N>) -> B
     }
     return true
 }
-
-routine FixedList<T, N>.__ne__(me: FixedList<T, N>, other: FixedList<T, N>) -> Bool {
-    return not (me == other)
-}

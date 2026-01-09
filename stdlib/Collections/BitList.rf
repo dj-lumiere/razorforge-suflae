@@ -403,10 +403,6 @@ routine BitList.__eq__(other: BitList) -> Bool {
     return true
 }
 
-routine BitList.__ne__(other: BitList) -> Bool {
-    return not (me == other)
-}
-
 # ============================================================================
 # Conversion Operations
 # ============================================================================

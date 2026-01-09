@@ -544,7 +544,3 @@ routine SortedSet<T>.__eq__(me: SortedSet<T>, other: SortedSet<T>) -> Bool {
     }
     return true
 }
-
-routine SortedSet<T>.__ne__(me: SortedSet<T>, other: SortedSet<T>) -> Bool {
-    return not (me == other)
-}

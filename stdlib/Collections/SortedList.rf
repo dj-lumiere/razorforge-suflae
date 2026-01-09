@@ -546,7 +546,3 @@ routine SortedList<T>.__eq__(me: SortedList<T>, other: SortedList<T>) -> Bool {
     }
     return true
 }
-
-routine SortedList<T>.__ne__(me: SortedList<T>, other: SortedList<T>) -> Bool {
-    return not (me == other)
-}

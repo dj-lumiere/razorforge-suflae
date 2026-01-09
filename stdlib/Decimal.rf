@@ -134,12 +134,6 @@ routine Decimal.__eq__(other: Decimal) -> Bool {
     }
 }
 
-routine Decimal.__ne__(other: Decimal) -> Bool {
-    danger! {
-        return @native.rf_bigdec_cmp(me.handle, other.handle) != 0
-    }
-}
-
 routine Decimal.__lt__(other: Decimal) -> Bool {
     danger! {
         return @native.rf_bigdec_cmp(me.handle, other.handle) < 0

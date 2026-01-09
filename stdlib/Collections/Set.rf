@@ -380,7 +380,3 @@ routine Set<T>.__eq__(me: Set<T>, other: Set<T>) -> Bool {
     }
     return me.is_subset(other)
 }
-
-routine Set<T>.__ne__(me: Set<T>, other: Set<T>) -> Bool {
-    return not (me == other)
-}

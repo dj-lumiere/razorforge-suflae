@@ -342,7 +342,3 @@ routine FixedDeque<T, N>.__eq__(me: FixedDeque<T, N>, other: FixedDeque<T, N>) -
     }
     return true
 }
-
-routine FixedDeque<T, N>.__ne__(me: FixedDeque<T, N>, other: FixedDeque<T, N>) -> Bool {
-    return not (me == other)
-}
