@@ -241,15 +241,25 @@ public partial class SuflaeTokenizer
                 ScanAtSign();
                 break;
 
-            // Numbers
+            // Numbers (special handling for 0x, 0b, and 0o prefixes)
             case '0':
                 if (Match(expected: 'x') || Match(expected: 'X'))
                 {
                     ScanPrefixedNumber(isHex: true);
                 }
-                else if (Match(expected: 'b') || Match(expected: 'B'))
+                else if ((Peek() == 'b' || Peek() == 'B') && (Peek(offset: 1) == '0' ||
+                                                              Peek(offset: 1) == '1' ||
+                                                              Peek(offset: 1) == '_'))
                 {
+                    Advance(); // consume 'b' or 'B'
                     ScanPrefixedNumber(isHex: false);
+                }
+                else if ((Peek() == 'o' || Peek() == 'O') &&
+                         ((Peek(offset: 1) >= '0' && Peek(offset: 1) <= '7') ||
+                          Peek(offset: 1) == '_'))
+                {
+                    Advance(); // consume 'o' or 'O'
+                    ScanOctalNumber();
                 }
                 else
                 {

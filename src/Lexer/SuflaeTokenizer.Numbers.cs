@@ -209,5 +209,67 @@ public partial class SuflaeTokenizer
         }
     }
 
+    /// <summary>
+    /// Scans an octal numeric literal (0o prefix).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is called after the prefix (0o) has been consumed.
+    /// It scans the remaining digits and optional type suffix.
+    /// </para>
+    /// <para>
+    /// Octal literals accept digits 0-7.
+    /// </para>
+    /// <para>
+    /// Underscores can be used as digit separators.
+    /// </para>
+    /// <para>
+    /// Only numeric type suffixes (s32, u64, etc.) are valid for octal literals.
+    /// Memory and duration suffixes are not allowed.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="LexerException">Thrown when an unknown or invalid suffix is encountered.</exception>
+    private void ScanOctalNumber()
+    {
+        // Consume valid octal digits and underscores
+        while ((Peek() >= '0' && Peek() <= '7') || Peek() == '_')
+        {
+            Advance();
+        }
+
+        // Check for type suffix
+        if (char.IsLetter(c: Peek()))
+        {
+            int suffixStart = _position;
+            while (char.IsLetterOrDigit(c: Peek()))
+            {
+                Advance();
+            }
+
+            string suffix =
+                _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
+
+            // Handle arbitrary precision suffix (n) - always Integer for octal
+            if (suffix == ArbitraryPrecisionSuffix)
+            {
+                AddToken(type: TokenType.Integer);
+            }
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
+            {
+                AddToken(type: tokenType);
+            }
+            else
+            {
+                throw new LexerException(
+                    message: $"Unknown octal suffix '{suffix}' at line {_line}");
+            }
+        }
+        else
+        {
+            // Default to Integer (Suflae defaults to arbitrary precision)
+            AddToken(type: TokenType.Integer);
+        }
+    }
+
     #endregion
 }
