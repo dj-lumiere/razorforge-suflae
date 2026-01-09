@@ -62,9 +62,9 @@ public partial class SuflaeParser
     private bool _parsingTypeBody = false;
 
     /// <summary>
-    /// Indicates whether we're parsing inside a strict record body (actual record, not entity).
-    /// When true, field modifiers (public/private/internal/published/var/let) are disallowed.
-    /// Records are immutable value types with all-public fields.
+    /// Indicates whether we're parsing inside a record body (actual record, not entity).
+    /// When true, only private/internal/public modifiers are allowed (not published/imported).
+    /// Also var/let/preset keywords are disallowed (use 'field: Type' syntax).
     /// </summary>
     private bool _parsingStrictRecordBody = false;
 
@@ -240,12 +240,12 @@ public partial class SuflaeParser
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
-            // In strict record bodies, access modifiers are not allowed
-            if (_parsingStrictRecordBody && visibility != VisibilityModifier.Public)
+            // In record bodies, only private/internal/public are allowed (not published/imported)
+            if (_parsingStrictRecordBody && visibility is VisibilityModifier.Published or VisibilityModifier.Imported)
             {
                 throw new ParseException(
-                    message: "Record fields cannot have access modifiers. " +
-                             "Records are immutable with all-public fields. Use 'entity' if you need access-controlled fields.");
+                    message: $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
+                             "Record fields can use 'private', 'internal', or 'public'.");
             }
             return ParseFieldDeclaration(visibility: visibility);
         }
