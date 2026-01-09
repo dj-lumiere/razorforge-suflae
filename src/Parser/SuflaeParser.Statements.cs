@@ -315,9 +315,8 @@ public partial class SuflaeParser
             return TryParseGuard(innerPattern: wildcardPattern, location: location);
         }
 
-        // Type/Variant pattern: Type, Type varName, Type.CASE, Type.CASE varName, CASE, CASE (a, b)
-        // In Suflae, all identifiers are TokenType.Identifier, so we check if it starts with uppercase
-        if (Check(type: TokenType.Identifier) && CurrentToken.Text.Length > 0 && char.IsUpper(CurrentToken.Text[0]))
+        // Type/Variant pattern: Type, Type varName, Choice.CASE, Variant.CASE varName, CASE, CASE (a, b)
+        if (Check(type: TokenType.Identifier) && CurrentToken.Text.Length > 0)
         {
             string name = CurrentToken.Text;
             Advance();
@@ -339,7 +338,7 @@ public partial class SuflaeParser
             List<string>? bindings = null;
             if (Match(type: TokenType.LeftParen))
             {
-                bindings = new List<string>();
+                bindings = [];
                 if (!Check(type: TokenType.RightParen))
                 {
                     do
@@ -365,7 +364,7 @@ public partial class SuflaeParser
                 variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
             }
 
-            TypeExpression type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+            TypeExpression type = new (Name: name, GenericArguments: null, Location: location);
             Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
             return TryParseGuard(innerPattern: typePattern, location: location);
         }
