@@ -832,4 +832,31 @@ public record IsPatternExpression(
     }
 }
 
+/// <summary>
+/// Pattern matching expression that evaluates to a value based on pattern matching.
+/// Similar to Rust's match expression or Kotlin's when expression.
+/// </summary>
+/// <param name="Expression">The value being matched against patterns</param>
+/// <param name="Clauses">The list of pattern-body pairs to evaluate</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// When expression examples:
+/// <list type="bullet">
+/// <item>return when x { 0 => "zero", 1 => "one", else => "many" }</item>
+/// <item>let desc = when status { is ACTIVE => "Running", else => "Not running" }</item>
+/// </list>
+/// The body of each clause must evaluate to a value of the same type.
+/// </remarks>
+public record WhenExpression(
+    Expression Expression,
+    List<WhenClause> Clauses,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitWhenExpression(node: this);
+    }
+}
+
 #endregion

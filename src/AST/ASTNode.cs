@@ -232,6 +232,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the is-pattern expression</returns>
     T VisitIsPatternExpression(IsPatternExpression node);
 
+    /// <summary>Visits a when expression node (pattern matching expression like 'when x { 0 => "zero", else => "many" }')</summary>
+    /// <param name="node">The when expression to visit</param>
+    /// <returns>Result of visiting the when expression</returns>
+    T VisitWhenExpression(WhenExpression node);
+
     /// <summary>Visits a steal expression node (ownership transfer like 'steal node')</summary>
     /// <param name="node">The steal expression to visit</param>
     /// <returns>Result of visiting the steal expression</returns>
