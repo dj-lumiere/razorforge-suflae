@@ -134,8 +134,8 @@ Read more: [RazorForge Philosophy](https://razorforge.lumi-dev.xyz/Philosophy) |
 
 ```bash
 # Clone the repository
-git clone https://github.com/dj-lumiere/razorforge-lang.git
-cd razorforge-lang
+git clone https://git.lumi-dev.xyz/Lumi/razorforge-suflae.git
+cd razorforge-suflae
 
 # Build the compiler
 dotnet build
@@ -240,7 +240,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Reality Bender](https://razorforge.lumi-dev.xyz/Reality-Bender) — Advanced low-level manipulation
 - [Lock Policies](https://razorforge.lumi-dev.xyz/Lock-Policies) — Mutex, MultiReadLock, RejectEdit
 - [Code Style](https://razorforge.lumi-dev.xyz/Code-Style) — Coding conventions
-- [Core Prelude](https://razorforge.lumi-dev.xyz/Core) — Always-loaded types and primitives
+- [Core](https://razorforge.lumi-dev.xyz/Core) — Auto-imported types and primitives
 
 ### Suflae Documentation
 
@@ -249,7 +249,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Error Handling](https://suflae.lumi-dev.xyz/Error-Handling) — `Maybe`, `Result`, error propagation
 - [Text](https://suflae.lumi-dev.xyz/Text) — String handling and text processing
 - [Code Style](https://suflae.lumi-dev.xyz/Code-Style) — Coding conventions
-- [Core Prelude](https://suflae.lumi-dev.xyz/Core) — Always-loaded types and abstractions
+- [Core](https://suflae.lumi-dev.xyz/Core) — Auto-imported types and abstractions
 
 ### Language Reference
 
@@ -525,7 +525,7 @@ RazorForge/
 
 ### Prerequisites
 
-- .NET SDK 8.0 or later
+- .NET SDK 10.0 or later
 - LLVM 15+ (for code generation)
 - CMake 3.20+ (for native components)
 - C compiler (GCC, Clang, or MSVC)
@@ -534,8 +534,8 @@ RazorForge/
 
 ```bash
 # Clone the repository
-git clone https://github.com/dj-lumiere/razorforge-lang.git
-cd razorforge-lang
+git clone https://git.lumi-dev.xyz/Lumi/razorforge-suflae.git
+cd razorforge-suflae
 
 # Build the compiler
 dotnet build
@@ -598,8 +598,6 @@ We welcome contributions! Whether it's:
 - Documentation improvements
 - Code contributions
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
 ---
 
 ## License
@@ -615,8 +613,9 @@ Choose the license that works best for your project.
 
 ## Community
 
-- **GitHub**: [github.com/dj-lumiere/razorforge-lang](https://github.com/dj-lumiere/razorforge-lang)
-- **Issues**: [Report bugs or request features](https://github.com/dj-lumiere/razorforge-lang/issues)
+- **Gitea**: [git.lumi-dev.xyz/Lumi/razorforge-suflae](https://git.lumi-dev.xyz/Lumi/razorforge-suflae)
+- **Issues**: [Report bugs or request features](https://git.lumi-dev.xyz/Lumi/razorforge-suflae/issues)
+- **GitHub Mirror**: [github.com/dj-lumiere/razorforge-lang](https://github.com/dj-lumiere/razorforge-lang)
 - **RazorForge Docs**: [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/)
 - **Suflae Docs**: [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)
 
