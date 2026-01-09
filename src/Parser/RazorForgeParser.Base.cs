@@ -470,6 +470,8 @@ public partial class RazorForgeParser
 
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,
+            TokenType.ReferenceEqual => BinaryOperator.Identical,
+            TokenType.ReferenceNotEqual => BinaryOperator.NotIdentical,
             TokenType.Less => BinaryOperator.Less,
             TokenType.LessEqual => BinaryOperator.LessEqual,
             TokenType.Greater => BinaryOperator.Greater,

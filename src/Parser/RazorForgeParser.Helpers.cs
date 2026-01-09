@@ -190,10 +190,11 @@ public partial class RazorForgeParser
                .Text;
         }
 
-        // Allow 'me' (Self token) as a valid identifier for method parameters
-        if (Match(type: TokenType.Me))
+        // Allow 'me' or 'Me' (Self tokens) as a valid identifier for method parameters
+        // 'me' is lowercase self reference, 'Me' is the type of self (for protocol method signatures)
+        if (Match(TokenType.Me, TokenType.MyType))
         {
-            return "me";
+            return PeekToken(offset: -1).Text;
         }
 
         // Allow keywords as identifiers in specific contexts (intrinsic names, parameter names)

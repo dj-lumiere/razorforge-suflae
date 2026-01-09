@@ -262,6 +262,13 @@ public partial class SuflaeParser
                .Text;
         }
 
+        // Allow 'me' or 'Me' (Self tokens) as a valid identifier for method parameters
+        // 'me' is lowercase self reference, 'Me' is the type of self (for protocol method signatures)
+        if (Match(TokenType.Me, TokenType.MyType))
+        {
+            return PeekToken(offset: -1).Text;
+        }
+
         Token current = CurrentToken;
         throw new ParseException(message: $"{errorMessage}. Expected Identifier, got {current.Type}.");
     }

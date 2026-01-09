@@ -272,7 +272,7 @@ public partial class RazorForgeParser
     {
         Expression expr = ParseComparison();
 
-        while (Match(TokenType.Equal, TokenType.NotEqual))
+        while (Match(TokenType.Equal, TokenType.NotEqual, TokenType.ReferenceEqual, TokenType.ReferenceNotEqual))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseComparison();
@@ -375,7 +375,7 @@ public partial class RazorForgeParser
                 {
                     string variableName = Advance()
                        .Text;
-                    var pattern = new TypePattern(Type: type, VariableName: variableName, Location: location);
+                    var pattern = new TypePattern(Type: type, VariableName: variableName, Bindings: null, Location: location);
                     expr = new IsPatternExpression(Expression: expr,
                         Pattern: pattern,
                         IsNegated: false,
@@ -384,7 +384,7 @@ public partial class RazorForgeParser
                 else
                 {
                     // Simple type check: is Type or isnot Type
-                    var pattern = new TypePattern(Type: type, VariableName: null, Location: location);
+                    var pattern = new TypePattern(Type: type, VariableName: null, Bindings: null, Location: location);
                     expr = new IsPatternExpression(Expression: expr,
                         Pattern: pattern,
                         IsNegated: isNegated,
@@ -959,59 +959,66 @@ public partial class RazorForgeParser
                 }
 
                 // Check for generic method call with type parameters
-                // Only parse as generics if the next token after '<' looks like a type
-                // to avoid confusing comparison operators with generics (e.g., me.current < me.step)
+                // Disambiguate by scanning for the pattern <...>() or <...>.
+                // If we find matching > followed by ( or ., it's definitely a generic call.
+                // This handles: method<Type>() vs method < value (comparison)
                 if (Check(type: TokenType.Less))
                 {
-                    // Lookahead to check if this is likely a generic or a comparison
-                    // Check if the token after '<' is a known type name
                     int savedPos = _position;
                     Advance(); // consume '<'
 
-                    // Check if the next token is a known type
+                    // Scan forward to find matching > and check what follows
                     bool isLikelyGeneric = false;
+                    int scanPos = _position;
+                    int depth = 1; // We already consumed one <
 
-                    if (Check(type: TokenType.TypeIdentifier) || Check(type: TokenType.Identifier))
+                    while (scanPos < tokens.Count && depth > 0)
                     {
-                        string identText = CurrentToken.Text;
-                        // Check if it's a known type name or a TypeIdentifier (lexer already knows type names)
-                        if (IsKnownTypeName(name: identText) || Check(type: TokenType.TypeIdentifier))
+                        TokenType tt = tokens[index: scanPos].Type;
+                        if (tt == TokenType.Less)
                         {
-                            // Looks like a type, but we need to verify the pattern matches a generic call
-                            // by scanning forward for > followed by ( or )
-                            // This disambiguates between: me.slot<N>() (generic) vs me.slot < N (comparison)
-                            int scanPos = _position;
-                            int depth = 1; // We already consumed one <
-                            while (scanPos < tokens.Count && depth > 0)
+                            depth++;
+                        }
+                        else if (tt == TokenType.Greater)
+                        {
+                            depth--;
+                            if (depth == 0)
                             {
-                                TokenType tt = tokens[index: scanPos].Type;
-                                if (tt == TokenType.Less)
+                                // Found matching >, check if ( or . follows (indicating generic call/access)
+                                if (scanPos + 1 < tokens.Count &&
+                                    (tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
+                                     tokens[index: scanPos + 1].Type == TokenType.Dot))
                                 {
-                                    depth++;
-                                }
-                                else if (tt == TokenType.Greater)
-                                {
-                                    depth--;
-                                    if (depth == 0)
-                                    {
-                                        // Found matching >, check if ( or . follows (indicating generic call/access)
-                                        if (scanPos + 1 < tokens.Count && (tokens[index: scanPos + 1].Type == TokenType.LeftParen || tokens[index: scanPos + 1].Type == TokenType.Dot))
-                                        {
-                                            isLikelyGeneric = true;
-                                        }
-
-                                        break;
-                                    }
-                                }
-                                else if (tt == TokenType.Newline || tt == TokenType.LeftBrace)
-                                {
-                                    // Hit statement boundary without finding matching >, this is a comparison
-                                    break;
+                                    isLikelyGeneric = true;
                                 }
 
-                                scanPos++;
+                                break;
                             }
                         }
+                        else if (tt == TokenType.RightShift)
+                        {
+                            // >> could be two > in nested generics like List<Dict<K, V>>
+                            depth -= 2;
+                            if (depth <= 0)
+                            {
+                                // Check what follows
+                                if (scanPos + 1 < tokens.Count &&
+                                    (tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
+                                     tokens[index: scanPos + 1].Type == TokenType.Dot))
+                                {
+                                    isLikelyGeneric = true;
+                                }
+
+                                break;
+                            }
+                        }
+                        else if (tt == TokenType.Newline || tt == TokenType.LeftBrace)
+                        {
+                            // Hit statement boundary without finding matching >, this is a comparison
+                            break;
+                        }
+
+                        scanPos++;
                     }
 
                     _position = savedPos; // restore position
@@ -1174,6 +1181,13 @@ public partial class RazorForgeParser
         if (TryParseDurationLiteral(location: location, result: out Expression? durationExpr))
         {
             return durationExpr!;
+        }
+
+        // When expression: when x { pattern => expr, ... }
+        // Used in expression context: return when x { ... }, let y = when x { ... }
+        if (Match(type: TokenType.When))
+        {
+            return ParseWhenExpression(location: location);
         }
 
         // Arrow lambda expression: x => expr or x given y => expr (single parameter, no parens)
@@ -1521,5 +1535,107 @@ public partial class RazorForgeParser
         }
 
         throw new ParseException(message: $"Invalid time literal: {token.Text}");
+    }
+
+    /// <summary>
+    /// Parses a when expression (pattern matching in expression context).
+    /// Syntax: <c>when expr { pattern => value, ... }</c>
+    /// The 'when' token has already been consumed before calling this method.
+    /// </summary>
+    /// <param name="location">Source location of the when keyword</param>
+    /// <returns>A <see cref="WhenExpression"/> AST node.</returns>
+    private WhenExpression ParseWhenExpression(SourceLocation location)
+    {
+        // Check for standalone when block (condition-based without subject)
+        // when { condition => body, ... }  - like Lisp's cond
+        bool isConditionBased = Check(type: TokenType.LeftBrace);
+        Expression expression;
+        if (isConditionBased)
+        {
+            // Standalone when - use 'true' as the implicit subject
+            expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
+        }
+        else
+        {
+            // Traditional when with explicit subject
+            expression = ParseExpression();
+        }
+
+        Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after when expression");
+
+        var clauses = new List<WhenClause>();
+
+        while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
+        {
+            // Skip newlines
+            if (Match(type: TokenType.Newline))
+            {
+                continue;
+            }
+
+            Pattern pattern;
+            SourceLocation clauseLocation = GetLocation();
+
+            // Handle 'else' keyword for default case: else => body or else varName => body
+            if (Match(type: TokenType.Else))
+            {
+                // Check for variable binding: else varName =>
+                if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+                       .Type == TokenType.FatArrow)
+                {
+                    string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
+                    pattern = new IdentifierPattern(Name: varName, Location: clauseLocation);
+                }
+                else
+                {
+                    // Plain else without variable binding - treat as wildcard
+                    pattern = new WildcardPattern(Location: clauseLocation);
+                }
+            }
+            // Handle wildcard: _ => body
+            else if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_" && PeekToken(offset: 1).Type == TokenType.FatArrow)
+            {
+                Advance(); // consume _
+                pattern = new WildcardPattern(Location: clauseLocation);
+            }
+            // Condition-based when: parse as expression, wrap in ExpressionPattern
+            else if (isConditionBased)
+            {
+                // Parse the condition as a full expression (e.g., me > 0)
+                Expression condition = ParseExpression();
+                pattern = new ExpressionPattern(Expression: condition, Location: clauseLocation);
+            }
+            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
+            else if (Match(type: TokenType.Is))
+            {
+                _inWhenPatternContext = true;
+                pattern = ParseTypePattern();
+                _inWhenPatternContext = false;
+            }
+            else
+            {
+                // Set context flag to prevent single-param lambdas from being parsed
+                // inside when patterns (e.g., a < b => action should not treat b => action as lambda)
+                _inWhenPatternContext = true;
+                pattern = ParsePattern();
+                _inWhenPatternContext = false;
+            }
+
+            Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after pattern");
+
+            // Set flag to prevent 'is' expression parsing in when clause bodies
+            _inWhenClauseBody = true;
+            Statement body = ParseStatement();
+            _inWhenClauseBody = false;
+
+            clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
+
+            // Optional comma or newline between clauses
+            Match(TokenType.Comma, TokenType.Newline);
+        }
+
+        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after when clauses");
+
+        return new WhenExpression(Expression: expression, Clauses: clauses, Location: location);
     }
 }

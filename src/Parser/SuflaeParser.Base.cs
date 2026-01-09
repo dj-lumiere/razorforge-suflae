@@ -1,4 +1,3 @@
-using System.Numerics;
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
@@ -418,6 +417,8 @@ public partial class SuflaeParser
 
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,
+            TokenType.ReferenceEqual => BinaryOperator.Identical,
+            TokenType.ReferenceNotEqual => BinaryOperator.NotIdentical,
             TokenType.Less => BinaryOperator.Less,
             TokenType.LessEqual => BinaryOperator.LessEqual,
             TokenType.Greater => BinaryOperator.Greater,

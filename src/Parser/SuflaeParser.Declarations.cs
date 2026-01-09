@@ -348,6 +348,9 @@ public partial class SuflaeParser
 
         var members = new List<Declaration>();
 
+        // Parse entity body as indented block
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+
         // Enable field declaration syntax inside entity body
         // Entities allow modifiers on fields (unlike records)
         bool wasParsingTypeBody = _parsingTypeBody;
@@ -356,41 +359,35 @@ public partial class SuflaeParser
         _parsingStrictRecordBody = false;  // Entities allow modifiers
 
         // Parse indented members
-        if (!Match(type: TokenType.Indent))
+        if (Check(type: TokenType.Indent))
         {
-            _parsingTypeBody = wasParsingTypeBody;
-            _parsingStrictRecordBody = wasParsingStrictRecordBody;
+            ProcessIndentToken();
 
-            // Pop generic parameter scope
-            if (genericParams is { Count: > 0 })
+            while (!Check(type: TokenType.Dedent) && !IsAtEnd)
             {
-                _genericParameterScopes.Pop();
+                if (Match(type: TokenType.Newline))
+                {
+                    continue;
+                }
+
+                IAstNode node = ParseDeclaration();
+                if (node is Declaration member)
+                {
+                    members.Add(item: member);
+                }
+                else
+                {
+                    throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
+                }
             }
 
-            return new EntityDeclaration(Name: name,
-                GenericParameters: genericParams,
-                GenericConstraints: constraints,
-                Protocols: interfaces,
-                Members: members,
-                Visibility: visibility,
-                Location: location);
-        }
-
-        while (!Check(type: TokenType.Dedent) && !IsAtEnd)
-        {
-            if (Match(type: TokenType.Newline))
+            if (Check(type: TokenType.Dedent))
             {
-                continue;
+                ProcessDedentTokens();
             }
-
-            IAstNode node = ParseDeclaration();
-            if (node is Declaration member)
+            else if (!IsAtEnd)
             {
-                members.Add(item: member);
-            }
-            else
-            {
-                throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
+                throw new ParseException(message: "Expected dedent after entity body");
             }
         }
 
@@ -401,23 +398,6 @@ public partial class SuflaeParser
         if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Pop();
-        }
-
-        if (Match(type: TokenType.Dedent))
-        {
-            return new EntityDeclaration(Name: name,
-                GenericParameters: genericParams,
-                GenericConstraints: constraints,
-                Protocols: interfaces,
-                Members: members,
-                Visibility: visibility,
-                Location: location);
-        }
-
-        // If no dedent token, we might be at end of file
-        if (!IsAtEnd)
-        {
-            throw new ParseException(message: "Expected dedent after entity body");
         }
 
         return new EntityDeclaration(Name: name,

@@ -225,7 +225,7 @@ public partial class RazorForgeParser
             else if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
-                pattern = ParsePattern();
+                pattern = ParseTypePattern();
                 _inWhenPatternContext = false;
             }
             else
@@ -257,7 +257,8 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses a pattern for use in when clauses.
-    /// Supports: wildcard (_), type patterns (Type varName), literal patterns, guard patterns (n if n &lt; 0).
+    /// Supports: wildcard (_), type patterns (Type varName), variant patterns (Type.CASE or CASE),
+    /// destructuring patterns (CASE (a, b)), literal patterns, guard patterns (n if n &lt; 0).
     /// </summary>
     /// <returns>A <see cref="Pattern"/> AST node.</returns>
     private Pattern ParsePattern()
@@ -272,20 +273,10 @@ public partial class RazorForgeParser
             return TryParseGuard(innerPattern: wildcardPattern, location: location);
         }
 
-        // Type pattern with optional variable binding: Type variableName or Type
+        // Type pattern with TypeIdentifier token (lexer identifies types by case/context)
         if (Check(type: TokenType.TypeIdentifier))
         {
-            TypeExpression type = ParseType();
-
-            // Check for variable binding
-            string? variableName = null;
-            if (Check(type: TokenType.Identifier))
-            {
-                variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
-            }
-
-            Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Location: location);
-            return TryParseGuard(innerPattern: typePattern, location: location);
+            return ParseTypePattern();
         }
 
         // Identifier pattern: variable binding (check before parsing full expression)
@@ -306,6 +297,73 @@ public partial class RazorForgeParser
 
         // Otherwise, treat as expression pattern
         return new ExpressionPattern(Expression: expr, Location: location);
+    }
+
+    /// <summary>
+    /// Parses a type pattern (used after 'is' keyword).
+    /// Accepts both Identifier and TypeIdentifier tokens since lexer may emit either.
+    /// Syntax: Type, Type varName, Type.CASE, Type.CASE varName, CASE (a, b)
+    /// </summary>
+    /// <returns>A <see cref="TypePattern"/> AST node.</returns>
+    private Pattern ParseTypePattern()
+    {
+        SourceLocation location = GetLocation();
+
+        // Accept both Identifier and TypeIdentifier (lexer may emit Identifier for all)
+        if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
+        {
+            throw new ParseException(message: $"Expected type name after 'is', got {CurrentToken.Type}");
+        }
+
+        string name = CurrentToken.Text;
+        Advance();
+
+        // Check for qualified name: Type.CASE or Type.CASE.SubCase
+        while (Match(type: TokenType.Dot))
+        {
+            if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+            {
+                name += "." + PeekToken(offset: -1).Text;
+            }
+            else
+            {
+                throw new ParseException(message: "Expected identifier after '.' in pattern");
+            }
+        }
+
+        // Check for destructuring: Type.CASE (field1, field2) or (field: alias, field2: alias2)
+        List<string>? bindings = null;
+        if (Match(type: TokenType.LeftParen))
+        {
+            bindings = new List<string>();
+            if (!Check(type: TokenType.RightParen))
+            {
+                do
+                {
+                    // Support both simple binding (field) and aliased binding (field: alias)
+                    string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name in destructuring pattern");
+                    // If there's a colon, this is an aliased binding (field: alias)
+                    if (Match(type: TokenType.Colon))
+                    {
+                        // The alias is what we actually bind to
+                        bindingName = ConsumeIdentifier(errorMessage: "Expected alias name after ':' in destructuring pattern");
+                    }
+                    bindings.Add(item: bindingName);
+                } while (Match(type: TokenType.Comma));
+            }
+            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
+        }
+
+        // Check for variable binding (only if no destructuring)
+        string? variableName = null;
+        if (bindings == null && Check(type: TokenType.Identifier))
+        {
+            variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
+        }
+
+        TypeExpression type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+        Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
+        return TryParseGuard(innerPattern: typePattern, location: location);
     }
 
     /// <summary>

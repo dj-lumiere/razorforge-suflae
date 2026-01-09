@@ -11,8 +11,8 @@ namespace Compilers.Suflae.Parser;
 public partial class SuflaeParser
 {
     /// <summary>
-    /// Parses an if statement with indented blocks.
-    /// Syntax: <c>if condition:</c> followed by indented body, optional <c>else:</c> block.
+    /// Parses an if statement with indented blocks and optional elseif/else chains.
+    /// Syntax: <c>if condition:</c> followed by indented body, optional <c>elseif condition:</c> blocks, optional <c>else:</c> block.
     /// </summary>
     /// <returns>An <see cref="IfStatement"/> AST node.</returns>
     private Statement ParseIfStatement()
@@ -24,16 +24,88 @@ public partial class SuflaeParser
         Statement thenBranch = ParseIndentedBlock();
 
         Statement? elseBranch = null;
-        if (Match(type: TokenType.Else))
+
+        // Handle elseif chain - convert to nested if-else
+        while (Match(type: TokenType.Elseif))
         {
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
-            elseBranch = ParseIndentedBlock();
+            SourceLocation elseifLocation = GetLocation(token: PeekToken(offset: -1));
+            Expression elseifCondition = ParseExpression();
+            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after elseif condition");
+            Statement elseifBranch = ParseIndentedBlock();
+
+            // Create nested if statement for this elseif
+            var nestedIf = new IfStatement(Condition: elseifCondition,
+                ThenStatement: elseifBranch,
+                ElseStatement: null,
+                Location: elseifLocation);
+
+            // Attach to the chain
+            if (elseBranch == null)
+            {
+                elseBranch = nestedIf;
+            }
+            else if (elseBranch is IfStatement prevIf)
+            {
+                // Find the end of the elseif chain and attach
+                IfStatement current = prevIf;
+                while (current.ElseStatement is IfStatement nextIf)
+                {
+                    current = nextIf;
+                }
+                // Create new chain with the nested if attached
+                elseBranch = AttachElseBranch(root: prevIf, newBranch: nestedIf);
+            }
+        }
+
+        if (!Match(type: TokenType.Else))
+        {
+            return new IfStatement(Condition: condition,
+                ThenStatement: thenBranch,
+                ElseStatement: elseBranch,
+                Location: location);
+        }
+
+        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+        Statement finalElse = ParseIndentedBlock();
+
+        if (elseBranch == null)
+        {
+            elseBranch = finalElse;
+        }
+        else if (elseBranch is IfStatement lastIf)
+        {
+            // Attach final else to the end of the elseif chain
+            elseBranch = AttachElseBranch(root: lastIf, newBranch: finalElse);
         }
 
         return new IfStatement(Condition: condition,
             ThenStatement: thenBranch,
             ElseStatement: elseBranch,
             Location: location);
+    }
+
+    /// <summary>
+    /// Helper to recursively attach an else branch to the end of an if-elseif chain.
+    /// Since IfStatement is immutable, we need to rebuild the chain.
+    /// </summary>
+    private static IfStatement AttachElseBranch(IfStatement root, Statement newBranch)
+    {
+        if (root.ElseStatement == null)
+        {
+            return new IfStatement(Condition: root.Condition,
+                ThenStatement: root.ThenStatement,
+                ElseStatement: newBranch,
+                Location: root.Location);
+        }
+        if (root.ElseStatement is IfStatement nestedIf)
+        {
+            return new IfStatement(Condition: root.Condition,
+                ThenStatement: root.ThenStatement,
+                ElseStatement: AttachElseBranch(root: nestedIf, newBranch: newBranch),
+                Location: root.Location);
+        }
+        // Already has a non-if else branch, shouldn't happen
+        return root;
     }
 
     /// <summary>
@@ -153,7 +225,7 @@ public partial class SuflaeParser
             if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
-                pattern = ParsePattern();
+                pattern = ParseTypePattern();
                 _inWhenPatternContext = false;
             }
             // Handle 'else' keyword for default case: else => body or else varName => body
@@ -181,19 +253,35 @@ public partial class SuflaeParser
                 _inWhenPatternContext = false;
             }
 
-            Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after pattern");
-
+            // Suflae supports two clause syntaxes:
+            // 1. is PATTERN => expr           (single expression)
+            // 2. is PATTERN:                  (indented block)
+            //        statements...
             // Set flag to prevent 'is' expression parsing in when clause bodies
             _inWhenClauseBody = true;
             Statement body;
-            if (Check(type: TokenType.Colon))
+            if (Match(type: TokenType.Colon))
             {
-                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after '=>'");
+                // Multi-line body: is PATTERN: followed by indented block
                 body = ParseIndentedBlock();
+            }
+            else if (Match(type: TokenType.FatArrow))
+            {
+                // Single-line body: is PATTERN => expression
+                // Optional colon after => for multi-line body
+                if (Check(type: TokenType.Colon))
+                {
+                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after '=>'");
+                    body = ParseIndentedBlock();
+                }
+                else
+                {
+                    body = ParseExpressionStatement();
+                }
             }
             else
             {
-                body = ParseExpressionStatement();
+                throw new ParseException(message: "Expected ':' or '=>' after pattern");
             }
 
             _inWhenClauseBody = false;
@@ -211,7 +299,8 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a pattern for use in when clauses.
-    /// Supports: wildcard (_), type patterns, identifier bindings, literal patterns, guard patterns (n if n &lt; 0).
+    /// Supports: wildcard (_), type patterns (Type varName), variant patterns (Type.CASE or CASE),
+    /// destructuring patterns (CASE (a, b)), literal patterns, guard patterns (n if n &lt; 0).
     /// </summary>
     /// <returns>A <see cref="Pattern"/> AST node.</returns>
     private Pattern ParsePattern()
@@ -219,26 +308,65 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation();
 
         // Wildcard pattern: _
-        if (Match(type: TokenType.Identifier) && PeekToken(offset: -1)
-               .Text == "_")
+        if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_")
         {
+            Advance(); // consume the '_'
             Pattern wildcardPattern = new WildcardPattern(Location: location);
             return TryParseGuard(innerPattern: wildcardPattern, location: location);
         }
 
-        // Type pattern with optional variable binding: Type variableName or Type
-        if (Check(type: TokenType.TypeIdentifier))
+        // Type/Variant pattern: Type, Type varName, Type.CASE, Type.CASE varName, CASE, CASE (a, b)
+        // In Suflae, all identifiers are TokenType.Identifier, so we check if it starts with uppercase
+        if (Check(type: TokenType.Identifier) && CurrentToken.Text.Length > 0 && char.IsUpper(CurrentToken.Text[0]))
         {
-            TypeExpression type = ParseType();
+            string name = CurrentToken.Text;
+            Advance();
 
-            // Check for variable binding
+            // Check for qualified name: Type.CASE or Type.CASE.SubCase
+            while (Match(type: TokenType.Dot))
+            {
+                if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+                {
+                    name += "." + PeekToken(offset: -1).Text;
+                }
+                else
+                {
+                    throw new ParseException(message: "Expected identifier after '.' in pattern");
+                }
+            }
+
+            // Check for destructuring: Type.CASE (field1, field2) or (field: alias, field2: alias2)
+            List<string>? bindings = null;
+            if (Match(type: TokenType.LeftParen))
+            {
+                bindings = new List<string>();
+                if (!Check(type: TokenType.RightParen))
+                {
+                    do
+                    {
+                        // Support both simple binding (field) and aliased binding (field: alias)
+                        string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name in destructuring pattern");
+                        // If there's a colon, this is an aliased binding (field: alias)
+                        if (Match(type: TokenType.Colon))
+                        {
+                            // The alias is what we actually bind to
+                            bindingName = ConsumeIdentifier(errorMessage: "Expected alias name after ':' in destructuring pattern");
+                        }
+                        bindings.Add(item: bindingName);
+                    } while (Match(type: TokenType.Comma));
+                }
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
+            }
+
+            // Check for variable binding (only if no destructuring)
             string? variableName = null;
-            if (Check(type: TokenType.Identifier))
+            if (bindings == null && Check(type: TokenType.Identifier))
             {
                 variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
             }
 
-            Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Location: location);
+            TypeExpression type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+            Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
             return TryParseGuard(innerPattern: typePattern, location: location);
         }
 
@@ -280,6 +408,83 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Parses a type pattern (used after 'is' keyword).
+    /// Accepts all identifiers since Suflae lexer emits Identifier for all.
+    /// Syntax: Type, Type varName, Type.CASE, Type.CASE varName, CASE (a, b)
+    /// Also handles special keywords like 'none'.
+    /// </summary>
+    /// <returns>A <see cref="TypePattern"/> AST node.</returns>
+    private Pattern ParseTypePattern()
+    {
+        SourceLocation location = GetLocation();
+
+        // Handle 'is none' as a special case - none is a keyword
+        if (Match(type: TokenType.None))
+        {
+            // Create a special "none" type pattern
+            TypeExpression noneType = new TypeExpression(Name: "none", GenericArguments: null, Location: location);
+            Pattern nonePattern = new TypePattern(Type: noneType, VariableName: null, Bindings: null, Location: location);
+            return TryParseGuard(innerPattern: nonePattern, location: location);
+        }
+
+        // Accept Identifier (Suflae emits Identifier for all identifiers)
+        if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
+        {
+            throw new ParseException(message: $"Expected type name after 'is', got {CurrentToken.Type}");
+        }
+
+        string name = CurrentToken.Text;
+        Advance();
+
+        // Check for qualified name: Type.CASE or Type.CASE.SubCase
+        while (Match(type: TokenType.Dot))
+        {
+            if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+            {
+                name += "." + PeekToken(offset: -1).Text;
+            }
+            else
+            {
+                throw new ParseException(message: "Expected identifier after '.' in pattern");
+            }
+        }
+
+        // Check for destructuring: Type.CASE (field1, field2) or (field: alias, field2: alias2)
+        List<string>? bindings = null;
+        if (Match(type: TokenType.LeftParen))
+        {
+            bindings = new List<string>();
+            if (!Check(type: TokenType.RightParen))
+            {
+                do
+                {
+                    // Support both simple binding (field) and aliased binding (field: alias)
+                    string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name in destructuring pattern");
+                    // If there's a colon, this is an aliased binding (field: alias)
+                    if (Match(type: TokenType.Colon))
+                    {
+                        // The alias is what we actually bind to
+                        bindingName = ConsumeIdentifier(errorMessage: "Expected alias name after ':' in destructuring pattern");
+                    }
+                    bindings.Add(item: bindingName);
+                } while (Match(type: TokenType.Comma));
+            }
+            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
+        }
+
+        // Check for variable binding (only if no destructuring)
+        string? variableName = null;
+        if (bindings == null && Check(type: TokenType.Identifier))
+        {
+            variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
+        }
+
+        TypeExpression type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+        Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
+        return TryParseGuard(innerPattern: typePattern, location: location);
+    }
+
+    /// <summary>
     /// Parses a return statement.
     /// Syntax: <c>return</c> or <c>return expression</c>
     /// </summary>
@@ -289,7 +494,8 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression? value = null;
-        if (!Check(type: TokenType.Newline) && !IsAtEnd)
+        // Check for both Newline and Dedent - in Suflae, either can follow a valueless return
+        if (!Check(type: TokenType.Newline) && !Check(type: TokenType.Dedent) && !IsAtEnd)
         {
             value = ParseExpression();
         }

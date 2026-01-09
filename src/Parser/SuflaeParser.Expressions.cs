@@ -276,7 +276,7 @@ public partial class SuflaeParser
     {
         Expression expr = ParseComparison();
 
-        while (Match(type: TokenType.NotEqual))
+        while (Match(TokenType.NotEqual, TokenType.ReferenceEqual, TokenType.ReferenceNotEqual))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseComparison();
@@ -395,41 +395,47 @@ public partial class SuflaeParser
             Token op = PeekToken(offset: -1);
             SourceLocation location = GetLocation(token: op);
 
-            if (op.Type == TokenType.Is || op.Type == TokenType.IsNot)
+            if (op.Type is TokenType.Is or TokenType.IsNot)
             {
                 bool isNegated = op.Type == TokenType.IsNot;
                 TypeExpression type = ParseType();
 
-                // Check for destructuring pattern: is Type (...)
-                if (!isNegated && Check(type: TokenType.LeftParen))
+                switch (isNegated)
                 {
-                    // Destructuring pattern: is Point (x, y) or is Point (x: a, y: b)
-                    List<DestructuringBinding> bindings = ParseDestructuringBindings();
-                    var pattern = new TypeDestructuringPattern(Type: type, Bindings: bindings, Location: location);
-                    expr = new IsPatternExpression(Expression: expr,
-                        Pattern: pattern,
-                        IsNegated: false,
-                        Location: location);
-                }
-                // Check for single binding: is Type identifier (only for 'is', not 'isnot')
-                else if (!isNegated && Check(TokenType.Identifier, TokenType.TypeIdentifier) && !IsKeywordToken(token: CurrentToken))
-                {
-                    string variableName = Advance()
-                       .Text;
-                    var pattern = new TypePattern(Type: type, VariableName: variableName, Location: location);
-                    expr = new IsPatternExpression(Expression: expr,
-                        Pattern: pattern,
-                        IsNegated: false,
-                        Location: location);
-                }
-                else
-                {
-                    // Simple type check: is Type or isnot Type
-                    var pattern = new TypePattern(Type: type, VariableName: null, Location: location);
-                    expr = new IsPatternExpression(Expression: expr,
-                        Pattern: pattern,
-                        IsNegated: isNegated,
-                        Location: location);
+                    // Check for destructuring pattern: is Type (...)
+                    case false when Check(type: TokenType.LeftParen):
+                    {
+                        // Destructuring pattern: is Point (x, y) or is Point (x: a, y: b)
+                        List<DestructuringBinding> bindings = ParseDestructuringBindings();
+                        var pattern = new TypeDestructuringPattern(Type: type, Bindings: bindings, Location: location);
+                        expr = new IsPatternExpression(Expression: expr,
+                            Pattern: pattern,
+                            IsNegated: false,
+                            Location: location);
+                        break;
+                    }
+                    // Check for single binding: is Type identifier (only for 'is', not 'isnot')
+                    case false when Check(TokenType.Identifier, TokenType.TypeIdentifier) && !IsKeywordToken(token: CurrentToken):
+                    {
+                        string variableName = Advance()
+                           .Text;
+                        var pattern = new TypePattern(Type: type, VariableName: variableName, Bindings: null, Location: location);
+                        expr = new IsPatternExpression(Expression: expr,
+                            Pattern: pattern,
+                            IsNegated: false,
+                            Location: location);
+                        break;
+                    }
+                    default:
+                    {
+                        // Simple type check: is Type or isnot Type
+                        var pattern = new TypePattern(Type: type, VariableName: null, Bindings: null, Location: location);
+                        expr = new IsPatternExpression(Expression: expr,
+                            Pattern: pattern,
+                            IsNegated: isNegated,
+                            Location: location);
+                        break;
+                    }
                 }
             }
             else
@@ -969,48 +975,62 @@ public partial class SuflaeParser
                 }
 
                 // Check for generic method call with type parameters
+                // Disambiguate by scanning for the pattern <...>() or <...>.
+                // If we find matching > followed by ( or ., it's definitely a generic call.
                 if (Check(type: TokenType.Less))
                 {
                     int savedPos = Position;
                     Advance(); // consume '<'
 
+                    // Scan forward to find matching > and check what follows
                     bool isLikelyGeneric = false;
+                    int scanPos = Position;
+                    int depth = 1;
 
-                    if (Check(type: TokenType.TypeIdentifier) || Check(type: TokenType.Identifier))
+                    while (scanPos < Tokens.Count && depth > 0)
                     {
-                        string identText = CurrentToken.Text;
-                        if (IsKnownTypeName(name: identText) || Check(type: TokenType.TypeIdentifier))
+                        TokenType tt = Tokens[index: scanPos].Type;
+                        if (tt == TokenType.Less)
                         {
-                            int scanPos = Position;
-                            int depth = 1;
-                            while (scanPos < Tokens.Count && depth > 0)
+                            depth++;
+                        }
+                        else if (tt == TokenType.Greater)
+                        {
+                            depth--;
+                            if (depth == 0)
                             {
-                                TokenType tt = Tokens[index: scanPos].Type;
-                                if (tt == TokenType.Less)
+                                if (scanPos + 1 < Tokens.Count &&
+                                    (Tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
+                                     Tokens[index: scanPos + 1].Type == TokenType.Dot))
                                 {
-                                    depth++;
-                                }
-                                else if (tt == TokenType.Greater)
-                                {
-                                    depth--;
-                                    if (depth == 0)
-                                    {
-                                        if (scanPos + 1 < Tokens.Count && (Tokens[index: scanPos + 1].Type == TokenType.LeftParen || Tokens[index: scanPos + 1].Type == TokenType.Dot))
-                                        {
-                                            isLikelyGeneric = true;
-                                        }
-
-                                        break;
-                                    }
-                                }
-                                else if (tt == TokenType.Newline || tt == TokenType.Colon)
-                                {
-                                    break;
+                                    isLikelyGeneric = true;
                                 }
 
-                                scanPos++;
+                                break;
                             }
                         }
+                        else if (tt == TokenType.RightShift)
+                        {
+                            // >> could be two > in nested generics
+                            depth -= 2;
+                            if (depth <= 0)
+                            {
+                                if (scanPos + 1 < Tokens.Count &&
+                                    (Tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
+                                     Tokens[index: scanPos + 1].Type == TokenType.Dot))
+                                {
+                                    isLikelyGeneric = true;
+                                }
+
+                                break;
+                            }
+                        }
+                        else if (tt == TokenType.Newline || tt == TokenType.Colon)
+                        {
+                            break;
+                        }
+
+                        scanPos++;
                     }
 
                     Position = savedPos;
@@ -1202,6 +1222,13 @@ public partial class SuflaeParser
             Expression expr = ParseExpression();
             Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after expression");
             return expr;
+        }
+
+        // When expression: when x: pattern => expr, ...
+        // Used in expression context: return when x: ..., let y = when x: ...
+        if (Match(type: TokenType.When))
+        {
+            return ParseWhenExpression(location: location);
         }
 
         // Intrinsic function call: @intrinsic.operation<T>(args)
@@ -1515,5 +1542,111 @@ public partial class SuflaeParser
         }
 
         return '?';
+    }
+
+    /// <summary>
+    /// Parses a when expression for use in expression context.
+    /// Syntax: when expression:
+    ///             pattern => expr
+    ///             pattern => expr
+    /// Similar to Rust's match expression or Kotlin's when expression.
+    /// </summary>
+    /// <param name="location">The source location of the when keyword.</param>
+    /// <returns>A <see cref="WhenExpression"/> AST node.</returns>
+    private WhenExpression ParseWhenExpression(SourceLocation location)
+    {
+        Expression expression = ParseExpression();
+        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after when expression");
+
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after when header");
+        Consume(type: TokenType.Indent, errorMessage: "Expected indented block after when");
+
+        var clauses = new List<WhenClause>();
+
+        while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+        {
+            // Skip newlines
+            if (Match(type: TokenType.Newline))
+            {
+                continue;
+            }
+
+            Pattern pattern;
+            SourceLocation clauseLocation = GetLocation();
+
+            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
+            if (Match(type: TokenType.Is))
+            {
+                _inWhenPatternContext = true;
+                pattern = ParseTypePattern();
+                _inWhenPatternContext = false;
+            }
+            // Handle 'else' keyword for default case: else => body or else varName => body
+            else if (Match(type: TokenType.Else))
+            {
+                // Check for variable binding: else varName =>
+                if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+                       .Type == TokenType.FatArrow)
+                {
+                    string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
+                    pattern = new IdentifierPattern(Name: varName, Location: clauseLocation);
+                }
+                else
+                {
+                    // Plain else without variable binding - treat as wildcard
+                    pattern = new WildcardPattern(Location: clauseLocation);
+                }
+            }
+            else
+            {
+                // Set context flag to prevent single-param lambdas from being parsed
+                // inside when patterns (e.g., a < b => action should not treat b => action as lambda)
+                _inWhenPatternContext = true;
+                pattern = ParsePattern();
+                _inWhenPatternContext = false;
+            }
+
+            // Suflae supports two clause syntaxes:
+            // 1. is PATTERN => expr           (single expression)
+            // 2. is PATTERN:                  (indented block)
+            //        statements...
+            // Set flag to prevent 'is' expression parsing in when clause bodies
+            _inWhenClauseBody = true;
+            Statement body;
+            if (Match(type: TokenType.Colon))
+            {
+                // Multi-line body: is PATTERN: followed by indented block
+                body = ParseIndentedBlock();
+            }
+            else if (Match(type: TokenType.FatArrow))
+            {
+                // Single-line body: is PATTERN => expression
+                // Optional colon after => for multi-line body
+                if (Check(type: TokenType.Colon))
+                {
+                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after '=>'");
+                    body = ParseIndentedBlock();
+                }
+                else
+                {
+                    body = ParseExpressionStatement();
+                }
+            }
+            else
+            {
+                throw new ParseException(message: "Expected ':' or '=>' after pattern");
+            }
+
+            _inWhenClauseBody = false;
+
+            clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
+
+            // Optional newline between clauses
+            Match(type: TokenType.Newline);
+        }
+
+        Consume(type: TokenType.Dedent, errorMessage: "Expected dedent after when clauses");
+
+        return new WhenExpression(Expression: expression, Clauses: clauses, Location: location);
     }
 }
