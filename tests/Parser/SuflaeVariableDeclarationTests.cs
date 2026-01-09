@@ -22,7 +22,7 @@ public class SuflaeVariableDeclarationTests
                             let x: Integer = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class SuflaeVariableDeclarationTests
                             let x = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class SuflaeVariableDeclarationTests
                             let items: List<Integer> = [1, 2, 3]
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class SuflaeVariableDeclarationTests
                             let map: Dict<Text, Integer> = Dict()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -63,10 +63,10 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test():
-                            let value: Integer? = None
+                            let value: Integer? = none
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class SuflaeVariableDeclarationTests
                             let result = compute(10, 20)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class SuflaeVariableDeclarationTests
                             let sum = a + b * c
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -103,7 +103,7 @@ public class SuflaeVariableDeclarationTests
                             var x: Integer = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class SuflaeVariableDeclarationTests
                             var x = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class SuflaeVariableDeclarationTests
                             count += 1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class SuflaeVariableDeclarationTests
                             x = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -156,7 +156,7 @@ public class SuflaeVariableDeclarationTests
                             let c = 3
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public class SuflaeVariableDeclarationTests
                             let another_constant = 200
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -184,7 +184,7 @@ public class SuflaeVariableDeclarationTests
                             let (x, y) = get_point()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class SuflaeVariableDeclarationTests
                             let (name, age) = Person(name: "Alice", age: 30)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class SuflaeVariableDeclarationTests
                             let ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public class SuflaeVariableDeclarationTests
                             let (center: c, radius: r) = circle
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class SuflaeVariableDeclarationTests
                             let (_, y) = get_point()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -252,7 +252,7 @@ public class SuflaeVariableDeclarationTests
                             let j: bool = true
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class SuflaeVariableDeclarationTests
                             let name: Text = "Alice"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public class SuflaeVariableDeclarationTests
                             let nested: Dict<Text, List<Integer>> = Dict()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -292,7 +292,7 @@ public class SuflaeVariableDeclarationTests
                             let oct = 0o77
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -305,7 +305,7 @@ public class SuflaeVariableDeclarationTests
                             let c = 2.5e-3
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -318,7 +318,7 @@ public class SuflaeVariableDeclarationTests
                             let formatted = f"value = {x}"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public class SuflaeVariableDeclarationTests
                             let f = false
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public class SuflaeVariableDeclarationTests
                             let x: Integer? = None
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -352,7 +352,7 @@ public class SuflaeVariableDeclarationTests
                             let items = [1, 2, 3, 4, 5]
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public class SuflaeVariableDeclarationTests
                             let empty: List<Integer> = []
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -432,7 +432,7 @@ public class SuflaeVariableDeclarationTests
                             let point = Point(x: 10.0, y: 20.0)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -443,7 +443,7 @@ public class SuflaeVariableDeclarationTests
                             let result = data.filter().map().collect()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -454,7 +454,7 @@ public class SuflaeVariableDeclarationTests
                             let value = if condition then 1 else 0
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -467,7 +467,7 @@ public class SuflaeVariableDeclarationTests
                                 else => "stopped"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

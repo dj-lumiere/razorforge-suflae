@@ -103,7 +103,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -161,7 +161,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -206,7 +206,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     // Nested inline if-then-else test moved to Analyzer/ControlFlowAnalysisTests.cs
@@ -252,7 +252,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -310,7 +310,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -327,7 +327,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -345,7 +345,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -384,7 +384,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -399,7 +399,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -414,7 +414,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -431,7 +431,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -448,7 +448,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -464,7 +464,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -501,7 +501,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -516,7 +516,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -532,7 +532,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -548,7 +548,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -567,7 +567,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -580,7 +580,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -593,7 +593,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -605,7 +605,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -617,7 +617,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -645,7 +645,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -662,7 +662,7 @@ public class ControlFlowTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion

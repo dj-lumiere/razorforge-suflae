@@ -51,7 +51,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -102,7 +102,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -155,7 +155,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -192,7 +192,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -244,7 +244,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -283,7 +283,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -315,7 +315,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -334,7 +334,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -349,7 +349,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -366,7 +366,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -382,7 +382,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -400,7 +400,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -421,7 +421,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -438,7 +438,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -453,7 +453,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -472,7 +472,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -489,7 +489,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -508,7 +508,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -529,7 +529,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -545,7 +545,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -557,7 +557,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -569,7 +569,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -608,7 +608,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -634,7 +634,7 @@ public class PatternMatchingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion

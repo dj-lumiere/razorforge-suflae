@@ -23,7 +23,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should resolve x correctly
     }
 
@@ -78,7 +78,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -131,7 +131,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -179,7 +179,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Parameter shadows global variable
     }
 
@@ -215,7 +215,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Shadowing in nested scope is allowed
     }
 
@@ -254,7 +254,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -334,7 +334,7 @@ public class ScopeTests
                             show(x)
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     [Fact]
@@ -358,7 +358,7 @@ public class ScopeTests
                                 show(i)
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     [Fact]
@@ -390,7 +390,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -423,7 +423,7 @@ public class ScopeTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion

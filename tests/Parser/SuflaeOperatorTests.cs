@@ -2,7 +2,6 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
 using static TestHelpers;
 
 /// <summary>
@@ -22,7 +21,7 @@ public class SuflaeOperatorTests
                             return 1 + 2
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -33,7 +32,7 @@ public class SuflaeOperatorTests
                             return 5 - 3
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -44,7 +43,7 @@ public class SuflaeOperatorTests
                             return 4 * 5
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -55,7 +54,7 @@ public class SuflaeOperatorTests
                             return 10.0 / 3.0
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -66,7 +65,7 @@ public class SuflaeOperatorTests
                             return 10 // 3
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -77,7 +76,7 @@ public class SuflaeOperatorTests
                             return 10 % 3
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -88,7 +87,7 @@ public class SuflaeOperatorTests
                             return 2 ** 10
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -99,7 +98,7 @@ public class SuflaeOperatorTests
                             return -42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -110,7 +109,7 @@ public class SuflaeOperatorTests
                             return 1 + 2 * 3 - 4 // 2
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -121,7 +120,7 @@ public class SuflaeOperatorTests
                             return (1 + 2) * (3 - 4)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -138,7 +137,7 @@ public class SuflaeOperatorTests
                             return a +% b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -151,7 +150,7 @@ public class SuflaeOperatorTests
                             return a -% b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -164,7 +163,7 @@ public class SuflaeOperatorTests
                             return a *% b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -181,7 +180,7 @@ public class SuflaeOperatorTests
                             return a +^ b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -194,7 +193,7 @@ public class SuflaeOperatorTests
                             return a -^ b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -211,7 +210,7 @@ public class SuflaeOperatorTests
                             return a +? b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -224,7 +223,7 @@ public class SuflaeOperatorTests
                             return a //? b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -239,7 +238,7 @@ public class SuflaeOperatorTests
                             return a == b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -250,7 +249,7 @@ public class SuflaeOperatorTests
                             return a != b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -261,7 +260,7 @@ public class SuflaeOperatorTests
                             return a < b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -272,7 +271,7 @@ public class SuflaeOperatorTests
                             return a <= b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -283,7 +282,7 @@ public class SuflaeOperatorTests
                             return a > b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -294,7 +293,7 @@ public class SuflaeOperatorTests
                             return a >= b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -305,7 +304,7 @@ public class SuflaeOperatorTests
                             return 0 <= index < length
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -316,7 +315,7 @@ public class SuflaeOperatorTests
                             return min <= value <= max
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -331,7 +330,7 @@ public class SuflaeOperatorTests
                             return a === b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -342,7 +341,7 @@ public class SuflaeOperatorTests
                             return a !== b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -357,7 +356,7 @@ public class SuflaeOperatorTests
                             return a and b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -368,7 +367,7 @@ public class SuflaeOperatorTests
                             return a or b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -379,7 +378,7 @@ public class SuflaeOperatorTests
                             return not a
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -390,7 +389,7 @@ public class SuflaeOperatorTests
                             return a and b or c and not d
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -401,7 +400,7 @@ public class SuflaeOperatorTests
                             return x > 0 and x < 100
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -416,7 +415,7 @@ public class SuflaeOperatorTests
                             return flags & mask
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -427,7 +426,7 @@ public class SuflaeOperatorTests
                             return flags | mask
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -438,7 +437,7 @@ public class SuflaeOperatorTests
                             return flags ^ mask
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -449,7 +448,7 @@ public class SuflaeOperatorTests
                             return ~flags
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -460,7 +459,7 @@ public class SuflaeOperatorTests
                             return value << 4
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -471,7 +470,7 @@ public class SuflaeOperatorTests
                             return value >> 4
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -482,7 +481,7 @@ public class SuflaeOperatorTests
                             return value <<< 4
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -493,7 +492,7 @@ public class SuflaeOperatorTests
                             return value >>> 4
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -509,7 +508,7 @@ public class SuflaeOperatorTests
                             return value ?? 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -517,13 +516,13 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer:
-                            let a: Integer? = None
-                            let b: Integer? = None
+                            let a: Integer? = none
+                            let b: Integer? = none
                             let c: Integer = 100
                             return a ?? b ?? c
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -534,7 +533,7 @@ public class SuflaeOperatorTests
                             return try_get_user(id) ?? default_user()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -550,7 +549,7 @@ public class SuflaeOperatorTests
                             x = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -562,7 +561,7 @@ public class SuflaeOperatorTests
                             x += 1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -574,7 +573,7 @@ public class SuflaeOperatorTests
                             x -= 1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -586,7 +585,7 @@ public class SuflaeOperatorTests
                             x *= 3
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -598,7 +597,7 @@ public class SuflaeOperatorTests
                             flags &= 0x0F
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -610,7 +609,7 @@ public class SuflaeOperatorTests
                             flags |= 0x0F
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -622,7 +621,7 @@ public class SuflaeOperatorTests
                             x <<= 4
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -634,7 +633,7 @@ public class SuflaeOperatorTests
                             x >>= 2
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -649,7 +648,7 @@ public class SuflaeOperatorTests
                             return "Hello, " + "World!"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -660,7 +659,7 @@ public class SuflaeOperatorTests
                             return "-" * 40
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -676,7 +675,7 @@ public class SuflaeOperatorTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -688,7 +687,7 @@ public class SuflaeOperatorTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -700,7 +699,7 @@ public class SuflaeOperatorTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -715,7 +714,7 @@ public class SuflaeOperatorTests
                             return (a + b) * c - d // e % f ** g
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -726,7 +725,7 @@ public class SuflaeOperatorTests
                             return a + b > c * d and not (e == f or g != h)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -737,7 +736,7 @@ public class SuflaeOperatorTests
                             return (flags & mask) != 0
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

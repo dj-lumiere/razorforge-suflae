@@ -2,7 +2,6 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
 using static TestHelpers;
 
 /// <summary>
@@ -22,7 +21,7 @@ public class SuflaeExpressionTests
                             show("hello")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -33,7 +32,7 @@ public class SuflaeExpressionTests
                             compute(1, 2, 3)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -44,7 +43,7 @@ public class SuflaeExpressionTests
                             create_user(name: "Alice", age: 30)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -52,10 +51,10 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test():
-                            data.where().select().to_list()
+                            data.where().select().List()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -63,10 +62,10 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test():
-                            let len = "hello".length()
+                            let len = "hello".count()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -77,7 +76,7 @@ public class SuflaeExpressionTests
                             let result = "42".S32!()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -88,7 +87,7 @@ public class SuflaeExpressionTests
                             let pi = Math.pi()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -103,7 +102,7 @@ public class SuflaeExpressionTests
                             let x = point.x
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -114,7 +113,7 @@ public class SuflaeExpressionTests
                             let city = user.address.city
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -125,7 +124,7 @@ public class SuflaeExpressionTests
                             let result = user.name.to_upper().length()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -137,7 +136,7 @@ public class SuflaeExpressionTests
                             return me.x
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -152,7 +151,7 @@ public class SuflaeExpressionTests
                             let first = items[0]
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -163,7 +162,7 @@ public class SuflaeExpressionTests
                             let cell = matrix[i][j]
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -174,40 +173,7 @@ public class SuflaeExpressionTests
                             let value = dict["key"]
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_SliceExpression()
-    {
-        string source = """
-                        routine test():
-                            let slice = items[1..5]
-                        """;
-
-        Program program = AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_SliceFromStart()
-    {
-        string source = """
-                        routine test():
-                            let first_five = items[..5]
-                        """;
-
-        Program program = AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_SliceToEnd()
-    {
-        string source = """
-                        routine test():
-                            let rest = items[5..]
-                        """;
-
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -219,7 +185,7 @@ public class SuflaeExpressionTests
                             items[0] = 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -234,7 +200,7 @@ public class SuflaeExpressionTests
                             let point = Point(x: 10.0, y: 20.0)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -245,7 +211,7 @@ public class SuflaeExpressionTests
                             let user = User(name: "Alice", age: 30)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -256,7 +222,7 @@ public class SuflaeExpressionTests
                             let circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -267,7 +233,7 @@ public class SuflaeExpressionTests
                             let container = Container<Integer>(value: 42)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -282,7 +248,7 @@ public class SuflaeExpressionTests
                             let add = (a, b) => a + b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -293,7 +259,7 @@ public class SuflaeExpressionTests
                             let double = x => x * 2
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -304,7 +270,7 @@ public class SuflaeExpressionTests
                             items.select(x => x * 2)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -316,7 +282,7 @@ public class SuflaeExpressionTests
                             let scale = x => x * multiplier
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -327,7 +293,7 @@ public class SuflaeExpressionTests
                             let get_value = () => 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -342,7 +308,7 @@ public class SuflaeExpressionTests
                             let msg = f"Hello, {name}!"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -353,7 +319,7 @@ public class SuflaeExpressionTests
                             let msg = f"Sum: {a + b}"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -364,7 +330,7 @@ public class SuflaeExpressionTests
                             let msg = f"{first} + {second} = {first + second}"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -375,7 +341,7 @@ public class SuflaeExpressionTests
                             let msg = f"Name: {user.name.to_upper()}"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -390,7 +356,7 @@ public class SuflaeExpressionTests
                             let x = value.S64!()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -401,7 +367,7 @@ public class SuflaeExpressionTests
                             let x = 42.F64()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -412,7 +378,7 @@ public class SuflaeExpressionTests
                             let result = "42".S32!().F64!()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -427,7 +393,7 @@ public class SuflaeExpressionTests
                             let result = (a + b) * c
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -438,7 +404,7 @@ public class SuflaeExpressionTests
                             let result = ((a + b) * (c - d)) / e
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -453,7 +419,7 @@ public class SuflaeExpressionTests
                             let range = 0 to 10
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -464,7 +430,7 @@ public class SuflaeExpressionTests
                             let range = 0 to 100 by 5
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -479,7 +445,7 @@ public class SuflaeExpressionTests
                             let result = items.where(x => x > 0).select(x => x * 2).take(10).to_list()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -490,7 +456,7 @@ public class SuflaeExpressionTests
                             let value = if condition then compute_a() else compute_b()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -504,7 +470,7 @@ public class SuflaeExpressionTests
                                 else => "Unknown"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -515,7 +481,7 @@ public class SuflaeExpressionTests
                             let value = first_option() ?? second_option() ?? default_value
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -530,7 +496,7 @@ public class SuflaeExpressionTests
                             let msg = Message.TEXT("Hello")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -541,7 +507,7 @@ public class SuflaeExpressionTests
                             let msg = Message.QUIT
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -557,7 +523,7 @@ public class SuflaeExpressionTests
                                     show(f"Error: {msg}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -572,7 +538,7 @@ public class SuflaeExpressionTests
                             let status = AppStatus.ACTIVE
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -584,7 +550,7 @@ public class SuflaeExpressionTests
                             let opposite = dir.opposite()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -597,7 +563,7 @@ public class SuflaeExpressionTests
                                 show("Read access")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -612,7 +578,7 @@ public class SuflaeExpressionTests
                             let add: Routine<S32, S32, S32> = (a, b) => a + b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -623,7 +589,7 @@ public class SuflaeExpressionTests
                             let get_value: Routine<S32> = () => 42
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

@@ -2,7 +2,6 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
 using static TestHelpers;
 
 /// <summary>
@@ -25,7 +24,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -42,7 +41,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -60,7 +59,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -77,7 +76,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -96,7 +95,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -113,7 +112,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -132,7 +131,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     // Nested hijacking test moved to Analyzer/MutabilityTests.cs
@@ -154,7 +153,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -171,7 +170,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -190,7 +189,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -207,7 +206,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -225,7 +224,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -244,7 +243,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -259,7 +258,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -275,7 +274,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -294,7 +293,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -313,7 +312,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -337,7 +336,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -355,7 +354,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -380,7 +379,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -397,7 +396,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -410,7 +409,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -423,7 +422,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -436,7 +435,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -453,7 +452,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -466,7 +465,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -483,7 +482,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -496,7 +495,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -509,7 +508,7 @@ public class AccessBlockTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion

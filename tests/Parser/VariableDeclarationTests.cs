@@ -22,7 +22,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -110,7 +110,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -167,7 +167,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -197,7 +197,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -245,7 +245,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -271,7 +271,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -283,7 +283,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -295,7 +295,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
 
@@ -308,7 +308,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -327,7 +327,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -356,7 +356,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -370,7 +370,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -383,7 +383,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -391,11 +391,11 @@ public class VariableDeclarationTests
     {
         string source = """
                         routine test() {
-                            let x: S32? = None
+                            let x: S32? = none
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -407,7 +407,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -419,7 +419,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -432,7 +432,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -501,7 +501,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -517,7 +517,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -529,7 +529,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -541,7 +541,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion

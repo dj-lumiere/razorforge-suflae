@@ -3,7 +3,6 @@ using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.RazorForge.Parser;
 using static TestHelpers;
 
 /// <summary>
@@ -23,7 +22,7 @@ public class ParserErrorTests
                         """;
 
         // Should either throw ParseException or recover with incomplete AST
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
         // Parser may recover or throw - either is acceptable for incomplete input
     }
 
@@ -37,7 +36,7 @@ public class ParserErrorTests
                         }
                         """;
 
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
         // Should not parse cleanly - missing type after colon
     }
 
@@ -55,7 +54,7 @@ public class ParserErrorTests
 
         // This tests that var in record field is either rejected or ignored
         // Depending on parser behavior, this may parse but semantic analysis should catch it
-        Program program = Parse(source: source);
+        Parse(source: source);
         // If it parses, the field should still be immutable
     }
 
@@ -73,7 +72,7 @@ public class ParserErrorTests
                         }
                         """;
 
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
         // Should either throw or produce warning/error
     }
 
@@ -86,7 +85,8 @@ public class ParserErrorTests
                         }
                         """;
 
-        Assert.ThrowsAny<Exception>(testCode: () => Parse(source: source));
+        // Parser uses error recovery, check for errors instead of exception
+        AssertParseError(source: source);
     }
 
     #endregion
@@ -106,7 +106,7 @@ public class ParserErrorTests
                         """;
 
         // This should be rejected - can't mix valued and non-valued cases
-        Program program = Parse(source: source);
+        Parse(source: source);
         // Parser may accept but semantic analyzer should reject
     }
 
@@ -138,7 +138,7 @@ public class ParserErrorTests
                         """;
 
         // Empty variant should either throw or produce error
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
     }
 
     #endregion
@@ -159,7 +159,7 @@ public class ParserErrorTests
                         """;
 
         // Should reject method with body in protocol
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class ParserErrorTests
                         """;
 
         // Should reject - methods need Me. prefix
-        Program program = Parse(source: source);
+        Parse(source: source);
         // May parse but should be flagged semantically
     }
 
@@ -193,7 +193,7 @@ public class ParserErrorTests
                         """;
 
         // X is not a type parameter - should be rejected
-        Program program = Parse(source: source);
+        Parse(source: source);
         // Parser accepts, semantic analyzer should reject
     }
 
@@ -208,7 +208,8 @@ public class ParserErrorTests
                         """;
 
         // "banana" is not a valid constraint kind (should be 'follows' or 'is')
-        Assert.ThrowsAny<Exception>(testCode: () => Parse(source: source));
+        // Parser uses error recovery, check for errors instead of exception
+        AssertParseError(source: source);
     }
 
     #endregion
@@ -232,7 +233,8 @@ public class ParserErrorTests
                         let x = 1 @@ 2
                         """;
 
-        Assert.ThrowsAny<Exception>(testCode: () => Parse(source: source));
+        // Parser uses error recovery, check for errors instead of exception
+        AssertParseError(source: source);
     }
 
     [Fact]
@@ -245,7 +247,7 @@ public class ParserErrorTests
                         }
                         """;
 
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
         // Missing closing brace for if statement
     }
 
@@ -258,7 +260,7 @@ public class ParserErrorTests
                         }
                         """;
 
-        Exception? ex = Record.Exception(testCode: () => Parse(source: source));
+        Record.Exception(testCode: () => Parse(source: source));
         // Missing closing paren for call
     }
 

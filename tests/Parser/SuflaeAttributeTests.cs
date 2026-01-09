@@ -38,7 +38,7 @@ public class SuflaeAttributeTests
                             me.count += 1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class SuflaeAttributeTests
                             return a // b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class SuflaeAttributeTests
                             pass
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class SuflaeAttributeTests
                             return 3.14159265359
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class SuflaeAttributeTests
                             return a + b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -104,7 +104,7 @@ public class SuflaeAttributeTests
                             return "C:\\config.toml"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class SuflaeAttributeTests
                             show(f"[DEBUG] {msg}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public class SuflaeAttributeTests
                             pass
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -146,7 +146,7 @@ public class SuflaeAttributeTests
                             return value
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class SuflaeAttributeTests
                             return x
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -175,7 +175,7 @@ public class SuflaeAttributeTests
                             y: F32
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public class SuflaeAttributeTests
                             var age: U32
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class SuflaeAttributeTests
                             routine display() -> Text
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -220,7 +220,7 @@ public class SuflaeAttributeTests
                             value: Integer
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class SuflaeAttributeTests
                             var email: Text
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -253,7 +253,7 @@ public class SuflaeAttributeTests
                             return x * 2
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -273,7 +273,7 @@ public class SuflaeAttributeTests
                             me.value = v
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -289,7 +289,7 @@ public class SuflaeAttributeTests
                             return 0.0
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -301,7 +301,7 @@ public class SuflaeAttributeTests
                             return x * 2
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public class SuflaeAttributeTests
                             value: Integer
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -335,7 +335,7 @@ public class SuflaeAttributeTests
                             routine clear()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -352,7 +352,7 @@ public class SuflaeAttributeTests
                             return response.body
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -368,7 +368,7 @@ public class SuflaeAttributeTests
                             verify!(1 + 1 == 2)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -381,7 +381,7 @@ public class SuflaeAttributeTests
                             sort(items)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

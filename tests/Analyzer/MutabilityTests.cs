@@ -57,7 +57,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should be valid
     }
 
@@ -71,7 +71,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -92,7 +92,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -189,7 +189,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -235,7 +235,7 @@ public class MutabilityTests
                             x = 10
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     [Fact]
@@ -266,7 +266,7 @@ public class MutabilityTests
                             me.count += 1
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     #endregion
@@ -283,7 +283,7 @@ public class MutabilityTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]

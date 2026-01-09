@@ -334,7 +334,7 @@ public class SuflaeTypeDeclarationTests
                         """;
 
         // Depending on parser behavior - may throw or parse but semantic rejects
-        Exception? ex = Record.Exception(testCode: () => ParseSuflae(source: source));
+        Record.Exception(testCode: () => ParseSuflae(source: source));
         // Either throws or parses (semantic will reject)
     }
 
@@ -350,7 +350,7 @@ public class SuflaeTypeDeclarationTests
                                     show(u.name)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -362,7 +362,7 @@ public class SuflaeTypeDeclarationTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

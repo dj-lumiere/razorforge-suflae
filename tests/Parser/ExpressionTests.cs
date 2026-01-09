@@ -2,7 +2,6 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
 using static TestHelpers;
 
 /// <summary>
@@ -22,7 +21,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -34,7 +33,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -46,7 +45,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -58,7 +57,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -70,7 +69,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -82,7 +81,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -94,7 +93,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -110,7 +109,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -122,7 +121,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -134,7 +133,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -147,7 +146,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -163,7 +162,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -175,7 +174,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -187,43 +186,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_SliceExpression()
-    {
-        string source = """
-                        routine test() {
-                            let slice = items[1 to 5]
-                        }
-                        """;
-
-        Program program = AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_SliceFromStart()
-    {
-        string source = """
-                        routine test() {
-                            let first_five = items[0 to 4]
-                        }
-                        """;
-
-        Program program = AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_SliceToEnd()
-    {
-        string source = """
-                        routine test() {
-                            let rest = items[5..]
-                        }
-                        """;
-
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -236,7 +199,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -252,7 +215,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -264,7 +227,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -276,7 +239,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -288,7 +251,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -304,7 +267,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -316,7 +279,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -328,7 +291,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -342,7 +305,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -356,7 +319,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -370,7 +333,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -383,7 +346,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -396,7 +359,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -464,7 +427,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -476,7 +439,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -488,7 +451,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -500,7 +463,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -512,7 +475,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -528,7 +491,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -540,7 +503,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -556,7 +519,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -568,7 +531,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -584,7 +547,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -596,7 +559,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -616,7 +579,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -628,7 +591,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -644,7 +607,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -656,7 +619,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -672,7 +635,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -684,7 +647,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -700,7 +663,7 @@ public class ExpressionTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion

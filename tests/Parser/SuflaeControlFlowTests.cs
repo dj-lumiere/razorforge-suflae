@@ -69,7 +69,7 @@ public class SuflaeControlFlowTests
                                 show("zero")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class SuflaeControlFlowTests
                                 return "other"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class SuflaeControlFlowTests
                                     show("both positive")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -116,7 +116,7 @@ public class SuflaeControlFlowTests
                                 return
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class SuflaeControlFlowTests
                                 show("condition is true")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class SuflaeControlFlowTests
                             show(data)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -158,7 +158,7 @@ public class SuflaeControlFlowTests
                             return if a < b then a else b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public class SuflaeControlFlowTests
                             let sign = if x >= 0 then 1 else -1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -187,7 +187,7 @@ public class SuflaeControlFlowTests
                                     break
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class SuflaeControlFlowTests
                                 break
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class SuflaeControlFlowTests
                                 process()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -229,7 +229,7 @@ public class SuflaeControlFlowTests
                                 process()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -243,7 +243,7 @@ public class SuflaeControlFlowTests
                                 count += 1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class SuflaeControlFlowTests
                                 show("Loop completed without finding it")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -275,7 +275,7 @@ public class SuflaeControlFlowTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public class SuflaeControlFlowTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class SuflaeControlFlowTests
                                 show(i)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class SuflaeControlFlowTests
                                 show(item)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -325,7 +325,7 @@ public class SuflaeControlFlowTests
                                 show(f"{index}: {item}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public class SuflaeControlFlowTests
                                 show("No match found")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -354,7 +354,7 @@ public class SuflaeControlFlowTests
                                     show(f"{i},{j}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -373,7 +373,7 @@ public class SuflaeControlFlowTests
                                 show(f"File not found: {e.path}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -391,7 +391,7 @@ public class SuflaeControlFlowTests
                                 show("Unknown error")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -408,7 +408,7 @@ public class SuflaeControlFlowTests
                                 file.close()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -423,7 +423,7 @@ public class SuflaeControlFlowTests
                                 lock.release()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -432,11 +432,11 @@ public class SuflaeControlFlowTests
         string source = """
                         routine validate(value: Integer) -> Integer:
                             if value < 0:
-                                raise ValueError("Value must be non-negative")
+                                throw ValueError("Value must be non-negative")
                             return value
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -451,7 +451,7 @@ public class SuflaeControlFlowTests
                                 raise
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -468,7 +468,7 @@ public class SuflaeControlFlowTests
                                 process(content)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -481,7 +481,7 @@ public class SuflaeControlFlowTests
                                 output.write(transform(data))
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public class SuflaeControlFlowTests
                                     process(conn)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -509,7 +509,7 @@ public class SuflaeControlFlowTests
                             return a + b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -521,7 +521,7 @@ public class SuflaeControlFlowTests
                             return
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -532,7 +532,7 @@ public class SuflaeControlFlowTests
                             pass
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -548,7 +548,7 @@ public class SuflaeControlFlowTests
                             return response.body
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -560,22 +560,22 @@ public class SuflaeControlFlowTests
                             show(data)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
     public void ParseSuflae_AsyncWithTryCatch()
     {
         string source = """
-                        suspended routine safe_fetch(url: Text) -> Text?:
+                        suspended routine safe_fetch!(url: Text) -> Text:
                             try:
                                 return waitfor fetch_data(url)
                             catch NetworkError as e:
                                 show(f"Network error: {e.message}")
-                                return None
+                                absent
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -592,7 +592,7 @@ public class SuflaeControlFlowTests
                             return a // b
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -604,7 +604,7 @@ public class SuflaeControlFlowTests
                             do_process(data)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -615,7 +615,7 @@ public class SuflaeControlFlowTests
                             breach!("Should never reach here")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -637,7 +637,7 @@ public class SuflaeControlFlowTests
                                         cell -= 1
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -651,7 +651,7 @@ public class SuflaeControlFlowTests
                             absent
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -673,7 +673,7 @@ public class SuflaeControlFlowTests
                                 cleanup()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

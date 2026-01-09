@@ -70,15 +70,16 @@ public class TypeResolutionTests
     [Fact]
     public void Analyze_Variant_RegistersInTypeRegistry()
     {
+        // Note: Don't use "Result" as it's a well-known error handling type
         string source = """
-                        variant Result {
+                        variant MyVariant {
                             SUCCESS: S32
                             ERROR: Text
                         }
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        TypeInfo? type = result.Registry.GetType(name: "Result");
+        TypeInfo? type = result.Registry.GetType(name: "MyVariant");
 
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Variant, actual: type.Category);
@@ -346,7 +347,7 @@ public class TypeResolutionTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should have no constraint-related errors
     }
 
@@ -392,7 +393,7 @@ public class TypeResolutionTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should validate protocol implementation
     }
 

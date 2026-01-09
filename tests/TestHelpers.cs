@@ -6,7 +6,6 @@ using Compilers.Analysis;
 using Compilers.Analysis.Enums;
 using Compilers.Analysis.Results;
 using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
 using Compilers.RazorForge.Lexer;
 using Compilers.RazorForge.Parser;
 using Compilers.Suflae.Lexer;

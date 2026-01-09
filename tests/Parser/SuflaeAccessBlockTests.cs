@@ -2,7 +2,6 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
 using static TestHelpers;
 
 /// <summary>
@@ -24,7 +23,7 @@ public class SuflaeAccessBlockTests
                                 process(content)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -37,7 +36,7 @@ public class SuflaeAccessBlockTests
                                 output.write(transform(data))
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -50,7 +49,7 @@ public class SuflaeAccessBlockTests
                                     process(conn)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -65,7 +64,7 @@ public class SuflaeAccessBlockTests
                                     process_line(line)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -81,7 +80,7 @@ public class SuflaeAccessBlockTests
                                 show(f"File not found: {e.path}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -94,7 +93,7 @@ public class SuflaeAccessBlockTests
                                 process(content)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -109,7 +108,7 @@ public class SuflaeAccessBlockTests
                                     else => use_default()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -123,7 +122,7 @@ public class SuflaeAccessBlockTests
                                     show(row.name)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -138,7 +137,7 @@ public class SuflaeAccessBlockTests
                                     tx.commit()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -151,7 +150,7 @@ public class SuflaeAccessBlockTests
                                 update_state()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -170,7 +169,7 @@ public class SuflaeAccessBlockTests
                                         output.write("\n")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -190,7 +189,7 @@ public class SuflaeAccessBlockTests
                                 cleanup()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -203,7 +202,7 @@ public class SuflaeAccessBlockTests
                                     file.write(response.body)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -216,7 +215,7 @@ public class SuflaeAccessBlockTests
                                 process(result)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -233,7 +232,7 @@ public class SuflaeAccessBlockTests
                             channel.close()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -245,7 +244,7 @@ public class SuflaeAccessBlockTests
                                 process(item)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -260,7 +259,7 @@ public class SuflaeAccessBlockTests
                                     else => break
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -271,27 +270,27 @@ public class SuflaeAccessBlockTests
     public void ParseSuflae_SpawnThread()
     {
         string source = """
-                        routine main():
+                        routine start():
                             let handle = spawn worker()
                             show("Worker started")
                             waitfor handle
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
     public void ParseSuflae_SpawnWithArguments()
     {
         string source = """
-                        routine main():
+                        routine start():
                             let data = prepare_data()
                             let handle = spawn process_data(data)
                             do_other_work()
                             waitfor handle
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -301,11 +300,11 @@ public class SuflaeAccessBlockTests
                         suspended routine parallel_fetch(urls: List<Text>) -> List<Text>:
                             let tasks = []
                             for url in urls:
-                                tasks.append(spawn_task(fetch_data, url))
+                                tasks.add_last(fetch_data(url))
                             return waitfor join_all(tasks)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion

@@ -280,7 +280,7 @@ public class ErrorHandlingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -297,7 +297,7 @@ public class ErrorHandlingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class ErrorHandlingTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
+        AssertParses(source: source);
     }
 
     #endregion
@@ -387,7 +387,8 @@ public class ErrorHandlingTests
                         }
                         """;
 
-        Assert.ThrowsAny<Exception>(testCode: () => Parse(source: source));
+        // Parser uses error recovery, check for errors instead of exception
+        AssertParseError(source: source);
     }
 
     #endregion

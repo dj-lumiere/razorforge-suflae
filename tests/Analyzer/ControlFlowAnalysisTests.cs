@@ -26,7 +26,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should have no missing return errors
     }
 
@@ -49,7 +49,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -98,7 +98,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should have warning about unreachable code
     }
 
@@ -112,7 +112,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -145,7 +145,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should be valid
     }
 
@@ -243,7 +243,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -261,7 +261,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should report missing return path
     }
 
@@ -282,7 +282,7 @@ public class ControlFlowAnalysisTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -300,7 +300,7 @@ public class ControlFlowAnalysisTests
                                 return 0
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public class ControlFlowAnalysisTests
                                     break
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     [Fact]

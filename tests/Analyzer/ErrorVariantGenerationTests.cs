@@ -4,7 +4,6 @@ using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
-using Compilers.Analysis.Enums;
 using static TestHelpers;
 
 /// <summary>

@@ -33,7 +33,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should validate protocol implementation
     }
 
@@ -103,7 +103,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
         // Should warn about missing @readonly attribute
     }
 
@@ -164,7 +164,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -245,7 +245,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -295,7 +295,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion
@@ -319,7 +319,7 @@ public class ProtocolImplementationTests
                             return "point"
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalyzeSuflae(source: source);
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     [Fact]
@@ -428,7 +428,7 @@ public class ProtocolImplementationTests
                         }
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        Analyze(source: source);
     }
 
     #endregion

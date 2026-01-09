@@ -47,7 +47,7 @@ public class SuflaePatternMatchingTests
                                 else => show("other")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class SuflaePatternMatchingTests
                                 else => "many"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class SuflaePatternMatchingTests
                                 else => "Not running"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -92,7 +92,7 @@ public class SuflaePatternMatchingTests
                                 else => show("Unknown type")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class SuflaePatternMatchingTests
                                 else => show("Unknown")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class SuflaePatternMatchingTests
                                 else => show("Unknown shape")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -139,7 +139,7 @@ public class SuflaePatternMatchingTests
                                 is Status.CANCELLED => show("Cancelled")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class SuflaePatternMatchingTests
                                 is CANCELLED => show("Cancelled")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -167,12 +167,12 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(msg: Message):
                             when msg:
-                                is TEXT (content) => process(content)
-                                is NUMBER (n) => compute(n)
+                                is TEXT content => process(content)
+                                is NUMBER n => compute(n)
                                 is QUIT => exit()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class SuflaePatternMatchingTests
                                     show(f"Rectangle at ({top_left.x}, {top_left.y})")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class SuflaePatternMatchingTests
                                 else => show("Not a circle")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public class SuflaePatternMatchingTests
                                     show(f"Rectangle at ({x}, {y}), {width}x{height}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -234,7 +234,7 @@ public class SuflaePatternMatchingTests
                                 is Integer x => show("Zero")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class SuflaePatternMatchingTests
                                 else => show("x not zero")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -262,7 +262,7 @@ public class SuflaePatternMatchingTests
                                 is Crashable e => show(f"Error: {e.message()}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -275,11 +275,11 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(value: User?):
                             when value:
-                                is None => show("User not found")
+                                is none => show("User not found")
                                 else user => show(f"Found: {user.name}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public class SuflaePatternMatchingTests
                                 else user => show(f"Found: {user.name}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -307,7 +307,7 @@ public class SuflaePatternMatchingTests
                                 else file => file.read()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -317,11 +317,11 @@ public class SuflaePatternMatchingTests
                         routine handle(result: Lookup<User>):
                             when result:
                                 is Crashable e => show(f"Error: {e.message()}")
-                                is None => show("User not found")
+                                is none => show("User not found")
                                 else user => show(f"Found: {user.name}")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -333,11 +333,11 @@ public class SuflaePatternMatchingTests
                                 is ValidationError e => stop!(f"Invalid config name: {e.message}")
                                 is IOError e => show(f"IO error: {e.message}")
                                 is Crashable e => breach!()
-                                is None => use_default_config()
+                                is none => use_default_config()
                                 else config => apply(config)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -356,7 +356,7 @@ public class SuflaePatternMatchingTests
                                 else => "many"
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -371,7 +371,7 @@ public class SuflaePatternMatchingTests
                                 else => show("Unknown command")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -384,7 +384,7 @@ public class SuflaePatternMatchingTests
                                 false => show("disabled")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -401,7 +401,7 @@ public class SuflaePatternMatchingTests
                                 else value => value
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -415,7 +415,7 @@ public class SuflaePatternMatchingTests
                                 else => show("Not a circle")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -428,11 +428,11 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(value: Maybe<User>):
                             when value:
-                                is None => show("Not found")
+                                is none => show("Not found")
                                 else u => show(u.name)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -441,7 +441,7 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(value: Maybe<User>):
                             when value:
-                                is None:
+                                is none:
                                     show("Not found")
                                     return
                                 else user:
@@ -449,7 +449,7 @@ public class SuflaePatternMatchingTests
                                     process(user)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -464,7 +464,7 @@ public class SuflaePatternMatchingTests
                             let (x, y) = Point(x: 5, y: 6)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -475,7 +475,7 @@ public class SuflaePatternMatchingTests
                             let (center: c, radius: r) = Circle(center: Point(5, 6), radius: 7)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -486,7 +486,7 @@ public class SuflaePatternMatchingTests
                             let ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -501,11 +501,11 @@ public class SuflaePatternMatchingTests
                             let result = when value:
                                 is A:
                                     let x = compute()
-                                    transform(x)
-                                else => default()
+                                    becomes transform(x)
+                                else => becomes default()
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
@@ -535,7 +535,7 @@ public class SuflaePatternMatchingTests
                                         else => show("Other shape")
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -557,7 +557,7 @@ public class SuflaePatternMatchingTests
                                     pass
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
+        AssertParsesSuflae(source: source);
     }
 
     #endregion
