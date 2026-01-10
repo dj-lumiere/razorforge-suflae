@@ -134,27 +134,15 @@ routine Decimal.__eq__(other: Decimal) -> Bool {
     }
 }
 
-routine Decimal.__lt__(other: Decimal) -> Bool {
+routine Decimal.__cmp__(you: Decimal) -> ComparisonSign {
     danger! {
-        return @native.rf_bigdec_cmp(me.handle, other.handle) < 0
-    }
-}
-
-routine Decimal.__le__(other: Decimal) -> Bool {
-    danger! {
-        return @native.rf_bigdec_cmp(me.handle, other.handle) <= 0
-    }
-}
-
-routine Decimal.__gt__(other: Decimal) -> Bool {
-    danger! {
-        return @native.rf_bigdec_cmp(me.handle, other.handle) > 0
-    }
-}
-
-routine Decimal.__ge__(other: Decimal) -> Bool {
-    danger! {
-        return @native.rf_bigdec_cmp(me.handle, other.handle) >= 0
+        let value = @native.rf_bigdec_cmp(me.handle, other.handle)
+        if value < 0 {
+            return ME_SMALL
+        } else if value > 0 {
+            return ME_LARGE
+        }
+        return EQUAL
     }
 }
 

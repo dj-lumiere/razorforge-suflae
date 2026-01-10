@@ -44,19 +44,6 @@ routine BackIndex<I follows Integral>.__eq__(me: BackIndex<I>, other: BackIndex<
     return me.offset.UAddr() == other.offset.UAddr()
 }
 
-routine BackIndex<I follows Integral>.__lt__(me: BackIndex<I>, other: BackIndex<I>) -> Bool {
-    # ^2 < ^1 because ^2 is further from end
-    return me.offset.UAddr() > other.offset.UAddr()
-}
-
-routine BackIndex<I follows Integral>.__le__(me: BackIndex<I>, other: BackIndex<I>) -> Bool {
-    return me.offset.UAddr() >= other.offset.UAddr()
-}
-
-routine BackIndex<I follows Integral>.__gt__(me: BackIndex<I>, other: BackIndex<I>) -> Bool {
-    return me.offset.UAddr() < other.offset.UAddr()
-}
-
-routine BackIndex<I follows Integral>.__ge__(me: BackIndex<I>, other: BackIndex<I>) -> Bool {
-    return me.offset.UAddr() <= other.offset.UAddr()
+routine BackIndex<I follows Integral>.__cmp__(me: BackIndex<I>, other: BackIndex<I>) -> ComparisonSign {
+    return -me.offset <=> -other.offset
 }
