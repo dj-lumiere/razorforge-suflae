@@ -271,7 +271,7 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         routine start():
-                            let handle = spawn worker()
+                            let handle = worker()
                             show("Worker started")
                             waitfor handle
                         """;
@@ -285,7 +285,7 @@ public class SuflaeAccessBlockTests
         string source = """
                         routine start():
                             let data = prepare_data()
-                            let handle = spawn process_data(data)
+                            let handle = process_data(data)
                             do_other_work()
                             waitfor handle
                         """;
