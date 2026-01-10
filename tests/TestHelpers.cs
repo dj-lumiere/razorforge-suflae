@@ -26,7 +26,7 @@ public static class TestHelpers
     /// </summary>
     public static List<Token> Tokenize(string source)
     {
-        var tokenizer = new RazorForgeTokenizer(source: source);
+        var tokenizer = new RazorForgeTokenizer(source: source, fileName: "test");
         return tokenizer.Tokenize();
     }
 
@@ -121,7 +121,7 @@ public static class TestHelpers
     /// </summary>
     public static List<Token> TokenizeSuflae(string source)
     {
-        var tokenizer = new SuflaeTokenizer(source: source);
+        var tokenizer = new SuflaeTokenizer(source: source, fileName:"test");
         return tokenizer.Tokenize();
     }
 
