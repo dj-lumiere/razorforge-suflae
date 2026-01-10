@@ -1,4 +1,5 @@
-﻿using Xunit;
+﻿using System.Runtime.CompilerServices;
+using Xunit;
 
 namespace RazorForge.Tests;
 
@@ -24,18 +25,18 @@ public static class TestHelpers
     /// <summary>
     /// Tokenizes RazorForge source code.
     /// </summary>
-    public static List<Token> Tokenize(string source)
+    public static List<Token> Tokenize(string source, [CallerMemberName] string? fileName = null)
     {
-        var tokenizer = new RazorForgeTokenizer(source: source, fileName: "test");
+        var tokenizer = new RazorForgeTokenizer(source: source, fileName: fileName ?? "test");
         return tokenizer.Tokenize();
     }
 
     /// <summary>
     /// Parses RazorForge source code into an AST.
     /// </summary>
-    public static Program Parse(string source, string? fileName = null)
+    public static Program Parse(string source, [CallerMemberName] string? fileName = null)
     {
-        List<Token> tokens = Tokenize(source: source);
+        List<Token> tokens = Tokenize(source: source, fileName: fileName);
         var parser = new RazorForgeParser(tokens: tokens, fileName: fileName);
         return parser.Parse();
     }
@@ -43,9 +44,9 @@ public static class TestHelpers
     /// <summary>
     /// Parses RazorForge source and returns the parser for error checking.
     /// </summary>
-    public static (Program Program, RazorForgeParser Parser) ParseWithErrors(string source, string? fileName = null)
+    public static (Program Program, RazorForgeParser Parser) ParseWithErrors(string source, [CallerMemberName] string? fileName = null)
     {
-        List<Token> tokens = Tokenize(source: source);
+        List<Token> tokens = Tokenize(source: source, fileName: fileName);
         var parser = new RazorForgeParser(tokens: tokens, fileName: fileName);
         Program program = parser.Parse();
         return (program, parser);
@@ -119,18 +120,18 @@ public static class TestHelpers
     /// <summary>
     /// Tokenizes Suflae source code.
     /// </summary>
-    public static List<Token> TokenizeSuflae(string source)
+    public static List<Token> TokenizeSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        var tokenizer = new SuflaeTokenizer(source: source, fileName:"test");
+        var tokenizer = new SuflaeTokenizer(source: source, fileName: fileName ?? "test");
         return tokenizer.Tokenize();
     }
 
     /// <summary>
     /// Parses Suflae source code into an AST.
     /// </summary>
-    public static Program ParseSuflae(string source, string? fileName = null)
+    public static Program ParseSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        List<Token> tokens = TokenizeSuflae(source: source);
+        List<Token> tokens = TokenizeSuflae(source: source, fileName: fileName);
         var parser = new SuflaeParser(tokens: tokens, fileName: fileName);
         return parser.Parse();
     }
@@ -138,9 +139,9 @@ public static class TestHelpers
     /// <summary>
     /// Parses and analyzes Suflae source code.
     /// </summary>
-    public static AnalysisResult AnalyzeSuflae(string source)
+    public static AnalysisResult AnalyzeSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        Program program = ParseSuflae(source: source);
+        Program program = ParseSuflae(source: source, fileName: fileName);
         var analyzer = new SemanticAnalyzer(language: Language.Suflae);
         return analyzer.Analyze(program: program);
     }
@@ -148,9 +149,9 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that Suflae parsing succeeds without throwing.
     /// </summary>
-    public static Program AssertParsesSuflae(string source)
+    public static Program AssertParsesSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        Program program = ParseSuflae(source: source);
+        Program program = ParseSuflae(source: source, fileName: fileName);
         Assert.NotNull(@object: program);
         Assert.NotEmpty(collection: program.Declarations);
         return program;
@@ -159,9 +160,9 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that Suflae analysis succeeds without errors.
     /// </summary>
-    public static AnalysisResult AssertAnalyzesSuflae(string source)
+    public static AnalysisResult AssertAnalyzesSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
         if (result.Errors.Count > 0)
         {
             string errorMessages = string.Join(separator: "\n",
@@ -176,9 +177,9 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that Suflae analysis produces specific errors.
     /// </summary>
-    public static AnalysisResult AssertHasErrorSuflae(string source, string expectedErrorSubstring)
+    public static AnalysisResult AssertHasErrorSuflae(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = AnalyzeSuflae(source: source);
+        AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected at least one error");
         Assert.Contains(collection: result.Errors,
