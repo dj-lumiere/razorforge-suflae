@@ -1,7 +1,5 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
-using Compilers.RazorForge.Parser; // For ParseException
 
 namespace Compilers.Suflae.Parser;
 
@@ -14,18 +12,46 @@ public partial class SuflaeParser
     /// Parses an if statement with indented blocks and optional elseif/else chains.
     /// Syntax: <c>if condition:</c> followed by indented body, optional <c>elseif condition:</c> blocks, optional <c>else:</c> block.
     /// </summary>
+    /// <remarks>
+    /// Parsing phases:
+    ///
+    /// PHASE 1: INITIAL IF
+    ///   - Parse condition expression
+    ///   - Parse indented then-block
+    ///
+    /// PHASE 2: ELSEIF CHAIN (optional)
+    ///   - Parse each elseif as a nested IfStatement
+    ///   - Chain them together via ElseStatement
+    ///
+    /// PHASE 3: FINAL ELSE (optional)
+    ///   - Parse else block
+    ///   - Attach to end of elseif chain
+    ///
+    /// The elseif chain is desugared to nested if-else:
+    ///   if a:       becomes    IfStatement(a, then1,
+    ///       then1                  IfStatement(b, then2,
+    ///   elseif b:                      else3))
+    ///       then2
+    ///   else:
+    ///       else3
+    /// </remarks>
     /// <returns>An <see cref="IfStatement"/> AST node.</returns>
     private Statement ParseIfStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: INITIAL IF (condition and then-block)
+        // ═══════════════════════════════════════════════════════════════════════════
         Expression condition = ParseExpression();
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after if condition");
         Statement thenBranch = ParseIndentedBlock();
 
         Statement? elseBranch = null;
 
-        // Handle elseif chain - convert to nested if-else
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: ELSEIF CHAIN (convert to nested if-else)
+        // ═══════════════════════════════════════════════════════════════════════════
         while (Match(type: TokenType.Elseif))
         {
             SourceLocation elseifLocation = GetLocation(token: PeekToken(offset: -1));
@@ -57,6 +83,9 @@ public partial class SuflaeParser
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 3: FINAL ELSE (optional)
+        // ═══════════════════════════════════════════════════════════════════════════
         if (!Match(type: TokenType.Else))
         {
             return new IfStatement(Condition: condition,
@@ -281,7 +310,7 @@ public partial class SuflaeParser
             }
             else
             {
-                throw new ParseException(message: "Expected ':' or '=>' after pattern");
+                throw ThrowParseError("Expected ':' or '=>' after pattern");
             }
 
             _inWhenClauseBody = false;
@@ -330,7 +359,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected identifier after '.' in pattern");
+                    throw ThrowParseError("Expected identifier after '.' in pattern");
                 }
             }
 
@@ -385,7 +414,7 @@ public partial class SuflaeParser
             return TryParseGuard(innerPattern: litPattern, location: location);
         }
 
-        throw new ParseException(message: $"Expected pattern, got {CurrentToken.Type}");
+        throw ThrowParseError($"Expected pattern, got {CurrentToken.Type}");
     }
 
     /// <summary>
@@ -429,7 +458,7 @@ public partial class SuflaeParser
         // Accept Identifier (Suflae emits Identifier for all identifiers)
         if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
         {
-            throw new ParseException(message: $"Expected type name after 'is', got {CurrentToken.Type}");
+            throw ThrowParseError($"Expected type name after 'is', got {CurrentToken.Type}");
         }
 
         string name = CurrentToken.Text;
@@ -444,7 +473,7 @@ public partial class SuflaeParser
             }
             else
             {
-                throw new ParseException(message: "Expected identifier after '.' in pattern");
+                throw ThrowParseError("Expected identifier after '.' in pattern");
             }
         }
 
@@ -610,7 +639,7 @@ public partial class SuflaeParser
         // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
         {
-            throw new ParseException(message: "Expected indented block after ':'");
+            throw ThrowParseError("Expected indented block after ':'");
         }
 
         // Process the indent token
@@ -636,7 +665,7 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw new ParseException(message: "Expected dedent to close indented block");
+            throw ThrowParseError("Expected dedent to close indented block");
         }
 
         return new BlockStatement(Statements: statements, Location: location);

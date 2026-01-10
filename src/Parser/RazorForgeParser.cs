@@ -1,6 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -113,6 +114,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// <returns>True if the name is a known type; false otherwise.</returns>
     private bool IsKnownTypeName(string name)
     {
+        // TODO: Why is it unused?
         // Check simple type names (declared locally or individually imported)
         if (_knownTypeNames.Contains(item: name))
         {
@@ -146,7 +148,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                 IAstNode decl = ParseDeclaration();
                 declarations.Add(item: decl);
             }
-            catch (ParseException ex)
+            catch (RazorForgeGrammarException ex)
             {
                 Token errorToken = _position < tokens.Count
                     ? tokens[index: _position]
@@ -169,9 +171,44 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// Handles all declaration types: namespace, import, define, using, preset,
     /// routines, entities, records, residents, choices, variants, mutants, and protocols.
     /// </summary>
+    /// <remarks>
+    /// Declaration parsing order (checked in sequence):
+    ///
+    /// FILE-LEVEL DECLARATIONS (must appear first):
+    ///   namespace    - Module namespace declaration
+    ///   import       - Import external modules
+    ///   define       - Type alias/redefinition
+    ///   using        - Namespace import
+    ///   preset       - Compile-time constant
+    ///
+    /// MODIFIERS (optional, parsed before declaration):
+    ///   attributes   - @crash_only, @inline, @config, etc.
+    ///   visibility   - private, family, internal, public, published, imported
+    ///   storage      - global (for file-scope variables)
+    ///
+    /// TYPE/VALUE DECLARATIONS:
+    ///   imported     - FFI routine declaration (with optional calling convention)
+    ///   var/let      - Variable declarations
+    ///   pass         - Empty placeholder
+    ///   field: Type  - Field declaration (inside type bodies)
+    ///   routine      - Function declaration
+    ///   entity       - Heap-allocated reference type
+    ///   record       - Stack-allocated value type
+    ///   resident     - Singleton static type
+    ///   choice       - Simple enumeration
+    ///   variant      - Tagged union (sum type)
+    ///   mutant       - Untagged union
+    ///   protocol     - Interface/trait definition
+    ///
+    /// If no declaration keyword matches, falls through to ParseStatement.
+    /// </remarks>
     /// <returns>The parsed declaration node.</returns>
     private IAstNode ParseDeclaration()
     {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // FILE-LEVEL DECLARATIONS (must appear at top of file)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         // Namespace declaration (must appear at top of file)
         if (Match(type: TokenType.Namespace))
         {
@@ -201,6 +238,10 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         {
             return ParsePresetDeclaration();
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PARSE MODIFIERS (attributes, visibility, storage class)
+        // ═══════════════════════════════════════════════════════════════════════════
 
         // Parse attributes (e.g., @crash_only, @inline, @config)
         List<string> attributes = ParseAttributes();
@@ -239,9 +280,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             // In strict record bodies, var/let/preset are not allowed
             if (_parsingStrictRecordBody)
             {
-                throw new ParseException(
-                    message: "Record fields cannot use 'var', 'let', or 'preset'. " +
-                             "Records are immutable with all-public fields. Use 'field: Type' syntax instead.");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                    "Record fields cannot use 'var', 'let', or 'preset'. " +
+                    "Records are immutable with all-public fields. Use 'field: Type' syntax instead.",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
@@ -271,9 +314,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             // In record bodies, only private/internal/public are allowed (not published/imported)
             if (_parsingStrictRecordBody && visibility is VisibilityModifier.Published or VisibilityModifier.Imported)
             {
-                throw new ParseException(
-                    message: $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
-                             "Record fields can use 'private', 'internal', or 'public'.");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                    $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
+                    "Record fields can use 'private', 'internal', or 'public'.",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseFieldDeclaration(visibility: visibility);
         }
@@ -284,9 +329,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             // Validate: global storage is not allowed for routines
             if (storage == StorageClass.Global)
             {
-                throw new ParseException(
-                    message: "'global' storage class is not valid for routines. " +
-                             "'global' can only be used for file-scope static variables.");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                    "'global' storage class is not valid for routines. " +
+                    "'global' can only be used for file-scope static variables.",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage);
         }
@@ -321,12 +368,6 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseVariantDeclaration();
         }
 
-        // Mutant declarations (untagged unions)
-        if (Match(type: TokenType.Mutant))
-        {
-            return ParseMutantDeclaration();
-        }
-
         // Protocol declarations (interface/trait definitions)
         if (Match(type: TokenType.Protocol))
         {
@@ -336,9 +377,10 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // If we parsed a visibility modifier but no declaration follows, it's an error
         if (visibility != VisibilityModifier.Public)
         {
-            throw new ParseException(message: $"Visibility modifier '{visibility}' must be followed by a declaration "
-                                              + $"(routine, entity, record, resident, choice, variant, mutant, protocol, preset,"
-                                              + $" var, or let)");
+            throw ThrowParseError(RazorForgeDiagnosticCode.VisibilityWithoutDeclaration,
+                $"Visibility modifier '{visibility}' must be followed by a declaration "
+                + $"(routine, entity, record, resident, choice, variant, mutant, protocol, preset,"
+                + $" var, or let)");
         }
 
         // Otherwise parse as statement
@@ -351,10 +393,44 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// special statements (pass, throw, absent), memory blocks (danger, viewing, hijacking, inspecting, seizing),
     /// block statements, and expression statements.
     /// </summary>
+    /// <remarks>
+    /// Statement types (checked in sequence):
+    ///
+    /// CONTROL FLOW:
+    ///   if/unless    - Conditional branching
+    ///   while/loop   - Loop constructs
+    ///   for          - Iteration over ranges/collections
+    ///   when         - Pattern matching (switch-like)
+    ///
+    /// JUMP STATEMENTS:
+    ///   return       - Return from routine (with optional value)
+    ///   becomes      - Tail call (return with tail-call optimization)
+    ///   break        - Exit loop
+    ///   continue     - Skip to next iteration
+    ///
+    /// SPECIAL STATEMENTS:
+    ///   pass         - Empty placeholder (no-op)
+    ///   throw        - Throw error (in failable routines)
+    ///   absent       - Return none (in failable routines)
+    ///
+    /// MEMORY BLOCKS (scoped access):
+    ///   danger!      - Unsafe block (raw pointers, FFI)
+    ///   viewing      - Scoped read-only access (single-thread)
+    ///   hijacking    - Scoped exclusive access (single-thread)
+    ///   inspecting   - Scoped read access (multi-thread)
+    ///   seizing      - Scoped exclusive access (multi-thread)
+    ///
+    /// BLOCK/EXPRESSION:
+    ///   { ... }      - Block statement
+    ///   expr         - Expression statement (fallback)
+    /// </remarks>
     /// <returns>The parsed statement, or null if no valid statement was found.</returns>
     private Statement ParseStatement()
     {
-        // Control flow
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CONTROL FLOW STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
         if (Match(type: TokenType.If))
         {
             return ParseIfStatement();
@@ -385,6 +461,10 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseWhenStatement();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // JUMP STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
         if (Match(type: TokenType.Return))
         {
             return ParseReturnStatement();
@@ -405,6 +485,10 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseContinueStatement();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SPECIAL STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
         if (Match(type: TokenType.Pass))
         {
             return ParsePassStatement();
@@ -420,7 +504,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseAbsentStatement();
         }
 
-        // Danger block
+        // ═══════════════════════════════════════════════════════════════════════════
+        // MEMORY/SCOPE BLOCKS
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        // Danger block (unsafe operations)
         if (Match(type: TokenType.Danger))
         {
             return ParseDangerStatement();
@@ -450,13 +538,17 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseSeizingStatement();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // BLOCK AND EXPRESSION STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
         // Block statement
         if (Check(type: TokenType.LeftBrace))
         {
             return ParseBlockStatement();
         }
 
-        // Expression statement
+        // Expression statement (fallback)
         return ParseExpressionStatement();
     }
 }

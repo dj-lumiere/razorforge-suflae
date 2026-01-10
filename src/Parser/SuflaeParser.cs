@@ -1,7 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
-using Compilers.RazorForge.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.Suflae.Parser;
 
@@ -174,7 +174,7 @@ public partial class SuflaeParser
                 IAstNode decl = ParseDeclaration();
                 declarations.Add(item: decl);
             }
-            catch (ParseException ex)
+            catch (SuflaeGrammarException ex)
             {
                 Token errorToken = Position < Tokens.Count
                     ? Tokens[index: Position]
@@ -194,10 +194,41 @@ public partial class SuflaeParser
     /// Parses a single top-level or nested declaration.
     /// Handles: namespace, import, define, using, var/let, routine, entity, record, choice, variant, protocol, impl.
     /// </summary>
+    /// <remarks>
+    /// Declaration parsing order (checked in sequence):
+    ///
+    /// FILE-LEVEL DECLARATIONS (must appear first):
+    ///   namespace    - Module namespace declaration
+    ///   import       - Import external modules
+    ///   define       - Type alias/redefinition
+    ///   using        - Namespace import
+    ///   preset       - Compile-time constant
+    ///
+    /// MODIFIERS (optional, parsed before declaration):
+    ///   attributes   - @crash_only, @inline, @intrinsic, etc.
+    ///   visibility   - private, internal, public, published, imported
+    ///   storage      - common, global
+    ///
+    /// TYPE/VALUE DECLARATIONS:
+    ///   field: Type  - Field declaration (inside type bodies)
+    ///   var/let      - Variable declarations
+    ///   routine      - Function declaration
+    ///   entity       - Heap-allocated reference type
+    ///   record       - Stack-allocated value type
+    ///   choice       - Simple enumeration
+    ///   variant      - Tagged union (sum type)
+    ///   protocol     - Interface/trait definition
+    ///
+    /// If no declaration keyword matches, falls through to ParseStatement.
+    /// </remarks>
     /// <returns>The parsed declaration node.</returns>
     /// <exception cref="ParseException">Thrown when no valid declaration or statement can be parsed.</exception>
     private IAstNode ParseDeclaration()
     {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // FILE-LEVEL DECLARATIONS (must appear at top of file)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         // Namespace declaration (must appear at top of file)
         if (Match(type: TokenType.Namespace))
         {
@@ -228,6 +259,10 @@ public partial class SuflaeParser
             return ParsePresetDeclaration();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PARSE MODIFIERS (attributes, visibility, storage class)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         // Parse attributes (e.g., @inline, @crash_only, @intrinsic("name"))
         List<string> attributes = ParseAttributes();
 
@@ -243,9 +278,11 @@ public partial class SuflaeParser
             // In record bodies, only private/internal/public are allowed (not published/imported)
             if (_parsingStrictRecordBody && visibility is VisibilityModifier.Published or VisibilityModifier.Imported)
             {
-                throw new ParseException(
-                    message: $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
-                             "Record fields can use 'private', 'internal', or 'public'.");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                    $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
+                    "Record fields can use 'private', 'internal', or 'public'",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseFieldDeclaration(visibility: visibility);
         }
@@ -256,9 +293,11 @@ public partial class SuflaeParser
             // In strict record bodies, var/let/preset are not allowed
             if (_parsingStrictRecordBody)
             {
-                throw new ParseException(
-                    message: "Record fields cannot use 'var', 'let', or 'preset'. " +
-                             "Records are immutable with all-public fields. Use 'field: Type' syntax instead.");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                    "Record fields cannot use 'var', 'let', or 'preset'. " +
+                    "Records are immutable with all-public fields. Use 'field: Type' syntax instead",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
@@ -269,9 +308,11 @@ public partial class SuflaeParser
             // Validate: global storage is not allowed for routines
             if (storage == StorageClass.Global)
             {
-                throw new ParseException(
-                    message: "'global' storage class is not valid for routines. " +
-                             "'global' can only be used for file-scope static variables.");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                    "'global' storage class is not valid for routines. " +
+                    "'global' can only be used for file-scope static variables",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage);
         }
@@ -306,13 +347,13 @@ public partial class SuflaeParser
         // it is an record or protocol)
         if (visibility != VisibilityModifier.Public)
         {
-            throw new ParseException(message: $"Visibility modifier '{visibility}' must be followed by a declaration " + $"(routine, entity, record, choice, variant, protocol, var, preset, or let)");
+            throw ThrowParseError($"Visibility modifier '{visibility}' must be followed by a declaration " + $"(routine, entity, record, choice, variant, protocol, var, preset, or let)");
         }
 
         // If we have attributes but no declaration, that's an error
         if (attributes.Count > 0)
         {
-            throw new ParseException(message: $"Attributes must be followed by a declaration (routine, entity, record, etc.)");
+            throw ThrowParseError($"Attributes must be followed by a declaration (routine, entity, record, etc.)");
         }
 
         // Otherwise parse as statement
@@ -323,9 +364,43 @@ public partial class SuflaeParser
     /// Parses a single statement within a block or function body.
     /// Handles: if, while, for, when, return, throw, absent, break, continue, and expression statements.
     /// </summary>
+    /// <remarks>
+    /// Statement types (checked in sequence):
+    ///
+    /// INDENTATION HANDLING:
+    ///   dedent       - Process block end (Suflae uses indentation)
+    ///   newlines     - Skip empty lines
+    ///
+    /// CONTROL FLOW:
+    ///   if/unless    - Conditional branching
+    ///   while/loop   - Loop constructs
+    ///   for          - Iteration over ranges/collections
+    ///   when         - Pattern matching (switch-like)
+    ///
+    /// JUMP STATEMENTS:
+    ///   return       - Return from routine (with optional value)
+    ///   becomes      - Tail call (return with tail-call optimization)
+    ///   break        - Exit loop
+    ///   continue     - Skip to next iteration
+    ///
+    /// SPECIAL STATEMENTS:
+    ///   throw        - Throw error (in failable routines)
+    ///   absent       - Return none (in failable routines)
+    ///   pass         - Empty placeholder (no-op)
+    ///
+    /// DECLARATIONS IN STATEMENT CONTEXT:
+    ///   var/let      - Variable declarations (including destructuring)
+    ///
+    /// EXPRESSION:
+    ///   expr         - Expression statement (fallback)
+    /// </remarks>
     /// <returns>The parsed statement, or null if at end of block.</returns>
     private Statement ParseStatement()
     {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // INDENTATION HANDLING (Suflae-specific)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         // Handle dedent tokens
         if (Check(type: TokenType.Dedent))
         {
@@ -335,7 +410,10 @@ public partial class SuflaeParser
         // Skip newlines
         while (Match(type: TokenType.Newline)) { }
 
-        // Control flow
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CONTROL FLOW STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
         if (Match(type: TokenType.If))
         {
             return ParseIfStatement();
@@ -366,6 +444,10 @@ public partial class SuflaeParser
             return ParseWhenStatement();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // JUMP STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
         if (Match(type: TokenType.Return))
         {
             return ParseReturnStatement();
@@ -374,16 +456,6 @@ public partial class SuflaeParser
         if (Match(type: TokenType.Becomes))
         {
             return ParseBecomesStatement();
-        }
-
-        if (Match(type: TokenType.Throw))
-        {
-            return ParseThrowStatement();
-        }
-
-        if (Match(type: TokenType.Absent))
-        {
-            return ParseAbsentStatement();
         }
 
         if (Match(type: TokenType.Break))
@@ -396,10 +468,28 @@ public partial class SuflaeParser
             return ParseContinueStatement();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SPECIAL STATEMENTS
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        if (Match(type: TokenType.Throw))
+        {
+            return ParseThrowStatement();
+        }
+
+        if (Match(type: TokenType.Absent))
+        {
+            return ParseAbsentStatement();
+        }
+
         if (Match(type: TokenType.Pass))
         {
             return ParsePassStatement();
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // DECLARATIONS IN STATEMENT CONTEXT
+        // ═══════════════════════════════════════════════════════════════════════════
 
         // Variable declarations (can appear in statement context)
         if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
@@ -414,7 +504,10 @@ public partial class SuflaeParser
             return new ExpressionStatement(Expression: new IdentifierExpression(Name: $"var {varDecl.Name}", Location: GetLocation()), Location: GetLocation());
         }
 
-        // Expression statement
+        // ═══════════════════════════════════════════════════════════════════════════
+        // EXPRESSION STATEMENT (fallback)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         return ParseExpressionStatement();
     }
 }

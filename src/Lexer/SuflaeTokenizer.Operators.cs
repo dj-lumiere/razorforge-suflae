@@ -322,15 +322,25 @@ public partial class SuflaeTokenizer
     /// </remarks>
     private void ScanAtSign()
     {
-        if (Peek() == 'i' && PeekWord() == "intrinsic")
+        if (Peek() == 'i' && PeekWord() == "intrinsic_type")
         {
-            // Consume "intrinsic" (9 characters)
-            for (int i = 0; i < 9; i += 1)
+            // Consume "intrinsic_type" (14 characters)
+            for (int i = 0; i < 14; i += 1)
             {
                 Advance();
             }
 
-            AddToken(type: TokenType.Intrinsic);
+            AddToken(type: TokenType.IntrinsicType);
+        }
+        else if (Peek() == 'i' && PeekWord() == "intrinsic_routine")
+        {
+            // Consume "intrinsic_routine" (17 characters)
+            for (int i = 0; i < 17; i += 1)
+            {
+                Advance();
+            }
+
+            AddToken(type: TokenType.IntrinsicRoutine);
         }
         else if (Peek() == 'n' && PeekWord() == "native")
         {

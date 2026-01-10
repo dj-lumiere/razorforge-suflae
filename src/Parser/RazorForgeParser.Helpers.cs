@@ -1,6 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -57,18 +58,18 @@ public partial class RazorForgeParser
     #endregion
 
     /// <summary>
-    /// Parses an intrinsic function call.
-    /// Syntax: <c>@intrinsic.operation&lt;T&gt;(args)</c>
-    /// Intrinsics map directly to LLVM/low-level operations.
+    /// Parses an intrinsic routine call.
+    /// Syntax: <c>@intrinsic_routine.operation&lt;T&gt;(args)</c>
+    /// Intrinsic routines map directly to LLVM IR operations like sitofp, fpext, trunc.
     /// </summary>
-    /// <param name="location">Source location of the intrinsic call.</param>
+    /// <param name="location">Source location of the intrinsic routine call.</param>
     /// <returns>An <see cref="IntrinsicCallExpression"/> AST node.</returns>
-    private IntrinsicCallExpression ParseIntrinsicCall(SourceLocation location)
+    private IntrinsicCallExpression ParseIntrinsicRoutineCall(SourceLocation location)
     {
         // Expect: .operation<T>(args)
-        // The @intrinsic token has already been consumed
+        // The @intrinsic_routine token has already been consumed
 
-        Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
+        Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic_routine'");
 
         // Parse intrinsic operation name (can contain dots like "add.wrapping", "icmp.slt")
         // Allow keywords as intrinsic names (e.g., @intrinsic.and, @intrinsic.or, @intrinsic.not)
@@ -95,7 +96,8 @@ public partial class RazorForgeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected type argument");
+                    throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedTypeArgument,
+                        "Expected type argument");
                 }
             } while (Match(type: TokenType.Comma));
 
@@ -216,7 +218,8 @@ public partial class RazorForgeParser
         }
 
         Token currentToken = CurrentToken;
-        throw new ParseException(message: $"{errorMessage}. Expected Identifier or TypeIdentifier, got {currentToken.Type}.");
+        throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedIdentifier,
+            $"{errorMessage}. Expected Identifier or TypeIdentifier, got {currentToken.Type}.");
     }
 
     /// <summary>
@@ -288,7 +291,7 @@ public partial class RazorForgeParser
     {
         if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
         {
-            throw new ParseException(message: errorMessage);
+            throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedIdentifier, errorMessage);
         }
 
         string name = CurrentToken.Text;

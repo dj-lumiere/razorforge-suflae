@@ -1,5 +1,6 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -158,12 +159,30 @@ public partial class RazorForgeParser
     /// Supports type patterns, literal patterns, wildcard patterns, and expression guards.
     /// </summary>
     /// <returns>A <see cref="WhenStatement"/> AST node.</returns>
+    /// <remarks>
+    /// Two forms of when statements:
+    /// 1. Subject-based: when expr { is Type => ..., LITERAL => ..., else => ... }
+    /// 2. Condition-based: when { condition1 => ..., condition2 => ..., else => ... }
+    ///
+    /// Pattern types supported:
+    /// - 'else' / 'else varName' - default case (wildcard or binding)
+    /// - '_' - explicit wildcard
+    /// - 'is Type' / 'is Type varName' - type pattern with optional binding
+    /// - 'is Type (field1, field2)' - destructuring pattern
+    /// - literal values (42, "hello", true)
+    /// - expression patterns (for condition-based when)
+    /// </remarks>
     private WhenStatement ParseWhenStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // Check for standalone when block (condition-based without subject)
-        // when { condition => body, ... }  - like Lisp's cond
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: Determine when form (subject-based vs condition-based)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Subject-based:    when value { is Type => ... }
+        // Condition-based:  when { x > 0 => ..., x < 0 => ... }  (like Lisp's cond)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         bool isConditionBased = Check(type: TokenType.LeftBrace);
         Expression expression;
         if (isConditionBased)
@@ -179,11 +198,14 @@ public partial class RazorForgeParser
 
         Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after when expression");
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: Parse clauses (pattern => body)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         var clauses = new List<WhenClause>();
 
         while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
         {
-            // Skip newlines
             if (Match(type: TokenType.Newline))
             {
                 continue;
@@ -192,7 +214,13 @@ public partial class RazorForgeParser
             Pattern pattern;
             SourceLocation clauseLocation = GetLocation();
 
-            // Handle 'else' keyword for default case: else => body or else varName => body
+            // ─────────────────────────────────────────────────────────────────────
+            // Pattern dispatch: determine which pattern type we're parsing
+            // Order matters - check specific patterns before general ones
+            // ─────────────────────────────────────────────────────────────────────
+
+            // Case 1: 'else' keyword - default/fallback case
+            // Forms: else => body, else varName => body
             if (Match(type: TokenType.Else))
             {
                 // Check for variable binding: else varName =>
@@ -208,26 +236,28 @@ public partial class RazorForgeParser
                     pattern = new WildcardPattern(Location: clauseLocation);
                 }
             }
-            // Handle wildcard: _ => body
+            // Case 2: Explicit wildcard '_'
             else if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_" && PeekToken(offset: 1).Type == TokenType.FatArrow)
             {
                 Advance(); // consume _
                 pattern = new WildcardPattern(Location: clauseLocation);
             }
-            // Condition-based when: parse as expression, wrap in ExpressionPattern
+            // Case 3: Condition-based when - parse full expression as pattern
             else if (isConditionBased)
             {
                 // Parse the condition as a full expression (e.g., me > 0)
                 Expression condition = ParseExpression();
                 pattern = new ExpressionPattern(Expression: condition, Location: clauseLocation);
             }
-            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
+            // Case 4: Type pattern with 'is' keyword
+            // Forms: is Type, is Type varName, is Type (field1, field2)
             else if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
                 pattern = ParseTypePattern();
                 _inWhenPatternContext = false;
             }
+            // Case 5: Other patterns (literals, identifiers)
             else
             {
                 // Set context flag to prevent single-param lambdas from being parsed
@@ -237,9 +267,14 @@ public partial class RazorForgeParser
                 _inWhenPatternContext = false;
             }
 
+            // ─────────────────────────────────────────────────────────────────────
+            // Parse arrow and body
+            // ─────────────────────────────────────────────────────────────────────
+
             Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after pattern");
 
             // Set flag to prevent 'is' expression parsing in when clause bodies
+            // This avoids ambiguity: "result is Success" should be a new pattern, not an is-expression
             _inWhenClauseBody = true;
             Statement body = ParseStatement();
             _inWhenClauseBody = false;
@@ -312,7 +347,8 @@ public partial class RazorForgeParser
         // Accept both Identifier and TypeIdentifier (lexer may emit Identifier for all)
         if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
         {
-            throw new ParseException(message: $"Expected type name after 'is', got {CurrentToken.Type}");
+            throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedPattern,
+                $"Expected type name after 'is', got {CurrentToken.Type}");
         }
 
         string name = CurrentToken.Text;
@@ -327,7 +363,8 @@ public partial class RazorForgeParser
             }
             else
             {
-                throw new ParseException(message: "Expected identifier after '.' in pattern");
+                throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedDotInQualifiedPattern,
+                    "Expected identifier after '.' in pattern");
             }
         }
 

@@ -78,13 +78,33 @@ public partial class RazorForgeParser
     /// - identifier [, identifier]* ) =>
     /// - identifier [, identifier]* ) given ... =>
     /// </summary>
+    /// <remarks>
+    /// LOOKAHEAD FUNCTION - Does not consume tokens permanently.
+    ///
+    /// This function distinguishes between:
+    ///   (x, y) => x + y         - Lambda expression
+    ///   (x + y)                 - Parenthesized expression
+    ///   (x, y)                  - Tuple expression (future)
+    ///
+    /// Lambda parameter patterns we accept:
+    ///   ()                      - No parameters
+    ///   (x)                     - Single untyped parameter
+    ///   (x: S32)                - Single typed parameter
+    ///   (x, y)                  - Multiple untyped parameters
+    ///   (x: S32, y: Text)       - Multiple typed parameters
+    ///   (x, y) given (a, b)     - With explicit captures
+    ///
+    /// The key discriminator is the '=>' or 'given' after the ')'.
+    /// </remarks>
     private bool IsArrowLambdaParameters()
     {
         int savedPosition = _position;
 
         try
         {
-            // Empty params case: () => or () given ... =>
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 1: Empty params - () => or () given =>
+            // ═══════════════════════════════════════════════════════════════════════════
             if (Check(type: TokenType.RightParen))
             {
                 Advance(); // consume )
@@ -93,10 +113,14 @@ public partial class RazorForgeParser
                 return result;
             }
 
-            // Look for pattern: identifier [: type]? [, identifier [: type]?]* ) [given ...] =>
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 2: Scan parameter list - identifier [: type]? [, ...]* ) [given] =>
+            // ═══════════════════════════════════════════════════════════════════════════
             while (true)
             {
-                // Must start with identifier
+                // ─────────────────────────────────────────────────────────────────────
+                // Each parameter must start with identifier
+                // ─────────────────────────────────────────────────────────────────────
                 if (!Check(type: TokenType.Identifier))
                 {
                     _position = savedPosition;
@@ -105,11 +129,14 @@ public partial class RazorForgeParser
 
                 Advance(); // consume identifier
 
-                // Optional type annotation
+                // ─────────────────────────────────────────────────────────────────────
+                // Optional type annotation - skip over it
+                // ─────────────────────────────────────────────────────────────────────
+                // We need to handle nested generics like List<Dict<Text, S32>>
                 if (Check(type: TokenType.Colon))
                 {
                     Advance(); // consume :
-                    // Skip the type (simplified - just skip until comma or rparen)
+                    // Skip the type (track < > depth for generics)
                     int depth = 0;
                     while (!IsAtEnd)
                     {
@@ -130,7 +157,9 @@ public partial class RazorForgeParser
                     }
                 }
 
-                // Check for comma (more params) or end
+                // ─────────────────────────────────────────────────────────────────────
+                // Check for comma (more params) or closing paren (end of list)
+                // ─────────────────────────────────────────────────────────────────────
                 if (Check(type: TokenType.Comma))
                 {
                     Advance(); // consume comma, continue loop
@@ -145,7 +174,7 @@ public partial class RazorForgeParser
                 }
                 else
                 {
-                    // Not a valid lambda parameter list
+                    // Not a valid lambda parameter list (e.g., expression like (x + y))
                     _position = savedPosition;
                     return false;
                 }
@@ -227,24 +256,51 @@ public partial class RazorForgeParser
     /// Disambiguation: If the first element contains ':', it's a dict; otherwise it's a set.
     /// Empty {} is treated as an empty set.
     /// </summary>
+    /// <remarks>
+    /// Collection literal forms:
+    ///
+    /// SET LITERALS:
+    ///   {}              - Empty set
+    ///   {1, 2, 3}       - Set with elements
+    ///   {"a", "b"}      - Set of strings
+    ///
+    /// DICT LITERALS:
+    ///   {"a": 1, "b": 2}  - Dict with key-value pairs
+    ///   {key: value}      - Single entry dict
+    ///
+    /// DISAMBIGUATION STRATEGY:
+    /// We parse the first expression, then check if a ':' follows.
+    /// - If ':' follows -> dict literal (first expr was a key)
+    /// - Otherwise -> set literal (first expr was an element)
+    ///
+    /// Note: Empty {} is always a set. For empty dict, use Dict&lt;K, V&gt;() constructor.
+    /// </remarks>
     private Expression ParseSetOrDictLiteral(SourceLocation location)
     {
-        // Empty braces -> empty set
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 1: Empty braces -> empty set
+        // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.RightBrace))
         {
             return new SetLiteralExpression(Elements: [], ElementType: null, Location: location);
         }
 
-        // Parse first element to determine if set or dict
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 2: Parse first element to determine set vs dict
+        // ═══════════════════════════════════════════════════════════════════════════
         Expression firstExpr = ParseExpression();
 
-        // If we see a colon, this is a dict literal
+        // ─────────────────────────────────────────────────────────────────────
+        // Colon after first expression -> dict literal
+        // ─────────────────────────────────────────────────────────────────────
         if (Match(type: TokenType.Colon))
         {
             return ParseDictLiteralContinuation(firstKey: firstExpr, location: location);
         }
 
-        // Otherwise it's a set literal
+        // ─────────────────────────────────────────────────────────────────────
+        // No colon -> set literal
+        // ─────────────────────────────────────────────────────────────────────
         return ParseSetLiteralContinuation(firstElement: firstExpr, location: location);
     }
 

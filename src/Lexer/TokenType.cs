@@ -243,13 +243,6 @@ public enum TokenType
     Variant,
 
     /// <summary>
-    /// Mutant declaration keyword.
-    /// Untagged union - raw memory reinterpretation without runtime tag.
-    /// Requires danger! blocks for access. Each case must have unique type.
-    /// </summary>
-    Mutant,
-
-    /// <summary>
     /// Resident declaration keyword (RazorForge only).
     /// Hybrid fixed-size reference type for permanent, foundational objects.
     /// Lives in persistent memory space with stable address.
@@ -697,10 +690,13 @@ public enum TokenType
     /// <summary>Attribute operator (@)</summary>
     At,
 
-    /// <summary>Intrinsic function call (@intrinsic)</summary>
-    Intrinsic,
+    /// <summary>Intrinsic type (@intrinsic_type) - LLVM IR primitive types like i8, i32, f64, ptr</summary>
+    IntrinsicType,
 
-    /// <summary>Native function call (@native)</summary>
+    /// <summary>Intrinsic routine (@intrinsic_routine) - LLVM IR operations like sitofp, fpext, trunc</summary>
+    IntrinsicRoutine,
+
+    /// <summary>Native function call (@native) - FFI routines without type definitions</summary>
     Native,
 
     /// <summary>Comment operator (#)</summary>

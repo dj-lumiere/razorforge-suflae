@@ -81,13 +81,33 @@ public partial class SuflaeParser
     /// - identifier [, identifier]* ) =>
     /// - identifier [, identifier]* ) given ... =>
     /// </summary>
+    /// <remarks>
+    /// LOOKAHEAD FUNCTION - Does not consume tokens permanently.
+    ///
+    /// This function distinguishes between:
+    ///   (x, y) => x + y         - Lambda expression
+    ///   (x + y)                 - Parenthesized expression
+    ///   (x, y)                  - Tuple expression (future)
+    ///
+    /// Lambda parameter patterns we accept:
+    ///   ()                      - No parameters
+    ///   (x)                     - Single untyped parameter
+    ///   (x: S32)                - Single typed parameter
+    ///   (x, y)                  - Multiple untyped parameters
+    ///   (x: S32, y: Text)       - Multiple typed parameters
+    ///   (x, y) given (a, b)     - With explicit captures
+    ///
+    /// The key discriminator is the '=>' or 'given' after the ')'.
+    /// </remarks>
     private bool IsArrowLambdaParameters()
     {
         int savedPosition = Position;
 
         try
         {
-            // Empty params case: () => or () given ... =>
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 1: Empty params - () => or () given =>
+            // ═══════════════════════════════════════════════════════════════════════════
             if (Check(type: TokenType.RightParen))
             {
                 Advance(); // consume )
@@ -96,10 +116,14 @@ public partial class SuflaeParser
                 return result;
             }
 
-            // Look for pattern: identifier [: type]? [, identifier [: type]?]* ) [given ...] =>
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 2: Scan parameter list - identifier [: type]? [, ...]* ) [given] =>
+            // ═══════════════════════════════════════════════════════════════════════════
             while (true)
             {
-                // Must start with identifier
+                // ─────────────────────────────────────────────────────────────────────
+                // Each parameter must start with identifier
+                // ─────────────────────────────────────────────────────────────────────
                 if (!Check(type: TokenType.Identifier))
                 {
                     Position = savedPosition;
@@ -108,11 +132,14 @@ public partial class SuflaeParser
 
                 Advance(); // consume identifier
 
-                // Optional type annotation
+                // ─────────────────────────────────────────────────────────────────────
+                // Optional type annotation - skip over it
+                // ─────────────────────────────────────────────────────────────────────
+                // We need to handle nested generics like List<Dict<Text, S32>>
                 if (Check(type: TokenType.Colon))
                 {
                     Advance(); // consume :
-                    // Skip the type (simplified - just skip until comma or rparen)
+                    // Skip the type (track < > depth for generics)
                     int depth = 0;
                     while (!IsAtEnd)
                     {
@@ -133,7 +160,9 @@ public partial class SuflaeParser
                     }
                 }
 
-                // Check for comma (more params) or end
+                // ─────────────────────────────────────────────────────────────────────
+                // Check for comma (more params) or closing paren (end of list)
+                // ─────────────────────────────────────────────────────────────────────
                 if (Check(type: TokenType.Comma))
                 {
                     Advance(); // consume comma, continue loop
@@ -148,7 +177,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    // Not a valid lambda parameter list
+                    // Not a valid lambda parameter list (e.g., expression like (x + y))
                     Position = savedPosition;
                     return false;
                 }

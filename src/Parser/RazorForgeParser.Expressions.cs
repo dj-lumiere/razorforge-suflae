@@ -1,6 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -774,16 +775,33 @@ public partial class RazorForgeParser
     /// Handles generic method calls: <c>func&lt;T&gt;()</c>, <c>obj.method&lt;T&gt;()</c>
     /// </summary>
     /// <returns>The parsed expression.</returns>
+    /// <remarks>
+    /// Postfix operators in order of check:
+    /// 1. Generic function call: func&lt;T&gt;() or func!&lt;T&gt;()
+    /// 2. Failable function call: func!(args)
+    /// 3. Regular function call: func(args)
+    /// 4. Index access: expr[index]
+    /// 5. Member access: expr.member (with sub-cases for generic/failable methods)
+    /// 6. Functional update: expr with (field: value)
+    ///
+    /// DISAMBIGUATION CHALLENGE:
+    /// The '<' token can be either a generic bracket or a less-than operator.
+    /// We disambiguate by scanning ahead: if we find <...>() or <...>., it's generics.
+    /// </remarks>
     private Expression ParsePostfix()
     {
         Expression expr = ParsePrimary();
 
         while (true)
         {
-            // Handle standalone generic function calls like func!<T>(args) or func<T>(args)
-            // The ! must come BEFORE < if present: func!<T>() not func<T>!()
-            // Only parse as generics if the identifier is followed by a type identifier or uppercase letter
-            // to avoid confusing comparison operators with generics
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 1: Generic function call - func<T>() or func!<T>()
+            // ═══════════════════════════════════════════════════════════════════════════
+            // The ! (failable marker) must come BEFORE < if present: func!<T>() not func<T>!()
+            // We need to disambiguate: is '<' starting generics or a comparison?
+            // Strategy: scan ahead for pattern <...>() which definitively means generics
+            // ═══════════════════════════════════════════════════════════════════════════
+
             if (expr is IdentifierExpression beforeExpr && (Check(type: TokenType.Less) || Check(type: TokenType.Bang) && PeekToken(offset: 1)
                    .Type == TokenType.Less))
             {
@@ -798,14 +816,14 @@ public partial class RazorForgeParser
                     break;
                 }
 
-                // Lookahead to check if this is likely a generic or a comparison
-                // Strategy: scan forward to see if we have pattern like <T>() which is definitely a generic call
-                // This handles both uppercase types and lowercase intrinsic functions like sizeof<T>()
+                // ─────────────────────────────────────────────────────────────────────
+                // GENERIC DISAMBIGUATION: Scan ahead to find <...>() pattern
+                // This distinguishes: sizeof<T>() (generic) vs i < N (comparison)
+                // ─────────────────────────────────────────────────────────────────────
+
                 int savedPos = _position;
                 Advance(); // consume '<'
 
-                // Scan forward to find > followed by ( to definitively identify generic calls
-                // This disambiguates: sizeof<T>() (generic) vs i < N (comparison)
                 bool isLikelyGeneric = false;
                 int scanPos = _position;
                 int depth = 1; // We already consumed one <
@@ -834,10 +852,10 @@ public partial class RazorForgeParser
                     else if (tt == TokenType.RightShift)
                     {
                         // >> is tokenized as RightShift - treat as two > tokens
+                        // This handles nested generics: List<Dict<K, V>>
                         depth -= 2;
                         if (depth == 0)
                         {
-                            // Found matching >>, check if ( or . follows
                             if (scanPos + 1 < tokens.Count && (tokens[index: scanPos + 1].Type == TokenType.LeftParen || tokens[index: scanPos + 1].Type == TokenType.Dot))
                             {
                                 isLikelyGeneric = true;
@@ -847,13 +865,12 @@ public partial class RazorForgeParser
                         }
                         if (depth < 0)
                         {
-                            // Went negative, not a valid generic pattern
-                            break;
+                            break; // Invalid pattern
                         }
                     }
                     else if (tt is TokenType.Newline or TokenType.LeftBrace)
                     {
-                        // Hit statement boundary without finding matching >, this is a comparison
+                        // Hit statement boundary without finding matching > - this is a comparison
                         break;
                     }
 
@@ -868,6 +885,10 @@ public partial class RazorForgeParser
                     break;
                 }
 
+                // ─────────────────────────────────────────────────────────────────────
+                // Parse the generic call: func<T, U>(args)
+                // ─────────────────────────────────────────────────────────────────────
+
                 Advance(); // consume '<' again
                 var typeArgs = new List<TypeExpression>();
                 do
@@ -879,12 +900,9 @@ public partial class RazorForgeParser
 
                 if (Match(type: TokenType.LeftParen))
                 {
-                    // Use ParseArgumentList to support named arguments (name: value)
                     List<Expression> args = ParseArgumentList();
-
                     Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
 
-                    // Append ! to method name if it's a failable call
                     string methodName = beforeExpr.Name;
                     if (isMemoryOperation)
                     {
@@ -900,23 +918,23 @@ public partial class RazorForgeParser
                 }
                 else
                 {
-                    // Generic type reference without call
+                    // Generic type reference without call: Type<T>
                     expr = new GenericMemberExpression(Object: expr,
                         MemberName: ((IdentifierExpression)expr).Name,
                         TypeArguments: typeArgs,
                         Location: expr.Location);
                 }
             }
-            // Throwable function call: identifier!(args) with named arguments
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 2: Failable function call without generics - func!(args)
+            // ═══════════════════════════════════════════════════════════════════════════
             else if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
                         .Type == TokenType.LeftParen)
             {
                 Advance(); // consume '!'
                 Advance(); // consume '('
 
-                // Function call - supports named arguments (name: value)
                 List<Expression> args = ParseArgumentList();
-
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
 
                 // Mark as failable call by appending ! to the callee name
@@ -929,27 +947,38 @@ public partial class RazorForgeParser
                     expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
                 }
             }
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 3: Regular function call - func(args)
+            // ═══════════════════════════════════════════════════════════════════════════
             else if (Match(type: TokenType.LeftParen))
             {
-                // Function call - supports named arguments (name: value)
                 List<Expression> args = ParseArgumentList();
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
                 expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
             }
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 4: Index access - expr[index]
+            // ═══════════════════════════════════════════════════════════════════════════
             else if (Match(type: TokenType.LeftBracket))
             {
-                // Array/map indexing
                 Expression index = ParseExpression();
                 Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index");
                 expr = new IndexExpression(Object: expr, Index: index, Location: expr.Location);
             }
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 5: Member access - expr.member
+            // ═══════════════════════════════════════════════════════════════════════════
+            // Sub-cases after parsing member name:
+            //   5a. Generic method: obj.method<T>() or obj.method!<T>()
+            //   5b. Failable method: obj.method!(args)
+            //   5c. Regular method: obj.method(args)
+            //   5d. Property access: obj.property
+            // ═══════════════════════════════════════════════════════════════════════════
             else if (Match(type: TokenType.Dot))
             {
-                // Member access - allow keywords like 'where', 'none' as method names
                 string member = ConsumeMethodName(errorMessage: "Expected member name after '.'");
 
                 // Check for failable marker ! before generic parameters: obj.method!<T>
-                // Pattern should be: obj.method!<T>() not obj.method<T>!()
                 bool isGenericMemOp = false;
                 if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
                        .Type == TokenType.Less)
@@ -958,10 +987,11 @@ public partial class RazorForgeParser
                     Match(type: TokenType.Bang); // consume !
                 }
 
-                // Check for generic method call with type parameters
-                // Disambiguate by scanning for the pattern <...>() or <...>.
-                // If we find matching > followed by ( or ., it's definitely a generic call.
-                // This handles: method<Type>() vs method < value (comparison)
+                // ─────────────────────────────────────────────────────────────────────
+                // Case 5a: Generic method call - obj.method<T>()
+                // Same disambiguation strategy as Case 1
+                // ─────────────────────────────────────────────────────────────────────
+
                 if (Check(type: TokenType.Less))
                 {
                     int savedPos = _position;
@@ -970,7 +1000,7 @@ public partial class RazorForgeParser
                     // Scan forward to find matching > and check what follows
                     bool isLikelyGeneric = false;
                     int scanPos = _position;
-                    int depth = 1; // We already consumed one <
+                    int depth = 1;
 
                     while (scanPos < tokens.Count && depth > 0)
                     {
@@ -984,7 +1014,6 @@ public partial class RazorForgeParser
                             depth--;
                             if (depth == 0)
                             {
-                                // Found matching >, check if ( or . follows (indicating generic call/access)
                                 if (scanPos + 1 < tokens.Count &&
                                     (tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
                                      tokens[index: scanPos + 1].Type == TokenType.Dot))
@@ -997,11 +1026,9 @@ public partial class RazorForgeParser
                         }
                         else if (tt == TokenType.RightShift)
                         {
-                            // >> could be two > in nested generics like List<Dict<K, V>>
                             depth -= 2;
                             if (depth <= 0)
                             {
-                                // Check what follows
                                 if (scanPos + 1 < tokens.Count &&
                                     (tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
                                      tokens[index: scanPos + 1].Type == TokenType.Dot))
@@ -1014,8 +1041,7 @@ public partial class RazorForgeParser
                         }
                         else if (tt == TokenType.Newline || tt == TokenType.LeftBrace)
                         {
-                            // Hit statement boundary without finding matching >, this is a comparison
-                            break;
+                            break; // Statement boundary - this is a comparison
                         }
 
                         scanPos++;
@@ -1036,12 +1062,9 @@ public partial class RazorForgeParser
 
                         if (Match(type: TokenType.LeftParen))
                         {
-                            // Use ParseArgumentList to support named arguments (name: value)
                             List<Expression> genericArgs = ParseArgumentList();
-
                             Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
 
-                            // Append ! to method name if it's a failable call
                             string methodName = member;
                             if (isGenericMemOp)
                             {
@@ -1068,37 +1091,45 @@ public partial class RazorForgeParser
                     // Not a generic, fall through to regular member access below
                 }
 
-                // Regular member access (no generic type args, or < was a comparison operator)
-                // Check for failable method call with ! suffix
+                // ─────────────────────────────────────────────────────────────────────
+                // Case 5b: Failable method call - obj.method!(args)
+                // ─────────────────────────────────────────────────────────────────────
+
                 if (Match(type: TokenType.Bang) && Match(type: TokenType.LeftParen))
                 {
-                    // Failable method call: obj.method!(args)
-                    // Represented as CallExpression with MemberExpression callee
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
 
                     Expression memberExpr = new MemberExpression(Object: expr, PropertyName: member + "!", Location: expr.Location);
                     expr = new CallExpression(Callee: memberExpr, Arguments: args, Location: expr.Location);
                 }
+                // ─────────────────────────────────────────────────────────────────────
+                // Case 5c: Regular method call - obj.method(args)
+                // ─────────────────────────────────────────────────────────────────────
                 else if (Match(type: TokenType.LeftParen))
                 {
-                    // Regular method call: obj.method(args)
-                    // Represented as CallExpression with MemberExpression callee
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
 
                     Expression memberExpr = new MemberExpression(Object: expr, PropertyName: member, Location: expr.Location);
                     expr = new CallExpression(Callee: memberExpr, Arguments: args, Location: expr.Location);
                 }
+                // ─────────────────────────────────────────────────────────────────────
+                // Case 5d: Property access - obj.property
+                // ─────────────────────────────────────────────────────────────────────
                 else
                 {
                     expr = new MemberExpression(Object: expr, PropertyName: member, Location: expr.Location);
                 }
             }
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 6: Functional update - record with (field: newValue)
+            // ═══════════════════════════════════════════════════════════════════════════
+            // Creates a copy of a record with some fields updated.
+            // Semantic analyzer validates that expr is actually a record type.
+            // ═══════════════════════════════════════════════════════════════════════════
             else if (Match(type: TokenType.With))
             {
-                // Functional update expression for records: record with (field: newVal)
-                // Only valid on record types - semantic analyzer will validate this
                 SourceLocation withLocation = GetLocation(token: PeekToken(offset: -1));
                 Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'with'");
 
@@ -1119,7 +1150,7 @@ public partial class RazorForgeParser
             }
             else
             {
-                break;
+                break; // No more postfix operators
             }
         }
 
@@ -1227,10 +1258,10 @@ public partial class RazorForgeParser
             return expr;
         }
 
-        // Intrinsic function call: @intrinsic.operation<T>(args)
-        if (Match(type: TokenType.Intrinsic))
+        // Intrinsic routine call: @intrinsic_routine.operation<T, U>(args)
+        if (Match(type: TokenType.IntrinsicRoutine))
         {
-            return ParseIntrinsicCall(location: location);
+            return ParseIntrinsicRoutineCall(location: location);
         }
 
         // Native function call: @native.function_name(args)
@@ -1251,7 +1282,8 @@ public partial class RazorForgeParser
             return ParseSetOrDictLiteral(location: location);
         }
 
-        throw new ParseException(message: $"Unexpected token: {CurrentToken.Type}");
+        throw ThrowParseError(RazorForgeDiagnosticCode.UnexpectedToken,
+            $"Unexpected token: {CurrentToken.Type}");
     }
 
     /// <summary>
@@ -1328,21 +1360,23 @@ public partial class RazorForgeParser
                 return true;
             }
 
-            throw new ParseException(message: $"Invalid float literal: {token.Text}");
+            throw ThrowParseError(RazorForgeDiagnosticCode.InvalidFloatLiteral,
+                $"Invalid float literal: {token.Text}");
         }
 
         return false;
     }
 
     /// <summary>
-    /// Parses an integer value from a cleaned string, handling hex, binary, and decimal formats.
-    /// For 128-bit literals, stores the string value for later semantic analysis.
+    /// Parses an integer value from a cleaned string, handling hex, binary, octal, and decimal formats.
+    /// For 128-bit and arbitrary precision (Integer type), stores the string value for semantic analysis.
+    /// NumericLiteralParser handles arbitrary precision during semantic analysis.
     /// </summary>
     private static LiteralExpression ParseIntegerValue(string cleanValue, Token token, SourceLocation location)
     {
-        // For 128-bit integers, store the raw string - semantic analysis will parse them
-        // using NumericLiteralParser which handles arbitrary precision
-        if (token.Type is TokenType.S128Literal or TokenType.U128Literal)
+        // For 128-bit integers and arbitrary precision (Integer), store the raw string.
+        // Semantic analysis will parse them using NumericLiteralParser which handles arbitrary precision.
+        if (token.Type is TokenType.S128Literal or TokenType.U128Literal or TokenType.Integer)
         {
             return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
         }
@@ -1358,9 +1392,11 @@ public partial class RazorForgeParser
             {
                 return new LiteralExpression(Value: hexVal, LiteralType: token.Type, Location: location);
             }
+            // Value too large for 64-bit, store as string for semantic analysis
+            return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
         }
         // Handle binary literals (0b prefix)
-        else if (cleanValue.StartsWith(value: "0b") || cleanValue.StartsWith(value: "0B"))
+        if (cleanValue.StartsWith(value: "0b") || cleanValue.StartsWith(value: "0B"))
         {
             string binaryPart = cleanValue.Substring(startIndex: 2);
             try
@@ -1370,21 +1406,37 @@ public partial class RazorForgeParser
             }
             catch (Exception)
             {
-                throw new ParseException(message: $"Invalid binary literal: {token.Text}");
+                // Value too large for 64-bit, store as string for semantic analysis
+                return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+            }
+        }
+        // Handle octal literals (0o prefix)
+        if (cleanValue.StartsWith(value: "0o") || cleanValue.StartsWith(value: "0O"))
+        {
+            string octalPart = cleanValue.Substring(startIndex: 2);
+            try
+            {
+                long octVal = Convert.ToInt64(value: octalPart, fromBase: 8);
+                return new LiteralExpression(Value: octVal, LiteralType: token.Type, Location: location);
+            }
+            catch (Exception)
+            {
+                // Value too large for 64-bit, store as string for semantic analysis
+                return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
             }
         }
         // Handle decimal literals
-        else if (long.TryParse(s: cleanValue, result: out long intVal))
+        if (long.TryParse(s: cleanValue, result: out long intVal))
         {
             return new LiteralExpression(Value: intVal, LiteralType: token.Type, Location: location);
         }
         // Try parsing as ulong for values that overflow long
-        else if (ulong.TryParse(s: cleanValue, result: out ulong ulongVal))
+        if (ulong.TryParse(s: cleanValue, result: out ulong ulongVal))
         {
             return new LiteralExpression(Value: unchecked((long)ulongVal), LiteralType: token.Type, Location: location);
         }
-
-        throw new ParseException(message: $"Invalid integer literal: {token.Text}");
+        // Value too large for 64-bit, store as string for semantic analysis
+        return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
     }
 
     /// <summary>
@@ -1501,7 +1553,8 @@ public partial class RazorForgeParser
             return true;
         }
 
-        throw new ParseException(message: $"Invalid memory literal: {token.Text}");
+        throw ThrowParseError(RazorForgeDiagnosticCode.InvalidMemoryLiteral,
+            $"Invalid memory literal: {token.Text}");
     }
 
     /// <summary>
@@ -1534,7 +1587,8 @@ public partial class RazorForgeParser
             return true;
         }
 
-        throw new ParseException(message: $"Invalid time literal: {token.Text}");
+        throw ThrowParseError(RazorForgeDiagnosticCode.InvalidDurationLiteral,
+            $"Invalid time literal: {token.Text}");
     }
 
     /// <summary>

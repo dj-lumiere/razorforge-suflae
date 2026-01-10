@@ -18,6 +18,10 @@ namespace Compilers.Shared.Lexer;
 /// </remarks>
 public class LexerException : Exception
 {
+    public string message;
+    public long lineNumber;
+    public long columnNumber;
+    public long errorCode;
     /// <summary>
     /// Initializes a new instance of the LexerException entity with a specified error message.
     /// </summary>

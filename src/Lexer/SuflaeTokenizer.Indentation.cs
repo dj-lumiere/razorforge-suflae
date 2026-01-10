@@ -1,3 +1,5 @@
+using RazorForge.Diagnostics;
+
 namespace Compilers.Suflae.Lexer;
 
 using Compilers.Shared.Lexer;
@@ -82,9 +84,10 @@ public partial class SuflaeTokenizer
         // Validate indentation alignment
         if (spaces % 4 != 0)
         {
-            throw new LexerException(
-                message:
-                $"Indentation error at line {_line}: expected multiple of 4 spaces, got {spaces} spaces.");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.InconsistentIndentation,
+                $"Indentation error: expected multiple of 4 spaces, got {spaces} spaces",
+                _fileName, _line, _column);
         }
 
         // Handle expected indent after block-starter colon
@@ -92,7 +95,10 @@ public partial class SuflaeTokenizer
         {
             if (newIndentLevel <= _currentIndentLevel)
             {
-                throw new LexerException(message: $"Expected indent after ':' at line {_line}");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.ExpectedIndent,
+                    "Expected indent after ':'",
+                    _fileName, _line, _column);
             }
 
             AddToken(type: TokenType.Indent, text: "");
@@ -111,7 +117,10 @@ public partial class SuflaeTokenizer
         // Unexpected increase in indentation
         if (newIndentLevel > _currentIndentLevel)
         {
-            throw new LexerException(message: $"Unexpected indent at line {_line}");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.ExpectedIndent,
+                "Unexpected indent",
+                _fileName, _line, _column);
         }
     }
 

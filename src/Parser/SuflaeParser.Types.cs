@@ -35,18 +35,35 @@ public partial class SuflaeParser
     /// <summary>
     /// Parses a base type expression without nullable suffix.
     /// </summary>
+    /// <remarks>
+    /// Type forms in priority order:
+    /// 1. Me               - Self type in protocols/methods
+    /// 2. Routine&lt;...&gt;     - Function type with parameter/return types
+    /// 3. Name&lt;T, U&gt;       - Generic named type
+    /// 4. Name             - Simple named type
+    ///
+    /// Note: Suflae does not have @intrinsic types (those are RazorForge-only).
+    /// </remarks>
     private TypeExpression ParseBaseType()
     {
         SourceLocation location = GetLocation();
 
-        // Me - self type in protocols/methods (like Self in Rust)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 1: Me - self type in protocols/methods (like Self in Rust)
+        // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.MyType))
         {
             return new TypeExpression(Name: "Me", GenericArguments: null, Location: location);
         }
 
-        // Routine type: Routine<P1, P2, ..., R> - arity-based function types
-        // The 'Routine' keyword is also a valid type name for function types
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 2: Routine type - arity-based function types
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Forms:
+        //   Routine            -> zero-arg void routine
+        //   Routine<R>         -> zero-arg returning R
+        //   Routine<P, R>      -> single param P, returns R
+        //   Routine<P1, P2, R> -> two params P1/P2, returns R (last type is return)
         if (Match(type: TokenType.Routine))
         {
             string name = "Routine";
@@ -70,18 +87,30 @@ public partial class SuflaeParser
             return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
         }
 
-        // Named type (identifier or type identifier)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 3/4: Named type - simple or generic
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Forms:
+        //   User                  -> simple type
+        //   List<T>               -> generic type
+        //   Dict<Text, S32>       -> multi-param generic
+        //   ValueText<256>        -> const generic (number as type arg)
         if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
         {
             string name = PeekToken(offset: -1)
                .Text;
 
-            // Check for generic type arguments
+            // ─────────────────────────────────────────────────────────────────────
+            // Simple type without generics
+            // ─────────────────────────────────────────────────────────────────────
             if (!Match(type: TokenType.Less))
             {
                 return new TypeExpression(Name: name, GenericArguments: null, Location: location);
             }
 
+            // ─────────────────────────────────────────────────────────────────────
+            // Generic type with type arguments
+            // ─────────────────────────────────────────────────────────────────────
             var typeArgs = new List<TypeExpression>();
 
             do
@@ -94,7 +123,7 @@ public partial class SuflaeParser
             return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
         }
 
-        throw new ParseException(message: $"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
+        throw ThrowParseError($"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
     }
 
     /// <summary>
@@ -182,6 +211,7 @@ public partial class SuflaeParser
             // and leave a Greater for the next parse
             Token currentToken = CurrentToken;
             var newGreater = new Token(Type: TokenType.Greater,
+                FileName: currentToken.FileName,
                 Text: ">",
                 Line: currentToken.Line,
                 Column: currentToken.Column + 1); // Second > is one position after
@@ -196,7 +226,7 @@ public partial class SuflaeParser
         }
 
         // Neither > nor >> found - error
-        throw new ParseException(message: $"{errorMessage}. Expected Greater, got {CurrentToken.Type}.");
+        throw ThrowParseError($"{errorMessage}. Expected Greater, got {CurrentToken.Type}.");
     }
 
     /// <summary>
@@ -295,7 +325,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected 'record', 'entity', 'routine', 'choice', 'variant', or type after 'is' in inline constraint");
+                    throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'variant', or type after 'is' in inline constraint");
                 }
             }
             else if (Match(type: TokenType.In))
@@ -351,7 +381,7 @@ public partial class SuflaeParser
                 // Verify this parameter was declared
                 if (!genericParams.Contains(item: paramName))
                 {
-                    throw new ParseException(message: $"Type parameter '{paramName}' not declared in generic parameters");
+                    throw ThrowParseError($"Type parameter '{paramName}' not declared in generic parameters");
                 }
 
                 // Parse constraint kind and types
@@ -420,7 +450,7 @@ public partial class SuflaeParser
                     }
                     else
                     {
-                        throw new ParseException(message: "Expected 'record', 'entity', 'routine', 'choice', 'variant', or type after 'is' in constraint");
+                        throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'variant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))
@@ -443,7 +473,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected 'follows', 'is', or 'in' in generic constraint");
+                    throw ThrowParseError("Expected 'follows', 'is', or 'in' in generic constraint");
                 }
 
                 // Continue parsing if there's a comma

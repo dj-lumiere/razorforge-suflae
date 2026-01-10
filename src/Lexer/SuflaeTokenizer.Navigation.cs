@@ -136,6 +136,7 @@ public partial class SuflaeTokenizer
     private void AddToken(TokenType type, string text)
     {
         _tokens.Add(item: new Token(Type: type,
+            FileName: _fileName,
             Text: text,
             Line: _tokenStartLine,
             Column: _tokenStartColumn,

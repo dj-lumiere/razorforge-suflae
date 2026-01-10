@@ -1,6 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -34,18 +35,34 @@ public partial class RazorForgeParser
     /// <summary>
     /// Parses a base type expression without nullable suffix.
     /// </summary>
+    /// <remarks>
+    /// Type forms in priority order:
+    /// 1. Me               - Self type in protocols/methods
+    /// 2. Routine&lt;...&gt;     - Function type with parameter/return types
+    /// 3. @intrinsic.xxx   - LLVM IR intrinsic types
+    /// 4. Name&lt;T, U&gt;       - Generic named type
+    /// 5. Name             - Simple named type
+    /// </remarks>
     private TypeExpression ParseBaseType()
     {
         SourceLocation location = GetLocation();
 
-        // Me - self type in protocols/methods (like Self in Rust)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 1: Me - self type in protocols/methods (like Self in Rust)
+        // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.MyType))
         {
             return new TypeExpression(Name: "Me", GenericArguments: null, Location: location);
         }
 
-        // Routine type: Routine<P1, P2, ..., R> - arity-based function types
-        // The 'Routine' keyword is also a valid type name for function types
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 2: Routine type - arity-based function types
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Forms:
+        //   Routine            -> zero-arg void routine
+        //   Routine<R>         -> zero-arg returning R
+        //   Routine<P, R>      -> single param P, returns R
+        //   Routine<P1, P2, R> -> two params P1/P2, returns R (last type is return)
         if (Match(type: TokenType.Routine))
         {
             string name = "Routine";
@@ -69,35 +86,52 @@ public partial class RazorForgeParser
             return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
         }
 
-        // Intrinsic type: @intrinsic.i1, @intrinsic.i32, @intrinsic.f64, etc.
-        // These map directly to LLVM IR types
-        if (Match(type: TokenType.Intrinsic))
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 3: Intrinsic type - direct LLVM IR types
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Forms: @intrinsic_type.i1, @intrinsic_type.i32, @intrinsic_type.f64, @intrinsic_type.ptr
+        // Note: @intrinsic_routine (with type args) is parsed as an expression, not a type
+        if (Match(type: TokenType.IntrinsicType))
         {
-            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
+            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic_type'");
 
             // Allow any identifier as intrinsic type name (i1, i8, i16, i32, i64, i128, f16, f32, f64, f128, ptr, etc.)
             if (!Match(TokenType.Identifier, TokenType.TypeIdentifier))
             {
-                throw new ParseException(
-                    message: $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.ExpectedTypeIdentifier,
+                    $"Expected intrinsic type name after '@intrinsic_type.', got {CurrentToken.Type}",
+                    fileName, CurrentToken.Line, CurrentToken.Column);
             }
 
             string intrinsicName = PeekToken(offset: -1).Text;
-            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}", GenericArguments: null, Location: location);
+            return new TypeExpression(Name: $"@intrinsic_type.{intrinsicName}", GenericArguments: null, Location: location);
         }
 
-        // Named type (identifier or type identifier)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 4/5: Named type - simple or generic
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Forms:
+        //   User                  -> simple type
+        //   List<T>               -> generic type
+        //   Dict<Text, S32>       -> multi-param generic
+        //   ValueText<256>        -> const generic (number as type arg)
         if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
         {
             string name = PeekToken(offset: -1)
                .Text;
 
-            // Check for generic type arguments
+            // ─────────────────────────────────────────────────────────────────────
+            // Simple type without generics
+            // ─────────────────────────────────────────────────────────────────────
             if (!Match(type: TokenType.Less))
             {
                 return new TypeExpression(Name: name, GenericArguments: null, Location: location);
             }
 
+            // ─────────────────────────────────────────────────────────────────────
+            // Generic type with type arguments
+            // ─────────────────────────────────────────────────────────────────────
             var typeArgs = new List<TypeExpression>();
 
             do
@@ -110,7 +144,8 @@ public partial class RazorForgeParser
             return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
         }
 
-        throw new ParseException(message: $"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
+        throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedType,
+            $"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
     }
 
     /// <summary>
@@ -198,6 +233,7 @@ public partial class RazorForgeParser
             // and leave a Greater for the next parse
             Token currentToken = CurrentToken;
             var newGreater = new Token(Type: TokenType.Greater,
+                FileName: currentToken.FileName,
                 Text: ">",
                 Line: currentToken.Line,
                 Column: currentToken.Column + 1); // Second > is one position after
@@ -212,7 +248,8 @@ public partial class RazorForgeParser
         }
 
         // Neither > nor >> found - error
-        throw new ParseException(message: $"{errorMessage}. Expected Greater, got {CurrentToken.Type}.");
+        throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedClosingAngle,
+            $"{errorMessage}. Expected '>', got {CurrentToken.Type}.");
     }
 
     /// <summary>
@@ -228,21 +265,52 @@ public partial class RazorForgeParser
     /// Parses generic parameters with optional inline constraints like &lt;T follows Integral&gt;.
     /// Returns both the parameter names and any inline constraints found.
     /// </summary>
+    /// <remarks>
+    /// Inline constraint forms (inside angle brackets):
+    ///
+    /// PROTOCOL CONSTRAINTS (follows):
+    ///   &lt;T follows Comparable&gt;           - Single protocol
+    ///   &lt;T follows Comparable, Hashable&gt;  - Multiple protocols
+    ///
+    /// TYPE KIND CONSTRAINTS (is):
+    ///   &lt;T is record&gt;    - Must be a value type (record)
+    ///   &lt;T is entity&gt;    - Must be a reference type (entity)
+    ///   &lt;T is resident&gt;  - Must be a resident type
+    ///   &lt;T is routine&gt;   - Must be a routine type
+    ///   &lt;T is choice&gt;    - Must be a choice type
+    ///   &lt;T is variant&gt;   - Must be a variant type
+    ///   &lt;N is S32&gt;       - Const generic (N is a compile-time constant of type S32)
+    ///
+    /// TYPE EQUALITY CONSTRAINTS (in):
+    ///   &lt;T in [S32, S64, F64]&gt;  - T must be one of the listed types
+    ///
+    /// DISAMBIGUATION CHALLENGE:
+    /// When parsing "T follows A, B", we need to distinguish between:
+    ///   - Multiple protocols for same param: &lt;T follows A, B&gt;
+    ///   - Next parameter with constraint: &lt;T follows A, U follows B&gt;
+    /// We look ahead to check if the next identifier has follows/is/in after it.
+    /// </remarks>
     private (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) ParseGenericParametersWithConstraints()
     {
         var genericParams = new List<string>();
         var inlineConstraints = new List<GenericConstraintDeclaration>();
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Parse each generic parameter with optional inline constraint
+        // ═══════════════════════════════════════════════════════════════════════════
         do
         {
             SourceLocation location = GetLocation();
             string paramName = ConsumeIdentifier(errorMessage: "Expected generic parameter name");
             genericParams.Add(item: paramName);
 
-            // Check for inline constraint: T follows Protocol or T is record/entity/resident
+            // ─────────────────────────────────────────────────────────────────────
+            // CONSTRAINT TYPE 1: follows - protocol conformance
+            // ─────────────────────────────────────────────────────────────────────
+            // Forms: T follows Protocol
+            //        T follows Protocol1, Protocol2  (multiple protocols)
             if (Match(type: TokenType.Follows))
             {
-                // Parse protocol constraints: T follows Protocol
                 var constraintTypes = new List<TypeExpression>();
                 do
                 {
@@ -259,10 +327,13 @@ public partial class RazorForgeParser
                     ConstraintTypes: constraintTypes,
                     Location: location));
             }
+            // ─────────────────────────────────────────────────────────────────────
+            // CONSTRAINT TYPE 2: is - type kind or const generic
+            // ─────────────────────────────────────────────────────────────────────
+            // Type kinds: T is record/entity/resident/routine/choice/variant
+            // Const generic: N is S32 (N is a compile-time S32 value)
             else if (Match(type: TokenType.Is))
             {
-                // Parse type kind constraints: T is record/entity/resident/routine/choice/variant/mutant
-                // Or const generic type constraints: N is uaddr/s32/etc.
                 if (Match(type: TokenType.Record))
                 {
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -305,13 +376,6 @@ public partial class RazorForgeParser
                         ConstraintTypes: null,
                         Location: location));
                 }
-                else if (Match(type: TokenType.Mutant))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
-                        ConstraintType: ConstraintKind.MutantType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
                 else if (Check(type: TokenType.Identifier) || Check(type: TokenType.TypeIdentifier))
                 {
                     // Const generic constraint: N is uaddr
@@ -324,12 +388,16 @@ public partial class RazorForgeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'variant', 'mutant', or type after 'is' in inline constraint");
+                    throw ThrowParseError(RazorForgeDiagnosticCode.InvalidConstraintKind,
+                        "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'variant', 'mutant', or type after 'is' in inline constraint");
                 }
             }
+            // ─────────────────────────────────────────────────────────────────────
+            // CONSTRAINT TYPE 3: in - type equality (must be one of listed types)
+            // ─────────────────────────────────────────────────────────────────────
+            // Form: T in [S32, S64, F64]
             else if (Match(type: TokenType.In))
             {
-                // T in [s32, s64, u32] - type equality constraint with list syntax
                 Consume(type: TokenType.LeftBracket, errorMessage: "Expected '[' after 'in' for type equality constraint");
 
                 var equalityTypes = new List<TypeExpression>();
@@ -345,7 +413,7 @@ public partial class RazorForgeParser
                     ConstraintTypes: equalityTypes,
                     Location: location));
             }
-            // No constraint for this parameter, continue
+            // No constraint for this parameter, continue to next
         } while (Match(type: TokenType.Comma));
 
         return (genericParams, inlineConstraints.Count > 0
@@ -354,9 +422,27 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses generic constraints for type parameters.
-    /// Supports inline constraints (T follows Protocol) and where clauses.
+    /// Parses generic constraints for type parameters using 'requires' clauses.
+    /// Called after generic parameters have been parsed.
     /// </summary>
+    /// <remarks>
+    /// This parses the EXTERNAL requires clause form (after angle brackets):
+    ///
+    /// Example:
+    ///   record Container&lt;T, U&gt;
+    ///   requires T follows Comparable, U is entity {
+    ///       ...
+    ///   }
+    ///
+    /// The same constraint kinds are supported as inline constraints:
+    /// - follows: protocol conformance
+    /// - is: type kind (record/entity/resident/routine/choice/variant) or const generic
+    /// - in: type equality (must be one of listed types)
+    ///
+    /// Multiple requires clauses can be chained, or constraints can be comma-separated:
+    ///   requires T follows A requires U follows B    (chained)
+    ///   requires T follows A, U follows B            (comma-separated)
+    /// </remarks>
     private List<GenericConstraintDeclaration>? ParseGenericConstraints(List<string>? genericParams, List<GenericConstraintDeclaration>? existingConstraints = null)
     {
         if (genericParams == null || genericParams.Count == 0)
@@ -368,7 +454,9 @@ public partial class RazorForgeParser
             ? [..existingConstraints]
             : [];
 
+        // ═══════════════════════════════════════════════════════════════════════════
         // Parse requires clauses: requires T follows Protocol
+        // ═══════════════════════════════════════════════════════════════════════════
         // Each parameter can have its own requires clause or they can be comma-separated
         while (Match(type: TokenType.Requires))
         {
@@ -377,13 +465,18 @@ public partial class RazorForgeParser
                 SourceLocation location = GetLocation();
                 string paramName = ConsumeIdentifier(errorMessage: "Expected type parameter name");
 
-                // Verify this parameter was declared
+                // ─────────────────────────────────────────────────────────────────────
+                // Verify this parameter was declared in the generic parameter list
+                // ─────────────────────────────────────────────────────────────────────
                 if (!genericParams.Contains(item: paramName))
                 {
-                    throw new ParseException(message: $"Type parameter '{paramName}' not declared in generic parameters");
+                    throw ThrowParseError(RazorForgeDiagnosticCode.UndeclaredTypeParameter,
+                        $"Type parameter '{paramName}' not declared in generic parameters");
                 }
 
-                // Parse constraint kind and types
+                // ─────────────────────────────────────────────────────────────────────
+                // Parse constraint kind and types (same logic as inline constraints)
+                // ─────────────────────────────────────────────────────────────────────
                 if (Match(type: TokenType.Follows))
                 {
                     // T follows Protocol1, Protocol2
@@ -443,13 +536,6 @@ public partial class RazorForgeParser
                             ConstraintTypes: null,
                             Location: location));
                     }
-                    else if (Match(type: TokenType.Mutant))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
-                            ConstraintType: ConstraintKind.MutantType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
                     else if (Check(type: TokenType.Identifier) || Check(type: TokenType.TypeIdentifier))
                     {
                         // Const generic constraint: N is uaddr
@@ -462,7 +548,8 @@ public partial class RazorForgeParser
                     }
                     else
                     {
-                        throw new ParseException(message: "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'variant', 'mutant', or type after 'is' in constraint");
+                        throw ThrowParseError(RazorForgeDiagnosticCode.InvalidConstraintKind,
+                            "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'variant', 'mutant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))
@@ -485,7 +572,8 @@ public partial class RazorForgeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected 'follows', 'is', or 'in' in generic constraint");
+                    throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedConstraintType,
+                        "Expected 'follows', 'is', or 'in' in generic constraint");
                 }
 
                 // Continue parsing if there's a comma

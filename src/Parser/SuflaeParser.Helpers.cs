@@ -104,18 +104,18 @@ public partial class SuflaeParser
 
     #endregion
     /// <summary>
-    /// Parses an intrinsic function call.
-    /// Syntax: <c>@intrinsic.operation&lt;T&gt;(args)</c>
-    /// Intrinsics map directly to LLVM/low-level operations.
+    /// Parses an intrinsic routine call.
+    /// Syntax: <c>@intrinsic_routine.operation&lt;T&gt;(args)</c>
+    /// Intrinsic routines map directly to LLVM IR operations like sitofp, fpext, trunc.
     /// </summary>
-    /// <param name="location">Source location of the intrinsic call.</param>
+    /// <param name="location">Source location of the intrinsic routine call.</param>
     /// <returns>An <see cref="IntrinsicCallExpression"/> AST node.</returns>
-    private IntrinsicCallExpression ParseIntrinsicCall(SourceLocation location)
+    private IntrinsicCallExpression ParseIntrinsicRoutineCall(SourceLocation location)
     {
         // Expect: .operation<T>(args)
-        // The @intrinsic token has already been consumed
+        // The @intrinsic_routine token has already been consumed
 
-        Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
+        Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic_routine'");
 
         // Parse intrinsic operation name (can contain dots like "add.wrapping", "icmp.slt")
         string intrinsicName = ConsumeIdentifier(errorMessage: "Expected intrinsic operation name");
@@ -140,7 +140,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new ParseException(message: "Expected type argument");
+                    throw ThrowParseError("Expected type argument");
                 }
             } while (Match(type: TokenType.Comma));
 
@@ -270,7 +270,7 @@ public partial class SuflaeParser
         }
 
         Token current = CurrentToken;
-        throw new ParseException(message: $"{errorMessage}. Expected Identifier, got {current.Type}.");
+        throw ThrowParseError($"{errorMessage}. Expected Identifier, got {current.Type}.");
     }
 
     /// <summary>
@@ -280,7 +280,7 @@ public partial class SuflaeParser
     {
         if (!Match(type: TokenType.Indent))
         {
-            throw new ParseException(message: "Expected INDENT token");
+            throw ThrowParseError("Expected INDENT token");
         }
 
         _currentIndentationLevel++;
@@ -306,7 +306,7 @@ public partial class SuflaeParser
             }
             else
             {
-                throw new ParseException(message: "Unexpected dedent - no matching indent");
+                throw ThrowParseError("Unexpected dedent - no matching indent");
             }
         }
     }
@@ -337,7 +337,7 @@ public partial class SuflaeParser
     {
         if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
         {
-            throw new ParseException(message: errorMessage);
+            throw ThrowParseError(errorMessage);
         }
 
         string name = CurrentToken.Text;

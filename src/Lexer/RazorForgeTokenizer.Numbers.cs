@@ -1,3 +1,5 @@
+using RazorForge.Diagnostics;
+
 namespace Compilers.RazorForge.Lexer;
 
 using Compilers.Shared.Lexer;
@@ -132,7 +134,10 @@ public partial class RazorForgeTokenizer
             }
             else
             {
-                throw new LexerException(message: $"Unknown suffix '{suffix}' at line {_line}");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidNumericLiteral,
+                    $"Unknown suffix '{suffix}'",
+                    _fileName, _line, _column);
             }
         }
         else
@@ -216,8 +221,10 @@ public partial class RazorForgeTokenizer
                 string baseType = isHex
                     ? "hex"
                     : "binary";
-                throw new LexerException(
-                    message: $"Unknown {baseType} suffix '{suffix}' at line {_line}");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidNumericLiteral,
+                    $"Unknown {baseType} suffix '{suffix}'",
+                    _fileName, _line, _column);
             }
         }
         else
@@ -278,8 +285,10 @@ public partial class RazorForgeTokenizer
             }
             else
             {
-                throw new LexerException(
-                    message: $"Unknown octal suffix '{suffix}' at line {_line}");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidNumericLiteral,
+                    $"Unknown octal suffix '{suffix}'",
+                    _fileName, _line, _column);
             }
         }
         else

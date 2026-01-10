@@ -1,7 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
-using Compilers.RazorForge.Parser; // For ParseException
+using RazorForge.Diagnostics;
 
 namespace Compilers.Suflae.Parser;
 
@@ -339,8 +339,10 @@ public partial class SuflaeParser
 
                 if ((isAscending && !newIsAscending) || (isDescending && !newIsDescending))
                 {
-                    throw new ParseException(
-                        message: "Invalid comparison chain: cannot mix ascending (<, <=) and descending (>, >=) operators");
+                    throw new SuflaeGrammarException(
+                        SuflaeDiagnosticCode.UnexpectedToken,
+                        "Invalid comparison chain: cannot mix ascending (<, <=) and descending (>, >=) operators",
+                        fileName, CurrentToken.Line, CurrentToken.Column);
                 }
             }
 
@@ -356,7 +358,7 @@ public partial class SuflaeParser
         {
             return new ChainedComparisonExpression(Operands: operands, Operators: operators, Location: GetLocation());
         }
-        else if (operators.Count == 1)
+        if (operators.Count == 1)
         {
             // Single comparison - desugar to method call
             return CreateBinaryExpression(
@@ -811,6 +813,19 @@ public partial class SuflaeParser
     /// Syntax: <c>f(args)</c>, <c>x[index]</c>, <c>obj.member</c>, <c>obj.method!()</c>, <c>value with (field: newVal)</c>
     /// Handles generic method calls: <c>func&lt;T&gt;()</c>, <c>obj.method&lt;T&gt;()</c>
     /// </summary>
+    /// <remarks>
+    /// Postfix operators in order of check:
+    /// 1. Generic function call: func&lt;T&gt;() or func!&lt;T&gt;()
+    /// 2. Failable function call: func!(args)
+    /// 3. Regular function call: func(args)
+    /// 4. Index access: expr[index]
+    /// 5. Member access: expr.member (with sub-cases for generic/failable methods)
+    /// 6. Functional update: expr with (field: value)
+    ///
+    /// DISAMBIGUATION CHALLENGE:
+    /// The '&lt;' token can be either a generic bracket or a less-than operator.
+    /// We disambiguate by scanning ahead: if we find &lt;...&gt;() or &lt;...&gt;., it's generics.
+    /// </remarks>
     /// <returns>The parsed expression.</returns>
     private Expression ParsePostfix()
     {
@@ -818,7 +833,9 @@ public partial class SuflaeParser
 
         while (true)
         {
-            // Handle standalone generic function calls like routine!<T>(args) or routine<T>(args)
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 1: Generic function call - func<T>() or func!<T>()
+            // ═══════════════════════════════════════════════════════════════════════════
             // The ! must come BEFORE < if present: func!<T>() not func<T>!()
             if (expr is IdentifierExpression expression && (Check(type: TokenType.Less) || Check(type: TokenType.Bang) && PeekToken(offset: 1)
                    .Type == TokenType.Less))
@@ -1231,10 +1248,10 @@ public partial class SuflaeParser
             return ParseWhenExpression(location: location);
         }
 
-        // Intrinsic function call: @intrinsic.operation<T>(args)
-        if (Match(type: TokenType.Intrinsic))
+        // Intrinsic routine call: @intrinsic_routine.operation<T>(args)
+        if (Match(type: TokenType.IntrinsicRoutine))
         {
-            return ParseIntrinsicCall(location: location);
+            return ParseIntrinsicRoutineCall(location: location);
         }
 
         // Native function call: @native.function_name(args)
@@ -1255,7 +1272,7 @@ public partial class SuflaeParser
             return ParseSetOrDictLiteral(location: location);
         }
 
-        throw new ParseException(message: $"Unexpected token: {CurrentToken.Type}");
+        throw ThrowParseError($"Unexpected token: {CurrentToken.Type}");
     }
 
     /// <summary>
@@ -1324,7 +1341,7 @@ public partial class SuflaeParser
                 return true;
             }
 
-            throw new ParseException(message: $"Invalid float literal: {token.Text}");
+            throw ThrowParseError($"Invalid float literal: {token.Text}");
         }
 
         return false;
@@ -1339,9 +1356,9 @@ public partial class SuflaeParser
     /// <returns>A <see cref="LiteralExpression"/> representing the integer value.</returns>
     private static LiteralExpression ParseIntegerValue(string cleanValue, Token token, SourceLocation location)
     {
-        // For 128-bit integers, store the raw string - semantic analysis will parse them
-        // using NumericLiteralParser which handles arbitrary precision
-        if (token.Type is TokenType.S128Literal or TokenType.U128Literal)
+        // For 128-bit integers and arbitrary precision (Integer), store the raw string.
+        // Semantic analysis will parse them using NumericLiteralParser which handles arbitrary precision.
+        if (token.Type is TokenType.S128Literal or TokenType.U128Literal or TokenType.Integer)
         {
             return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
         }
@@ -1357,9 +1374,11 @@ public partial class SuflaeParser
             {
                 return new LiteralExpression(Value: hexVal, LiteralType: token.Type, Location: location);
             }
+            // Value too large for 64-bit, store as string for semantic analysis
+            return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
         }
         // Handle binary literals (0b prefix)
-        else if (cleanValue.StartsWith(value: "0b") || cleanValue.StartsWith(value: "0B"))
+        if (cleanValue.StartsWith(value: "0b") || cleanValue.StartsWith(value: "0B"))
         {
             string binaryPart = cleanValue.Substring(startIndex: 2);
             try
@@ -1369,21 +1388,37 @@ public partial class SuflaeParser
             }
             catch (Exception)
             {
-                throw new ParseException(message: $"Invalid binary literal: {token.Text}");
+                // Value too large for 64-bit, store as string for semantic analysis
+                return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+            }
+        }
+        // Handle octal literals (0o prefix)
+        if (cleanValue.StartsWith(value: "0o") || cleanValue.StartsWith(value: "0O"))
+        {
+            string octalPart = cleanValue.Substring(startIndex: 2);
+            try
+            {
+                long octVal = Convert.ToInt64(value: octalPart, fromBase: 8);
+                return new LiteralExpression(Value: octVal, LiteralType: token.Type, Location: location);
+            }
+            catch (Exception)
+            {
+                // Value too large for 64-bit, store as string for semantic analysis
+                return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
             }
         }
         // Handle decimal literals
-        else if (long.TryParse(s: cleanValue, result: out long intVal))
+        if (long.TryParse(s: cleanValue, result: out long intVal))
         {
             return new LiteralExpression(Value: intVal, LiteralType: token.Type, Location: location);
         }
         // Handle large unsigned values
-        else if (ulong.TryParse(s: cleanValue, result: out ulong ulongVal))
+        if (ulong.TryParse(s: cleanValue, result: out ulong ulongVal))
         {
             return new LiteralExpression(Value: unchecked((long)ulongVal), LiteralType: token.Type, Location: location);
         }
-
-        throw new ParseException(message: $"Invalid integer literal: {token.Text}");
+        // Value too large for 64-bit, store as string for semantic analysis
+        return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
     }
 
     /// <summary>
@@ -1481,7 +1516,7 @@ public partial class SuflaeParser
             return true;
         }
 
-        throw new ParseException(message: $"Invalid memory literal: {token.Text}");
+        throw ThrowParseError($"Invalid memory literal: {token.Text}");
     }
 
     /// <summary>
@@ -1514,7 +1549,7 @@ public partial class SuflaeParser
             return true;
         }
 
-        throw new ParseException(message: $"Invalid duration literal: {token.Text}");
+        throw ThrowParseError($"Invalid duration literal: {token.Text}");
     }
 
     /// <summary>
@@ -1634,7 +1669,7 @@ public partial class SuflaeParser
             }
             else
             {
-                throw new ParseException(message: "Expected ':' or '=>' after pattern");
+                throw ThrowParseError("Expected ':' or '=>' after pattern");
             }
 
             _inWhenClauseBody = false;

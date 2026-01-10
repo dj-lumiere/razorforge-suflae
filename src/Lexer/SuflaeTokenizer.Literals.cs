@@ -1,3 +1,5 @@
+using RazorForge.Diagnostics;
+
 namespace Compilers.Suflae.Lexer;
 
 using Compilers.Shared.Lexer;
@@ -141,8 +143,10 @@ public partial class SuflaeTokenizer
 
         if (IsAtEnd())
         {
-            throw new LexerException(
-                message: $"Unterminated text starting at line {startLine}, column {startColumn}");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.UnterminatedString,
+                $"Unterminated text starting at line {startLine}, column {startColumn}",
+                _fileName, startLine, startColumn);
         }
 
         Advance(); // consume closing quote
@@ -164,7 +168,10 @@ public partial class SuflaeTokenizer
     {
         if (IsAtEnd())
         {
-            throw new LexerException(message: $"Unterminated character literal at line {_line}");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.UnterminatedString,
+                "Unterminated character literal",
+                _fileName, _line, _column);
         }
 
         char value;
@@ -180,7 +187,10 @@ public partial class SuflaeTokenizer
 
         if (Peek() != '\'')
         {
-            throw new LexerException(message: $"Unterminated character literal at line {_line}");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.UnterminatedString,
+                "Unterminated character literal",
+                _fileName, _line, _column);
         }
 
         Advance(); // consume closing quote
@@ -236,7 +246,10 @@ public partial class SuflaeTokenizer
 
         if (!Match(expected: '\''))
         {
-            throw new LexerException(message: $"Unterminated character literal at line {_line}");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.UnterminatedString,
+                "Unterminated character literal",
+                _fileName, _line, _column);
         }
 
         AddToken(type: tokenType);
@@ -263,7 +276,10 @@ public partial class SuflaeTokenizer
     {
         if (IsAtEnd())
         {
-            throw new LexerException(message: $"Unterminated escape sequence at line {_line}");
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.InvalidEscapeSequence,
+                "Unterminated escape sequence",
+                _fileName, _line, _column);
         }
 
         char escapeChar = Peek();
@@ -281,8 +297,10 @@ public partial class SuflaeTokenizer
                 ScanUnicodeEscape();
                 break;
             default:
-                throw new LexerException(
-                    message: $"Invalid escape sequence '\\{escapeChar}' at line {_line}");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                    $"Invalid escape sequence '\\{escapeChar}'",
+                    _fileName, _line, _column);
         }
     }
 
@@ -299,8 +317,10 @@ public partial class SuflaeTokenizer
         {
             if (!IsHexDigit(c: Peek()))
             {
-                throw new LexerException(
-                    message: $"Invalid hex byte escape at line {_line}: expected 2 hex digits (\\xFF)");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                    "Invalid hex byte escape: expected 2 hex digits (\\xFF)",
+                    _fileName, _line, _column);
             }
 
             Advance();
@@ -320,8 +340,10 @@ public partial class SuflaeTokenizer
         {
             if (!IsHexDigit(c: Peek()))
             {
-                throw new LexerException(
-                    message: $"Invalid Unicode escape at line {_line}: expected 8 hex digits (\\uXXXXXXXX)");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                    "Invalid Unicode escape: expected 8 hex digits (\\uXXXXXXXX)",
+                    _fileName, _line, _column);
             }
 
             Advance();
@@ -355,8 +377,10 @@ public partial class SuflaeTokenizer
 
             if (codePoint > 0x10FFFF)
             {
-                throw new LexerException(
-                    message: $"Unicode escape value U+{codePoint:X} exceeds valid Unicode range at line {_line}");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                    $"Unicode escape value U+{codePoint:X} exceeds valid Unicode range",
+                    _fileName, _line, _column);
             }
 
             return (char)codePoint;

@@ -2,6 +2,7 @@ using System.Numerics;
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -77,9 +78,31 @@ public partial class RazorForgeParser
     /// Consumes the current token if it matches the expected type, otherwise throws an error.
     /// </summary>
     /// <param name="type">The expected token type.</param>
+    /// <param name="code">The diagnostic code for the error.</param>
     /// <param name="errorMessage">Error message to include in the exception if token doesn't match.</param>
     /// <returns>The consumed token.</returns>
-    /// <exception cref="ParseException">Thrown if the current token doesn't match the expected type.</exception>
+    /// <exception cref="RazorForgeGrammarException">Thrown if the current token doesn't match the expected type.</exception>
+    protected Token Consume(TokenType type, RazorForgeDiagnosticCode code, string errorMessage)
+    {
+        if (Check(type: type))
+        {
+            return Advance();
+        }
+
+        Token current = CurrentToken;
+        throw new RazorForgeGrammarException(code,
+            $"{errorMessage}. Expected {type}, got {current.Type}.",
+            fileName, current.Line, current.Column);
+    }
+
+    /// <summary>
+    /// Consumes the current token if it matches the expected type, otherwise throws an error.
+    /// Uses automatic diagnostic code based on expected token type.
+    /// </summary>
+    /// <param name="type">The expected token type.</param>
+    /// <param name="errorMessage">Error message to include in the exception if token doesn't match.</param>
+    /// <returns>The consumed token.</returns>
+    /// <exception cref="RazorForgeGrammarException">Thrown if the current token doesn't match the expected type.</exception>
     protected Token Consume(TokenType type, string errorMessage)
     {
         if (Check(type: type))
@@ -88,8 +111,32 @@ public partial class RazorForgeParser
         }
 
         Token current = CurrentToken;
-        throw new ParseException($"{errorMessage}. Expected {type}, got {current.Type}.",
+        var code = GetDiagnosticCodeForExpectedToken(type);
+        throw new RazorForgeGrammarException(code,
+            $"{errorMessage}. Expected {type}, got {current.Type}.",
             fileName, current.Line, current.Column);
+    }
+
+    /// <summary>
+    /// Maps expected token types to their corresponding diagnostic codes.
+    /// </summary>
+    private static RazorForgeDiagnosticCode GetDiagnosticCodeForExpectedToken(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.RightBrace => RazorForgeDiagnosticCode.ExpectedClosingBrace,
+            TokenType.RightParen => RazorForgeDiagnosticCode.ExpectedClosingParen,
+            TokenType.RightBracket => RazorForgeDiagnosticCode.ExpectedClosingBracket,
+            TokenType.Greater => RazorForgeDiagnosticCode.ExpectedClosingAngle,
+            TokenType.Colon => RazorForgeDiagnosticCode.ExpectedColon,
+            TokenType.Arrow => RazorForgeDiagnosticCode.ExpectedArrow,
+            TokenType.FatArrow => RazorForgeDiagnosticCode.ExpectedFatArrow,
+            TokenType.Assign => RazorForgeDiagnosticCode.ExpectedEquals,
+            TokenType.Comma => RazorForgeDiagnosticCode.ExpectedComma,
+            TokenType.Dot => RazorForgeDiagnosticCode.ExpectedDot,
+            TokenType.Identifier => RazorForgeDiagnosticCode.ExpectedIdentifier,
+            _ => RazorForgeDiagnosticCode.UnexpectedToken
+        };
     }
 
     /// <summary>
@@ -383,9 +430,9 @@ public partial class RazorForgeParser
             {
                 case TokenType.Entity:
                 case TokenType.Record:
+                case TokenType.Resident:
                 case TokenType.Choice:
                 case TokenType.Variant:
-                case TokenType.Mutant:
                 case TokenType.Protocol:
                 case TokenType.Routine:
                 case TokenType.Var:
@@ -432,25 +479,72 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Throws a ParseException with the current token's location information.
+    /// Creates a RazorForgeGrammarException with the current token's location information.
+    /// Use as: throw ThrowParseError(code, "message");
     /// </summary>
+    /// <param name="code">The diagnostic code for the error.</param>
     /// <param name="message">The error message.</param>
-    /// <exception cref="ParseException">Always thrown with location info.</exception>
-    protected void ThrowParseError(string message)
+    /// <returns>The exception to throw.</returns>
+    protected RazorForgeGrammarException ThrowParseError(RazorForgeDiagnosticCode code, string message)
     {
         var token = CurrentToken;
-        throw new ParseException(message, fileName, token.Line, token.Column);
+        return new RazorForgeGrammarException(code, message, fileName, token.Line, token.Column);
     }
 
     /// <summary>
-    /// Throws a ParseException with the specified token's location information.
+    /// Creates a RazorForgeGrammarException with the specified token's location information.
+    /// Use as: throw ThrowParseError(code, "message", token);
     /// </summary>
+    /// <param name="code">The diagnostic code for the error.</param>
     /// <param name="message">The error message.</param>
     /// <param name="token">The token where the error occurred.</param>
-    /// <exception cref="ParseException">Always thrown with location info.</exception>
-    protected void ThrowParseError(string message, Token token)
+    /// <returns>The exception to throw.</returns>
+    protected RazorForgeGrammarException ThrowParseError(RazorForgeDiagnosticCode code, string message, Token token)
     {
-        throw new ParseException(message, fileName, token.Line, token.Column);
+        return new RazorForgeGrammarException(code, message, fileName, token.Line, token.Column);
+    }
+
+    /// <summary>
+    /// Creates an UnexpectedToken error with the current token's location information.
+    /// Use as: throw ThrowUnexpectedToken("context");
+    /// </summary>
+    /// <param name="context">Context describing what was expected.</param>
+    /// <returns>The exception to throw.</returns>
+    protected RazorForgeGrammarException ThrowUnexpectedToken(string context)
+    {
+        var token = CurrentToken;
+        return new RazorForgeGrammarException(
+            RazorForgeDiagnosticCode.UnexpectedToken,
+            $"Unexpected token '{token.Type}' {context}",
+            fileName, token.Line, token.Column);
+    }
+
+    /// <summary>
+    /// Creates an ExpectedExpression error with the current token's location information.
+    /// Use as: throw ThrowExpectedExpression();
+    /// </summary>
+    /// <returns>The exception to throw.</returns>
+    protected RazorForgeGrammarException ThrowExpectedExpression()
+    {
+        var token = CurrentToken;
+        return new RazorForgeGrammarException(
+            RazorForgeDiagnosticCode.ExpectedExpression,
+            $"Expected expression, got '{token.Type}'",
+            fileName, token.Line, token.Column);
+    }
+
+    /// <summary>
+    /// Creates an ExpectedDeclaration error with the current token's location information.
+    /// Use as: throw ThrowExpectedDeclaration();
+    /// </summary>
+    /// <returns>The exception to throw.</returns>
+    protected RazorForgeGrammarException ThrowExpectedDeclaration()
+    {
+        var token = CurrentToken;
+        return new RazorForgeGrammarException(
+            RazorForgeDiagnosticCode.ExpectedDeclaration,
+            $"Expected declaration, got '{token.Type}'",
+            fileName, token.Line, token.Column);
     }
 
     #endregion
@@ -462,7 +556,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="tokenType">The token type representing the operator.</param>
     /// <returns>The corresponding binary operator.</returns>
-    /// <exception cref="ParseException">Thrown if the token type is not a valid binary operator.</exception>
+    /// <exception cref="RazorForgeGrammarException">Thrown if the token type is not a valid binary operator.</exception>
     protected BinaryOperator TokenToBinaryOperator(TokenType tokenType)
     {
         return tokenType switch
@@ -519,7 +613,10 @@ public partial class RazorForgeParser
             TokenType.NotFollows => BinaryOperator.NotFollows,
             TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
 
-            _ => throw new ParseException(message: $"Unknown binary operator: {tokenType}")
+            _ => throw new RazorForgeGrammarException(
+                RazorForgeDiagnosticCode.UnexpectedToken,
+                $"Unknown binary operator: {tokenType}",
+                fileName, CurrentToken.Line, CurrentToken.Column)
         };
     }
 
@@ -528,7 +625,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="tokenType">The token type representing the operator.</param>
     /// <returns>The corresponding unary operator.</returns>
-    /// <exception cref="ParseException">Thrown if the token type is not a valid unary operator.</exception>
+    /// <exception cref="RazorForgeGrammarException">Thrown if the token type is not a valid unary operator.</exception>
     protected UnaryOperator TokenToUnaryOperator(TokenType tokenType)
     {
         return tokenType switch
@@ -537,7 +634,10 @@ public partial class RazorForgeParser
             TokenType.Not => UnaryOperator.Not,
             TokenType.Tilde => UnaryOperator.BitwiseNot,
 
-            _ => throw new ParseException(message: $"Unknown unary operator: {tokenType}")
+            _ => throw new RazorForgeGrammarException(
+                RazorForgeDiagnosticCode.UnexpectedToken,
+                $"Unknown unary operator: {tokenType}",
+                fileName, CurrentToken.Line, CurrentToken.Column)
         };
     }
 

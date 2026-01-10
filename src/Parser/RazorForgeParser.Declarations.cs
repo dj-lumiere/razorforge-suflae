@@ -1,5 +1,6 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
+using RazorForge.Diagnostics;
 
 namespace Compilers.RazorForge.Parser;
 
@@ -309,15 +310,25 @@ public partial class RazorForgeParser
     {
         var attributes = new List<string>();
 
-        // Handle both @attribute and @intrinsic (which gets special tokenization)
-        while (Check(TokenType.At, TokenType.Intrinsic))
+        // Handle both @attribute and special tokens (@intrinsic_type, @intrinsic_routine, @native)
+        while (Check(TokenType.At, TokenType.IntrinsicType, TokenType.IntrinsicRoutine, TokenType.Native))
         {
             string attrName;
 
-            if (Match(type: TokenType.Intrinsic))
+            if (Match(type: TokenType.IntrinsicType))
             {
-                // @intrinsic was tokenized as a single Intrinsic token
-                attrName = "intrinsic";
+                // @intrinsic_type was tokenized as a single IntrinsicType token
+                attrName = "intrinsic_type";
+            }
+            else if (Match(type: TokenType.IntrinsicRoutine))
+            {
+                // @intrinsic_routine was tokenized as a single IntrinsicRoutine token
+                attrName = "intrinsic_routine";
+            }
+            else if (Match(type: TokenType.Native))
+            {
+                // @native was tokenized as a single Native token
+                attrName = "native";
             }
             else if (Match(type: TokenType.At))
             {
@@ -420,7 +431,8 @@ public partial class RazorForgeParser
                .Text;
         }
 
-        throw new ParseException(message: $"Expected attribute value, got {CurrentToken.Type}");
+        throw ThrowParseError(RazorForgeDiagnosticCode.ExpectedAttributeValue,
+            $"Expected attribute value, got {CurrentToken.Type}");
     }
 
     /// <summary>
@@ -433,27 +445,49 @@ public partial class RazorForgeParser
     /// <param name="allowNoBody">If true, allows signature-only declarations (for protocols/intrinsics/imported).</param>
     /// <param name="storage">The storage class modifier (default: None, can be Common for type-level static).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
+    /// <remarks>
+    /// Parsing phases:
+    /// 1. NAME PARSING - Base name + optional type-level generics (e.g., "List&lt;T&gt;")
+    /// 2. QUALIFIED NAME - Dot-separated parts for methods (e.g., "List&lt;T&gt;.append")
+    /// 3. FAILABLE MARKER - Check for "!" suffix
+    /// 4. PARAMETERS - "(param: Type, ...)" including 'me' self-reference
+    /// 5. RETURN TYPE - "-> ReturnType" clause
+    /// 6. CONSTRAINTS - "where T follows Protocol" clause
+    /// 7. BODY - "{...}" or signature-only for protocols/intrinsics
+    /// </remarks>
     private RoutineDeclaration ParseRoutineDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Public,
         List<string>? attributes = null,
         bool allowNoBody = false,
         StorageClass storage = StorageClass.None)
     {
-        // Reject nested routine declarations
+        // ═══════════════════════════════════════════════════════════════════════════
+        // VALIDATION: Reject nested routine declarations
+        // ═══════════════════════════════════════════════════════════════════════════
         if (_inRoutineBody)
         {
-            throw new ParseException(message: "Nested routine declarations are not allowed. Define routines at module or type level.");
+            throw ThrowParseError(RazorForgeDiagnosticCode.NestedRoutineNotAllowed,
+                "Nested routine declarations are not allowed. Define routines at module or type level.");
         }
 
-        // Visibility: public, internal, private + Storage: common (type-level static)
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: Parse base routine name and optional type-level generic parameters
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Examples:
+        //   "foo"          -> name="foo", no generics
+        //   "List<T>"      -> name="List", genericParams=["T"]
+        //   "Dict<K, V>"   -> name="Dict", genericParams=["K", "V"]
+        // ═══════════════════════════════════════════════════════════════════════════
 
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
-        // Support generic type in name like Text<T>.method (generics BEFORE dot)
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
         bool hasGenericParams = false;
+
+        // Check for type-level generic params BEFORE the dot (e.g., "List<T>.append")
         if (Match(type: TokenType.Less))
         {
             (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
@@ -464,12 +498,30 @@ public partial class RazorForgeParser
             ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic parameters");
         }
 
-        // Support namespace-qualified names like Console.print or Console.show<T>
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: Parse dot-separated qualified name (for methods)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Examples:
+        //   "Console.print"           -> name="Console.print"
+        //   "List<T>.append"          -> name="List<T>.append" (generics embedded in name)
+        //   "Dict<K, V>.get<I>"       -> name="Dict<K, V>.get", genericParams=["K","V","I"]
+        //
+        // The loop handles:
+        //   - Simple qualified names: "Type.method"
+        //   - Generic types with methods: "Type<T>.method"
+        //   - Methods with their own generics: "Type.method<I>"
+        //   - Both: "Type<T>.method<I>" merges both param lists
+        // ═══════════════════════════════════════════════════════════════════════════
+
         while (Match(type: TokenType.Dot))
         {
             string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
 
-            // If we just parsed generic params before the dot, include them in the name
+            // ─────────────────────────────────────────────────────────────────────
+            // If we parsed generic params before the dot, embed them in the name
+            // This transforms: name="List", generics=["T"], part="append"
+            //             to: name="List<T>.append"
+            // ─────────────────────────────────────────────────────────────────────
             if (hasGenericParams && !name.Contains(value: '.') && genericParams != null)
             {
                 name = name + "<" + string.Join(separator: ", ", values: genericParams) + ">." + part;
@@ -480,14 +532,18 @@ public partial class RazorForgeParser
                 name = name + "." + part;
             }
 
-            // Check for generic params after the method name: Console.show<T>
+            // ─────────────────────────────────────────────────────────────────────
+            // Check for method-level generic params AFTER the method name
+            // e.g., "List<T>.get<I>" - the <I> belongs to the method
+            // ─────────────────────────────────────────────────────────────────────
             if (!Check(type: TokenType.Less))
             {
                 continue;
             }
 
-            // Peek ahead to see if this looks like generic params (identifier/type after <)
-            // or a comparison expression (which would have different tokens)
+            // Disambiguate: Is '<' starting generics or a comparison?
+            // Generics: followed by Identifier, TypeIdentifier, or '>' (empty)
+            // Comparison: followed by literal, expression, etc.
             Token nextToken = PeekToken(offset: 1);
             if (nextToken.Type != TokenType.Identifier && nextToken.Type != TokenType.TypeIdentifier && nextToken.Type != TokenType.Greater)
             {
@@ -497,8 +553,11 @@ public partial class RazorForgeParser
             Match(type: TokenType.Less);
             (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
 
-            // CRITICAL: Merge method generic params with type generic params
-            // For List<T>.__setitem__!<I>, we need both T (from List) and I (from method)
+            // ─────────────────────────────────────────────────────────────────────
+            // MERGE: Combine type-level and method-level generic parameters
+            // For "List<T>.__setitem__!<I>", we need both T (from List) and I (from method)
+            // Result: genericParams = ["T", "I"]
+            // ─────────────────────────────────────────────────────────────────────
             if (genericParams is { Count: > 0 })
             {
                 // Merge: type params first, then method params
@@ -526,18 +585,34 @@ public partial class RazorForgeParser
             ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic parameters");
         }
 
-        // Support ! suffix for failable routines
-        // Note: ConsumeMethodName may have already consumed ! and included it in the name
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 3: Parse failable marker (!)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Failable routines can return errors or "absent" (none).
+        // The '!' can appear:
+        //   - After routine name: "get_value!()"
+        //   - Already in name from ConsumeMethodName: name ends with "!"
+        // ═══════════════════════════════════════════════════════════════════════════
+
         bool isFailable = Match(type: TokenType.Bang);
 
-        // Also check if the name already ends with ! (from ConsumeMethodName in method case)
+        // ConsumeMethodName may have already included '!' in the name
         if (name.EndsWith('!'))
         {
             isFailable = true;
-            name = name[..^1];
+            name = name[..^1]; // Strip the '!' from name, we track it separately
         }
 
-        // Parameters
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 4: Parse parameter list
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: (param1: Type1, param2: Type2 = default, ...)
+        // Special cases:
+        //   - 'me' keyword for self-reference (optional type)
+        //   - Keywords allowed as param names (e.g., 'from' in conversion routines)
+        //   - Optional default values with '='
+        // ═══════════════════════════════════════════════════════════════════════════
+
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after routine name");
         var parameters = new List<Parameter>();
 
@@ -545,7 +620,10 @@ public partial class RazorForgeParser
         {
             do
             {
-                // Handle 'me' parameter without type (self reference)
+                // ─────────────────────────────────────────────────────────────────
+                // Handle 'me' parameter (self-reference for methods)
+                // Can be typed: "me: MyType" or untyped: "me"
+                // ─────────────────────────────────────────────────────────────────
                 if (Check(type: TokenType.Me))
                 {
                     Token selfToken = Advance();
@@ -562,7 +640,10 @@ public partial class RazorForgeParser
                 }
                 else
                 {
-                    // Allow keywords as parameter names (e.g., 'from' in conversion routines)
+                    // ─────────────────────────────────────────────────────────────
+                    // Regular parameter: name: Type = default
+                    // allowKeywords=true lets us use 'from', 'to', etc. as param names
+                    // ─────────────────────────────────────────────────────────────
                     string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name", allowKeywords: true);
                     TypeExpression? paramType = null;
                     Expression? defaultValue = null;
@@ -587,30 +668,54 @@ public partial class RazorForgeParser
 
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
 
-        // Return type
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 5: Parse return type
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: -> ReturnType
+        // Optional - if omitted, routine returns nothing (void/unit)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         TypeExpression? returnType = null;
         if (Match(type: TokenType.Arrow))
         {
             returnType = ParseType();
         }
 
-        // Parse generic constraints (where clause) - merge with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 6: Parse generic constraints (where clause)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: where T follows Protocol, K is SomeType
+        // Merges inline constraints (from <T follows X>) with where-clause constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // Push generic parameters into scope before parsing body
+        // This allows the body to reference T, K, etc. as types
         if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Push(item: [..genericParams]);
         }
 
-        // Body - check if allowed to have no body (for protocol method signatures or @intrinsic routines)
-        // Routines with @intrinsic attribute don't have bodies
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 7: Parse routine body
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Three cases:
+        //   1. Has body: { ... } - normal routine
+        //   2. No body allowed: signature-only (protocols, @intrinsic)
+        //   3. No body but required: error
+        // ═══════════════════════════════════════════════════════════════════════════
+
         bool hasIntrinsicAttribute = attributes != null && attributes.Any(predicate: a => a.StartsWith(value: "intrinsic"));
         bool canSkipBody = allowNoBody || hasIntrinsicAttribute;
 
         BlockStatement? body;
         if (Check(type: TokenType.LeftBrace))
         {
+            // ─────────────────────────────────────────────────────────────────────
+            // Normal case: Parse the routine body
+            // Set _inRoutineBody to prevent nested routine declarations
+            // ─────────────────────────────────────────────────────────────────────
             _inRoutineBody = true;
             try
             {
@@ -623,13 +728,17 @@ public partial class RazorForgeParser
         }
         else if (!canSkipBody)
         {
-            // If no body and not allowed, it's an error
+            // ─────────────────────────────────────────────────────────────────────
+            // Error case: Body required but not present
+            // ─────────────────────────────────────────────────────────────────────
             Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after routine signature");
             body = new BlockStatement(Statements: [], Location: location);
         }
         else
         {
-            // No body - this is a signature-only declaration (protocol or intrinsic)
+            // ─────────────────────────────────────────────────────────────────────
+            // Signature-only: Protocol method or @intrinsic function
+            // ─────────────────────────────────────────────────────────────────────
             ConsumeStatementTerminator();
             body = new BlockStatement(Statements: [], Location: location);
         }
@@ -639,6 +748,10 @@ public partial class RazorForgeParser
         {
             _genericParameterScopes.Pop();
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // BUILD AST NODE
+        // ═══════════════════════════════════════════════════════════════════════════
 
         return new RoutineDeclaration(Name: name,
             Parameters: parameters,
@@ -659,16 +772,34 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">The visibility modifier for the entity.</param>
     /// <returns>An <see cref="EntityDeclaration"/> AST node.</returns>
+    /// <remarks>
+    /// Parsing phases (shared pattern with record/resident/protocol):
+    /// 1. NAME - Type name identifier
+    /// 2. GENERICS - Optional &lt;T, K&gt; with inline constraints
+    /// 3. CONSTRAINTS - Optional "where T follows X" clause
+    /// 4. PROTOCOLS - Optional "follows Protocol1, Protocol2" clause
+    /// 5. BODY - "{...}" containing member declarations
+    /// </remarks>
     private EntityDeclaration ParseEntityDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: Parse type name
+        // ═══════════════════════════════════════════════════════════════════════════
+
         string name = ConsumeIdentifier(errorMessage: "Expected entity name");
 
-        // Register this type name
+        // Register for generic disambiguation (so Parser knows "MyEntity<T>" is a type, not comparison)
         _knownTypeNames.Add(item: name);
 
-        // Generic parameters with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: Parse optional generic parameters with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: <T, K follows Comparable>
+        // Inline constraints like "K follows Comparable" are parsed here
+        // ═══════════════════════════════════════════════════════════════════════════
+
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
         if (Match(type: TokenType.Less))
@@ -680,42 +811,57 @@ public partial class RazorForgeParser
             ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic parameters");
         }
 
-        // Parse generic constraints (where clause) - merge with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 3: Parse generic constraints (where clause)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: where T follows Protocol, K is SomeType
+        // Merges with inline constraints from phase 2
+        // ═══════════════════════════════════════════════════════════════════════════
+
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // Push generic parameters into scope
+        // Push generic parameters into scope so body can reference them as types
         if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Push(item: [..genericParams]);
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 4: Parse protocol implementations
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: follows Protocol1, Protocol2
+        // Allows multi-line formatting with newlines around protocol names
+        // ═══════════════════════════════════════════════════════════════════════════
+
         var protocols = new List<TypeExpression>();
 
-        // Parse interfaces/protocols the entity follows
         if (Match(type: TokenType.Follows))
         {
             do
             {
-                // Skip newlines before protocol name (for multi-line formatting)
-                while (Match(type: TokenType.Newline)) { }
-
+                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 protocols.Add(item: ParseType());
-
-                // Skip newlines after protocol name (before comma or brace)
-                while (Match(type: TokenType.Newline)) { }
+                while (Match(type: TokenType.Newline)) { } // Skip newlines after protocol name
             } while (Match(type: TokenType.Comma));
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 5: Parse entity body
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Contains: fields (var/let), methods, nested types
+        // _parsingTypeBody=true enables field declaration syntax
+        // _parsingStrictRecordBody=false allows visibility modifiers on fields
+        // ═══════════════════════════════════════════════════════════════════════════
 
         Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after entity header");
 
         var members = new List<Declaration>();
 
-        // Enable field declaration syntax inside entity body
-        // Entities allow modifiers on fields (unlike records)
+        // Save and set parsing context flags
         bool wasParsingTypeBody = _parsingTypeBody;
         bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
         _parsingTypeBody = true;
-        _parsingStrictRecordBody = false;  // Entities allow modifiers
+        _parsingStrictRecordBody = false;  // Entities allow modifiers (private, public, etc.)
 
         while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
         {
@@ -731,10 +877,12 @@ public partial class RazorForgeParser
             }
             else
             {
-                throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
+                throw ThrowParseError(RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                    $"Expected declaration inside entity body, got {node.GetType().Name}");
             }
         }
 
+        // Restore parsing context flags
         _parsingTypeBody = wasParsingTypeBody;
         _parsingStrictRecordBody = wasParsingStrictRecordBody;
 
@@ -745,6 +893,10 @@ public partial class RazorForgeParser
         {
             _genericParameterScopes.Pop();
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // BUILD AST NODE
+        // ═══════════════════════════════════════════════════════════════════════════
 
         return new EntityDeclaration(Name: name,
             GenericParameters: genericParams,
@@ -832,7 +984,8 @@ public partial class RazorForgeParser
             }
             else
             {
-                throw new ParseException(message: $"Expected declaration inside record body, got {node.GetType().Name}");
+                throw ThrowParseError(RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                    $"Expected declaration inside record body, got {node.GetType().Name}");
             }
         }
 
@@ -933,7 +1086,8 @@ public partial class RazorForgeParser
             }
             else
             {
-                throw new ParseException(message: $"Expected declaration inside resident body, got {node.GetType().Name}");
+                throw ThrowParseError(RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                $"Expected declaration inside resident body, got {node.GetType().Name}");
             }
         }
 
@@ -1178,16 +1332,37 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">The visibility modifier for the protocol.</param>
     /// <returns>A <see cref="ProtocolDeclaration"/> AST node.</returns>
+    /// <remarks>
+    /// Parsing phases:
+    /// 1. NAME - Protocol name identifier
+    /// 2. GENERICS - Optional &lt;T, K&gt; with inline constraints
+    /// 3. CONSTRAINTS - Optional "where T follows X" clause
+    /// 4. PARENT PROTOCOLS - Optional "follows Parent1, Parent2" for inheritance
+    /// 5. BODY - "{...}" containing method SIGNATURES (no bodies)
+    ///
+    /// Method signature parsing (nested within body):
+    ///   a. Attributes (@readonly, etc.)
+    ///   b. Method name (with optional "Me." prefix and "!" suffix)
+    ///   c. Parameters
+    ///   d. Return type
+    /// </remarks>
     private ProtocolDeclaration ParseProtocolDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: Parse protocol name
+        // ═══════════════════════════════════════════════════════════════════════════
+
         string name = ConsumeIdentifier(errorMessage: "Expected protocol name");
 
-        // Register this type name
+        // Register for generic disambiguation
         _knownTypeNames.Add(item: name);
 
-        // Generic parameters with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: Parse optional generic parameters with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
         if (Match(type: TokenType.Less))
@@ -1199,31 +1374,48 @@ public partial class RazorForgeParser
             ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic parameters");
         }
 
-        // Parse generic constraints (where clause) - merge with inline constraints
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 3: Parse generic constraints (where clause)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // Push generic parameters into scope
+        // Push generic parameters into scope for body parsing
         if (genericParams is { Count: > 0 })
         {
             _genericParameterScopes.Push(item: [..genericParams]);
         }
 
-        // Parse parent protocols (protocol X follows Y, Z)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 4: Parse parent protocols (protocol inheritance)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Syntax: follows Parent1, Parent2
+        // Protocols can inherit from multiple parent protocols
+        // ═══════════════════════════════════════════════════════════════════════════
+
         var parentProtocols = new List<TypeExpression>();
         if (Match(type: TokenType.Follows))
         {
             do
             {
-                // Skip newlines before protocol name (for multi-line formatting)
-                while (Match(type: TokenType.Newline)) { }
-
+                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 parentProtocols.Add(item: ParseType());
-
-                // Skip newlines after protocol name (before comma or brace)
-                while (Match(type: TokenType.Newline)) { }
+                while (Match(type: TokenType.Newline)) { } // Skip newlines after protocol name
             }
             while (Match(type: TokenType.Comma));
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 5: Parse protocol body (method signatures)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Protocol body contains method SIGNATURES only (no implementations).
+        // Each signature consists of:
+        //   - Optional attributes (@readonly, @mutating)
+        //   - "routine" keyword
+        //   - Method name (optionally qualified: "Me.method")
+        //   - Parameters
+        //   - Optional return type
+        // ═══════════════════════════════════════════════════════════════════════════
 
         Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after protocol header");
 
@@ -1236,29 +1428,32 @@ public partial class RazorForgeParser
                 continue;
             }
 
-            // Parse attributes before routine or field declaration
+            // ─────────────────────────────────────────────────────────────────────
+            // Parse method signature: @attr routine Me.method!(params) -> Type
+            // ─────────────────────────────────────────────────────────────────────
+
+            // Step 5a: Parse attributes before routine declaration
             List<string> attributes = ParseAttributes();
 
-            // Check if this is a routine (method signature) or a field requirement
             if (Match(type: TokenType.Routine))
             {
-                // Parse function signature (without body)
+                // Step 5b: Parse method name
                 string methodName = ConsumeIdentifier(errorMessage: "Expected method name");
 
-                // Support namespace-qualified names like Me.method or Type.method
+                // Support qualified names: "Me.method" or "Type.method"
                 while (Match(type: TokenType.Dot))
                 {
                     string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
                     methodName = methodName + "." + part;
                 }
 
-                // Support ! suffix for failable methods
+                // Support failable methods: "method!"
                 if (Match(type: TokenType.Bang))
                 {
                     methodName = methodName + "!";
                 }
 
-                // Parameters
+                // Step 5c: Parse parameters
                 Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after method name");
                 var parameters = new List<Parameter>();
 
@@ -1266,7 +1461,7 @@ public partial class RazorForgeParser
                 {
                     do
                     {
-                        // Handle 'me' parameter without type (self reference)
+                        // Handle 'me' parameter (self-reference, optionally typed)
                         if (Check(type: TokenType.Me))
                         {
                             Token selfToken = Advance();
@@ -1283,6 +1478,7 @@ public partial class RazorForgeParser
                         }
                         else
                         {
+                            // Regular parameter
                             string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
 
                             TypeExpression? paramType = null;
@@ -1301,13 +1497,14 @@ public partial class RazorForgeParser
 
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
 
-                // Return type
+                // Step 5d: Parse optional return type
                 TypeExpression? returnType = null;
                 if (Match(type: TokenType.Arrow))
                 {
                     returnType = ParseType();
                 }
 
+                // Add the method signature (no body - protocols only have signatures)
                 methods.Add(item: new RoutineSignature(Name: methodName,
                     Parameters: parameters,
                     ReturnType: returnType,
@@ -1318,7 +1515,7 @@ public partial class RazorForgeParser
             }
             else
             {
-                // Unknown token, skip it
+                // Unknown token in protocol body, skip it
                 Advance();
             }
         }
@@ -1330,6 +1527,10 @@ public partial class RazorForgeParser
         {
             _genericParameterScopes.Pop();
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // BUILD AST NODE
+        // ═══════════════════════════════════════════════════════════════════════════
 
         return new ProtocolDeclaration(Name: name,
             GenericParameters: genericParams,

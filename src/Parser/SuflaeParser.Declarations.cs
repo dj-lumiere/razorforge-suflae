@@ -17,15 +17,25 @@ public partial class SuflaeParser
     {
         var attributes = new List<string>();
 
-        // Handle both @attribute and @intrinsic (which gets special tokenization)
-        while (Check(TokenType.At, TokenType.Intrinsic))
+        // Handle both @attribute and special tokens (@intrinsic_type, @intrinsic_routine, @native)
+        while (Check(TokenType.At, TokenType.IntrinsicType, TokenType.IntrinsicRoutine, TokenType.Native))
         {
             string attrName;
 
-            if (Match(type: TokenType.Intrinsic))
+            if (Match(type: TokenType.IntrinsicType))
             {
-                // @intrinsic was tokenized as a single Intrinsic token
-                attrName = "intrinsic";
+                // @intrinsic_type was tokenized as a single IntrinsicType token
+                attrName = "intrinsic_type";
+            }
+            else if (Match(type: TokenType.IntrinsicRoutine))
+            {
+                // @intrinsic_routine was tokenized as a single IntrinsicRoutine token
+                attrName = "intrinsic_routine";
+            }
+            else if (Match(type: TokenType.Native))
+            {
+                // @native was tokenized as a single Native token
+                attrName = "native";
             }
             else if (Match(type: TokenType.At))
             {
@@ -127,7 +137,7 @@ public partial class SuflaeParser
                .Text;
         }
 
-        throw new ParseException(message: $"Expected attribute value, got {CurrentToken.Type}");
+        throw ThrowParseError($"Expected attribute value, got {CurrentToken.Type}");
     }
 
     /// <summary>
@@ -213,6 +223,25 @@ public partial class SuflaeParser
     /// Syntax: <c>routine name(params) -&gt; ReturnType:</c> followed by indented body.
     /// Supports ! suffix for failable routines.
     /// </summary>
+    /// <remarks>
+    /// Parsing phases:
+    ///
+    /// PHASE 1: VALIDATION
+    ///   - Reject nested routine declarations
+    ///
+    /// PHASE 2: NAME AND FAILABLE MARKER
+    ///   - Parse routine name
+    ///   - Check for ! suffix (failable routine)
+    ///
+    /// PHASE 3: PARAMETERS
+    ///   - Parse parameter list: (name: Type, name: Type = default)
+    ///
+    /// PHASE 4: RETURN TYPE
+    ///   - Optional: -> ReturnType
+    ///
+    /// PHASE 5: BODY
+    ///   - Parse indented block after colon
+    /// </remarks>
     /// <param name="visibility">Access modifier for the routine.</param>
     /// <param name="attributes">List of attributes applied to the routine.</param>
     /// <param name="storage">Storage class modifier (default: None, can be Common for type-level static).</param>
@@ -222,21 +251,27 @@ public partial class SuflaeParser
         List<string>? attributes = null,
         StorageClass storage = StorageClass.None)
     {
-        // Reject nested routine declarations
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: VALIDATION
+        // ═══════════════════════════════════════════════════════════════════════════
         if (_inRoutineBody)
         {
-            throw new ParseException(message: "Nested routine declarations are not allowed. Define routines at module or type level.");
+            throw ThrowParseError("Nested routine declarations are not allowed. Define routines at module or type level.");
         }
 
-        // Visibility: public, internal, private + Storage: common (type-level static)
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: NAME AND FAILABLE MARKER
+        // ═══════════════════════════════════════════════════════════════════════════
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
         // Support ! suffix for failable functions
         bool isFailable = Match(type: TokenType.Bang);
 
-        // Parameters
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 3: PARAMETERS
+        // ═══════════════════════════════════════════════════════════════════════════
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after routine name");
         var parameters = new List<Parameter>();
 
@@ -263,17 +298,20 @@ public partial class SuflaeParser
 
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
 
-        // Return type
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 4: RETURN TYPE
+        // ═══════════════════════════════════════════════════════════════════════════
         TypeExpression? returnType = null;
         if (Match(type: TokenType.Arrow))
         {
             returnType = ParseType();
         }
 
-        // Colon to start indented block
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 5: BODY (indented block after colon)
+        // ═══════════════════════════════════════════════════════════════════════════
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after routine header");
 
-        // Body (indented block)
         _inRoutineBody = true;
         Statement body;
         try
@@ -377,7 +415,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new ParseException(message: $"Expected declaration inside entity body, got {node.GetType().Name}");
+                    throw ThrowParseError($"Expected declaration inside entity body, got {node.GetType().Name}");
                 }
             }
 
@@ -387,7 +425,7 @@ public partial class SuflaeParser
             }
             else if (!IsAtEnd)
             {
-                throw new ParseException(message: "Expected dedent after entity body");
+                throw ThrowParseError("Expected dedent after entity body");
             }
         }
 
@@ -489,7 +527,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new ParseException(message: $"Expected declaration inside record body, got {node.GetType().Name}");
+                    throw ThrowParseError($"Expected declaration inside record body, got {node.GetType().Name}");
                 }
             }
 
@@ -499,7 +537,7 @@ public partial class SuflaeParser
             }
             else if (!IsAtEnd)
             {
-                throw new ParseException(message: "Expected dedent after record body");
+                throw ThrowParseError("Expected dedent after record body");
             }
         }
 
@@ -602,7 +640,7 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw new ParseException(message: "Expected dedent after option body");
+            throw ThrowParseError("Expected dedent after option body");
         }
 
         return new ChoiceDeclaration(Name: name,
@@ -697,7 +735,7 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw new ParseException(message: "Expected dedent after variant body");
+            throw ThrowParseError("Expected dedent after variant body");
         }
 
         // Pop generic parameter scope
@@ -811,7 +849,7 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw new ParseException(message: "Expected dedent after protocol body");
+            throw ThrowParseError("Expected dedent after protocol body");
         }
 
         return new ProtocolDeclaration(Name: name,
@@ -1035,16 +1073,5 @@ public partial class SuflaeParser
         }
 
         return (visibility, storage);
-    }
-
-    /// <summary>
-    /// Parses a visibility modifier keyword (backward compatibility wrapper).
-    /// Supported modifiers: public, published, internal, private, imported.
-    /// </summary>
-    /// <returns>The parsed visibility modifier, or Public if none found.</returns>
-    private VisibilityModifier ParseVisibilityModifier()
-    {
-        var (visibility, _) = ParseModifiers();
-        return visibility;
     }
 }

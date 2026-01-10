@@ -34,6 +34,11 @@ public partial class SuflaeTokenizer
     private readonly string _source;
 
     /// <summary>
+    /// The filename being tokenized;
+    /// </summary>
+    private readonly string _fileName;
+
+    /// <summary>
     /// Current character position in the source text (0-based index).
     /// </summary>
     private int _position;
@@ -313,9 +318,11 @@ public partial class SuflaeTokenizer
     /// Initializes a new instance of the <see cref="SuflaeTokenizer"/> class.
     /// </summary>
     /// <param name="source">The Suflae source code to tokenize.</param>
+    /// <param name="fileName">The source code's file name being tokenized.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> is null.</exception>
-    public SuflaeTokenizer(string source)
+    public SuflaeTokenizer(string source, string fileName)
     {
+        _fileName = fileName;
         _source = source ?? throw new ArgumentNullException(paramName: nameof(source));
     }
 
@@ -381,6 +388,7 @@ public partial class SuflaeTokenizer
         }
 
         _tokens.Add(item: new Token(Type: TokenType.Eof,
+            FileName: _fileName,
             Text: "",
             Line: _line,
             Column: _column,

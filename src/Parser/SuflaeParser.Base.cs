@@ -1,7 +1,7 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
-using Compilers.RazorForge.Parser;
+using RazorForge.Diagnostics;
 
 namespace Compilers.Suflae.Parser;
 
@@ -66,7 +66,9 @@ public partial class SuflaeParser
         }
 
         Token current = CurrentToken;
-        throw new ParseException($"{errorMessage}. Expected {type}, got {current.Type}.",
+        throw new SuflaeGrammarException(
+            SuflaeDiagnosticCode.UnexpectedToken,
+            $"{errorMessage}. Expected {type}, got {current.Type}",
             fileName, current.Line, current.Column);
     }
 
@@ -382,25 +384,33 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Throws a ParseException with the current token's location information.
+    /// Creates a ParseException with the current token's location information.
+    /// Use as: throw ThrowParseError("message");
     /// </summary>
     /// <param name="message">The error message.</param>
-    /// <exception cref="ParseException">Always thrown with location info.</exception>
-    protected void ThrowParseError(string message)
+    /// <returns>The exception to throw.</returns>
+    protected SuflaeGrammarException ThrowParseError(string message)
     {
         var token = CurrentToken;
-        throw new ParseException(message, fileName, token.Line, token.Column);
+        return new SuflaeGrammarException(
+            SuflaeDiagnosticCode.UnexpectedToken,
+            message,
+            fileName, token.Line, token.Column);
     }
 
     /// <summary>
-    /// Throws a ParseException with the specified token's location information.
+    /// Creates a ParseException with the specified token's location information.
+    /// Use as: throw ThrowParseError("message", token);
     /// </summary>
     /// <param name="message">The error message.</param>
     /// <param name="token">The token where the error occurred.</param>
-    /// <exception cref="ParseException">Always thrown with location info.</exception>
-    protected void ThrowParseError(string message, Token token)
+    /// <returns>The exception to throw.</returns>
+    protected SuflaeGrammarException ThrowParseError(string message, Token token)
     {
-        throw new ParseException(message, fileName, token.Line, token.Column);
+        return new SuflaeGrammarException(
+            SuflaeDiagnosticCode.UnexpectedToken,
+            message,
+            fileName, token.Line, token.Column);
     }
 
     #endregion
@@ -466,7 +476,10 @@ public partial class SuflaeParser
             TokenType.NotFollows => BinaryOperator.NotFollows,
             TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
 
-            _ => throw new ParseException(message: $"Unknown binary operator: {tokenType}")
+            _ => throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.UnexpectedToken,
+                $"Unknown binary operator: {tokenType}",
+                fileName, CurrentToken.Line, CurrentToken.Column)
         };
     }
 
@@ -481,7 +494,10 @@ public partial class SuflaeParser
             TokenType.Not => UnaryOperator.Not,
             TokenType.Tilde => UnaryOperator.BitwiseNot,
 
-            _ => throw new ParseException(message: $"Unknown unary operator: {tokenType}")
+            _ => throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.UnexpectedToken,
+                $"Unknown unary operator: {tokenType}",
+                fileName, CurrentToken.Line, CurrentToken.Column)
         };
     }
 

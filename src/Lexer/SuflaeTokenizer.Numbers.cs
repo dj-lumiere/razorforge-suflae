@@ -1,3 +1,5 @@
+using RazorForge.Diagnostics;
+
 namespace Compilers.Suflae.Lexer;
 
 using Compilers.Shared.Lexer;
@@ -120,7 +122,10 @@ public partial class SuflaeTokenizer
             }
             else
             {
-                throw new LexerException(message: $"Unknown suffix '{suffix}' at line {_line}");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidNumericLiteral,
+                    $"Unknown suffix '{suffix}'",
+                    _fileName, _line, _column);
             }
         }
         else
@@ -198,8 +203,10 @@ public partial class SuflaeTokenizer
                 string baseType = isHex
                     ? "hex"
                     : "binary";
-                throw new LexerException(
-                    message: $"Unknown {baseType} suffix '{suffix}' at line {_line}");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidNumericLiteral,
+                    $"Unknown {baseType} suffix '{suffix}'",
+                    _fileName, _line, _column);
             }
         }
         else
@@ -260,8 +267,10 @@ public partial class SuflaeTokenizer
             }
             else
             {
-                throw new LexerException(
-                    message: $"Unknown octal suffix '{suffix}' at line {_line}");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidNumericLiteral,
+                    $"Unknown octal suffix '{suffix}'",
+                    _fileName, _line, _column);
             }
         }
         else

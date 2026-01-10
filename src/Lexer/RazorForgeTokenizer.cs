@@ -38,6 +38,15 @@ public partial class RazorForgeTokenizer
     private readonly string _source;
 
     /// <summary>
+    /// Filename being tokenized.
+    /// </summary>
+    /// <remarks>
+    /// This field is immutable after construction and represents the filename
+    /// that will be processed by the tokenizer.
+    /// </remarks>
+    private readonly string _fileName;
+
+    /// <summary>
     /// Current character position in the source text (0-based index).
     /// </summary>
     /// <remarks>
@@ -133,7 +142,6 @@ public partial class RazorForgeTokenizer
         [key: "record"] = TokenType.Record,
         [key: "choice"] = TokenType.Choice,
         [key: "variant"] = TokenType.Variant,
-        [key: "mutant"] = TokenType.Mutant,
         [key: "resident"] = TokenType.Resident,
         [key: "protocol"] = TokenType.Protocol,
 
@@ -358,8 +366,9 @@ public partial class RazorForgeTokenizer
     /// </summary>
     /// <param name="source">The RazorForge source code to tokenize.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> is null.</exception>
-    public RazorForgeTokenizer(string source)
+    public RazorForgeTokenizer(string source, string fileName)
     {
+        _fileName = fileName;
         _source = source ?? throw new ArgumentNullException(paramName: nameof(source));
     }
 
@@ -402,6 +411,7 @@ public partial class RazorForgeTokenizer
         }
 
         _tokens.Add(item: new Token(Type: TokenType.Eof,
+            FileName: _fileName,
             Text: "",
             Line: _line,
             Column: _column,

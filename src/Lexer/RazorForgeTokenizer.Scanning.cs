@@ -1,3 +1,5 @@
+using RazorForge.Diagnostics;
+
 namespace Compilers.RazorForge.Lexer;
 
 using Compilers.Shared.Lexer;
@@ -101,9 +103,10 @@ public partial class RazorForgeTokenizer
                 AddToken(type: TokenType.Comma);
                 break;
             case ';':
-                throw new LexerException(
-                    message:
-                    $"[{_line}:{_column}] Semicolons are not used in RazorForge. Statements are terminated by newlines.");
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidCharacter,
+                    "Semicolons are not used in RazorForge. Statements are terminated by newlines.",
+                    _fileName, _line, _column);
 
             // Multi-character punctuation
             case '.':
@@ -115,9 +118,10 @@ public partial class RazorForgeTokenizer
                     }
                     else
                     {
-                        throw new LexerException(
-                            message:
-                            $"[{_line}:{_column}] Range operator '..' is not supported. Use 'to' keyword instead (e.g., '1 to 10').");
+                        throw new RazorForgeGrammarException(
+                            RazorForgeDiagnosticCode.InvalidCharacter,
+                            "Range operator '..' is not supported. Use 'to' keyword instead (e.g., '1 to 10').",
+                            _fileName, _line, _column);
                     }
                 }
                 else
@@ -129,9 +133,10 @@ public partial class RazorForgeTokenizer
             case ':':
                 if (Match(expected: ':'))
                 {
-                    throw new LexerException(
-                        message:
-                        $"[{_line}:{_column}] Static access operator '::' is not supported. Use '.' instead.");
+                    throw new RazorForgeGrammarException(
+                        RazorForgeDiagnosticCode.InvalidCharacter,
+                        "Static access operator '::' is not supported. Use '.' instead.",
+                        _fileName, _line, _column);
                 }
 
                 AddToken(type: TokenType.Colon);

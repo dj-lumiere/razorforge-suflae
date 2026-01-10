@@ -1,3 +1,5 @@
+using RazorForge.Diagnostics;
+
 namespace Compilers.Suflae.Lexer;
 
 using Compilers.Shared.Lexer;
@@ -119,9 +121,10 @@ public partial class SuflaeTokenizer
                 AddToken(type: TokenType.Comma);
                 break;
             case ';':
-                throw new LexerException(
-                    message:
-                    $"[{_line}:{_column}] Semicolons are not used in Suflae. Statements are terminated by newlines.");
+                throw new SuflaeGrammarException(
+                    SuflaeDiagnosticCode.InvalidCharacter,
+                    "Semicolons are not used in Suflae. Statements are terminated by newlines.",
+                    _fileName, _line, _column);
 
             // Multi-character punctuation
             case '.':
@@ -133,9 +136,10 @@ public partial class SuflaeTokenizer
                     }
                     else
                     {
-                        throw new LexerException(
-                            message:
-                            $"[{_line}:{_column}] Range operator '..' is no longer supported. Use 'to' keyword instead (e.g., '1 to 10').");
+                        throw new SuflaeGrammarException(
+                            SuflaeDiagnosticCode.InvalidCharacter,
+                            "Range operator '..' is no longer supported. Use 'to' keyword instead (e.g., '1 to 10').",
+                            _fileName, _line, _column);
                     }
                 }
                 else
@@ -147,9 +151,10 @@ public partial class SuflaeTokenizer
             case ':':
                 if (Match(expected: ':'))
                 {
-                    throw new LexerException(
-                        message:
-                        $"[{_line}:{_column}] Static access operator '::' is no longer supported. Use '.' instead.");
+                    throw new SuflaeGrammarException(
+                        SuflaeDiagnosticCode.InvalidCharacter,
+                        "Static access operator '::' is no longer supported. Use '.' instead.",
+                        _fileName, _line, _column);
                 }
 
                 AddToken(type: TokenType.Colon);
