@@ -92,7 +92,7 @@ public partial class RazorForgeParser
         Token current = CurrentToken;
         throw new RazorForgeGrammarException(code,
             $"{errorMessage}. Expected {type}, got {current.Type}.",
-            fileName, current.Line, current.Column);
+            _fileName, current.Line, current.Column);
     }
 
     /// <summary>
@@ -114,7 +114,7 @@ public partial class RazorForgeParser
         var code = GetDiagnosticCodeForExpectedToken(type);
         throw new RazorForgeGrammarException(code,
             $"{errorMessage}. Expected {type}, got {current.Type}.",
-            fileName, current.Line, current.Column);
+            _fileName, current.Line, current.Column);
     }
 
     /// <summary>
@@ -472,7 +472,7 @@ public partial class RazorForgeParser
     /// <returns>A <see cref="SourceLocation"/> with the token's file, line, column, and position.</returns>
     protected SourceLocation GetLocation(Token token)
     {
-        return new SourceLocation(FileName: fileName ?? "<unknown>",
+        return new SourceLocation(FileName: _fileName ?? "<unknown>",
             Line: token.Line,
             Column: token.Column,
             Position: token.Position);
@@ -488,7 +488,7 @@ public partial class RazorForgeParser
     protected RazorForgeGrammarException ThrowParseError(RazorForgeDiagnosticCode code, string message)
     {
         var token = CurrentToken;
-        return new RazorForgeGrammarException(code, message, fileName, token.Line, token.Column);
+        return new RazorForgeGrammarException(code, message, _fileName, token.Line, token.Column);
     }
 
     /// <summary>
@@ -501,7 +501,7 @@ public partial class RazorForgeParser
     /// <returns>The exception to throw.</returns>
     protected RazorForgeGrammarException ThrowParseError(RazorForgeDiagnosticCode code, string message, Token token)
     {
-        return new RazorForgeGrammarException(code, message, fileName, token.Line, token.Column);
+        return new RazorForgeGrammarException(code, message, _fileName, token.Line, token.Column);
     }
 
     /// <summary>
@@ -516,7 +516,7 @@ public partial class RazorForgeParser
         return new RazorForgeGrammarException(
             RazorForgeDiagnosticCode.UnexpectedToken,
             $"Unexpected token '{token.Type}' {context}",
-            fileName, token.Line, token.Column);
+            _fileName, token.Line, token.Column);
     }
 
     /// <summary>
@@ -530,7 +530,7 @@ public partial class RazorForgeParser
         return new RazorForgeGrammarException(
             RazorForgeDiagnosticCode.ExpectedExpression,
             $"Expected expression, got '{token.Type}'",
-            fileName, token.Line, token.Column);
+            _fileName, token.Line, token.Column);
     }
 
     /// <summary>
@@ -544,7 +544,7 @@ public partial class RazorForgeParser
         return new RazorForgeGrammarException(
             RazorForgeDiagnosticCode.ExpectedDeclaration,
             $"Expected declaration, got '{token.Type}'",
-            fileName, token.Line, token.Column);
+            _fileName, token.Line, token.Column);
     }
 
     #endregion
@@ -616,7 +616,7 @@ public partial class RazorForgeParser
             _ => throw new RazorForgeGrammarException(
                 RazorForgeDiagnosticCode.UnexpectedToken,
                 $"Unknown binary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column)
+                _fileName, CurrentToken.Line, CurrentToken.Column)
         };
     }
 
@@ -637,7 +637,7 @@ public partial class RazorForgeParser
             _ => throw new RazorForgeGrammarException(
                 RazorForgeDiagnosticCode.UnexpectedToken,
                 $"Unknown unary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column)
+                _fileName, CurrentToken.Line, CurrentToken.Column)
         };
     }
 

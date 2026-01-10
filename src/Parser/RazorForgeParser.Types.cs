@@ -101,7 +101,7 @@ public partial class RazorForgeParser
                 throw new RazorForgeGrammarException(
                     RazorForgeDiagnosticCode.ExpectedTypeIdentifier,
                     $"Expected intrinsic type name after '@intrinsic_type.', got {CurrentToken.Type}",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    _fileName, CurrentToken.Line, CurrentToken.Column);
             }
 
             string intrinsicName = PeekToken(offset: -1).Text;
