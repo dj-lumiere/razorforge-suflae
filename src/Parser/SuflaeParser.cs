@@ -141,7 +141,7 @@ public partial class SuflaeParser
     public SuflaeParser(List<Token> tokens, string? fileName = null)
     {
         Tokens = tokens;
-        this.fileName = fileName ?? "";
+        this.fileName = fileName ?? "unknown";
         _indentationStack.Push(item: 0); // Base indentation level
     }
 
@@ -176,13 +176,9 @@ public partial class SuflaeParser
             }
             catch (SuflaeGrammarException ex)
             {
-                Token errorToken = Position < Tokens.Count
-                    ? Tokens[index: Position]
-                    : Tokens[^1];
-                string location = !string.IsNullOrEmpty(value: fileName)
-                    ? $"[{fileName}:{errorToken.Line}:{errorToken.Column}]"
-                    : $"[{errorToken.Line}:{errorToken.Column}]";
-                Console.Error.WriteLine(value: $"Parse error{location}: {ex.Message}");
+                // SuflaeGrammarException.Message already contains formatted error:
+                // error[SF-G150]: filename.sf:9:14: message
+                Console.Error.WriteLine(value: ex.Message);
                 Synchronize();
             }
         }

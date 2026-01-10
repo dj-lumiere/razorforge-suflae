@@ -214,12 +214,12 @@ internal class Program
         }
         catch (ParseException ex)
         {
-            Console.WriteLine($"Parse error: {ex.Message}");
+            Console.WriteLine(ex.Message);
             return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Parsing failed: {ex.Message}");
+            Console.WriteLine(ex.Message);
             Console.WriteLine(ex.StackTrace);
             return 1;
         }
@@ -341,7 +341,7 @@ internal class Program
         }
         catch (ParseException ex)
         {
-            Console.WriteLine($"Parse error: {ex.Message}");
+            Console.WriteLine($"{ex.Message}");
             return 1;
         }
         catch (Exception ex)

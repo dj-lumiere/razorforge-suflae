@@ -104,6 +104,8 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// </summary>
     private readonly Stack<HashSet<string>> _genericParameterScopes = new();
 
+    private string? _fileName = fileName ?? "unknown";
+
     #endregion
 
     /// <summary>
@@ -134,7 +136,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     public Compilers.Shared.AST.Program Parse()
     {
         var declarations = new List<IAstNode>();
-
+        _fileName ??= "unknown";
         while (!IsAtEnd)
         {
             try
@@ -150,15 +152,10 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             }
             catch (RazorForgeGrammarException ex)
             {
-                Token errorToken = _position < tokens.Count
-                    ? tokens[index: _position]
-                    : tokens[^1];
-                string location = !string.IsNullOrEmpty(value: fileName)
-                    ? $"[{fileName}:{errorToken.Line}:{errorToken.Column}]"
-                    : $"[{errorToken.Line}:{errorToken.Column}]";
-                string errorMessage = $"Parse error{location}: {ex.Message}";
-                _errors.Add(item: errorMessage);
-                Console.Error.WriteLine(value: errorMessage);
+                // RazorForgeGrammarException.Message already contains formatted error:
+                // error[RF-G150]: filename.rf:9:14: message
+                _errors.Add(item: ex.Message);
+                Console.Error.WriteLine(value: ex.Message);
                 Synchronize();
             }
         }
@@ -284,7 +281,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                     RazorForgeDiagnosticCode.InvalidDeclarationInBody,
                     "Record fields cannot use 'var', 'let', or 'preset'. " +
                     "Records are immutable with all-public fields. Use 'field: Type' syntax instead.",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    _fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
@@ -318,7 +315,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                     RazorForgeDiagnosticCode.InvalidDeclarationInBody,
                     $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
                     "Record fields can use 'private', 'internal', or 'public'.",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    _fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseFieldDeclaration(visibility: visibility);
         }
@@ -333,7 +330,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                     RazorForgeDiagnosticCode.InvalidDeclarationInBody,
                     "'global' storage class is not valid for routines. " +
                     "'global' can only be used for file-scope static variables.",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    _fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage);
         }
