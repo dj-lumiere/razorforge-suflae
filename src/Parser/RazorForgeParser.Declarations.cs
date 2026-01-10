@@ -200,24 +200,6 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses a using declaration (local type alias).
-    /// Syntax: <c>using Type as Alias</c>
-    /// </summary>
-    /// <returns>A <see cref="UsingDeclaration"/> AST node.</returns>
-    private UsingDeclaration ParseUsingDeclaration()
-    {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
-
-        TypeExpression type = ParseType();
-        Consume(type: TokenType.As, errorMessage: "Expected 'as' in using declaration");
-        string alias = ConsumeIdentifier(errorMessage: "Expected alias name in using declaration");
-
-        ConsumeStatementTerminator();
-
-        return new UsingDeclaration(Type: type, Alias: alias, Location: location);
-    }
-
-    /// <summary>
     /// Parses a preset declaration: preset name: Type = value
     /// Preset is a compile-time constant.
     /// </summary>

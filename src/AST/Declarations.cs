@@ -535,31 +535,6 @@ public record DefineDeclaration(string OldName, string NewName, SourceLocation L
 }
 
 /// <summary>
-/// Using declaration that creates a type alias for complex type expressions.
-/// Simplifies usage of long or complex type names.
-/// </summary>
-/// <param name="Type">Type expression to alias</param>
-/// <param name="Alias">Short alias name</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Using declarations improve code readability:
-/// <list type="bullet">
-/// <item>Complex generics: using StringMap = Dict[Text, Text]</item>
-/// <item>Long names: using DB = DatabaseConnectionManager</item>
-/// <item>Scoped aliases: defined within specific modules</item>
-/// <item>Generic aliases: using Result[T] = variant { OK: T, ERROR: Crashable }</item>
-/// </list>
-/// </remarks>
-public record UsingDeclaration(TypeExpression Type, string Alias, SourceLocation Location)
-    : Declaration(Location: Location)
-{
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitUsingDeclaration(node: this);
-    }
-}
-
-/// <summary>
 /// Preset declaration that defines a compile-time constant value.
 /// Similar to const in other languages but with RazorForge naming convention.
 /// </summary>

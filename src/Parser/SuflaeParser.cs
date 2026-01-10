@@ -243,12 +243,6 @@ public partial class SuflaeParser
             return ParseDefineDeclaration();
         }
 
-        // Using declaration
-        if (Match(type: TokenType.Using))
-        {
-            return ParseUsingDeclaration();
-        }
-
         // Preset (compile-time constant)
         if (Match(type: TokenType.Preset))
         {
@@ -471,6 +465,12 @@ public partial class SuflaeParser
         if (Match(type: TokenType.Throw))
         {
             return ParseThrowStatement();
+        }
+
+        // Using statement for resource management: using expr as name:
+        if (Match(type: TokenType.Using))
+        {
+            return ParseUsingStatement();
         }
 
         if (Match(type: TokenType.Absent))

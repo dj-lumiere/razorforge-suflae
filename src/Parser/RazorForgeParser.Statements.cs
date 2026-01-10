@@ -698,6 +698,31 @@ public partial class RazorForgeParser
             Location: location);
     }
 
+
+    /// <summary>
+    /// Parses a using declaration (resource management)
+    /// Syntax: <c>using file as a</c>
+    /// </summary>
+    /// <returns>A <see cref="UsingStatement"/> AST node.</returns>
+    private UsingStatement ParseUsingStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // Parse resource expression
+        Expression resource = ParseExpression();
+
+        // Expect 'as'
+        Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
+
+        // Parse the binding name
+        string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
+
+        Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after using statement");
+        Statement body = ParseBlockStatement();
+
+        return new UsingStatement(Resource: resource, Name: name, Body: body, Location: location);
+    }
+
     /// <summary>
     /// Parses record/entity destructuring: let (field, field2) = expr
     /// or let (field: alias, field2: alias2) = expr

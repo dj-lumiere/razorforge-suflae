@@ -875,3 +875,32 @@ public record SeizingStatement(
         return visitor.VisitSeizingStatement(node: this);
     }
 }
+
+/// <summary>
+/// Represents a resource management statement (using ... as ...: body).
+/// Similar to Python's 'with' statement or C#'s 'using' statement.
+/// The resource is acquired when entering the block and automatically released when exiting.
+/// </summary>
+/// <remarks>
+/// <para>Syntax: <c>using resource_expr as name: body</c></para>
+/// <para>The resource expression must return an object that implements a disposable/closeable protocol.</para>
+/// <para>Example:</para>
+/// <code>
+/// using open("file.txt") as file:
+///     let content = file.read_all()
+///     process(content)
+/// # file is automatically closed here
+/// </code>
+/// </remarks>
+public record UsingStatement(
+    Expression Resource,
+    string Name,
+    Statement Body,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitUsingStatement(node: this);
+    }
+}

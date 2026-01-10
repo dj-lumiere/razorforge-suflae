@@ -714,4 +714,39 @@ public partial class SuflaeParser
             IsMutable: isMutable,
             Location: location);
     }
+
+    /// <summary>
+    /// Parses a using statement for resource management.
+    /// Syntax: <c>using resource_expr as name:</c> followed by indented body.
+    /// Similar to Python's 'with' statement or C#'s 'using' statement.
+    /// </summary>
+    /// <remarks>
+    /// The resource is acquired when entering the block and automatically released when exiting.
+    /// <code>
+    /// using open("file.txt") as file:
+    ///     let content = file.read_all()
+    ///     process(content)
+    /// # file is automatically closed here
+    /// </code>
+    /// </remarks>
+    /// <returns>A <see cref="UsingStatement"/> AST node.</returns>
+    private Statement ParseUsingStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // Parse resource expression
+        Expression resource = ParseExpression();
+
+        // Expect 'as'
+        Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
+
+        // Parse the binding name
+        string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
+
+        // Expect ':' and indented body
+        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after using statement");
+        Statement body = ParseIndentedBlock();
+
+        return new UsingStatement(Resource: resource, Name: name, Body: body, Location: location);
+    }
 }

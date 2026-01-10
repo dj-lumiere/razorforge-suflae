@@ -994,25 +994,6 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses a using declaration for local type aliases.
-    /// Syntax: <c>using Type as Alias</c>
-    /// Creates a local alias for a type within the current scope.
-    /// </summary>
-    /// <returns>A <see cref="UsingDeclaration"/> AST node.</returns>
-    private IAstNode ParseUsingDeclaration()
-    {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
-
-        TypeExpression type = ParseType();
-        Consume(type: TokenType.As, errorMessage: "Expected 'as' in using declaration");
-        string alias = ConsumeIdentifier(errorMessage: "Expected alias name in using declaration");
-
-        ConsumeStatementTerminator();
-
-        return new UsingDeclaration(Type: type, Alias: alias, Location: location);
-    }
-
-    /// <summary>
     /// Parses visibility and storage class modifiers.
     /// Visibility: public, published, internal, private, imported
     /// Storage: common, global

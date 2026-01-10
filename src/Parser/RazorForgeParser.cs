@@ -104,28 +104,9 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// </summary>
     private readonly Stack<HashSet<string>> _genericParameterScopes = new();
 
-    private string? _fileName = fileName ?? "unknown";
+    private readonly string _fileName = fileName ?? "unknown";
 
     #endregion
-
-    /// <summary>
-    /// Checks if an identifier is a known type name (declared, imported, or generic parameter).
-    /// Used for generic disambiguation when parsing expressions like <c>x &lt; y</c> vs <c>List&lt;T&gt;</c>.
-    /// </summary>
-    /// <param name="name">The identifier name to check.</param>
-    /// <returns>True if the name is a known type; false otherwise.</returns>
-    private bool IsKnownTypeName(string name)
-    {
-        // TODO: Why is it unused?
-        // Check simple type names (declared locally or individually imported)
-        if (_knownTypeNames.Contains(item: name))
-        {
-            return true;
-        }
-
-        // Check generic parameter scopes (e.g., K, V within Dict<K, V>)
-        return _genericParameterScopes.Any(scope => scope.Contains(item: name));
-    }
 
     /// <summary>
     /// Parses the token stream and produces a complete program AST.
@@ -136,7 +117,6 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     public Compilers.Shared.AST.Program Parse()
     {
         var declarations = new List<IAstNode>();
-        _fileName ??= "unknown";
         while (!IsAtEnd)
         {
             try
@@ -175,7 +155,6 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     ///   namespace    - Module namespace declaration
     ///   import       - Import external modules
     ///   define       - Type alias/redefinition
-    ///   using        - Namespace import
     ///   preset       - Compile-time constant
     ///
     /// MODIFIERS (optional, parsed before declaration):
@@ -194,7 +173,6 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     ///   resident     - Singleton static type
     ///   choice       - Simple enumeration
     ///   variant      - Tagged union (sum type)
-    ///   mutant       - Untagged union
     ///   protocol     - Interface/trait definition
     ///
     /// If no declaration keyword matches, falls through to ParseStatement.
@@ -222,12 +200,6 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         if (Match(type: TokenType.Define))
         {
             return ParseDefineDeclaration();
-        }
-
-        // Using declaration
-        if (Match(type: TokenType.Using))
-        {
-            return ParseUsingDeclaration();
         }
 
         // Preset (compile-time constant)
@@ -376,7 +348,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         {
             throw ThrowParseError(RazorForgeDiagnosticCode.VisibilityWithoutDeclaration,
                 $"Visibility modifier '{visibility}' must be followed by a declaration "
-                + $"(routine, entity, record, resident, choice, variant, mutant, protocol, preset,"
+                + $"(routine, entity, record, resident, choice, variant, protocol, preset,"
                 + $" var, or let)");
         }
 
@@ -416,6 +388,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     ///   hijacking    - Scoped exclusive access (single-thread)
     ///   inspecting   - Scoped read access (multi-thread)
     ///   seizing      - Scoped exclusive access (multi-thread)
+    ///   using        - resource management
     ///
     /// BLOCK/EXPRESSION:
     ///   { ... }      - Block statement
@@ -533,6 +506,12 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         if (Match(type: TokenType.Seizing))
         {
             return ParseSeizingStatement();
+        }
+
+        // Using declaration
+        if (Match(type: TokenType.Using))
+        {
+            return ParseUsingStatement();
         }
 
         // ═══════════════════════════════════════════════════════════════════════════

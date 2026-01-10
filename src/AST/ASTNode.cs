@@ -350,6 +350,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the seizing statement</returns>
     T VisitSeizingStatement(SeizingStatement node);
 
+    /// <summary>Visits a using statement node (resource management)</summary>
+    /// <param name="node">The using statement to visit</param>
+    /// <returns>Result of visiting the using statement</returns>
+    T VisitUsingStatement(UsingStatement node);
+
     // Declaration visitor methods - handle all declaration node types
 
     /// <summary>Visits a variable declaration node (var/let declarations)</summary>
@@ -411,11 +416,6 @@ public interface IAstVisitor<T>
     /// <param name="node">The redefinition declaration to visit</param>
     /// <returns>Result of visiting the redefinition declaration</returns>
     T VisitDefineDeclaration(DefineDeclaration node);
-
-    /// <summary>Visits a using declaration node (type aliasing)</summary>
-    /// <param name="node">The using declaration to visit</param>
-    /// <returns>Result of visiting the using declaration</returns>
-    T VisitUsingDeclaration(UsingDeclaration node);
 
     /// <summary>Visits an external declaration node (native function declarations)</summary>
     /// <param name="node">The external declaration to visit</param>
