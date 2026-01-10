@@ -28,5 +28,5 @@ namespace Runtime/Reflection
 
 # This is a marker attribute - the compiler recognizes it and generates
 # appropriate reflection metadata for types marked with it
-@intrinsic("marker_attribute")
+@intrinsic_routine("marker_attribute")
 routine reflectable() -> Attribute

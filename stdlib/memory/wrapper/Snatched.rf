@@ -50,7 +50,7 @@ routine Snatched<T>.read() -> T {
 routine Snatched<T>.write(value: T) {
     danger! {
         # Call via intrinsic since direct FFI calls with multiple params not yet supported
-        @intrinsic.store<T>(me.address, value)
+        @intrinsic_routine.store<T>(me.address, value)
     }
 }
 
@@ -65,7 +65,7 @@ routine Snatched<T>.volatile_read() -> T {
 routine Snatched<T>.volatile_write(value: T) {
     danger! {
         # Call via intrinsic since direct FFI calls with multiple params not yet supported
-        @intrinsic.store.volatile<T>(me.address, value)
+        @intrinsic_routine.store.volatile<T>(me.address, value)
     }
 }
 

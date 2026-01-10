@@ -1,7 +1,7 @@
 namespace Core
 
 record Bool {
-    private value: @intrinsic.i1
+    private value: @intrinsic_type.i1
 }
 
 routine Bool.__eq__(you: Bool) {

@@ -3,7 +3,7 @@
 namespace Core
 # Core F128 type definition - maps to LLVM fp128
 record F128 {
-    private value: @intrinsic.fp128
+    private value: @intrinsic_type.fp128
 }
 
 # IEEE 754 quadruple precision constants
@@ -32,80 +32,80 @@ routine F128.__create__!(from_text: Text<Letter>) -> F128 {
 # Convert integers to F128 using LLVM intrinsics (lossless for all integer sizes)
 routine F128.__create__(from: S8) -> F128 {
     danger! {
-        return @intrinsic.sitofp<i8, fp128>(from)
+        return @intrinsic_routine.sitofp<i8, fp128>(from)
     }
 }
 
 routine F128.__create__(from: S16) -> F128 {
     danger! {
-        return @intrinsic.sitofp<i16, fp128>(from)
+        return @intrinsic_routine.sitofp<i16, fp128>(from)
     }
 }
 
 routine F128.__create__(from: S32) -> F128 {
     danger! {
-        return @intrinsic.sitofp<i32, fp128>(from)
+        return @intrinsic_routine.sitofp<i32, fp128>(from)
     }
 }
 
 routine F128.__create__(from: S64) -> F128 {
     danger! {
-        return @intrinsic.sitofp<i64, fp128>(from)
+        return @intrinsic_routine.sitofp<i64, fp128>(from)
     }
 }
 
 routine F128.__create__(from: S128) -> F128 {
     danger! {
-        return @intrinsic.sitofp<i128, fp128>(from)
+        return @intrinsic_routine.sitofp<i128, fp128>(from)
     }
 }
 
 routine F128.__create__(from: U8) -> F128 {
     danger! {
-        return @intrinsic.uitofp<i8, fp128>(from)
+        return @intrinsic_routine.uitofp<i8, fp128>(from)
     }
 }
 
 routine F128.__create__(from: U16) -> F128 {
     danger! {
-        return @intrinsic.uitofp<i16, fp128>(from)
+        return @intrinsic_routine.uitofp<i16, fp128>(from)
     }
 }
 
 routine F128.__create__(from: U32) -> F128 {
     danger! {
-        return @intrinsic.uitofp<i32, fp128>(from)
+        return @intrinsic_routine.uitofp<i32, fp128>(from)
     }
 }
 
 routine F128.__create__(from: U64) -> F128 {
     danger! {
-        return @intrinsic.uitofp<i64, fp128>(from)
+        return @intrinsic_routine.uitofp<i64, fp128>(from)
     }
 }
 
 routine F128.__create__(from: U128) -> F128 {
     danger! {
-        return @intrinsic.uitofp<i128, fp128>(from)
+        return @intrinsic_routine.uitofp<i128, fp128>(from)
     }
 }
 
 # Extend from smaller float types using LLVM intrinsics (lossless widening)
 routine F128.__create__(from: F16) -> F128 {
     danger! {
-        return @intrinsic.fpext<half, fp128>(from)
+        return @intrinsic_routine.fpext<half, fp128>(from)
     }
 }
 
 routine F128.__create__(from: F32) -> F128 {
     danger! {
-        return @intrinsic.fpext<float, fp128>(from)
+        return @intrinsic_routine.fpext<float, fp128>(from)
     }
 }
 
 routine F128.__create__(from: F64) -> F128 {
     danger! {
-        return @intrinsic.fpext<double, fp128>(from)
+        return @intrinsic_routine.fpext<double, fp128>(from)
     }
 }
 
@@ -135,14 +135,14 @@ routine F128.__create__(from: D128) -> F128 {
 # From SAddr - convert to float using LLVM intrinsic
 routine F128.__create__(from: SAddr) -> F128 {
     danger! {
-        return @intrinsic.sitofp<iptr, fp128>(from)
+        return @intrinsic_routine.sitofp<iptr, fp128>(from)
     }
 }
 
 # From UAddr - convert to float using LLVM intrinsic
 routine F128.__create__(from: UAddr) -> F128 {
     danger! {
-        return @intrinsic.uitofp<uptr, fp128>(from)
+        return @intrinsic_routine.uitofp<uptr, fp128>(from)
     }
 }
 
@@ -152,31 +152,31 @@ routine F128.__create__(from: UAddr) -> F128 {
 
 routine F128.__add__(you: F128) -> F128 {
     danger! {
-        return @intrinsic.add.wrapping<fp128>(me, you)
+        return @intrinsic_routine.add.wrapping<fp128>(me, you)
     }
 }
 
 routine F128.__sub__(you: F128) -> F128 {
     danger! {
-        return @intrinsic.sub.wrapping<fp128>(me, you)
+        return @intrinsic_routine.sub.wrapping<fp128>(me, you)
     }
 }
 
 routine F128.__mul__(you: F128) -> F128 {
     danger! {
-        return @intrinsic.mul.wrapping<fp128>(me, you)
+        return @intrinsic_routine.mul.wrapping<fp128>(me, you)
     }
 }
 
 routine F128.__truediv__(you: F128) -> F128 {
     danger! {
-        return @intrinsic.div.wrapping<fp128>(me, you)
+        return @intrinsic_routine.div.wrapping<fp128>(me, you)
     }
 }
 
 routine F128.__neg__() -> F128 {
     danger! {
-        return @intrinsic.sub.wrapping<fp128>(0.0_f128, me)
+        return @intrinsic_routine.sub.wrapping<fp128>(0.0_f128, me)
     }
 }
 
@@ -186,16 +186,16 @@ routine F128.__neg__() -> F128 {
 
 routine F128.__eq__(you: F128) -> Bool {
     danger! {
-        return @intrinsic.fcmp.oeq<fp128>(me, you)
+        return @intrinsic_routine.fcmp.oeq<fp128>(me, you)
     }
 }
 
 routine F128.__cmp__(you: F128) -> ComparisonSign {
     danger! {
-        if @intrinsic.fcmp.olt<fp128>(me, you) {
+        if @intrinsic_routine.fcmp.olt<fp128>(me, you) {
             return ME_SMALL
         }
-        if @intrinsic.fcmp.ogt<fp128>(me, you) {
+        if @intrinsic_routine.fcmp.ogt<fp128>(me, you) {
             return ME_LARGE
         }
         return EQUAL
@@ -208,37 +208,37 @@ routine F128.__cmp__(you: F128) -> ComparisonSign {
 
 routine F128.sqrt() -> F128 {
     danger! {
-        return @intrinsic.sqrt<fp128>(me)
+        return @intrinsic_routine.sqrt<fp128>(me)
     }
 }
 
 routine F128.abs() -> F128 {
     danger! {
-        return @intrinsic.fabs<fp128>(me)
+        return @intrinsic_routine.fabs<fp128>(me)
     }
 }
 
 routine F128.floor() -> F128 {
     danger! {
-        return @intrinsic.floor<fp128>(me)
+        return @intrinsic_routine.floor<fp128>(me)
     }
 }
 
 routine F128.ceil() -> F128 {
     danger! {
-        return @intrinsic.ceil<fp128>(me)
+        return @intrinsic_routine.ceil<fp128>(me)
     }
 }
 
 routine F128.round() -> F128 {
     danger! {
-        return @intrinsic.round<fp128>(me)
+        return @intrinsic_routine.round<fp128>(me)
     }
 }
 
 routine F128.trunc() -> F128 {
     danger! {
-        return @intrinsic.trunc_float<fp128>(me)
+        return @intrinsic_routine.trunc_float<fp128>(me)
     }
 }
 
@@ -441,14 +441,14 @@ routine F128.signum() -> F128 {
 # Reinterpret bits as U128 (type punning)
 routine F128.to_bits() -> U128 {
     danger! {
-        return @intrinsic.bitcast<fp128, i128>(me)
+        return @intrinsic_routine.bitcast<fp128, i128>(me)
     }
 }
 
 # Create F128 from U128 bits (type punning)
 routine F128.from_bits(bits: U128) -> F128 {
     danger! {
-        return @intrinsic.bitcast<i128, fp128>(bits)
+        return @intrinsic_routine.bitcast<i128, fp128>(bits)
     }
 }
 

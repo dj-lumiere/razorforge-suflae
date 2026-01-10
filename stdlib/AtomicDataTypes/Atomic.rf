@@ -46,7 +46,7 @@ routine Atomic<T>.load() -> T {
     danger! {
         # SAFETY: Atomic load with seq_cst ordering
         # Ensures proper synchronization across threads
-        return @intrinsic.atomic.load<T>(me.value.get_address())
+        return @intrinsic_routine.atomic.load<T>(me.value.get_address())
     }
 }
 
@@ -64,7 +64,7 @@ routine Atomic<T>.store(new_value: T) {
     danger! {
         # SAFETY: Atomic store with seq_cst ordering
         # Ensures proper synchronization across threads
-        @intrinsic.atomic.store<T>(me.value.get_address(), new_value)
+        @intrinsic_routine.atomic.store<T>(me.value.get_address(), new_value)
     }
 }
 
@@ -84,7 +84,7 @@ routine Atomic<T>.store(new_value: T) {
 routine Atomic<T>.swap(new_value: T) -> T {
     danger! {
         # SAFETY: Atomic swap with seq_cst ordering
-        return @intrinsic.atomic.xchg<T>(me.value.get_address(), new_value)
+        return @intrinsic_routine.atomic.xchg<T>(me.value.get_address(), new_value)
     }
 }
 
@@ -113,7 +113,7 @@ routine Atomic<T>.compare_exchange(expected: T, desired: T) -> Bool {
     danger! {
         # SAFETY: Atomic compare-exchange with seq_cst ordering
         # Returns true if successful, false otherwise
-        return @intrinsic.atomic.cmpxchg<T>(
+        return @intrinsic_routine.atomic.cmpxchg<T>(
             me.value.get_address(),
             expected,
             desired
@@ -141,7 +141,7 @@ requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-add with seq_cst ordering
         # Hardware guarantees atomicity for supported integer types
-        return @intrinsic.atomic.add<T>(me.value.get_address(), delta)
+        return @intrinsic_routine.atomic.add<T>(me.value.get_address(), delta)
     }
 }
 
@@ -165,7 +165,7 @@ requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-sub with seq_cst ordering
         # Hardware guarantees atomicity for supported integer types
-        return @intrinsic.atomic.sub<T>(me.value.get_address(), delta)
+        return @intrinsic_routine.atomic.sub<T>(me.value.get_address(), delta)
     }
 }
 
@@ -188,7 +188,7 @@ routine Atomic<T>.fetch_and(mask: T) -> T
 requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-and with seq_cst ordering
-        return @intrinsic.atomic.and<T>(me.value.get_address(), mask)
+        return @intrinsic_routine.atomic.and<T>(me.value.get_address(), mask)
     }
 }
 
@@ -211,7 +211,7 @@ routine Atomic<T>.fetch_or(mask: T) -> T
 requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-or with seq_cst ordering
-        return @intrinsic.atomic.or<T>(me.value.get_address(), mask)
+        return @intrinsic_routine.atomic.or<T>(me.value.get_address(), mask)
     }
 }
 
@@ -234,7 +234,7 @@ routine Atomic<T>.fetch_xor(mask: T) -> T
 requires T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr] {
     danger! {
         # SAFETY: Atomic fetch-xor with seq_cst ordering
-        return @intrinsic.atomic.xor<T>(me.value.get_address(), mask)
+        return @intrinsic_routine.atomic.xor<T>(me.value.get_address(), mask)
     }
 }
 

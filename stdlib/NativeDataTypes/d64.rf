@@ -23,35 +23,35 @@ routine D64.__create__!(from_text: Bytes) -> D64 {
     danger! {
         let cstr_val = from_text.to_cstr()
         let bits = @native.rf_d64_from_string(cstr_val)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: S8) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_s32(S32(from))
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: S16) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_s32(S32(from))
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: S32) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_s32(from)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: S64) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_s64(from)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
@@ -63,28 +63,28 @@ routine D64.__create__(from: S128) -> D64 {
 routine D64.__create__(from: U8) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_u32(U32(from))
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: U16) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_u32(U32(from))
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: U32) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_u32(from)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: U64) -> D64 {
     danger! {
         let bits = @native.rf_d64_from_u64(from)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
@@ -100,14 +100,14 @@ routine D64.__create__(from: F16) -> D64 {
 routine D64.__create__(from: F32) -> D64 {
     danger! {
         let bits = @native.rf_f32_to_d64(from)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D64.__create__(from: F64) -> D64 {
     danger! {
         let bits = @native.rf_f64_to_d64(from)
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
@@ -119,7 +119,7 @@ routine D64.__create__(from: D32) -> D64 {
     danger! {
         let bits = from.to_bits()
         let result_bits = @native.rf_d32_to_d64(bits)
-        return @intrinsic.bitcast<U64, D64>(result_bits)
+        return @intrinsic_routine.bitcast<U64, D64>(result_bits)
     }
 }
 
@@ -130,7 +130,7 @@ routine D64.__create__(from: D64) -> D64 {
 routine D64.__create__(from: D128) -> D64 {
     danger! {
         let result_bits = @native.rf_d128_to_d64(from.low_bits(), from.high_bits())
-        return @intrinsic.bitcast<U64, D64>(result_bits)
+        return @intrinsic_routine.bitcast<U64, D64>(result_bits)
     }
 }
 
@@ -150,46 +150,46 @@ routine D64.__create__(from: UAddr) -> D64 {
 
 routine D64.__add__(you: D64) -> D64 {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         let result = @native.rf_d64_add(a_bits, b_bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.__sub__(you: D64) -> D64 {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         let result = @native.rf_d64_sub(a_bits, b_bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.__mul__(you: D64) -> D64 {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         let result = @native.rf_d64_mul(a_bits, b_bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.__truediv__(you: D64) -> D64 {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         let result = @native.rf_d64_div(a_bits, b_bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.__neg__() -> D64 {
     danger! {
-        let zero_bits = @intrinsic.bitcast<D64, U64>(D64_ZERO)
-        let me_bits = @intrinsic.bitcast<D64, U64>(me)
+        let zero_bits = @intrinsic_routine.bitcast<D64, U64>(D64_ZERO)
+        let me_bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_sub(zero_bits, me_bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
@@ -199,16 +199,16 @@ routine D64.__neg__() -> D64 {
 
 routine D64.__eq__(you: D64) -> Bool {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         return @native.rf_d64_cmp(a_bits, b_bits) == 0
     }
 }
 
 routine D64.__cmp__(you: D64) -> ComparisonSign {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         let cmp = @native.rf_d64_cmp(a_bits, b_bits)
         if cmp < 0 {
             return ME_SMALL
@@ -226,49 +226,49 @@ routine D64.__cmp__(you: D64) -> ComparisonSign {
 
 routine D64.sqrt() -> D64 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_sqrt(bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.abs() -> D64 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_abs(bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.ceil() -> D64 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_ceil(bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.floor() -> D64 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_floor(bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.round() -> D64 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_round(bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
 routine D64.trunc() -> D64 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let result = @native.rf_d64_trunc(bits)
-        return @intrinsic.bitcast<U64, D64>(result)
+        return @intrinsic_routine.bitcast<U64, D64>(result)
     }
 }
 
@@ -278,16 +278,16 @@ routine D64.trunc() -> D64 {
 
 routine D64.min(you: D64) -> D64 {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         return (if @native.rf_d64_cmp(a_bits, b_bits) <= 0 then me else you)
     }
 }
 
 routine D64.max(you: D64) -> D64 {
     danger! {
-        let a_bits = @intrinsic.bitcast<D64, U64>(me)
-        let b_bits = @intrinsic.bitcast<D64, U64>(you)
+        let a_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let b_bits = @intrinsic_routine.bitcast<D64, U64>(you)
         return (if @native.rf_d64_cmp(a_bits, b_bits) >= 0 then me else you)
     }
 }
@@ -298,32 +298,32 @@ routine D64.clamp(min_val: D64, max_val: D64) -> D64 {
 
 routine D64.is_positive() -> Bool {
     danger! {
-        let me_bits = @intrinsic.bitcast<D64, U64>(me)
-        let zero_bits = @intrinsic.bitcast<D64, U64>(D64_ZERO)
+        let me_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let zero_bits = @intrinsic_routine.bitcast<D64, U64>(D64_ZERO)
         return @native.rf_d64_cmp(me_bits, zero_bits) > 0
     }
 }
 
 routine D64.is_negative() -> Bool {
     danger! {
-        let me_bits = @intrinsic.bitcast<D64, U64>(me)
-        let zero_bits = @intrinsic.bitcast<D64, U64>(D64_ZERO)
+        let me_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let zero_bits = @intrinsic_routine.bitcast<D64, U64>(D64_ZERO)
         return @native.rf_d64_cmp(me_bits, zero_bits) < 0
     }
 }
 
 routine D64.is_zero() -> Bool {
     danger! {
-        let me_bits = @intrinsic.bitcast<D64, U64>(me)
-        let zero_bits = @intrinsic.bitcast<D64, U64>(D64_ZERO)
+        let me_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let zero_bits = @intrinsic_routine.bitcast<D64, U64>(D64_ZERO)
         return @native.rf_d64_cmp(me_bits, zero_bits) == 0
     }
 }
 
 routine D64.signum() -> D64 {
     danger! {
-        let me_bits = @intrinsic.bitcast<D64, U64>(me)
-        let zero_bits = @intrinsic.bitcast<D64, U64>(D64_ZERO)
+        let me_bits = @intrinsic_routine.bitcast<D64, U64>(me)
+        let zero_bits = @intrinsic_routine.bitcast<D64, U64>(D64_ZERO)
         let cmp = @native.rf_d64_cmp(me_bits, zero_bits)
         when {
             cmp > 0 => D64_ONE,
@@ -336,14 +336,14 @@ routine D64.signum() -> D64 {
 # Reinterpret bits as U64 (type punning)
 routine D64.to_bits() -> U64 {
     danger! {
-        return @intrinsic.bitcast<D64, U64>(me)
+        return @intrinsic_routine.bitcast<D64, U64>(me)
     }
 }
 
 # Create D64 from U64 bits (type punning)
 routine D64.from_bits(bits: U64) -> D64 {
     danger! {
-        return @intrinsic.bitcast<U64, D64>(bits)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
@@ -353,7 +353,7 @@ routine D64.from_bits(bits: U64) -> D64 {
 
 routine D64.to_text() -> Text {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(me)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(me)
         let cstr_result = @native.rf_d64_to_string(bits)
         return Text.from_cstr(cstr_result)
     }

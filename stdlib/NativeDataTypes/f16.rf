@@ -3,7 +3,7 @@
 namespace Core
 # Core F16 type definition - maps to LLVM half
 record F16 {
-    private value: @intrinsic.half
+    private value: @intrinsic_type.half
 }
 
 # IEEE 754 half precision constants
@@ -30,61 +30,61 @@ routine F16.__create__!(from_text: Text<Letter>) -> F16 {
 # Convert integers to F16 using LLVM intrinsics
 routine F16.__create__(from: S8) -> F16 {
     danger! {
-        return @intrinsic.sitofp<i8, half>(from)
+        return @intrinsic_routine.sitofp<i8, half>(from)
     }
 }
 
 routine F16.__create__(from: S16) -> F16 {
     danger! {
-        return @intrinsic.sitofp<i16, half>(from)
+        return @intrinsic_routine.sitofp<i16, half>(from)
     }
 }
 
 routine F16.__create__(from: S32) -> F16 {
     danger! {
-        return @intrinsic.sitofp<i32, half>(from)
+        return @intrinsic_routine.sitofp<i32, half>(from)
     }
 }
 
 routine F16.__create__(from: S64) -> F16 {
     danger! {
-        return @intrinsic.sitofp<i64, half>(from)
+        return @intrinsic_routine.sitofp<i64, half>(from)
     }
 }
 
 routine F16.__create__(from: S128) -> F16 {
     danger! {
-        return @intrinsic.sitofp<i128, half>(from)
+        return @intrinsic_routine.sitofp<i128, half>(from)
     }
 }
 
 routine F16.__create__(from: U8) -> F16 {
     danger! {
-        return @intrinsic.uitofp<i8, half>(from)
+        return @intrinsic_routine.uitofp<i8, half>(from)
     }
 }
 
 routine F16.__create__(from: U16) -> F16 {
     danger! {
-        return @intrinsic.uitofp<i16, half>(from)
+        return @intrinsic_routine.uitofp<i16, half>(from)
     }
 }
 
 routine F16.__create__(from: U32) -> F16 {
     danger! {
-        return @intrinsic.uitofp<i32, half>(from)
+        return @intrinsic_routine.uitofp<i32, half>(from)
     }
 }
 
 routine F16.__create__(from: U64) -> F16 {
     danger! {
-        return @intrinsic.uitofp<i64, half>(from)
+        return @intrinsic_routine.uitofp<i64, half>(from)
     }
 }
 
 routine F16.__create__(from: U128) -> F16 {
     danger! {
-        return @intrinsic.uitofp<i128, half>(from)
+        return @intrinsic_routine.uitofp<i128, half>(from)
     }
 }
 
@@ -95,19 +95,19 @@ routine F16.__create__(from: F16) -> F16 {
 # Truncate from larger float types using LLVM intrinsics
 routine F16.__create__(from: F32) -> F16 {
     danger! {
-        return @intrinsic.fptrunc<float, half>(from)
+        return @intrinsic_routine.fptrunc<float, half>(from)
     }
 }
 
 routine F16.__create__(from: F64) -> F16 {
     danger! {
-        return @intrinsic.fptrunc<double, half>(from)
+        return @intrinsic_routine.fptrunc<double, half>(from)
     }
 }
 
 routine F16.__create__(from: F128) -> F16 {
     danger! {
-        return @intrinsic.fptrunc<fp128, half>(from)
+        return @intrinsic_routine.fptrunc<fp128, half>(from)
     }
 }
 
@@ -115,35 +115,35 @@ routine F16.__create__(from: F128) -> F16 {
 routine F16.__create__(from: D32) -> F16 {
     danger! {
         let f32_val = @native.rf_d32_to_f32(from.to_bits())
-        return @intrinsic.fptrunc<float, half>(f32_val)
+        return @intrinsic_routine.fptrunc<float, half>(f32_val)
     }
 }
 
 routine F16.__create__(from: D64) -> F16 {
     danger! {
         let f32_val = @native.rf_d64_to_f32(from.to_bits())
-        return @intrinsic.fptrunc<float, half>(f32_val)
+        return @intrinsic_routine.fptrunc<float, half>(f32_val)
     }
 }
 
 routine F16.__create__(from: D128) -> F16 {
     danger! {
         let f32_val = @native.rf_d128_to_f32(from.low_bits(), from.high_bits())
-        return @intrinsic.fptrunc<float, half>(f32_val)
+        return @intrinsic_routine.fptrunc<float, half>(f32_val)
     }
 }
 
 # From SAddr - convert using LLVM intrinsic
 routine F16.__create__(from: SAddr) -> F16 {
     danger! {
-        return @intrinsic.sitofp<iptr, half>(from)
+        return @intrinsic_routine.sitofp<iptr, half>(from)
     }
 }
 
 # From UAddr - convert using LLVM intrinsic
 routine F16.__create__(from: UAddr) -> F16 {
     danger! {
-        return @intrinsic.uitofp<uptr, half>(from)
+        return @intrinsic_routine.uitofp<uptr, half>(from)
     }
 }
 
@@ -153,31 +153,31 @@ routine F16.__create__(from: UAddr) -> F16 {
 
 routine F16.__add__(you: F16) -> F16 {
     danger! {
-        return @intrinsic.add.wrapping<half>(me, you)
+        return @intrinsic_routine.add.wrapping<half>(me, you)
     }
 }
 
 routine F16.__sub__(you: F16) -> F16 {
     danger! {
-        return @intrinsic.sub.wrapping<half>(me, you)
+        return @intrinsic_routine.sub.wrapping<half>(me, you)
     }
 }
 
 routine F16.__mul__(you: F16) -> F16 {
     danger! {
-        return @intrinsic.mul.wrapping<half>(me, you)
+        return @intrinsic_routine.mul.wrapping<half>(me, you)
     }
 }
 
 routine F16.__truediv__(you: F16) -> F16 {
     danger! {
-        return @intrinsic.div.wrapping<half>(me, you)
+        return @intrinsic_routine.div.wrapping<half>(me, you)
     }
 }
 
 routine F16.__neg__() -> F16 {
     danger! {
-        return @intrinsic.sub.wrapping<half>(0.0_f16, me)
+        return @intrinsic_routine.sub.wrapping<half>(0.0_f16, me)
     }
 }
 
@@ -187,16 +187,16 @@ routine F16.__neg__() -> F16 {
 
 routine F16.__eq__(you: F16) -> Bool {
     danger! {
-        return @intrinsic.fcmp.oeq<half>(me, you)
+        return @intrinsic_routine.fcmp.oeq<half>(me, you)
     }
 }
 
 routine F16.__cmp__(you: F16) -> ComparisonSign {
     danger! {
-        if @intrinsic.fcmp.olt<half>(me, you) {
+        if @intrinsic_routine.fcmp.olt<half>(me, you) {
             return ME_SMALL
         }
-        if @intrinsic.fcmp.ogt<half>(me, you) {
+        if @intrinsic_routine.fcmp.ogt<half>(me, you) {
             return ME_LARGE
         }
         return EQUAL
@@ -209,43 +209,43 @@ routine F16.__cmp__(you: F16) -> ComparisonSign {
 
 routine F16.sqrt() -> F16 {
     danger! {
-        return @intrinsic.sqrt<half>(me)
+        return @intrinsic_routine.sqrt<half>(me)
     }
 }
 
 routine F16.abs() -> F16 {
     danger! {
-        return @intrinsic.fabs<half>(me)
+        return @intrinsic_routine.fabs<half>(me)
     }
 }
 
 routine F16.floor() -> F16 {
     danger! {
-        return @intrinsic.floor<half>(me)
+        return @intrinsic_routine.floor<half>(me)
     }
 }
 
 routine F16.ceil() -> F16 {
     danger! {
-        return @intrinsic.ceil<half>(me)
+        return @intrinsic_routine.ceil<half>(me)
     }
 }
 
 routine F16.round() -> F16 {
     danger! {
-        return @intrinsic.round<half>(me)
+        return @intrinsic_routine.round<half>(me)
     }
 }
 
 routine F16.trunc() -> F16 {
     danger! {
-        return @intrinsic.trunc_float<half>(me)
+        return @intrinsic_routine.trunc_float<half>(me)
     }
 }
 
 routine F16.copysign(sign: F16) -> F16 {
     danger! {
-        return @intrinsic.copysign<half>(me, sign)
+        return @intrinsic_routine.copysign<half>(me, sign)
     }
 }
 
@@ -292,14 +292,14 @@ routine F16.signum() -> F16 {
 # Reinterpret bits as U16 (type punning)
 routine F16.to_bits() -> U16 {
     danger! {
-        return @intrinsic.bitcast<half, i16>(me)
+        return @intrinsic_routine.bitcast<half, i16>(me)
     }
 }
 
 # Create F16 from U16 bits (type punning)
 routine F16.from_bits(bits: U16) -> F16 {
     danger! {
-        return @intrinsic.bitcast<i16, half>(bits)
+        return @intrinsic_routine.bitcast<i16, half>(bits)
     }
 }
 

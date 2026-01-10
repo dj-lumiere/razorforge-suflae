@@ -12,7 +12,7 @@ import Text.Text
 
 # Core UAddr type definition - maps to LLVM iptr/usize
 record UAddr {
-    public value: @intrinsic.iptr
+    public value: @intrinsic_type.iptr
 }
 
 # ============================================================================
@@ -29,70 +29,70 @@ routine UAddr.__create__!(from_text: Text<Letter>) -> UAddr {
 # From S8 - sign extend then reinterpret (wraps if negative)
 routine UAddr.__create__(from: S8) -> UAddr {
     danger! {
-        return @intrinsic.sext<i8, uptr>(from)
+        return @intrinsic_routine.sext<i8, uptr>(from)
     }
 }
 
 # From S16 - sign extend then reinterpret (wraps if negative)
 routine UAddr.__create__(from: S16) -> UAddr {
     danger! {
-        return @intrinsic.sext<i16, uptr>(from)
+        return @intrinsic_routine.sext<i16, uptr>(from)
     }
 }
 
 # From S32 - sign extend then reinterpret (wraps if negative)
 routine UAddr.__create__(from: S32) -> UAddr {
     danger! {
-        return @intrinsic.sext<i32, uptr>(from)
+        return @intrinsic_routine.sext<i32, uptr>(from)
     }
 }
 
 # From S64 - truncate or bitcast depending on platform (wraps)
 routine UAddr.__create__(from: S64) -> UAddr {
     danger! {
-        return @intrinsic.trunc<i64, uptr>(from)
+        return @intrinsic_routine.trunc<i64, uptr>(from)
     }
 }
 
 # From S128 - truncate (wraps)
 routine UAddr.__create__(from: S128) -> UAddr {
     danger! {
-        return @intrinsic.trunc<i128, uptr>(from)
+        return @intrinsic_routine.trunc<i128, uptr>(from)
     }
 }
 
 # From U8 - zero extend
 routine UAddr.__create__(from: U8) -> UAddr {
     danger! {
-        return @intrinsic.zext<i8, uptr>(from)
+        return @intrinsic_routine.zext<i8, uptr>(from)
     }
 }
 
 # From U16 - zero extend
 routine UAddr.__create__(from: U16) -> UAddr {
     danger! {
-        return @intrinsic.zext<i16, uptr>(from)
+        return @intrinsic_routine.zext<i16, uptr>(from)
     }
 }
 
 # From U32 - zero extend or bitcast depending on platform
 routine UAddr.__create__(from: U32) -> UAddr {
     danger! {
-        return @intrinsic.zext<i32, uptr>(from)
+        return @intrinsic_routine.zext<i32, uptr>(from)
     }
 }
 
 # From U64 - truncate or bitcast depending on platform (wraps)
 routine UAddr.__create__(from: U64) -> UAddr {
     danger! {
-        return @intrinsic.trunc<i64, uptr>(from)
+        return @intrinsic_routine.trunc<i64, uptr>(from)
     }
 }
 
 # From U128 - truncate (wraps)
 routine UAddr.__create__(from: U128) -> UAddr {
     danger! {
-        return @intrinsic.trunc<i128, uptr>(from)
+        return @intrinsic_routine.trunc<i128, uptr>(from)
     }
 }
 
@@ -103,13 +103,13 @@ routine UAddr.__create__(from: F16) -> UAddr {
 
 routine UAddr.__create__(from: F32) -> UAddr {
     danger! {
-        return @intrinsic.fptoui<float, uptr>(from)
+        return @intrinsic_routine.fptoui<float, uptr>(from)
     }
 }
 
 routine UAddr.__create__(from: F64) -> UAddr {
     danger! {
-        return @intrinsic.fptoui<double, uptr>(from)
+        return @intrinsic_routine.fptoui<double, uptr>(from)
     }
 }
 
@@ -120,7 +120,7 @@ routine UAddr.__create__(from: F128) -> UAddr {
 # From decimal - truncates fractional part (wraps on overflow)
 routine UAddr.__create__(from: D32) -> UAddr {
     danger! {
-        let bit_width = @intrinsic.bitwidth<uptr>()
+        let bit_width = @intrinsic_routine.bitwidth<uptr>()
         if bit_width == 32 {
             return from.U32().UAddr()
         } else {
@@ -131,7 +131,7 @@ routine UAddr.__create__(from: D32) -> UAddr {
 
 routine UAddr.__create__(from: D64) -> UAddr {
     danger! {
-        let bit_width = @intrinsic.bitwidth<uptr>()
+        let bit_width = @intrinsic_routine.bitwidth<uptr>()
         if bit_width == 32 {
             return from.U32().UAddr()
         } else {
@@ -142,7 +142,7 @@ routine UAddr.__create__(from: D64) -> UAddr {
 
 routine UAddr.__create__(from: D128) -> UAddr {
     danger! {
-        let bit_width = @intrinsic.bitwidth<uptr>()
+        let bit_width = @intrinsic_routine.bitwidth<uptr>()
         if bit_width == 32 {
             return from.U32().UAddr()
         } else {
@@ -167,31 +167,31 @@ routine UAddr.__create__(from: UAddr) -> UAddr {
 
 routine UAddr.__add_wrap__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.add.wrapping<uptr>(me, you)
+        return @intrinsic_routine.add.wrapping<uptr>(me, you)
     }
 }
 
 routine UAddr.__sub_wrap__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.sub.wrapping<uptr>(me, you)
+        return @intrinsic_routine.sub.wrapping<uptr>(me, you)
     }
 }
 
 routine UAddr.__mul_wrap__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.mul.wrapping<uptr>(me, you)
+        return @intrinsic_routine.mul.wrapping<uptr>(me, you)
     }
 }
 
 routine UAddr.__floordiv_wrap__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.udiv<uptr>(me, you)
+        return @intrinsic_routine.udiv<uptr>(me, you)
     }
 }
 
 routine UAddr.__mod_wrap__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.urem<uptr>(me, you)
+        return @intrinsic_routine.urem<uptr>(me, you)
     }
 }
 
@@ -202,21 +202,21 @@ routine UAddr.__mod_wrap__(you: UAddr) -> UAddr {
 
 routine UAddr.__add_checked__(you: UAddr) -> Maybe<UAddr> {
     danger! {
-        let (result, overflow) = @intrinsic.add.overflow<uptr>(me, you)
+        let (result, overflow) = @intrinsic_routine.add.overflow<uptr>(me, you)
         return if overflow then None else result
     }
 }
 
 routine UAddr.__sub_checked__(you: UAddr) -> Maybe<UAddr> {
     danger! {
-        let (result, overflow) = @intrinsic.sub.overflow<uptr>(me, you)
+        let (result, overflow) = @intrinsic_routine.sub.overflow<uptr>(me, you)
         return if overflow then None else result
     }
 }
 
 routine UAddr.__mul_checked__(you: UAddr) -> Maybe<UAddr> {
     danger! {
-        let (result, overflow) = @intrinsic.mul.overflow<uptr>(me, you)
+        let (result, overflow) = @intrinsic_routine.mul.overflow<uptr>(me, you)
         return if overflow then None else result
     }
 }
@@ -226,7 +226,7 @@ routine UAddr.__floordiv_checked__(you: UAddr) -> Maybe<UAddr> {
         return None
     }
     danger! {
-        return @intrinsic.udiv<uptr>(me, you)
+        return @intrinsic_routine.udiv<uptr>(me, you)
     }
 }
 
@@ -235,20 +235,20 @@ routine UAddr.__mod_checked__(you: UAddr) -> Maybe<UAddr> {
         return None
     }
     danger! {
-        return @intrinsic.urem<uptr>(me, you)
+        return @intrinsic_routine.urem<uptr>(me, you)
     }
 }
 
 routine UAddr.__ashl_checked__(bits: U32) -> Maybe<UAddr> {
     danger! {
         # Check if shift would overflow (bits >= bit width or high bits would be lost)
-        let bit_width = @intrinsic.bitwidth<uptr>()
+        let bit_width = @intrinsic_routine.bitwidth<uptr>()
         if bits >= bit_width {
             return None
         }
-        let result = @intrinsic.shl<uptr>(me, bits)
+        let result = @intrinsic_routine.shl<uptr>(me, bits)
         # Check if we can recover the original value by shifting back
-        let recovered = @intrinsic.lshr<uptr>(result, bits)
+        let recovered = @intrinsic_routine.lshr<uptr>(result, bits)
         if recovered != me {
             return None
         }
@@ -263,13 +263,13 @@ routine UAddr.__ashl_checked__(bits: U32) -> Maybe<UAddr> {
 
 routine UAddr.__lshl__(bits: U32) -> UAddr {
     danger! {
-        return @intrinsic.shl<uptr>(me, bits)
+        return @intrinsic_routine.shl<uptr>(me, bits)
     }
 }
 
 routine UAddr.__lshr__(bits: U32) -> UAddr {
     danger! {
-        return @intrinsic.lshr<uptr>(me, bits)
+        return @intrinsic_routine.lshr<uptr>(me, bits)
     }
 }
 
@@ -280,25 +280,25 @@ routine UAddr.__lshr__(bits: U32) -> UAddr {
 
 routine UAddr.__and__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.and<uptr>(me, you)
+        return @intrinsic_routine.and<uptr>(me, you)
     }
 }
 
 routine UAddr.__or__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.or<uptr>(me, you)
+        return @intrinsic_routine.or<uptr>(me, you)
     }
 }
 
 routine UAddr.__xor__(you: UAddr) -> UAddr {
     danger! {
-        return @intrinsic.xor<uptr>(me, you)
+        return @intrinsic_routine.xor<uptr>(me, you)
     }
 }
 
 routine UAddr.__not__() -> UAddr {
     danger! {
-        return @intrinsic.not<uptr>(me)
+        return @intrinsic_routine.not<uptr>(me)
     }
 }
 
@@ -308,16 +308,16 @@ routine UAddr.__not__() -> UAddr {
 
 routine UAddr.__eq__(you: UAddr) -> Bool {
     danger! {
-        return @intrinsic.icmp.eq<uptr>(me, you)
+        return @intrinsic_routine.icmp.eq<uptr>(me, you)
     }
 }
 
 routine UAddr.__cmp__(you: UAddr) -> ComparisonSign {
     danger! {
-        if @intrinsic.icmp.ult<uptr>(me, you) {
+        if @intrinsic_routine.icmp.ult<uptr>(me, you) {
             return ME_SMALL
         }
-        if @intrinsic.icmp.ugt<uptr>(me, you) {
+        if @intrinsic_routine.icmp.ugt<uptr>(me, you) {
             return ME_LARGE
         }
         return EQUAL

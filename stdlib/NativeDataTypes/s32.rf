@@ -3,7 +3,7 @@
 namespace Core
 # Core S32 type definition - maps to LLVM i32
 record S32 {
-    private value: @intrinsic.i32
+    private value: @intrinsic_type.i32
 }
 
 # Constants for S32 limits
@@ -27,14 +27,14 @@ routine S32.__create__!(from_text: Bytes) -> S32 {
 # From S8 - always fits, no check needed
 routine S32.__create__(from: S8) -> S32 {
     danger! {
-        return @intrinsic.sext<i8, i32>(from)
+        return @intrinsic_routine.sext<i8, i32>(from)
     }
 }
 
 # From S16 - always fits, no check needed
 routine S32.__create__(from: S16) -> S32 {
     danger! {
-        return @intrinsic.sext<i16, i32>(from)
+        return @intrinsic_routine.sext<i16, i32>(from)
     }
 }
 
@@ -48,7 +48,7 @@ routine S32.__create__!(from: S64) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.trunc<i64, i32>(from)
+        return @intrinsic_routine.trunc<i64, i32>(from)
     }
 }
 
@@ -58,21 +58,21 @@ routine S32.__create__!(from: S128) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.trunc<i128, i32>(from)
+        return @intrinsic_routine.trunc<i128, i32>(from)
     }
 }
 
 # From U8 - always fits, no check needed
 routine S32.__create__(from: U8) -> S32 {
     danger! {
-        return @intrinsic.zext<i8, i32>(from)
+        return @intrinsic_routine.zext<i8, i32>(from)
     }
 }
 
 # From U16 - always fits, no check needed
 routine S32.__create__(from: U16) -> S32 {
     danger! {
-        return @intrinsic.zext<i16, i32>(from)
+        return @intrinsic_routine.zext<i16, i32>(from)
     }
 }
 
@@ -82,7 +82,7 @@ routine S32.__create__!(from: U32) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.bitcast<i32, i32>(from)
+        return @intrinsic_routine.bitcast<i32, i32>(from)
     }
 }
 
@@ -92,7 +92,7 @@ routine S32.__create__!(from: U64) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.trunc<i64, i32>(from)
+        return @intrinsic_routine.trunc<i64, i32>(from)
     }
 }
 
@@ -102,7 +102,7 @@ routine S32.__create__!(from: U128) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.trunc<i128, i32>(from)
+        return @intrinsic_routine.trunc<i128, i32>(from)
     }
 }
 
@@ -113,13 +113,13 @@ routine S32.__create__!(from: F16) -> S32 {
 
 routine S32.__create__!(from: F32) -> S32 {
     danger! {
-        return @intrinsic.fptosi<float, i32>(from)
+        return @intrinsic_routine.fptosi<float, i32>(from)
     }
 }
 
 routine S32.__create__!(from: F64) -> S32 {
     danger! {
-        return @intrinsic.fptosi<double, i32>(from)
+        return @intrinsic_routine.fptosi<double, i32>(from)
     }
 }
 
@@ -130,14 +130,14 @@ routine S32.__create__!(from: F128) -> S32 {
 # From decimal - truncates fractional part and can overflow
 routine S32.__create__!(from: D32) -> S32 {
     danger! {
-        let bits = @intrinsic.bitcast<D32, U32>(from)
+        let bits = @intrinsic_routine.bitcast<D32, U32>(from)
         return d32_to_s32(bits)
     }
 }
 
 routine S32.__create__!(from: D64) -> S32 {
     danger! {
-        let bits = @intrinsic.bitcast<D64, U64>(from)
+        let bits = @intrinsic_routine.bitcast<D64, U64>(from)
         return d64_to_s32(bits)
     }
 }
@@ -155,7 +155,7 @@ routine S32.__create__!(from: SAddr) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.trunc<iptr, i32>(from)
+        return @intrinsic_routine.trunc<iptr, i32>(from)
     }
 }
 
@@ -166,7 +166,7 @@ routine S32.__create__!(from: UAddr) -> S32 {
         throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
     }
     danger! {
-        return @intrinsic.trunc<uptr, i32>(from)
+        return @intrinsic_routine.trunc<uptr, i32>(from)
     }
 }
 
@@ -177,21 +177,21 @@ routine S32.__create__!(from: UAddr) -> S32 {
 @crash_only
 routine S32.__add__!(you: S32) -> S32 {
     danger! {
-        return @intrinsic.add<i32>(me, you)
+        return @intrinsic_routine.add<i32>(me, you)
     }
 }
 
 @crash_only
 routine S32.__sub__!(you: S32) -> S32 {
     danger! {
-        return @intrinsic.sub<i32>(me, you)
+        return @intrinsic_routine.sub<i32>(me, you)
     }
 }
 
 @crash_only
 routine S32.__mul__!(you: S32) -> S32 {
     danger! {
-        return @intrinsic.mul<i32>(me, you)
+        return @intrinsic_routine.mul<i32>(me, you)
     }
 }
 
@@ -201,21 +201,21 @@ routine S32.__floordiv__!(you: S32) -> S32 {
         throw DivisionByZeroError()
     }
     danger! {
-        return @intrinsic.sdiv<i32>(me, you)
+        return @intrinsic_routine.sdiv<i32>(me, you)
     }
 }
 
 @crash_only
 routine S32.__mod__!(you: S32) -> S32 {
     danger! {
-        return @intrinsic.srem<i32>(me, you)
+        return @intrinsic_routine.srem<i32>(me, you)
     }
 }
 
 @crash_only
 routine S32.__neg__!() -> S32 {
     danger! {
-        return @intrinsic.neg<i32>(me)
+        return @intrinsic_routine.neg<i32>(me)
     }
 }
 
@@ -225,19 +225,19 @@ routine S32.__neg__!() -> S32 {
 
 routine S32.__add_wrap__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.add.wrapping<i32>(me, you)
+        return @intrinsic_routine.add.wrapping<i32>(me, you)
     }
 }
 
 routine S32.__sub_wrap__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.sub.wrapping<i32>(me, you)
+        return @intrinsic_routine.sub.wrapping<i32>(me, you)
     }
 }
 
 routine S32.__mul_wrap__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.mul.wrapping<i32>(me, you)
+        return @intrinsic_routine.mul.wrapping<i32>(me, you)
     }
 }
 
@@ -247,19 +247,19 @@ routine S32.__mul_wrap__(you: S32) -> S32 {
 
 routine S32.__add_sat__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.add.saturate<i32>(me, you)
+        return @intrinsic_routine.add.saturate<i32>(me, you)
     }
 }
 
 routine S32.__sub_sat__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.sub.saturate<i32>(me, you)
+        return @intrinsic_routine.sub.saturate<i32>(me, you)
     }
 }
 
 routine S32.__mul_sat__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.mul.saturate<i32>(me, you)
+        return @intrinsic_routine.mul.saturate<i32>(me, you)
     }
 }
 
@@ -269,21 +269,21 @@ routine S32.__mul_sat__(you: S32) -> S32 {
 
 routine S32.__add_checked__(you: S32) -> Maybe<S32> {
     danger! {
-        let (result, overflow) = @intrinsic.add.overflow<i32>(me, you)
+        let (result, overflow) = @intrinsic_routine.add.overflow<i32>(me, you)
         return if overflow then None else result
     }
 }
 
 routine S32.__sub_checked__(you: S32) -> Maybe<S32> {
     danger! {
-        let (result, overflow) = @intrinsic.sub.overflow<i32>(me, you)
+        let (result, overflow) = @intrinsic_routine.sub.overflow<i32>(me, you)
         return if overflow then None else result
     }
 }
 
 routine S32.__mul_checked__(you: S32) -> Maybe<S32> {
     danger! {
-        let (result, overflow) = @intrinsic.mul.overflow<i32>(me, you)
+        let (result, overflow) = @intrinsic_routine.mul.overflow<i32>(me, you)
         return if overflow then None else result
     }
 }
@@ -307,9 +307,9 @@ routine S32.__pow__!(exp: S32) -> S32 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul<i32>(result, base)
+                result = @intrinsic_routine.mul<i32>(result, base)
             }
-            base = @intrinsic.mul<i32>(base, base)
+            base = @intrinsic_routine.mul<i32>(base, base)
             e = e >> 1
         }
         return result
@@ -330,9 +330,9 @@ routine S32.__pow_wrap__!(exp: S32) -> S32 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.wrapping<i32>(result, base)
+                result = @intrinsic_routine.mul.wrapping<i32>(result, base)
             }
-            base = @intrinsic.mul.wrapping<i32>(base, base)
+            base = @intrinsic_routine.mul.wrapping<i32>(base, base)
             e = e >> 1
         }
         return result
@@ -353,9 +353,9 @@ routine S32.__pow_sat__!(exp: S32) -> S32 {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                result = @intrinsic.mul.saturate<i32>(result, base)
+                result = @intrinsic_routine.mul.saturate<i32>(result, base)
             }
-            base = @intrinsic.mul.saturate<i32>(base, base)
+            base = @intrinsic_routine.mul.saturate<i32>(base, base)
             e = e >> 1
         }
         return result
@@ -376,13 +376,13 @@ routine S32.__pow_checked__(exp: S32) -> Maybe<S32> {
         }
         while e > 0 {
             if (e & 1) == 1 {
-                let (new_result, overflow) = @intrinsic.mul.overflow<i32>(result, base)
+                let (new_result, overflow) = @intrinsic_routine.mul.overflow<i32>(result, base)
                 if overflow {
                     return None
                 }
                 result = new_result
             }
-            let (new_base, overflow) = @intrinsic.mul.overflow<i32>(base, base)
+            let (new_base, overflow) = @intrinsic_routine.mul.overflow<i32>(base, base)
             if overflow and e > 1 {
                 return None
             }
@@ -399,25 +399,25 @@ routine S32.__pow_checked__(exp: S32) -> Maybe<S32> {
 
 routine S32.__and__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.and<i32>(me, you)
+        return @intrinsic_routine.and<i32>(me, you)
     }
 }
 
 routine S32.__or__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.or<i32>(me, you)
+        return @intrinsic_routine.or<i32>(me, you)
     }
 }
 
 routine S32.__xor__(you: S32) -> S32 {
     danger! {
-        return @intrinsic.xor<i32>(me, you)
+        return @intrinsic_routine.xor<i32>(me, you)
     }
 }
 
 routine S32.__not__() -> S32 {
     danger! {
-        return @intrinsic.not<i32>(me)
+        return @intrinsic_routine.not<i32>(me)
     }
 }
 
@@ -428,7 +428,7 @@ routine S32.__not__() -> S32 {
 # Arithmetic left shift (<<) - sign preserving
 routine S32.__ashl__(bits: U32) -> S32 {
     danger! {
-        return @intrinsic.shl<i32>(me, bits)
+        return @intrinsic_routine.shl<i32>(me, bits)
     }
 }
 
@@ -438,9 +438,9 @@ routine S32.__ashl_checked__(bits: U32) -> Maybe<S32> {
         if bits >= 32 {
             return None
         }
-        let result = @intrinsic.shl<i32>(me, bits)
+        let result = @intrinsic_routine.shl<i32>(me, bits)
         # Check if we can recover the original value
-        let recovered = @intrinsic.ashr<i32>(result, bits)
+        let recovered = @intrinsic_routine.ashr<i32>(result, bits)
         if recovered != me {
             return None
         }
@@ -451,21 +451,21 @@ routine S32.__ashl_checked__(bits: U32) -> Maybe<S32> {
 # Arithmetic right shift (>>) - preserves sign, always safe
 routine S32.__ashr__(bits: U32) -> S32 {
     danger! {
-        return @intrinsic.ashr<i32>(me, bits)
+        return @intrinsic_routine.ashr<i32>(me, bits)
     }
 }
 
 # Logical left shift (<<<) - removes sign
 routine S32.__lshl__(bits: U32) -> S32 {
     danger! {
-        return @intrinsic.shl<i32>(me, bits)
+        return @intrinsic_routine.shl<i32>(me, bits)
     }
 }
 
 # Logical right shift (>>>) - fills with zeros, ignores sign
 routine S32.__lshr__(bits: U32) -> S32 {
     danger! {
-        return @intrinsic.lshr<i32>(me, bits)
+        return @intrinsic_routine.lshr<i32>(me, bits)
     }
 }
 
@@ -475,16 +475,16 @@ routine S32.__lshr__(bits: U32) -> S32 {
 
 routine S32.__eq__(you: S32) -> Bool {
     danger! {
-        return @intrinsic.icmp.eq<i32>(me, you)
+        return @intrinsic_routine.icmp.eq<i32>(me, you)
     }
 }
 
 routine S32.__cmp__(you: S32) -> ComparisonSign {
     danger! {
-        if @intrinsic.icmp.slt<i32>(me, you) {
+        if @intrinsic_routine.icmp.slt<i32>(me, you) {
             return ME_SMALL
         }
-        if @intrinsic.icmp.sgt<i32>(me, you) {
+        if @intrinsic_routine.icmp.sgt<i32>(me, you) {
             return ME_LARGE
         }
         return EQUAL
@@ -497,7 +497,7 @@ routine S32.__cmp__(you: S32) -> ComparisonSign {
 
 routine S32.abs() -> S32 {
     danger! {
-        return @intrinsic.abs<i32>(me)
+        return @intrinsic_routine.abs<i32>(me)
     }
 }
 
@@ -519,7 +519,7 @@ routine S32.clamp(min_val: S32, max_val: S32) -> S32 {
 
 routine S32.count_ones() -> S32 {
     danger! {
-        return @intrinsic.ctpop<i32>(me)
+        return @intrinsic_routine.ctpop<i32>(me)
     }
 }
 
@@ -529,13 +529,13 @@ routine S32.count_zeros() -> S32 {
 
 routine S32.leading_zeros() -> S32 {
     danger! {
-        return @intrinsic.ctlz<i32>(me)
+        return @intrinsic_routine.ctlz<i32>(me)
     }
 }
 
 routine S32.trailing_zeros() -> S32 {
     danger! {
-        return @intrinsic.cttz<i32>(me)
+        return @intrinsic_routine.cttz<i32>(me)
     }
 }
 
@@ -549,13 +549,13 @@ routine S32.trailing_ones() -> S32 {
 
 routine S32.reverse_bits() -> S32 {
     danger! {
-        return @intrinsic.bitreverse<i32>(me)
+        return @intrinsic_routine.bitreverse<i32>(me)
     }
 }
 
 routine S32.swap_bytes() -> S32 {
     danger! {
-        return @intrinsic.bswap<i32>(me)
+        return @intrinsic_routine.bswap<i32>(me)
     }
 }
 
@@ -577,8 +577,8 @@ routine S32.is_zero() -> Bool {
 
 routine S32.is_even() -> Bool {
     danger! {
-        let result = @intrinsic.and<i32>(me, 1_s32)
-        return @intrinsic.icmp.eq<i32>(result, 0_s32)
+        let result = @intrinsic_routine.and<i32>(me, 1_s32)
+        return @intrinsic_routine.icmp.eq<i32>(result, 0_s32)
     }
 }
 
@@ -596,10 +596,10 @@ routine S32.signum() -> S32 {
 
 routine S32.is_power_of_two() -> Bool {
     danger! {
-        let is_pos = @intrinsic.icmp.sgt<i32>(me, 0_s32)
-        let minus_one = @intrinsic.sub.wrapping<i32>(me, 1_s32)
-        let anded = @intrinsic.and<i32>(me, minus_one)
-        let is_zero = @intrinsic.icmp.eq<i32>(anded, 0_s32)
+        let is_pos = @intrinsic_routine.icmp.sgt<i32>(me, 0_s32)
+        let minus_one = @intrinsic_routine.sub.wrapping<i32>(me, 1_s32)
+        let anded = @intrinsic_routine.and<i32>(me, minus_one)
+        let is_zero = @intrinsic_routine.icmp.eq<i32>(anded, 0_s32)
         return is_pos and is_zero
     }
 }
