@@ -233,12 +233,12 @@ public sealed class CompilationDriver
             List<Token> tokens;
             if (isSuflae)
             {
-                var tokenizer = new SuflaeTokenizer(code);
+                var tokenizer = new SuflaeTokenizer(code, filePath);
                 tokens = tokenizer.Tokenize();
             }
             else
             {
-                var tokenizer = new RazorForgeTokenizer(code);
+                var tokenizer = new RazorForgeTokenizer(code, filePath);
                 tokens = tokenizer.Tokenize();
             }
 

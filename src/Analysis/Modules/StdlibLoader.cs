@@ -67,7 +67,7 @@ public sealed class StdlibLoader
         try
         {
             string code = File.ReadAllText(filePath);
-            var tokenizer = new RazorForgeTokenizer(code);
+            var tokenizer = new RazorForgeTokenizer(code, filePath);
             List<Token> tokens = tokenizer.Tokenize();
             var parser = new RazorForgeParser(tokens, filePath);
             Program ast = parser.Parse();
@@ -198,7 +198,7 @@ public sealed class StdlibLoader
         try
         {
             string code = File.ReadAllText(filePath);
-            var tokenizer = new RazorForgeTokenizer(code);
+            var tokenizer = new RazorForgeTokenizer(code, filePath);
             List<Token> tokens = tokenizer.Tokenize();
             var parser = new RazorForgeParser(tokens, filePath);
             Program ast = parser.Parse();
