@@ -108,12 +108,12 @@ internal class Program
             List<Token> tokens;
             if (isSuflae)
             {
-                var tokenizer = new SuflaeTokenizer(code);
+                var tokenizer = new SuflaeTokenizer(code, sourceFile);
                 tokens = tokenizer.Tokenize();
             }
             else
             {
-                var tokenizer = new RazorForgeTokenizer(code);
+                var tokenizer = new RazorForgeTokenizer(code, sourceFile);
                 tokens = tokenizer.Tokenize();
             }
 
@@ -157,12 +157,12 @@ internal class Program
             List<Token> tokens;
             if (isSuflae)
             {
-                var tokenizer = new SuflaeTokenizer(code);
+                var tokenizer = new SuflaeTokenizer(code, sourceFile);
                 tokens = tokenizer.Tokenize();
             }
             else
             {
-                var tokenizer = new RazorForgeTokenizer(code);
+                var tokenizer = new RazorForgeTokenizer(code, sourceFile);
                 tokens = tokenizer.Tokenize();
             }
             Console.WriteLine($"Generated {tokens.Count} tokens");
@@ -246,12 +246,12 @@ internal class Program
             List<Token> tokens;
             if (isSuflae)
             {
-                var tokenizer = new SuflaeTokenizer(code);
+                var tokenizer = new SuflaeTokenizer(code, sourceFile);
                 tokens = tokenizer.Tokenize();
             }
             else
             {
-                var tokenizer = new RazorForgeTokenizer(code);
+                var tokenizer = new RazorForgeTokenizer(code, sourceFile);
                 tokens = tokenizer.Tokenize();
             }
             Console.WriteLine($"Generated {tokens.Count} tokens");
