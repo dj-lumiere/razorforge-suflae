@@ -94,10 +94,10 @@ cannot escape. Generators naturally can't hold resources across yields because t
 
 ### Related Docs
 
-- [RazorForge Routines](../wiki/RazorForge-Routines.md)
-- [Suflae Routines](../wiki/Suflae-Routines.md)
-- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
-- [Suflae SeqTools](../wiki/Suflae-SeqTools.md)
+- [RazorForge Routines](https://razorforge.lumi-dev.xyz/Routines.md)
+- [Suflae Routines](https://suflae.lumi-dev.xyz/Routines.md)
+- [RazorForge SeqTools](https://razorforge.lumi-dev.xyz/SeqTools.md)
+- [Suflae SeqTools](https://suflae.lumi-dev.xyz/SeqTools.md)
 
 ---
 
@@ -250,7 +250,7 @@ threaded routine compute(data: List<S64>) -> S64:
         sum += process(item)
     return sum
 
-routine main():
+routine start():
     # Sequential
     let a = waitfor fetch("url1")
     let b = waitfor compute(data)
@@ -292,10 +292,10 @@ SignalCaster exists specifically for broadcast capability — it's the only way 
 
 ### Related Docs
 
-- [RazorForge Concurrency Model](../wiki/RazorForge-Concurrency-Model.md)
-- [RazorForge Concurrency Primitives](../wiki/RazorForge-Concurrency-Primitives.md) — Channel, SignalCaster
-- [Suflae Concurrency Model](../wiki/Suflae-Concurrency-Model.md)
-- [RazorForge Routines](../wiki/RazorForge-Routines.md)
+- [RazorForge Concurrency Model](https://razorforge.lumi-dev.xyz/Concurrency-Model.md)
+- [RazorForge Concurrency Primitives](https://razorforge.lumi-dev.xyz/Concurrency-Primitives.md) — Channel, SignalCaster
+- [Suflae Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model.md)
+- [RazorForge Routines](https://razorforge.lumi-dev.xyz/Routines.md)
 
 ---
 
@@ -371,9 +371,9 @@ routine outer() { let result = helper(5) }
 
 ### Related Docs
 
-- [RazorForge Routines](../wiki/RazorForge-Routines.md)
-- [Suflae Routines](../wiki/Suflae-Routines.md)
-- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
+- [RazorForge Routines](https://razorforge.lumi-dev.xyz/Routines.md)
+- [Suflae Routines](https://suflae.lumi-dev.xyz/Routines.md)
+- [RazorForge SeqTools](https://razorforge.lumi-dev.xyz/SeqTools.md)
 
 ---
 
@@ -416,8 +416,8 @@ entity Cat follows Animal { }
 
 ### Related Docs
 
-- [RazorForge Generics](../wiki/RazorForge-Generics.md)
-- [RazorForge Protocols](../wiki/RazorForge-Protocols.md)
+- [RazorForge Generics](https://razorforge.lumi-dev.xyz/Generics.md)
+- [RazorForge Protocols](https://razorforge.lumi-dev.xyz/Protocols.md)
 
 ---
 
@@ -496,8 +496,8 @@ This is enforced at compile time. Only protocol types are valid type arguments.
 
 ### Related Docs
 
-- [RazorForge Protocols](../wiki/RazorForge-Protocols.md)
-- [RazorForge Generics](../wiki/RazorForge-Generics.md)
+- [RazorForge Protocols](https://razorforge.lumi-dev.xyz/Protocols.md)
+- [RazorForge Generics](https://razorforge.lumi-dev.xyz/Generics.md)
 
 ---
 
@@ -548,7 +548,7 @@ routine test_missing_file() {
 
 ### Related Docs
 
-- [Standard Libraries](../wiki/Standard-Libraries.md)
+- [Standard Libraries](https://razorforge.lumi-dev.xyz/Standard-Libraries.md)
 
 ---
 
@@ -596,7 +596,7 @@ f"Result: {result}"
 
 ### Related Docs
 
-- [RazorForge Text](../wiki/RazorForge-Text.md)
+- [RazorForge Text](https://razorforge.lumi-dev.xyz/Text.md)
 - [COMPILER-TODO](COMPILER-TODO.md)
 
 ---
@@ -677,8 +677,8 @@ is Crashable e:
 
 ### Related Docs
 
-- [RazorForge Error Handling](../wiki/RazorForge-Error-Handling.md)
-- [Suflae Error Handling](../wiki/Suflae-Error-Handling.md)
+- [RazorForge Error Handling](https://razorforge.lumi-dev.xyz/Error-Handling.md)
+- [Suflae Error Handling](https://suflae.lumi-dev.xyz/Error-Handling.md)
 
 ---
 
@@ -745,8 +745,8 @@ let val = counter.get_value()           # Sends message, waits for response
 
 ### Related Docs
 
-- [Suflae Concurrency Model](../wiki/Suflae-Concurrency-Model.md)
-- [Suflae SeqTools](../wiki/Suflae-SeqTools.md)
+- [Suflae Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model.md)
+- [Suflae SeqTools](https://suflae.lumi-dev.xyz/SeqTools.md)
 
 ---
 
@@ -852,8 +852,8 @@ These are mathematically similar but semantically different:
 
 ### Related Docs
 
-- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
-- [Suflae SeqTools](../wiki/Suflae-SeqTools.md)
+- [RazorForge SeqTools](https://razorforge.lumi-dev.xyz/SeqTools.md)
+- [Suflae SeqTools](https://suflae.lumi-dev.xyz/SeqTools.md)
 
 ---
 
@@ -926,12 +926,76 @@ list.shuffle(using: rng)
 
 ### Related Docs
 
-- [RazorForge SeqTools](../wiki/RazorForge-SeqTools.md)
-- [Standard Libraries](../wiki/Standard-Libraries.md)
+- [RazorForge SeqTools](https://razorforge.lumi-dev.xyz/SeqTools.md)
+- [Standard Libraries](https://razorforge.lumi-dev.xyz/Standard-Libraries.md)
 
 ---
 
-## 11. Membership Operators (`in`, `notin`)
+## 11. Module Prelude System
+
+**Status:** ✅ Resolved
+**Date:** 2026-01-08
+
+### The Question
+
+Should individual routines/types be automatically available without imports via `@prelude` attribute?
+
+### Design Decision
+
+**Removed `@prelude` attribute. Only `Core` namespace is auto-imported.**
+
+### Before (with `@prelude`)
+
+```razorforge
+# In stdlib/Console.rf
+@prelude
+routine Console.show(value: Text) { ... }
+
+# In user code - works without import
+routine start() {
+    show("Hello!")  # Where does this come from?
+}
+```
+
+### After (no `@prelude`)
+
+```razorforge
+# RazorForge - must import Console
+import Console
+
+routine start() {
+    show("Hello!")  # Clearly from Console
+}
+
+# Suflae - Console I/O is part of Core (auto-imported)
+routine start():
+    show("Hello!")  # Part of Core
+```
+
+### Resolved Questions
+
+| Issue                         | Decision                                  |
+|-------------------------------|-------------------------------------------|
+| **`Core` auto-import**        | Kept — fundamental types always available |
+| **`@prelude` attribute**      | **Removed** — no magic auto-availability  |
+| **Console I/O in RazorForge** | Requires `import Console`                 |
+| **Console I/O in Suflae**     | Part of `Core` (auto-imported)            |
+
+### Rationale
+
+- **Explicitness**: Every symbol's origin is clear from imports
+- **No magic**: One auto-import (Core), everything else explicit
+- **Simpler mental model**: Easier to understand where things come from
+- **IDE friendliness**: Auto-import suggestions work naturally
+
+### Related Docs
+
+- [RazorForge Modules and Imports](https://razorforge.lumi-dev.xyz/Modules-and-Imports.md)
+- [Suflae Modules and Imports](https://suflae.lumi-dev.xyz/Modules-and-Imports.md)
+
+---
+
+## 12. Membership Operators (`in`, `notin`)
 
 **Status:** ✅ Resolved
 **Date:** 2026-01-07
@@ -1007,10 +1071,243 @@ let numbers = Set<S32>()
 
 ### Related Docs
 
-- [RazorForge Operators](../RazorForge-Wiki/docs/Operators.md)
-- [RazorForge Range Records](../RazorForge-Wiki/docs/Range-Records.md)
-- [Suflae Operators](../Suflae-Wiki/docs/Operators.md)
-- [Suflae Range Records](../Suflae-Wiki/docs/Range-Records.md)
+- [RazorForge Operators](https://razorforge.lumi-dev.xyz/Operators.md)
+- [RazorForge Range Records](https://razorforge.lumi-dev.xyz/Range-Records.md)
+- [Suflae Operators](https://suflae.lumi-dev.xyz/Operators.md)
+- [Suflae Range Records](https://suflae.lumi-dev.xyz/Range-Records.md)
+
+---
+
+## 13. Variant Semantics
+
+**Status:** ✅ Resolved
+**Date:** 2026-01-10
+**Resolved:** 2026-01-12
+
+### The Question
+
+What are the exact semantics for user-defined variants?
+
+### Design Decision
+
+**Immediate dismantling only.** Variants are ephemeral branching constructs — create and pattern match in one
+expression.
+
+```razorforge
+# ✅ Create and immediately match
+when Message.Text("hello"):
+    is Text t => process(t)
+    is Number n => handle(n)
+
+# ✅ Function returning variant must be immediately matched
+when parse_input(text):
+    is Success data => use(data)
+    is Error e => handle(e)
+
+# ❌ CE: Cannot store in variable
+let msg = Message.Text("hello")
+
+# ❌ CE: Cannot pass to function
+process(Message.Text("hello"))
+
+# ❌ CE: Cannot store in collection
+list.add_last(Message.Text("hello"))
+```
+
+**If you need to store/pass heterogeneous data, use `Data` instead.**
+
+### Resolved Questions
+
+| Issue                       | Decision                                                   |
+|-----------------------------|------------------------------------------------------------|
+| **Internal representation** | `record` (value type, stack allocated)                     |
+| **Storage**                 | **No** — must immediately dismantle                        |
+| **Passing**                 | **No** — cannot pass variants as arguments                 |
+| **Collections**             | **No** — use `Data` for heterogeneous collections          |
+| **Copying**                 | **N/A** — immediate dismantling means no copy needed       |
+| **Generic variants**        | **Yes** — `variant Result<T, E> { Ok: T, Err: E }` allowed |
+| **Nested variants**         | **No** — variant payloads cannot be other variants         |
+
+### What Can Variants Contain?
+
+**Rule: Variant payloads must be copyable types** (for extraction during pattern match).
+
+| Type           | Allow? | Notes                                   |
+|----------------|--------|-----------------------------------------|
+| Records        | ✅      | Value copy                              |
+| Choices        | ✅      | Value copy                              |
+| Shared<T>      | ✅      | Handle copy (refcount increased)        |
+| Shared<T, P>   | ✅      | Handle copy (refcount increased)        |
+| Actor<T>       | ✅      | Handle copy (refcount increased)        |
+| Tracked<T>     | ✅      | Weak ref copy                           |
+| Snatched<T>    | ✅      | Raw pointer copy (unsafe, your problem) |
+| Raw entities   | ❌      | No copy semantics                       |
+| Other variants | ❌      | No nesting                              |
+| Tokens         | ❌      | Scope-bound, can't escape               |
+
+### Variants vs Data
+
+| Need                          | Use       | Why                                                   |
+|-------------------------------|-----------|-------------------------------------------------------|
+| Immediate type branching      | `variant` | Stack allocated, zero overhead, dismantle on the spot |
+| Store/pass heterogeneous data | `Data`    | Heap allocated, refcounted, collection-friendly       |
+
+**Variants** = ephemeral branching construct (like `when` that carries data)
+**Data** = persistent universal box (like `Object` in other languages)
+
+These are complementary features, not competing ones.
+
+### Rationale
+
+- **No hidden costs**: No copy vs move confusion, no expensive implicit operations
+- **Explicit**: You see what happens right where it happens
+- **Simple**: One rule — create, match, done
+- **Escape hatch**: Need storage? Use `Data` instead
+
+### Reference: cve-rs Soundness Hole
+
+The `cvers-src/` directory contains Rust code demonstrating issue #25860:
+
+- `lifetime_expansion.rs` - Core exploit using lifetime translator
+- `use_after_free.rs` - Get reference to dropped stack buffer
+- Key insight: Complex lifetime inference can have soundness holes
+
+**Lesson for RazorForge:** Keep ownership rules simple and explicit to avoid similar issues.
+
+### Related Docs
+
+- [RazorForge Variants](https://razorforge.lumi-dev.xyz/Variants.md)
+- [Suflae Variants](https://suflae.lumi-dev.xyz/Variants.md)
+
+---
+
+## 14. Top Type / Universal Type (`Data`)
+
+**Status:** Open
+**Date:** 2026-01-11
+
+### The Question
+
+Should RazorForge/Suflae have a top type (like `Object` in Java/C#, `Any` in Kotlin/TypeScript) that can hold any value?
+
+**Note:** If added to RazorForge, Suflae will definitely have it too.
+
+**Naming decision:** `Data` — simple, doesn't imply inheritance hierarchy, suggests "arbitrary data of any type."
+
+**Implementation:** `Data` is a **type-erased box** — an `entity` that stores any value along with its type information.
+
+- Entities have identity and can be referenced
+- Heap allocation is already expected for boxed values
+- Reference semantics match how top types work in other languages
+- Can participate in `Shared<Data>`, `Tracked<Data>`, etc.
+
+### Motivation
+
+A top type enables:
+
+- Heterogeneous collections without protocols: `List<Data>`
+- Dynamic-style programming when needed
+- Reflection/introspection APIs
+- Generic "box anything" scenarios
+- Interop with dynamic languages
+
+### Design Considerations
+
+**Without inheritance, what does "top type" mean?**
+
+In traditional OOP, `Object` is the root of the class hierarchy. Every class IS-A Object. But RazorForge has no
+inheritance — entities use `follows` for protocol conformance, not subtyping.
+
+Possible interpretations:
+
+1. **Type-erased box**: `Data` is a fat pointer (data + type ID) that can hold any value
+2. **Universal protocol**: `Data` is an empty protocol that everything implicitly follows
+3. **Compiler primitive**: Like `Erased<T>` but without requiring a protocol
+
+### Options
+
+| Option                   | Description                                      | Pros               | Cons                                   |
+|--------------------------|--------------------------------------------------|--------------------|----------------------------------------|
+| **A: No top type**       | Keep current design, use protocols + `Erased<T>` | Simple, explicit   | Can't box arbitrary types              |
+| **B: `Any` type**        | Universal box that holds any value               | Flexible, familiar | Type safety concerns, runtime overhead |
+| **C: `Dynamic` type**    | Explicit opt-in dynamic typing                   | Clear intent       | Two type systems                       |
+| **D: `Tagged<T>` union** | Variant over all primitive types                 | Type-safe          | Only primitives, not custom types      |
+
+### Open Questions
+
+1. **Boxing semantics**: Does storing in `Data` copy or reference?
+    - Value types (records): Copy into box?
+    - Entities: Reference (refcount++)?
+    - What about large records?
+
+2. **Type recovery**: How do you get the original type back?
+   ```razorforge
+   let box: Data = 42
+   # How to extract?
+   when box:
+       is S32 n => show(n)
+       is Text t => show(t)
+       else => show("unknown")
+   ```
+
+3. **Method dispatch**: Can you call methods on `Data`?
+    - No methods (must unbox first)?
+    - Only `Core` protocol methods (like `to_text()`)?
+    - Full reflection-based dispatch?
+
+4. **Performance**: What's the runtime cost?
+    - Type ID storage (8 bytes minimum)
+    - Potential heap allocation for large values
+    - Dynamic dispatch overhead
+
+5. **Interaction with existing features**:
+    - `Data` vs `Erased<Protocol>` — when to use which?
+    - `Data` in generic constraints — `T: Data` means nothing?
+    - Can `Data` hold tokens, variants, or other restricted types?
+
+6. **Type safety**: Does `Data` undermine the language's safety goals?
+    - Runtime type errors possible
+    - Lost compile-time guarantees
+
+7. **Data inside Data problem**:
+    - Can `Data` hold another `Data`? → `Data(Data(Data(42)))`
+    - Issues with nested boxing:
+        - Unnecessary indirection and heap allocations
+        - Pattern matching confusion — match outer or inner?
+        - Performance overhead (multiple dereferences)
+        - Type recovery becomes ambiguous
+    - Options:
+        - **Flatten automatically**: `Data(Data(42))` becomes `Data(42)` — compiler unwraps
+        - **Compile error**: `Data` cannot contain `Data`
+        - **Allow it**: User's problem if they nest (least restrictive)
+    - Similar questions for `Data` containing `Erased<T>` or vice versa
+
+8. **Relationship with variant restrictions (Section 13)** ✅ Clarified
+    - `Data` is an **entity** (reference semantics) — cheap to store/pass (pointer copy, refcount++)
+    - Variants are **records** (value semantics) — expensive to store/pass (full payload copy)
+    - This is not a double standard; the different type categories justify different rules:
+        - `Data`: heap-allocated, refcounted → naturally collection-friendly
+        - Variants: stack-allocated, value copy → restrictions avoid hidden expensive copies
+    - Both share the same pattern-match requirement for type recovery
+
+### Alternative: Reflection API without Top Type
+
+Instead of a top type, provide reflection primitives:
+
+```razorforge
+# Type metadata
+let type_id = type_of(value)
+let name = type_id.name()
+let fields = type_id.fields()
+
+# But storage still requires known types or Erased<Protocol>
+```
+
+### Related Docs
+
+- [RazorForge Generics](https://razorforge.lumi-dev.xyz/Generics.md)
+- [RazorForge Protocols](https://razorforge.lumi-dev.xyz/Protocols.md)
+- [Type Erasure (`Erased<T>`)](#4b-type-erasure-erasedt)
 
 ---
 
