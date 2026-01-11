@@ -1,11 +1,10 @@
 ﻿namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Inference;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Inference;
+using Symbols;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Phase 4: Mutation inference for RazorForge.
@@ -135,8 +134,9 @@ public sealed partial class SemanticAnalyzer
             if (hasMutatingToken)
             {
                 ReportWarning(
-                    message: $"Method '{callee.Name}' is readonly, no ! token needed.",
-                    location: callExpr.Location);
+                    SemanticWarningCode.UnnecessaryMutationToken,
+                    $"Method '{callee.Name}' is readonly, no ! token needed.",
+                    callExpr.Location);
             }
 
             return;
@@ -146,8 +146,9 @@ public sealed partial class SemanticAnalyzer
         if (!hasMutatingToken && calleeCategory >= MutationCategory.Writable)
         {
             ReportError(
-                message: $"Method '{callee.Name}' is {calleeCategory.ToString().ToLower()} and requires ! token.",
-                location: callExpr.Location);
+                SemanticDiagnosticCode.MutatingMethodRequiresToken,
+                $"Method '{callee.Name}' is {calleeCategory.ToString().ToLower()} and requires ! token.",
+                callExpr.Location);
         }
     }
 
@@ -170,8 +171,9 @@ public sealed partial class SemanticAnalyzer
                 if (calleeCategory != MutationCategory.Readonly)
                 {
                     ReportError(
-                        message: $"Cannot call {calleeCategory.ToString().ToLower()} method '{callee.Name}' through {tokenType} token.",
-                        location: callExpr.Location);
+                        SemanticDiagnosticCode.MutatingMethodThroughReadOnlyToken,
+                        $"Cannot call {calleeCategory.ToString().ToLower()} method '{callee.Name}' through {tokenType} token.",
+                        callExpr.Location);
                 }
 
                 break;
@@ -183,8 +185,9 @@ public sealed partial class SemanticAnalyzer
                 if (calleeCategory == MutationCategory.Migratable)
                 {
                     ReportError(
-                        message: $"Cannot call migratable method '{callee.Name}' through {tokenType} token.",
-                        location: callExpr.Location);
+                        SemanticDiagnosticCode.MigratableMethodThroughExclusiveToken,
+                        $"Cannot call migratable method '{callee.Name}' through {tokenType} token.",
+                        callExpr.Location);
                 }
 
                 break;

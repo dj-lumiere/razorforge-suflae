@@ -1,11 +1,11 @@
 namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Scopes;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Symbols;
+using Types;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Phase 3: Statement analysis.
@@ -178,8 +178,9 @@ public sealed partial class SemanticAnalyzer
 
             default:
                 ReportWarning(
-                    message: $"Unknown statement type: {statement.GetType().Name}",
-                    location: statement.Location);
+                    SemanticWarningCode.UnknownStatementType,
+                    $"Unknown statement type: {statement.GetType().Name}",
+                    statement.Location);
                 break;
         }
     }
@@ -215,8 +216,9 @@ public sealed partial class SemanticAnalyzer
 
             default:
                 ReportWarning(
-                    message: $"Unexpected declaration in statement context: {decl.Declaration.GetType().Name}",
-                    location: decl.Location);
+                    SemanticWarningCode.UnexpectedDeclaration,
+                    $"Unexpected declaration in statement context: {decl.Declaration.GetType().Name}",
+                    decl.Location);
                 break;
         }
     }
@@ -238,20 +240,22 @@ public sealed partial class SemanticAnalyzer
         else
         {
             ReportError(
-                message: $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
-                location: varDecl.Location);
+                SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
+                varDecl.Location);
             varType = ErrorTypeInfo.Instance;
         }
 
         // If we have both type annotation and initializer, verify compatibility
-        if (varDecl.Type != null && varDecl.Initializer != null)
+        if (varDecl is { Type: not null, Initializer: not null })
         {
             TypeSymbol initType = AnalyzeExpression(expression: varDecl.Initializer);
             if (!IsAssignableTo(source: initType, target: varType))
             {
                 ReportError(
-                    message: $"Cannot assign value of type '{initType.Name}' to variable of type '{varType.Name}'.",
-                    location: varDecl.Location);
+                    SemanticDiagnosticCode.VariableInitializerTypeMismatch,
+                    $"Cannot assign value of type '{initType.Name}' to variable of type '{varType.Name}'.",
+                    varDecl.Location);
             }
         }
 
@@ -277,8 +281,9 @@ public sealed partial class SemanticAnalyzer
         if (!IsAssignableTarget(target: assign.Target))
         {
             ReportError(
-                message: "Invalid assignment target.",
-                location: assign.Target.Location);
+                SemanticDiagnosticCode.InvalidAssignmentTarget,
+                "Invalid assignment target.",
+                assign.Target.Location);
             return;
         }
 
@@ -289,8 +294,9 @@ public sealed partial class SemanticAnalyzer
             if (varInfo is { IsMutable: false })
             {
                 ReportError(
-                    message: $"Cannot assign to immutable variable '{id.Name}'.",
-                    location: assign.Location);
+                    SemanticDiagnosticCode.AssignmentToImmutable,
+                    $"Cannot assign to immutable variable '{id.Name}'.",
+                    assign.Location);
             }
         }
 
@@ -305,8 +311,9 @@ public sealed partial class SemanticAnalyzer
         if (!IsAssignableTo(source: valueType, target: targetType))
         {
             ReportError(
-                message: $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
-                location: assign.Location);
+                SemanticDiagnosticCode.AssignmentTypeMismatch,
+                $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
+                assign.Location);
         }
     }
 
@@ -318,8 +325,9 @@ public sealed partial class SemanticAnalyzer
         if (!IsBoolType(type: conditionType))
         {
             ReportError(
-                message: $"If condition must be boolean, got '{conditionType.Name}'.",
-                location: ifStmt.Condition.Location);
+                SemanticDiagnosticCode.IfConditionNotBool,
+                $"If condition must be boolean, got '{conditionType.Name}'.",
+                ifStmt.Condition.Location);
         }
 
         // Analyze then branch
@@ -340,8 +348,9 @@ public sealed partial class SemanticAnalyzer
         if (!IsBoolType(type: conditionType))
         {
             ReportError(
-                message: $"While condition must be boolean, got '{conditionType.Name}'.",
-                location: whileStmt.Condition.Location);
+                SemanticDiagnosticCode.WhileConditionNotBool,
+                $"While condition must be boolean, got '{conditionType.Name}'.",
+                whileStmt.Condition.Location);
         }
 
         // Analyze loop body
@@ -395,8 +404,9 @@ public sealed partial class SemanticAnalyzer
         if (_currentRoutine == null)
         {
             ReportError(
-                message: "Return statement outside of function.",
-                location: ret.Location);
+                SemanticDiagnosticCode.ReturnOutsideFunction,
+                "Return statement outside of function.",
+                ret.Location);
             return;
         }
 
@@ -412,8 +422,9 @@ public sealed partial class SemanticAnalyzer
                 !IsAssignableTo(source: returnType, target: _currentRoutine.ReturnType))
             {
                 ReportError(
-                    message: $"Cannot return value of type '{returnType.Name}' from function expecting '{_currentRoutine.ReturnType.Name}'.",
-                    location: ret.Location);
+                    SemanticDiagnosticCode.ReturnTypeMismatch,
+                    $"Cannot return value of type '{returnType.Name}' from function expecting '{_currentRoutine.ReturnType.Name}'.",
+                    ret.Location);
             }
         }
     }
@@ -439,8 +450,9 @@ public sealed partial class SemanticAnalyzer
         if (_currentRoutine == null || !_currentRoutine.IsFailable)
         {
             ReportError(
-                message: "Throw statement is only allowed in failable functions (marked with !).",
-                location: throwStmt.Location);
+                SemanticDiagnosticCode.ThrowOutsideFailableFunction,
+                "Throw statement is only allowed in failable functions (marked with !).",
+                throwStmt.Location);
             return;
         }
 
@@ -450,8 +462,9 @@ public sealed partial class SemanticAnalyzer
         if (!ImplementsProtocol(type: errorType, protocolName: "Crashable"))
         {
             ReportError(
-                message: $"Thrown value must implement Crashable protocol, got '{errorType.Name}'.",
-                location: throwStmt.Error.Location);
+                SemanticDiagnosticCode.ThrowNotCrashable,
+                $"Thrown value must implement Crashable protocol, got '{errorType.Name}'.",
+                throwStmt.Error.Location);
         }
 
         // Mark routine as having throw statements (for variant generation)
@@ -463,8 +476,9 @@ public sealed partial class SemanticAnalyzer
         if (_currentRoutine == null || !_currentRoutine.IsFailable)
         {
             ReportError(
-                message: "Absent statement is only allowed in failable functions (marked with !).",
-                location: absent.Location);
+                SemanticDiagnosticCode.AbsentOutsideFailableFunction,
+                "Absent statement is only allowed in failable functions (marked with !).",
+                absent.Location);
             return;
         }
 
@@ -485,8 +499,9 @@ public sealed partial class SemanticAnalyzer
         if (_registry.Language == Language.Suflae)
         {
             ReportError(
-                message: "Danger blocks are not available in Suflae.",
-                location: danger.Location);
+                SemanticDiagnosticCode.FeatureNotInSuflae,
+                "Danger blocks are not available in Suflae.",
+                danger.Location);
             return;
         }
 
@@ -494,8 +509,9 @@ public sealed partial class SemanticAnalyzer
         if (InDangerBlock)
         {
             ReportError(
-                message: "Danger blocks cannot be nested.",
-                location: danger.Location);
+                SemanticDiagnosticCode.NestedDangerBlock,
+                "Danger blocks cannot be nested.",
+                danger.Location);
             return;
         }
 
@@ -519,8 +535,9 @@ public sealed partial class SemanticAnalyzer
         if (_registry.Language == Language.Suflae)
         {
             ReportError(
-                message: "Viewing blocks are not available in Suflae.",
-                location: viewing.Location);
+                SemanticDiagnosticCode.FeatureNotInSuflae,
+                "Viewing blocks are not available in Suflae.",
+                viewing.Location);
             return;
         }
 
@@ -546,8 +563,9 @@ public sealed partial class SemanticAnalyzer
         if (_registry.Language == Language.Suflae)
         {
             ReportError(
-                message: "Hijacking blocks are not available in Suflae.",
-                location: hijacking.Location);
+                SemanticDiagnosticCode.FeatureNotInSuflae,
+                "Hijacking blocks are not available in Suflae.",
+                hijacking.Location);
             return;
         }
 
@@ -573,8 +591,9 @@ public sealed partial class SemanticAnalyzer
         if (_registry.Language == Language.Suflae)
         {
             ReportError(
-                message: "Inspecting blocks are not available in Suflae.",
-                location: inspecting.Location);
+                SemanticDiagnosticCode.FeatureNotInSuflae,
+                "Inspecting blocks are not available in Suflae.",
+                inspecting.Location);
             return;
         }
 
@@ -600,8 +619,9 @@ public sealed partial class SemanticAnalyzer
         if (_registry.Language == Language.Suflae)
         {
             ReportError(
-                message: "Seizing blocks are not available in Suflae.",
-                location: seizing.Location);
+                SemanticDiagnosticCode.FeatureNotInSuflae,
+                "Seizing blocks are not available in Suflae.",
+                seizing.Location);
             return;
         }
 

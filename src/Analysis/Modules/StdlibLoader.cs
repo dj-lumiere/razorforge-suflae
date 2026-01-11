@@ -1,10 +1,9 @@
 ﻿namespace Compilers.Analysis.Modules;
 
-using Compilers.Analysis.Enums;
-using Compilers.RazorForge.Lexer;
-using Compilers.RazorForge.Parser;
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+using RazorForge.Lexer;
+using RazorForge.Parser;
+using Shared.AST;
+using Shared.Lexer;
 
 /// <summary>
 /// Loads the standard library Core namespace from stdlib files.
@@ -16,7 +15,7 @@ public sealed class StdlibLoader
     private readonly string _stdlibPath;
 
     /// <summary>Parsed stdlib programs with their file paths.</summary>
-    private readonly List<(Program Program, string FilePath)> _parsedPrograms = new();
+    private readonly List<(Program Program, string FilePath)> _parsedPrograms = [];
 
     /// <summary>Gets the parsed stdlib programs.</summary>
     public IReadOnlyList<(Program Program, string FilePath)> ParsedPrograms => _parsedPrograms;
@@ -106,13 +105,16 @@ public sealed class StdlibLoader
     private static string GetNamespaceFromModuleId(string moduleId)
     {
         int lastDot = moduleId.LastIndexOf('.');
-        return lastDot > 0 ? moduleId.Substring(0, lastDot) : moduleId;
+        return lastDot > 0
+            ? moduleId.Substring(0, lastDot)
+            : moduleId;
     }
 
     /// <summary>
     /// Registers declarations using a specified namespace (from import path).
     /// </summary>
-    private static void RegisterProgramDeclarationsWithNamespace(TypeRegistry registry, Program program, string importNamespace)
+    private static void RegisterProgramDeclarationsWithNamespace(TypeRegistry registry,
+        Program program, string importNamespace)
     {
         // Check if file has explicit namespace declaration
         string? fileNamespace = null;
@@ -207,7 +209,8 @@ public sealed class StdlibLoader
         catch (Exception ex)
         {
             // Log but don't fail - stdlib loading should be resilient
-            Console.Error.WriteLine($"Warning: Failed to parse stdlib file {filePath}: {ex.Message}");
+            Console.Error.WriteLine(
+                $"Warning: Failed to parse stdlib file {filePath}: {ex.Message}");
         }
     }
 
@@ -219,7 +222,8 @@ public sealed class StdlibLoader
     /// <param name="program">The parsed program AST.</param>
     /// <param name="filePath">The source file path.</param>
     /// <param name="stdlibPath">The stdlib root directory path.</param>
-    private static void RegisterProgramDeclarations(TypeRegistry registry, Program program, string filePath, string stdlibPath)
+    private static void RegisterProgramDeclarations(TypeRegistry registry, Program program,
+        string filePath, string stdlibPath)
     {
         // Get namespace if declared, otherwise derive from file directory
         string? fileNamespace = null;
@@ -265,13 +269,15 @@ public sealed class StdlibLoader
             string normalizedStdlibPath = Path.GetFullPath(stdlibPath);
 
             // Get relative path from stdlib root
-            if (!normalizedFileDir.StartsWith(normalizedStdlibPath, StringComparison.OrdinalIgnoreCase))
+            if (!normalizedFileDir.StartsWith(normalizedStdlibPath,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return "Core";
             }
 
             string relativePath = normalizedFileDir.Substring(normalizedStdlibPath.Length)
-                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                                                   .TrimStart(Path.DirectorySeparatorChar,
+                                                        Path.AltDirectorySeparatorChar);
 
             if (string.IsNullOrEmpty(relativePath))
             {
@@ -287,7 +293,7 @@ public sealed class StdlibLoader
 
             // Replace directory separators with dots for namespace
             return relativePath.Replace(Path.DirectorySeparatorChar, '.')
-                              .Replace(Path.AltDirectorySeparatorChar, '.');
+                               .Replace(Path.AltDirectorySeparatorChar, '.');
         }
         catch
         {
@@ -298,7 +304,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a single declaration.
     /// </summary>
-    private static void RegisterDeclaration(TypeRegistry registry, Declaration decl, string? namespaceName)
+    private static void RegisterDeclaration(TypeRegistry registry, Declaration decl,
+        string? namespaceName)
     {
         switch (decl)
         {
@@ -335,27 +342,30 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a routine from stdlib (including type methods like S32.__add__).
     /// </summary>
-    private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine, string? namespaceName)
+    private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
+        string? namespaceName)
     {
         // Parse method names like "S32.__add__" or "Type.method"
         string routineName = routine.Name;
-        Analysis.Types.TypeInfo? ownerType = null;
+        Types.TypeInfo? ownerType = null;
         string methodName = routineName;
 
         int dotIndex = routineName.IndexOf('.');
         if (dotIndex > 0)
         {
             string typeName = routineName.Substring(0, dotIndex);
-            methodName = routineName.Substring(dotIndex + 1); // Just the method part (e.g., "__add__")
+            methodName =
+                routineName.Substring(dotIndex + 1); // Just the method part (e.g., "__add__")
             ownerType = registry.LookupType(typeName);
         }
 
         // Resolve parameter types
-        var parameters = new List<Analysis.Symbols.ParameterInfo>();
+        var parameters = new List<Symbols.ParameterInfo>();
         foreach (var param in routine.Parameters)
         {
             var paramType = ResolveSimpleType(registry, param.Type);
-            parameters.Add(new Analysis.Symbols.ParameterInfo(param.Name, paramType ?? Analysis.Types.ErrorTypeInfo.Instance));
+            parameters.Add(new Symbols.ParameterInfo(param.Name,
+                paramType ?? Types.ErrorTypeInfo.Instance));
         }
 
         // Resolve return type
@@ -364,7 +374,7 @@ public sealed class StdlibLoader
             : null;
 
         // Use just the method name (not "S32.__add__", just "__add__")
-        var routineInfo = new Analysis.Symbols.RoutineInfo(methodName)
+        var routineInfo = new Symbols.RoutineInfo(methodName)
         {
             OwnerType = ownerType,
             Parameters = parameters,
@@ -386,7 +396,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a record type from stdlib.
     /// </summary>
-    private static void RegisterRecordType(TypeRegistry registry, RecordDeclaration record, string? namespaceName)
+    private static void RegisterRecordType(TypeRegistry registry, RecordDeclaration record,
+        string? namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(record.Name) != null)
@@ -395,25 +406,24 @@ public sealed class StdlibLoader
         }
 
         // Build fields list upfront (TypeInfo uses init properties with IReadOnlyList)
-        var fields = new List<Analysis.Symbols.FieldInfo>();
+        var fields = new List<Symbols.FieldInfo>();
         foreach (var member in record.Members)
         {
-            if (member is VariableDeclaration field && field.Type != null)
+            if (member is VariableDeclaration { Type: not null } field)
             {
                 var fieldType = ResolveSimpleType(registry, field.Type);
                 if (fieldType != null)
                 {
-                    fields.Add(new Analysis.Symbols.FieldInfo(field.Name, fieldType)
+                    fields.Add(new Symbols.FieldInfo(field.Name, fieldType)
                     {
-                        IsMutable = field.IsMutable,
-                        Visibility = field.Visibility
+                        IsMutable = field.IsMutable, Visibility = field.Visibility
                     });
                 }
             }
         }
 
         // Resolve implemented protocols (follows clause)
-        var protocols = new List<Analysis.Types.TypeInfo>();
+        var protocols = new List<Types.TypeInfo>();
         foreach (var protoExpr in record.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -423,7 +433,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new Analysis.Types.RecordTypeInfo(record.Name)
+        var typeInfo = new Types.RecordTypeInfo(record.Name)
         {
             Namespace = namespaceName ?? "Core",
             Visibility = record.Visibility,
@@ -444,7 +454,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers an entity type from stdlib.
     /// </summary>
-    private static void RegisterEntityType(TypeRegistry registry, EntityDeclaration entity, string? namespaceName)
+    private static void RegisterEntityType(TypeRegistry registry, EntityDeclaration entity,
+        string? namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(entity.Name) != null)
@@ -453,24 +464,23 @@ public sealed class StdlibLoader
         }
 
         // Build fields list upfront
-        var fields = new List<Analysis.Symbols.FieldInfo>();
+        var fields = new List<Symbols.FieldInfo>();
         foreach (var member in entity.Members)
         {
-            if (member is VariableDeclaration field && field.Type != null)
+            if (member is VariableDeclaration { Type: not null } field)
             {
                 var fieldType = ResolveSimpleType(registry, field.Type);
                 if (fieldType != null)
                 {
-                    fields.Add(new Analysis.Symbols.FieldInfo(field.Name, fieldType)
+                    fields.Add(new Symbols.FieldInfo(field.Name, fieldType)
                     {
-                        IsMutable = field.IsMutable,
-                        Visibility = field.Visibility
+                        IsMutable = field.IsMutable, Visibility = field.Visibility
                     });
                 }
             }
         }
 
-        var typeInfo = new Analysis.Types.EntityTypeInfo(entity.Name)
+        var typeInfo = new Types.EntityTypeInfo(entity.Name)
         {
             Namespace = namespaceName ?? "Core",
             Visibility = entity.Visibility,
@@ -483,7 +493,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a choice type from stdlib.
     /// </summary>
-    private static void RegisterChoiceType(TypeRegistry registry, ChoiceDeclaration choice, string? namespaceName)
+    private static void RegisterChoiceType(TypeRegistry registry, ChoiceDeclaration choice,
+        string? namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(choice.Name) != null)
@@ -492,20 +503,20 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<Analysis.Types.ChoiceCaseInfo>();
+        var cases = new List<Types.ChoiceCaseInfo>();
         foreach (var caseDecl in choice.Cases)
         {
-            cases.Add(new Analysis.Types.ChoiceCaseInfo(caseDecl.Name)
+            cases.Add(new Types.ChoiceCaseInfo(caseDecl.Name)
             {
-                Value = caseDecl.Value.HasValue ? (int)caseDecl.Value.Value : null
+                Value = caseDecl.Value.HasValue
+                    ? (int)caseDecl.Value.Value
+                    : null
             });
         }
 
-        var typeInfo = new Analysis.Types.ChoiceTypeInfo(choice.Name)
+        var typeInfo = new Types.ChoiceTypeInfo(choice.Name)
         {
-            Namespace = namespaceName ?? "Core",
-            Visibility = choice.Visibility,
-            Cases = cases
+            Namespace = namespaceName ?? "Core", Visibility = choice.Visibility, Cases = cases
         };
 
         registry.RegisterType(typeInfo);
@@ -514,7 +525,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a variant type (tagged union) from stdlib.
     /// </summary>
-    private static void RegisterVariantType(TypeRegistry registry, VariantDeclaration variant, string? namespaceName)
+    private static void RegisterVariantType(TypeRegistry registry, VariantDeclaration variant,
+        string? namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(variant.Name) != null)
@@ -523,28 +535,26 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<Analysis.Types.VariantCaseInfo>();
+        var cases = new List<Types.VariantCaseInfo>();
         int tagValue = 0;
         foreach (var caseDecl in variant.Cases)
         {
             // Determine payload type from AssociatedTypes if any
-            Analysis.Types.TypeInfo? payloadType = null;
+            Types.TypeInfo? payloadType = null;
             if (caseDecl.AssociatedTypes != null)
             {
                 payloadType = ResolveSimpleType(registry, caseDecl.AssociatedTypes);
             }
 
-            cases.Add(new Analysis.Types.VariantCaseInfo(caseDecl.Name)
+            cases.Add(new Types.VariantCaseInfo(caseDecl.Name)
             {
-                PayloadType = payloadType,
-                TagValue = tagValue++
+                PayloadType = payloadType, TagValue = tagValue++
             });
         }
 
-        var typeInfo = new Analysis.Types.VariantTypeInfo(variant.Name)
+        var typeInfo = new Types.VariantTypeInfo(variant.Name)
         {
-            Namespace = namespaceName ?? "Core",
-            Cases = cases
+            Namespace = namespaceName ?? "Core", Cases = cases
         };
 
         registry.RegisterType(typeInfo);
@@ -553,7 +563,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a mutant type (untagged union) from stdlib.
     /// </summary>
-    private static void RegisterMutantType(TypeRegistry registry, MutantDeclaration mutant, string? namespaceName)
+    private static void RegisterMutantType(TypeRegistry registry, MutantDeclaration mutant,
+        string? namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(mutant.Name) != null)
@@ -562,28 +573,26 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<Analysis.Types.VariantCaseInfo>();
+        var cases = new List<Types.VariantCaseInfo>();
         int tagValue = 0;
         foreach (var caseDecl in mutant.Cases)
         {
             // Determine payload type from AssociatedTypes if any
-            Analysis.Types.TypeInfo? payloadType = null;
+            Types.TypeInfo? payloadType = null;
             if (caseDecl.AssociatedTypes != null)
             {
                 payloadType = ResolveSimpleType(registry, caseDecl.AssociatedTypes);
             }
 
-            cases.Add(new Analysis.Types.VariantCaseInfo(caseDecl.Name)
+            cases.Add(new Types.VariantCaseInfo(caseDecl.Name)
             {
-                PayloadType = payloadType,
-                TagValue = tagValue++
+                PayloadType = payloadType, TagValue = tagValue++
             });
         }
 
-        var typeInfo = new Analysis.Types.MutantTypeInfo(mutant.Name)
+        var typeInfo = new Types.MutantTypeInfo(mutant.Name)
         {
-            Namespace = namespaceName ?? "Core",
-            Cases = cases
+            Namespace = namespaceName ?? "Core", Cases = cases
         };
 
         registry.RegisterType(typeInfo);
@@ -592,7 +601,8 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers a protocol type from stdlib.
     /// </summary>
-    private static void RegisterProtocolType(TypeRegistry registry, ProtocolDeclaration protocol, string? namespaceName)
+    private static void RegisterProtocolType(TypeRegistry registry, ProtocolDeclaration protocol,
+        string? namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(protocol.Name) != null)
@@ -601,14 +611,14 @@ public sealed class StdlibLoader
         }
 
         // Build methods list upfront
-        var methods = new List<Analysis.Types.ProtocolMethodInfo>();
+        var methods = new List<Types.ProtocolMethodInfo>();
         foreach (var method in protocol.Methods)
         {
             var returnType = method.ReturnType != null
                 ? ResolveSimpleType(registry, method.ReturnType)
                 : null;
 
-            var parameterTypes = new List<Analysis.Types.TypeInfo>();
+            var parameterTypes = new List<Types.TypeInfo>();
             var parameterNames = new List<string>();
 
             foreach (var param in method.Parameters)
@@ -621,7 +631,7 @@ public sealed class StdlibLoader
                 }
             }
 
-            methods.Add(new Analysis.Types.ProtocolMethodInfo(method.Name)
+            methods.Add(new Types.ProtocolMethodInfo(method.Name)
             {
                 ParameterTypes = parameterTypes,
                 ParameterNames = parameterNames,
@@ -629,7 +639,7 @@ public sealed class StdlibLoader
             });
         }
 
-        var typeInfo = new Analysis.Types.ProtocolTypeInfo(protocol.Name)
+        var typeInfo = new Types.ProtocolTypeInfo(protocol.Name)
         {
             Namespace = namespaceName ?? "Core",
             Visibility = protocol.Visibility,
@@ -643,7 +653,8 @@ public sealed class StdlibLoader
     /// Resolves a simple type expression.
     /// Only handles intrinsic types and direct type references.
     /// </summary>
-    private static Analysis.Types.TypeInfo? ResolveSimpleType(TypeRegistry registry, TypeExpression? typeExpr)
+    private static Types.TypeInfo? ResolveSimpleType(TypeRegistry registry,
+        TypeExpression? typeExpr)
     {
         if (typeExpr == null) return null;
 

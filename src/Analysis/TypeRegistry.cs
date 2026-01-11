@@ -1,12 +1,12 @@
 ﻿namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Modules;
-using Compilers.Analysis.Scopes;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeInfo = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Modules;
+using Scopes;
+using Symbols;
+using Types;
+using Shared.AST;
+using TypeInfo = Types.TypeInfo;
 
 /// <summary>
 /// Central registry for all type information in a RazorForge/Suflae program.
@@ -155,7 +155,7 @@ public sealed class TypeRegistry
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
     public IReadOnlyList<(Program Program, string FilePath)> StdlibPrograms
-        => _stdlibLoader?.ParsedPrograms ?? Array.Empty<(Program, string)>();
+        => _stdlibLoader?.ParsedPrograms ?? [];
 
     /// <summary>
     /// Loads a module on-demand by its import path.
@@ -475,7 +475,7 @@ public sealed class TypeRegistry
     /// <returns>True if the type is a single-field wrapper, false otherwise.</returns>
     public bool IsSingleFieldWrapper(TypeInfo type)
     {
-        return type is RecordTypeInfo record && record.IsSingleFieldWrapper;
+        return type is RecordTypeInfo { IsSingleFieldWrapper: true };
     }
 
     /// <summary>
@@ -531,7 +531,7 @@ public sealed class TypeRegistry
             string ownerKey = routine.OwnerType.Name;
             if (!_routinesByOwner.TryGetValue(key: ownerKey, value: out List<RoutineInfo>? list))
             {
-                list = new List<RoutineInfo>();
+                list = [];
                 _routinesByOwner[key: ownerKey] = list;
             }
 
@@ -702,7 +702,7 @@ public sealed class TypeRegistry
             return methods;
         }
 
-        return Enumerable.Empty<RoutineInfo>();
+        return [];
     }
 
     /// <summary>

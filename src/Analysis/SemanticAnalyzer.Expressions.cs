@@ -1,14 +1,14 @@
 namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Results;
+using Enums;
+using Results;
 using Compilers.Shared.Analysis.Native;
-using Compilers.Analysis.Scopes;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Symbols;
+using Types;
+using Shared.Lexer;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Phase 3: Expression analysis.
@@ -55,6 +55,7 @@ public sealed partial class SemanticAnalyzer
             StealExpression steal => AnalyzeStealExpression(steal: steal),
             BackIndexExpression back => AnalyzeBackIndexExpression(back: back),
             TypeExpression typeExpr => ResolveType(typeExpr: typeExpr),
+            WhenExpression whenExpr => AnalyzeWhenExpression(when: whenExpr),
             _ => HandleUnknownExpression(expression: expression)
         };
 
@@ -129,8 +130,9 @@ public sealed partial class SemanticAnalyzer
         if (typeName == null)
         {
             ReportError(
-                message: $"Unknown literal type '{literal.LiteralType}'.",
-                location: literal.Location);
+                SemanticDiagnosticCode.UnknownLiteralType,
+                $"Unknown literal type '{literal.LiteralType}'.",
+                literal.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -159,8 +161,9 @@ public sealed partial class SemanticAnalyzer
         if (type == null)
         {
             ReportError(
-                message: $"Type '{typeName}' is not defined.",
-                location: literal.Location);
+                SemanticDiagnosticCode.LiteralTypeNotDefined,
+                $"Type '{typeName}' is not defined.",
+                literal.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -192,14 +195,14 @@ public sealed partial class SemanticAnalyzer
 
         return targetType.Name switch
         {
-            "S8" => value >= sbyte.MinValue && value <= sbyte.MaxValue,
-            "S16" => value >= short.MinValue && value <= short.MaxValue,
-            "S32" => value >= int.MinValue && value <= int.MaxValue,
+            "S8" => value is >= sbyte.MinValue and <= sbyte.MaxValue,
+            "S16" => value is >= short.MinValue and <= short.MaxValue,
+            "S32" => value is >= int.MinValue and <= int.MaxValue,
             "S64" => true, // Any long fits in S64
             "S128" => true, // Any long fits in S128
-            "U8" => value >= 0 && value <= byte.MaxValue,
-            "U16" => value >= 0 && value <= ushort.MaxValue,
-            "U32" => value >= 0 && value <= uint.MaxValue,
+            "U8" => value is >= 0 and <= byte.MaxValue,
+            "U16" => value is >= 0 and <= ushort.MaxValue,
+            "U32" => value is >= 0 and <= uint.MaxValue,
             "U64" => value >= 0, // Any non-negative long fits in U64
             "U128" => value >= 0,
             "SAddr" or "UAddr" => true, // System-dependent, allow for now
@@ -231,7 +234,7 @@ public sealed partial class SemanticAnalyzer
         }
         catch (Exception ex)
         {
-            ReportError(message: $"Failed to parse numeric literal '{rawValue}': {ex.Message}", location: literal.Location);
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Failed to parse numeric literal '{rawValue}': {ex.Message}", literal.Location);
             return null;
         }
     }
@@ -265,7 +268,7 @@ public sealed partial class SemanticAnalyzer
         (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: rawValue);
         if (bytes.Length == 0)
         {
-            ReportError(message: $"Invalid Integer literal: '{rawValue}'", location: literal.Location);
+            ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid Integer literal: '{rawValue}'", literal.Location);
             return new ParsedInteger(Location: literal.Location, Limbs: [], Sign: 0, Exponent: 0);
         }
 
@@ -279,7 +282,7 @@ public sealed partial class SemanticAnalyzer
 
         if (string.IsNullOrEmpty(value: value))
         {
-            ReportError(message: $"Invalid Decimal literal: '{rawValue}'", location: literal.Location);
+            ReportError(SemanticDiagnosticCode.InvalidDecimalLiteral, $"Invalid Decimal literal: '{rawValue}'", literal.Location);
             return new ParsedDecimal(Location: literal.Location, StringValue: rawValue, Sign: 0, Exponent: 0, SignificantDigits: 0, IsInteger: false);
         }
 
@@ -296,7 +299,7 @@ public sealed partial class SemanticAnalyzer
                 return _currentType;
             }
 
-            ReportError(message: "'me' can only be used inside a type method.", location: id.Location);
+            ReportError(SemanticDiagnosticCode.MeOutsideTypeMethod, "'me' can only be used inside a type method.", id.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -328,7 +331,7 @@ public sealed partial class SemanticAnalyzer
             return type;
         }
 
-        ReportError(message: $"Unknown identifier '{id.Name}'.", location: id.Location);
+        ReportError(SemanticDiagnosticCode.UnknownIdentifier, $"Unknown identifier '{id.Name}'.", id.Location);
         return ErrorTypeInfo.Instance;
     }
 
@@ -349,7 +352,7 @@ public sealed partial class SemanticAnalyzer
         {
             if (!IsBoolType(type: leftType) || !IsBoolType(type: rightType))
             {
-                ReportError(message: $"Logical operator '{binary.Operator.ToStringRepresentation()}' requires boolean operands.", location: binary.Location);
+                ReportError(SemanticDiagnosticCode.LogicalOperatorRequiresBool, $"Logical operator '{binary.Operator.ToStringRepresentation()}' requires boolean operands.", binary.Location);
             }
 
             return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
@@ -361,8 +364,9 @@ public sealed partial class SemanticAnalyzer
             if (!SupportsTrueDivision(type: leftType))
             {
                 ReportError(
-                    message: $"True division operator '/' is not supported on '{leftType.Name}'. Use floor division '//' for integers.",
-                    location: binary.Location);
+                    SemanticDiagnosticCode.TrueDivisionNotSupported,
+                    $"True division operator '/' is not supported on '{leftType.Name}'. Use floor division '//' for integers.",
+                    binary.Location);
             }
         }
         else if (binary.Operator == BinaryOperator.FloorDivide)
@@ -370,8 +374,9 @@ public sealed partial class SemanticAnalyzer
             if (!SupportsFloorDivision(type: leftType))
             {
                 ReportError(
-                    message: $"Floor division operator '//' is not supported on '{leftType.Name}'.",
-                    location: binary.Location);
+                    SemanticDiagnosticCode.FloorDivisionNotSupported,
+                    $"Floor division operator '//' is not supported on '{leftType.Name}'.",
+                    binary.Location);
             }
         }
 
@@ -381,8 +386,9 @@ public sealed partial class SemanticAnalyzer
             if (!SupportsOverflowArithmetic(type: leftType, operatorSuffix: overflowKind))
             {
                 ReportError(
-                    message: $"Overflow arithmetic operator '{binary.Operator.ToStringRepresentation()}' is only supported on fixed-width integer types, not '{leftType.Name}'.",
-                    location: binary.Location);
+                    SemanticDiagnosticCode.OverflowOperatorNotSupported,
+                    $"Overflow arithmetic operator '{binary.Operator.ToStringRepresentation()}' is only supported on fixed-width integer types, not '{leftType.Name}'.",
+                    binary.Location);
             }
         }
 
@@ -393,8 +399,9 @@ public sealed partial class SemanticAnalyzer
             if (leftType.Category != TypeCategory.Error && rightType.Category != TypeCategory.Error)
             {
                 ReportError(
-                    message: $"Binary operator '{binary.Operator.ToStringRepresentation()}' cannot be applied to operands of type '{leftType.Name}' and '{rightType.Name}'.",
-                    location: binary.Location);
+                    SemanticDiagnosticCode.BinaryOperatorTypeMismatch,
+                    $"Binary operator '{binary.Operator.ToStringRepresentation()}' cannot be applied to operands of type '{leftType.Name}' and '{rightType.Name}'.",
+                    binary.Location);
             }
         }
 
@@ -482,7 +489,7 @@ public sealed partial class SemanticAnalyzer
             case UnaryOperator.Not:
                 if (!IsBoolType(type: operandType))
                 {
-                    ReportError(message: "Logical 'not' operator requires a boolean operand.", location: unary.Location);
+                    ReportError(SemanticDiagnosticCode.LogicalNotRequiresBool, "Logical 'not' operator requires a boolean operand.", unary.Location);
                 }
 
                 return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
@@ -490,7 +497,7 @@ public sealed partial class SemanticAnalyzer
             case UnaryOperator.Minus:
                 if (!IsNumericType(type: operandType))
                 {
-                    ReportError(message: "Negation operator requires a numeric operand.", location: unary.Location);
+                    ReportError(SemanticDiagnosticCode.NegationRequiresNumeric, "Negation operator requires a numeric operand.", unary.Location);
                 }
 
                 return operandType;
@@ -498,7 +505,7 @@ public sealed partial class SemanticAnalyzer
             case UnaryOperator.BitwiseNot:
                 if (!IsIntegerType(type: operandType))
                 {
-                    ReportError(message: "Bitwise 'not' operator requires an integer operand.", location: unary.Location);
+                    ReportError(SemanticDiagnosticCode.BitwiseNotRequiresInteger, "Bitwise 'not' operator requires an integer operand.", unary.Location);
                 }
 
                 return operandType;
@@ -643,7 +650,7 @@ public sealed partial class SemanticAnalyzer
 
             // For generic instantiations, substitute type parameters in return type
             TypeSymbol? returnType = method.ReturnType;
-            if (returnType != null && objectType.IsGenericInstantiation && objectType.TypeArguments != null)
+            if (returnType != null && objectType is { IsGenericInstantiation: true, TypeArguments: not null })
             {
                 returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
             }
@@ -651,14 +658,14 @@ public sealed partial class SemanticAnalyzer
             return returnType ?? ErrorTypeInfo.Instance;
         }
 
-        ReportError(message: $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.", location: member.Location);
+        ReportError(SemanticDiagnosticCode.MemberNotFound, $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.", member.Location);
         return ErrorTypeInfo.Instance;
     }
 
     private TypeSymbol AnalyzeIndexExpression(IndexExpression index)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
-        TypeSymbol indexType = AnalyzeExpression(expression: index.Index);
+        AnalyzeExpression(expression: index.Index);
 
         // Look for __getitem__ method
         RoutineInfo? getItem = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getitem__");
@@ -682,7 +689,7 @@ public sealed partial class SemanticAnalyzer
 
         if (!IsBoolType(type: conditionType))
         {
-            ReportError(message: $"Conditional expression requires a boolean condition, got '{conditionType.Name}'.", location: cond.Condition.Location);
+            ReportError(SemanticDiagnosticCode.ConditionalNotBool, $"Conditional expression requires a boolean condition, got '{conditionType.Name}'.", cond.Condition.Location);
         }
 
         TypeSymbol trueType = AnalyzeExpression(expression: cond.TrueExpression);
@@ -691,7 +698,7 @@ public sealed partial class SemanticAnalyzer
         // Both branches must be compatible
         if (!IsAssignableTo(source: trueType, target: falseType) && !IsAssignableTo(source: falseType, target: trueType))
         {
-            ReportError(message: $"Conditional expression branches have incompatible types: '{trueType.Name}' and '{falseType.Name}'.", location: cond.Location);
+            ReportError(SemanticDiagnosticCode.ConditionalBranchTypeMismatch, $"Conditional expression branches have incompatible types: '{trueType.Name}' and '{falseType.Name}'.", cond.Location);
         }
 
         // Return the common type (for now, use the true branch type)
@@ -791,10 +798,11 @@ public sealed partial class SemanticAnalyzer
         {
             string tokenKind = GetMemoryTokenKind(type: varType);
             ReportError(
-                message: $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
-                         $"scope-bound tokens cannot escape their scope. " +
-                         $"Use a handle type (Shared<T> or Tracked<T>) instead.",
-                location: location);
+                SemanticDiagnosticCode.LambdaCaptureToken,
+                $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
+                $"scope-bound tokens cannot escape their scope. " +
+                $"Use a handle type (Shared<T> or Tracked<T>) instead.",
+                location);
             return;
         }
 
@@ -802,10 +810,11 @@ public sealed partial class SemanticAnalyzer
         if (IsRawEntityType(type: varType))
         {
             ReportError(
-                message: $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
-                         $"raw entities cannot be captured. " +
-                         $"Wrap in a handle type (Shared<T> or Tracked<T>) before capturing.",
-                location: location);
+                SemanticDiagnosticCode.LambdaCaptureRawEntity,
+                $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
+                $"raw entities cannot be captured. " +
+                $"Wrap in a handle type (Shared<T> or Tracked<T>) before capturing.",
+                location);
         }
     }
 
@@ -882,7 +891,7 @@ public sealed partial class SemanticAnalyzer
                 CollectIdentifiersRecursive(expression: cond.FalseExpression, identifiers: identifiers);
                 break;
 
-            case LambdaExpression lambda:
+            case LambdaExpression:
                 // Don't descend into nested lambdas - they have their own capture context
                 break;
 
@@ -1001,7 +1010,7 @@ public sealed partial class SemanticAnalyzer
         // Range types must be compatible
         if (!IsNumericType(type: startType) || !IsNumericType(type: endType))
         {
-            ReportError(message: "Range bounds must be numeric types.", location: range.Location);
+            ReportError(SemanticDiagnosticCode.RangeBoundsNotNumeric, "Range bounds must be numeric types.", range.Location);
         }
 
         // Return Range type
@@ -1013,7 +1022,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? type = _registry.LookupType(name: ctor.TypeName);
         if (type == null)
         {
-            ReportError(message: $"Unknown type '{ctor.TypeName}'.", location: ctor.Location);
+            ReportError(SemanticDiagnosticCode.UnknownType, $"Unknown type '{ctor.TypeName}'.", ctor.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -1061,8 +1070,9 @@ public sealed partial class SemanticAnalyzer
             if (fields.Count > 0)
             {
                 ReportError(
-                    message: $"Type '{type.Name}' does not support field initialization.",
-                    location: location);
+                    SemanticDiagnosticCode.TypeNotFieldInitializable,
+                    $"Type '{type.Name}' does not support field initialization.",
+                    location);
             }
             return;
         }
@@ -1084,8 +1094,9 @@ public sealed partial class SemanticAnalyzer
             if (!providedFields.Add(fieldName))
             {
                 ReportError(
-                    message: $"Duplicate field initializer for '{fieldName}'.",
-                    location: value.Location);
+                    SemanticDiagnosticCode.DuplicateFieldInitializer,
+                    $"Duplicate field initializer for '{fieldName}'.",
+                    value.Location);
                 continue;
             }
 
@@ -1093,8 +1104,9 @@ public sealed partial class SemanticAnalyzer
             if (!fieldLookup.TryGetValue(fieldName, out FieldInfo? expectedField))
             {
                 ReportError(
-                    message: $"Type '{type.Name}' does not have a field named '{fieldName}'.",
-                    location: value.Location);
+                    SemanticDiagnosticCode.FieldNotFound,
+                    $"Type '{type.Name}' does not have a field named '{fieldName}'.",
+                    value.Location);
                 AnalyzeExpression(expression: value); // Still analyze the value
                 continue;
             }
@@ -1103,7 +1115,7 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol fieldType = expectedField.Type;
 
             // For generic instantiations, substitute type parameters in field type
-            if (type.IsGenericInstantiation && type.TypeArguments != null)
+            if (type is { IsGenericInstantiation: true, TypeArguments: not null })
             {
                 fieldType = SubstituteTypeParameters(type: fieldType, genericType: type);
             }
@@ -1114,8 +1126,9 @@ public sealed partial class SemanticAnalyzer
             if (!IsAssignableTo(source: valueType, target: fieldType))
             {
                 ReportError(
-                    message: $"Cannot assign '{valueType.Name}' to field '{fieldName}' of type '{fieldType.Name}'.",
-                    location: value.Location);
+                    SemanticDiagnosticCode.FieldTypeMismatch,
+                    $"Cannot assign '{valueType.Name}' to field '{fieldName}' of type '{fieldType.Name}'.",
+                    value.Location);
             }
         }
 
@@ -1125,8 +1138,9 @@ public sealed partial class SemanticAnalyzer
             if (!providedFields.Contains(field.Name) && !field.HasDefaultValue)
             {
                 ReportError(
-                    message: $"Missing required field '{field.Name}' in constructor for '{type.Name}'.",
-                    location: location);
+                    SemanticDiagnosticCode.MissingRequiredField,
+                    $"Missing required field '{field.Name}' in constructor for '{type.Name}'.",
+                    location);
             }
         }
     }
@@ -1150,13 +1164,13 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol elemType = AnalyzeExpression(expression: list.Elements[i]);
                 if (!IsAssignableTo(source: elemType, target: elementType))
                 {
-                    ReportError(message: $"List element type mismatch: expected '{elementType.Name}', got '{elemType.Name}'.", location: list.Elements[i].Location);
+                    ReportError(SemanticDiagnosticCode.ListElementTypeMismatch, $"List element type mismatch: expected '{elementType.Name}', got '{elemType.Name}'.", list.Elements[i].Location);
                 }
             }
         }
         else
         {
-            ReportError(message: "Cannot infer element type from empty list literal without type annotation.", location: list.Location);
+            ReportError(SemanticDiagnosticCode.EmptyListNoTypeAnnotation, "Cannot infer element type from empty list literal without type annotation.", list.Location);
             elementType = ErrorTypeInfo.Instance;
         }
 
@@ -1184,7 +1198,7 @@ public sealed partial class SemanticAnalyzer
         }
         else
         {
-            ReportError(message: "Cannot infer element type from empty set literal without type annotation.", location: set.Location);
+            ReportError(SemanticDiagnosticCode.EmptySetNoTypeAnnotation, "Cannot infer element type from empty set literal without type annotation.", set.Location);
             elementType = ErrorTypeInfo.Instance;
         }
 
@@ -1209,7 +1223,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? keyType = null;
         TypeSymbol? valueType = null;
 
-        if (dict.KeyType != null && dict.ValueType != null)
+        if (dict is { KeyType: not null, ValueType: not null })
         {
             keyType = ResolveType(typeExpr: dict.KeyType);
             valueType = ResolveType(typeExpr: dict.ValueType);
@@ -1221,7 +1235,7 @@ public sealed partial class SemanticAnalyzer
         }
         else
         {
-            ReportError(message: "Cannot infer types from empty dict literal without type annotation.", location: dict.Location);
+            ReportError(SemanticDiagnosticCode.EmptyDictNoTypeAnnotation, "Cannot infer types from empty dict literal without type annotation.", dict.Location);
             keyType = ErrorTypeInfo.Instance;
             valueType = ErrorTypeInfo.Instance;
         }
@@ -1250,7 +1264,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? targetType = _registry.LookupType(name: conv.TargetType);
         if (targetType == null)
         {
-            ReportError(message: $"Unknown conversion target type '{conv.TargetType}'.", location: conv.Location);
+            ReportError(SemanticDiagnosticCode.UnknownConversionTargetType, $"Unknown conversion target type '{conv.TargetType}'.", conv.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -1296,7 +1310,7 @@ public sealed partial class SemanticAnalyzer
         // Validate that base is a record type
         if (baseType.Category != TypeCategory.Record)
         {
-            ReportError(message: $"'with' expression requires a record type, got '{baseType.Name}'.", location: with.Location);
+            ReportError(SemanticDiagnosticCode.WithExpressionNotRecord, $"'with' expression requires a record type, got '{baseType.Name}'.", with.Location);
         }
 
         // Analyze update expressions
@@ -1308,6 +1322,86 @@ public sealed partial class SemanticAnalyzer
 
         // Returns the same type as the base
         return baseType;
+    }
+
+    /// <summary>
+    /// Analyzes a when expression (pattern matching expression).
+    /// Returns the common type of all branch results.
+    /// </summary>
+    private TypeSymbol AnalyzeWhenExpression(WhenExpression when)
+    {
+        // Analyze the matched expression
+        TypeSymbol matchedType = AnalyzeExpression(expression: when.Expression);
+
+        TypeSymbol? resultType = null;
+        bool hasElse = false;
+
+        foreach (WhenClause clause in when.Clauses)
+        {
+            // Analyze the pattern
+            AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
+
+            // Check for else clause
+            if (clause.Pattern is WildcardPattern or ElsePattern)
+            {
+                hasElse = true;
+            }
+
+            // When expressions require expression bodies that return values
+            // The Body is a Statement, but for expressions it should typically be an ExpressionStatement
+            if (clause.Body is ExpressionStatement exprStmt)
+            {
+                TypeSymbol branchType = AnalyzeExpression(expression: exprStmt.Expression);
+
+                if (resultType == null)
+                {
+                    resultType = branchType;
+                }
+                else if (!IsAssignableTo(source: branchType, target: resultType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.WhenBranchTypeMismatch,
+                        $"When expression branches have incompatible types: '{resultType.Name}' and '{branchType.Name}'.",
+                        clause.Body.Location);
+                }
+            }
+            else if (clause.Body is ReturnStatement ret && ret.Value != null)
+            {
+                // Allow return statements in when expressions
+                TypeSymbol branchType = AnalyzeExpression(expression: ret.Value);
+
+                if (resultType == null)
+                {
+                    resultType = branchType;
+                }
+            }
+            else if (clause.Body is BlockStatement block)
+            {
+                // For block statements, analyze and try to infer result type from last statement
+                foreach (Statement stmt in block.Statements)
+                {
+                    AnalyzeStatement(statement: stmt);
+                }
+                // Block in expression context - result type is harder to determine
+                // For now, keep previous result type
+            }
+            else
+            {
+                // Analyze as regular statement
+                AnalyzeStatement(statement: clause.Body);
+            }
+        }
+
+        // Warn if no else clause (expression may not cover all cases)
+        if (!hasElse)
+        {
+            ReportWarning(
+                SemanticWarningCode.NonExhaustiveWhen,
+                "When expression may not cover all cases - consider adding an 'else' clause.",
+                when.Location);
+        }
+
+        return resultType ?? ErrorTypeInfo.Instance;
     }
 
     private TypeSymbol AnalyzeGenericMethodCallExpression(GenericMethodCallExpression generic)
@@ -1340,7 +1434,7 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol AnalyzeGenericMemberExpression(GenericMemberExpression genericMember)
     {
-        TypeSymbol objectType = AnalyzeExpression(expression: genericMember.Object);
+        AnalyzeExpression(expression: genericMember.Object);
 
         // Resolve type arguments
         foreach (TypeExpression typeArg in genericMember.TypeArguments)
@@ -1360,8 +1454,9 @@ public sealed partial class SemanticAnalyzer
         if (!InDangerBlock)
         {
             ReportError(
-                message: $"Intrinsic call '@intrinsic.{intrinsic.IntrinsicName}' can only be used inside a danger block.",
-                location: intrinsic.Location);
+                SemanticDiagnosticCode.IntrinsicOutsideDanger,
+                $"Intrinsic call '@intrinsic.{intrinsic.IntrinsicName}' can only be used inside a danger block.",
+                intrinsic.Location);
         }
 
         foreach (Expression arg in intrinsic.Arguments)
@@ -1389,8 +1484,9 @@ public sealed partial class SemanticAnalyzer
         if (!InDangerBlock)
         {
             ReportError(
-                message: $"Native call '@native.{native.FunctionName}' can only be used inside a danger block.",
-                location: native.Location);
+                SemanticDiagnosticCode.NativeOutsideDanger,
+                $"Native call '@native.{native.FunctionName}' can only be used inside a danger block.",
+                native.Location);
         }
 
         foreach (Expression arg in native.Arguments)
@@ -1415,7 +1511,7 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol HandleUnknownExpression(Expression expression)
     {
-        ReportWarning(message: $"Unknown expression type: {expression.GetType().Name}", location: expression.Location);
+        ReportWarning(SemanticWarningCode.UnknownExpressionType, $"Unknown expression type: {expression.GetType().Name}", expression.Location);
         return ErrorTypeInfo.Instance;
     }
 
@@ -1483,7 +1579,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // For generic instantiations, recursively substitute in type arguments
-        if (type.IsGenericInstantiation && type.TypeArguments != null)
+        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
         {
             var substitutedArgs = new List<TypeSymbol>();
             bool anyChanged = false;
@@ -1541,9 +1637,10 @@ public sealed partial class SemanticAnalyzer
         {
             string tokenKind = GetMemoryTokenKind(type: operandType);
             ReportError(
-                message: $"Cannot steal '{tokenKind}' - scope-bound tokens cannot be stolen. " +
-                         $"Only raw entities, Shared<T>, and Tracked<T> can be stolen.",
-                location: steal.Location);
+                SemanticDiagnosticCode.StealScopeBoundToken,
+                $"Cannot steal '{tokenKind}' - scope-bound tokens cannot be stolen. " +
+                $"Only raw entities, Shared<T>, and Tracked<T> can be stolen.",
+                steal.Location);
             return operandType;
         }
 
@@ -1551,8 +1648,9 @@ public sealed partial class SemanticAnalyzer
         if (IsSnatched(type: operandType))
         {
             ReportError(
-                message: "Cannot steal 'Snatched<T>' - internal ownership type cannot be stolen.",
-                location: steal.Location);
+                SemanticDiagnosticCode.StealSnatched,
+                "Cannot steal 'Snatched<T>' - internal ownership type cannot be stolen.",
+                steal.Location);
             return operandType;
         }
 
@@ -1637,8 +1735,9 @@ public sealed partial class SemanticAnalyzer
         if (!IsIntegerType(type: operandType))
         {
             ReportError(
-                message: $"BackIndex operator '^' requires an integer operand, got '{operandType.Name}'.",
-                location: back.Location);
+                SemanticDiagnosticCode.BackIndexRequiresInteger,
+                $"BackIndex operator '^' requires an integer operand, got '{operandType.Name}'.",
+                back.Location);
         }
 
         // Return a BackIndex type (or UAddr as the underlying representation)

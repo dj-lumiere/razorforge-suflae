@@ -295,7 +295,7 @@ internal class Program
                 Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
                 foreach (var error in result.Errors)
                 {
-                    Console.WriteLine($"  [{error.Location.Line}:{error.Location.Column}] {error.Message}");
+                    Console.WriteLine($"  {error.FormattedMessage}");
                 }
                 Console.WriteLine();
                 Console.WriteLine("Code generation aborted due to errors.");
@@ -308,7 +308,7 @@ internal class Program
                 Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
                 foreach (var warning in result.Warnings)
                 {
-                    Console.WriteLine($"  [{warning.Location.Line}:{warning.Location.Column}] {warning.Message}");
+                    Console.WriteLine($"  {warning.FormattedMessage}");
                 }
             }
 

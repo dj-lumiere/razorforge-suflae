@@ -1,13 +1,13 @@
 namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Inference;
-using Compilers.Analysis.Results;
-using Compilers.Analysis.Scopes;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Inference;
+using Results;
+using Scopes;
+using Symbols;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Semantic analyzer for RazorForge and Suflae programs.
@@ -135,23 +135,25 @@ public sealed partial class SemanticAnalyzer
     #region Error Reporting
 
     /// <summary>
-    /// Reports a semantic error.
+    /// Reports a semantic error with a diagnostic code.
     /// </summary>
+    /// <param name="code">The diagnostic code for this error.</param>
     /// <param name="message">The error message.</param>
     /// <param name="location">The source location of the error.</param>
-    private void ReportError(string message, SourceLocation location)
+    private void ReportError(SemanticDiagnosticCode code, string message, SourceLocation location)
     {
-        _errors.Add(item: new SemanticError(Message: message, Location: location));
+        _errors.Add(item: new SemanticError(Code: code, Message: message, Location: location));
     }
 
     /// <summary>
-    /// Reports a semantic warning.
+    /// Reports a semantic warning with a diagnostic code.
     /// </summary>
+    /// <param name="code">The diagnostic code for this warning.</param>
     /// <param name="message">The warning message.</param>
     /// <param name="location">The source location of the warning.</param>
-    private void ReportWarning(string message, SourceLocation location)
+    private void ReportWarning(SemanticWarningCode code, string message, SourceLocation location)
     {
-        _warnings.Add(item: new SemanticWarning(Message: message, Location: location));
+        _warnings.Add(item: new SemanticWarning(Code: code, Message: message, Location: location));
     }
 
     #endregion

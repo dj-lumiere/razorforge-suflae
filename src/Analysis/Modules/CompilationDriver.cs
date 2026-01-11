@@ -1,14 +1,15 @@
 ﻿namespace Compilers.Analysis.Modules;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Results;
-using Compilers.RazorForge.Lexer;
-using Compilers.RazorForge.Parser;
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
-using Compilers.Suflae.Lexer;
-using Compilers.Suflae.Parser;
+using Enums;
+using Results;
+using RazorForge.Lexer;
+using RazorForge.Parser;
+using Shared.AST;
+using Shared.Lexer;
+using Shared.Parser;
+using Suflae.Lexer;
+using Suflae.Parser;
+using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Result of compiling a single source file.
@@ -88,6 +89,7 @@ public sealed class CompilationDriver
             if (!File.Exists(path: sourceFile))
             {
                 _errors.Add(item: new SemanticError(
+                    Code: SemanticDiagnosticCode.SourceFileNotFound,
                     Message: $"Source file not found: '{sourceFile}'",
                     Location: new SourceLocation(FileName: sourceFile, Line: 0, Column: 0, Position: 0)));
                 continue;
@@ -111,6 +113,7 @@ public sealed class CompilationDriver
             catch (InvalidOperationException ex)
             {
                 _errors.Add(item: new SemanticError(
+                    Code: SemanticDiagnosticCode.CircularImport,
                     Message: ex.Message,
                     Location: new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0)));
             }
@@ -216,6 +219,7 @@ public sealed class CompilationDriver
             if (isSuflae && _language == Language.RazorForge)
             {
                 _errors.Add(item: new SemanticError(
+                    Code: SemanticDiagnosticCode.LanguageMismatch,
                     Message: $"Cannot import Suflae file '{filePath}' from RazorForge project.",
                     Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
                 return null;
@@ -224,6 +228,7 @@ public sealed class CompilationDriver
             if (!isSuflae && _language == Language.Suflae)
             {
                 _errors.Add(item: new SemanticError(
+                    Code: SemanticDiagnosticCode.LanguageMismatch,
                     Message: $"Cannot import RazorForge file '{filePath}' from Suflae project.",
                     Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
                 return null;
@@ -284,13 +289,15 @@ public sealed class CompilationDriver
         catch (ParseException ex)
         {
             _errors.Add(item: new SemanticError(
-                Message: $"Parse error in '{filePath}': {ex.Message}",
+                Code: SemanticDiagnosticCode.ParseError,
+                Message: $"{ex.Message}",
                 Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
             return null;
         }
         catch (Exception ex)
         {
             _errors.Add(item: new SemanticError(
+                Code: SemanticDiagnosticCode.CompilationError,
                 Message: $"Error processing '{filePath}': {ex.Message}",
                 Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
             return null;

@@ -4,6 +4,7 @@ using Enums;
 using Symbols;
 using Types;
 using Shared.AST;
+using global::RazorForge.Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 #region Numeric Type Classification
@@ -65,21 +66,24 @@ public sealed partial class SemanticAnalyzer
             if (requiredParams == totalParams)
             {
                 ReportError(
-                    message: $"'{routine.Name}' expects {totalParams} argument(s), but got {arguments.Count}.",
-                    location: location);
+                    SemanticDiagnosticCode.TooFewArguments,
+                    $"'{routine.Name}' expects {totalParams} argument(s), but got {arguments.Count}.",
+                    location);
             }
             else
             {
                 ReportError(
-                    message: $"'{routine.Name}' expects at least {requiredParams} argument(s), but got {arguments.Count}.",
-                    location: location);
+                    SemanticDiagnosticCode.TooFewArguments,
+                    $"'{routine.Name}' expects at least {requiredParams} argument(s), but got {arguments.Count}.",
+                    location);
             }
         }
         else if (arguments.Count > totalParams && !routine.IsVariadic)
         {
             ReportError(
-                message: $"'{routine.Name}' expects at most {totalParams} argument(s), but got {arguments.Count}.",
-                location: location);
+                SemanticDiagnosticCode.TooManyArguments,
+                $"'{routine.Name}' expects at most {totalParams} argument(s), but got {arguments.Count}.",
+                location);
         }
 
         // Check argument types
@@ -109,8 +113,9 @@ public sealed partial class SemanticAnalyzer
             if (!IsAssignableTo(source: argType, target: paramType))
             {
                 ReportError(
-                    message: $"Argument {i + 1} of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
-                    location: arg.Location);
+                    SemanticDiagnosticCode.ArgumentTypeMismatch,
+                    $"Argument {i + 1} of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
+                    arg.Location);
             }
         }
     }
@@ -276,8 +281,9 @@ public sealed partial class SemanticAnalyzer
                 right.Category is not (TypeCategory.Entity or TypeCategory.Resident))
             {
                 ReportError(
-                    message: $"Identity operator '{op.ToStringRepresentation()}' can only be used with entity or resident types, not '{left.Name}' and '{right.Name}'.",
-                    location: location);
+                    SemanticDiagnosticCode.IdentityOperatorRequiresReference,
+                    $"Identity operator '{op.ToStringRepresentation()}' can only be used with entity or resident types, not '{left.Name}' and '{right.Name}'.",
+                    location);
             }
 
             return;
@@ -289,8 +295,9 @@ public sealed partial class SemanticAnalyzer
             if (op is not (BinaryOperator.Is or BinaryOperator.IsNot))
             {
                 ReportError(
-                    message: $"Comparison operator '{op.ToStringRepresentation()}' cannot be used with variant types. Use 'is' or 'isnot' for pattern matching.",
-                    location: location);
+                    SemanticDiagnosticCode.ComparisonOnVariantType,
+                    $"Comparison operator '{op.ToStringRepresentation()}' cannot be used with variant types. Use 'is' or 'isnot' for pattern matching.",
+                    location);
             }
 
             return;
@@ -300,8 +307,9 @@ public sealed partial class SemanticAnalyzer
         if (!IsAssignableTo(source: left, target: right) && !IsAssignableTo(source: right, target: left))
         {
             ReportError(
-                message: $"Cannot compare values of incompatible types '{left.Name}' and '{right.Name}'.",
-                location: location);
+                SemanticDiagnosticCode.IncompatibleComparisonTypes,
+                $"Cannot compare values of incompatible types '{left.Name}' and '{right.Name}'.",
+                location);
         }
 
         // For ordering operators, verify the type is comparable (has __cmp__ or individual comparison methods)
@@ -310,8 +318,9 @@ public sealed partial class SemanticAnalyzer
             if (!SupportsOperator(type: left, op: op))
             {
                 ReportError(
-                    message: $"Type '{left.Name}' does not support ordering comparisons.",
-                    location: location);
+                    SemanticDiagnosticCode.OrderingNotSupported,
+                    $"Type '{left.Name}' does not support ordering comparisons.",
+                    location);
             }
         }
     }
@@ -345,8 +354,9 @@ public sealed partial class SemanticAnalyzer
             if (op == BinaryOperator.NotEqual)
             {
                 ReportError(
-                    message: "The '!=' operator cannot be used in comparison chains.",
-                    location: location);
+                    SemanticDiagnosticCode.NotEqualInComparisonChain,
+                    "The '!=' operator cannot be used in comparison chains.",
+                    location);
                 return;
             }
 
@@ -358,8 +368,9 @@ public sealed partial class SemanticAnalyzer
                 if (isAscending == false)
                 {
                     ReportError(
-                        message: "Cannot mix ascending (<, <=) and descending (>, >=) operators in a comparison chain.",
-                        location: location);
+                        SemanticDiagnosticCode.MixedComparisonChainDirection,
+                        "Cannot mix ascending (<, <=) and descending (>, >=) operators in a comparison chain.",
+                        location);
                     return;
                 }
 
@@ -370,8 +381,9 @@ public sealed partial class SemanticAnalyzer
                 if (isAscending == true)
                 {
                     ReportError(
-                        message: "Cannot mix ascending (<, <=) and descending (>, >=) operators in a comparison chain.",
-                        location: location);
+                        SemanticDiagnosticCode.MixedComparisonChainDirection,
+                        "Cannot mix ascending (<, <=) and descending (>, >=) operators in a comparison chain.",
+                        location);
                     return;
                 }
 
@@ -416,8 +428,9 @@ public sealed partial class SemanticAnalyzer
         }
 
         ReportError(
-            message: $"Type '{iterableType.Name}' is not iterable.",
-            location: location);
+            SemanticDiagnosticCode.TypeNotIterable,
+            $"Type '{iterableType.Name}' is not iterable.",
+            location);
         return ErrorTypeInfo.Instance;
     }
 
@@ -747,9 +760,10 @@ public sealed partial class SemanticAnalyzer
         {
             string wrapperName = GetBaseTypeName(typeName: wrapperType.Name);
             ReportError(
-                message: $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}<T>'. " +
+                SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
+                $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}<T>'. " +
                 $"Only @readonly methods are accessible.",
-                location: location);
+                location);
         }
     }
 
@@ -827,8 +841,9 @@ public sealed partial class SemanticAnalyzer
         if (IsInlineOnlyTokenType(type: type))
         {
             ReportError(
-                message: $"Cannot return {GetTokenKindDescription(type: type)} from a routine. Tokens are inline-only and cannot escape their scope.",
-                location: location);
+                SemanticDiagnosticCode.TokenReturnNotAllowed,
+                $"Cannot return {GetTokenKindDescription(type: type)} from a routine. Tokens are inline-only and cannot escape their scope.",
+                location);
         }
     }
 
@@ -845,8 +860,9 @@ public sealed partial class SemanticAnalyzer
         if (IsInlineOnlyTokenType(type: type))
         {
             ReportError(
-                message: $"Cannot store {GetTokenKindDescription(type: type)} in field '{fieldName}'. Tokens are inline-only and cannot be stored.",
-                location: location);
+                SemanticDiagnosticCode.TokenFieldNotAllowed,
+                $"Cannot store {GetTokenKindDescription(type: type)} in field '{fieldName}'. Tokens are inline-only and cannot be stored.",
+                location);
         }
     }
 
@@ -890,8 +906,9 @@ public sealed partial class SemanticAnalyzer
             if (seenExclusiveTokens.Contains(value: exprKey))
             {
                 ReportError(
-                    message: $"Cannot pass the same {baseName} token '{exprKey}' multiple times in a single call. Exclusive tokens require unique access.",
-                    location: location);
+                    SemanticDiagnosticCode.ExclusiveTokenDuplicate,
+                    $"Cannot pass the same {baseName} token '{exprKey}' multiple times in a single call. Exclusive tokens require unique access.",
+                    location);
             }
             else
             {
@@ -927,8 +944,9 @@ public sealed partial class SemanticAnalyzer
         if (IsInlineOnlyTokenType(type: type))
         {
             ReportError(
-                message: $"Cannot use {GetTokenKindDescription(type: type)} as payload for variant case '{caseName}'. Tokens are inline-only and cannot be stored in variants.",
-                location: location);
+                SemanticDiagnosticCode.TokenVariantPayloadNotAllowed,
+                $"Cannot use {GetTokenKindDescription(type: type)} as payload for variant case '{caseName}'. Tokens are inline-only and cannot be stored in variants.",
+                location);
         }
     }
 
@@ -985,9 +1003,10 @@ public sealed partial class SemanticAnalyzer
         if (setterLevel > getterLevel)
         {
             ReportError(
-                message: $"Invalid visibility combination for field '{fieldName}': setter visibility ({setterVisibility.Value}) cannot be less restrictive than getter visibility ({getterVisibility}). " +
+                SemanticDiagnosticCode.InvalidVisibilityCombination,
+                $"Invalid visibility combination for field '{fieldName}': setter visibility ({setterVisibility.Value}) cannot be less restrictive than getter visibility ({getterVisibility}). " +
                          "Valid combinations: public, published, internal, private.",
-                location: location);
+                location);
         }
     }
 
@@ -1062,8 +1081,9 @@ public sealed partial class SemanticAnalyzer
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(
-                        message: $"Cannot access private {memberKind} '{memberName}' of '{typeName}' from outside its defining file.",
-                        location: accessLocation);
+                        SemanticDiagnosticCode.PrivateMemberAccess,
+                        $"Cannot access private {memberKind} '{memberName}' of '{typeName}' from outside its defining file.",
+                        accessLocation);
                 }
                 break;
 
@@ -1073,8 +1093,9 @@ public sealed partial class SemanticAnalyzer
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(
-                        message: $"Cannot access internal {memberKind} '{memberName}' of '{typeName}' from outside the namespace.",
-                        location: accessLocation);
+                        SemanticDiagnosticCode.InternalMemberAccess,
+                        $"Cannot access internal {memberKind} '{memberName}' of '{typeName}' from outside the namespace.",
+                        accessLocation);
                 }
                 break;
 

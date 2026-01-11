@@ -1,8 +1,9 @@
 ﻿namespace Compilers.Analysis;
 
-using Compilers.Analysis.Inference;
-using Compilers.Analysis.Symbols;
-using Compilers.Shared.AST;
+using Inference;
+using Symbols;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Phase 5: Error handling variant generation.
@@ -77,8 +78,9 @@ public sealed partial class SemanticAnalyzer
         if (result.Error != null)
         {
             ReportError(
-                message: result.Error,
-                location: routine.Location ?? new SourceLocation(
+                SemanticDiagnosticCode.VariantGenerationError,
+                result.Error,
+                routine.Location ?? new SourceLocation(
                     FileName: "<unknown>",
                     Line: 0,
                     Column: 0,

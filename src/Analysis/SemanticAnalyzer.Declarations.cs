@@ -1,10 +1,11 @@
 namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Symbols;
+using Types;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Phase 1 &amp; 2: Declaration collection and type body resolution.
@@ -95,8 +96,9 @@ public sealed partial class SemanticAnalyzer
         if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase))
         {
             ReportError(
-                message: "Namespace 'Core' is reserved for the standard library and cannot be used in user code.",
-                location: ns.Location);
+                SemanticDiagnosticCode.ReservedNamespaceCore,
+                "Namespace 'Core' is reserved for the standard library and cannot be used in user code.",
+                ns.Location);
         }
     }
 
@@ -116,8 +118,9 @@ public sealed partial class SemanticAnalyzer
         if (!success)
         {
             ReportError(
-                message: $"Cannot resolve import '{import.ModulePath}'. Module not found.",
-                location: import.Location);
+                SemanticDiagnosticCode.ModuleNotFound,
+                $"Cannot resolve import '{import.ModulePath}'. Module not found.",
+                import.Location);
         }
     }
 
@@ -179,8 +182,9 @@ public sealed partial class SemanticAnalyzer
         if (_registry.Language == Language.Suflae)
         {
             ReportError(
-                message: "Resident types are not available in Suflae.",
-                location: resident.Location);
+                SemanticDiagnosticCode.FeatureNotInSuflae,
+                "Resident types are not available in Suflae.",
+                resident.Location);
             return;
         }
 
@@ -295,8 +299,9 @@ public sealed partial class SemanticAnalyzer
         catch (InvalidOperationException)
         {
             ReportError(
-                message: $"Type '{type.Name}' is already defined.",
-                location: location);
+                SemanticDiagnosticCode.DuplicateTypeDefinition,
+                $"Type '{type.Name}' is already defined.",
+                location);
         }
     }
 
@@ -352,7 +357,7 @@ public sealed partial class SemanticAnalyzer
         _currentType = _registry.LookupType(name: record.Name);
 
         // Resolve implemented protocols
-        if (_currentType is RecordTypeInfo recordInfo && record.Protocols.Count > 0)
+        if (_currentType is RecordTypeInfo && record.Protocols.Count > 0)
         {
             var resolvedProtocols = new List<TypeInfo>();
             foreach (TypeExpression protoExpr in record.Protocols)
@@ -365,8 +370,9 @@ public sealed partial class SemanticAnalyzer
                 else if (protoType is not ErrorTypeInfo)
                 {
                     ReportError(
-                        message: $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
-                        location: protoExpr.Location);
+                        SemanticDiagnosticCode.NotAProtocol,
+                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        protoExpr.Location);
                 }
             }
 
@@ -429,8 +435,9 @@ public sealed partial class SemanticAnalyzer
             else if (parentType is not ErrorTypeInfo)
             {
                 ReportError(
-                    message: $"'{parentExpr}' is not a protocol. Only protocols can be inherited with 'follows'.",
-                    location: parentExpr.Location);
+                    SemanticDiagnosticCode.NotAProtocol,
+                    $"'{parentExpr}' is not a protocol. Only protocols can be inherited with 'follows'.",
+                    parentExpr.Location);
             }
         }
 
@@ -545,9 +552,10 @@ public sealed partial class SemanticAnalyzer
             if (mutantCase.AssociatedTypes == null)
             {
                 ReportError(
-                    message: $"Mutant case '{mutantCase.Name}' must have an associated type. " +
+                    SemanticDiagnosticCode.MutantCaseRequiresType,
+                    $"Mutant case '{mutantCase.Name}' must have an associated type. " +
                              "Empty cases are not allowed in mutants.",
-                    location: mutantCase.Location);
+                    mutantCase.Location);
                 continue;
             }
 
@@ -564,9 +572,10 @@ public sealed partial class SemanticAnalyzer
             if (seenTypes.TryGetValue(key: typeName, value: out string? existingCase))
             {
                 ReportError(
-                    message: $"Mutant case '{mutantCase.Name}' has type '{typeName}' which is already " +
+                    SemanticDiagnosticCode.MutantCaseTypeDuplicate,
+                    $"Mutant case '{mutantCase.Name}' has type '{typeName}' which is already " +
                              $"used by case '{existingCase}'. All mutant case types must be unique.",
-                    location: mutantCase.Location);
+                    mutantCase.Location);
             }
             else
             {
@@ -664,7 +673,7 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol paramType = ResolveType(typeExpr: param.Type);
 
             // Protocol-as-type desugaring: routine foo(x: Displayable) → routine foo<T follows Displayable>(x: T)
-            if (paramType is ProtocolTypeInfo protocol)
+            if (paramType is ProtocolTypeInfo)
             {
                 // Generate implicit generic parameter name
                 string implicitGenericName = $"__T{implicitGenericCounter++}";
@@ -704,11 +713,11 @@ public sealed partial class SemanticAnalyzer
             : null;
 
         // Merge implicit generics with explicit generics
-        List<string>? allGenericParams = routineInfo.GenericParameters?.ToList() ?? [];
+        List<string> allGenericParams = routineInfo.GenericParameters?.ToList() ?? [];
         allGenericParams.AddRange(collection: implicitGenerics);
 
         // Merge implicit constraints with explicit constraints
-        List<GenericConstraintDeclaration>? allConstraints = routineInfo.GenericConstraints?.ToList() ?? [];
+        List<GenericConstraintDeclaration> allConstraints = routineInfo.GenericConstraints?.ToList() ?? [];
         allConstraints.AddRange(collection: implicitConstraints);
 
         // Update the routine info with resolved parameters
@@ -812,9 +821,10 @@ public sealed partial class SemanticAnalyzer
             if (!existingNe.IsSynthesized)
             {
                 ReportError(
-                    message: $"Cannot define '__ne__' when '__eq__' is defined. " +
+                    SemanticDiagnosticCode.DerivedOperatorOverride,
+                    $"Cannot define '__ne__' when '__eq__' is defined. " +
                              "'__ne__' is auto-generated from '__eq__'.",
-                    location: existingNe.Location);
+                    existingNe.Location);
             }
 
             return;
@@ -881,9 +891,10 @@ public sealed partial class SemanticAnalyzer
                 if (!existing.IsSynthesized)
                 {
                     ReportError(
-                        message: $"Cannot define '{opName}' when '__cmp__' is defined. " +
+                        SemanticDiagnosticCode.DerivedOperatorOverride,
+                        $"Cannot define '{opName}' when '__cmp__' is defined. " +
                                  $"'{opName}' is auto-generated from '__cmp__'.",
-                        location: existing.Location);
+                        existing.Location);
                 }
 
                 continue;

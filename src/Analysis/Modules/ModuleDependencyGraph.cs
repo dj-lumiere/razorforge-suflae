@@ -1,7 +1,8 @@
 ﻿namespace Compilers.Analysis.Modules;
 
-using Compilers.Analysis.Results;
-using Compilers.Shared.AST;
+using Results;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Represents a module in the dependency graph.
@@ -92,6 +93,7 @@ public sealed class ModuleDependencyGraph
         if (fromModule == toModule)
         {
             _errors.Add(item: new SemanticError(
+                Code: SemanticDiagnosticCode.SelfImport,
                 Message: $"Module '{fromModule}' cannot import itself.",
                 Location: importLocation));
             return false;
@@ -111,6 +113,7 @@ public sealed class ModuleDependencyGraph
             string cyclePath = string.Join(separator: " → ", values: cycle);
 
             _errors.Add(item: new SemanticError(
+                Code: SemanticDiagnosticCode.CircularImport,
                 Message: $"Circular import detected: {cyclePath}",
                 Location: importLocation));
 

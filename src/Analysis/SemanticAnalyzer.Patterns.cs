@@ -1,9 +1,9 @@
 ﻿namespace Compilers.Analysis;
 
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Types;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Pattern analysis for when/is expressions.
@@ -16,7 +16,7 @@ public sealed partial class SemanticAnalyzer
     {
         switch (pattern)
         {
-            case LiteralPattern literal:
+            case LiteralPattern:
                 // Literal patterns don't bind variables
                 // TODO: REALLY?
                 break;
@@ -58,8 +58,9 @@ public sealed partial class SemanticAnalyzer
                 if (!IsBoolType(type: guardType))
                 {
                     ReportError(
-                        message: "Guard expression must be boolean.",
-                        location: guard.Guard.Location);
+                        SemanticDiagnosticCode.PatternGuardNotBool,
+                        "Guard expression must be boolean.",
+                        guard.Guard.Location);
                 }
 
                 break;
@@ -93,8 +94,9 @@ public sealed partial class SemanticAnalyzer
                 if (!IsBoolType(type: exprType))
                 {
                     ReportError(
-                        message: "Expression pattern must be boolean.",
-                        location: exprPat.Location);
+                        SemanticDiagnosticCode.ExpressionPatternNotBool,
+                        "Expression pattern must be boolean.",
+                        exprPat.Location);
                 }
 
                 break;
@@ -150,8 +152,9 @@ public sealed partial class SemanticAnalyzer
         if (cases == null)
         {
             ReportError(
-                message: $"Cannot match variant pattern against non-variant type '{matchedType.Name}'.",
-                location: pattern.Location);
+                SemanticDiagnosticCode.VariantPatternOnNonVariant,
+                $"Cannot match variant pattern against non-variant type '{matchedType.Name}'.",
+                pattern.Location);
             // Still declare bindings with error type to avoid cascading errors
             DeclareBindingsWithErrorType(bindings: pattern.Bindings);
             return;
@@ -162,60 +165,64 @@ public sealed partial class SemanticAnalyzer
         if (matchedCase == null)
         {
             ReportError(
-                message: $"Variant type '{matchedType.Name}' does not have a case named '{pattern.CaseName}'.",
-                location: pattern.Location);
+                SemanticDiagnosticCode.VariantCaseNotFound,
+                $"Variant type '{matchedType.Name}' does not have a case named '{pattern.CaseName}'.",
+                pattern.Location);
             DeclareBindingsWithErrorType(bindings: pattern.Bindings);
             return;
         }
 
         // Bind the payload if present
-        if (pattern.Bindings != null && pattern.Bindings.Count > 0)
+        if (pattern.Bindings is not { Count: > 0 })
         {
-            if (!matchedCase.HasPayload)
+            return;
+        }
+
+        if (!matchedCase.HasPayload)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantCaseNoPayload,
+                $"Variant case '{pattern.CaseName}' has no payload to destructure.",
+                pattern.Location);
+            return;
+        }
+
+        // Variant cases have a single payload type
+        TypeSymbol payloadType = matchedCase.PayloadType!;
+
+        // For a single binding without field name, bind directly to the payload
+        if (pattern.Bindings.Count == 1 && pattern.Bindings[0].FieldName == null)
+        {
+            DestructuringBinding binding = pattern.Bindings[0];
+            if (binding.NestedPattern != null)
             {
-                ReportError(
-                    message: $"Variant case '{pattern.CaseName}' has no payload to destructure.",
-                    location: pattern.Location);
-                return;
+                AnalyzePattern(pattern: binding.NestedPattern, matchedType: payloadType);
             }
-
-            // Variant cases have a single payload type
-            TypeSymbol payloadType = matchedCase.PayloadType!;
-
-            // For a single binding without field name, bind directly to the payload
-            if (pattern.Bindings.Count == 1 && pattern.Bindings[0].FieldName == null)
+            else if (binding.BindingName != null)
             {
-                DestructuringBinding binding = pattern.Bindings[0];
+                _registry.DeclareVariable(
+                    name: binding.BindingName,
+                    type: payloadType,
+                    isMutable: false);
+            }
+        }
+        else
+        {
+            // Multiple bindings - payload must be a record/entity type
+            foreach (DestructuringBinding binding in pattern.Bindings)
+            {
+                TypeSymbol fieldType = LookupFieldType(type: payloadType, fieldName: binding.FieldName);
+
                 if (binding.NestedPattern != null)
                 {
-                    AnalyzePattern(pattern: binding.NestedPattern, matchedType: payloadType);
+                    AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
                 }
                 else if (binding.BindingName != null)
                 {
                     _registry.DeclareVariable(
                         name: binding.BindingName,
-                        type: payloadType,
+                        type: fieldType,
                         isMutable: false);
-                }
-            }
-            else
-            {
-                // Multiple bindings - payload must be a record/entity type
-                foreach (DestructuringBinding binding in pattern.Bindings)
-                {
-                    TypeSymbol fieldType = LookupFieldType(type: payloadType, fieldName: binding.FieldName);
-
-                    if (binding.NestedPattern != null)
-                    {
-                        AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
-                    }
-                    else if (binding.BindingName != null)
-                    {
-                        _registry.DeclareVariable(
-                            name: binding.BindingName,
-                            type: fieldType,
-                            isMutable: false);
-                    }
                 }
             }
         }

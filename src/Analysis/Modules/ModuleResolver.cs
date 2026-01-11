@@ -1,7 +1,8 @@
 ﻿namespace Compilers.Analysis.Modules;
 
-using Compilers.Analysis.Results;
-using Compilers.Shared.AST;
+using Results;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Resolves import paths to actual source files.
@@ -102,6 +103,7 @@ public sealed class ModuleResolver
         if (resolved == null)
         {
             _errors.Add(item: new SemanticError(
+                Code: SemanticDiagnosticCode.ModuleNotFound,
                 Message: $"Cannot resolve import '{importPath}'. Module not found.",
                 Location: location));
         }
@@ -209,7 +211,8 @@ public sealed class ModuleResolver
     private static List<string> ExtractTypeNames(string content)
     {
         var types = new List<string>();
-        string[] keywords = { "record ", "entity ", "choice ", "variant ", "mutant ", "protocol ", "resident " };
+        string[] keywords = ["record ", "entity ", "choice ", "variant ", "mutant ", "protocol ", "resident "
+        ];
 
         foreach (string line in content.Split('\n'))
         {
@@ -219,23 +222,25 @@ public sealed class ModuleResolver
             if (trimmed.StartsWith("public ") || trimmed.StartsWith("private ") ||
                 trimmed.StartsWith("internal ") || trimmed.StartsWith("protected "))
             {
-                trimmed = trimmed.Substring(trimmed.IndexOf(' ') + 1).Trim();
+                trimmed = trimmed[(trimmed.IndexOf(' ') + 1)..].Trim();
             }
 
             foreach (string keyword in keywords)
             {
-                if (trimmed.StartsWith(keyword))
+                if (!trimmed.StartsWith(keyword))
                 {
-                    string rest = trimmed.Substring(keyword.Length).Trim();
-                    // Extract type name (before < or { or space)
-                    int endIdx = rest.IndexOfAny(['<', '{', ' ', '(']);
-                    string typeName = endIdx >= 0 ? rest.Substring(0, endIdx) : rest;
-                    if (!string.IsNullOrEmpty(typeName))
-                    {
-                        types.Add(typeName);
-                    }
-                    break;
+                    continue;
                 }
+
+                string rest = trimmed[keyword.Length..].Trim();
+                // Extract type name (before < or { or space)
+                int endIdx = rest.IndexOfAny(['<', '{', ' ', '(']);
+                string typeName = endIdx >= 0 ? rest[..endIdx] : rest;
+                if (!string.IsNullOrEmpty(typeName))
+                {
+                    types.Add(typeName);
+                }
+                break;
             }
         }
 

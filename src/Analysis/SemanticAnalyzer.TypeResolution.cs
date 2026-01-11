@@ -1,9 +1,10 @@
 ﻿namespace Compilers.Analysis;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Types;
+using Shared.AST;
+using global::RazorForge.Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Type resolution for type expressions.
@@ -47,8 +48,9 @@ public sealed partial class SemanticAnalyzer
 
         // Type not found
         ReportError(
-            message: $"Unknown type '{typeExpr.Name}'.",
-            location: typeExpr.Location);
+            SemanticDiagnosticCode.UnknownType,
+            $"Unknown type '{typeExpr.Name}'.",
+            typeExpr.Location);
         return ErrorTypeInfo.Instance;
     }
 
@@ -58,16 +60,18 @@ public sealed partial class SemanticAnalyzer
         if (genericDef == null)
         {
             ReportError(
-                message: $"Unknown type '{typeExpr.Name}'.",
-                location: typeExpr.Location);
+                SemanticDiagnosticCode.UnknownType,
+                $"Unknown type '{typeExpr.Name}'.",
+                typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
         if (!genericDef.IsGenericDefinition)
         {
             ReportError(
-                message: $"Type '{typeExpr.Name}' is not a generic type.",
-                location: typeExpr.Location);
+                SemanticDiagnosticCode.TypeNotGeneric,
+                $"Type '{typeExpr.Name}' is not a generic type.",
+                typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -81,9 +85,9 @@ public sealed partial class SemanticAnalyzer
         if (genericDef.GenericParameters!.Count != typeArgs.Count)
         {
             ReportError(
-                message:
+                SemanticDiagnosticCode.WrongTypeArgumentCount,
                 $"Type '{typeExpr.Name}' expects {genericDef.GenericParameters.Count} type arguments, got {typeArgs.Count}.",
-                location: typeExpr.Location);
+                typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -197,8 +201,9 @@ public sealed partial class SemanticAnalyzer
             if (!ImplementsProtocol(type: typeArg, protocolName: protoExpr.Name))
             {
                 ReportError(
-                    message: $"Type '{typeArg.Name}' does not implement protocol '{protoExpr.Name}' required by constraint on '{constraint.ParameterName}'.",
-                    location: location);
+                    SemanticDiagnosticCode.ProtocolConstraintViolation,
+                    $"Type '{typeArg.Name}' does not implement protocol '{protoExpr.Name}' required by constraint on '{constraint.ParameterName}'.",
+                    location);
             }
         }
     }
@@ -230,8 +235,9 @@ public sealed partial class SemanticAnalyzer
         // TODO: Check inheritance chain when entity inheritance is fully implemented
         // For now, just check exact type match
         ReportError(
-            message: $"Type '{typeArg.Name}' is not '{baseType.Name}' required by constraint on '{constraint.ParameterName}'.",
-            location: location);
+            SemanticDiagnosticCode.FromConstraintViolation,
+            $"Type '{typeArg.Name}' is not '{baseType.Name}' required by constraint on '{constraint.ParameterName}'.",
+            location);
     }
 
     private void ValidateValueTypeConstraint(
@@ -242,8 +248,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Record)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a value type (record) required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.ValueTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a value type (record) required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -255,8 +262,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Entity)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a reference type (entity) required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.ReferenceTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a reference type (entity) required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -268,8 +276,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Resident)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a resident type required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.ResidentTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a resident type required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -296,8 +305,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Routine)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a routine type required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.RoutineTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a routine type required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -309,8 +319,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Choice)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a choice type required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.ChoiceTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a choice type required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -322,8 +333,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Variant)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a variant type required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.VariantTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a variant type required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -335,8 +347,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Category != TypeCategory.Mutant)
         {
             ReportError(
-                message: $"Type '{typeArg.Name}' is not a mutant type required by constraint on '{constraint.ParameterName}'.",
-                location: location);
+                SemanticDiagnosticCode.MutantTypeConstraintViolation,
+                $"Type '{typeArg.Name}' is not a mutant type required by constraint on '{constraint.ParameterName}'.",
+                location);
         }
     }
 
@@ -369,9 +382,10 @@ public sealed partial class SemanticAnalyzer
         if (!validConstTypes.Contains(value: requiredTypeName))
         {
             ReportError(
-                message: $"Invalid const generic type '{requiredTypeName}' for '{constraint.ParameterName}'. " +
+                SemanticDiagnosticCode.InvalidConstGenericType,
+                $"Invalid const generic type '{requiredTypeName}' for '{constraint.ParameterName}'. " +
                          "Const generics must be integer types.",
-                location: location);
+                location);
             return;
         }
 
@@ -379,8 +393,9 @@ public sealed partial class SemanticAnalyzer
         if (typeArg.Name != requiredTypeName)
         {
             ReportError(
-                message: $"Const generic '{constraint.ParameterName}' requires type '{requiredTypeName}', got '{typeArg.Name}'.",
-                location: location);
+                SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                $"Const generic '{constraint.ParameterName}' requires type '{requiredTypeName}', got '{typeArg.Name}'.",
+                location);
         }
     }
 
@@ -409,8 +424,9 @@ public sealed partial class SemanticAnalyzer
         // No match found
         string allowedTypesList = string.Join(separator: ", ", values: constraint.ConstraintTypes.Select(selector: t => t.Name));
         ReportError(
-            message: $"Type '{typeArg.Name}' is not in [{allowedTypesList}] for constraint on '{constraint.ParameterName}'.",
-            location: location);
+            SemanticDiagnosticCode.TypeEqualityConstraintViolation,
+            $"Type '{typeArg.Name}' is not in [{allowedTypesList}] for constraint on '{constraint.ParameterName}'.",
+            location);
     }
 
     #endregion
