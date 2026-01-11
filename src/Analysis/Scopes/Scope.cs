@@ -1,8 +1,8 @@
 ﻿namespace Compilers.Analysis.Scopes;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Symbols;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Represents a scope in the program for variable and symbol lookup.

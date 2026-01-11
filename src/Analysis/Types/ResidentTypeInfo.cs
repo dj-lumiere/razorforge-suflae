@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
+using Enums;
+using Symbols;
 
 /// <summary>
 /// Type information for residents (fixed-size reference types in persistent memory).
@@ -13,7 +13,7 @@ public sealed class ResidentTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Resident;
 
     /// <summary>Fields declared in this resident.</summary>
-    public IReadOnlyList<FieldInfo> Fields { get; init; } = Array.Empty<FieldInfo>();
+    public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
 
     /// <summary>
     /// Looks up a field by name.
@@ -26,7 +26,7 @@ public sealed class ResidentTypeInfo : TypeInfo
     }
 
     /// <summary>Protocols this resident implements (follows).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = Array.Empty<TypeInfo>();
+    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
     /// The fixed size of this resident in bytes.
@@ -130,7 +130,7 @@ public sealed class ResidentTypeInfo : TypeInfo
                           .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
                           .ToList();
 
-        if (type is ResidentTypeInfo residentType && residentType.GenericDefinition != null)
+        if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
         {
             return residentType.GenericDefinition.Instantiate(typeArguments: newArgs);
         }

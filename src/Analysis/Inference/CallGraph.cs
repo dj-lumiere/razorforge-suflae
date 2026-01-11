@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Inference;
 
-using Compilers.Analysis.Symbols;
+using Symbols;
 
 /// <summary>
 /// Represents a call graph for analyzing method dependencies.

@@ -1,6 +1,6 @@
 namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
+using Enums;
 
 /// <summary>
 /// Type information for first-class function types (lambdas, function references).
@@ -119,9 +119,9 @@ public sealed class RoutineTypeInfo : TypeInfo
         }
 
         // For generic instantiations, recursively substitute
-        if (type.IsGenericInstantiation && type.TypeArguments != null)
+        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
         {
-            var newArgs = type.TypeArguments
+            type.TypeArguments
                 .Select(arg => SubstituteType(arg, substitution))
                 .ToList();
 

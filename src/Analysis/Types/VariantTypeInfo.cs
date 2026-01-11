@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
+using Enums;
 
 /// <summary>
 /// Type information for variants (tagged unions).
@@ -12,7 +12,7 @@ public sealed class VariantTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Variant;
 
     /// <summary>The cases of this variant.</summary>
-    public IReadOnlyList<VariantCaseInfo> Cases { get; init; } = Array.Empty<VariantCaseInfo>();
+    public IReadOnlyList<VariantCaseInfo> Cases { get; init; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was instantiated from.
@@ -105,13 +105,13 @@ public sealed class VariantTypeInfo : TypeInfo
             return substituted;
         }
 
-        if (type.IsGenericInstantiation && type.TypeArguments != null)
+        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
                 .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
                 .ToList();
 
-            if (type is VariantTypeInfo variantType && variantType.GenericDefinition != null)
+            if (type is VariantTypeInfo { GenericDefinition: not null } variantType)
             {
                 return variantType.GenericDefinition.Instantiate(typeArguments: newArgs);
             }

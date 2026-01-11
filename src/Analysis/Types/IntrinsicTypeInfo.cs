@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
+using Enums;
 
 /// <summary>
 /// LLVM intrinsic types (@intrinsic.*) - internal implementation details only.

@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Shared.AST;
+using Shared.AST;
 
 /// <summary>
 /// Information about a single case in a choice type.

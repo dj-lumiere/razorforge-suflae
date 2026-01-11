@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
+using Enums;
 
 /// <summary>
 /// Type information for compiler-generated error handling types (Maybe, Result, Lookup).

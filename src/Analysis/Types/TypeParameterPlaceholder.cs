@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
+using Enums;
 
 /// <summary>
 /// Placeholder type used for unbound generic type parameters.

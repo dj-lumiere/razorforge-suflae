@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
+using Enums;
+using Symbols;
 
 /// <summary>
 /// Type information for records (value types with copy semantics).
@@ -161,7 +161,7 @@ public sealed class RecordTypeInfo : TypeInfo
                           .ToList();
 
         // Get the generic definition and instantiate with new args
-        if (type is RecordTypeInfo recordType && recordType.GenericDefinition != null)
+        if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
         {
             return recordType.GenericDefinition.Instantiate(typeArguments: newArgs);
         }

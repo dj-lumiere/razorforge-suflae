@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Symbols;
 
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Shared.AST;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Information about a field in a record, entity, or resident.

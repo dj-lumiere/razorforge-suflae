@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
+using Enums;
 
 /// <summary>
 /// Type information for protocols (interface/trait definitions).
@@ -12,11 +12,11 @@ public sealed class ProtocolTypeInfo : TypeInfo
 
     /// <summary>Method signatures defined by this protocol.</summary>
     public IReadOnlyList<ProtocolMethodInfo> Methods { get; init; } =
-        Array.Empty<ProtocolMethodInfo>();
+        [];
 
     /// <summary>Parent protocols that this protocol extends.</summary>
     public IReadOnlyList<ProtocolTypeInfo> ParentProtocols { get; init; } =
-        Array.Empty<ProtocolTypeInfo>();
+        [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was instantiated from.

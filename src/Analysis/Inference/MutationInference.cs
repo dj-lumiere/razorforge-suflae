@@ -1,9 +1,7 @@
 ﻿namespace Compilers.Analysis.Inference;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
+using Enums;
+using Shared.AST;
 
 /// <summary>
 /// Performs mutation inference for routines.

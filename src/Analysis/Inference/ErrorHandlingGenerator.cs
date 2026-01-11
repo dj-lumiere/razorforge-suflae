@@ -1,10 +1,9 @@
 ﻿namespace Compilers.Analysis.Inference;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeInfo = Compilers.Analysis.Types.TypeInfo;
+using Symbols;
+using Types;
+using Shared.AST;
+using TypeInfo = Types.TypeInfo;
 
 /// <summary>
 /// Generates error handling variants for failable (!) routines.

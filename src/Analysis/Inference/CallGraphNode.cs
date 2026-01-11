@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Inference;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
+using Enums;
+using Symbols;
 
 /// <summary>
 /// Represents a node in the call graph (a single routine).

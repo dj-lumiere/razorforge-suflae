@@ -1,9 +1,8 @@
 ﻿namespace Compilers.Analysis.Symbols;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+using Enums;
+using Shared.AST;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Information about a routine (function, method, constructor).
@@ -36,7 +35,7 @@ public sealed class RoutineInfo
     public TypeSymbol? OwnerType { get; init; }
 
     /// <summary>Parameters of this routine.</summary>
-    public IReadOnlyList<ParameterInfo> Parameters { get; init; } = Array.Empty<ParameterInfo>();
+    public IReadOnlyList<ParameterInfo> Parameters { get; init; } = [];
 
     /// <summary>Return type, or null for void.</summary>
     public TypeSymbol? ReturnType { get; init; }
@@ -81,7 +80,7 @@ public sealed class RoutineInfo
     public string? Namespace { get; init; }
 
     /// <summary>Attributes on this routine (e.g., @readonly, @inline).</summary>
-    public IReadOnlyList<string> Attributes { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> Attributes { get; init; } = [];
 
     /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
     public bool IsReadOnly => Attributes.Contains(value: "readonly");
@@ -196,7 +195,7 @@ public sealed class RoutineInfo
             return substituted;
         }
 
-        if (type.IsGenericInstantiation && type.TypeArguments != null)
+        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
                 .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))

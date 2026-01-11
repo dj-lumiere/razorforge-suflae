@@ -1,9 +1,8 @@
 ﻿namespace Compilers.Analysis.Inference;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
+using Enums;
+using Types;
+using Shared.AST;
 
 /// <summary>
 /// Performs migratable inference for routines.
@@ -116,7 +115,7 @@ public sealed class MigratableInference
     /// Currently no detection is implemented - this is a placeholder.
     /// </remarks>
     public void AnalyzeCallForMigration(CallGraphNode node, CallExpression callExpr,
-        string methodName, Expression receiver, Types.TypeInfo receiverType)
+        string methodName, Expression receiver, TypeInfo receiverType)
     {
         // TODO: Check if the called method is migratable (from the call graph)
         // and if the receiver is a field of 'me', propagate migratable to the caller.

@@ -1,6 +1,6 @@
 ﻿namespace Compilers.Analysis.Inference;
 
-using Compilers.Analysis.Symbols;
+using Symbols;
 
 /// <summary>
 /// A generated error handling variant.

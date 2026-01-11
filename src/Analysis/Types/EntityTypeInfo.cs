@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Symbols;
+using Enums;
+using Symbols;
 
 /// <summary>
 /// Type information for entities (reference types, heap-allocated).
@@ -12,10 +12,10 @@ public sealed class EntityTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Entity;
 
     /// <summary>Fields declared in this entity.</summary>
-    public IReadOnlyList<FieldInfo> Fields { get; init; } = Array.Empty<FieldInfo>();
+    public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
 
     /// <summary>Protocols this entity implements (follows).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = Array.Empty<TypeInfo>();
+    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was instantiated from.

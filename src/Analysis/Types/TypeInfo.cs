@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
-using Compilers.Shared.AST;
+using Enums;
+using Shared.AST;
 
 /// <summary>
 /// Base class for all type information in the TypeRegistry.

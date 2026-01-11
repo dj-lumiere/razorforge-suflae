@@ -1,7 +1,7 @@
 ﻿namespace Compilers.Analysis.Types;
 
-using Compilers.Analysis.Enums;
-using Compilers.Shared.AST;
+using Enums;
+using Shared.AST;
 
 /// <summary>
 /// Information about a method signature in a protocol.
@@ -20,10 +20,10 @@ public sealed class ProtocolMethodInfo
     public MutationCategory Mutation { get; init; } = MutationCategory.Migratable;
 
     /// <summary>Parameter types (excluding me for instance methods).</summary>
-    public IReadOnlyList<TypeInfo> ParameterTypes { get; init; } = Array.Empty<TypeInfo>();
+    public IReadOnlyList<TypeInfo> ParameterTypes { get; init; } = [];
 
     /// <summary>Parameter names.</summary>
-    public IReadOnlyList<string> ParameterNames { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> ParameterNames { get; init; } = [];
 
     /// <summary>Return type, or null for void.</summary>
     public TypeInfo? ReturnType { get; init; }
