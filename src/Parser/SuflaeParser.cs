@@ -369,7 +369,7 @@ public partial class SuflaeParser
     ///
     /// JUMP STATEMENTS:
     ///   return       - Return from routine (with optional value)
-    ///   becomes      - Tail call (return with tail-call optimization)
+    ///   becomes      - argument assign with if-elseif-else
     ///   break        - Exit loop
     ///   continue     - Skip to next iteration
     ///
