@@ -1080,9 +1080,8 @@ let numbers = Set<S32>()
 
 ## 13. Variant Semantics
 
-**Status:** ✅ Resolved
+**Status:** Open
 **Date:** 2026-01-10
-**Resolved:** 2026-01-12
 
 ### The Question
 
@@ -1090,8 +1089,8 @@ What are the exact semantics for user-defined variants?
 
 ### Design Decision
 
-**Immediate dismantling only.** Variants are ephemeral branching constructs — create and pattern match in one
-expression.
+**Single-use storage with immediate dismantling.** Variants can be stored once, but must be pattern matched before any
+other use.
 
 ```razorforge
 # ✅ Create and immediately match
@@ -1099,51 +1098,59 @@ when Message.Text("hello"):
     is Text t => process(t)
     is Number n => handle(n)
 
-# ✅ Function returning variant must be immediately matched
-when parse_input(text):
+# ✅ Store once, then dismantle
+let msg = Message.Text("hello")
+when msg:
+    is Text t => process(t)
+    is Number n => handle(n)
+
+# ✅ Function returning variant — store or match immediately
+let result = parse_input(text)
+when result:
     is Success data => use(data)
     is Error e => handle(e)
 
-# ❌ CE: Cannot store in variable
-let msg = Message.Text("hello")
-
 # ❌ CE: Cannot pass to function
-process(Message.Text("hello"))
+process(msg)
 
 # ❌ CE: Cannot store in collection
 list.add_last(Message.Text("hello"))
+
+# ❌ CE: Cannot reassign
+msg = Message.Number(42)
 ```
 
-**If you need to store/pass heterogeneous data, use `Data` instead.**
+**If you need to pass around or store in collections, use `Data` instead.**
 
 ### Resolved Questions
 
-| Issue                       | Decision                                                   |
-|-----------------------------|------------------------------------------------------------|
-| **Internal representation** | `record` (value type, stack allocated)                     |
-| **Storage**                 | **No** — must immediately dismantle                        |
-| **Passing**                 | **No** — cannot pass variants as arguments                 |
-| **Collections**             | **No** — use `Data` for heterogeneous collections          |
-| **Copying**                 | **N/A** — immediate dismantling means no copy needed       |
-| **Generic variants**        | **Yes** — `variant Result<T, E> { Ok: T, Err: E }` allowed |
-| **Nested variants**         | **No** — variant payloads cannot be other variants         |
+| Issue                       | Decision                                                    |
+|-----------------------------|-------------------------------------------------------------|
+| **Internal representation** | `record` (value type, stack allocated)                      |
+| **Storage**                 | **Once** — can store in variable, must dismantle before use |
+| **Passing**                 | **No** — cannot pass variants as arguments                  |
+| **Collections**             | **No** — use `Data` for heterogeneous collections           |
+| **Copying**                 | **No** — single owner only                                  |
+| **Reassignment**            | **No** — cannot reassign after initial binding              |
+| **Generic variants**        | **Yes** — `variant Result<T, E> { Ok: T, Err: E }` allowed  |
+| **Nested variants**         | **No** — variant payloads cannot be other variants          |
 
 ### What Can Variants Contain?
 
-**Rule: Variant payloads must be copyable types** (for extraction during pattern match).
+Variants can hold **any type**, including raw entities.
 
-| Type           | Allow? | Notes                                   |
-|----------------|--------|-----------------------------------------|
-| Records        | ✅      | Value copy                              |
-| Choices        | ✅      | Value copy                              |
-| Shared<T>      | ✅      | Handle copy (refcount increased)        |
-| Shared<T, P>   | ✅      | Handle copy (refcount increased)        |
-| Actor<T>       | ✅      | Handle copy (refcount increased)        |
-| Tracked<T>     | ✅      | Weak ref copy                           |
-| Snatched<T>    | ✅      | Raw pointer copy (unsafe, your problem) |
-| Raw entities   | ❌      | No copy semantics                       |
-| Other variants | ❌      | No nesting                              |
-| Tokens         | ❌      | Scope-bound, can't escape               |
+| Type           | Allow? | Notes                       |
+|----------------|--------|-----------------------------|
+| Records        | ✅      | Value types                 |
+| Choices        | ✅      | Value types                 |
+| Shared<T>      | ✅      | Handle (refcount increased) |
+| Shared<T, P>   | ✅      | Handle (refcount increased) |
+| Actor<T>       | ✅      | Handle (refcount increased) |
+| Tracked<T>     | ✅      | Weak ref                    |
+| Snatched<T>    | ✅      | Raw pointer (your problem)  |
+| Raw entities   | ✅      | Single owner                |
+| Other variants | ❌      | No nesting                  |
+| Tokens         | ❌      | Scope-bound, can't escape   |
 
 ### Variants vs Data
 
@@ -1156,6 +1163,113 @@ list.add_last(Message.Text("hello"))
 **Data** = persistent universal box (like `Object` in other languages)
 
 These are complementary features, not competing ones.
+
+### Built-in Variants: `Maybe<T>`, `Result<T>`, `Lookup<T>`
+
+**These are NOT normal user-defined variants.** They are compiler primitives with **type-based branch names**:
+
+| Feature                 | User-defined variants                     | `Maybe<T>`, `Result<T>`, `Lookup<T>`        |
+|-------------------------|-------------------------------------------|---------------------------------------------|
+| Branch names            | Fixed case names (`is Text`, `is Number`) | Type-based (`is Crashable`, `is T`, `else`) |
+| Type parameter in match | No — cases are predefined                 | Yes — branch on actual type `T`             |
+
+```razorforge
+# User-defined: fixed case names
+variant Message { Text: Text, Number: S64 }
+when msg:
+    is Text t => ...    # "Text" is a fixed case name
+    is Number n => ...  # "Number" is a fixed case name
+
+# Built-in: type-based branch names
+let result: Result<MyEntity> = try_load_entity()
+when result:
+    is Crashable e => handle(e)   # "Crashable" is a TYPE, not a case name
+    else entity => use(entity)    # Matches the type parameter T
+
+let maybe: Maybe<S32> = try_parse("42")
+when maybe:
+    is none => show("absent")     # Special "none" case
+    else n => show(n)             # Matches S32 (the type parameter)
+```
+
+**Why the difference?**
+
+- Built-in variants use the **type parameter** to determine branch semantics
+- `Result<T>` matches against `Crashable` protocol (error) vs `T` (success)
+- `Maybe<T>` matches against `none` (absent) vs `T` (present)
+- `Lookup<T>` matches against `Crashable`, `none`, or `T`
+- User variants have statically-defined case names, not type-based matching
+
+**Type inference exclusivity:** Only `Maybe<T>`, `Result<T>`, and `Lookup<T>` support direct type-based matching. This
+is a compiler primitive feature — user-defined variants cannot opt into this behavior. They must always use explicit
+case names.
+
+### Resolved Questions (Additional)
+
+1. **Variant in entity field?**
+
+   ```razorforge
+   entity Container {
+       var result: Result<S32>  # ❌ CE: Result<T> cannot be stored in entity field
+       var maybe: Maybe<S32>    # ✅ Only Maybe<T> is allowed
+   }
+   ```
+
+   **Decision:** Only `Maybe<T>` can be stored in entity fields. Other variants (`Result<T>`, `Lookup<T>`, user-defined)
+   cannot.
+
+2. **Store in entity field for later dismantling?**
+
+   ```razorforge
+   entity Handler {
+       var cached: Maybe<S32>   # ✅ Maybe<T> allowed
+   }
+
+   handler.cached = try_parse("42")  # ✅ OK
+
+   # Later...
+   when handler.cached { ... }       # ✅ OK
+   ```
+
+   **Decision:** Only `Maybe<T>` can be stored in entity fields and dismantled later. Other variant types must be
+   dismantled immediately.
+
+3. **Case name vs type name clarity**
+
+   ```razorforge
+   variant Message {
+       TextMsg: Text    # Case name: TextMsg, payload type: Text
+       NumMsg: S64      # Case name: NumMsg, payload type: S64
+   }
+
+   when msg {
+       is TextMsg t => ...  # ✅ Match by case name
+       is Text t => ...     # ❌ CE: "Text" is not a case name (but can map to Text)
+   }
+   ```
+
+   **Decision:** Yes, match by **case name**, not payload type. However, the case name can be mapped to `Text` if
+   desired (e.g., `Text` case holds `Text` payload).
+
+4. **Is `none` reserved?**
+
+   ```razorforge
+   when maybe {
+       is none => ...  # Lowercase 'none' — Maybe<T> literal
+       else n => ...
+   }
+   ```
+
+   **Decision:** Yes, `none` is a reserved literal for `Maybe<T>`. It represents the absent case.
+
+   ```razorforge
+   variant MyMaybe<T> {
+       none          # ❌ CE: 'none' is reserved for Maybe<T>
+       Some: T
+   }
+   ```
+
+   User-defined variants cannot use `none` as a case name.
 
 ### Rationale
 
@@ -1211,6 +1325,28 @@ A top type enables:
 - Generic "box anything" scenarios
 - Interop with dynamic languages
 
+### Proposed Implementation
+
+**`Data` is an entity with three fields (24 bytes on 64-bit):**
+
+```razorforge
+entity Data {
+    type_id: U64      # Identifies the boxed type (for pattern matching, destructor lookup)
+    size: U64         # Size of the boxed data in bytes
+    data_ptr: UAddr   # Pointer to heap-allocated boxed value
+}
+```
+
+| Field      | Purpose                                                   |
+|------------|-----------------------------------------------------------|
+| `type_id`  | Pattern matching, destructor lookup, `to_text()` dispatch |
+| `size`     | Know how much data to copy/free, bounds checking          |
+| `data_ptr` | Access the actual boxed data                              |
+
+**Memory management:** Standard entity semantics (see [Memory Model](../RazorForge-Wiki/docs/Memory-Model.md)).
+
+**Destructor:** Looked up from `type_id` when `Data` is dropped. No need to store function pointer directly.
+
 ### Design Considerations
 
 **Without inheritance, what does "top type" mean?**
@@ -1233,54 +1369,87 @@ Possible interpretations:
 | **C: `Dynamic` type**    | Explicit opt-in dynamic typing                   | Clear intent       | Two type systems                       |
 | **D: `Tagged<T>` union** | Variant over all primitive types                 | Type-safe          | Only primitives, not custom types      |
 
-### Open Questions
+### Resolved Questions
 
-1. **Boxing semantics**: Does storing in `Data` copy or reference?
-    - Value types (records): Copy into box?
-    - Entities: Reference (refcount++)?
-    - What about large records?
+1. **Boxing semantics** ✅
+    - `Data` is always an entity (heap-allocated)
+    - Value types (records, choices): Copied into box
+    - Entities: `data_ptr` points to entity
 
-2. **Type recovery**: How do you get the original type back?
+2. **Type recovery** ✅
    ```razorforge
-   let box: Data = 42
-   # How to extract?
+   let box: Data = Data(42)
+
+   # Pattern matching
    when box:
        is S32 n => show(n)
        is Text t => show(t)
        else => show("unknown")
+
+   # Cast (crashes if wrong type) — both syntaxes valid
+   let n = S32!(box)      # Constructor style
+   let n = box.S32!()     # Method chaining style
+
+   # Safe cast (returns Maybe)
+   let n = box.try_S32()  # Maybe<S32>
    ```
 
-3. **Method dispatch**: Can you call methods on `Data`?
-    - No methods (must unbox first)?
-    - Only `Core` protocol methods (like `to_text()`)?
-    - Full reflection-based dispatch?
+3. **Method dispatch** ✅
+    - Full reflection-based dispatch
+    - Any method callable on `Data`, runtime lookup
 
-4. **Performance**: What's the runtime cost?
-    - Type ID storage (8 bytes minimum)
-    - Potential heap allocation for large values
-    - Dynamic dispatch overhead
+4. **Performance** ✅
+    - Type ID storage: 8 bytes
+    - Heap allocation for boxed value
+    - Dynamic dispatch overhead for method calls
+    - All costs acknowledged — explicit opt-in
 
-5. **Interaction with existing features**:
-    - `Data` vs `Erased<Protocol>` — when to use which?
-    - `Data` in generic constraints — `T: Data` means nothing?
-    - Can `Data` hold tokens, variants, or other restricted types?
+5. **Interaction with existing features** ✅
+    - `Data` vs `Erased<Protocol>`: Use `Erased<T>` when you know the protocol, `Data` when truly arbitrary
+    - `T: Data` means nothing — not a useful constraint (everything can be boxed)
+    - **What `Data` can hold:**
 
-6. **Type safety**: Does `Data` undermine the language's safety goals?
-    - Runtime type errors possible
-    - Lost compile-time guarantees
+   | Type                         | Can box? | Notes                                   |
+   |------------------------------|----------|-----------------------------------------|
+   | Records, Choices             | ✅        | Copied into box                         |
+   | Primitives (S32, Text, etc.) | ✅        | Copied into box                         |
+   | Entities                     | ✅        | `data_ptr` references entity            |
+   | Shared<T>, Tracked<T>        | ✅        | Handle copied (refcount++)              |
+   | Snatched<T>                  | ✅        | Raw pointer copied (your problem)       |
+   | Maybe<T>                     | ✅        | Already storable anywhere               |
+   | **Result<T>**                | ❌        | Must dismantle immediately (handle errors) |
+   | **Lookup<T>**                | ❌        | Must dismantle immediately (handle errors) |
+   | **User-defined variants**    | ❌        | Must dismantle immediately              |
+   | **Tokens**                   | ❌        | Scope-bound, cannot escape              |
 
-7. **Data inside Data problem**:
-    - Can `Data` hold another `Data`? → `Data(Data(Data(42)))`
-    - Issues with nested boxing:
+   **Simple rule:** `Data` holds anything that can already be freely stored/passed. It's not an escape hatch for types that must be dismantled immediately.
+
+   ```razorforge
+   # ✅ Maybe<T> is fine
+   let box = Data(try_parse("42"))  # Maybe<S32>
+
+   # ❌ Can't box Result/Lookup (must handle errors)
+   let box = Data(check_parse("42"))  # CE: Result<S32> cannot be boxed
+
+   # ❌ Can't box variant directly
+   let box = Data(Message.Text("hello"))  # CE
+
+   # ✅ Dismantle first, box the payload
+   when Message.Text("hello"):
+       is Text t => let box = Data(t)
+   ```
+
+6. **Type safety** ✅
+    - **Decision:** You opted in — you accept the risk.
+    - Using `Data` is an explicit choice to trade compile-time guarantees for runtime flexibility.
+    - Runtime type errors are possible and expected; handle with pattern matching.
+
+7. **Data inside Data problem** ✅ Resolved
+    - **Decision:** Compiler flattening — `Data(Data(42))` becomes `Data(42)`.
+    - The compiler automatically unwraps nested `Data` to avoid:
         - Unnecessary indirection and heap allocations
-        - Pattern matching confusion — match outer or inner?
-        - Performance overhead (multiple dereferences)
-        - Type recovery becomes ambiguous
-    - Options:
-        - **Flatten automatically**: `Data(Data(42))` becomes `Data(42)` — compiler unwraps
-        - **Compile error**: `Data` cannot contain `Data`
-        - **Allow it**: User's problem if they nest (least restrictive)
-    - Similar questions for `Data` containing `Erased<T>` or vice versa
+        - Pattern matching confusion
+        - Performance overhead
 
 8. **Relationship with variant restrictions (Section 13)** ✅ Clarified
     - `Data` is an **entity** (reference semantics) — cheap to store/pass (pointer copy, refcount++)
