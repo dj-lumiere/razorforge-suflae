@@ -325,10 +325,6 @@ public sealed class StdlibLoader
                 RegisterVariantType(registry, variant, namespaceName);
                 break;
 
-            case MutantDeclaration mutant:
-                RegisterMutantType(registry, mutant, namespaceName);
-                break;
-
             case ProtocolDeclaration protocol:
                 RegisterProtocolType(registry, protocol, namespaceName);
                 break;
@@ -553,44 +549,6 @@ public sealed class StdlibLoader
         }
 
         var typeInfo = new Types.VariantTypeInfo(variant.Name)
-        {
-            Namespace = namespaceName ?? "Core", Cases = cases
-        };
-
-        registry.RegisterType(typeInfo);
-    }
-
-    /// <summary>
-    /// Registers a mutant type (untagged union) from stdlib.
-    /// </summary>
-    private static void RegisterMutantType(TypeRegistry registry, MutantDeclaration mutant,
-        string? namespaceName)
-    {
-        // Skip if already registered
-        if (registry.LookupType(mutant.Name) != null)
-        {
-            return;
-        }
-
-        // Build cases list upfront
-        var cases = new List<Types.VariantCaseInfo>();
-        int tagValue = 0;
-        foreach (var caseDecl in mutant.Cases)
-        {
-            // Determine payload type from AssociatedTypes if any
-            Types.TypeInfo? payloadType = null;
-            if (caseDecl.AssociatedTypes != null)
-            {
-                payloadType = ResolveSimpleType(registry, caseDecl.AssociatedTypes);
-            }
-
-            cases.Add(new Types.VariantCaseInfo(caseDecl.Name)
-            {
-                PayloadType = payloadType, TagValue = tagValue++
-            });
-        }
-
-        var typeInfo = new Types.MutantTypeInfo(mutant.Name)
         {
             Namespace = namespaceName ?? "Core", Cases = cases
         };

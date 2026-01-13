@@ -315,37 +315,6 @@ public record VariantDeclaration(
 }
 
 /// <summary>
-/// Mutant declaration that defines untagged unions (raw memory unions).
-/// Requires danger! block for access, no safety guarantees.
-/// </summary>
-/// <param name="Name">Mutant identifier name</param>
-/// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="Cases">List of mutant cases with associated types</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Mutant declarations enable unsafe memory unions:
-/// <list type="bullet">
-/// <item>Untagged unions: mutant RawData { AS_INT(S32), AS_FLOAT(F32) }</item>
-/// <item>Requires danger! block for access</item>
-/// <item>No runtime tag - caller must track which case is active</item>
-/// <item>Used for FFI and low-level memory manipulation</item>
-/// </list>
-/// </remarks>
-public record MutantDeclaration(
-    string Name,
-    List<string>? GenericParameters,
-    List<VariantCase> Cases,
-    SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null)
-    : Declaration(Location: Location)
-{
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitMutantDeclaration(node: this);
-    }
-}
-
-/// <summary>
 /// Protocol (trait/interface) declaration that defines behavioral contracts.
 /// Specifies method signatures that implementing types must provide.
 /// </summary>

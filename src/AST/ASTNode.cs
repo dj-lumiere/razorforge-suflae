@@ -392,11 +392,6 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the variant declaration</returns>
     T VisitVariantDeclaration(VariantDeclaration node);
 
-    /// <summary>Visits a mutant declaration node (untagged union/raw memory union definitions)</summary>
-    /// <param name="node">The mutant declaration to visit</param>
-    /// <returns>Result of visiting the mutant declaration</returns>
-    T VisitMutantDeclaration(MutantDeclaration node);
-
     /// <summary>Visits a feature declaration node (trait/interface definitions)</summary>
     /// <param name="node">The feature declaration to visit</param>
     /// <returns>Result of visiting the feature declaration</returns>

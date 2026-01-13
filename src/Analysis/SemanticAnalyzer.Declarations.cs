@@ -56,10 +56,6 @@ public sealed partial class SemanticAnalyzer
                 CollectVariantDeclaration(variant: variant);
                 break;
 
-            case MutantDeclaration mutant:
-                CollectMutantDeclaration(mutant: mutant);
-                break;
-
             case ProtocolDeclaration protocol:
                 CollectProtocolDeclaration(protocol: protocol);
                 break;
@@ -225,19 +221,6 @@ public sealed partial class SemanticAnalyzer
         TryRegisterType(type: typeInfo, location: variant.Location);
     }
 
-    private void CollectMutantDeclaration(MutantDeclaration mutant)
-    {
-        var typeInfo = new MutantTypeInfo(name: mutant.Name)
-        {
-            GenericParameters = mutant.GenericParameters,
-            GenericConstraints = mutant.GenericConstraints,
-            Location = mutant.Location,
-            Namespace = GetCurrentNamespace()
-        };
-
-        TryRegisterType(type: typeInfo, location: mutant.Location);
-    }
-
     private void CollectProtocolDeclaration(ProtocolDeclaration protocol)
     {
         var typeInfo = new ProtocolTypeInfo(name: protocol.Name)
@@ -343,10 +326,6 @@ public sealed partial class SemanticAnalyzer
 
             case VariantDeclaration variant:
                 ResolveVariantBody(variant: variant);
-                break;
-
-            case MutantDeclaration mutant:
-                ResolveMutantBody(mutant: mutant);
                 break;
         }
     }
@@ -538,55 +517,6 @@ public sealed partial class SemanticAnalyzer
                 type: payloadType,
                 caseName: variantCase.Name,
                 location: variantCase.Location);
-        }
-    }
-
-    private void ResolveMutantBody(MutantDeclaration mutant)
-    {
-        // Track seen types for uniqueness validation
-        var seenTypes = new Dictionary<string, string>(); // type name -> case name
-
-        foreach (VariantCase mutantCase in mutant.Cases)
-        {
-            // Rule 1: All mutant cases must have an associated type
-            if (mutantCase.AssociatedTypes == null)
-            {
-                ReportError(
-                    SemanticDiagnosticCode.MutantCaseRequiresType,
-                    $"Mutant case '{mutantCase.Name}' must have an associated type. " +
-                             "Empty cases are not allowed in mutants.",
-                    mutantCase.Location);
-                continue;
-            }
-
-            TypeSymbol payloadType = ResolveType(typeExpr: mutantCase.AssociatedTypes);
-
-            // Skip further validation if type resolution failed
-            if (payloadType is ErrorTypeInfo)
-            {
-                continue;
-            }
-
-            // Rule 2: All types must be unique within the mutant
-            string typeName = payloadType.Name;
-            if (seenTypes.TryGetValue(key: typeName, value: out string? existingCase))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.MutantCaseTypeDuplicate,
-                    $"Mutant case '{mutantCase.Name}' has type '{typeName}' which is already " +
-                             $"used by case '{existingCase}'. All mutant case types must be unique.",
-                    mutantCase.Location);
-            }
-            else
-            {
-                seenTypes[key: typeName] = mutantCase.Name;
-            }
-
-            // Validate that tokens cannot be used as mutant payloads
-            ValidateNotTokenVariantPayload(
-                type: payloadType,
-                caseName: mutantCase.Name,
-                location: mutantCase.Location);
         }
     }
 
