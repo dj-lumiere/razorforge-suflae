@@ -113,15 +113,15 @@ public partial class SuflaeParser
 
         // Numeric literals
         if (Check(TokenType.Integer,
-                TokenType.S64Literal,
-                TokenType.U64Literal,
-                TokenType.S32Literal,
-                TokenType.U32Literal,
-                TokenType.S16Literal,
-                TokenType.U16Literal,
                 TokenType.S8Literal,
-                TokenType.U8Literal,
+                TokenType.S16Literal,
+                TokenType.S32Literal,
+                TokenType.S64Literal,
                 TokenType.S128Literal,
+                TokenType.U8Literal,
+                TokenType.U16Literal,
+                TokenType.U32Literal,
+                TokenType.U64Literal,
                 TokenType.U128Literal,
                 TokenType.SAddrLiteral,
                 TokenType.UAddrLiteral))

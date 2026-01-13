@@ -132,6 +132,19 @@ public enum TokenType
     /// <summary>128-bit decimal literal (3.14d128)</summary>
     D128Literal,
 
+    // Imaginary (for complex numbers)
+    /// <summary>32-bit imaginary literal (4.0j32)</summary>
+    J32Literal,
+
+    /// <summary>64-bit imaginary literal (4.0j64 or 4.0j)</summary>
+    J64Literal,
+
+    /// <summary>128-bit imaginary literal (4.0j128)</summary>
+    J128Literal,
+
+    /// <summary>Arbitrary precision imaginary literal (4.0jn)</summary>
+    JnLiteral,
+
     #endregion
 
     #region Memory Size Literals

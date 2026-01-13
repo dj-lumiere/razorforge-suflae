@@ -752,55 +752,43 @@ public partial class SuflaeParser
 
         // Special handling for unary minus on numeric literals
         // This allows parsing negative min values like -9_223_372_036_854_775_808_s64
-        if (op.Type == TokenType.Minus && Check(TokenType.Integer,
-                TokenType.S64Literal,
-                TokenType.U64Literal,
-                TokenType.S32Literal,
-                TokenType.U32Literal,
-                TokenType.S16Literal,
-                TokenType.U16Literal,
+        // All numeric literals are now strings, so we prepend "-" to the string
+        if (op.Type == TokenType.Minus && Check(
                 TokenType.S8Literal,
-                TokenType.U8Literal,
+                TokenType.S16Literal,
+                TokenType.S32Literal,
+                TokenType.S64Literal,
                 TokenType.S128Literal,
-                TokenType.U128Literal,
                 TokenType.SAddrLiteral,
+                TokenType.U8Literal,
+                TokenType.U16Literal,
+                TokenType.U32Literal,
+                TokenType.U64Literal,
+                TokenType.U128Literal,
                 TokenType.UAddrLiteral,
-                TokenType.Decimal,
+                TokenType.Integer,
                 TokenType.F16Literal,
                 TokenType.F32Literal,
                 TokenType.F64Literal,
                 TokenType.F128Literal,
                 TokenType.D32Literal,
                 TokenType.D64Literal,
-                TokenType.D128Literal))
+                TokenType.D128Literal,
+                TokenType.Decimal,
+                TokenType.J32Literal,
+                TokenType.J64Literal,
+                TokenType.J128Literal,
+                TokenType.JnLiteral))
         {
             // Parse the literal
             Expression literal = ParsePostfix();
 
-            // If it's a literal expression, apply the sign directly to the value
-            if (literal is LiteralExpression litExpr)
+            // If it's a literal expression with string value, prepend negative sign
+            if (literal is LiteralExpression { Value: string strVal } litExpr)
             {
-                return litExpr.Value switch
-                {
-                    // Negate numeric values with C# equivalents
-                    sbyte sbyteVal => new LiteralExpression(Value: (sbyte)-sbyteVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    short shortVal => new LiteralExpression(Value: (short)-shortVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    int intVal => new LiteralExpression(Value: -intVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    long longVal => new LiteralExpression(Value: -longVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    Int128 int128Val => new LiteralExpression(Value: -int128Val, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    float floatVal => new LiteralExpression(Value: -floatVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    double doubleVal => new LiteralExpression(Value: -doubleVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-                    Half halfVal => new LiteralExpression(Value: -halfVal, LiteralType: litExpr.LiteralType, Location: opLocation),
-
-                    // Deferred types stored as strings - prepend negative sign
-                    // d128, Integer, Decimal are parsed at compile-time by native libraries
-                    string strVal => new LiteralExpression(
-                        Value: strVal.StartsWith(value: "-") ? strVal.Substring(startIndex: 1) : "-" + strVal,
-                        LiteralType: litExpr.LiteralType,
-                        Location: opLocation),
-
-                    _ => literal
-                };
+                // Toggle negative sign: if already negative, remove it; otherwise add it
+                string newValue = strVal.StartsWith(value: "-") ? strVal.Substring(startIndex: 1) : "-" + strVal;
+                return new LiteralExpression(Value: newValue, LiteralType: litExpr.LiteralType, Location: opLocation);
             }
         }
 
@@ -1276,13 +1264,21 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Tries to parse an integer or float literal.
+    /// Tries to parse a numeric literal (integer, float, decimal, imaginary).
+    /// All numeric literals are stored as raw strings for semantic analysis.
+    /// The semantic analyzer will parse the value based on the expected type context.
     /// </summary>
+    /// <remarks>
+    /// Storing literals as strings enables:
+    /// - Contextual type inference: `let a: S16 = 100` treats 100 as S16
+    /// - Arbitrary precision: `let b: Integer = 123...123` handles any size
+    /// - Overflow detection: semantic analyzer can validate value fits in target type
+    /// </remarks>
     private bool TryParseNumericLiteral(SourceLocation location, out Expression? result)
     {
         result = null;
 
-        // Integer literals
+        // Integer literals (Suflae uses S32/S64/S128 and Integer for arbitrary precision)
         if (Match(TokenType.Integer,
                 TokenType.S32Literal,
                 TokenType.S64Literal,
@@ -1291,134 +1287,26 @@ public partial class SuflaeParser
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
-                TokenType.UAddrLiteral))
-        {
-            Token token = PeekToken(offset: -1);
-            string cleanValue = token.Text
-                                     .Replace(oldValue: "s32", newValue: "")
-                                     .Replace(oldValue: "s64", newValue: "")
-                                     .Replace(oldValue: "s128", newValue: "")
-                                     .Replace(oldValue: "saddr", newValue: "")
-                                     .Replace(oldValue: "u32", newValue: "")
-                                     .Replace(oldValue: "u64", newValue: "")
-                                     .Replace(oldValue: "u128", newValue: "")
-                                     .Replace(oldValue: "uaddr", newValue: "")
-                                     .Replace(oldValue: "_", newValue: "");
-
-            result = ParseIntegerValue(cleanValue: cleanValue, token: token, location: location);
-            return true;
-        }
-
-        // Float literals
-        if (Match(TokenType.Decimal,
+                TokenType.UAddrLiteral,
+                TokenType.Decimal,
                 TokenType.F16Literal,
                 TokenType.F32Literal,
                 TokenType.F64Literal,
                 TokenType.F128Literal,
                 TokenType.D32Literal,
                 TokenType.D64Literal,
-                TokenType.D128Literal))
+                TokenType.D128Literal,
+                TokenType.J32Literal,
+                TokenType.J64Literal,
+                TokenType.J128Literal,
+                TokenType.JnLiteral))
         {
             Token token = PeekToken(offset: -1);
-
-            // For F128, D32, D64, D128 - store raw string, semantic analysis will parse them
-            // using NumericLiteralParser which calls native C libraries (LibBF, Intel DFP)
-            if (token.Type is TokenType.F128Literal or TokenType.D32Literal or TokenType.D64Literal or TokenType.D128Literal)
-            {
-                result = new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
-                return true;
-            }
-
-            string cleanValue = token.Text
-                                     .Replace(oldValue: "f16", newValue: "")
-                                     .Replace(oldValue: "f32", newValue: "")
-                                     .Replace(oldValue: "f64", newValue: "")
-                                     .Replace(oldValue: "_", newValue: "");
-
-            if (double.TryParse(s: cleanValue, result: out double floatVal))
-            {
-                result = new LiteralExpression(Value: floatVal, LiteralType: token.Type, Location: location);
-                return true;
-            }
-
-            throw ThrowParseError($"Invalid float literal: {token.Text}");
+            result = new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+            return true;
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Parses an integer value from a cleaned string, handling hex, binary, and decimal formats.
-    /// </summary>
-    /// <param name="cleanValue">The cleaned integer literal without type suffix.</param>
-    /// <param name="token">The original token for error reporting.</param>
-    /// <param name="location">Source location of the literal.</param>
-    /// <returns>A <see cref="LiteralExpression"/> representing the integer value.</returns>
-    private static LiteralExpression ParseIntegerValue(string cleanValue, Token token, SourceLocation location)
-    {
-        // For 128-bit integers and arbitrary precision (Integer), store the raw string.
-        // Semantic analysis will parse them using NumericLiteralParser which handles arbitrary precision.
-        if (token.Type is TokenType.S128Literal or TokenType.U128Literal or TokenType.Integer)
-        {
-            return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
-        }
-
-        // Handle hexadecimal literals (0x prefix)
-        if (cleanValue.StartsWith(value: "0x") || cleanValue.StartsWith(value: "0X"))
-        {
-            string hexPart = cleanValue.Substring(startIndex: 2);
-            if (long.TryParse(s: hexPart,
-                    style: System.Globalization.NumberStyles.HexNumber,
-                    provider: null,
-                    result: out long hexVal))
-            {
-                return new LiteralExpression(Value: hexVal, LiteralType: token.Type, Location: location);
-            }
-            // Value too large for 64-bit, store as string for semantic analysis
-            return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
-        }
-        // Handle binary literals (0b prefix)
-        if (cleanValue.StartsWith(value: "0b") || cleanValue.StartsWith(value: "0B"))
-        {
-            string binaryPart = cleanValue.Substring(startIndex: 2);
-            try
-            {
-                long binVal = Convert.ToInt64(value: binaryPart, fromBase: 2);
-                return new LiteralExpression(Value: binVal, LiteralType: token.Type, Location: location);
-            }
-            catch (Exception)
-            {
-                // Value too large for 64-bit, store as string for semantic analysis
-                return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
-            }
-        }
-        // Handle octal literals (0o prefix)
-        if (cleanValue.StartsWith(value: "0o") || cleanValue.StartsWith(value: "0O"))
-        {
-            string octalPart = cleanValue.Substring(startIndex: 2);
-            try
-            {
-                long octVal = Convert.ToInt64(value: octalPart, fromBase: 8);
-                return new LiteralExpression(Value: octVal, LiteralType: token.Type, Location: location);
-            }
-            catch (Exception)
-            {
-                // Value too large for 64-bit, store as string for semantic analysis
-                return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
-            }
-        }
-        // Handle decimal literals
-        if (long.TryParse(s: cleanValue, result: out long intVal))
-        {
-            return new LiteralExpression(Value: intVal, LiteralType: token.Type, Location: location);
-        }
-        // Handle large unsigned values
-        if (ulong.TryParse(s: cleanValue, result: out ulong ulongVal))
-        {
-            return new LiteralExpression(Value: unchecked((long)ulongVal), LiteralType: token.Type, Location: location);
-        }
-        // Value too large for 64-bit, store as string for semantic analysis
-        return new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
     }
 
     /// <summary>
@@ -1489,6 +1377,8 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Tries to parse a memory size literal (bytes, kilobytes, etc.).
+    /// All memory literals are stored as raw strings for semantic analysis.
+    /// The semantic analyzer will parse the value and validate it fits in the target type.
     /// </summary>
     private bool TryParseMemoryLiteral(SourceLocation location, out Expression? result)
     {
@@ -1506,21 +1396,14 @@ public partial class SuflaeParser
         }
 
         Token token = PeekToken(offset: -1);
-        string numericPart = new(value: token.Text
-                                             .TakeWhile(predicate: char.IsDigit)
-                                             .ToArray());
-
-        if (long.TryParse(s: numericPart, result: out long memoryVal))
-        {
-            result = new LiteralExpression(Value: memoryVal, LiteralType: token.Type, Location: location);
-            return true;
-        }
-
-        throw ThrowParseError($"Invalid memory literal: {token.Text}");
+        result = new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+        return true;
     }
 
     /// <summary>
     /// Tries to parse a duration/time literal (hours, minutes, seconds, etc.).
+    /// All duration literals are stored as raw strings for semantic analysis.
+    /// The semantic analyzer will parse the value and validate it fits in the target type.
     /// </summary>
     private bool TryParseDurationLiteral(SourceLocation location, out Expression? result)
     {
@@ -1539,17 +1422,8 @@ public partial class SuflaeParser
         }
 
         Token token = PeekToken(offset: -1);
-        string numericPart = new(value: token.Text
-                                             .TakeWhile(predicate: char.IsDigit)
-                                             .ToArray());
-
-        if (long.TryParse(s: numericPart, result: out long timeVal))
-        {
-            result = new LiteralExpression(Value: timeVal, LiteralType: token.Type, Location: location);
-            return true;
-        }
-
-        throw ThrowParseError($"Invalid duration literal: {token.Text}");
+        result = new LiteralExpression(Value: token.Text, LiteralType: token.Type, Location: location);
+        return true;
     }
 
     /// <summary>

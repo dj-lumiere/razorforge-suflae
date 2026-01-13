@@ -85,7 +85,7 @@ public sealed partial class SemanticAnalyzer
     public AnalysisResult Analyze(Program program, string? filePath = null)
     {
         // Store file path for import resolution
-        _currentFilePath = filePath ?? program.Location.FileName ?? string.Empty;
+        _currentFilePath = filePath ?? program.Location.FileName;
 
         // Phase 1: Collect all type and routine declarations (forward declarations)
         CollectDeclarations(program: program);

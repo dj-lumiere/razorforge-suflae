@@ -247,7 +247,14 @@ public partial class SuflaeTokenizer
         // Decimal floating-point
         [key: "d32"] = TokenType.D32Literal,
         [key: "d64"] = TokenType.D64Literal,
-        [key: "d128"] = TokenType.D128Literal
+        [key: "d128"] = TokenType.D128Literal,
+
+        // Imaginary (for complex numbers)
+        [key: "j"] = TokenType.J64Literal,    // Default to 64-bit
+        [key: "j32"] = TokenType.J32Literal,
+        [key: "j64"] = TokenType.J64Literal,
+        [key: "j128"] = TokenType.J128Literal,
+        [key: "jn"] = TokenType.JnLiteral     // Arbitrary precision
     };
 
     /// <summary>
