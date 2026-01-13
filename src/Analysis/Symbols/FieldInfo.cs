@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Symbols;
+namespace Compilers.Analysis.Symbols;
 
 using Shared.AST;
 using TypeSymbol = Types.TypeInfo;
@@ -6,6 +6,15 @@ using TypeSymbol = Types.TypeInfo;
 /// <summary>
 /// Information about a field in a record, entity, or resident.
 /// </summary>
+/// <remarks>
+/// Field visibility uses the four-level system:
+/// <list type="bullet">
+/// <item>public - read/write from anywhere</item>
+/// <item>published - public read, private write</item>
+/// <item>internal - read/write within module</item>
+/// <item>private - read/write within file</item>
+/// </list>
+/// </remarks>
 public sealed class FieldInfo
 {
     /// <summary>The name of the field.</summary>
@@ -17,15 +26,11 @@ public sealed class FieldInfo
     /// <summary>Whether this field is mutable (var) or immutable (let).</summary>
     public bool IsMutable { get; init; }
 
-    /// <summary>Visibility for reading (getter).</summary>
+    /// <summary>
+    /// Visibility for the field (public, published, internal, private).
+    /// For published fields, read is public but write is private.
+    /// </summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Public;
-
-    /// <summary>Visibility for writing (setter), if different from getter.</summary>
-    public VisibilityModifier? SetterVisibility { get; init; }
-
-    /// <summary>The effective setter visibility (uses getter visibility if not specified).</summary>
-    public VisibilityModifier EffectiveSetterVisibility =>
-        SetterVisibility ?? Visibility;
 
     /// <summary>The index of this field within the containing type.</summary>
     public int Index { get; init; }
@@ -61,7 +66,6 @@ public sealed class FieldInfo
         {
             IsMutable = IsMutable,
             Visibility = Visibility,
-            SetterVisibility = SetterVisibility,
             Index = Index,
             HasDefaultValue = HasDefaultValue,
             Location = Location,
