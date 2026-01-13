@@ -28,7 +28,7 @@ routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection? {
     hijacking pool as p {
         # Check capacity with pattern matching
         when p.active_count < p.max_connections {
-            true => {
+            == true => {
                 let conn = Connection()
                 p.connections.add_last(steal conn)  # Explicit ownership transfer
                 p.active_count += 1
@@ -42,7 +42,7 @@ routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection? {
 routine monitor_pool(weak: Tracked<ConnectionPool>) {
     # Try to recover weak reference
     when weak.try_recover() {
-        is none => show("Pool was deallocated"),
+        is None => show("Pool was deallocated"),
         else strong => {
             # Inline access for single read
             show(f"Pool stats: {strong.view().active_count}/{strong.view().max_connections}")
@@ -77,7 +77,7 @@ public routine UserCache.__create__():
 public suspended routine UserCache.fetch_user!(id: Integer) -> User:
     # Check cache first
     when me.cache.try_getitem(id):
-        is none:
+        is None:
             me.miss_count += 1
             let user = waitfor http.get(f"/api/users/{id}")
             unless user:
@@ -413,7 +413,7 @@ routine start() {
         let receiver = rx
         loop {
             when receiver.try_receive() {
-                is none => break,  # Channel closed
+                is None => break,  # Channel closed
                 else task => {
                     show(f"Worker {worker_id} processing task {task.id}")
                     process_task(task)

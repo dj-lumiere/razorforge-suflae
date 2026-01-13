@@ -198,7 +198,7 @@ public partial class SuflaeTokenizer
         // Literals
         [key: "true"] = TokenType.True,
         [key: "false"] = TokenType.False,
-        [key: "none"] = TokenType.None,
+        [key: "None"] = TokenType.None,
 
         // Generic constraints
         [key: "requires"] = TokenType.Requires,
