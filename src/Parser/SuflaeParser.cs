@@ -256,6 +256,16 @@ public partial class SuflaeParser
         // Parse attributes (e.g., @inline, @crash_only, @intrinsic("name"))
         List<string> attributes = ParseAttributes();
 
+        // Skip newlines between attributes and the declaration they modify
+        // e.g., @readonly\nroutine foo() should work
+        if (attributes.Count > 0)
+        {
+            while (Match(type: TokenType.Newline))
+            {
+                // Skip newlines
+            }
+        }
+
         // Parse visibility and storage class modifiers
         var (visibility, storage) = ParseModifiers();
 
