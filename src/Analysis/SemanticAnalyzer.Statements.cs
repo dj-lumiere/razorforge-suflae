@@ -146,10 +146,16 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeAbsentStatement(absent: absent);
                 break;
 
-            case BreakStatement:
-            case ContinueStatement:
+            case BreakStatement breakStmt:
+                AnalyzeBreakStatement(breakStmt: breakStmt);
+                break;
+
+            case ContinueStatement continueStmt:
+                AnalyzeContinueStatement(continueStmt: continueStmt);
+                break;
+
             case PassStatement:
-                // These are simple control flow statements with no type analysis needed
+                // Pass is a no-op statement with no type analysis needed
                 break;
 
             case DestructuringStatement destruct:
@@ -354,14 +360,14 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Analyze loop body
-        _registry.EnterScope(kind: ScopeKind.Block, name: "while");
+        _registry.EnterScope(kind: ScopeKind.Loop, name: "while");
         AnalyzeStatement(statement: whileStmt.Body);
         _registry.ExitScope();
     }
 
     private void AnalyzeForStatement(ForStatement forStmt)
     {
-        _registry.EnterScope(kind: ScopeKind.Block, name: "for");
+        _registry.EnterScope(kind: ScopeKind.Loop, name: "for");
 
         // Analyze iterable expression
         TypeSymbol iterableType = AnalyzeExpression(expression: forStmt.Iterable);
@@ -484,6 +490,28 @@ public sealed partial class SemanticAnalyzer
 
         // Mark routine as having absent statements (for variant generation)
         _currentRoutine.HasAbsent = true;
+    }
+
+    private void AnalyzeBreakStatement(BreakStatement breakStmt)
+    {
+        if (!_registry.CurrentScope.IsInLoop)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BreakOutsideLoop,
+                "Break statement is only allowed inside a loop.",
+                breakStmt.Location);
+        }
+    }
+
+    private void AnalyzeContinueStatement(ContinueStatement continueStmt)
+    {
+        if (!_registry.CurrentScope.IsInLoop)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ContinueOutsideLoop,
+                "Continue statement is only allowed inside a loop.",
+                continueStmt.Location);
+        }
     }
 
     private void AnalyzeDestructuringStatement(DestructuringStatement destruct)

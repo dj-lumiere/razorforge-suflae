@@ -17,8 +17,11 @@ public enum ScopeKind
     /// <summary>Function/routine body scope.</summary>
     Function,
 
-    /// <summary>Block scope (if, while, for, etc.).</summary>
+    /// <summary>Block scope (if, when, etc.).</summary>
     Block,
+
+    /// <summary>Loop scope (while, for, until).</summary>
+    Loop,
 
     /// <summary>Danger block scope (RazorForge only).</summary>
     Danger,

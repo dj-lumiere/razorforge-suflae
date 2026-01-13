@@ -257,7 +257,12 @@ public partial class RazorForgeParser
                 pattern = ParseTypePattern();
                 _inWhenPatternContext = false;
             }
-            // Case 5: Other patterns (literals, identifiers)
+            // Case 5: Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
+            else if (IsComparisonOperator(CurrentToken.Type))
+            {
+                pattern = ParseComparisonPattern();
+            }
+            // Case 6: Other patterns (literals, identifiers)
             else
             {
                 // Set context flag to prevent single-param lambdas from being parsed
@@ -268,15 +273,39 @@ public partial class RazorForgeParser
             }
 
             // ─────────────────────────────────────────────────────────────────────
-            // Parse arrow and body
+            // Parse arrow or block
+            // Two forms:
+            //   pattern => expression       (single expression)
+            //   pattern { statements... }   (multi-statement block, requires 'becomes')
             // ─────────────────────────────────────────────────────────────────────
 
-            Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after pattern");
-
             // Set flag to prevent 'is' expression parsing in when clause bodies
-            // This avoids ambiguity: "result is Success" should be a new pattern, not an is-expression
             _inWhenClauseBody = true;
-            Statement body = ParseStatement();
+            Statement body;
+
+            if (Match(type: TokenType.FatArrow))
+            {
+                // Single-expression branch: pattern => expression
+                // Block is NOT allowed after => (use pattern { } instead)
+                if (Check(type: TokenType.LeftBrace))
+                {
+                    throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
+                        "Block '{ }' is not allowed after '=>'. Use 'pattern { statements... becomes value }' for multi-statement branches");
+                }
+
+                body = ParseStatement();
+            }
+            else if (Check(type: TokenType.LeftBrace))
+            {
+                // Multi-statement branch: pattern { statements... becomes value }
+                body = ParseBlockStatement();
+            }
+            else
+            {
+                throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
+                    "Expected '=>' or '{' after pattern");
+            }
+
             _inWhenClauseBody = false;
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
@@ -752,5 +781,57 @@ public partial class RazorForgeParser
             Initializer: initializer,
             IsMutable: isMutable,
             Location: location);
+    }
+
+    /// <summary>
+    /// Checks if the given token type is a comparison operator used in when patterns.
+    /// Supported operators: ==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==
+    /// </summary>
+    /// <param name="tokenType">The token type to check.</param>
+    /// <returns>True if the token is a comparison operator for patterns.</returns>
+    private static bool IsComparisonOperator(TokenType tokenType)
+    {
+        return tokenType is TokenType.Equal or TokenType.NotEqual
+            or TokenType.Less or TokenType.Greater
+            or TokenType.LessEqual or TokenType.GreaterEqual
+            or TokenType.ReferenceEqual or TokenType.ReferenceNotEqual;
+    }
+
+    /// <summary>
+    /// Parses a comparison pattern in a when clause.
+    /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
+    /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
+    /// </summary>
+    /// <returns>A <see cref="ComparisonPattern"/> AST node.</returns>
+    private ComparisonPattern ParseComparisonPattern()
+    {
+        SourceLocation location = GetLocation();
+        TokenType op = CurrentToken.Type;
+        Advance(); // consume the operator
+
+        // Parse the value to compare against
+        // Set context flag to prevent lambda parsing
+        _inWhenPatternContext = true;
+        Expression value = ParsePrimary();
+
+        // Allow member access and calls on the primary expression (e.g., Status.ACTIVE, get_user())
+        while (Check(type: TokenType.Dot) || Check(type: TokenType.LeftParen))
+        {
+            if (Match(type: TokenType.Dot))
+            {
+                string memberName = ConsumeIdentifier(errorMessage: "Expected member name after '.'");
+                value = new MemberExpression(Object: value, PropertyName: memberName, Location: GetLocation());
+            }
+            else if (Match(type: TokenType.LeftParen))
+            {
+                List<Expression> args = ParseArgumentList();
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
+                value = new CallExpression(Callee: value, Arguments: args, Location: GetLocation());
+            }
+        }
+
+        _inWhenPatternContext = false;
+
+        return new ComparisonPattern(Operator: op, Value: value, Location: location);
     }
 }

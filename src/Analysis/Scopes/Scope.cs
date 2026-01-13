@@ -159,6 +159,28 @@ public sealed class Scope
     }
 
     /// <summary>
+    /// Checks if this scope is inside a loop (while, for, until).
+    /// </summary>
+    public bool IsInLoop
+    {
+        get
+        {
+            Scope? current = this;
+            while (current != null)
+            {
+                if (current.Kind == ScopeKind.Loop)
+                {
+                    return true;
+                }
+
+                current = current.Parent;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Gets the enclosing function scope, if any.
     /// </summary>
     public Scope? EnclosingFunction

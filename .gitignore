@@ -14504,3 +14504,5 @@ Suflae-Wiki/
 
 *.old
 *.backup
+/vscode-extension/
+/cvers-src/

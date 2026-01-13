@@ -273,6 +273,11 @@ public partial class SuflaeParser
                     pattern = new WildcardPattern(Location: clauseLocation);
                 }
             }
+            // Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
+            else if (IsComparisonOperator(CurrentToken.Type))
+            {
+                pattern = ParseComparisonPattern();
+            }
             else
             {
                 // Set context flag to prevent single-param lambdas from being parsed
@@ -284,8 +289,9 @@ public partial class SuflaeParser
 
             // Suflae supports two clause syntaxes:
             // 1. is PATTERN => expr           (single expression)
-            // 2. is PATTERN:                  (indented block)
+            // 2. is PATTERN:                  (indented block, requires 'becomes')
             //        statements...
+            //        becomes value
             // Set flag to prevent 'is' expression parsing in when clause bodies
             _inWhenClauseBody = true;
             Statement body;
@@ -297,16 +303,13 @@ public partial class SuflaeParser
             else if (Match(type: TokenType.FatArrow))
             {
                 // Single-line body: is PATTERN => expression
-                // Optional colon after => for multi-line body
+                // Block is NOT allowed after => (use PATTERN: with indented block instead)
                 if (Check(type: TokenType.Colon))
                 {
-                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after '=>'");
-                    body = ParseIndentedBlock();
+                    throw ThrowParseError("Block ':' is not allowed after '=>'. Use 'pattern:' with indented block and 'becomes' for multi-statement branches");
                 }
-                else
-                {
-                    body = ParseExpressionStatement();
-                }
+
+                body = ParseExpressionStatement();
             }
             else
             {
@@ -748,5 +751,57 @@ public partial class SuflaeParser
         Statement body = ParseIndentedBlock();
 
         return new UsingStatement(Resource: resource, Name: name, Body: body, Location: location);
+    }
+
+    /// <summary>
+    /// Checks if the given token type is a comparison operator used in when patterns.
+    /// Supported operators: ==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==
+    /// </summary>
+    /// <param name="tokenType">The token type to check.</param>
+    /// <returns>True if the token is a comparison operator for patterns.</returns>
+    private static bool IsComparisonOperator(TokenType tokenType)
+    {
+        return tokenType is TokenType.Equal or TokenType.NotEqual
+            or TokenType.Less or TokenType.Greater
+            or TokenType.LessEqual or TokenType.GreaterEqual
+            or TokenType.ReferenceEqual or TokenType.ReferenceNotEqual;
+    }
+
+    /// <summary>
+    /// Parses a comparison pattern in a when clause.
+    /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
+    /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
+    /// </summary>
+    /// <returns>A <see cref="ComparisonPattern"/> AST node.</returns>
+    private ComparisonPattern ParseComparisonPattern()
+    {
+        SourceLocation location = GetLocation();
+        TokenType op = CurrentToken.Type;
+        Advance(); // consume the operator
+
+        // Parse the value to compare against
+        // Set context flag to prevent lambda parsing
+        _inWhenPatternContext = true;
+        Expression value = ParsePrimary();
+
+        // Allow member access and calls on the primary expression (e.g., Status.ACTIVE, get_user())
+        while (Check(type: TokenType.Dot) || Check(type: TokenType.LeftParen))
+        {
+            if (Match(type: TokenType.Dot))
+            {
+                string memberName = ConsumeIdentifier(errorMessage: "Expected member name after '.'");
+                value = new MemberExpression(Object: value, PropertyName: memberName, Location: GetLocation());
+            }
+            else if (Match(type: TokenType.LeftParen))
+            {
+                List<Expression> args = ParseArgumentList();
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
+                value = new CallExpression(Callee: value, Arguments: args, Location: GetLocation());
+            }
+        }
+
+        _inWhenPatternContext = false;
+
+        return new ComparisonPattern(Operator: op, Value: value, Location: location);
     }
 }

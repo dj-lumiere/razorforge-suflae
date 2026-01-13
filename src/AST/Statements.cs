@@ -570,6 +570,30 @@ public record ExpressionPattern(Expression Expression, SourceLocation Location)
     : Pattern(Location: Location);
 
 /// <summary>
+/// Pattern for comparison-based matching in when clauses.
+/// Compares the when subject against a value using the specified operator.
+/// </summary>
+/// <param name="Operator">The comparison operator (==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==)</param>
+/// <param name="Value">The expression to compare the when subject against</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>== ACTIVE => ... (value equality for choices)</item>
+/// <item>!= CANCELLED => ... (value inequality)</item>
+/// <item>&lt; 0 => ... (numeric comparison)</item>
+/// <item>&gt;= 65 => ... (numeric comparison)</item>
+/// <item>=== current_user => ... (reference equality)</item>
+/// <item>!== current_user => ... (reference inequality)</item>
+/// <item>== true => ... (boolean matching)</item>
+/// </list>
+/// </remarks>
+public record ComparisonPattern(
+    TokenType Operator,
+    Expression Value,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
 /// Pattern for matching variant cases with optional destructuring.
 /// Supports both qualified (Variant.CASE) and unqualified (CASE) syntax.
 /// </summary>
