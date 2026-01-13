@@ -1204,13 +1204,14 @@ public partial class SuflaeParser
         }
 
         // Identifiers and Suflae-specific keywords
-        if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+        // Note: 'me' is tokenized as TokenType.Me, so we need to handle it explicitly
+        if (Match(TokenType.Identifier, TokenType.TypeIdentifier, TokenType.Me))
         {
             string text = PeekToken(offset: -1)
                .Text;
             if (text == "me")
             {
-                return new IdentifierExpression(Name: "this", Location: location);
+                return new IdentifierExpression(Name: "me", Location: location);
             }
 
             return new IdentifierExpression(Name: text, Location: location);
