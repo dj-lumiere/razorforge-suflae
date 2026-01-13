@@ -257,11 +257,84 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // PHASE 2: NAME AND FAILABLE MARKER
+        // PHASE 2: NAME PARSING - Base name + optional type-level generic parameters
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Examples:
+        //   "foo"          -> name="foo", no generics
+        //   "List<T>"      -> name="List", genericParams=["T"]
+        //   "Point.get_x"  -> name="Point.get_x"
         // ═══════════════════════════════════════════════════════════════════════════
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
-        // Support ! suffix for failable functions
+        List<string>? genericParams = null;
+        List<GenericConstraintDeclaration>? inlineConstraints = null;
+        bool hasGenericParams = false;
+
+        // Check for type-level generic params BEFORE the dot (e.g., "List<T>.append")
+        if (Match(type: TokenType.Less))
+        {
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
+            hasGenericParams = true;
+
+            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2b: Parse dot-separated qualified name (for methods)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Examples:
+        //   "Point.get_x"          -> name="Point.get_x"
+        //   "List<T>.append"       -> name="List<T>.append"
+        // ═══════════════════════════════════════════════════════════════════════════
+        while (Match(type: TokenType.Dot))
+        {
+            string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
+
+            // If we parsed generic params before the dot, embed them in the name
+            if (hasGenericParams && !name.Contains(value: '.') && genericParams != null)
+            {
+                name = name + "<" + string.Join(separator: ", ", values: genericParams) + ">." + part;
+                hasGenericParams = false; // Only add once
+            }
+            else
+            {
+                name = name + "." + part;
+            }
+
+            // Check for method-level generic params AFTER the method name
+            if (Check(type: TokenType.Less))
+            {
+                Token nextToken = PeekToken(offset: 1);
+                if (nextToken.Type == TokenType.Identifier || nextToken.Type == TokenType.TypeIdentifier || nextToken.Type == TokenType.Greater)
+                {
+                    Match(type: TokenType.Less);
+                    (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+
+                    // Merge type-level and method-level generic parameters
+                    if (genericParams is { Count: > 0 })
+                    {
+                        genericParams = new List<string>(collection: genericParams);
+                        genericParams.AddRange(collection: result.genericParams);
+                        if (inlineConstraints != null && result.inlineConstraints != null)
+                        {
+                            inlineConstraints = new List<GenericConstraintDeclaration>(collection: inlineConstraints);
+                            inlineConstraints.AddRange(collection: result.inlineConstraints);
+                        }
+                    }
+                    else
+                    {
+                        genericParams = result.genericParams;
+                        inlineConstraints = result.inlineConstraints;
+                    }
+
+                    Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+                }
+            }
+        }
+
+        // Support ! suffix for failable functions (can appear after qualified name)
         bool isFailable = Match(type: TokenType.Bang);
 
         // ═══════════════════════════════════════════════════════════════════════════
