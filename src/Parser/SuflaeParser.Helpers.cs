@@ -288,14 +288,16 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Process one or more DEDENT tokens by popping indentation levels
+    /// Process a single DEDENT token by popping one indentation level.
+    /// Each block should only process its own DEDENT, not consume all consecutive ones.
     /// </summary>
     private void ProcessDedentTokens()
     {
         // Check for unnecessary closing braces before processing dedents
         CheckUnnecessaryBrace();
 
-        while (Check(type: TokenType.Dedent) && !IsAtEnd)
+        // Only process ONE DEDENT - each block is responsible for its own dedent
+        if (Check(type: TokenType.Dedent) && !IsAtEnd)
         {
             Advance(); // Consume the DEDENT token
 

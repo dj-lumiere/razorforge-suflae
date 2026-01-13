@@ -235,7 +235,13 @@ public partial class SuflaeParser
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after when expression");
 
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after when header");
-        Consume(type: TokenType.Indent, errorMessage: "Expected indented block after when");
+
+        // Must have an indent token for a proper indented block
+        if (!Check(type: TokenType.Indent))
+        {
+            throw ThrowParseError("Expected indented block after when");
+        }
+        ProcessIndentToken();
 
         var clauses = new List<WhenClause>();
 
@@ -324,7 +330,15 @@ public partial class SuflaeParser
             Match(type: TokenType.Newline);
         }
 
-        Consume(type: TokenType.Dedent, errorMessage: "Expected dedent after when clauses");
+        // Process the when block's dedent (matching the ProcessIndentToken at the start)
+        if (Check(type: TokenType.Dedent))
+        {
+            ProcessDedentTokens();
+        }
+        else if (!IsAtEnd)
+        {
+            throw ThrowParseError("Expected dedent after when clauses");
+        }
 
         return new WhenStatement(Expression: expression, Clauses: clauses, Location: location);
     }
