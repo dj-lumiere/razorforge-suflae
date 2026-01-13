@@ -144,13 +144,11 @@ public partial class SuflaeParser
     /// Parses a variable declaration.
     /// Syntax: <c>var name: Type = value</c> or <c>let name: Type = value</c> or <c>preset name: Type = value</c>
     /// </summary>
-    /// <param name="visibility">Access modifier for the getter (default private).</param>
-    /// <param name="setterVisibility">Optional separate visibility for the setter.</param>
+    /// <param name="visibility">Access modifier (public, published, internal, private).</param>
     /// <param name="storage">Storage class modifier (default: None).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
     private VariableDeclaration ParseVariableDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Public,
-        VisibilityModifier? setterVisibility = null,
         StorageClass storage = StorageClass.None)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
@@ -179,7 +177,6 @@ public partial class SuflaeParser
             Visibility: visibility,
             IsMutable: isMutable,
             Location: location,
-            SetterVisibility: setterVisibility,
             Storage: storage);
     }
 
@@ -188,10 +185,9 @@ public partial class SuflaeParser
     /// Syntax: <c>name: Type</c> or <c>public name: Type = value</c>
     /// Fields are declared without var/let keywords.
     /// </summary>
-    /// <param name="visibility">Access modifier for the field getter.</param>
-    /// <param name="setterVisibility">Optional separate visibility for the setter.</param>
+    /// <param name="visibility">Access modifier (public, published, internal, private).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
-    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Public, VisibilityModifier? setterVisibility = null)
+    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
     {
         SourceLocation location = GetLocation();
 
@@ -214,8 +210,7 @@ public partial class SuflaeParser
             Initializer: initializer,
             Visibility: visibility,
             IsMutable: false,
-            Location: location,
-            SetterVisibility: setterVisibility);
+            Location: location);
     }
 
     /// <summary>

@@ -977,42 +977,34 @@ public sealed partial class SemanticAnalyzer
     /// 1. public (getter: public, setter: public)
     /// 2. published (getter: public, setter: private)
     /// 3. internal (getter: internal, setter: internal)
-    /// 4. private (getter: private, setter: private)
+    /// 4. private (read/write private)
     /// </summary>
-    /// <param name="getterVisibility">The getter/read visibility.</param>
-    /// <param name="setterVisibility">The setter/write visibility (null means same as getter).</param>
-    /// <param name="fieldName">The field name for error messages.</param>
-    /// <param name="location">Source location for error reporting.</param>
-    private void ValidateGetterSetterVisibility(
-        VisibilityModifier getterVisibility,
-        VisibilityModifier? setterVisibility,
-        string fieldName,
-        SourceLocation location)
-    {
-        // If no setter visibility specified, it defaults to getter visibility (valid)
-        if (setterVisibility == null)
-        {
-            return;
-        }
-
-        int getterLevel = GetVisibilityLevel(visibility: getterVisibility);
-        int setterLevel = GetVisibilityLevel(visibility: setterVisibility.Value);
-
-        // Setter must be equal to or more restrictive than getter
-        // More restrictive = lower level number
-        if (setterLevel > getterLevel)
-        {
-            ReportError(
-                SemanticDiagnosticCode.InvalidVisibilityCombination,
-                $"Invalid visibility combination for field '{fieldName}': setter visibility ({setterVisibility.Value}) cannot be less restrictive than getter visibility ({getterVisibility}). " +
-                         "Valid combinations: public, published, internal, private.",
-                location);
-        }
-    }
+    /// <remarks>
+    /// With the simplified four-level visibility system, no validation is needed.
+    /// The visibility level directly determines both read and write access:
+    /// - public: read/write from anywhere
+    /// - published: public read, private write
+    /// - internal: read/write within module
+    /// - private: read/write within file
+    /// </remarks>
 
     #endregion
 
     #region Access Modifier Enforcement
+
+    /// <summary>
+    /// Gets the effective visibility for field write access.
+    /// For published fields, write access is private (only owner can write).
+    /// </summary>
+    /// <param name="field">The field to check.</param>
+    /// <returns>The effective visibility for write access.</returns>
+    private static VisibilityModifier GetEffectiveWriteVisibility(FieldInfo field)
+    {
+        // Published fields have public read but private write
+        return field.Visibility == VisibilityModifier.Published
+            ? VisibilityModifier.Private
+            : field.Visibility;
+    }
 
     /// <summary>
     /// Checks if access to a field is allowed from the current context.
@@ -1022,8 +1014,9 @@ public sealed partial class SemanticAnalyzer
     /// <param name="accessLocation">Source location of the access site.</param>
     private void ValidateFieldAccess(FieldInfo field, bool isWrite, SourceLocation accessLocation)
     {
+        // For published fields, write access is restricted to private (owner only)
         VisibilityModifier visibility = isWrite
-            ? field.EffectiveSetterVisibility
+            ? GetEffectiveWriteVisibility(field: field)
             : field.Visibility;
 
         ValidateMemberAccess(

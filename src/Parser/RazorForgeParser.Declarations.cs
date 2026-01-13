@@ -13,13 +13,11 @@ public partial class RazorForgeParser
     /// Parses a variable declaration with var/let/preset keyword.
     /// Syntax: <c>var name: Type = value</c> or <c>let name = value</c> or <c>preset name = value</c>
     /// </summary>
-    /// <param name="visibility">The visibility modifier for the getter (default: Public).</param>
-    /// <param name="setterVisibility">Optional separate visibility for the setter.</param>
+    /// <param name="visibility">The visibility modifier (public, published, internal, private).</param>
     /// <param name="storage">The storage class modifier (default: None).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
     private VariableDeclaration ParseVariableDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Public,
-        VisibilityModifier? setterVisibility = null,
         StorageClass storage = StorageClass.None)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
@@ -48,7 +46,6 @@ public partial class RazorForgeParser
             Visibility: visibility,
             IsMutable: isMutable,
             Location: location,
-            SetterVisibility: setterVisibility,
             Storage: storage);
     }
 
@@ -56,7 +53,8 @@ public partial class RazorForgeParser
     /// Parses a field declaration in records: public name: Type or name: Type
     /// Fields are declared without var/let keywords.
     /// </summary>
-    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Public, VisibilityModifier? setterVisibility = null)
+    /// <param name="visibility">The visibility modifier (public, published, internal, private).</param>
+    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
     {
         SourceLocation location = GetLocation();
 
@@ -79,8 +77,7 @@ public partial class RazorForgeParser
             Initializer: initializer,
             Visibility: visibility,
             IsMutable: false,
-            Location: location,
-            SetterVisibility: setterVisibility);
+            Location: location);
     }
 
     /// <summary>

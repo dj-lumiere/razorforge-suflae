@@ -67,8 +67,7 @@ public record GenericConstraintDeclaration(
 /// <param name="Name">Variable identifier name</param>
 /// <param name="Type">Optional type annotation; if null, type is inferred from initializer</param>
 /// <param name="Initializer">Optional initial value expression</param>
-/// <param name="Visibility">Access control modifier for getter (public, private, etc.)</param>
-/// <param name="SetterVisibility">Optional separate setter access control; if null, same as Visibility</param>
+/// <param name="Visibility">Access control modifier (public, published, internal, private)</param>
 /// <param name="IsMutable">true for 'var' (mutable), false for 'let' (immutable)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -81,6 +80,14 @@ public record GenericConstraintDeclaration(
 /// <item>Mutable: var x = 42 (can be reassigned)</item>
 /// <item>Published: published var x = 42 (public read, private write)</item>
 /// </list>
+///
+/// Visibility levels:
+/// <list type="bullet">
+/// <item>public - read/write from anywhere</item>
+/// <item>published - public read, private write</item>
+/// <item>internal - read/write within module</item>
+/// <item>private - read/write within file</item>
+/// </list>
 /// </remarks>
 public record VariableDeclaration(
     string Name,
@@ -89,7 +96,6 @@ public record VariableDeclaration(
     VisibilityModifier Visibility,
     bool IsMutable, // var vs let
     SourceLocation Location,
-    VisibilityModifier? SetterVisibility = null,
     StorageClass Storage = StorageClass.None) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)

@@ -667,4 +667,179 @@ public class ExpressionTests
     }
 
     #endregion
+
+    #region Unary vs Binary Operator Tests
+
+    /// <summary>
+    /// Verifies that binary subtraction is parsed correctly (not as unary minus).
+    /// 3 - 2 should be desugared to 3.__sub__(2), NOT "3" and "-2".
+    /// Note: Arithmetic operators are desugared to method calls for operator overloading.
+    /// </summary>
+    [Fact]
+    public void Parse_BinarySubtraction_NotUnaryMinus()
+    {
+        string source = """
+                        routine test() {
+                            let result = 3 - 2
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var varDeclTyped = (Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration;
+        var call = varDeclTyped.Initializer as Compilers.Shared.AST.CallExpression;
+
+        // Arithmetic operators are desugared: 3 - 2 => 3.__sub__(2)
+        Assert.NotNull(call);
+        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
+        Assert.NotNull(memberExpr);
+        Assert.Equal("__sub__", memberExpr!.PropertyName);
+
+        // Left operand (receiver) should be "3", not "-3"
+        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(left);
+        Assert.Equal("3", left!.Value);
+
+        // Right operand (argument) should be "2", not "-2"
+        Assert.Single(call.Arguments);
+        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(right);
+        Assert.Equal("2", right!.Value);
+    }
+
+    /// <summary>
+    /// Verifies that unary minus on a literal is parsed correctly.
+    /// -2 should be a single literal "-2".
+    /// </summary>
+    [Fact]
+    public void Parse_UnaryMinus_OnLiteral()
+    {
+        string source = """
+                        routine test() {
+                            let result = -2
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var literal = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.LiteralExpression;
+
+        Assert.NotNull(literal);
+        Assert.Equal("-2", literal!.Value);
+    }
+
+    /// <summary>
+    /// Verifies that binary subtraction with imaginary literals is parsed correctly.
+    /// 3 - 2j should be desugared to 3.__sub__(2j), NOT "3" and "-2j".
+    /// </summary>
+    [Fact]
+    public void Parse_BinarySubtraction_WithImaginaryLiteral()
+    {
+        string source = """
+                        routine test() {
+                            let result = 3 - 2j
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var call = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.CallExpression;
+
+        // Arithmetic operators are desugared: 3 - 2j => 3.__sub__(2j)
+        Assert.NotNull(call);
+        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
+        Assert.NotNull(memberExpr);
+        Assert.Equal("__sub__", memberExpr!.PropertyName);
+
+        // Left operand (receiver) should be "3"
+        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(left);
+        Assert.Equal("3", left!.Value);
+
+        // Right operand (argument) should be "2j", NOT "-2j"
+        Assert.Single(call.Arguments);
+        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(right);
+        Assert.Equal("2j", right!.Value);
+    }
+
+    /// <summary>
+    /// Verifies complex expression with both unary minus and binary subtraction.
+    /// -3 - 2 should be desugared to (-3).__sub__(2).
+    /// </summary>
+    [Fact]
+    public void Parse_UnaryMinusAndBinarySubtraction()
+    {
+        string source = """
+                        routine test() {
+                            let result = -3 - 2
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var call = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.CallExpression;
+
+        Assert.NotNull(call);
+        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
+        Assert.NotNull(memberExpr);
+        Assert.Equal("__sub__", memberExpr!.PropertyName);
+
+        // Left operand (receiver) should be "-3" (unary minus applied to literal)
+        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(left);
+        Assert.Equal("-3", left!.Value);
+
+        // Right operand (argument) should be "2", NOT "-2"
+        Assert.Single(call.Arguments);
+        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(right);
+        Assert.Equal("2", right!.Value);
+    }
+
+    /// <summary>
+    /// Verifies binary addition is not affected by unary minus handling.
+    /// 3 + 2 should be desugared to 3.__add__(2).
+    /// </summary>
+    [Fact]
+    public void Parse_BinaryAddition_NotAffectedByUnaryHandling()
+    {
+        string source = """
+                        routine test() {
+                            let result = 3 + 2
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var call = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.CallExpression;
+
+        Assert.NotNull(call);
+        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
+        Assert.NotNull(memberExpr);
+        Assert.Equal("__add__", memberExpr!.PropertyName);
+
+        // Left operand should be "3"
+        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(left);
+        Assert.Equal("3", left!.Value);
+
+        // Right operand should be "2"
+        Assert.Single(call.Arguments);
+        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        Assert.NotNull(right);
+        Assert.Equal("2", right!.Value);
+    }
+
+    #endregion
 }

@@ -123,14 +123,11 @@ public sealed partial class SemanticAnalyzer
     private void CollectFieldDeclaration(VariableDeclaration field)
     {
         // Fields are VariableDeclarations within type members
-        // Validate that the field type is not an inline-only token type
-
-        // Validate getter/setter visibility combinations
-        ValidateGetterSetterVisibility(
-            getterVisibility: field.Visibility,
-            setterVisibility: field.SetterVisibility,
-            fieldName: field.Name,
-            location: field.Location);
+        // Visibility is validated using the simplified four-level system:
+        // - public: read/write from anywhere
+        // - published: public read, private write
+        // - internal: read/write within module
+        // - private: read/write within file
 
         if (field.Type == null)
         {
