@@ -42,7 +42,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(x: S32) {
                             when x {
-                                1 => {
+                                == 1 {
                                     show("one")
                                     do_something()
                                 }
@@ -60,8 +60,8 @@ public class PatternMatchingTests
         string source = """
                         routine describe(x: S32) -> Text {
                             return when x {
-                                0 => "zero"
-                                1 => "one"
+                                == 0 => "zero"
+                                == 1 => "one"
                                 else => "many"
                             }
                         }
@@ -76,7 +76,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(status: Status) {
                             let description = when status {
-                                is Status.ACTIVE => "Running"
+                                == Status.ACTIVE => "Running"
                                 else => "Not running"
                             }
                         }
@@ -93,7 +93,7 @@ public class PatternMatchingTests
     public void Parse_WhenIsType()
     {
         string source = """
-                        routine test(value: Any) {
+                        routine test(value: Data) {
                             when value {
                                 is S32 n => show(f"Integer: {n}")
                                 is Text t => show(f"Text: {t}")
@@ -109,7 +109,7 @@ public class PatternMatchingTests
     public void Parse_WhenIsTypeWithoutBinding()
     {
         string source = """
-                        routine test(value: Any) {
+                        routine test(value: Data) {
                             when value {
                                 is S32 => show("It's an integer")
                                 is Text => show("It's text")
@@ -125,7 +125,7 @@ public class PatternMatchingTests
     public void Parse_WhenIsCustomType()
     {
         string source = """
-                        routine test(value: Any) {
+                        routine test(value: Data) {
                             when value {
                                 is Point p => show(f"Point: ({p.x}, {p.y})")
                                 is Circle c => show(f"Circle: r={c.radius}")
@@ -147,10 +147,10 @@ public class PatternMatchingTests
         string source = """
                         routine handle(status: Status) {
                             when status {
-                                is Status.PENDING => show("Waiting...")
-                                is Status.ACTIVE => show("In progress")
-                                is Status.COMPLETED => show("Done!")
-                                is Status.CANCELLED => show("Cancelled")
+                                == Status.PENDING => show("Waiting...")
+                                == Status.ACTIVE => show("In progress")
+                                == Status.COMPLETED => show("Done!")
+                                == Status.CANCELLED => show("Cancelled")
                             }
                         }
                         """;
@@ -164,10 +164,10 @@ public class PatternMatchingTests
         string source = """
                         routine handle(status: Status) {
                             when status {
-                                is PENDING => show("Waiting...")
-                                is ACTIVE => show("In progress")
-                                is COMPLETED => show("Done!")
-                                is CANCELLED => show("Cancelled")
+                                == PENDING => show("Waiting...")
+                                == ACTIVE => show("In progress")
+                                == COMPLETED => show("Done!")
+                                == CANCELLED => show("Cancelled")
                             }
                         }
                         """;
@@ -201,9 +201,9 @@ public class PatternMatchingTests
         string source = """
                         routine handle(msg: Message) {
                             when msg {
-                                is TEXT content => process(content)
-                                is NUMBER n => compute(n)
-                                is QUIT => exit()
+                                is Text content => process(content)
+                                is Number n => compute(n)
+                                is Quit => exit()
                             }
                         }
                         """;
@@ -217,10 +217,10 @@ public class PatternMatchingTests
         string source = """
                         routine handle(shape: Shape) {
                             when shape {
-                                is CIRCLE (center, radius) => {
+                                is Circle (center, radius) {
                                     show(f"Circle at ({center.x}, {center.y}) with radius {radius}")
                                 }
-                                is RECTANGLE (top_left, size) => {
+                                is Rectangle (top_left, size) {
                                     show(f"Rectangle at ({top_left.x}, {top_left.y})")
                                 }
                             }
@@ -236,7 +236,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(shape: Shape) {
                             when shape {
-                                is CIRCLE (center: c, radius: r) => {
+                                is Circle (center: c, radius: r) {
                                     show(f"Circle: center={c}, r={r}")
                                 }
                                 else => show("Not a circle")
@@ -253,10 +253,10 @@ public class PatternMatchingTests
         string source = """
                         routine handle(shape: Shape) {
                             when shape {
-                                is CIRCLE ((x, y), radius) => {
+                                is Circle ((x, y), radius) {
                                     show(f"Circle at ({x}, {y}) with radius {radius}")
                                 }
-                                is RECTANGLE ((x, y), (width, height)) => {
+                                is Rectangle ((x, y), (width, height)) {
                                     show(f"Rectangle at ({x}, {y}), {width}x{height}")
                                 }
                             }
@@ -274,11 +274,12 @@ public class PatternMatchingTests
     public void Parse_WhenWithGuard()
     {
         string source = """
-                        routine classify(n: S32) {
+                        routine classify(n: S32?) {
                             when n {
                                 is S32 x if x > 0 => show("Positive")
                                 is S32 x if x < 0 => show("Negative")
                                 is S32 x => show("Zero")
+                                else => show("None")
                             }
                         }
                         """;
@@ -292,8 +293,8 @@ public class PatternMatchingTests
         string source = """
                         routine test(x: S32, y: S32) {
                             when x {
-                                0 if y > 0 => show("x=0, y positive")
-                                0 => show("x=0, y non-positive")
+                                == 0 if y > 0 => show("x=0, y positive")
+                                == 0 => show("x=0, y non-positive")
                                 else => show("x not zero")
                             }
                         }
@@ -481,7 +482,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(shape: Shape) {
                             when shape {
-                                is CIRCLE (_, radius) => {
+                                is CIRCLE (_, radius) {
                                     show(f"Radius: {radius}")
                                 }
                                 else => show("Not a circle")
@@ -517,11 +518,11 @@ public class PatternMatchingTests
         string source = """
                         routine handle(value: Maybe<User>) {
                             when value {
-                                is None => {
+                                is None {
                                     show("Not found")
                                     return
                                 }
-                                else user => {
+                                else user {
                                     show(user.name)
                                     process(user)
                                 }
@@ -582,23 +583,23 @@ public class PatternMatchingTests
         string source = """
                         routine process(result: Lookup<Shape>) {
                             when result {
-                                is Crashable e => {
+                                is Crashable e {
                                     log_error(e)
                                     return
                                 }
-                                is None => {
+                                is None {
                                     show("No shape found")
                                     return
                                 }
-                                else shape => {
+                                else shape {
                                     when shape {
-                                        is CIRCLE (center, radius) if radius > 10 => {
+                                        is CIRCLE (center, radius) if radius > 10 {
                                             show("Large circle")
                                         }
-                                        is CIRCLE (center, radius) => {
+                                        is CIRCLE (center, radius) {
                                             show("Small circle")
                                         }
-                                        is RECTANGLE ((x, y), (w, h)) if w == h => {
+                                        is RECTANGLE ((x, y), (w, h)) if w == h {
                                             show("Square")
                                         }
                                         else => show("Other shape")
@@ -617,19 +618,21 @@ public class PatternMatchingTests
         string source = """
                         routine handle(event: Event) {
                             when event {
-                                is CLICK pos => {
+                                is CLICK pos {
                                     let x = pos.x
                                     let y = pos.y
                                     handle_click(x, y)
                                 }
-                                is KEY (code, modifiers) => {
+                                is KEY (code, modifiers) {
                                     if modifiers.ctrl {
                                         handle_ctrl_key(code)
                                     } else {
                                         handle_key(code)
                                     }
                                 }
-                                else => {}
+                                else {
+                                    pass
+                                }
                             }
                         }
                         """;

@@ -234,7 +234,7 @@ public class TypeDeclarationTests
         ChoiceDeclaration choice = GetDeclaration<ChoiceDeclaration>(program: program);
 
         Assert.Equal(expected: 3, actual: choice.Cases.Count);
-        Assert.NotNull(value: choice.Cases[index: 0].Value);
+        Assert.NotNull(@object: choice.Cases[index: 0].Value);
     }
 
     #endregion
@@ -246,8 +246,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant NetworkEvent {
-                            CONNECT
-                            DISCONNECT
+                            Connect
+                            Disconnect
                         }
                         """;
 
@@ -263,8 +263,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant ParseResult {
-                            SUCCESS: S32
-                            ERROR: Text
+                            Success: S32
+                            Error: Text
                         }
                         """;
 
@@ -281,10 +281,10 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant Event {
-                            CONNECT
-                            DATA: Text
-                            ERROR: U32
-                            NONE
+                            Connect
+                            Data: Text
+                            Error: U32
+                            Nothing
                         }
                         """;
 
