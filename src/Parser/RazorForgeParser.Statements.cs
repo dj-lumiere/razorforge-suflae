@@ -372,6 +372,15 @@ public partial class RazorForgeParser
     private Pattern ParseTypePattern()
     {
         SourceLocation location = GetLocation();
+        // Handle 'is None' as a special case - None is a keyword
+        if (Match(type: TokenType.None))
+        {
+            // Create a special "None" type pattern
+            TypeExpression noneType = new TypeExpression(Name: "None", GenericArguments: null,
+                Location: location);
+            Pattern nonePattern = new TypePattern(Type: noneType, VariableName: null, Bindings: null, Location: location);
+            return TryParseGuard(innerPattern: nonePattern, location: location);
+        }
 
         // Accept both Identifier and TypeIdentifier (lexer may emit Identifier for all)
         if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))

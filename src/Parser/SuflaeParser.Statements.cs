@@ -463,11 +463,11 @@ public partial class SuflaeParser
     {
         SourceLocation location = GetLocation();
 
-        // Handle 'is none' as a special case - none is a keyword
+        // Handle 'is None' as a special case - None is a keyword
         if (Match(type: TokenType.None))
         {
-            // Create a special "none" type pattern
-            TypeExpression noneType = new TypeExpression(Name: "none", GenericArguments: null, Location: location);
+            // Create a special "None" type pattern
+            TypeExpression noneType = new TypeExpression(Name: "None", GenericArguments: null, Location: location);
             Pattern nonePattern = new TypePattern(Type: noneType, VariableName: null, Bindings: null, Location: location);
             return TryParseGuard(innerPattern: nonePattern, location: location);
         }
