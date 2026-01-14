@@ -55,18 +55,18 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that parsing produces errors.
     /// </summary>
-    public static void AssertParseError(string source)
+    public static void AssertParseError(string source, [CallerMemberName] string? fileName = null)
     {
-        (Program _, RazorForgeParser parser) = ParseWithErrors(source: source);
+        (Program _, RazorForgeParser parser) = ParseWithErrors(source: source, fileName: fileName);
         Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors but none were found");
     }
 
     /// <summary>
     /// Parses and analyzes RazorForge source code.
     /// </summary>
-    public static AnalysisResult Analyze(string source)
+    public static AnalysisResult Analyze(string source, [CallerMemberName] string? fileName = null)
     {
-        Program program = Parse(source: source);
+        Program program = Parse(source: source, fileName: fileName);
         var analyzer = new SemanticAnalyzer(language: Language.RazorForge);
         return analyzer.Analyze(program: program);
     }
@@ -74,9 +74,9 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that parsing succeeds without throwing.
     /// </summary>
-    public static Program AssertParses(string source)
+    public static Program AssertParses(string source, [CallerMemberName] string? fileName = null)
     {
-        Program program = Parse(source: source);
+        Program program = Parse(source: source, fileName: fileName);
         Assert.NotNull(@object: program);
         Assert.NotEmpty(collection: program.Declarations);
         return program;
@@ -85,9 +85,9 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that analysis succeeds without errors.
     /// </summary>
-    public static AnalysisResult AssertAnalyzes(string source)
+    public static AnalysisResult AssertAnalyzes(string source, [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = Analyze(source: source, fileName: fileName);
         if (result.Errors.Count > 0)
         {
             string errorMessages = string.Join(separator: "\n",
@@ -102,9 +102,9 @@ public static class TestHelpers
     /// <summary>
     /// Asserts that analysis produces specific errors.
     /// </summary>
-    public static AnalysisResult AssertHasError(string source, string expectedErrorSubstring)
+    public static AnalysisResult AssertHasError(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = Analyze(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected at least one error");
         Assert.Contains(collection: result.Errors,
