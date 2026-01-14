@@ -1,6 +1,0 @@
-record None {
-}
-
-routine None.to_text() -> Text {
-    return "None"
-}
