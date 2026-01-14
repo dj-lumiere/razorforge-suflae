@@ -266,10 +266,18 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Register variable in current scope
-        _registry.DeclareVariable(
+        bool declared = _registry.DeclareVariable(
             name: varDecl.Name,
             type: varType,
             isMutable: varDecl.IsMutable);
+
+        if (!declared)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariableRedeclaration,
+                $"Variable '{varDecl.Name}' is already declared in this scope.",
+                varDecl.Location);
+        }
     }
 
     private void AnalyzeExpressionStatement(ExpressionStatement expr)
@@ -311,6 +319,17 @@ public sealed partial class SemanticAnalyzer
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
             ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: assign.Location);
+
+            // Check if we're in a @readonly method trying to mutate 'me'
+            if (_currentRoutine is { IsReadOnly: true } &&
+                member.Object is IdentifierExpression { Name: "me" })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MutationInReadonlyMethod,
+                    $"Cannot mutate field '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow mutations.",
+                    assign.Location);
+            }
         }
 
         // Check type compatibility

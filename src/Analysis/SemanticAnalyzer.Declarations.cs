@@ -129,6 +129,18 @@ public sealed partial class SemanticAnalyzer
         // - internal: read/write within module
         // - private: read/write within file
 
+        // Check for duplicate field names within the same type
+        if (_currentTypeFieldNames != null)
+        {
+            if (!_currentTypeFieldNames.Add(item: field.Name))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.DuplicateFieldDefinition,
+                    $"Field '{field.Name}' is already defined in this type.",
+                    field.Location);
+            }
+        }
+
         if (field.Type == null)
         {
             return; // Type inference will be handled later
@@ -234,16 +246,53 @@ public sealed partial class SemanticAnalyzer
 
     private void CollectFunctionDeclaration(RoutineDeclaration routine)
     {
-        RoutineKind kind = _currentType != null
-            ? (routine.Name == "__create__" ? RoutineKind.Constructor : RoutineKind.Method)
-            : RoutineKind.Function;
+        // Determine the kind of routine
+        RoutineKind kind;
+        TypeSymbol? ownerType = _currentType;
+        string routineName = routine.Name;
+
+        if (_currentType != null)
+        {
+            // Inside a type body
+            kind = routine.Name == "__create__" ? RoutineKind.Constructor : RoutineKind.Method;
+        }
+        else if (routine.Name.Contains(value: '.'))
+        {
+            // Extension method syntax: "Type.method"
+            // Extract type name and method name separately
+            int dotIndex = routine.Name.IndexOf(value: '.');
+            string typeName = routine.Name[..dotIndex];
+            routineName = routine.Name[(dotIndex + 1)..]; // Just the method name
+
+            kind = RoutineKind.Method;
+            ownerType = _registry.LookupType(name: typeName);
+        }
+        else
+        {
+            // Top-level function
+            kind = RoutineKind.Function;
+        }
+
+        // Validate reserved prefixes (try_, check_, find_) for user functions
+        string baseName = routineName.Contains(value: '.')
+            ? routineName[(routineName.IndexOf(value: '.') + 1)..]
+            : routineName;
+
+        if (IsReservedRoutinePrefix(name: baseName))
+        {
+            ReportError(
+                SemanticDiagnosticCode.ReservedRoutinePrefix,
+                $"Routine name '{baseName}' uses a reserved prefix. " +
+                         "Prefixes 'try_', 'check_', and 'find_' are reserved for auto-generated error handling variants.",
+                routine.Location);
+        }
 
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
-        var routineInfo = new RoutineInfo(name: routine.Name)
+        var routineInfo = new RoutineInfo(name: routineName)
         {
             Kind = kind,
-            OwnerType = _currentType,
+            OwnerType = ownerType,
             IsFailable = routine.IsFailable,
             GenericParameters = routine.GenericParameters,
             GenericConstraints = routine.GenericConstraints,
@@ -253,6 +302,16 @@ public sealed partial class SemanticAnalyzer
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
+    }
+
+    /// <summary>
+    /// Checks if a routine name uses a reserved prefix.
+    /// </summary>
+    private static bool IsReservedRoutinePrefix(string name)
+    {
+        return name.StartsWith(value: "try_", comparisonType: StringComparison.Ordinal) ||
+               name.StartsWith(value: "check_", comparisonType: StringComparison.Ordinal) ||
+               name.StartsWith(value: "find_", comparisonType: StringComparison.Ordinal);
     }
 
     private void CollectImportedDeclaration(ImportedDeclaration imported)
@@ -330,7 +389,10 @@ public sealed partial class SemanticAnalyzer
     private void ResolveRecordBody(RecordDeclaration record)
     {
         TypeSymbol? previousType = _currentType;
+        HashSet<string>? previousFieldNames = _currentTypeFieldNames;
+
         _currentType = _registry.LookupType(name: record.Name);
+        _currentTypeFieldNames = [];
 
         // Resolve implemented protocols
         if (_currentType is RecordTypeInfo && record.Protocols.Count > 0)
@@ -356,18 +418,28 @@ public sealed partial class SemanticAnalyzer
             _registry.UpdateRecordProtocols(recordName: record.Name, protocols: resolvedProtocols);
         }
 
+        // Validate generic constraints reference declared type parameters
+        ValidateConstraintTypeParameters(
+            constraints: record.GenericConstraints,
+            typeParameters: record.GenericParameters,
+            location: record.Location);
+
         foreach (Declaration member in record.Members)
         {
             CollectDeclaration(node: member);
         }
 
         _currentType = previousType;
+        _currentTypeFieldNames = previousFieldNames;
     }
 
     private void ResolveEntityBody(EntityDeclaration entity)
     {
         TypeSymbol? previousType = _currentType;
+        HashSet<string>? previousFieldNames = _currentTypeFieldNames;
+
         _currentType = _registry.LookupType(name: entity.Name);
+        _currentTypeFieldNames = [];
 
         foreach (Declaration member in entity.Members)
         {
@@ -375,12 +447,16 @@ public sealed partial class SemanticAnalyzer
         }
 
         _currentType = previousType;
+        _currentTypeFieldNames = previousFieldNames;
     }
 
     private void ResolveResidentBody(ResidentDeclaration resident)
     {
         TypeSymbol? previousType = _currentType;
+        HashSet<string>? previousFieldNames = _currentTypeFieldNames;
+
         _currentType = _registry.LookupType(name: resident.Name);
+        _currentTypeFieldNames = [];
 
         foreach (Declaration member in resident.Members)
         {
@@ -388,6 +464,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         _currentType = previousType;
+        _currentTypeFieldNames = previousFieldNames;
     }
 
     private void ResolveProtocolBody(ProtocolDeclaration protocol)
@@ -577,6 +654,8 @@ public sealed partial class SemanticAnalyzer
         bool isFailable = routine.Name.EndsWith(value: '!');
         string routineName = isFailable ? routine.Name[..^1] : routine.Name;
 
+        // For extension methods (Type.method), the routine was registered with just the method name
+        // but the FullName includes the owner type, so we can look it up either way
         RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routineName);
         if (routineInfo == null)
         {
@@ -845,6 +924,43 @@ public sealed partial class SemanticAnalyzer
             };
 
             _registry.RegisterRoutine(routine: derivedMethod);
+        }
+    }
+
+    #endregion
+
+    #region Constraint Validation
+
+    /// <summary>
+    /// Validates that generic constraints only reference declared type parameters.
+    /// </summary>
+    /// <param name="constraints">The constraints to validate.</param>
+    /// <param name="typeParameters">The declared type parameters.</param>
+    /// <param name="location">Source location for error reporting.</param>
+    private void ValidateConstraintTypeParameters(
+        IReadOnlyList<GenericConstraintDeclaration>? constraints,
+        IReadOnlyList<string>? typeParameters,
+        SourceLocation? location)
+    {
+        if (constraints == null || constraints.Count == 0)
+        {
+            return;
+        }
+
+        HashSet<string> validParams = typeParameters != null
+            ? [..typeParameters]
+            : [];
+
+        foreach (GenericConstraintDeclaration constraint in constraints)
+        {
+            if (!validParams.Contains(constraint.ParameterName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.UnknownTypeParameterInConstraint,
+                    $"Type parameter '{constraint.ParameterName}' in constraint is not declared. " +
+                    $"Declared type parameters: {(typeParameters?.Count > 0 ? string.Join(", ", typeParameters) : "none")}.",
+                    constraint.Location ?? location);
+            }
         }
     }
 

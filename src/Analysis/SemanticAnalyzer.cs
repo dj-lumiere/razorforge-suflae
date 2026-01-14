@@ -56,6 +56,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Gets whether we're currently inside a danger block.</summary>
     private bool InDangerBlock => _dangerBlockDepth > 0;
 
+    /// <summary>Field names seen in the current type during body resolution (for duplicate detection).</summary>
+    private HashSet<string>? _currentTypeFieldNames;
+
     /// <summary>The source file path of the program being analyzed (for import resolution).</summary>
     private string _currentFilePath = string.Empty;
 

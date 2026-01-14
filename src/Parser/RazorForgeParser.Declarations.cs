@@ -1118,16 +1118,12 @@ public partial class RazorForgeParser
 
             string variantName = ConsumeIdentifier(errorMessage: "Expected choice variant name");
 
-            // CASE: value syntax for choice values
-            long? value = null;
+            // CASE: value syntax for choice values (e.g., OK: 200)
+            // Store expression as-is; semantic analyzer will validate and convert
+            Expression? value = null;
             if (Match(type: TokenType.Colon))
             {
-                Expression expr = ParseExpression();
-                // RazorForge uses s64 (long) for integer literals
-                if (expr is LiteralExpression { Value: long longVal })
-                {
-                    value = longVal;
-                }
+                value = ParseExpression();
             }
 
             variants.Add(item: new ChoiceCase(Name: variantName, Value: value, Location: GetLocation()));

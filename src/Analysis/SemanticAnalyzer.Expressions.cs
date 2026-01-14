@@ -340,6 +340,12 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
         TypeSymbol rightType = AnalyzeExpression(expression: binary.Right);
 
+        // Handle assignment operator
+        if (binary.Operator == BinaryOperator.Assign)
+        {
+            return AnalyzeAssignmentExpression(target: binary.Left, value: binary.Right, targetType: leftType, valueType: rightType, location: binary.Location);
+        }
+
         // Handle comparison operators - always return bool
         if (IsComparisonOperator(op: binary.Operator))
         {
@@ -444,6 +450,83 @@ public sealed partial class SemanticAnalyzer
 
         // Default: return left type
         return leftType;
+    }
+
+    /// <summary>
+    /// Analyzes an assignment expression (target = value).
+    /// Validates mutability, field access, and type compatibility.
+    /// </summary>
+    /// <param name="target">The assignment target expression.</param>
+    /// <param name="value">The value being assigned.</param>
+    /// <param name="targetType">The resolved type of the target.</param>
+    /// <param name="valueType">The resolved type of the value.</param>
+    /// <param name="location">Source location for error reporting.</param>
+    /// <returns>The type of the assignment expression (same as target type).</returns>
+    private TypeSymbol AnalyzeAssignmentExpression(
+        Expression target,
+        Expression value,
+        TypeSymbol targetType,
+        TypeSymbol valueType,
+        SourceLocation location)
+    {
+        // Check if target is assignable (variable, field, or index)
+        if (!IsAssignableTarget(target: target))
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidAssignmentTarget,
+                "Invalid assignment target.",
+                target.Location);
+            return targetType;
+        }
+
+        // Check mutability for variable assignments
+        if (target is IdentifierExpression id)
+        {
+            VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+            if (varInfo is { IsMutable: false })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.AssignmentToImmutable,
+                    $"Cannot assign to immutable variable '{id.Name}'.",
+                    location);
+            }
+        }
+
+        // Validate field write access (setter visibility)
+        if (target is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+            ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: location);
+        }
+
+        // Check mutability for index assignments (let vs var)
+        if (target is IndexExpression index)
+        {
+            // The object being indexed must be mutable
+            if (index.Object is IdentifierExpression indexedVar)
+            {
+                VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);
+                if (varInfo is { IsMutable: false })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.AssignmentToImmutable,
+                        $"Cannot assign to index of immutable variable '{indexedVar.Name}'.",
+                        location);
+                }
+            }
+        }
+
+        // Check type compatibility
+        if (!IsAssignableTo(source: valueType, target: targetType))
+        {
+            ReportError(
+                SemanticDiagnosticCode.AssignmentTypeMismatch,
+                $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
+                location);
+        }
+
+        // Assignment expression returns the target type
+        return targetType;
     }
 
     /// <summary>

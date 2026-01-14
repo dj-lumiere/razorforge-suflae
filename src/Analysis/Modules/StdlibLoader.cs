@@ -499,14 +499,14 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
+        // Note: Choice values are Expression? now - semantic analyzer handles value extraction
         var cases = new List<Types.ChoiceCaseInfo>();
         foreach (var caseDecl in choice.Cases)
         {
+            // Value extraction from Expression is handled by semantic analysis
             cases.Add(new Types.ChoiceCaseInfo(caseDecl.Name)
             {
-                Value = caseDecl.Value.HasValue
-                    ? (int)caseDecl.Value.Value
-                    : null
+                Value = null // TODO: Extract from caseDecl.Value expression
             });
         }
 

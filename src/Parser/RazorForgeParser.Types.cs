@@ -465,14 +465,8 @@ public partial class RazorForgeParser
                 SourceLocation location = GetLocation();
                 string paramName = ConsumeIdentifier(errorMessage: "Expected type parameter name");
 
-                // ─────────────────────────────────────────────────────────────────────
-                // Verify this parameter was declared in the generic parameter list
-                // ─────────────────────────────────────────────────────────────────────
-                if (!genericParams.Contains(item: paramName))
-                {
-                    throw ThrowParseError(RazorForgeDiagnosticCode.UndeclaredTypeParameter,
-                        $"Type parameter '{paramName}' not declared in generic parameters");
-                }
+                // Note: Type parameter validation (whether paramName is in genericParams)
+                // is intentionally deferred to semantic analysis for better error reporting.
 
                 // ─────────────────────────────────────────────────────────────────────
                 // Parse constraint kind and types (same logic as inline constraints)

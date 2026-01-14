@@ -682,19 +682,12 @@ public partial class SuflaeParser
                 // Parse enum variant
                 string variantName = ConsumeIdentifier(errorMessage: "Expected option variant name");
 
-                // CASE: value syntax for choice values
-                long? value = null;
+                // CASE: value syntax for choice values (e.g., OK: 200)
+                // Store expression as-is; semantic analyzer will validate and convert
+                Expression? value = null;
                 if (Match(type: TokenType.Colon))
                 {
-                    Expression expr = ParseExpression();
-                    // Accept both long (s64) and BigInteger for integer literals
-                    if (expr is LiteralExpression literal)
-                    {
-                        if (literal.Value is long longVal)
-                            value = longVal;
-                        else if (literal.Value is System.Numerics.BigInteger bigVal)
-                            value = (long)bigVal;
-                    }
+                    value = ParseExpression();
                 }
 
                 variants.Add(item: new ChoiceCase(Name: variantName, Value: value, Location: GetLocation()));

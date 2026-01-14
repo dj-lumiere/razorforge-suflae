@@ -435,7 +435,7 @@ public record ImportDeclaration(
 /// </remarks>
 public record ChoiceCase(
     string Name,
-    long? Value, // For explicit values like OK: 200
+    Expression? Value, // For explicit values like OK: 200 - semantic analyzer converts
     SourceLocation Location);
 
 /// <summary>

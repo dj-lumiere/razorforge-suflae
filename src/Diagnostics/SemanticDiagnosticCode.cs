@@ -55,6 +55,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Identifier shadows another identifier in outer scope.</summary>
     IdentifierShadowing = 8,
 
+    /// <summary>Variable with this name already declared in the same scope.</summary>
+    VariableRedeclaration = 9,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // BINARY AND UNARY OPERATOR ERRORS (RF-S050 - RF-S099)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -199,6 +202,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Generic constraint violation (general).</summary>
     GenericConstraintViolation = 162,
 
+    /// <summary>Type parameter in constraint is not declared on the type or function.</summary>
+    UnknownTypeParameterInConstraint = 163,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STATEMENT ERRORS (RF-S200 - RF-S249)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -251,6 +257,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Compound assignment operator not supported on type.</summary>
     CompoundAssignmentNotSupported = 254,
+
+    /// <summary>Attempting to mutate 'me' field in a @readonly method.</summary>
+    MutationInReadonlyMethod = 255,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
@@ -338,6 +347,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Invalid visibility modifier for this context.</summary>
     InvalidVisibilityModifier = 408,
+
+    /// <summary>Routine name uses reserved prefix (try_, check_, find_).</summary>
+    ReservedRoutinePrefix = 409,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
