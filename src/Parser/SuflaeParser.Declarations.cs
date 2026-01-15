@@ -827,6 +827,27 @@ public partial class SuflaeParser
         // Register this type name for generic disambiguation
         _knownTypeNames.Add(item: name);
 
+        // Generic parameters with inline constraints
+        List<string>? genericParams = null;
+        List<GenericConstraintDeclaration>? inlineConstraints = null;
+        if (Match(type: TokenType.Less))
+        {
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
+
+            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+        }
+
+        // Parse generic constraints (where clause) - merge with inline constraints
+        List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
+
+        // Push generic parameters into scope before parsing body
+        if (genericParams is { Count: > 0 })
+        {
+            _genericParameterScopes.Push(item: [..genericParams]);
+        }
+
         // Parse parent protocols (protocol X follows Y, Z)
         var parentProtocols = new List<TypeExpression>();
         if (Match(type: TokenType.Follows))
@@ -848,8 +869,14 @@ public partial class SuflaeParser
 
         if (!Check(type: TokenType.Indent))
         {
+            // Pop generic parameter scope before returning
+            if (genericParams is { Count: > 0 })
+            {
+                _genericParameterScopes.Pop();
+            }
+
             return new ProtocolDeclaration(Name: name,
-                GenericParameters: null,
+                GenericParameters: genericParams,
                 ParentProtocols: parentProtocols,
                 Methods: methods,
                 Visibility: visibility,
@@ -865,8 +892,16 @@ public partial class SuflaeParser
                 continue;
             }
 
+            // Parse optional attributes on routine signatures (e.g., @readonly)
+            List<string> methodAttributes = ParseAttributes();
+
+            // Skip newlines between attributes and routine keyword
+            while (Match(type: TokenType.Newline))
+            {
+            }
+
             // Parse routine signature
-            Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' in feature method");
+            Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' in protocol method");
             string methodName = ConsumeIdentifier(errorMessage: "Expected method name");
 
             // Parameters
@@ -899,7 +934,7 @@ public partial class SuflaeParser
             methods.Add(item: new RoutineSignature(Name: methodName,
                 Parameters: parameters,
                 ReturnType: returnType,
-                Attributes: null,
+                Attributes: methodAttributes.Count > 0 ? methodAttributes : null,
                 Location: GetLocation()));
             Match(type: TokenType.Newline);
         }
@@ -913,8 +948,14 @@ public partial class SuflaeParser
             throw ThrowParseError("Expected dedent after protocol body");
         }
 
+        // Pop generic parameter scope
+        if (genericParams is { Count: > 0 })
+        {
+            _genericParameterScopes.Pop();
+        }
+
         return new ProtocolDeclaration(Name: name,
-            GenericParameters: null,
+            GenericParameters: genericParams,
             ParentProtocols: parentProtocols,
             Methods: methods,
             Visibility: visibility,
