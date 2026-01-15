@@ -166,9 +166,19 @@ public partial class RazorForgeTokenizer
             {
                 int escapeStart = _position;
                 Advance(); // consume backslash
-                ScanEscapeSequence(bitWidth: bitWidth);
-                content.Append(value: ParseEscapeSequence(escapeStart: escapeStart,
-                    bitWidth: bitWidth));
+
+                // Check for line continuation (\ followed by newline)
+                if (Peek() == '\n' || Peek() == '\r')
+                {
+                    // Line continuation: skip newline and leading whitespace, don't add to content
+                    ScanEscapeSequence(bitWidth: bitWidth);
+                }
+                else
+                {
+                    ScanEscapeSequence(bitWidth: bitWidth);
+                    content.Append(value: ParseEscapeSequence(escapeStart: escapeStart,
+                        bitWidth: bitWidth));
+                }
             }
             else
             {
@@ -371,6 +381,28 @@ public partial class RazorForgeTokenizer
             case 'u':
                 Advance(); // consume 'u'
                 ScanUnicodeEscape();
+                break;
+            case '\r':
+                // Line continuation: \ followed by CRLF
+                Advance(); // consume '\r'
+                if (Peek() == '\n')
+                {
+                    Advance(); // consume '\n'
+                }
+                // Skip leading whitespace on continuation line
+                while (Peek() == ' ' || Peek() == '\t')
+                {
+                    Advance();
+                }
+                break;
+            case '\n':
+                // Line continuation: \ followed by LF
+                Advance(); // consume '\n'
+                // Skip leading whitespace on continuation line
+                while (Peek() == ' ' || Peek() == '\t')
+                {
+                    Advance();
+                }
                 break;
             default:
                 throw new RazorForgeGrammarException(

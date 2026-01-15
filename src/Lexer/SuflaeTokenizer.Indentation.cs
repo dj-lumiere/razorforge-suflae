@@ -68,7 +68,8 @@ public partial class SuflaeTokenizer
         }
 
         // Skip empty lines (don't change indentation state)
-        if (Peek() == '\n' || IsAtEnd())
+        // Note: Check for \r to handle CRLF line endings on Windows
+        if (Peek() == '\n' || Peek() == '\r' || IsAtEnd())
         {
             return;
         }
