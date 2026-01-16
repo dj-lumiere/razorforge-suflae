@@ -1,9 +1,9 @@
 ﻿namespace Compilers.CodeGen;
 
 using System.Text;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
+using Analysis.Symbols;
+using Analysis.Types;
+using Shared.AST;
 
 /// <summary>
 /// Type and function declaration generation.
@@ -303,14 +303,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Add explicit parameters
-        foreach (var param in routine.Parameters)
-        {
-            if (param.Type != null)
-            {
-                string paramType = GetParameterLLVMType(param.Type);
-                paramTypes.Add(paramType);
-            }
-        }
+        paramTypes.AddRange(routine.Parameters.Select(param => GetParameterLLVMType(param.Type)));
 
         // Get return type
         string returnType = routine.ReturnType != null
@@ -318,8 +311,8 @@ public partial class LLVMCodeGenerator
             : "void";
 
         // Build declaration
-        string params_ = string.Join(", ", paramTypes);
-        EmitLine(_functionDeclarations, $"declare {returnType} @{funcName}({params_})");
+        string parameters = string.Join(", ", paramTypes);
+        EmitLine(_functionDeclarations, $"declare {returnType} @{funcName}({parameters})");
     }
 
     /// <summary>
@@ -365,15 +358,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Add explicit parameters
-        for (int i = 0; i < routineInfo.Parameters.Count; i++)
-        {
-            var param = routineInfo.Parameters[i];
-            if (param.Type != null)
-            {
-                string paramType = GetParameterLLVMType(param.Type);
-                paramList.Add($"{paramType} %{param.Name}");
-            }
-        }
+        paramList.AddRange(from param in routineInfo.Parameters let paramType = GetParameterLLVMType(param.Type) select $"{paramType} %{param.Name}");
 
         // Get return type
         string returnType = routineInfo.ReturnType != null
@@ -381,8 +366,8 @@ public partial class LLVMCodeGenerator
             : "void";
 
         // Start function
-        string params_ = string.Join(", ", paramList);
-        EmitLine(_functionDefinitions, $"define {returnType} @{funcName}({params_}) {{");
+        string parameters = string.Join(", ", paramList);
+        EmitLine(_functionDefinitions, $"define {returnType} @{funcName}({parameters}) {{");
         EmitLine(_functionDefinitions, "entry:");
 
         // Generate body
@@ -408,15 +393,12 @@ public partial class LLVMCodeGenerator
         // Register parameters as local variables
         foreach (var param in routine.Parameters)
         {
-            if (param.Type != null)
-            {
-                // Parameters are passed by value, create a local copy
-                string paramPtr = $"%{param.Name}.addr";
-                string llvmType = GetLLVMType(param.Type);
-                EmitLine(_functionDefinitions, $"  {paramPtr} = alloca {llvmType}");
-                EmitLine(_functionDefinitions, $"  store {llvmType} %{param.Name}, ptr {paramPtr}");
-                _localVariables[param.Name] = param.Type;
-            }
+            // Parameters are passed by value, create a local copy
+            string paramPtr = $"%{param.Name}.addr";
+            string llvmType = GetLLVMType(param.Type);
+            EmitLine(_functionDefinitions, $"  {paramPtr} = alloca {llvmType}");
+            EmitLine(_functionDefinitions, $"  store {llvmType} %{param.Name}, ptr {paramPtr}");
+            _localVariables[param.Name] = param.Type;
         }
 
         // Emit the body statements
@@ -425,18 +407,20 @@ public partial class LLVMCodeGenerator
         // Ensure function is properly terminated
         // Check if the last instruction was a terminator (ret, br, etc.)
         // If not, add a default return
-        if (!EndsWithTerminator(_functionDefinitions))
+        if (EndsWithTerminator(_functionDefinitions))
         {
-            if (routine.ReturnType == null)
-            {
-                EmitLine(_functionDefinitions, "  ret void");
-            }
-            else
-            {
-                string returnType = GetLLVMType(routine.ReturnType);
-                string zeroValue = GetZeroValue(routine.ReturnType);
-                EmitLine(_functionDefinitions, $"  ret {returnType} {zeroValue}");
-            }
+            return;
+        }
+
+        if (routine.ReturnType == null)
+        {
+            EmitLine(_functionDefinitions, "  ret void");
+        }
+        else
+        {
+            string returnType = GetLLVMType(routine.ReturnType);
+            string zeroValue = GetZeroValue(routine.ReturnType);
+            EmitLine(_functionDefinitions, $"  ret {returnType} {zeroValue}");
         }
     }
 
@@ -469,7 +453,7 @@ public partial class LLVMCodeGenerator
                 "@intrinsic.ptr" => "null",
                 _ => "0"
             },
-            RecordTypeInfo record when record.IsSingleFieldWrapper =>
+            RecordTypeInfo { IsSingleFieldWrapper: true } record =>
                 GetZeroValue(record.UnderlyingIntrinsic!),
             EntityTypeInfo or ResidentTypeInfo => "null",
             _ => "zeroinitializer"
@@ -481,13 +465,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string MangleFunctionName(RoutineInfo routine)
     {
-        if (routine.OwnerType != null)
+        if (routine.OwnerType == null)
         {
-            string typeName = MangleTypeName(routine.OwnerType.Name);
-            // Use underscore separator for C ABI compatibility
-            return $"{typeName}_{routine.Name}";
+            return routine.Name;
         }
-        return routine.Name;
+
+        string typeName = MangleTypeName(routine.OwnerType.Name);
+        // Use underscore separator for C ABI compatibility
+        return $"{typeName}_{routine.Name}";
     }
 
     #endregion

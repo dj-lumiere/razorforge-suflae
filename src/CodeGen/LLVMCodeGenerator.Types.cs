@@ -1,6 +1,6 @@
 ﻿namespace Compilers.CodeGen;
 
-using Compilers.Analysis.Types;
+using Analysis.Types;
 
 /// <summary>
 /// Type mapping: RazorForge/Suflae types → LLVM IR types.
@@ -22,20 +22,20 @@ public partial class LLVMCodeGenerator
             IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic),
 
             // Single-field record wrappers → unwrap to underlying intrinsic
-            RecordTypeInfo record when record.IsSingleFieldWrapper =>
+            RecordTypeInfo { IsSingleFieldWrapper: true } record =>
                 GetLLVMType(record.UnderlyingIntrinsic!),
 
             // Multi-field records → LLVM struct type
             RecordTypeInfo record => GetRecordTypeName(record),
 
             // Entities → pointer to LLVM struct
-            EntityTypeInfo entity => "ptr",
+            EntityTypeInfo => "ptr",
 
             // Residents → pointer to LLVM struct (same as entity at IR level)
-            ResidentTypeInfo resident => "ptr",
+            ResidentTypeInfo => "ptr",
 
             // Choices → underlying integer type (s32 by default)
-            ChoiceTypeInfo choice => "i32",
+            ChoiceTypeInfo => "i32",
 
             // Variants → struct { tag, payload }
             VariantTypeInfo variant => GetVariantTypeName(variant),
@@ -189,7 +189,7 @@ public partial class LLVMCodeGenerator
         return type switch
         {
             IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic),
-            RecordTypeInfo record when record.IsSingleFieldWrapper =>
+            RecordTypeInfo { IsSingleFieldWrapper: true } record =>
                 GetTypeSize(record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record),
             EntityTypeInfo entity => CalculateEntitySize(entity),

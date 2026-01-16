@@ -3,9 +3,9 @@
 namespace Compilers.CodeGen;
 
 using System.Text;
-using Compilers.Analysis;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
+using Analysis;
+using Analysis.Types;
+using Shared.AST;
 
 /// <summary>
 /// LLVM IR code generator for RazorForge and Suflae.
@@ -43,10 +43,10 @@ public partial class LLVMCodeGenerator
     private int _labelCounter;
 
     /// <summary>Set of already-generated type declarations to avoid duplicates.</summary>
-    private readonly HashSet<string> _generatedTypes = new();
+    private readonly HashSet<string> _generatedTypes = [];
 
     /// <summary>Set of already-generated function declarations to avoid duplicates.</summary>
-    private readonly HashSet<string> _generatedFunctions = new();
+    private readonly HashSet<string> _generatedFunctions = [];
 
     /// <summary>Counter for generating unique string constant names.</summary>
     private int _stringCounter;
@@ -55,13 +55,13 @@ public partial class LLVMCodeGenerator
     private readonly Dictionary<string, string> _stringConstants = new();
 
     /// <summary>Set of already-declared native functions to avoid duplicate declarations.</summary>
-    private readonly HashSet<string> _declaredNativeFunctions = new();
+    private readonly HashSet<string> _declaredNativeFunctions = [];
 
     /// <summary>Map of local variable names to their types for the current function.</summary>
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
 
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
-    private readonly HashSet<string> _generatedFunctionDefs = new();
+    private readonly HashSet<string> _generatedFunctionDefs = [];
 
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentFunctionReturnType;
@@ -80,7 +80,7 @@ public partial class LLVMCodeGenerator
     {
         _program = program;
         _registry = registry;
-        _stdlibPrograms = stdlibPrograms ?? Array.Empty<(Program, string)>();
+        _stdlibPrograms = stdlibPrograms ?? [];
     }
 
     #endregion
@@ -121,7 +121,7 @@ public partial class LLVMCodeGenerator
         // Generate entity types (reference types, heap-allocated)
         foreach (var type in _registry.GetTypesByCategory(TypeCategory.Entity))
         {
-            if (type is EntityTypeInfo entity && !entity.IsGenericDefinition)
+            if (type is EntityTypeInfo { IsGenericDefinition: false } entity)
             {
                 GenerateEntityType(entity);
             }
@@ -130,7 +130,7 @@ public partial class LLVMCodeGenerator
         // Generate record types (value types)
         foreach (var type in _registry.GetTypesByCategory(TypeCategory.Record))
         {
-            if (type is RecordTypeInfo record && !record.IsGenericDefinition)
+            if (type is RecordTypeInfo { IsGenericDefinition: false } record)
             {
                 GenerateRecordType(record);
             }
@@ -139,7 +139,7 @@ public partial class LLVMCodeGenerator
         // Generate resident types (fixed-size reference types) - RazorForge only
         foreach (var type in _registry.GetTypesByCategory(TypeCategory.Resident))
         {
-            if (type is ResidentTypeInfo resident && !resident.IsGenericDefinition)
+            if (type is ResidentTypeInfo { IsGenericDefinition: false } resident)
             {
                 GenerateResidentType(resident);
             }
@@ -157,7 +157,7 @@ public partial class LLVMCodeGenerator
         // Generate variant types (tagged unions → tag + payload record)
         foreach (var type in _registry.GetTypesByCategory(TypeCategory.Variant))
         {
-            if (type is VariantTypeInfo variant && !variant.IsGenericDefinition)
+            if (type is VariantTypeInfo { IsGenericDefinition: false } variant)
             {
                 GenerateVariantType(variant);
             }
@@ -177,7 +177,7 @@ public partial class LLVMCodeGenerator
         // User program routines
         foreach (var decl in _program.Declarations)
         {
-            if (decl is RoutineDeclaration routine && routine.Body != null)
+            if (decl is RoutineDeclaration routine)
             {
                 routinesWithBodies.Add(routine.Name);
             }
@@ -188,7 +188,7 @@ public partial class LLVMCodeGenerator
         {
             foreach (var decl in program.Declarations)
             {
-                if (decl is RoutineDeclaration routine && routine.Body != null)
+                if (decl is RoutineDeclaration routine)
                 {
                     routinesWithBodies.Add(routine.Name);
                 }
@@ -221,7 +221,7 @@ public partial class LLVMCodeGenerator
     private static bool HasErrorTypes(Analysis.Symbols.RoutineInfo routine)
     {
         // Check return type
-        if (routine.ReturnType?.Category == Analysis.Enums.TypeCategory.Error)
+        if (routine.ReturnType?.Category == TypeCategory.Error)
         {
             return true;
         }
@@ -229,7 +229,7 @@ public partial class LLVMCodeGenerator
         // Check parameter types
         foreach (var param in routine.Parameters)
         {
-            if (param.Type.Category == Analysis.Enums.TypeCategory.Error)
+            if (param.Type.Category == TypeCategory.Error)
             {
                 return true;
             }
@@ -260,7 +260,7 @@ public partial class LLVMCodeGenerator
         {
             foreach (var decl in program.Declarations)
             {
-                if (decl is RoutineDeclaration routine && routine.Body != null)
+                if (decl is RoutineDeclaration routine)
                 {
                     try
                     {

@@ -1,9 +1,8 @@
 ﻿namespace Compilers.CodeGen;
 
 using System.Text;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
+using Analysis.Types;
+using Shared.AST;
 
 /// <summary>
 /// Statement code generation: control flow, assignments, declarations, returns.
@@ -401,7 +400,7 @@ public partial class LLVMCodeGenerator
         _loopStack.Push((incrLabel, endLabel));
 
         // Evaluate the iterable
-        string iterable = EmitExpression(sb, forStmt.Iterable);
+        EmitExpression(sb, forStmt.Iterable);
 
         // TODO: For now, assume it's a range and just jump to condition
         EmitLine(sb, $"  br label %{condLabel}");
@@ -543,7 +542,7 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb, $"  br label %{matchLabel}");
                 break;
 
-            case IdentifierPattern id:
+            case IdentifierPattern:
                 // Bind value to variable and always match
                 // TODO: Store subject into variable id.Name
                 EmitLine(sb, $"  br label %{matchLabel}");

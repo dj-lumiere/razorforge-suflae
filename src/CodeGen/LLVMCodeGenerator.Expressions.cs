@@ -1,9 +1,9 @@
 ﻿namespace Compilers.CodeGen;
 
 using System.Text;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using Compilers.Shared.AST;
+using Analysis.Symbols;
+using Analysis.Types;
+using Shared.AST;
 
 /// <summary>
 /// Expression code generation: allocation, field access, method calls, operators.
@@ -341,6 +341,7 @@ public partial class LLVMCodeGenerator
             ConditionalExpression cond => EmitConditional(sb, cond),
             IndexExpression index => EmitIndexAccess(sb, index),
             RangeExpression range => EmitRange(sb, range),
+            StealExpression steal => EmitSteal(sb, steal),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
     }
@@ -381,7 +382,7 @@ public partial class LLVMCodeGenerator
 
         // Escape the string for LLVM IR
         string escaped = EscapeStringForLLVM(value);
-        int byteLength = System.Text.Encoding.UTF8.GetByteCount(value) + 1; // +1 for null terminator
+        int byteLength = Encoding.UTF8.GetByteCount(value) + 1; // +1 for null terminator
 
         // Emit global constant (null-terminated for C interop)
         EmitLine(_globalDeclarations, $"{constName} = private unnamed_addr constant [{byteLength} x i8] c\"{escaped}\\00\"");
@@ -397,38 +398,41 @@ public partial class LLVMCodeGenerator
         var sb = new StringBuilder();
         foreach (char c in value)
         {
-            if (c == '"')
+            switch (c)
             {
-                sb.Append("\\22");
-            }
-            else if (c == '\\')
-            {
-                sb.Append("\\5C");
-            }
-            else if (c == '\n')
-            {
-                sb.Append("\\0A");
-            }
-            else if (c == '\r')
-            {
-                sb.Append("\\0D");
-            }
-            else if (c == '\t')
-            {
-                sb.Append("\\09");
-            }
-            else if (c < 32 || c > 126)
-            {
-                // Non-printable or non-ASCII: encode as hex bytes
-                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(c.ToString());
-                foreach (byte b in bytes)
+                case '"':
+                    sb.Append("\\22");
+                    break;
+                case '\\':
+                    sb.Append("\\5C");
+                    break;
+                case '\n':
+                    sb.Append("\\0A");
+                    break;
+                case '\r':
+                    sb.Append("\\0D");
+                    break;
+                case '\t':
+                    sb.Append("\\09");
+                    break;
+                default:
                 {
-                    sb.Append($"\\{b:X2}");
+                    if (c < 32 || c > 126)
+                    {
+                        // Non-printable or non-ASCII: encode as hex bytes
+                        byte[] bytes = Encoding.UTF8.GetBytes(c.ToString());
+                        foreach (byte b in bytes)
+                        {
+                            sb.Append($"\\{b:X2}");
+                        }
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+
+                    break;
                 }
-            }
-            else
-            {
-                sb.Append(c);
             }
         }
         return sb.ToString();
@@ -440,17 +444,17 @@ public partial class LLVMCodeGenerator
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
     {
         // Look up the variable in local variables first
-        if (_localVariables.TryGetValue(identifier.Name, out var varType))
+        if (!_localVariables.TryGetValue(identifier.Name, out var varType))
         {
-            // Variables are stored in allocas (%name.addr), need to load them
-            string llvmType = GetLLVMType(varType);
-            string tmp = NextTemp();
-            EmitLine(sb, $"  {tmp} = load {llvmType}, ptr %{identifier.Name}.addr");
-            return tmp;
+            // Fallback for unknown identifiers (shouldn't happen after semantic analysis)
+            return $"%{identifier.Name}";
         }
 
-        // Fallback for unknown identifiers (shouldn't happen after semantic analysis)
-        return $"%{identifier.Name}";
+        // Variables are stored in allocas (%name.addr), need to load them
+        string llvmType = GetLLVMType(varType);
+        string tmp = NextTemp();
+        EmitLine(sb, $"  {tmp} = load {llvmType}, ptr %{identifier.Name}.addr");
+        return tmp;
     }
 
     /// <summary>
@@ -459,18 +463,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
-        // Determine if this is a method call (callee is MemberExpression) or standalone function call
-        if (call.Callee is MemberExpression member)
+        return call.Callee switch
         {
-            return EmitMethodCall(sb, member, call.Arguments);
-        }
-
-        if (call.Callee is IdentifierExpression id)
-        {
-            return EmitFunctionCall(sb, id.Name, call.Arguments);
-        }
-
-        throw new NotImplementedException($"Cannot emit call for callee type: {call.Callee.GetType().Name}");
+            // Determine if this is a method call (callee is MemberExpression) or standalone function call
+            MemberExpression member => EmitMethodCall(sb, member, call.Arguments),
+            IdentifierExpression id => EmitFunctionCall(sb, id.Name, call.Arguments),
+            _ => throw new NotImplementedException(
+                $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
+        };
     }
 
     /// <summary>
@@ -593,14 +593,7 @@ public partial class LLVMCodeGenerator
         {
             return "";
         }
-
-        var args = new List<string>();
-        for (int i = 0; i < types.Count; i++)
-        {
-            args.Add($"{types[i]} {values[i]}");
-        }
-
-        return string.Join(", ", args);
+        return string.Join(", ", types.Select((t, i) => $"{t} {values[i]}"));
     }
 
     /// <summary>
@@ -702,25 +695,25 @@ public partial class LLVMCodeGenerator
     {
         string? typeName = literal.LiteralType switch
         {
-            Compilers.Shared.Lexer.TokenType.S8Literal => "S8",
-            Compilers.Shared.Lexer.TokenType.S16Literal => "S16",
-            Compilers.Shared.Lexer.TokenType.S32Literal => "S32",
-            Compilers.Shared.Lexer.TokenType.S64Literal => "S64",
-            Compilers.Shared.Lexer.TokenType.S128Literal => "S128",
-            Compilers.Shared.Lexer.TokenType.U8Literal => "U8",
-            Compilers.Shared.Lexer.TokenType.U16Literal => "U16",
-            Compilers.Shared.Lexer.TokenType.U32Literal => "U32",
-            Compilers.Shared.Lexer.TokenType.U64Literal => "U64",
-            Compilers.Shared.Lexer.TokenType.U128Literal => "U128",
-            Compilers.Shared.Lexer.TokenType.F16Literal => "F16",
-            Compilers.Shared.Lexer.TokenType.F32Literal => "F32",
-            Compilers.Shared.Lexer.TokenType.F64Literal => "F64",
-            Compilers.Shared.Lexer.TokenType.F128Literal => "F128",
-            Compilers.Shared.Lexer.TokenType.D32Literal => "D32",
-            Compilers.Shared.Lexer.TokenType.D64Literal => "D64",
-            Compilers.Shared.Lexer.TokenType.D128Literal => "D128",
-            Compilers.Shared.Lexer.TokenType.True or Compilers.Shared.Lexer.TokenType.False => "Bool",
-            Compilers.Shared.Lexer.TokenType.TextLiteral => "Text",
+            Shared.Lexer.TokenType.S8Literal => "S8",
+            Shared.Lexer.TokenType.S16Literal => "S16",
+            Shared.Lexer.TokenType.S32Literal => "S32",
+            Shared.Lexer.TokenType.S64Literal => "S64",
+            Shared.Lexer.TokenType.S128Literal => "S128",
+            Shared.Lexer.TokenType.U8Literal => "U8",
+            Shared.Lexer.TokenType.U16Literal => "U16",
+            Shared.Lexer.TokenType.U32Literal => "U32",
+            Shared.Lexer.TokenType.U64Literal => "U64",
+            Shared.Lexer.TokenType.U128Literal => "U128",
+            Shared.Lexer.TokenType.F16Literal => "F16",
+            Shared.Lexer.TokenType.F32Literal => "F32",
+            Shared.Lexer.TokenType.F64Literal => "F64",
+            Shared.Lexer.TokenType.F128Literal => "F128",
+            Shared.Lexer.TokenType.D32Literal => "D32",
+            Shared.Lexer.TokenType.D64Literal => "D64",
+            Shared.Lexer.TokenType.D128Literal => "D128",
+            Shared.Lexer.TokenType.True or Shared.Lexer.TokenType.False => "Bool",
+            Shared.Lexer.TokenType.TextLiteral => "Text",
             _ => null
         };
 
@@ -1104,10 +1097,10 @@ public partial class LLVMCodeGenerator
             "iptr" or "uptr" => "i64", // TODO: Make platform-dependent
 
             // Floating-point types
-            "half" or "f16" => "half",
-            "float" or "f32" => "float",
-            "double" or "f64" => "double",
-            "fp128" or "f128" => "fp128",
+            "half" => "half",
+            "float" => "float",
+            "double" => "double",
+            "fp128" => "fp128",
 
             // Pointer type
             "ptr" => "ptr",
@@ -1225,10 +1218,37 @@ public partial class LLVMCodeGenerator
     {
         // TODO: Implement range expression (create Range struct)
         string start = EmitExpression(sb, range.Start);
-        string end = EmitExpression(sb, range.End);
+        EmitExpression(sb, range.End);
 
         // For now, just return the start value
         return start;
+    }
+
+    /// <summary>
+    /// Generates code for a steal expression (ownership transfer).
+    /// </summary>
+    /// <remarks>
+    /// The steal keyword transfers ownership from the source to the destination.
+    /// At runtime, this is essentially a pass-through - the ownership tracking
+    /// is handled at compile time by the semantic analyzer, which marks the
+    /// source as a deadref after the steal.
+    ///
+    /// Stealable types:
+    /// - Raw entities (ownership transferred)
+    /// - Shared&lt;T&gt; (reference count transferred)
+    /// - Tracked&lt;T&gt; (weak reference transferred)
+    ///
+    /// Non-stealable types (caught by semantic analyzer):
+    /// - Scope-bound tokens (Viewed, Hijacked, Inspected, Seized)
+    /// - Snatched&lt;T&gt; (internal ownership type)
+    /// </remarks>
+    private string EmitSteal(StringBuilder sb, StealExpression steal)
+    {
+        // Steal just evaluates the operand and passes the value through.
+        // The semantic analyzer has already validated that:
+        // 1. The operand is a stealable type
+        // 2. The source will be marked as deadref after this point
+        return EmitExpression(sb, steal.Operand);
     }
 
     #endregion
@@ -1280,11 +1300,10 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void DeclareNativeFunction(string funcName, List<string> argTypes, string returnType)
     {
-        if (_declaredNativeFunctions.Contains(funcName))
+        if (!_declaredNativeFunctions.Add(funcName))
         {
             return;
         }
-        _declaredNativeFunctions.Add(funcName);
 
         string argList = string.Join(", ", argTypes);
         EmitLine(_functionDeclarations, $"declare {returnType} @{funcName}({argList})");
