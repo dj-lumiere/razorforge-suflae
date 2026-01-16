@@ -45,11 +45,12 @@ generics implementation.
 
 ---
 
-## 🔄 STDLIB REORGANIZATION: Core Prelude Namespace
+## 🔄 STDLIB REORGANIZATION: Core Namespace
 
 ### New Organization Structure
 
-**Goal:** Move all fundamental types into the `core` namespace, which is automatically loaded without requiring imports.
+**Goal:** Move all fundamental types into the `Core` namespace, which is automatically imported without requiring
+explicit imports.
 
 All files in `stdlib/core/` should be marked with `namespace Core` and will be available in every RazorForge file
 automatically.
@@ -64,11 +65,12 @@ automatically.
     - [ ] SAddr.rf, UAddr.rf
     - [ ] F16.rf, F32.rf, F64.rf, F128.rf
     - [ ] D32.rf, D64.rf, D128.rf
+    - [ ] C32.rf, C64.rf, C128.rf
     - [ ] bool.rf
 
 2. **Letters** (now in `stdlib/Text/`)
-    - [x] letter.rf (32-bit Unicode codepoint) ✅ Done
-    - [x] byte.rf (8-bit UTF-8 code unit) ✅ Done
+    - [x] Letter.rf (32-bit Unicode codepoint) ✅ Done
+    - [x] Byte.rf (8-bit UTF-8 code unit) ✅ Done
 
 3. **Error Handling** (from various locations → `stdlib/core/errors/`)
     - [ ] Maybe.rf
@@ -78,7 +80,6 @@ automatically.
     - [ ] Error.rf
 
 4. **Memory** (from `stdlib/memory/` → `stdlib/core/memory/`)
-    - [ ] MemorySize.rf
     - ~~DynamicSlice.rf~~ - **INTERNAL ONLY** (not in core, used by stdlib internals)
 
 5. **CSubsystem** (from `stdlib/CSubsystem/` → `stdlib/core/csubsystem/`)
@@ -96,24 +97,26 @@ automatically.
 7. **Types** (create new `stdlib/core/types/`)
     - [ ] Blank.rf (unit type)
     - [ ] Duration.rf (time literals)
+    - [ ] MemorySize.rf (memory size literals)
 
 #### Files to Keep Outside Core (require import):
 
 - **Console.rf** → `stdlib/Console.rf` (namespace Console or implicit)
-- **Text/Text.rf** → `stdlib/Text/Text.rf` (namespace Text/Text or implicit)
+- **Text/Text.rf** → `stdlib/Text/Text.rf` (namespace Text.Text or implicit)
 - **Collections/** → `stdlib/Collections/` (namespace Collections)
-- **Integer.rf, Decimal.rf, Fraction.rf** → `stdlib/` (arbitrary precision types)
+- **Integer.rf, Decimal.rf, Fraction.rf, Complex.rf** → `stdlib/` (arbitrary precision types)
 
 ### New Directory Structure
 
 ```
 stdlib/
-├── core/                        # Always-loaded prelude (namespace: core)
+├── core/                        # Auto-imported namespace (namespace: Core)
 │   ├── primitives/
 │   │   ├── S8.rf - S128.rf     (namespace Core)
 │   │   ├── U8.rf - U128.rf     (namespace Core)
 │   │   ├── F16.rf - F128.rf    (namespace Core)
 │   │   ├── D32.rf - D128.rf    (namespace Core)
+│   │   ├── C32.rf - C128.rf    (namespace Core)
 │   │   ├── SAddr.rf            (namespace Core)
 │   │   ├── UAddr.rf            (namespace Core)
 │   │   └── Bool.rf             (namespace Core)
@@ -162,7 +165,7 @@ For each file being moved to `core`:
 3. [ ] **Remove imports for core types** - core types don't need imports
 4. [ ] Update imports in other files that reference it
 5. [ ] Test that file compiles with namespace declaration
-6. [ ] Verify auto-loading when core prelude is implemented
+6. [ ] Verify auto-import when Core namespace is implemented
 
 ### File Structure Style
 
