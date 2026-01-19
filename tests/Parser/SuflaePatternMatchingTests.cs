@@ -561,4 +561,336 @@ public class SuflaePatternMatchingTests
     }
 
     #endregion
+
+    #region Comparison Pattern Tests
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonNotEqual()
+    {
+        string source = """
+                        routine test(x: Integer):
+                            when x:
+                                != 0 => show("non-zero")
+                                else => show("zero")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonLessThan()
+    {
+        string source = """
+                        routine classify(n: Integer):
+                            when n:
+                                < 0 => show("negative")
+                                == 0 => show("zero")
+                                else => show("positive")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonGreaterThan()
+    {
+        string source = """
+                        routine classify(n: Integer) -> Text:
+                            return when n:
+                                > 100 => "large"
+                                > 10 => "medium"
+                                else => "small"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonLessThanOrEqual()
+    {
+        string source = """
+                        routine grade(score: Integer) -> Text:
+                            return when score:
+                                <= 50 => "fail"
+                                <= 70 => "pass"
+                                <= 90 => "good"
+                                else => "excellent"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonGreaterThanOrEqual()
+    {
+        string source = """
+                        routine classify(temp: Integer) -> Text:
+                            return when temp:
+                                >= 100 => "boiling"
+                                >= 30 => "hot"
+                                >= 0 => "cold"
+                                else => "freezing"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonStrictEqual()
+    {
+        string source = """
+                        routine test(a: Data, b: Data):
+                            when a:
+                                === b => show("same reference")
+                                else => show("different reference")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonStrictNotEqual()
+    {
+        string source = """
+                        routine test(a: Data, b: Data):
+                            when a:
+                                !== b => show("different reference")
+                                else => show("same reference")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonWithMemberAccess()
+    {
+        string source = """
+                        routine handle(code: Integer):
+                            when code:
+                                == HttpStatus.OK => show("success")
+                                == HttpStatus.NOT_FOUND => show("not found")
+                                >= HttpStatus.SERVER_ERROR => show("server error")
+                                else => show("unknown")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonWithMethodCall()
+    {
+        string source = """
+                        routine test(value: Integer):
+                            when value:
+                                == get_threshold() => show("at threshold")
+                                > get_threshold() => show("above threshold")
+                                else => show("below threshold")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenMixedComparisonPatterns()
+    {
+        string source = """
+                        routine categorize(n: Integer):
+                            when n:
+                                < 0 => show("negative")
+                                == 0 => show("zero")
+                                < 50 => show("small")
+                                < 100 => show("medium")
+                                else => show("large")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Becomes Statement Tests
+
+    [Fact]
+    public void ParseSuflae_WhenBlockWithBecomes()
+    {
+        string source = """
+                        routine describe(n: Integer) -> Text:
+                            return when n:
+                                == 0:
+                                    log("found zero")
+                                    becomes "zero"
+                                else => "non-zero"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenMultipleBlocksWithBecomes()
+    {
+        string source = """
+                        routine process(status: Status) -> Text:
+                            return when status:
+                                == Status.PENDING:
+                                    log("still waiting")
+                                    notify_user()
+                                    becomes "pending"
+                                == Status.ACTIVE:
+                                    log("running")
+                                    update_progress()
+                                    becomes "active"
+                                else:
+                                    log("completed or unknown")
+                                    becomes "done"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenTypePatternWithBlockAndBecomes()
+    {
+        string source = """
+                        routine handle(shape: Shape) -> Float:
+                            return when shape:
+                                is Circle (center, radius):
+                                    let area = 3.14159 * radius * radius
+                                    log(f"Circle area: {area}")
+                                    becomes area
+                                is Rectangle (_, size):
+                                    let area = size.width * size.height
+                                    log(f"Rectangle area: {area}")
+                                    becomes area
+                                else:
+                                    becomes 0.0
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenBlockWithBecomesExpression()
+    {
+        string source = """
+                        routine compute(n: Integer):
+                            when n:
+                                == 0:
+                                    let x = 0
+                                    becomes x
+                                else:
+                                    becomes n * 2
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Comparison Patterns with Guards Tests
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonWithGuard()
+    {
+        string source = """
+                        routine test(x: Integer, y: Integer):
+                            when x:
+                                > 0 if y > 0 => show("both positive")
+                                > 0 => show("x positive, y not")
+                                < 0 if y < 0 => show("both negative")
+                                else => show("other")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenComparisonWithComplexGuard()
+    {
+        string source = """
+                        routine validate(score: Integer, bonus: Integer) -> Text:
+                            return when score:
+                                >= 90 if bonus > 0 => "A+"
+                                >= 90 => "A"
+                                >= 80 if bonus >= 5 => "B+"
+                                >= 80 => "B"
+                                else => "C"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Complex Boolean Guard Tests
+
+    [Fact]
+    public void ParseSuflae_WhenGuardWithAnd()
+    {
+        string source = """
+                        routine test(n: Integer, m: Integer):
+                            when n:
+                                is Integer x if x > 0 and m > 0 => show("both positive")
+                                else => show("not both positive")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenGuardWithOr()
+    {
+        string source = """
+                        routine test(n: Integer):
+                            when n:
+                                is Integer x if x < -100 or x > 100 => show("extreme")
+                                else => show("moderate")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenGuardWithAndOr()
+    {
+        string source = """
+                        routine classify(x: Integer, y: Integer, z: Integer):
+                            when x:
+                                > 0 if y > 0 and z > 0 => show("all positive")
+                                > 0 if y > 0 or z > 0 => show("x and at least one other positive")
+                                > 0 => show("only x positive")
+                                else => show("x not positive")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenGuardWithFieldAccess()
+    {
+        string source = """
+                        routine handle(user: User):
+                            when user:
+                                is User u if u.age >= 18 and u.verified => show("verified adult")
+                                is User u if u.age >= 18 => show("unverified adult")
+                                else => show("minor")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WhenGuardWithMethodCall()
+    {
+        string source = """
+                        routine process(item: Item):
+                            when item:
+                                is Item i if i.is_valid() and i.count() > 0 => process_valid(i)
+                                is Item i if i.is_valid() => handle_empty(i)
+                                else => reject(item)
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    #endregion
 }

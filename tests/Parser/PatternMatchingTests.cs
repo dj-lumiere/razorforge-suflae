@@ -641,4 +641,387 @@ public class PatternMatchingTests
     }
 
     #endregion
+
+    #region Comparison Pattern Tests
+
+    [Fact]
+    public void Parse_WhenComparisonNotEqual()
+    {
+        string source = """
+                        routine test(x: S32) {
+                            when x {
+                                != 0 => show("non-zero")
+                                else => show("zero")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonLessThan()
+    {
+        string source = """
+                        routine classify(n: S32) -> Text {
+                            return when n {
+                                < 0 => "negative"
+                                == 0 => "zero"
+                                else => "positive"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonGreaterThan()
+    {
+        string source = """
+                        routine classify(n: S32) -> Text {
+                            return when n {
+                                > 100 => "large"
+                                > 10 => "medium"
+                                else => "small"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonLessThanOrEqual()
+    {
+        string source = """
+                        routine grade(score: S32) -> Text {
+                            return when score {
+                                <= 50 => "fail"
+                                <= 70 => "pass"
+                                <= 90 => "good"
+                                else => "excellent"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonGreaterThanOrEqual()
+    {
+        string source = """
+                        routine classify(temp: S32) -> Text {
+                            return when temp {
+                                >= 100 => "boiling"
+                                >= 30 => "hot"
+                                >= 0 => "cold"
+                                else => "freezing"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonStrictEqual()
+    {
+        string source = """
+                        routine test(a: Data, b: Data) {
+                            when a {
+                                === b => show("same reference")
+                                else => show("different reference")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonStrictNotEqual()
+    {
+        string source = """
+                        routine test(a: Data, b: Data) {
+                            when a {
+                                !== b => show("different reference")
+                                else => show("same reference")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonWithMemberAccess()
+    {
+        string source = """
+                        routine handle(code: S32) {
+                            when code {
+                                == HttpStatus.OK => show("success")
+                                == HttpStatus.NOT_FOUND => show("not found")
+                                >= HttpStatus.SERVER_ERROR => show("server error")
+                                else => show("unknown")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonWithMethodCall()
+    {
+        string source = """
+                        routine test(value: S32) {
+                            when value {
+                                == get_threshold() => show("at threshold")
+                                > get_threshold() => show("above threshold")
+                                else => show("below threshold")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenMixedComparisonPatterns()
+    {
+        string source = """
+                        routine categorize(n: S32) -> Text {
+                            return when n {
+                                < 0 => "negative"
+                                == 0 => "zero"
+                                < 50 => "small"
+                                < 100 => "medium"
+                                else => "large"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    #endregion
+
+    #region Becomes Statement Tests
+
+    [Fact]
+    public void Parse_WhenBlockWithBecomes()
+    {
+        string source = """
+                        routine describe(n: S32) -> Text {
+                            return when n {
+                                == 0 {
+                                    log("found zero")
+                                    becomes "zero"
+                                }
+                                else => "non-zero"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenMultipleBlocksWithBecomes()
+    {
+        string source = """
+                        routine process(status: Status) -> Text {
+                            return when status {
+                                == Status.PENDING {
+                                    log("still waiting")
+                                    notify_user()
+                                    becomes "pending"
+                                }
+                                == Status.ACTIVE {
+                                    log("running")
+                                    update_progress()
+                                    becomes "active"
+                                }
+                                else {
+                                    log("completed or unknown")
+                                    becomes "done"
+                                }
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenTypePatternWithBlockAndBecomes()
+    {
+        string source = """
+                        routine handle(shape: Shape) -> F64 {
+                            return when shape {
+                                is Circle (center, radius) {
+                                    let area = 3.14159 * radius * radius
+                                    log(f"Circle area: {area}")
+                                    becomes area
+                                }
+                                is Rectangle (_, size) {
+                                    let area = size.width * size.height
+                                    log(f"Rectangle area: {area}")
+                                    becomes area
+                                }
+                                else {
+                                    becomes 0.0
+                                }
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenBlockWithBecomesExpression()
+    {
+        string source = """
+                        routine compute(n: S32) -> S32 {
+                            return when n {
+                                < 0 {
+                                    let abs = -n
+                                    becomes abs * 2
+                                }
+                                else {
+                                    becomes n * 2
+                                }
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    #endregion
+
+    #region Comparison Patterns with Guards Tests
+
+    [Fact]
+    public void Parse_WhenComparisonWithGuard()
+    {
+        string source = """
+                        routine test(x: S32, y: S32) {
+                            when x {
+                                > 0 if y > 0 => show("both positive")
+                                > 0 => show("x positive, y not")
+                                < 0 if y < 0 => show("both negative")
+                                else => show("other")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenComparisonWithComplexGuard()
+    {
+        string source = """
+                        routine validate(score: S32, bonus: S32) -> Text {
+                            return when score {
+                                >= 90 if bonus > 0 => "A+"
+                                >= 90 => "A"
+                                >= 80 if bonus >= 5 => "B+"
+                                >= 80 => "B"
+                                else => "C"
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    #endregion
+
+    #region Complex Boolean Guard Tests
+
+    [Fact]
+    public void Parse_WhenGuardWithAnd()
+    {
+        string source = """
+                        routine test(n: S32, m: S32) {
+                            when n {
+                                is S32 x if x > 0 and m > 0 => show("both positive")
+                                else => show("not both positive")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenGuardWithOr()
+    {
+        string source = """
+                        routine test(n: S32) {
+                            when n {
+                                is S32 x if x < -100 or x > 100 => show("extreme")
+                                else => show("moderate")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenGuardWithAndOr()
+    {
+        string source = """
+                        routine classify(x: S32, y: S32, z: S32) {
+                            when x {
+                                > 0 if y > 0 and z > 0 => show("all positive")
+                                > 0 if y > 0 or z > 0 => show("x and at least one other positive")
+                                > 0 => show("only x positive")
+                                else => show("x not positive")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenGuardWithFieldAccess()
+    {
+        string source = """
+                        routine handle(user: User) {
+                            when user {
+                                is User u if u.age >= 18 and u.verified => show("verified adult")
+                                is User u if u.age >= 18 => show("unverified adult")
+                                else => show("minor")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenGuardWithMethodCall()
+    {
+        string source = """
+                        routine process(item: Item) {
+                            when item {
+                                is Item i if i.is_valid() and i.count() > 0 => process_valid(i)
+                                is Item i if i.is_valid() => handle_empty(i)
+                                else => reject(item)
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    #endregion
 }
