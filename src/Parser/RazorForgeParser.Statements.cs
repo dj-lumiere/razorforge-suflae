@@ -220,12 +220,13 @@ public partial class RazorForgeParser
             // ─────────────────────────────────────────────────────────────────────
 
             // Case 1: 'else' keyword - default/fallback case
-            // Forms: else => body, else varName => body
+            // Forms: else => body, else varName => body, else varName { block }
             if (Match(type: TokenType.Else))
             {
-                // Check for variable binding: else varName =>
-                if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-                       .Type == TokenType.FatArrow)
+                // Check for variable binding: else varName => or else varName {
+                TokenType nextAfterIdent = PeekToken(offset: 1).Type;
+                if (Check(type: TokenType.Identifier) &&
+                    (nextAfterIdent == TokenType.FatArrow || nextAfterIdent == TokenType.LeftBrace))
                 {
                     string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
                     pattern = new IdentifierPattern(Name: varName, Location: clauseLocation);
@@ -811,8 +812,8 @@ public partial class RazorForgeParser
     /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
     /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
     /// </summary>
-    /// <returns>A <see cref="ComparisonPattern"/> AST node.</returns>
-    private ComparisonPattern ParseComparisonPattern()
+    /// <returns>A <see cref="ComparisonPattern"/> or <see cref="GuardPattern"/> AST node.</returns>
+    private Pattern ParseComparisonPattern()
     {
         SourceLocation location = GetLocation();
         TokenType op = CurrentToken.Type;
@@ -841,6 +842,7 @@ public partial class RazorForgeParser
 
         _inWhenPatternContext = false;
 
-        return new ComparisonPattern(Operator: op, Value: value, Location: location);
+        var pattern = new ComparisonPattern(Operator: op, Value: value, Location: location);
+        return TryParseGuard(innerPattern: pattern, location: location);
     }
 }

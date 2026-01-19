@@ -1166,6 +1166,12 @@ public partial class SuflaeParser
             return new LiteralExpression(Value: null!, LiteralType: TokenType.None, Location: location);
         }
 
+        // 'absent' as expression - evaluates to none (used in pattern matching arms)
+        if (Match(type: TokenType.Absent))
+        {
+            return new LiteralExpression(Value: null!, LiteralType: TokenType.None, Location: location);
+        }
+
         // Numeric literals (integers and floats)
         if (TryParseNumericLiteral(location: location, result: out Expression? numericExpr))
         {
@@ -1506,6 +1512,11 @@ public partial class SuflaeParser
                     // Plain else without variable binding - treat as wildcard
                     pattern = new WildcardPattern(Location: clauseLocation);
                 }
+            }
+            // Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
+            else if (IsComparisonOperator(CurrentToken.Type))
+            {
+                pattern = ParseComparisonPattern();
             }
             else
             {

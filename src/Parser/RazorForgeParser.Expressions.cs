@@ -268,10 +268,24 @@ public partial class RazorForgeParser
     /// Parses equality comparison expressions.
     /// Syntax: <c>a == b</c> or <c>a != b</c>
     /// </summary>
+    /// <remarks>
+    /// When inside a when clause body (<see cref="_inWhenClauseBody"/> is true),
+    /// comparison operators are not allowed to continue the expression.
+    /// This prevents ambiguity between `=> body` followed by `== pattern`
+    /// and `=> body == continuation` since newlines don't produce tokens.
+    /// </remarks>
     /// <returns>The parsed expression.</returns>
     private Expression ParseEquality()
     {
         Expression expr = ParseComparison();
+
+        // In when clause body context, don't allow comparison operators to continue.
+        // This prevents `=> 1 == Status.ACTIVE` from being parsed as `=> (1 == Status.ACTIVE)`
+        // instead of `=> 1` followed by `== Status.ACTIVE => ...`
+        if (_inWhenClauseBody)
+        {
+            return expr;
+        }
 
         while (Match(TokenType.Equal, TokenType.NotEqual, TokenType.ReferenceEqual, TokenType.ReferenceNotEqual))
         {
@@ -291,10 +305,24 @@ public partial class RazorForgeParser
     /// Syntax: <c>a &lt; b</c>, <c>a &lt;= b &lt;= c</c> (chained), <c>a &lt;=&gt; b</c> (three-way)
     /// Supports: &lt;, &lt;=, &gt;, &gt;=, ==, !=, &lt;=&gt;
     /// </summary>
+    /// <remarks>
+    /// When inside a when clause body (<see cref="_inWhenClauseBody"/> is true),
+    /// comparison operators are not allowed to continue the expression.
+    /// This prevents ambiguity between `=> body` followed by `== pattern`
+    /// and `=> body == continuation` since newlines don't produce tokens.
+    /// </remarks>
     /// <returns>The parsed expression (may be <see cref="ChainedComparisonExpression"/> for chains).</returns>
     private Expression ParseComparison()
     {
         Expression expr = ParseIsExpression();
+
+        // In when clause body context, don't allow comparison operators to continue.
+        // This prevents `=> 1 < Status.Value` from being parsed as a continued comparison
+        // instead of `=> 1` followed by `< Status.Value => ...`
+        if (_inWhenClauseBody)
+        {
+            return expr;
+        }
 
         // Check for chained comparisons (a < b < c)
         var operators = new List<BinaryOperator>();
@@ -1528,6 +1556,11 @@ public partial class RazorForgeParser
                 pattern = ParseTypePattern();
                 _inWhenPatternContext = false;
             }
+            // Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
+            else if (IsComparisonOperator(CurrentToken.Type))
+            {
+                pattern = ParseComparisonPattern();
+            }
             else
             {
                 // Set context flag to prevent single-param lambdas from being parsed
@@ -1537,11 +1570,36 @@ public partial class RazorForgeParser
                 _inWhenPatternContext = false;
             }
 
-            Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after pattern");
-
-            // Set flag to prevent 'is' expression parsing in when clause bodies
+            // Parse arrow or block
+            // Two forms:
+            //   pattern => expression       (single expression)
+            //   pattern { statements... }   (multi-statement block, requires 'becomes')
             _inWhenClauseBody = true;
-            Statement body = ParseStatement();
+            Statement body;
+
+            if (Match(type: TokenType.FatArrow))
+            {
+                // Single-expression branch: pattern => expression
+                // Block is NOT allowed after => (use pattern { } instead)
+                if (Check(type: TokenType.LeftBrace))
+                {
+                    throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
+                        "Block '{ }' is not allowed after '=>'. Use 'pattern { statements... becomes value }' for multi-statement branches");
+                }
+
+                body = ParseStatement();
+            }
+            else if (Check(type: TokenType.LeftBrace))
+            {
+                // Multi-statement branch: pattern { statements... becomes value }
+                body = ParseBlockStatement();
+            }
+            else
+            {
+                throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
+                    "Expected '=>' or '{' after pattern");
+            }
+
             _inWhenClauseBody = false;
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));

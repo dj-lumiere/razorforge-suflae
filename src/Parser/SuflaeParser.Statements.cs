@@ -786,8 +786,8 @@ public partial class SuflaeParser
     /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
     /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
     /// </summary>
-    /// <returns>A <see cref="ComparisonPattern"/> AST node.</returns>
-    private ComparisonPattern ParseComparisonPattern()
+    /// <returns>A <see cref="ComparisonPattern"/> or <see cref="GuardPattern"/> AST node.</returns>
+    private Pattern ParseComparisonPattern()
     {
         SourceLocation location = GetLocation();
         TokenType op = CurrentToken.Type;
@@ -816,6 +816,7 @@ public partial class SuflaeParser
 
         _inWhenPatternContext = false;
 
-        return new ComparisonPattern(Operator: op, Value: value, Location: location);
+        var pattern = new ComparisonPattern(Operator: op, Value: value, Location: location);
+        return TryParseGuard(innerPattern: pattern, location: location);
     }
 }
