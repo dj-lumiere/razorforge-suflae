@@ -1,8 +1,0 @@
-# Test namespace-based imports
-
-import Core.Maybe
-import Collections.List
-
-routine start() {
-    let x = 42
-}
