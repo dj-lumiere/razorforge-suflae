@@ -496,13 +496,15 @@ public class SuflaePatternMatchingTests
     [Fact]
     public void ParseSuflae_WhenMultiLineArm()
     {
+        // Fixed: 'becomes' should only be used in multi-statement blocks, not after '=>'
+        // The else clause uses '=>' for single expression (no becomes needed)
         string source = """
                         routine test(value: Integer):
                             let result = when value:
                                 is A:
                                     let x = compute()
                                     becomes transform(x)
-                                else => becomes default()
+                                else => default()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -701,6 +703,21 @@ public class SuflaePatternMatchingTests
                                 < 50 => show("small")
                                 < 100 => show("medium")
                                 else => show("large")
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_ReturnWhenWithLessThanPattern()
+    {
+        // Regression test: return when + < comparison pattern
+        // Previously failed due to ParseWhenExpression not using ProcessIndentToken
+        string source = """
+                        routine classify(n: Integer) -> Text:
+                            return when n:
+                                < 0 => "negative"
+                                else => "positive"
                         """;
 
         AssertParsesSuflae(source: source);
