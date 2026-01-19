@@ -533,7 +533,7 @@ public record IdentifierPattern(string Name, SourceLocation Location)
 /// <param name="Type">Type expression specifying the type to match</param>
 /// <param name="VariableName">Optional variable name to bind the typed value to</param>
 /// <param name="Location">Source location information</param>
-/// <param name="Bindings">Optional list of binding names for destructuring (e.g., CIRCLE (x, y))</param>
+/// <param name="Bindings">Optional list of bindings for destructuring (e.g., CIRCLE (x, y) or CIRCLE ((x, y), radius))</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
@@ -541,9 +541,10 @@ public record IdentifierPattern(string Name, SourceLocation Location)
 /// <item>when obj { is Point p => ... } matches Point and binds to p</item>
 /// <item>when obj { is Message.TEXT content => ... } matches variant case with binding</item>
 /// <item>when obj { is CIRCLE (x, y) => ... } matches variant case with destructuring</item>
+/// <item>when obj { is CIRCLE ((x, y), radius) => ... } matches with nested destructuring</item>
 /// </list>
 /// </remarks>
-public record TypePattern(TypeExpression Type, string? VariableName, List<string>? Bindings, SourceLocation Location)
+public record TypePattern(TypeExpression Type, string? VariableName, List<DestructuringBinding>? Bindings, SourceLocation Location)
     : Pattern(Location: Location);
 
 /// <summary>

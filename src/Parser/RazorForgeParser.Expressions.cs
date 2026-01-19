@@ -511,6 +511,82 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
+    /// Parses a list of destructuring bindings (without consuming the surrounding parentheses).
+    /// Used by ParseTypePattern() for type patterns with destructuring like: is CIRCLE ((x, y), radius)
+    /// </summary>
+    private List<DestructuringBinding> ParseDestructuringBindingList()
+    {
+        var bindings = new List<DestructuringBinding>();
+
+        if (Check(type: TokenType.RightParen))
+        {
+            return bindings; // Empty list
+        }
+
+        do
+        {
+            SourceLocation bindingLocation = GetLocation();
+
+            // Check for nested pattern: (...)
+            if (Check(type: TokenType.LeftParen))
+            {
+                // Nested destructuring - recursively parse with parens
+                List<DestructuringBinding> nestedBindings = ParseDestructuringBindings();
+                // For nested patterns without a field name, use null FieldName
+                bindings.Add(item: new DestructuringBinding(FieldName: null,
+                    BindingName: null,
+                    NestedPattern: new DestructuringPattern(Bindings: nestedBindings, Location: bindingLocation),
+                    Location: bindingLocation));
+            }
+            // Check for wildcard: _
+            else if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_")
+            {
+                Advance();
+                bindings.Add(item: new DestructuringBinding(FieldName: null,
+                    BindingName: "_",
+                    NestedPattern: null,
+                    Location: bindingLocation));
+            }
+            else
+            {
+                // Named or positional binding
+                string name = ConsumeIdentifier(errorMessage: "Expected field name or binding in destructuring pattern");
+
+                if (Match(type: TokenType.Colon))
+                {
+                    // Named binding: field: binding or field: (nested)
+                    if (Check(type: TokenType.LeftParen))
+                    {
+                        List<DestructuringBinding> nestedBindings = ParseDestructuringBindings();
+                        bindings.Add(item: new DestructuringBinding(FieldName: name,
+                            BindingName: null,
+                            NestedPattern: new DestructuringPattern(Bindings: nestedBindings, Location: bindingLocation),
+                            Location: bindingLocation));
+                    }
+                    else
+                    {
+                        string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name after ':'");
+                        bindings.Add(item: new DestructuringBinding(FieldName: name,
+                            BindingName: bindingName,
+                            NestedPattern: null,
+                            Location: bindingLocation));
+                    }
+                }
+                else
+                {
+                    // Positional binding: name binds to field of same name
+                    bindings.Add(item: new DestructuringBinding(FieldName: name,
+                        BindingName: name,
+                        NestedPattern: null,
+                        Location: bindingLocation));
+                }
+            }
+        } while (Match(type: TokenType.Comma));
+
+        return bindings;
+    }
+
+    /// <summary>
     /// Checks if the current token is a keyword that should not be treated as an identifier.
     /// Used to prevent parsing keywords as binding names in pattern matching.
     /// </summary>

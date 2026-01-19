@@ -380,26 +380,11 @@ public partial class SuflaeParser
                 }
             }
 
-            // Check for destructuring: Type.CASE (field1, field2) or (field: alias, field2: alias2)
-            List<string>? bindings = null;
+            // Check for destructuring: Type.CASE (field1, field2), (field: alias), or ((x, y), z)
+            List<DestructuringBinding>? bindings = null;
             if (Match(type: TokenType.LeftParen))
             {
-                bindings = [];
-                if (!Check(type: TokenType.RightParen))
-                {
-                    do
-                    {
-                        // Support both simple binding (field) and aliased binding (field: alias)
-                        string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name in destructuring pattern");
-                        // If there's a colon, this is an aliased binding (field: alias)
-                        if (Match(type: TokenType.Colon))
-                        {
-                            // The alias is what we actually bind to
-                            bindingName = ConsumeIdentifier(errorMessage: "Expected alias name after ':' in destructuring pattern");
-                        }
-                        bindings.Add(item: bindingName);
-                    } while (Match(type: TokenType.Comma));
-                }
+                bindings = ParseDestructuringBindingList();
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
             }
 
@@ -494,26 +479,11 @@ public partial class SuflaeParser
             }
         }
 
-        // Check for destructuring: Type.CASE (field1, field2) or (field: alias, field2: alias2)
-        List<string>? bindings = null;
+        // Check for destructuring: Type.CASE (field1, field2), (field: alias), or ((x, y), z)
+        List<DestructuringBinding>? bindings = null;
         if (Match(type: TokenType.LeftParen))
         {
-            bindings = new List<string>();
-            if (!Check(type: TokenType.RightParen))
-            {
-                do
-                {
-                    // Support both simple binding (field) and aliased binding (field: alias)
-                    string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name in destructuring pattern");
-                    // If there's a colon, this is an aliased binding (field: alias)
-                    if (Match(type: TokenType.Colon))
-                    {
-                        // The alias is what we actually bind to
-                        bindingName = ConsumeIdentifier(errorMessage: "Expected alias name after ':' in destructuring pattern");
-                    }
-                    bindings.Add(item: bindingName);
-                } while (Match(type: TokenType.Comma));
-            }
+            bindings = ParseDestructuringBindingList();
             Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
         }
 
