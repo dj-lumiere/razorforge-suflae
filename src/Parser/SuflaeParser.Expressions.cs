@@ -779,19 +779,20 @@ public partial class SuflaeParser
     /// <summary>
     /// Parses power/exponentiation expressions.
     /// Syntax: <c>a ** b</c> and overflow variants (**%, **^, **!).
+    /// Power is right-associative: <c>a ** b ** c</c> = <c>a ** (b ** c)</c>
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParsePower()
     {
         Expression expr = ParseUnary();
 
-        while (Match(TokenType.Power,
+        if (Match(TokenType.Power,
                    TokenType.PowerWrap,
                    TokenType.PowerSaturate,
                    TokenType.PowerChecked))
         {
             Token op = PeekToken(offset: -1);
-            Expression right = ParseUnary();
+            Expression right = ParsePower(); // Recursive call for right-associativity
             expr = CreateBinaryExpression(
                 left: expr,
                 op: TokenToBinaryOperator(tokenType: op.Type),

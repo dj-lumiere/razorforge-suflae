@@ -760,13 +760,13 @@ public partial class RazorForgeParser
     {
         Expression expr = ParseUnary();
 
-        while (Match(TokenType.Power,
+        if (Match(TokenType.Power,
                    TokenType.PowerWrap,
                    TokenType.PowerSaturate,
                    TokenType.PowerChecked))
         {
             Token op = PeekToken(offset: -1);
-            Expression right = ParseUnary();
+            Expression right = ParsePower(); // Recursive call for right-associativity
             expr = CreateBinaryExpression(left: expr,
                 op: TokenToBinaryOperator(tokenType: op.Type),
                 right: right,
