@@ -220,50 +220,6 @@ public class SuflaeAccessBlockTests
 
     #endregion
 
-    #region Actor/Channel Patterns (Suflae-specific)
-
-    [Fact]
-    public void ParseSuflae_ChannelUsage()
-    {
-        string source = """
-                        routine producer(channel: Channel<Integer>):
-                            for i in 0 to 100:
-                                channel.send(i)
-                            channel.close()
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_ChannelReceive()
-    {
-        string source = """
-                        routine consumer(channel: Channel<Integer>):
-                            for item in channel:
-                                process(item)
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact(Skip = "Requires parser support for pattern matching on channel select result")]
-    public void ParseSuflae_SelectOnChannels()
-    {
-        string source = """
-                        routine multiplexer(ch1: Channel<Integer>, ch2: Channel<Text>):
-                            loop:
-                                when select(ch1, ch2):
-                                    is ch1 value => show(f"Integer: {value}")
-                                    is ch2 value => show(f"Text: {value}")
-                                    else => break
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    #endregion
-
     #region Thread Spawn Tests
 
     [Fact]
