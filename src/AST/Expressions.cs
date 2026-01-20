@@ -768,6 +768,36 @@ public record StealExpression(Expression Operand, SourceLocation Location)
 
 #endregion
 
+#region Async Expressions
+
+/// <summary>
+/// Expression that waits for a suspended computation to complete.
+/// Used in suspended/threaded routines to await Task-like values.
+/// </summary>
+/// <param name="Operand">The suspended computation to wait for</param>
+/// <param name="Timeout">Optional timeout duration (with 'until' keyword)</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Waitfor expression examples:
+/// <list type="bullet">
+/// <item>waitfor task - wait for task to complete</item>
+/// <item>waitfor task until 5s - wait with 5 second timeout</item>
+/// <item>waitfor http.get(url) until 30s - wait for HTTP request with timeout</item>
+/// </list>
+/// Waitfor can only be used inside suspended/threaded routines.
+/// </remarks>
+public record WaitforExpression(Expression Operand, Expression? Timeout, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitWaitforExpression(node: this);
+    }
+}
+
+#endregion
+
 #region Back Index Expressions
 
 /// <summary>

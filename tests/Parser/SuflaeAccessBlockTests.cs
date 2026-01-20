@@ -83,7 +83,7 @@ public class SuflaeAccessBlockTests
         AssertParsesSuflae(source: source);
     }
 
-    [Fact(Skip = "Requires parser support for suspended/waitfor keywords")]
+    [Fact]
     public void ParseSuflae_UsingWithAsync()
     {
         string source = """
@@ -192,7 +192,7 @@ public class SuflaeAccessBlockTests
         AssertParsesSuflae(source: source);
     }
 
-    [Fact(Skip = "Requires parser support for suspended/waitfor keywords")]
+    [Fact]
     public void ParseSuflae_NetworkResourceManagement()
     {
         string source = """
@@ -266,7 +266,7 @@ public class SuflaeAccessBlockTests
 
     #region Thread Spawn Tests
 
-    [Fact(Skip = "Requires parser support for suspended/waitfor keywords")]
+    [Fact]
     public void ParseSuflae_SpawnThread()
     {
         // Note: waitfor requires suspended routine
@@ -280,7 +280,7 @@ public class SuflaeAccessBlockTests
         AssertParsesSuflae(source: source);
     }
 
-    [Fact(Skip = "Requires parser support for suspended/waitfor keywords")]
+    [Fact]
     public void ParseSuflae_SpawnWithArguments()
     {
         // Note: waitfor requires suspended routine
@@ -295,7 +295,7 @@ public class SuflaeAccessBlockTests
         AssertParsesSuflae(source: source);
     }
 
-    [Fact(Skip = "Requires parser support for suspended/waitfor keywords")]
+    [Fact]
     public void ParseSuflae_SpawnMultiple()
     {
         string source = """

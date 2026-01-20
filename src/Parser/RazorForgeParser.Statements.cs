@@ -114,7 +114,7 @@ public partial class RazorForgeParser
         Expression condition = ParseExpression();
         Statement body = ParseStatement();
 
-        return new WhileStatement(Condition: condition, Body: body, Location: location);
+        return new WhileStatement(Condition: condition, Body: body, ElseBranch: null, Location: location);
     }
 
     /// <summary>
@@ -130,26 +130,41 @@ public partial class RazorForgeParser
         Expression trueCondition = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
         Statement body = ParseStatement();
 
-        return new WhileStatement(Condition: trueCondition, Body: body, Location: location);
+        return new WhileStatement(Condition: trueCondition, Body: body, ElseBranch: null, Location: location);
     }
 
     /// <summary>
     /// Parses a for-in loop statement (iteration over collections).
-    /// Syntax: <c>for variable in iterable { body }</c>
+    /// Syntax: <c>for variable in iterable { body }</c> or <c>for (a, b) in iterable { body }</c>
     /// </summary>
     /// <returns>A <see cref="ForStatement"/> AST node.</returns>
     private ForStatement ParseForStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string variable = ConsumeIdentifier(errorMessage: "Expected variable name");
+        string? variable = null;
+        DestructuringPattern? variablePattern = null;
+
+        // Check for tuple destructuring: for (index, item) in items.enumerate()
+        if (Check(type: TokenType.LeftParen))
+        {
+            List<DestructuringBinding> bindings = ParseDestructuringBindings();
+            variablePattern = new DestructuringPattern(Bindings: bindings, Location: location);
+        }
+        else
+        {
+            variable = ConsumeIdentifier(errorMessage: "Expected variable name");
+        }
+
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in for loop");
         Expression iterable = ParseExpression();
         Statement body = ParseStatement();
 
         return new ForStatement(Variable: variable,
+            VariablePattern: variablePattern,
             Iterable: iterable,
             Body: body,
+            ElseBranch: null,
             Location: location);
     }
 
@@ -747,8 +762,7 @@ public partial class RazorForgeParser
         // Parse the binding name
         string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
 
-        Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after using statement");
-        Statement body = ParseBlockStatement();
+        BlockStatement body = ParseBlockStatement();
 
         return new UsingStatement(Resource: resource, Name: name, Body: body, Location: location);
     }

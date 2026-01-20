@@ -39,6 +39,27 @@ public sealed partial class SemanticAnalyzer
                         isMutable: false);
                 }
 
+                // Process destructuring bindings if present
+                if (typePat.Bindings is { Count: > 0 })
+                {
+                    foreach (DestructuringBinding binding in typePat.Bindings)
+                    {
+                        TypeSymbol fieldType = LookupFieldType(type: patternType, fieldName: binding.FieldName);
+
+                        if (binding.NestedPattern != null)
+                        {
+                            AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
+                        }
+                        else if (binding.BindingName != null)
+                        {
+                            _registry.DeclareVariable(
+                                name: binding.BindingName,
+                                type: fieldType,
+                                isMutable: false);
+                        }
+                    }
+                }
+
                 break;
 
             case WildcardPattern:

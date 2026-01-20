@@ -56,6 +56,7 @@ public sealed partial class SemanticAnalyzer
             BackIndexExpression back => AnalyzeBackIndexExpression(back: back),
             TypeExpression typeExpr => ResolveType(typeExpr: typeExpr),
             WhenExpression whenExpr => AnalyzeWhenExpression(when: whenExpr),
+            WaitforExpression waitfor => AnalyzeWaitforExpression(waitfor: waitfor),
             _ => HandleUnknownExpression(expression: expression)
         };
 
@@ -1855,6 +1856,40 @@ public sealed partial class SemanticAnalyzer
             parameterTypes: parameterTypes,
             returnType: returnType,
             isFailable: routine.IsFailable);
+    }
+
+    /// <summary>
+    /// Analyzes a waitfor expression (async/concurrency).
+    /// Waits for an async operation to complete, optionally with a timeout.
+    /// </summary>
+    /// <param name="waitfor">The waitfor expression to analyze.</param>
+    /// <returns>The type of the awaited value.</returns>
+    private TypeSymbol AnalyzeWaitforExpression(WaitforExpression waitfor)
+    {
+        // Analyze the operand (the async operation to wait for)
+        TypeSymbol operandType = AnalyzeExpression(expression: waitfor.Operand);
+
+        // Analyze optional timeout expression
+        if (waitfor.Timeout != null)
+        {
+            TypeSymbol timeoutType = AnalyzeExpression(expression: waitfor.Timeout);
+
+            // Validate that timeout is a Duration type
+            TypeSymbol? durationType = _registry.LookupType(name: "Duration");
+            if (durationType != null && !IsAssignableTo(source: timeoutType, target: durationType))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.WaitforTimeoutNotDuration,
+                    $"Waitfor 'until' clause requires a Duration, got '{timeoutType.Name}'.",
+                    waitfor.Timeout.Location);
+            }
+        }
+
+        // TODO: Validate that we're inside a suspended/threaded routine
+
+        // The result type is the inner type of the async operation
+        // For now, return the operand type directly
+        return operandType;
     }
 
     #endregion

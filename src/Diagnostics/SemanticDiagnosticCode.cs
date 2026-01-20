@@ -113,6 +113,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Unary operator method not found on type.</summary>
     UnaryOperatorNotFound = 66,
 
+    /// <summary>Waitfor 'until' clause requires a Duration type.</summary>
+    WaitforTimeoutNotDuration = 67,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // TYPE RESOLUTION ERRORS (RF-S100 - RF-S149)
     // ═══════════════════════════════════════════════════════════════════════════

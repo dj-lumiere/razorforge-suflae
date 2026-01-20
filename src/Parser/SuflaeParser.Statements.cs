@@ -168,7 +168,8 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a while loop statement.
-    /// Syntax: <c>while condition:</c> followed by indented body.
+    /// Syntax: <c>while condition:</c> followed by indented body, optional <c>else:</c> block.
+    /// The else block executes if the loop completes without hitting a break.
     /// </summary>
     /// <returns>A <see cref="WhileStatement"/> AST node.</returns>
     private Statement ParseWhileStatement()
@@ -179,7 +180,15 @@ public partial class SuflaeParser
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after while condition");
         Statement body = ParseIndentedBlock();
 
-        return new WhileStatement(Condition: condition, Body: body, Location: location);
+        // Check for Python-style else clause (runs if loop completes without break)
+        Statement? elseBranch = null;
+        if (Match(type: TokenType.Else))
+        {
+            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+            elseBranch = ParseIndentedBlock();
+        }
+
+        return new WhileStatement(Condition: condition, Body: body, ElseBranch: elseBranch, Location: location);
     }
 
     /// <summary>
@@ -197,27 +206,51 @@ public partial class SuflaeParser
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after loop");
         Statement body = ParseIndentedBlock();
 
-        return new WhileStatement(Condition: trueCondition, Body: body, Location: location);
+        return new WhileStatement(Condition: trueCondition, Body: body, ElseBranch: null, Location: location);
     }
 
     /// <summary>
     /// Parses a for-in loop statement.
-    /// Syntax: <c>for variable in iterable:</c> followed by indented body.
+    /// Syntax: <c>for variable in iterable:</c> or <c>for (a, b) in iterable:</c> followed by indented body.
+    /// Optional <c>else:</c> block executes if loop completes without break.
     /// </summary>
     /// <returns>A <see cref="ForStatement"/> AST node.</returns>
     private Statement ParseForStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string variable = ConsumeIdentifier(errorMessage: "Expected variable name");
+        string? variable = null;
+        DestructuringPattern? variablePattern = null;
+
+        // Check for tuple destructuring: for (index, item) in items.enumerate()
+        if (Check(type: TokenType.LeftParen))
+        {
+            List<DestructuringBinding> bindings = ParseDestructuringBindings();
+            variablePattern = new DestructuringPattern(Bindings: bindings, Location: location);
+        }
+        else
+        {
+            variable = ConsumeIdentifier(errorMessage: "Expected variable name");
+        }
+
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in for loop");
         Expression iterable = ParseExpression();
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after for header");
         Statement body = ParseIndentedBlock();
 
+        // Check for Python-style else clause (runs if loop completes without break)
+        Statement? elseBranch = null;
+        if (Match(type: TokenType.Else))
+        {
+            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+            elseBranch = ParseIndentedBlock();
+        }
+
         return new ForStatement(Variable: variable,
+            VariablePattern: variablePattern,
             Iterable: iterable,
             Body: body,
+            ElseBranch: elseBranch,
             Location: location);
     }
 
@@ -266,9 +299,10 @@ public partial class SuflaeParser
             // Handle 'else' keyword for default case: else => body or else varName => body
             else if (Match(type: TokenType.Else))
             {
-                // Check for variable binding: else varName =>
-                if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-                       .Type == TokenType.FatArrow)
+                // Check for variable binding: else varName => or else varName:
+                TokenType nextAfterIdent = PeekToken(offset: 1).Type;
+                if (Check(type: TokenType.Identifier) &&
+                    (nextAfterIdent == TokenType.FatArrow || nextAfterIdent == TokenType.Colon))
                 {
                     string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
                     pattern = new IdentifierPattern(Name: varName, Location: clauseLocation);

@@ -302,6 +302,13 @@ public partial class SuflaeParser
             return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
 
+        // Check for suspended modifier before routine
+        AsyncStatus asyncStatus = AsyncStatus.None;
+        if (Match(type: TokenType.Suspended))
+        {
+            asyncStatus = AsyncStatus.Suspended;
+        }
+
         // Routine (function) declaration - using 'routine' keyword in Suflae
         if (Match(type: TokenType.Routine))
         {
@@ -314,7 +321,16 @@ public partial class SuflaeParser
                     "'global' can only be used for file-scope static variables",
                     fileName, CurrentToken.Line, CurrentToken.Column);
             }
-            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage);
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus);
+        }
+
+        // If we consumed 'suspended' but no 'routine' follows, that's an error
+        if (asyncStatus != AsyncStatus.None)
+        {
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                "'suspended' must be followed by 'routine'",
+                fileName, CurrentToken.Line, CurrentToken.Column);
         }
 
         // Entity/Record/Choice declarations

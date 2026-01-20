@@ -293,6 +293,13 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         }
 
         // Routine declaration (access modifiers: private, family, internal, public)
+        // Supports: threaded routine foo() for OS-level threading
+        AsyncStatus asyncStatus = AsyncStatus.None;
+        if (Match(type: TokenType.Threaded))
+        {
+            asyncStatus = AsyncStatus.Threaded;
+        }
+
         if (Match(type: TokenType.Routine))
         {
             // Validate: global storage is not allowed for routines
@@ -304,7 +311,16 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                     "'global' can only be used for file-scope static variables.",
                     _fileName, CurrentToken.Line, CurrentToken.Column);
             }
-            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage);
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus);
+        }
+
+        // If we consumed 'threaded' but no 'routine' follows, it's an error
+        if (asyncStatus != AsyncStatus.None)
+        {
+            throw new RazorForgeGrammarException(
+                RazorForgeDiagnosticCode.UnexpectedToken,
+                "'threaded' must be followed by 'routine'",
+                _fileName, CurrentToken.Line, CurrentToken.Column);
         }
 
         // Entity declarations (heap-allocated reference types)

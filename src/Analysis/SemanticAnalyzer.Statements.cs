@@ -394,11 +394,31 @@ public sealed partial class SemanticAnalyzer
         // Get element type from iterable
         TypeSymbol elementType = GetIterableElementType(iterableType: iterableType, location: forStmt.Location);
 
-        // Declare loop variable with element type
-        _registry.DeclareVariable(
-            name: forStmt.Variable,
-            type: elementType,
-            isMutable: false); // Loop variables are immutable
+        // Handle either simple variable or destructuring pattern
+        if (forStmt.Variable != null)
+        {
+            // Simple variable binding: for item in items
+            _registry.DeclareVariable(
+                name: forStmt.Variable,
+                type: elementType,
+                isMutable: false); // Loop variables are immutable
+        }
+        else if (forStmt.VariablePattern != null)
+        {
+            // Destructuring pattern: for (index, item) in items.enumerate()
+            // For tuple destructuring, we need to extract element types from the tuple
+            // For now, we'll declare each binding with the element type (to be refined with proper tuple handling)
+            foreach (DestructuringBinding binding in forStmt.VariablePattern.Bindings)
+            {
+                if (binding.BindingName != null)
+                {
+                    _registry.DeclareVariable(
+                        name: binding.BindingName,
+                        type: elementType, // TODO: Extract proper tuple element types
+                        isMutable: false);
+                }
+            }
+        }
 
         // Analyze loop body
         AnalyzeStatement(statement: forStmt.Body);

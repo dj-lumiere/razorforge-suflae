@@ -124,6 +124,7 @@ public record VariableDeclaration(
 /// <item>Type inference: parameters and return types can be inferred</item>
 /// <item>Attributes: @inline,etc.</item>
 /// <item>Visibility: public, private, internal</item>
+/// <item>Suspended: async function that can use waitfor</item>
 /// </list>
 /// </remarks>
 public record RoutineDeclaration(
@@ -137,7 +138,8 @@ public record RoutineDeclaration(
     List<string>? GenericParameters = null,
     List<GenericConstraintDeclaration>? GenericConstraints = null,
     bool IsFailable = false,
-    StorageClass Storage = StorageClass.None)
+    StorageClass Storage = StorageClass.None,
+    AsyncStatus Async = AsyncStatus.None)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -417,6 +419,27 @@ public record ImportDeclaration(
 #endregion
 
 #region Supporting Types and Enums
+
+/// <summary>
+/// Specifies the async execution model for a routine.
+/// </summary>
+public enum AsyncStatus
+{
+    /// <summary>Regular synchronous routine</summary>
+    None,
+
+    /// <summary>
+    /// Lightweight async (suspended) - cooperative multitasking using green threads.
+    /// Best for I/O-bound operations. Uses waitfor to await results.
+    /// </summary>
+    Suspended,
+
+    /// <summary>
+    /// OS-level threading for CPU-bound parallel work.
+    /// Uses real threads with higher overhead but true parallelism.
+    /// </summary>
+    Threaded
+}
 
 /// <summary>
 /// Value assigning used within Choice (enum) declarations.

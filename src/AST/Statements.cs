@@ -328,10 +328,14 @@ public record IfStatement(
 /// <item>Supports break and continue statements for flow control</item>
 /// <item>Infinite loops possible if condition never becomes false</item>
 /// <item>Body can be single statement or block statement</item>
+/// <item>Python-style else: else branch executes if loop completes without break</item>
 /// </list>
 /// </remarks>
-public record WhileStatement(Expression Condition, Statement Body, SourceLocation Location)
-    : Statement(Location: Location)
+public record WhileStatement(
+    Expression Condition,
+    Statement Body,
+    Statement? ElseBranch,
+    SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -355,12 +359,16 @@ public record WhileStatement(Expression Condition, Statement Body, SourceLocatio
 /// <item>Ranges: for i in (0 to 10)</item>
 /// <item>Strings: for char in "hello"</item>
 /// <item>Custom iterables implementing iteration protocols</item>
+/// <item>Tuple destructuring: for (index, item) in items.enumerate()</item>
+/// <item>Python-style else: else branch executes if loop completes without break</item>
 /// </list>
 /// </remarks>
 public record ForStatement(
-    string Variable,
+    string? Variable,
+    DestructuringPattern? VariablePattern,
     Expression Iterable,
     Statement Body,
+    Statement? ElseBranch,
     SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>

@@ -1319,6 +1319,21 @@ public partial class SuflaeParser
             return ParseWhenExpression(location: location);
         }
 
+        // Waitfor expression: waitfor expr or waitfor expr until timeout
+        // Used for async/concurrency: let result = waitfor asyncOperation
+        if (Match(type: TokenType.Waitfor))
+        {
+            Expression operand = ParseUnary(); // Parse the expression to wait for
+            Expression? timeout = null;
+
+            if (Match(type: TokenType.Until))
+            {
+                timeout = ParseUnary(); // Parse the timeout expression
+            }
+
+            return new WaitforExpression(Operand: operand, Timeout: timeout, Location: location);
+        }
+
         // Intrinsic routine call: @intrinsic_routine.operation<T>(args)
         if (Match(type: TokenType.IntrinsicRoutine))
         {

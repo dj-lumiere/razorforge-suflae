@@ -438,7 +438,8 @@ public partial class RazorForgeParser
         VisibilityModifier visibility = VisibilityModifier.Public,
         List<string>? attributes = null,
         bool allowNoBody = false,
-        StorageClass storage = StorageClass.None)
+        StorageClass storage = StorageClass.None,
+        AsyncStatus asyncStatus = AsyncStatus.None)
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // VALIDATION: Reject nested routine declarations
@@ -742,7 +743,8 @@ public partial class RazorForgeParser
             GenericParameters: genericParams,
             GenericConstraints: constraints,
             IsFailable: isFailable,
-            Storage: storage);
+            Storage: storage,
+            Async: asyncStatus);
     }
 
     /// <summary>

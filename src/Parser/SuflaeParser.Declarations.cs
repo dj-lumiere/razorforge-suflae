@@ -244,7 +244,8 @@ public partial class SuflaeParser
     private RoutineDeclaration ParseRoutineDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Public,
         List<string>? attributes = null,
-        StorageClass storage = StorageClass.None)
+        StorageClass storage = StorageClass.None,
+        AsyncStatus asyncStatus = AsyncStatus.None)
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // PHASE 1: VALIDATION
@@ -399,7 +400,8 @@ public partial class SuflaeParser
             Attributes: attributes ?? [],
             Location: location,
             IsFailable: isFailable,
-            Storage: storage);
+            Storage: storage,
+            Async: asyncStatus);
     }
 
     /// <summary>
