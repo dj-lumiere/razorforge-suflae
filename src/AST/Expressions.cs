@@ -126,6 +126,33 @@ public record DictLiteralExpression(
 }
 
 /// <summary>
+/// Expression representing a tuple literal: (1, 2, 3) or (x,) for single-element.
+/// Creates a ValueTuple (if all elements are value types) or Tuple (if any element is a reference type).
+/// </summary>
+/// <param name="Elements">The expressions for each tuple element (must have at least 1 element)</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Tuple literal syntax:
+/// <list type="bullet">
+/// <item>Multi-element: (1, 2, 3) - creates tuple with 3 elements</item>
+/// <item>Single-element: (42,) - trailing comma required to distinguish from parenthesized expression</item>
+/// <item>Nested: (1, (2, 3)) - tuples can contain other tuples</item>
+/// </list>
+/// Note: Empty tuples () are not valid. Use Blank for unit type.
+/// Access elements via .item0, .item1, etc.
+/// </remarks>
+public record TupleLiteralExpression(
+    List<Expression> Elements,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitTupleLiteralExpression(node: this);
+    }
+}
+
+/// <summary>
 /// Expression that references a named symbol (variable, function, entity, etc.).
 /// Represents the use of identifiers that must be resolved during semantic analysis.
 /// </summary>

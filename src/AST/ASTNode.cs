@@ -127,6 +127,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the dict literal</returns>
     T VisitDictLiteralExpression(DictLiteralExpression node);
 
+    /// <summary>Visits a tuple literal expression node (1, 2, 3) or (x,)</summary>
+    /// <param name="node">The tuple literal to visit</param>
+    /// <returns>Result of visiting the tuple literal</returns>
+    T VisitTupleLiteralExpression(TupleLiteralExpression node);
+
     /// <summary>Visits an identifier expression node (variable/function references)</summary>
     /// <param name="node">The identifier expression to visit</param>
     /// <returns>Result of visiting the identifier expression</returns>

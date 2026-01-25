@@ -1330,7 +1330,7 @@ public partial class RazorForgeParser
                 Location: location);
         }
 
-        // Parenthesized expression or arrow lambda with parenthesized params
+        // Parenthesized expression, tuple literal, or arrow lambda with parenthesized params
         if (Match(type: TokenType.LeftParen))
         {
             if (IsArrowLambdaParameters())
@@ -1338,9 +1338,35 @@ public partial class RazorForgeParser
                 return ParseParenthesizedArrowLambda(location: location);
             }
 
-            Expression expr = ParseExpression();
+            // Parse first expression
+            Expression firstExpr = ParseExpression();
+
+            // Check if this is a tuple (has comma) or just parenthesized expression
+            if (Match(type: TokenType.Comma))
+            {
+                // It's a tuple
+                var elements = new List<Expression> { firstExpr };
+
+                // Check for single-element tuple: (expr,)
+                if (Check(type: TokenType.RightParen))
+                {
+                    Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple");
+                    return new TupleLiteralExpression(Elements: elements, Location: location);
+                }
+
+                // Multi-element tuple: (expr1, expr2, ...)
+                do
+                {
+                    elements.Add(item: ParseExpression());
+                } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightParen));
+
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple elements");
+                return new TupleLiteralExpression(Elements: elements, Location: location);
+            }
+
+            // Just a parenthesized expression
             Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after expression");
-            return expr;
+            return firstExpr;
         }
 
         // Intrinsic routine call: @intrinsic_routine.operation<T, U>(args)
