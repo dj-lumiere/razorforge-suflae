@@ -283,7 +283,6 @@ public sealed partial class SemanticAnalyzer
             ReportError(
                 SemanticDiagnosticCode.ReservedRoutinePrefix,
                 $"Routine name '{baseName}' uses a reserved prefix. " +
-                         "Prefixes 'try_', 'check_', and 'find_' are reserved for auto-generated error handling variants.",
                          "Prefixes 'try_', 'check_', and 'lookup_' are reserved for auto-generated error handling variants.",
                 routine.Location);
         }
