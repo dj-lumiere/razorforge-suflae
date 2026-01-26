@@ -273,7 +273,7 @@ public sealed partial class SemanticAnalyzer
             kind = RoutineKind.Function;
         }
 
-        // Validate reserved prefixes (try_, check_, find_) for user functions
+        // Validate reserved prefixes (try_, check_, lookup_) for user functions
         string baseName = routineName.Contains(value: '.')
             ? routineName[(routineName.IndexOf(value: '.') + 1)..]
             : routineName;
@@ -284,6 +284,17 @@ public sealed partial class SemanticAnalyzer
                 SemanticDiagnosticCode.ReservedRoutinePrefix,
                 $"Routine name '{baseName}' uses a reserved prefix. " +
                          "Prefixes 'try_', 'check_', and 'find_' are reserved for auto-generated error handling variants.",
+                         "Prefixes 'try_', 'check_', and 'lookup_' are reserved for auto-generated error handling variants.",
+                routine.Location);
+        }
+
+        // Validate dunder patterns (__name__) are known operator methods
+        if (IsUnknownDunderMethod(name: baseName))
+        {
+            ReportError(
+                SemanticDiagnosticCode.UnknownDunderMethod,
+                $"Routine name '{baseName}' uses reserved dunder pattern. " +
+                         "Names matching '__name__' are reserved for operator methods.",
                 routine.Location);
         }
 
@@ -311,7 +322,74 @@ public sealed partial class SemanticAnalyzer
     {
         return name.StartsWith(value: "try_", comparisonType: StringComparison.Ordinal) ||
                name.StartsWith(value: "check_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "find_", comparisonType: StringComparison.Ordinal);
+               name.StartsWith(value: "lookup_", comparisonType: StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Known dunder methods that are valid operator/special methods.
+    /// </summary>
+    private static readonly HashSet<string> KnownDunderMethods =
+    [
+        // Constructor
+        "__create__",
+
+        // Arithmetic operators
+        "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__",
+
+        // Wrapping arithmetic
+        "__add_wrap__", "__sub_wrap__", "__mul_wrap__", "__pow_wrap__",
+
+        // Saturating arithmetic
+        "__add_sat__", "__sub_sat__", "__mul_sat__", "__pow_sat__",
+
+        // Checked arithmetic
+        "__add_checked__", "__sub_checked__", "__mul_checked__",
+        "__floordiv_checked__", "__mod_checked__", "__pow_checked__",
+
+        // Comparison operators
+        "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
+
+        // Bitwise operators
+        "__and__", "__or__", "__xor__",
+        "__ashl__", "__ashl_checked__", "__ashr__", "__lshl__", "__lshr__",
+
+        // Unary operators
+        "__neg__", "__pos__", "__not__", "__bitnot__",
+
+        // Membership operators
+        "__contains__", "__notcontains__",
+
+        // Conversion and representation
+        "__repr__", "__str__", "__hash__", "__bool__",
+
+        // Iteration
+        "__iter__", "__next__",
+
+        // Indexing
+        "__getitem__", "__setitem__", "__delitem__", "__len__",
+
+        // Context management
+        "__enter__", "__exit__",
+
+        // Destructor/cleanup
+        "__destroy__"
+    ];
+
+    /// <summary>
+    /// Checks if a routine name uses the dunder pattern but is not a known operator method.
+    /// </summary>
+    private static bool IsUnknownDunderMethod(string name)
+    {
+        // Check if it matches dunder pattern: __name__
+        if (!name.StartsWith(value: "__", comparisonType: StringComparison.Ordinal) ||
+            !name.EndsWith(value: "__", comparisonType: StringComparison.Ordinal) ||
+            name.Length <= 4) // Must have something between the underscores
+        {
+            return false;
+        }
+
+        // It's a dunder pattern - check if it's known
+        return !KnownDunderMethods.Contains(value: name);
     }
 
     private void CollectImportedDeclaration(ImportedDeclaration imported)

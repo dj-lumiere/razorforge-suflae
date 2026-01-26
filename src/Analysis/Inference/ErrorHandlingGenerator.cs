@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Inference;
+namespace Compilers.Analysis.Inference;
 
 using Symbols;
 using Types;
@@ -35,7 +35,7 @@ public sealed class ErrorHandlingGenerator
     /// For qualified names like "Cache.get", produces "Cache.try_get".
     /// For simple names like "get", produces "try_get".
     /// </summary>
-    /// <param name="prefix">The variant prefix (try, check, find).</param>
+    /// <param name="prefix">The variant prefix (try, check, lookup).</param>
     /// <param name="originalName">The original routine name.</param>
     /// <returns>The variant name.</returns>
     private static string GenerateVariantName(string prefix, string originalName)
@@ -99,10 +99,10 @@ public sealed class ErrorHandlingGenerator
         // lookup_ variant if both throw and absent
         if (analysis is { HasThrow: true, HasAbsent: true })
         {
-            RoutineInfo findVariant = GenerateFindVariant(original: routine);
+            RoutineInfo lookupVariant = GenerateLookupVariant(original: routine);
             variants.Add(item: new GeneratedVariant(
-                Kind: ErrorHandlingVariantKind.Find,
-                Routine: findVariant));
+                Kind: ErrorHandlingVariantKind.Lookup,
+                Routine: lookupVariant));
         }
 
         return new ErrorHandlingResult
@@ -252,7 +252,7 @@ public sealed class ErrorHandlingGenerator
     /// </summary>
     /// <param name="original">The original routine.</param>
     /// <returns>The lookup_ variant routine info.</returns>
-    private RoutineInfo GenerateFindVariant(RoutineInfo original)
+    private RoutineInfo GenerateLookupVariant(RoutineInfo original)
     {
         TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
             message: "Failable function must have a return type");
@@ -261,7 +261,7 @@ public sealed class ErrorHandlingGenerator
             genericDef: ErrorHandlingTypeInfo.WellKnown.LookupDefinition,
             typeArguments: [returnType]);
 
-        return new RoutineInfo(name: GenerateVariantName(prefix: "find", originalName: original.Name))
+        return new RoutineInfo(name: GenerateVariantName(prefix: "lookup", originalName: original.Name))
         {
             Kind = original.Kind,
             OwnerType = original.OwnerType,

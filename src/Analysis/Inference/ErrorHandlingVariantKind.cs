@@ -12,5 +12,5 @@ public enum ErrorHandlingVariantKind
     Check,
 
     /// <summary>lookup_ variant - returns Lookup&lt;T&gt;, distinguishes error from absence.</summary>
-    Find
+    Lookup
 }
