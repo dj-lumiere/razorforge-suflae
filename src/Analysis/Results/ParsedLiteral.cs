@@ -69,3 +69,109 @@ public sealed record ParsedDecimal(
     public bool IsZero => Sign == 0;
     public override string ToString() => $"Decimal({StringValue}, exp={Exponent})";
 }
+
+/// <summary>
+/// Parsed fixed-width signed integer value (S8, S16, S32, S64, S128).
+/// </summary>
+public sealed record ParsedSignedInt(
+    SourceLocation Location,
+    string TypeName,
+    Int128 Value) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"{TypeName}({Value})";
+}
+
+/// <summary>
+/// Parsed fixed-width unsigned integer value (U8, U16, U32, U64, U128).
+/// </summary>
+public sealed record ParsedUnsignedInt(
+    SourceLocation Location,
+    string TypeName,
+    UInt128 Value) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"{TypeName}({Value})";
+}
+
+/// <summary>
+/// Parsed fixed-width float value (F16, F32, F64).
+/// F128 uses ParsedF128 with native library parsing.
+/// </summary>
+public sealed record ParsedFloat(
+    SourceLocation Location,
+    string TypeName,
+    double Value) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"{TypeName}({Value})";
+}
+
+/// <summary>
+/// Parsed Duration literal value stored as nanoseconds.
+/// Supports: ns, us, ms, s, m, h, d, w suffixes.
+/// </summary>
+public sealed record ParsedDuration(
+    SourceLocation Location,
+    long Nanoseconds,
+    string OriginalUnit) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"Duration({Nanoseconds}ns, original={OriginalUnit})";
+}
+
+/// <summary>
+/// Parsed MemorySize literal value stored as bytes.
+/// Supports: b, kb, kib, mb, mib, gb, gib suffixes.
+/// </summary>
+public sealed record ParsedMemorySize(
+    SourceLocation Location,
+    ulong Bytes,
+    string OriginalUnit) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"MemorySize({Bytes}b, original={OriginalUnit})";
+}
+
+/// <summary>
+/// Parsed imaginary component for J32 (F32-based complex).
+/// </summary>
+public sealed record ParsedJ32(
+    SourceLocation Location,
+    float Value) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"J32({Value}i)";
+}
+
+/// <summary>
+/// Parsed imaginary component for J64 (F64-based complex).
+/// </summary>
+public sealed record ParsedJ64(
+    SourceLocation Location,
+    double Value) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"J64({Value}i)";
+}
+
+/// <summary>
+/// Parsed imaginary component for J128 (F128-based complex).
+/// Uses the same representation as ParsedF128.
+/// </summary>
+public sealed record ParsedJ128(
+    SourceLocation Location,
+    ulong Lo,
+    ulong Hi) : ParsedLiteral(Location)
+{
+    public override string ToString() => $"J128(0x{Hi:X16}{Lo:X16}i)";
+}
+
+/// <summary>
+/// Parsed imaginary component for Jn (arbitrary-precision Decimal-based complex).
+/// Uses the same representation as ParsedDecimal.
+/// </summary>
+public sealed record ParsedJn(
+    SourceLocation Location,
+    string StringValue,
+    int Sign,
+    int Exponent,
+    int SignificantDigits) : ParsedLiteral(Location)
+{
+    public bool IsNegative => Sign < 0;
+    public bool IsZero => Sign == 0;
+    public override string ToString() => $"Jn({StringValue}i, exp={Exponent})";
+}
