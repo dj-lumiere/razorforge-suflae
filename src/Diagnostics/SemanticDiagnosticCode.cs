@@ -58,6 +58,24 @@ public enum SemanticDiagnosticCode
     /// <summary>Variable with this name already declared in the same scope.</summary>
     VariableRedeclaration = 9,
 
+    /// <summary>Integer literal value overflows the target type's range.</summary>
+    IntegerLiteralOverflow = 10,
+
+    /// <summary>Float literal value overflows the target type's range.</summary>
+    FloatLiteralOverflow = 11,
+
+    /// <summary>Duration literal value overflows (exceeds maximum representable duration).</summary>
+    DurationLiteralOverflow = 12,
+
+    /// <summary>Memory size literal value overflows (exceeds maximum representable size).</summary>
+    MemorySizeLiteralOverflow = 13,
+
+    /// <summary>Failed to parse imaginary literal for complex number.</summary>
+    ImaginaryLiteralParseFailed = 14,
+
+    /// <summary>Invalid base prefix in numeric literal (expected 0x, 0o, or 0b).</summary>
+    InvalidNumericBase = 15,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // BINARY AND UNARY OPERATOR ERRORS (RF-S050 - RF-S099)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -351,8 +369,11 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid visibility modifier for this context.</summary>
     InvalidVisibilityModifier = 408,
 
-    /// <summary>Routine name uses reserved prefix (try_, check_, find_).</summary>
+    /// <summary>Routine name uses reserved prefix (try_, check_, lookup_).</summary>
     ReservedRoutinePrefix = 409,
+
+    /// <summary>Routine name uses reserved dunder pattern (__name__) that is not a known operator method.</summary>
+    UnknownDunderMethod = 410,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
