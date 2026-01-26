@@ -31,10 +31,19 @@ public partial class RazorForgeParser
             return null;
         }
 
-        // Create: left.__methodName__(right)
-        MemberExpression memberExpr = new(Object: left, PropertyName: methodName, Location: location);
+        // For membership operators (in, notin), the operands are reversed:
+        // x in coll → coll.__contains__(x)
+        // x notin coll → coll.__notcontains__(x)
+        if (op is BinaryOperator.In or BinaryOperator.NotIn)
+        {
+            MemberExpression memberExpr = new(Object: right, PropertyName: methodName, Location: location);
+            return new CallExpression(Callee: memberExpr, Arguments: [left], Location: location);
+        }
 
-        return new CallExpression(Callee: memberExpr, Arguments: [right], Location: location);
+        // Create: left.__methodName__(right)
+        MemberExpression defaultMemberExpr = new(Object: left, PropertyName: methodName, Location: location);
+
+        return new CallExpression(Callee: defaultMemberExpr, Arguments: [right], Location: location);
     }
 
     /// <summary>

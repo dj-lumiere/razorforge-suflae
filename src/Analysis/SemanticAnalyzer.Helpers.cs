@@ -255,14 +255,14 @@ public sealed partial class SemanticAnalyzer
             || _registry.LookupRoutine(fullName: $"{type.Name}.{methodName}!") != null;
     }
 
-    private bool IsComparisonOperator(BinaryOperator op)
+    /// <summary>
+    /// Checks if an operator is a non-desugared comparison operator.
+    /// Note: ==, !=, &lt;, &lt;=, &gt;, &gt;=, &lt;=&gt;, in, notin are desugared to method calls in the parser.
+    /// This only returns true for operators that remain as BinaryExpression nodes.
+    /// </summary>
+    private static bool IsComparisonOperator(BinaryOperator op)
     {
-        return op is BinaryOperator.Equal or BinaryOperator.NotEqual
-            or BinaryOperator.Identical or BinaryOperator.NotIdentical
-            or BinaryOperator.Less or BinaryOperator.LessEqual
-            or BinaryOperator.Greater or BinaryOperator.GreaterEqual
-            or BinaryOperator.ThreeWayComparator
-            or BinaryOperator.In or BinaryOperator.NotIn
+        return op is BinaryOperator.Identical or BinaryOperator.NotIdentical
             or BinaryOperator.Is or BinaryOperator.IsNot
             or BinaryOperator.Follows or BinaryOperator.NotFollows;
     }
@@ -272,6 +272,11 @@ public sealed partial class SemanticAnalyzer
         return op is BinaryOperator.And or BinaryOperator.Or;
     }
 
+    /// <summary>
+    /// Validates comparison operands for type compatibility and operator support.
+    /// Called from both AnalyzeBinaryExpression (for non-desugared operators like ===, is, follows)
+    /// and AnalyzeChainedComparisonExpression (for chained comparisons like a &lt; b &lt; c).
+    /// </summary>
     private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op, SourceLocation location)
     {
         // Identity operators (===, !==) only work on entity/resident types
@@ -289,7 +294,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Variants cannot use equality or ordering operators
+        // Variants cannot use equality or ordering operators (only 'is' and 'isnot')
         if (left.Category == TypeCategory.Variant || right.Category == TypeCategory.Variant)
         {
             if (op is not (BinaryOperator.Is or BinaryOperator.IsNot))
@@ -312,14 +317,17 @@ public sealed partial class SemanticAnalyzer
                 location);
         }
 
-        // For ordering operators, verify the type is comparable (has __cmp__ or individual comparison methods)
-        if (op is BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater or BinaryOperator.GreaterEqual)
+        // For ordering/equality operators in chained comparisons, verify the type supports them
+        // Note: For single comparisons, these are desugared to method calls in the parser.
+        // This validation only runs for chained comparisons (a < b < c) where operators are NOT desugared.
+        if (op is BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater or BinaryOperator.GreaterEqual
+            or BinaryOperator.Equal)
         {
             if (!SupportsOperator(type: left, op: op))
             {
                 ReportError(
                     SemanticDiagnosticCode.OrderingNotSupported,
-                    $"Type '{left.Name}' does not support ordering comparisons.",
+                    $"Type '{left.Name}' does not support comparison operator '{op.ToStringRepresentation()}'.",
                     location);
             }
         }

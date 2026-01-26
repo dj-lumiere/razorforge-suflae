@@ -325,6 +325,12 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.LogicalLeftShift => "__lshl__",
                 BinaryOperator.LogicalRightShift => "__lshr__",
 
+                // Membership (note: operands are reversed in desugaring)
+                // x in coll → coll.__contains__(x)
+                // x notin coll → coll.__notcontains__(x)
+                BinaryOperator.In => "__contains__",
+                BinaryOperator.NotIn => "__notcontains__",
+
                 // Non-overloadable operators return null
                 _ => null
             };

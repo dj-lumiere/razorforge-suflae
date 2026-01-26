@@ -14,10 +14,11 @@ public partial class SuflaeParser
     /// <summary>
     /// Creates a method call expression that desugars a binary operator.
     /// Converts: a + b → a.__add__(b)
+    /// For membership operators: x in coll → coll.__contains__(x)
     /// </summary>
-    /// <param name="left">The left operand (becomes the receiver of the method call).</param>
+    /// <param name="left">The left operand (becomes the receiver of the method call, or argument for in/notin).</param>
     /// <param name="op">The binary operator to desugar.</param>
-    /// <param name="right">The right operand (becomes the argument to the method call).</param>
+    /// <param name="right">The right operand (becomes the argument, or receiver for in/notin).</param>
     /// <param name="location">Source location for error reporting.</param>
     /// <returns>A CallExpression representing the desugared operator, or null if operator is not desugared.</returns>
     private Expression? TryDesugarBinaryOperator(Expression left, BinaryOperator op, Expression right, SourceLocation location)
@@ -29,14 +30,23 @@ public partial class SuflaeParser
             return null;
         }
 
+        // For membership operators (in, notin), the operands are reversed:
+        // x in coll → coll.__contains__(x)
+        // x notin coll → coll.__notcontains__(x)
+        if (op is BinaryOperator.In or BinaryOperator.NotIn)
+        {
+            MemberExpression memberExpr = new(Object: right, PropertyName: methodName, Location: location);
+            return new CallExpression(Callee: memberExpr, Arguments: [left], Location: location);
+        }
+
         // Create: left.__methodName__(right)
-        MemberExpression memberExpr = new(
+        MemberExpression defaultMemberExpr = new(
             Object: left,
             PropertyName: methodName,
             Location: location);
 
         return new CallExpression(
-            Callee: memberExpr,
+            Callee: defaultMemberExpr,
             Arguments: [right],
             Location: location);
     }

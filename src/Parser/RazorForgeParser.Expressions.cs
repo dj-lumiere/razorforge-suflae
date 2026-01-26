@@ -358,13 +358,15 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses type-checking and pattern matching expressions.
+    /// Parses type-checking, membership, and pattern matching expressions.
     /// Syntax:
     /// - <c>expr is Type</c> - type check
     /// - <c>expr is Type binding</c> - type check with variable binding
     /// - <c>expr is Type (field1, field2)</c> - destructuring pattern
     /// - <c>expr is Type (field: binding)</c> - named destructuring
     /// - <c>expr isnot Type</c> - negated type check
+    /// - <c>expr in collection</c> - membership test (desugars to collection.__contains__(expr))
+    /// - <c>expr notin collection</c> - negated membership test
     /// - <c>expr follows Protocol</c> - protocol conformance check
     /// - <c>expr notfollows Protocol</c> - negated protocol check
     /// Context-sensitive: disabled inside when clause bodies to avoid ambiguity.
@@ -374,9 +376,11 @@ public partial class RazorForgeParser
     {
         Expression expr = ParseBitwiseOr();
 
-        // Handle is/isnot/follows/notfollows expressions when not in when pattern/clause context
+        // Handle is/isnot/in/notin/follows/notfollows expressions when not in when pattern/clause context
         while (!_inWhenPatternContext && !_inWhenClauseBody && Match(TokenType.Is,
                    TokenType.IsNot,
+                   TokenType.In,
+                   TokenType.NotIn,
                    TokenType.Follows,
                    TokenType.NotFollows))
         {
