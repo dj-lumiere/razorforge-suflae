@@ -845,6 +845,17 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
+    /// <summary>
+    /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
+    /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
+    /// in the parser (e.g., a + b → a.__add__(b)). This method only handles operators that
+    /// are NOT desugared:
+    /// - Assignment (=)
+    /// - Logical operators (and, or) — require short-circuit evaluation
+    /// - Identity operators (===, !==)
+    /// - Membership/type operators (in, notin, is, isnot, follows, notfollows)
+    /// - None coalescing (??) — requires short-circuit evaluation
+    /// </summary>
     private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
     {
         TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
@@ -856,14 +867,8 @@ public sealed partial class SemanticAnalyzer
             return AnalyzeAssignmentExpression(target: binary.Left, value: binary.Right, targetType: leftType, valueType: rightType, location: binary.Location);
         }
 
-        // Handle comparison operators - always return bool
-        if (IsComparisonOperator(op: binary.Operator))
-        {
-            ValidateComparisonOperands(left: leftType, right: rightType, op: binary.Operator, location: binary.Location);
-            return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
-        }
-
-        // Handle logical operators - require bool operands, return bool
+        // Handle logical operators (and, or) — require bool operands, return bool
+        // These are not desugared because they need short-circuit evaluation
         if (IsLogicalOperator(op: binary.Operator))
         {
             if (!IsBoolType(type: leftType) || !IsBoolType(type: rightType))
@@ -871,90 +876,22 @@ public sealed partial class SemanticAnalyzer
                 ReportError(SemanticDiagnosticCode.LogicalOperatorRequiresBool, $"Logical operator '{binary.Operator.ToStringRepresentation()}' requires boolean operands.", binary.Location);
             }
 
-            return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 
-        // Validate division operators
-        if (binary.Operator == BinaryOperator.TrueDivide)
+        // Handle non-desugared comparison operators (===, !==, in, is, follows, etc.)
+        // Note: ==, !=, <, <=, >, >=, <=> are desugared to method calls in the parser
+        if (IsComparisonOperator(op: binary.Operator))
         {
-            if (!SupportsTrueDivision(type: leftType))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.TrueDivisionNotSupported,
-                    $"True division operator '/' is not supported on '{leftType.Name}'. Use floor division '//' for integers.",
-                    binary.Location);
-            }
-        }
-        else if (binary.Operator == BinaryOperator.FloorDivide)
-        {
-            if (!SupportsFloorDivision(type: leftType))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.FloorDivisionNotSupported,
-                    $"Floor division operator '//' is not supported on '{leftType.Name}'.",
-                    binary.Location);
-            }
+            ValidateComparisonOperands(left: leftType, right: rightType, op: binary.Operator, location: binary.Location);
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 
-        // Validate overflow arithmetic operators (+%, -%, *%, +^, -^, *^, +?, -?, *?)
-        if (IsOverflowOperator(op: binary.Operator, out string? overflowKind))
-        {
-            if (!SupportsOverflowArithmetic(type: leftType, operatorSuffix: overflowKind))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.OverflowOperatorNotSupported,
-                    $"Overflow arithmetic operator '{binary.Operator.ToStringRepresentation()}' is only supported on fixed-width integer types, not '{leftType.Name}'.",
-                    binary.Location);
-            }
-        }
-
-        // Validate operand types match (no implicit conversions)
-        if (!IsAssignableTo(source: rightType, target: leftType) && !IsAssignableTo(source: leftType, target: rightType))
-        {
-            // Allow error types to pass through
-            if (leftType.Category != TypeCategory.Error && rightType.Category != TypeCategory.Error)
-            {
-                ReportError(
-                    SemanticDiagnosticCode.BinaryOperatorTypeMismatch,
-                    $"Binary operator '{binary.Operator.ToStringRepresentation()}' cannot be applied to operands of type '{leftType.Name}' and '{rightType.Name}'.",
-                    binary.Location);
-            }
-        }
-
-        // Handle arithmetic/bitwise operators - look for operator method
-        string? methodName = binary.Operator.GetMethodName();
-        if (methodName != null)
-        {
-            // Try to find operator method on left type (both regular and crashable versions)
-            RoutineInfo? opMethod = _registry.LookupRoutine(fullName: $"{leftType.Name}.{methodName}")
-                ?? _registry.LookupRoutine(fullName: $"{leftType.Name}.{methodName}!");
-
-            if (opMethod?.ReturnType != null)
-            {
-                return opMethod.ReturnType;
-            }
-
-            // If no method found but types are numeric, return left type (basic inference)
-            if (IsNumericType(type: leftType) && IsNumericType(type: rightType))
-            {
-                // Checked operators return Maybe<T>
-                if (IsCheckedOperator(op: binary.Operator))
-                {
-                    TypeSymbol? maybeDef = _registry.LookupType(name: "Maybe");
-                    if (maybeDef != null)
-                    {
-                        return _registry.GetOrCreateInstantiation(genericDef: maybeDef, typeArguments: [leftType]);
-                    }
-                }
-
-                return leftType;
-            }
-        }
-
-        // Handle none coalescing operator
+        // Handle none coalescing operator (??)
+        // Not desugared because it needs short-circuit evaluation
         if (binary.Operator == BinaryOperator.NoneCoalesce)
         {
-            // Returns the non-optional type
+            // Returns the non-optional type (right operand provides the default)
             return rightType;
         }
 
