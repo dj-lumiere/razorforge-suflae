@@ -354,4 +354,153 @@ public class ControlFlowAnalysisTests
     }
 
     #endregion
+
+    #region Becomes Statement Validation
+
+    [Fact]
+    public void Analyze_WhenExpressionBlockWithBecomes_NoError()
+    {
+        // Multi-statement block with becomes is valid
+        string source = """
+                        routine test(value: S32) -> S32 {
+                            let result = when value {
+                                == 1 {
+                                    let x = value * 2
+                                    becomes x
+                                }
+                                else => 0
+                            }
+                            return result
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_WhenExpressionBlockMissingBecomes_ReportsError()
+    {
+        // Multi-statement block in when expression without becomes should error
+        string source = """
+                        routine test(value: S32) -> S32 {
+                            let result = when value {
+                                == 1 {
+                                    let x = value * 2
+                                    x
+                                }
+                                else => 0
+                            }
+                            return result
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "requires 'becomes'", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_WhenExpressionSingleBecomesBlock_ReportsError()
+    {
+        // Block containing only 'becomes' should use => syntax instead
+        string source = """
+                        routine test(value: S32) -> S32 {
+                            let result = when value {
+                                == 1 {
+                                    becomes 42
+                                }
+                                else => 0
+                            }
+                            return result
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "'=>' syntax", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_WhenExpressionArrowSyntax_NoError()
+    {
+        // Single expression with => is valid
+        string source = """
+                        routine test(value: S32) -> S32 {
+                            let result = when value {
+                                == 1 => 42
+                                else => 0
+                            }
+                            return result
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_WhenStatementBlockWithoutBecomes_NoError()
+    {
+        // When statement (not expression) doesn't need becomes
+        string source = """
+                        routine test(value: S32) {
+                            when value {
+                                == 1 {
+                                    let x = value * 2
+                                    show(x)
+                                }
+                                else {
+                                    show(value)
+                                }
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AnalyzeSuflae_WhenExpressionBlockWithBecomes_NoError()
+    {
+        // Multi-statement block with becomes is valid in Suflae
+        string source = """
+                        routine test(value: Integer) -> Integer:
+                            let result = when value:
+                                == 1:
+                                    let x = value * 2
+                                    becomes x
+                                else => 0
+                            return result
+                        """;
+
+        AnalysisResult result = AnalyzeSuflae(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AnalyzeSuflae_WhenExpressionBlockMissingBecomes_ReportsError()
+    {
+        // Multi-statement block in when expression without becomes should error in Suflae
+        string source = """
+                        routine test(value: Integer) -> Integer:
+                            let result = when value:
+                                == 1:
+                                    let x = value * 2
+                                    x
+                                else => 0
+                            return result
+                        """;
+
+        AnalysisResult result = AnalyzeSuflae(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "requires 'becomes'", comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    #endregion
 }

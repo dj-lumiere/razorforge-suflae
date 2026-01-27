@@ -523,7 +523,8 @@ public partial class SuflaeParser
             }
 
             VariableDeclaration varDecl = ParseVariableDeclaration();
-            return new ExpressionStatement(Expression: new IdentifierExpression(Name: $"var {varDecl.Name}", Location: GetLocation()), Location: GetLocation());
+            // Wrap the variable declaration as a declaration statement
+            return new DeclarationStatement(Declaration: varDecl, Location: varDecl.Location);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════

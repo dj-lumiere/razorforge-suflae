@@ -7,7 +7,7 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for error handling variant generation (try_/check_/find_).
+/// Tests for error handling variant generation (try_/check_/lookup_).
 /// The compiler generates safe wrapper functions from failable (!) routines.
 /// </summary>
 public class ErrorVariantGenerationTests
@@ -97,10 +97,10 @@ public class ErrorVariantGenerationTests
     #region Lookup Variant (throw AND absent)
 
     [Fact]
-    public void Analyze_FailableWithBothThrowAndAbsent_GeneratesFindAndTryVariants()
+    public void Analyze_FailableWithBothThrowAndAbsent_GeneratesLookupAndTryVariants()
     {
         // Routine with both 'throw' and 'absent' generates:
-        // - find_get_user() -> Lookup<T>
+        // - lookup_get_user() -> Lookup<T>
         // - try_get_user() -> T?
         string source = """
                         entity DatabaseError follows Crashable {
@@ -142,9 +142,9 @@ public class ErrorVariantGenerationTests
 
         AnalysisResult result = Analyze(source: source);
 
-        // Should generate find_get_user variant
-        RoutineInfo? findVariant = result.Registry.GetRoutine(name: "find_get_user");
-        Assert.NotNull(@object: findVariant);
+        // Should generate lookup_get_user variant
+        RoutineInfo? lookupVariant = result.Registry.GetRoutine(name: "lookup_get_user");
+        Assert.NotNull(@object: lookupVariant);
 
         // Should also generate try_get_user variant
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get_user");
@@ -193,10 +193,10 @@ public class ErrorVariantGenerationTests
 
         AnalysisResult result = Analyze(source: source);
 
-        // Should NOT generate try_add, check_add, or find_add
+        // Should NOT generate try_add, check_add, or lookup_add
         Assert.Null(@object: result.Registry.GetRoutine(name: "try_add"));
         Assert.Null(@object: result.Registry.GetRoutine(name: "check_add"));
-        Assert.Null(@object: result.Registry.GetRoutine(name: "find_add"));
+        Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_add"));
     }
 
     [Fact]

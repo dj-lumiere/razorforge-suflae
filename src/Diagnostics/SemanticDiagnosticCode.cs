@@ -307,6 +307,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Becomes statement outside of expression block.</summary>
     BecomesOutsideExpressionBlock = 306,
 
+    /// <summary>Multi-statement block in when expression requires 'becomes' to specify result.</summary>
+    WhenExpressionBlockMissingBecomes = 307,
+
+    /// <summary>Single-expression when branch should use '=>' syntax instead of block with 'becomes'.</summary>
+    SingleExpressionBranchUsesBecomes = 308,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)
     // ═══════════════════════════════════════════════════════════════════════════

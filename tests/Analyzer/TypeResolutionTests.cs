@@ -316,10 +316,10 @@ public class TypeResolutionTests
     }
 
     [Fact]
-    public void Analyze_ReservedFunctionPrefix_Find_ReportsError()
+    public void Analyze_ReservedFunctionPrefix_Lookup_ReportsError()
     {
         string source = """
-                        routine find_item() {
+                        routine lookup_item() {
                             pass
                         }
                         """;

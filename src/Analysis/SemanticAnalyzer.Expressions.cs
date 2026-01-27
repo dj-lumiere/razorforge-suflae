@@ -1880,13 +1880,57 @@ public sealed partial class SemanticAnalyzer
             }
             else if (clause.Body is BlockStatement block)
             {
-                // For block statements, analyze and try to infer result type from last statement
+                // For block statements in when expressions, we need to validate 'becomes' usage
+                // and extract the result type from the becomes statement
+                BecomesStatement? becomesStmt = null;
+                int statementCount = 0;
+
                 foreach (Statement stmt in block.Statements)
                 {
                     AnalyzeStatement(statement: stmt);
+                    statementCount++;
+
+                    if (stmt is BecomesStatement becomes)
+                    {
+                        becomesStmt = becomes;
+                    }
                 }
-                // Block in expression context - result type is harder to determine
-                // For now, keep previous result type
+
+                if (becomesStmt != null)
+                {
+                    // Found a becomes statement - check if it's a single-statement block
+                    if (statementCount == 1)
+                    {
+                        // Block contains only 'becomes expr' - should use => syntax instead
+                        ReportError(
+                            SemanticDiagnosticCode.SingleExpressionBranchUsesBecomes,
+                            "Single-expression when branch should use '=>' syntax instead of block with 'becomes'.",
+                            becomesStmt.Location);
+                    }
+
+                    // Extract the result type from the becomes expression (already analyzed via AnalyzeStatement)
+                    TypeSymbol branchType = becomesStmt.Value.ResolvedType ?? ErrorTypeInfo.Instance;
+
+                    if (resultType == null)
+                    {
+                        resultType = branchType;
+                    }
+                    else if (!IsAssignableTo(source: branchType, target: resultType))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.WhenBranchTypeMismatch,
+                            $"When expression branches have incompatible types: '{resultType.Name}' and '{branchType.Name}'.",
+                            becomesStmt.Location);
+                    }
+                }
+                else if (statementCount > 0)
+                {
+                    // Multi-statement block without 'becomes' in a when expression
+                    ReportError(
+                        SemanticDiagnosticCode.WhenExpressionBlockMissingBecomes,
+                        "Multi-statement block in when expression requires 'becomes' to specify the result value.",
+                        block.Location);
+                }
             }
             else
             {
