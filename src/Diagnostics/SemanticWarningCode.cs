@@ -39,6 +39,9 @@ public enum SemanticWarningCode
     /// <summary>Field is declared but never read.</summary>
     UnusedField = 6,
 
+    /// <summary>Routine call's return value is unused. Use 'discard' to explicitly ignore it.</summary>
+    UnusedRoutineReturnValue = 7,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // UNREACHABLE CODE WARNINGS (RF-W050 - RF-W099)
     // ═══════════════════════════════════════════════════════════════════════════

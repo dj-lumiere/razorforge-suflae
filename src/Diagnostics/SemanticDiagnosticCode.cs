@@ -260,6 +260,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Using statement requires disposable type.</summary>
     UsingRequiresDisposable = 209,
 
+    /// <summary>Warning: Routine call's return value is unused. Use 'discard' to explicitly ignore it.</summary>
+    UnusedReturnValue = 210,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ASSIGNMENT AND MUTABILITY ERRORS (RF-S250 - RF-S299)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -312,6 +315,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Single-expression when branch should use '=>' syntax instead of block with 'becomes'.</summary>
     SingleExpressionBranchUsesBecomes = 308,
+
+    /// <summary>Nested if-then-else expressions are not allowed. Use 'when' for complex conditionals.</summary>
+    NestedConditionalExpression = 309,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)
@@ -502,6 +508,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot capture raw entity in lambda.</summary>
     LambdaCaptureRawEntity = 607,
 
+    /// <summary>Nested hijacking is not allowed - cannot hijack a member of an already-hijacked object.</summary>
+    NestedHijackingNotAllowed = 608,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -549,6 +558,12 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Crashable function called without error handling.</summary>
     UnhandledCrashableCall = 753,
+
+    /// <summary>Error handling type (Result/Lookup) cannot be used as parameter type.</summary>
+    ErrorHandlingTypeAsParameter = 754,
+
+    /// <summary>Error handling type (Result/Lookup) cannot be used as field type.</summary>
+    ErrorHandlingTypeAsField = 755,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)

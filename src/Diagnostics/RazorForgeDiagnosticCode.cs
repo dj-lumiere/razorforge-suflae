@@ -60,6 +60,7 @@ public enum RazorForgeDiagnosticCode
     AttributesWithoutDeclaration = 202,
     InvalidDeclarationInBody = 203,
     ThrowRequiresExpression = 204,
+    DiscardRequiresCall = 205,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (RF-G250 - RF-G299)

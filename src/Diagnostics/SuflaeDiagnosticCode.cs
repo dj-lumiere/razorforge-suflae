@@ -71,6 +71,7 @@ public enum SuflaeDiagnosticCode
     InvalidDeclarationInBody = 203,
     ThrowRequiresExpression = 204,
     ExpectedDedentAfterBody = 205,
+    DiscardRequiresCall = 206,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (SF-G250 - SF-G299)

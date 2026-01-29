@@ -162,6 +162,10 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeDestructuringStatement(destruct: destruct);
                 break;
 
+            case DiscardStatement discard:
+                AnalyzeDiscardStatement(discard: discard);
+                break;
+
             case DangerStatement danger:
                 AnalyzeDangerStatement(danger: danger);
                 break;
@@ -283,7 +287,26 @@ public sealed partial class SemanticAnalyzer
     private void AnalyzeExpressionStatement(ExpressionStatement expr)
     {
         // Analyze the expression for side effects and type validation
-        AnalyzeExpression(expression: expr.Expression);
+        TypeSymbol exprType = AnalyzeExpression(expression: expr.Expression);
+
+        // Check if this is a call expression with a non-Blank return value
+        // If so, warn that the return value is unused (use 'discard' to explicitly ignore)
+        if (expr.Expression is CallExpression call && !exprType.IsBlank)
+        {
+            // Get a readable name for the routine being called
+            string routineName = call.Callee switch
+            {
+                IdentifierExpression id => id.Name,
+                MemberExpression member => member.PropertyName,
+                _ => "routine"
+            };
+
+            ReportWarning(
+                SemanticWarningCode.UnusedRoutineReturnValue,
+                $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
+                "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
+                call.Location);
+        }
     }
 
     private void AnalyzeAssignmentStatement(AssignmentStatement assign)
@@ -561,6 +584,17 @@ public sealed partial class SemanticAnalyzer
         AnalyzeDestructuringPattern(pattern: destruct.Pattern, sourceType: initType, isMutable: destruct.IsMutable);
     }
 
+    /// <summary>
+    /// Analyzes a discard statement (explicitly ignores a return value).
+    /// Used to explicitly indicate that a routine's return value is intentionally ignored.
+    /// </summary>
+    private void AnalyzeDiscardStatement(DiscardStatement discard)
+    {
+        // Analyze the expression - this validates the expression and checks for errors
+        // The result is intentionally discarded
+        AnalyzeExpression(expression: discard.Expression);
+    }
+
     private void AnalyzeDangerStatement(DangerStatement danger)
     {
         if (_registry.Language == Language.Suflae)
@@ -632,6 +666,16 @@ public sealed partial class SemanticAnalyzer
             ReportError(
                 SemanticDiagnosticCode.FeatureNotInSuflae,
                 "Hijacking blocks are not available in Suflae.",
+                hijacking.Location);
+            return;
+        }
+
+        // Check for nested hijacking - cannot hijack a member of an already-hijacked object
+        if (IsNestedHijacking(source: hijacking.Source))
+        {
+            ReportError(
+                SemanticDiagnosticCode.NestedHijackingNotAllowed,
+                "Nested hijacking is not allowed. Cannot hijack a member of an already-hijacked object.",
                 hijacking.Location);
             return;
         }
