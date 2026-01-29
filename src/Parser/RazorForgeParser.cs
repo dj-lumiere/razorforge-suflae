@@ -490,6 +490,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseAbsentStatement();
         }
 
+        if (Match(type: TokenType.Discard))
+        {
+            return ParseDiscardStatement();
+        }
+
         // ═══════════════════════════════════════════════════════════════════════════
         // MEMORY/SCOPE BLOCKS
         // ═══════════════════════════════════════════════════════════════════════════

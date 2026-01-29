@@ -273,6 +273,38 @@ public record PassStatement(SourceLocation Location) : Statement(Location: Locat
     }
 }
 
+/// <summary>
+/// Statement that explicitly discards the result of an expression.
+/// Used when a routine returns a value but the caller intentionally ignores it.
+/// </summary>
+/// <param name="Expression">The expression whose result is discarded</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// The discard statement prevents warnings about unused return values:
+/// <code>
+/// # Without discard - compile warning: unused return value
+/// process_data()
+///
+/// # With discard - explicitly ignore return value
+/// discard process_data()
+/// </code>
+/// Benefits:
+/// <list type="bullet">
+/// <item>Explicit intent - Makes it clear the return value is intentionally ignored</item>
+/// <item>Prevents bugs - Catches cases where return values are accidentally ignored</item>
+/// <item>Clean code - No need for dummy variables like let _ = process_data()</item>
+/// </list>
+/// </remarks>
+public record DiscardStatement(Expression Expression, SourceLocation Location)
+    : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitDiscardStatement(node: this);
+    }
+}
+
 #endregion
 
 #region Control Flow Statements

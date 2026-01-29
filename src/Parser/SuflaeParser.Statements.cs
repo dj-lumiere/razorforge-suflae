@@ -1,5 +1,6 @@
 using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
+using RazorForge.Diagnostics;
 
 namespace Compilers.Suflae.Parser;
 
@@ -641,6 +642,31 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         ConsumeStatementTerminator();
         return new PassStatement(Location: location);
+    }
+
+    /// <summary>
+    /// Parses a discard statement (explicitly ignores a return value).
+    /// Syntax: <c>discard routine_call()</c>
+    /// Used to explicitly indicate that a routine's return value is intentionally ignored.
+    /// </summary>
+    /// <returns>A <see cref="DiscardStatement"/> AST node.</returns>
+    private DiscardStatement ParseDiscardStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+        Expression expression = ParseExpression();
+
+        // Discard must be followed by a call expression
+        if (expression is not CallExpression)
+        {
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.DiscardRequiresCall,
+                "The 'discard' keyword must be followed by a routine call. " +
+                "Use 'discard routine_call()' to explicitly ignore a return value.",
+                fileName, location.Line, location.Column);
+        }
+
+        ConsumeStatementTerminator();
+        return new DiscardStatement(Expression: expression, Location: location);
     }
 
     /// <summary>

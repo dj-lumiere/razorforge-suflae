@@ -366,6 +366,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the using statement</returns>
     T VisitUsingStatement(UsingStatement node);
 
+    /// <summary>Visits a discard statement node (explicit return value discard)</summary>
+    /// <param name="node">The discard statement to visit</param>
+    /// <returns>Result of visiting the discard statement</returns>
+    T VisitDiscardStatement(DiscardStatement node);
+
     // Declaration visitor methods - handle all declaration node types
 
     /// <summary>Visits a variable declaration node (var/let declarations)</summary>

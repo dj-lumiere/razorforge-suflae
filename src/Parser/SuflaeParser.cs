@@ -509,6 +509,11 @@ public partial class SuflaeParser
             return ParsePassStatement();
         }
 
+        if (Match(type: TokenType.Discard))
+        {
+            return ParseDiscardStatement();
+        }
+
         // ═══════════════════════════════════════════════════════════════════════════
         // DECLARATIONS IN STATEMENT CONTEXT
         // ═══════════════════════════════════════════════════════════════════════════
