@@ -599,7 +599,11 @@ public sealed partial class SemanticAnalyzer
             return _registry.GetOrCreateInstantiation(genericDef: viewedDef, typeArguments: [innerType]);
         }
 
-        return ErrorTypeInfo.Instance;
+        // Synthesize wrapper type if not defined in the program
+        return _registry.GetOrCreateWrapperType(
+            wrapperName: "Viewed",
+            innerType: innerType,
+            isReadOnly: true);
     }
 
     private TypeSymbol CreateHijackedType(TypeSymbol innerType)
@@ -610,7 +614,11 @@ public sealed partial class SemanticAnalyzer
             return _registry.GetOrCreateInstantiation(genericDef: hijackedDef, typeArguments: [innerType]);
         }
 
-        return ErrorTypeInfo.Instance;
+        // Synthesize wrapper type if not defined in the program
+        return _registry.GetOrCreateWrapperType(
+            wrapperName: "Hijacked",
+            innerType: innerType,
+            isReadOnly: false);
     }
 
     private TypeSymbol CreateInspectedType(TypeSymbol innerType)
@@ -621,7 +629,11 @@ public sealed partial class SemanticAnalyzer
             return _registry.GetOrCreateInstantiation(genericDef: inspectedDef, typeArguments: [innerType]);
         }
 
-        return ErrorTypeInfo.Instance;
+        // Synthesize wrapper type if not defined in the program
+        return _registry.GetOrCreateWrapperType(
+            wrapperName: "Inspected",
+            innerType: innerType,
+            isReadOnly: true);
     }
 
     private TypeSymbol CreateSeizedType(TypeSymbol innerType)
@@ -632,7 +644,52 @@ public sealed partial class SemanticAnalyzer
             return _registry.GetOrCreateInstantiation(genericDef: seizedDef, typeArguments: [innerType]);
         }
 
-        return ErrorTypeInfo.Instance;
+        // Synthesize wrapper type if not defined in the program
+        return _registry.GetOrCreateWrapperType(
+            wrapperName: "Seized",
+            innerType: innerType,
+            isReadOnly: false);
+    }
+
+    /// <summary>
+    /// Checks if a hijacking source expression would result in nested hijacking.
+    /// Nested hijacking occurs when trying to hijack a member of an already-hijacked object.
+    /// </summary>
+    /// <param name="source">The source expression for the hijacking statement.</param>
+    /// <returns>True if this would be a nested hijacking, false otherwise.</returns>
+    private bool IsNestedHijacking(Expression source)
+    {
+        // Check if source is a member access expression (e.g., p.child)
+        if (source is not MemberExpression member)
+        {
+            return false;
+        }
+
+        // Check if the object being accessed is an identifier
+        if (member.Object is not IdentifierExpression id)
+        {
+            // Could be a chained member access, check recursively
+            return IsNestedHijacking(source: member.Object);
+        }
+
+        // Look up the variable and check if its type is Hijacked<T>
+        VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+        if (varInfo == null)
+        {
+            return false;
+        }
+
+        // Check if the variable's type is Hijacked<T>
+        return IsHijackedType(type: varInfo.Type);
+    }
+
+    /// <summary>
+    /// Checks if a type is a Hijacked&lt;T&gt; token type.
+    /// </summary>
+    private static bool IsHijackedType(TypeSymbol type)
+    {
+        // Check if the type name is "Hijacked" (for instantiated generic types)
+        return type.Name == "Hijacked";
     }
 
     #endregion

@@ -151,6 +151,17 @@ public sealed partial class SemanticAnalyzer
         // Validate that tokens cannot be stored in fields
         ValidateNotTokenFieldType(type: fieldType, fieldName: field.Name, location: field.Location);
 
+        // Validate that Result<T> and Lookup<T> are not used as field types
+        if (fieldType is ErrorHandlingTypeInfo errorHandlingType &&
+            errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ErrorHandlingTypeAsField,
+                $"'{errorHandlingType.Kind}<T>' cannot be used as a field type. " +
+                "Error handling types are internal for error propagation and should not be stored.",
+                field.Location);
+        }
+
         // TODO: Register field in the current type's field list when type body resolution is implemented
     }
 
@@ -754,6 +765,17 @@ public sealed partial class SemanticAnalyzer
             }
 
             TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+
+            // Validate that Result<T> and Lookup<T> are not used as parameter types
+            if (paramType is ErrorHandlingTypeInfo errorHandlingType &&
+                errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ErrorHandlingTypeAsParameter,
+                    $"'{errorHandlingType.Kind}<T>' cannot be used as a parameter type. " +
+                    "Error handling types are internal for error propagation and should not be passed as arguments.",
+                    param.Location);
+            }
 
             // Protocol-as-type desugaring: routine foo(x: Displayable) → routine foo<T follows Displayable>(x: T)
             if (paramType is ProtocolTypeInfo)

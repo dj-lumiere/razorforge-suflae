@@ -53,5 +53,11 @@ public enum TypeCategory
     ErrorHandling,
 
     /// <summary>First-class function type for lambdas and function references (e.g., Routine&lt;s32, s32, s32&gt; = two s32 params, returns s32).</summary>
-    Routine
+    Routine,
+
+    /// <summary>Compiler-generated tuple types (ValueTuple for value types, Tuple for reference types).</summary>
+    Tuple,
+
+    /// <summary>Compiler-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).</summary>
+    Wrapper
 }

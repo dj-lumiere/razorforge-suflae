@@ -469,6 +469,82 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
+    /// Gets or creates a tuple type with the given element types.
+    /// Tuple types are cached by their element type signature.
+    /// </summary>
+    /// <param name="elementTypes">The types of each element in the tuple.</param>
+    /// <param name="isValueTuple">Whether all elements are value types (determines ValueTuple vs Tuple).</param>
+    /// <returns>The cached or newly created tuple type.</returns>
+    public TupleTypeInfo GetOrCreateTupleType(
+        IReadOnlyList<TypeInfo> elementTypes,
+        bool isValueTuple)
+    {
+        // Build the cache key
+        string prefix = isValueTuple ? "ValueTuple" : "Tuple";
+        string typeList = string.Join(separator: ", ", values: elementTypes.Select(selector: t => t.FullName));
+        string key = $"{prefix}<{typeList}>";
+
+        // Check cache
+        if (_instantiations.TryGetValue(key: key, value: out TypeInfo? existing) && existing is TupleTypeInfo tupleType)
+        {
+            return tupleType;
+        }
+
+        // Create and cache
+        var newType = new TupleTypeInfo(elementTypes: elementTypes, isValueTuple: isValueTuple);
+        _instantiations[key: key] = newType;
+
+        return newType;
+    }
+
+    /// <summary>
+    /// Gets or creates a synthesized wrapper type (Hijacked, Inspected, Seized, Viewed).
+    /// These are compiler-intrinsic types that don't need to be defined in the program.
+    /// </summary>
+    /// <param name="wrapperName">The name of the wrapper type (e.g., "Hijacked").</param>
+    /// <param name="innerType">The type being wrapped.</param>
+    /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewed, Inspected).</param>
+    /// <returns>The cached or newly created wrapper type.</returns>
+    public WrapperTypeInfo GetOrCreateWrapperType(
+        string wrapperName,
+        TypeInfo innerType,
+        bool isReadOnly)
+    {
+        // Build the cache key
+        string key = $"{wrapperName}<{innerType.FullName}>";
+
+        // Check cache
+        if (_instantiations.TryGetValue(key: key, value: out TypeInfo? existing) && existing is WrapperTypeInfo wrapperType)
+        {
+            return wrapperType;
+        }
+
+        // Create and cache
+        var newType = new WrapperTypeInfo(wrapperName: wrapperName, innerType: innerType, isReadOnly: isReadOnly);
+        _instantiations[key: key] = newType;
+
+        return newType;
+    }
+
+    /// <summary>
+    /// Determines if a type is a value type (has copy semantics).
+    /// Value types include: Record, Choice, ValueTuple, and intrinsic wrappers.
+    /// </summary>
+    /// <param name="type">The type to check.</param>
+    /// <returns>True if the type is a value type, false otherwise.</returns>
+    public static bool IsValueType(TypeInfo type)
+    {
+        return type.Category switch
+        {
+            TypeCategory.Record => true,
+            TypeCategory.Choice => true,
+            TypeCategory.Variant => true, // Variants are value types (stack-allocated)
+            TypeCategory.Tuple when type is TupleTypeInfo tt => tt.IsValueTuple,
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// Checks if a type is a single-field record wrapping an intrinsic.
     /// </summary>
     /// <param name="type">The type to check.</param>
