@@ -204,6 +204,7 @@ public partial class RazorForgeTokenizer
         [key: "to"] = TokenType.To,
         [key: "downto"] = TokenType.Downto,
         [key: "by"] = TokenType.By,
+        [key: "discard"] = TokenType.Discard,
 
         // Logical operators
         [key: "and"] = TokenType.And,

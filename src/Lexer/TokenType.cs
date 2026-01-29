@@ -455,6 +455,11 @@ public enum TokenType
     /// <summary>By keyword for Range step size (for i in 1 to 10 by 2)</summary>
     By,
 
+    /// <summary>
+    /// Discard keyword for explicit discarding of variable
+    /// </summary>
+    Discard,
+
     #endregion
 
     #region Keywords - Logical Operators
