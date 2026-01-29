@@ -29,6 +29,22 @@ public partial class SuflaeParser
     protected readonly List<CompileWarning> Warnings = [];
 
     /// <summary>
+    /// Collection of errors accumulated during error recovery.
+    /// Errors are accumulated during error recovery.
+    /// </summary>
+    private readonly List<string> _errors = [];
+
+    /// <summary>
+    /// Returns true if any parse errors occurred during parsing.
+    /// </summary>
+    public bool HasErrors => _errors.Count > 0;
+
+    /// <summary>
+    /// Gets all parse errors encountered during parsing.
+    /// </summary>
+    public IReadOnlyList<string> GetErrors() => _errors;
+
+    /// <summary>
     /// The source file name for error reporting.
     /// </summary>
     public string fileName = "";
@@ -178,6 +194,7 @@ public partial class SuflaeParser
             {
                 // SuflaeGrammarException.Message already contains formatted error:
                 // error[SF-G150]: filename.sf:9:14: message
+                _errors.Add(item: ex.Message);
                 Console.Error.WriteLine(value: ex.Message);
                 Synchronize();
             }
