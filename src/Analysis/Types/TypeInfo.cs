@@ -29,6 +29,9 @@ public abstract class TypeInfo
     /// <summary>Whether this is an instantiated generic type.</summary>
     public bool IsGenericInstantiation => TypeArguments is { Count: > 0 };
 
+    /// <summary>Whether this is the Blank (unit/void) type.</summary>
+    public bool IsBlank => Name == "Blank";
+
     /// <summary>The visibility of this type.</summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Public;
 
