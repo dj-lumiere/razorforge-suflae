@@ -102,6 +102,9 @@ public sealed partial class SemanticAnalyzer
         // Phase 2.6: Generate derived comparison operators (__ne__ from __eq__, __lt__/__le__/__gt__/__ge__ from __cmp__)
         GenerateDerivedOperators();
 
+        // Phase 2.7: Validate protocol implementations (ensure types implement all required protocol methods)
+        ValidateProtocolImplementations();
+
         // Phase 3: Analyze routine bodies and expressions
         AnalyzeBodies(program: program);
 

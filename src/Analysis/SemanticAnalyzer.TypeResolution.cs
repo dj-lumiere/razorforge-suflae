@@ -54,6 +54,29 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
+    /// <summary>
+    /// Resolves a type expression within a protocol context.
+    /// Handles the special 'Me' type which represents the implementing type.
+    /// </summary>
+    /// <param name="typeExpr">The type expression to resolve.</param>
+    /// <returns>The resolved type, or ProtocolSelfTypeInfo for 'Me'.</returns>
+    private TypeSymbol ResolveProtocolType(TypeExpression? typeExpr)
+    {
+        if (typeExpr == null)
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Handle the special 'Me' type in protocol signatures
+        if (typeExpr is { Name: "Me", GenericArguments: not { Count: > 0 } })
+        {
+            return ProtocolSelfTypeInfo.Instance;
+        }
+
+        // Fall back to normal type resolution
+        return ResolveType(typeExpr: typeExpr);
+    }
+
     private TypeSymbol ResolveGenericType(TypeExpression typeExpr)
     {
         TypeSymbol? genericDef = _registry.LookupType(name: typeExpr.Name);

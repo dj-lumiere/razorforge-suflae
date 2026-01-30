@@ -21,6 +21,12 @@ public enum TypeCategory
     /// </summary>
     TypeParameter,
 
+    /// <summary>
+    /// Protocol self type (Me).
+    /// Represents the implementing type in protocol signatures.
+    /// </summary>
+    ProtocolSelf,
+
     /// <summary>LLVM intrinsic types (@intrinsic.*) - compiler internal only.</summary>
     Intrinsic,
 
