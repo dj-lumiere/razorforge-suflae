@@ -22,7 +22,7 @@ public partial class LLVMCodeGenerator
     private readonly Program _program;
 
     /// <summary>The stdlib programs to include routine bodies from.</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath)> _stdlibPrograms;
+    private readonly IReadOnlyList<(Program Program, string FilePath, string Namespace)> _stdlibPrograms;
 
     /// <summary>Output buffer for type declarations.</summary>
     private readonly StringBuilder _typeDeclarations = new();
@@ -76,7 +76,7 @@ public partial class LLVMCodeGenerator
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath)>? stdlibPrograms = null)
+    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Namespace)>? stdlibPrograms = null)
     {
         _program = program;
         _registry = registry;
@@ -184,7 +184,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Stdlib routines with bodies
-        foreach (var (program, _) in _stdlibPrograms)
+        foreach (var (program, _, _) in _stdlibPrograms)
         {
             foreach (var decl in program.Declarations)
             {
@@ -256,7 +256,7 @@ public partial class LLVMCodeGenerator
         // Then, generate stdlib routine definitions (for intrinsic operations)
         // This allows S64.__add__ etc. to have their bodies compiled
         // We wrap each in try-catch since some stdlib routines may have parse errors
-        foreach (var (program, _) in _stdlibPrograms)
+        foreach (var (program, _, _) in _stdlibPrograms)
         {
             foreach (var decl in program.Declarations)
             {

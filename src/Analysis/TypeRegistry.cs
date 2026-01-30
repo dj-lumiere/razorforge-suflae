@@ -156,7 +156,7 @@ public sealed class TypeRegistry
     /// Gets the parsed stdlib programs (for code generation).
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath)> StdlibPrograms
+    public IReadOnlyList<(Program Program, string FilePath, string Namespace)> StdlibPrograms
         => _stdlibLoader?.ParsedPrograms ?? [];
 
     /// <summary>

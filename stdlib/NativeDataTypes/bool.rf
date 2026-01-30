@@ -5,7 +5,9 @@ record Bool {
 }
 
 routine Bool.__eq__(you: Bool) -> Bool {
-    return me.value == you.value
+    danger! {
+        return @intrinsic_routine.icmp.eq<i1>(me.value, you.value)
+    }
 }
 
 routine Bool.to_text() -> Text {

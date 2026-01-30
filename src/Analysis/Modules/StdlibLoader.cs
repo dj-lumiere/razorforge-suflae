@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Modules;
+namespace Compilers.Analysis.Modules;
 
 using RazorForge.Lexer;
 using RazorForge.Parser;
@@ -6,19 +6,26 @@ using Shared.AST;
 using Shared.Lexer;
 
 /// <summary>
-/// Loads the standard library Core namespace from stdlib files.
-/// Core namespace is auto-imported and reserved for stdlib use only.
+/// Loads the standard library based on namespace declarations.
+/// Files declaring "namespace Core" are loaded eagerly (auto-imported).
+/// Other namespaces are loaded on-demand when imported.
 /// </summary>
 public sealed class StdlibLoader
 {
     /// <summary>The stdlib root directory path.</summary>
     private readonly string _stdlibPath;
 
-    /// <summary>Parsed stdlib programs with their file paths.</summary>
-    private readonly List<(Program Program, string FilePath)> _parsedPrograms = [];
+    /// <summary>Parsed Core namespace programs with their file paths and namespace.</summary>
+    private readonly List<(Program Program, string FilePath, string Namespace)> _corePrograms = [];
 
-    /// <summary>Gets the parsed stdlib programs.</summary>
-    public IReadOnlyList<(Program Program, string FilePath)> ParsedPrograms => _parsedPrograms;
+    /// <summary>Cache of parsed non-Core programs by namespace.</summary>
+    private readonly Dictionary<string, List<(Program Program, string FilePath, string Namespace)>> _namespacePrograms = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Set of already scanned directories to avoid re-scanning.</summary>
+    private bool _stdlibScanned;
+
+    /// <summary>Gets the parsed Core namespace programs.</summary>
+    public IReadOnlyList<(Program Program, string FilePath, string Namespace)> ParsedPrograms => _corePrograms;
 
     /// <summary>
     /// Creates a new stdlib loader.
@@ -31,25 +38,172 @@ public sealed class StdlibLoader
 
     /// <summary>
     /// Loads the Core namespace types into the type registry.
-    /// Parses stdlib files and registers their declarations.
+    /// Scans all stdlib files and loads those declaring "namespace Core".
     /// </summary>
     /// <param name="registry">The type registry to populate.</param>
     public void LoadCoreNamespace(TypeRegistry registry)
     {
-        // Parse all Core namespace files in correct order:
-        // 1. Root stdlib files (protocols like Integral, BinaryFP, etc.)
-        // 2. Core directory files
-        // 3. NativeDataTypes (depend on protocols)
-        ParseStdlibRootFiles();
-        ParseCoreDirectory();
-        ParseNativeDataTypes();
+        // Scan all stdlib files and categorize by namespace
+        ScanStdlibFiles();
 
-        // Use a simplified analysis to register just the type declarations
-        // Full body analysis happens later when routines are called
-        foreach (var (program, filePath) in _parsedPrograms)
+        // Two-pass registration ensures all types are available before routines reference them.
+        // Pass 1: Register all types (record, entity, choice, variant, protocol)
+        foreach (var (program, _, ns) in _corePrograms)
         {
-            RegisterProgramDeclarations(registry, program, filePath, _stdlibPath);
+            RegisterProgramTypes(registry, program, ns);
         }
+
+        // Pass 2: Register all routines (now all types are available for return type resolution)
+        foreach (var (program, _, ns) in _corePrograms)
+        {
+            RegisterProgramRoutines(registry, program, ns);
+        }
+    }
+
+    /// <summary>
+    /// Scans all .rf files in stdlib recursively and categorizes them by namespace.
+    /// Files with "namespace Core" go to _corePrograms.
+    /// Other namespaces are cached in _namespacePrograms for on-demand loading.
+    /// </summary>
+    private void ScanStdlibFiles()
+    {
+        if (_stdlibScanned || !Directory.Exists(_stdlibPath))
+        {
+            return;
+        }
+
+        _stdlibScanned = true;
+
+        // Recursively find all .rf files
+        foreach (string filePath in Directory.GetFiles(_stdlibPath, "*.rf", SearchOption.AllDirectories))
+        {
+            try
+            {
+                string code = File.ReadAllText(filePath);
+                var tokenizer = new RazorForgeTokenizer(code, filePath);
+                List<Token> tokens = tokenizer.Tokenize();
+                var parser = new RazorForgeParser(tokens, filePath);
+                Program ast = parser.Parse();
+
+                // Find namespace declaration, or derive from directory
+                string? fileNamespace = GetDeclaredNamespace(ast);
+                fileNamespace ??= DeriveNamespaceFromPath(filePath);
+
+                // Categorize by namespace
+                if (fileNamespace.Equals("Core", StringComparison.OrdinalIgnoreCase))
+                {
+                    _corePrograms.Add((ast, filePath, fileNamespace));
+                }
+                else
+                {
+                    // Cache for on-demand loading
+                    if (!_namespacePrograms.TryGetValue(fileNamespace, out var programs))
+                    {
+                        programs = [];
+                        _namespacePrograms[fileNamespace] = programs;
+                    }
+                    programs.Add((ast, filePath, fileNamespace));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Warning: Failed to parse stdlib file {filePath}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the declared namespace from a program AST.
+    /// </summary>
+    private static string? GetDeclaredNamespace(Program program)
+    {
+        foreach (var node in program.Declarations)
+        {
+            if (node is NamespaceDeclaration ns)
+            {
+                return ns.Path;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Derives a namespace from the file path relative to the stdlib root.
+    /// Example: stdlib/Collections/List.rf -> Collections
+    /// Example: stdlib/Text/Encoding/UTF8.rf -> Text.Encoding
+    /// Files directly in stdlib root default to Core.
+    /// </summary>
+    private string DeriveNamespaceFromPath(string filePath)
+    {
+        try
+        {
+            string? fileDir = Path.GetDirectoryName(filePath);
+            if (fileDir == null)
+            {
+                return "Core";
+            }
+
+            string normalizedFileDir = Path.GetFullPath(fileDir);
+            string normalizedStdlibPath = Path.GetFullPath(_stdlibPath);
+
+            if (!normalizedFileDir.StartsWith(normalizedStdlibPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return "Core";
+            }
+
+            string relativePath = normalizedFileDir.Substring(normalizedStdlibPath.Length)
+                                                   .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            if (string.IsNullOrEmpty(relativePath))
+            {
+                return "Core";
+            }
+
+            // Convert directory separators to namespace dots
+            return relativePath.Replace(Path.DirectorySeparatorChar, '.')
+                               .Replace(Path.AltDirectorySeparatorChar, '.');
+        }
+        catch
+        {
+            return "Core";
+        }
+    }
+
+    /// <summary>
+    /// Loads a specific namespace on-demand.
+    /// </summary>
+    /// <param name="registry">The type registry to populate.</param>
+    /// <param name="namespaceName">The namespace to load (e.g., "Collections").</param>
+    /// <returns>True if the namespace was loaded successfully, false if not found.</returns>
+    public bool LoadNamespace(TypeRegistry registry, string namespaceName)
+    {
+        // Ensure stdlib is scanned
+        ScanStdlibFiles();
+
+        // Core is already loaded
+        if (namespaceName.Equals("Core", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Check if we have files for this namespace
+        if (!_namespacePrograms.TryGetValue(namespaceName, out var programs) || programs.Count == 0)
+        {
+            return false;
+        }
+
+        // Two-pass registration
+        foreach (var (program, _, ns) in programs)
+        {
+            RegisterProgramTypes(registry, program, ns);
+        }
+
+        foreach (var (program, _, ns) in programs)
+        {
+            RegisterProgramRoutines(registry, program, ns);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -71,12 +225,13 @@ public sealed class StdlibLoader
             var parser = new RazorForgeParser(tokens, filePath);
             Program ast = parser.Parse();
 
-            // Extract namespace from module ID (e.g., "Collections.List" -> "Collections")
-            // The module ID comes from the import path, which is namespace-based
-            string importNamespace = GetNamespaceFromModuleId(moduleId);
+            // Get namespace from file declaration
+            string? fileNamespace = GetDeclaredNamespace(ast);
+            string effectiveNamespace = fileNamespace ?? moduleId;
 
-            // Register the module's declarations using the import-derived namespace
-            RegisterProgramDeclarationsWithNamespace(registry, ast, importNamespace);
+            // Two-pass registration for single module
+            RegisterProgramTypes(registry, ast, effectiveNamespace);
+            RegisterProgramRoutines(registry, ast, effectiveNamespace);
 
             // Handle any imports within this module (recursive loading)
             foreach (var node in ast.Declarations)
@@ -98,240 +253,49 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Extracts the namespace from a module ID.
-    /// For "Collections.List", returns "Collections".
-    /// For "Collections", returns "Collections".
-    /// </summary>
-    private static string GetNamespaceFromModuleId(string moduleId)
-    {
-        int lastDot = moduleId.LastIndexOf('.');
-        return lastDot > 0
-            ? moduleId.Substring(0, lastDot)
-            : moduleId;
-    }
-
-    /// <summary>
-    /// Registers declarations using a specified namespace (from import path).
-    /// </summary>
-    private static void RegisterProgramDeclarationsWithNamespace(TypeRegistry registry,
-        Program program, string importNamespace)
-    {
-        // Check if file has explicit namespace declaration
-        string? fileNamespace = null;
-        foreach (var node in program.Declarations)
-        {
-            if (node is NamespaceDeclaration ns)
-            {
-                fileNamespace = ns.Path;
-                break;
-            }
-        }
-
-        // Use import-derived namespace, but respect file's namespace if it's a sub-namespace
-        // e.g., import Collections/List with file declaring "Collections" -> use "Collections"
-        // e.g., import Collections/List with file declaring "Collections.Internal" -> use "Collections.Internal"
-        string effectiveNamespace = fileNamespace ?? importNamespace;
-
-        // Register each type declaration
-        foreach (var node in program.Declarations)
-        {
-            if (node is Declaration decl)
-            {
-                RegisterDeclaration(registry, decl, effectiveNamespace);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Parses .rf files in the stdlib root directory (protocols, etc.).
-    /// </summary>
-    private void ParseStdlibRootFiles()
-    {
-        if (!Directory.Exists(_stdlibPath))
-        {
-            return;
-        }
-
-        foreach (string file in Directory.GetFiles(_stdlibPath, "*.rf"))
-        {
-            ParseStdlibFile(file);
-        }
-    }
-
-    /// <summary>
-    /// Parses native data types from stdlib/NativeDataTypes/.
-    /// </summary>
-    private void ParseNativeDataTypes()
-    {
-        string nativeTypesPath = Path.Combine(_stdlibPath, "NativeDataTypes");
-        if (!Directory.Exists(nativeTypesPath))
-        {
-            return;
-        }
-
-        foreach (string file in Directory.GetFiles(nativeTypesPath, "*.rf"))
-        {
-            ParseStdlibFile(file);
-        }
-    }
-
-    /// <summary>
-    /// Parses Core directory types from stdlib/Core/.
-    /// </summary>
-    private void ParseCoreDirectory()
-    {
-        string corePath = Path.Combine(_stdlibPath, "Core");
-        if (!Directory.Exists(corePath))
-        {
-            return;
-        }
-
-        foreach (string file in Directory.GetFiles(corePath, "*.rf"))
-        {
-            ParseStdlibFile(file);
-        }
-    }
-
-    /// <summary>
-    /// Parses a single stdlib file.
-    /// </summary>
-    private void ParseStdlibFile(string filePath)
-    {
-        try
-        {
-            string code = File.ReadAllText(filePath);
-            var tokenizer = new RazorForgeTokenizer(code, filePath);
-            List<Token> tokens = tokenizer.Tokenize();
-            var parser = new RazorForgeParser(tokens, filePath);
-            Program ast = parser.Parse();
-            _parsedPrograms.Add((ast, filePath));
-        }
-        catch (Exception ex)
-        {
-            // Log but don't fail - stdlib loading should be resilient
-            Console.Error.WriteLine(
-                $"Warning: Failed to parse stdlib file {filePath}: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Registers declarations from a parsed program into the type registry.
-    /// Only registers type signatures, not routine bodies.
+    /// Registers type declarations (record, entity, choice, variant, protocol) from a program.
+    /// This is pass 1 of namespace-based loading.
     /// </summary>
     /// <param name="registry">The type registry to register types into.</param>
     /// <param name="program">The parsed program AST.</param>
-    /// <param name="filePath">The source file path.</param>
-    /// <param name="stdlibPath">The stdlib root directory path.</param>
-    private static void RegisterProgramDeclarations(TypeRegistry registry, Program program,
-        string filePath, string stdlibPath)
+    /// <param name="namespaceName">The namespace for the types (from declaration or directory-derived).</param>
+    private static void RegisterProgramTypes(TypeRegistry registry, Program program, string namespaceName)
     {
-        // Get namespace if declared, otherwise derive from file directory
-        string? fileNamespace = null;
         foreach (var node in program.Declarations)
         {
-            if (node is NamespaceDeclaration ns)
+            switch (node)
             {
-                fileNamespace = ns.Path;
-                break;
-            }
-        }
-
-        // If no explicit namespace, derive from directory relative to stdlib root
-        fileNamespace ??= DeriveNamespaceFromPath(filePath, stdlibPath);
-
-        // Register each type declaration
-        foreach (var node in program.Declarations)
-        {
-            if (node is Declaration decl)
-            {
-                RegisterDeclaration(registry, decl, fileNamespace);
+                case RecordDeclaration record:
+                    RegisterRecordType(registry, record, namespaceName);
+                    break;
+                case EntityDeclaration entity:
+                    RegisterEntityType(registry, entity, namespaceName);
+                    break;
+                case ChoiceDeclaration choice:
+                    RegisterChoiceType(registry, choice, namespaceName);
+                    break;
+                case VariantDeclaration variant:
+                    RegisterVariantType(registry, variant, namespaceName);
+                    break;
+                case ProtocolDeclaration protocol:
+                    RegisterProtocolType(registry, protocol, namespaceName);
+                    break;
             }
         }
     }
 
     /// <summary>
-    /// Derives a namespace from the file path relative to the stdlib root.
-    /// Example: stdlib/Text/Encoding/UTF8.rf -> Text.Encoding
+    /// Registers routine declarations from a program.
+    /// This is pass 2 of namespace-based loading - all types are already registered.
     /// </summary>
-    private static string DeriveNamespaceFromPath(string filePath, string stdlibPath)
+    private static void RegisterProgramRoutines(TypeRegistry registry, Program program, string namespaceName)
     {
-        try
+        foreach (var node in program.Declarations)
         {
-            // Get the directory of the file
-            string? fileDir = Path.GetDirectoryName(filePath);
-            if (fileDir == null)
+            if (node is RoutineDeclaration routine)
             {
-                return "Core";
-            }
-
-            // Normalize paths for comparison
-            string normalizedFileDir = Path.GetFullPath(fileDir);
-            string normalizedStdlibPath = Path.GetFullPath(stdlibPath);
-
-            // Get relative path from stdlib root
-            if (!normalizedFileDir.StartsWith(normalizedStdlibPath,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return "Core";
-            }
-
-            string relativePath = normalizedFileDir.Substring(normalizedStdlibPath.Length)
-                                                   .TrimStart(Path.DirectorySeparatorChar,
-                                                        Path.AltDirectorySeparatorChar);
-
-            if (string.IsNullOrEmpty(relativePath))
-            {
-                return "Core";
-            }
-
-            // Convert directory separators to namespace dots
-            // NativeDataTypes -> Core (special case for primitive types)
-            if (relativePath.Equals("NativeDataTypes", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Core";
-            }
-
-            // Replace directory separators with dots for namespace
-            return relativePath.Replace(Path.DirectorySeparatorChar, '.')
-                               .Replace(Path.AltDirectorySeparatorChar, '.');
-        }
-        catch
-        {
-            return "Core";
-        }
-    }
-
-    /// <summary>
-    /// Registers a single declaration.
-    /// </summary>
-    private static void RegisterDeclaration(TypeRegistry registry, Declaration decl,
-        string? namespaceName)
-    {
-        switch (decl)
-        {
-            case RecordDeclaration record:
-                RegisterRecordType(registry, record, namespaceName);
-                break;
-
-            case EntityDeclaration entity:
-                RegisterEntityType(registry, entity, namespaceName);
-                break;
-
-            case ChoiceDeclaration choice:
-                RegisterChoiceType(registry, choice, namespaceName);
-                break;
-
-            case VariantDeclaration variant:
-                RegisterVariantType(registry, variant, namespaceName);
-                break;
-
-            case ProtocolDeclaration protocol:
-                RegisterProtocolType(registry, protocol, namespaceName);
-                break;
-
-            case RoutineDeclaration routine:
                 RegisterRoutine(registry, routine, namespaceName);
-                break;
+            }
         }
     }
 
@@ -339,7 +303,7 @@ public sealed class StdlibLoader
     /// Registers a routine from stdlib (including type methods like S32.__add__).
     /// </summary>
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
-        string? namespaceName)
+        string namespaceName)
     {
         // Parse method names like "S32.__add__" or "Type.method"
         string routineName = routine.Name;
@@ -350,8 +314,7 @@ public sealed class StdlibLoader
         if (dotIndex > 0)
         {
             string typeName = routineName.Substring(0, dotIndex);
-            methodName =
-                routineName.Substring(dotIndex + 1); // Just the method part (e.g., "__add__")
+            methodName = routineName.Substring(dotIndex + 1); // Just the method part (e.g., "__add__")
             ownerType = registry.LookupType(typeName);
         }
 
@@ -393,7 +356,7 @@ public sealed class StdlibLoader
     /// Registers a record type from stdlib.
     /// </summary>
     private static void RegisterRecordType(TypeRegistry registry, RecordDeclaration record,
-        string? namespaceName)
+        string namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(record.Name) != null)
@@ -431,10 +394,11 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.RecordTypeInfo(record.Name)
         {
-            Namespace = namespaceName ?? "Core",
+            Namespace = namespaceName,
             Visibility = record.Visibility,
             Fields = fields,
-            ImplementedProtocols = protocols
+            ImplementedProtocols = protocols,
+            GenericParameters = record.GenericParameters
         };
 
         try
@@ -451,7 +415,7 @@ public sealed class StdlibLoader
     /// Registers an entity type from stdlib.
     /// </summary>
     private static void RegisterEntityType(TypeRegistry registry, EntityDeclaration entity,
-        string? namespaceName)
+        string namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(entity.Name) != null)
@@ -478,9 +442,10 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.EntityTypeInfo(entity.Name)
         {
-            Namespace = namespaceName ?? "Core",
+            Namespace = namespaceName,
             Visibility = entity.Visibility,
-            Fields = fields
+            Fields = fields,
+            GenericParameters = entity.GenericParameters
         };
 
         registry.RegisterType(typeInfo);
@@ -490,7 +455,7 @@ public sealed class StdlibLoader
     /// Registers a choice type from stdlib.
     /// </summary>
     private static void RegisterChoiceType(TypeRegistry registry, ChoiceDeclaration choice,
-        string? namespaceName)
+        string namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(choice.Name) != null)
@@ -499,11 +464,9 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        // Note: Choice values are Expression? now - semantic analyzer handles value extraction
         var cases = new List<Types.ChoiceCaseInfo>();
         foreach (var caseDecl in choice.Cases)
         {
-            // Value extraction from Expression is handled by semantic analysis
             cases.Add(new Types.ChoiceCaseInfo(caseDecl.Name)
             {
                 Value = null // TODO: Extract from caseDecl.Value expression
@@ -512,7 +475,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.ChoiceTypeInfo(choice.Name)
         {
-            Namespace = namespaceName ?? "Core", Visibility = choice.Visibility, Cases = cases
+            Namespace = namespaceName, Visibility = choice.Visibility, Cases = cases
         };
 
         registry.RegisterType(typeInfo);
@@ -522,7 +485,7 @@ public sealed class StdlibLoader
     /// Registers a variant type (tagged union) from stdlib.
     /// </summary>
     private static void RegisterVariantType(TypeRegistry registry, VariantDeclaration variant,
-        string? namespaceName)
+        string namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(variant.Name) != null)
@@ -550,7 +513,9 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.VariantTypeInfo(variant.Name)
         {
-            Namespace = namespaceName ?? "Core", Cases = cases
+            Namespace = namespaceName,
+            Cases = cases,
+            GenericParameters = variant.GenericParameters
         };
 
         registry.RegisterType(typeInfo);
@@ -560,7 +525,7 @@ public sealed class StdlibLoader
     /// Registers a protocol type from stdlib.
     /// </summary>
     private static void RegisterProtocolType(TypeRegistry registry, ProtocolDeclaration protocol,
-        string? namespaceName)
+        string namespaceName)
     {
         // Skip if already registered
         if (registry.LookupType(protocol.Name) != null)
@@ -599,9 +564,10 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.ProtocolTypeInfo(protocol.Name)
         {
-            Namespace = namespaceName ?? "Core",
+            Namespace = namespaceName,
             Visibility = protocol.Visibility,
-            Methods = methods
+            Methods = methods,
+            GenericParameters = protocol.GenericParameters
         };
 
         registry.RegisterType(typeInfo);
