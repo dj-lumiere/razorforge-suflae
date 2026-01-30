@@ -140,8 +140,10 @@ public sealed class TypeRegistry
         }
         else
         {
-            // Fallback: register minimal Core types if stdlib is not available
-            RegisterFallbackCoreTypes();
+            string searchPath = _stdlibPath ?? "not specified";
+            throw new InvalidOperationException(
+                $"Standard library (stdlib) not found at '{searchPath}'. " +
+                "Ensure stdlib directory exists and contains the Core namespace.");
         }
     }
 
@@ -233,71 +235,6 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Registers minimal fallback Core types when stdlib is not available.
-    /// This is only used for testing or when stdlib cannot be found.
-    /// </summary>
-    private void RegisterFallbackCoreTypes()
-    {
-        // Signed integers
-        RegisterFallbackRecordType(name: "S8", underlying: IntrinsicTypeInfo.WellKnown.I8);
-        RegisterFallbackRecordType(name: "S16", underlying: IntrinsicTypeInfo.WellKnown.I16);
-        RegisterFallbackRecordType(name: "S32", underlying: IntrinsicTypeInfo.WellKnown.I32);
-        RegisterFallbackRecordType(name: "S64", underlying: IntrinsicTypeInfo.WellKnown.I64);
-        RegisterFallbackRecordType(name: "S128", underlying: IntrinsicTypeInfo.WellKnown.I128);
-
-        // Unsigned integers
-        RegisterFallbackRecordType(name: "U8", underlying: IntrinsicTypeInfo.WellKnown.I8);
-        RegisterFallbackRecordType(name: "U16", underlying: IntrinsicTypeInfo.WellKnown.I16);
-        RegisterFallbackRecordType(name: "U32", underlying: IntrinsicTypeInfo.WellKnown.I32);
-        RegisterFallbackRecordType(name: "U64", underlying: IntrinsicTypeInfo.WellKnown.I64);
-        RegisterFallbackRecordType(name: "U128", underlying: IntrinsicTypeInfo.WellKnown.I128);
-
-        // Pointer-sized integers
-        RegisterFallbackRecordType(name: "SAddr", underlying: IntrinsicTypeInfo.WellKnown.Iptr);
-        RegisterFallbackRecordType(name: "UAddr", underlying: IntrinsicTypeInfo.WellKnown.Uptr);
-
-        // Floating-point types
-        RegisterFallbackRecordType(name: "F16", underlying: IntrinsicTypeInfo.WellKnown.F16);
-        RegisterFallbackRecordType(name: "F32", underlying: IntrinsicTypeInfo.WellKnown.F32);
-        RegisterFallbackRecordType(name: "F64", underlying: IntrinsicTypeInfo.WellKnown.F64);
-        RegisterFallbackRecordType(name: "F128", underlying: IntrinsicTypeInfo.WellKnown.F128);
-
-        // Boolean
-        RegisterFallbackRecordType(name: "Bool", underlying: IntrinsicTypeInfo.WellKnown.I1);
-
-        // Text (placeholder)
-        var textType = new RecordTypeInfo(name: "Text")
-        {
-            Namespace = "Core",
-            Visibility = VisibilityModifier.Public
-        };
-        _types[key: "Text"] = textType;
-
-        // Blank (unit type)
-        var blankType = new RecordTypeInfo(name: "Blank")
-        {
-            Namespace = "Core",
-            Visibility = VisibilityModifier.Public
-        };
-        _types[key: "Blank"] = blankType;
-    }
-
-    /// <summary>
-    /// Registers a fallback Core record type that wraps an intrinsic.
-    /// </summary>
-    private void RegisterFallbackRecordType(string name, IntrinsicTypeInfo underlying)
-    {
-        var valueField = new FieldInfo(name: "value", type: underlying);
-        var recordType = new RecordTypeInfo(name: name)
-        {
-            Fields = [valueField],
-            Namespace = "Core",
-            Visibility = VisibilityModifier.Public
-        };
-        _types[key: name] = recordType;
-    }
-
-    /// <summary>
     /// Registers all well-known error handling types (Maybe, Result, Lookup).
     /// </summary>
     private void RegisterErrorHandlingTypes()
@@ -374,6 +311,93 @@ public sealed class TypeRegistry
         };
 
         _types[key: recordName] = updatedRecord;
+    }
+
+    /// <summary>
+    /// Updates a record type with its resolved fields.
+    /// </summary>
+    /// <param name="recordName">The name of the record to update.</param>
+    /// <param name="fields">The resolved fields.</param>
+    public void UpdateRecordFields(string recordName, IReadOnlyList<FieldInfo> fields)
+    {
+        if (!_types.TryGetValue(key: recordName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not RecordTypeInfo record)
+        {
+            return;
+        }
+
+        // Create updated record with fields
+        var updatedRecord = new RecordTypeInfo(name: record.Name)
+        {
+            Fields = fields,
+            ImplementedProtocols = record.ImplementedProtocols,
+            GenericParameters = record.GenericParameters,
+            GenericConstraints = record.GenericConstraints,
+            TypeArguments = record.TypeArguments,
+            Visibility = record.Visibility,
+            Location = record.Location,
+            Namespace = record.Namespace
+        };
+
+        _types[key: recordName] = updatedRecord;
+    }
+
+    /// <summary>
+    /// Updates a choice type with its resolved cases.
+    /// </summary>
+    /// <param name="choiceName">The name of the choice to update.</param>
+    /// <param name="cases">The resolved choice cases.</param>
+    public void UpdateChoiceCases(string choiceName, IReadOnlyList<ChoiceCaseInfo> cases)
+    {
+        if (!_types.TryGetValue(key: choiceName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not ChoiceTypeInfo choice)
+        {
+            return;
+        }
+
+        // Create updated choice with cases
+        var updatedChoice = new ChoiceTypeInfo(name: choice.Name)
+        {
+            Cases = cases,
+            UnderlyingType = choice.UnderlyingType,
+            GenericParameters = choice.GenericParameters,
+            GenericConstraints = choice.GenericConstraints,
+            Visibility = choice.Visibility,
+            Location = choice.Location,
+            Namespace = choice.Namespace
+        };
+
+        _types[key: choiceName] = updatedChoice;
+    }
+
+    /// <summary>
+    /// Looks up a choice case by name across all choice types.
+    /// </summary>
+    /// <param name="caseName">The name of the choice case to look up.</param>
+    /// <returns>A tuple of the choice type and case info if found, null otherwise.</returns>
+    public (ChoiceTypeInfo ChoiceType, ChoiceCaseInfo CaseInfo)? LookupChoiceCase(string caseName)
+    {
+        foreach (TypeInfo type in _types.Values)
+        {
+            if (type is ChoiceTypeInfo choiceType)
+            {
+                ChoiceCaseInfo? caseInfo = choiceType.Cases.FirstOrDefault(predicate: c => c.Name == caseName);
+                if (caseInfo != null)
+                {
+                    return (choiceType, caseInfo);
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -583,6 +607,15 @@ public sealed class TypeRegistry
         return _types.Values.Where(predicate: t =>
             t.Category is TypeCategory.Record or TypeCategory.Entity or
                 TypeCategory.Resident or TypeCategory.Choice);
+    }
+
+    /// <summary>
+    /// Gets all registered types.
+    /// </summary>
+    /// <returns>An enumerable of all types.</returns>
+    public IEnumerable<TypeInfo> GetAllTypes()
+    {
+        return _types.Values;
     }
 
     #endregion
@@ -831,12 +864,7 @@ public sealed class TypeRegistry
     /// <exception cref="InvalidOperationException">Thrown if attempting to exit the global scope.</exception>
     public void ExitScope()
     {
-        if (_currentScope.Parent == null)
-        {
-            throw new InvalidOperationException(message: "Cannot exit the global scope.");
-        }
-
-        _currentScope = _currentScope.Parent;
+        _currentScope = _currentScope.Parent ?? throw new InvalidOperationException(message: "Cannot exit the global scope.");
     }
 
     /// <summary>
