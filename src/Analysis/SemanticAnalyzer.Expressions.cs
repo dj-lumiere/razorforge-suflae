@@ -42,6 +42,7 @@ public sealed partial class SemanticAnalyzer
             ListLiteralExpression list => AnalyzeListLiteralExpression(list: list),
             SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set),
             DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict),
+            TupleLiteralExpression tuple => AnalyzeTupleLiteralExpression(tuple: tuple),
             TypeConversionExpression conv => AnalyzeTypeConversionExpression(conv: conv),
             ChainedComparisonExpression chain => AnalyzeChainedComparisonExpression(chain: chain),
             BlockExpression block => AnalyzeBlockExpression(block: block),
@@ -353,7 +354,9 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseSignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, long minValue, long maxValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        // Extract numeric part by removing the type suffix (e.g., "1s32" -> "1")
+        string numericPart = ExtractNumericPart(rawValue, typeName.ToLowerInvariant());
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (!TryParseSignedInteger(cleanedValue, out long value))
         {
@@ -379,7 +382,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseS128Literal(LiteralExpression literal, string rawValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        string numericPart = ExtractNumericPart(rawValue, "s128");
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (Int128.TryParse(cleanedValue, out Int128 value))
         {
@@ -395,7 +399,9 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, ulong maxValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        // Extract numeric part by removing the type suffix (e.g., "1u32" -> "1")
+        string numericPart = ExtractNumericPart(rawValue, typeName.ToLowerInvariant());
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (!TryParseUnsignedInteger(cleanedValue, out ulong value))
         {
@@ -421,7 +427,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseU128Literal(LiteralExpression literal, string rawValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        string numericPart = ExtractNumericPart(rawValue, "u128");
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (UInt128.TryParse(cleanedValue, out UInt128 value))
         {
@@ -439,7 +446,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseF16Literal(LiteralExpression literal, string rawValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        string numericPart = ExtractNumericPart(rawValue, "f16");
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (!Half.TryParse(cleanedValue, out Half value))
         {
@@ -465,7 +473,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseF32Literal(LiteralExpression literal, string rawValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        string numericPart = ExtractNumericPart(rawValue, "f32");
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (!float.TryParse(cleanedValue, out float value))
         {
@@ -489,7 +498,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private ParsedLiteral? ParseF64Literal(LiteralExpression literal, string rawValue)
     {
-        string cleanedValue = CleanNumericLiteral(rawValue);
+        string numericPart = ExtractNumericPart(rawValue, "f64");
+        string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (!double.TryParse(cleanedValue, out double value))
         {
@@ -804,9 +814,21 @@ public sealed partial class SemanticAnalyzer
         // Special identifiers
         if (id.Name == "me")
         {
+            // First check if we're inside a type body
             if (_currentType != null)
             {
                 return _currentType;
+            }
+
+            // For extension methods (routine Type.method), check the routine's owner type
+            if (_currentRoutine?.OwnerType != null)
+            {
+                // Re-lookup to get the updated type with resolved protocols/fields
+                TypeSymbol? ownerType = _registry.LookupType(name: _currentRoutine.OwnerType.Name);
+                if (ownerType != null)
+                {
+                    return ownerType;
+                }
             }
 
             ReportError(SemanticDiagnosticCode.MeOutsideTypeMethod, "'me' can only be used inside a type method.", id.Location);
@@ -824,6 +846,13 @@ public sealed partial class SemanticAnalyzer
         if (varInfo != null)
         {
             return varInfo.Type;
+        }
+
+        // Try to look up as choice case (SCREAMING_SNAKE_CASE identifiers like ME_SMALL, SAME)
+        var choiceCase = _registry.LookupChoiceCase(caseName: id.Name);
+        if (choiceCase.HasValue)
+        {
+            return choiceCase.Value.ChoiceType;
         }
 
         // Try to look up as routine (function reference)
@@ -1027,7 +1056,8 @@ public sealed partial class SemanticAnalyzer
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
-                return routine.ReturnType ?? ErrorTypeInfo.Instance;
+                // Return type is Blank if not specified (routines without explicit return type return Blank)
+                return routine.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
 
             // Could be a type constructor
@@ -1059,7 +1089,8 @@ public sealed partial class SemanticAnalyzer
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
-                return method.ReturnType ?? ErrorTypeInfo.Instance;
+                // Return type is Blank if not specified
+                return method.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
         }
 
@@ -1133,7 +1164,8 @@ public sealed partial class SemanticAnalyzer
                 ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType, method: innerMethod, location: member.Location);
                 // Validate method access
                 ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
-                return innerMethod.ReturnType ?? ErrorTypeInfo.Instance;
+                // Return type is Blank if not specified
+                return innerMethod.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
         }
 
@@ -1758,6 +1790,35 @@ public sealed partial class SemanticAnalyzer
         }
 
         return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeTupleLiteralExpression(TupleLiteralExpression tuple)
+    {
+        // Analyze all element expressions
+        var elementTypes = new List<TypeSymbol>();
+        foreach (Expression element in tuple.Elements)
+        {
+            TypeSymbol elementType = AnalyzeExpression(expression: element);
+            elementTypes.Add(item: elementType);
+        }
+
+        // Empty tuples are not allowed - use Blank instead
+        if (elementTypes.Count == 0)
+        {
+            ReportError(
+                SemanticDiagnosticCode.UnknownType,
+                "Empty tuples are not allowed. Use 'Blank' for the unit type.",
+                tuple.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Determine if all elements are value types
+        // ValueTuple: all elements are value types (Record, Choice, Variant, ValueTuple)
+        // Tuple: at least one element is a reference type (Entity, Resident, Tuple)
+        bool allValueTypes = elementTypes.All(predicate: TypeRegistry.IsValueType);
+
+        // Create the tuple type using the registry's caching mechanism
+        return _registry.GetOrCreateTupleType(elementTypes: elementTypes, isValueTuple: allValueTypes);
     }
 
     private TypeSymbol AnalyzeTypeConversionExpression(TypeConversionExpression conv)
