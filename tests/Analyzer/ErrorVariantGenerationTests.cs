@@ -337,7 +337,7 @@ public class ErrorVariantGenerationTests
 
     #region Error Handling Types Not Passable as Parameters
 
-    [Fact(Skip = "Requires namespace Core auto-import and Result parameter validation")]
+    [Fact]
     public void Analyze_ResultAsParameter_ReportsError()
     {
         // Result<T> should not be passable as a function argument
@@ -362,7 +362,7 @@ public class ErrorVariantGenerationTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact(Skip = "Requires namespace Core auto-import and Lookup parameter validation")]
+    [Fact]
     public void Analyze_LookupAsParameter_ReportsError()
     {
         // Lookup<T> should not be passable as a function argument

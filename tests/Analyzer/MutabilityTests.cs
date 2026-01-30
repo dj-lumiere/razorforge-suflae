@@ -304,7 +304,7 @@ public class MutabilityTests
 
     #region Hijacking Restrictions
 
-    [Fact(Skip = "Requires namespace Core auto-import and nested hijacking validation")]
+    [Fact]
     public void Analyze_NestedHijacking_ReportsError()
     {
         // Nested hijacking (partial hijacking) should not be allowed

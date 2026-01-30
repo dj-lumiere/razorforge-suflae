@@ -1,4 +1,5 @@
 ﻿using Compilers.Analysis.Results;
+using RazorForge.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -308,18 +309,19 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Displayable:
                             @readonly
-                            routine Me.display() -> Text
+                            routine Me.display() -> S32
 
                         record Point follows Displayable:
                             x: F32
                             y: F32
 
                         @readonly
-                        routine Point.display() -> Text:
-                            return "point"
+                        routine Point.display() -> S32:
+                            return 0s32
                         """;
 
-        AnalyzeSuflae(source: source);
+        AnalysisResult result = AnalyzeSuflae(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 
     [Fact]
@@ -328,7 +330,7 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Displayable:
                             @readonly
-                            routine Me.display() -> Text
+                            routine Me.display() -> S32
 
                         record Point follows Displayable:
                             x: F32
@@ -337,6 +339,7 @@ public class ProtocolImplementationTests
 
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.True(condition: result.Errors.Count > 0);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MissingProtocolMethod);
     }
 
     #endregion

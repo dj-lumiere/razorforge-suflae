@@ -302,6 +302,26 @@ public class ParserErrorTests
 
     #endregion
 
+    #region Inline Conditional Errors
+
+    [Fact]
+    public void Parse_NestedInlineIfThenElse_ReportsError()
+    {
+        // Nested if-then-else expressions are not idiomatic and should be rejected
+        // The parser prevents nesting by design (using _parsingInlineConditional flag)
+        // Use when/match or regular if statements for complex conditionals
+        string source = """
+                        routine classify(n: S32) -> Text {
+                            return if n > 0 then "positive" else if n < 0 then "negative" else "zero"
+                        }
+                        """;
+
+        // Parser rejects nested inline conditionals
+        AssertParseError(source: source);
+    }
+
+    #endregion
+
     #region Reserved Prefix Errors
 
     [Fact]

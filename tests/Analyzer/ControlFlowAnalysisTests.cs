@@ -330,31 +330,6 @@ public class ControlFlowAnalysisTests
 
     #endregion
 
-    #region Expression Style Restrictions
-
-    [Fact(Skip = "Requires nested if-then-else validation to be implemented")]
-    public void Analyze_NestedInlineIfThenElse_ReportsError()
-    {
-        // Nested if-then-else expressions are not idiomatic and should be rejected
-        // Use when/match or regular if statements for complex conditionals
-        string source = """
-                        routine classify(n: S32) -> Text {
-                            return if n > 0 then "positive" else if n < 0 then "negative" else "zero"
-                        }
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-        Assert.Contains(collection: result.Errors,
-            filter: e =>
-                e.Message.Contains(value: "nested",
-                    comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                e.Message.Contains(value: "if",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
-
-    #endregion
-
     #region Becomes Statement Validation
 
     [Fact]

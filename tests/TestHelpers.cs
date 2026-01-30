@@ -137,6 +137,17 @@ public static class TestHelpers
     }
 
     /// <summary>
+    /// Parses Suflae source and returns the parser for error checking.
+    /// </summary>
+    public static (Program Program, SuflaeParser Parser) ParseSuflaeWithErrors(string source, [CallerMemberName] string? fileName = null)
+    {
+        List<Token> tokens = TokenizeSuflae(source: source, fileName: fileName);
+        var parser = new SuflaeParser(tokens: tokens, fileName: fileName);
+        Program program = parser.Parse();
+        return (program, parser);
+    }
+
+    /// <summary>
     /// Parses and analyzes Suflae source code.
     /// </summary>
     public static AnalysisResult AnalyzeSuflae(string source, [CallerMemberName] string? fileName = null)
