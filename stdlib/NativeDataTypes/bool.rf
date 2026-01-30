@@ -4,7 +4,7 @@ record Bool {
     private value: @intrinsic_type.i1
 }
 
-routine Bool.__eq__(you: Bool) {
+routine Bool.__eq__(you: Bool) -> Bool {
     return me.value == you.value
 }
 
