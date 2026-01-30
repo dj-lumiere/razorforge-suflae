@@ -856,7 +856,9 @@ public partial class SuflaeParser
         {
             do
             {
+                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 parentProtocols.Add(item: ParseType());
+                while (Match(type: TokenType.Newline)) { } // Skip newlines after protocol name
             }
             while (Match(type: TokenType.Comma));
         }
@@ -882,7 +884,8 @@ public partial class SuflaeParser
                 ParentProtocols: parentProtocols,
                 Methods: methods,
                 Visibility: visibility,
-                Location: location);
+                Location: location,
+                GenericConstraints: constraints);
         }
 
         ProcessIndentToken();
@@ -906,6 +909,20 @@ public partial class SuflaeParser
             Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' in protocol method");
             string methodName = ConsumeIdentifier(errorMessage: "Expected method name");
 
+            // Handle Me.methodName syntax for instance methods
+            // Protocol methods can be: "routine Me.methodName()" or "routine methodName()"
+            while (Match(type: TokenType.Dot))
+            {
+                string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
+                methodName = methodName + "." + part;
+            }
+
+            // Support failable methods: "method!"
+            if (Match(type: TokenType.Bang))
+            {
+                methodName = methodName + "!";
+            }
+
             // Parameters
             Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after method name");
             var parameters = new List<Parameter>();
@@ -914,13 +931,37 @@ public partial class SuflaeParser
             {
                 do
                 {
-                    string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
-                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after parameter name");
-                    TypeExpression paramType = ParseType();
-                    parameters.Add(item: new Parameter(Name: paramName,
-                        Type: paramType,
-                        DefaultValue: null,
-                        Location: GetLocation()));
+                    // Handle 'me' parameter (self-reference, optionally typed)
+                    if (Check(type: TokenType.Me))
+                    {
+                        Token selfToken = Advance();
+                        TypeExpression? selfType = null;
+                        if (Match(type: TokenType.Colon))
+                        {
+                            selfType = ParseType();
+                        }
+
+                        parameters.Add(item: new Parameter(Name: "me",
+                            Type: selfType,
+                            DefaultValue: null,
+                            Location: GetLocation(token: selfToken)));
+                    }
+                    else
+                    {
+                        // Regular parameter
+                        string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
+
+                        TypeExpression? paramType = null;
+                        if (Match(type: TokenType.Colon))
+                        {
+                            paramType = ParseType();
+                        }
+
+                        parameters.Add(item: new Parameter(Name: paramName,
+                            Type: paramType,
+                            DefaultValue: null,
+                            Location: GetLocation()));
+                    }
                 } while (Match(type: TokenType.Comma));
             }
 
@@ -961,7 +1002,8 @@ public partial class SuflaeParser
             ParentProtocols: parentProtocols,
             Methods: methods,
             Visibility: visibility,
-            Location: location);
+            Location: location,
+            GenericConstraints: constraints);
     }
 
     /// <summary>
