@@ -268,6 +268,9 @@ public sealed class StdlibLoader
                 case RecordDeclaration record:
                     RegisterRecordType(registry, record, namespaceName);
                     break;
+                case ResidentDeclaration resident:
+                    RegisterResidentType(registry, resident, namespaceName);
+                    break;
                 case EntityDeclaration entity:
                     RegisterEntityType(registry, entity, namespaceName);
                     break;
@@ -446,6 +449,59 @@ public sealed class StdlibLoader
             Visibility = entity.Visibility,
             Fields = fields,
             GenericParameters = entity.GenericParameters
+        };
+
+        registry.RegisterType(typeInfo);
+    }
+
+    /// <summary>
+    /// Registers a resident type from stdlib.
+    /// Residents are fixed-size reference types with stable memory addresses.
+    /// </summary>
+    private static void RegisterResidentType(TypeRegistry registry, ResidentDeclaration resident,
+        string namespaceName)
+    {
+        // Skip if already registered
+        if (registry.LookupType(resident.Name) != null)
+        {
+            return;
+        }
+
+        // Build fields list upfront
+        var fields = new List<Symbols.FieldInfo>();
+        foreach (var member in resident.Members)
+        {
+            if (member is VariableDeclaration { Type: not null } field)
+            {
+                var fieldType = ResolveSimpleType(registry, field.Type);
+                if (fieldType != null)
+                {
+                    fields.Add(new Symbols.FieldInfo(field.Name, fieldType)
+                    {
+                        IsMutable = field.IsMutable, Visibility = field.Visibility
+                    });
+                }
+            }
+        }
+
+        // Resolve implemented protocols (follows clause)
+        var protocols = new List<Types.TypeInfo>();
+        foreach (var protoExpr in resident.Protocols)
+        {
+            var protoType = ResolveSimpleType(registry, protoExpr);
+            if (protoType != null)
+            {
+                protocols.Add(protoType);
+            }
+        }
+
+        var typeInfo = new Types.ResidentTypeInfo(resident.Name)
+        {
+            Namespace = namespaceName,
+            Visibility = resident.Visibility,
+            Fields = fields,
+            ImplementedProtocols = protocols,
+            GenericParameters = resident.GenericParameters
         };
 
         registry.RegisterType(typeInfo);
