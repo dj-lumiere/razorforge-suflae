@@ -402,6 +402,85 @@ public sealed partial class SemanticAnalyzer
         return !KnownDunderMethods.Contains(value: name);
     }
 
+    /// <summary>
+    /// Maps operator dunder methods to their required protocols.
+    /// Types must follow the protocol to define the operator method.
+    /// </summary>
+    private static readonly Dictionary<string, string> DunderToProtocol = new()
+    {
+        // Arithmetic operators
+        ["__add__"] = "Addable",
+        ["__sub__"] = "Subtractable",
+        ["__mul__"] = "Multiplicable",
+        ["__truediv__"] = "Divisible",
+        ["__floordiv__"] = "FloorDivisible",
+        ["__mod__"] = "FloorDivisible",
+        ["__pow__"] = "Exponentiable",
+
+        // Overflow arithmetic (wrapping)
+        ["__add_wrap__"] = "OverflowAddable",
+        ["__sub_wrap__"] = "OverflowSubtractable",
+        ["__mul_wrap__"] = "OverflowMultiplicable",
+        ["__pow_wrap__"] = "OverflowExponentiable",
+
+        // Overflow arithmetic (saturating)
+        ["__add_sat__"] = "OverflowAddable",
+        ["__sub_sat__"] = "OverflowSubtractable",
+        ["__mul_sat__"] = "OverflowMultiplicable",
+        ["__pow_sat__"] = "OverflowExponentiable",
+
+        // Overflow arithmetic (checked)
+        ["__add_checked__"] = "OverflowAddable",
+        ["__sub_checked__"] = "OverflowSubtractable",
+        ["__mul_checked__"] = "OverflowMultiplicable",
+        ["__floordiv_checked__"] = "CheckedDivisible",
+        ["__mod_checked__"] = "CheckedDivisible",
+        ["__pow_checked__"] = "OverflowExponentiable",
+
+        // Comparison operators
+        ["__eq__"] = "Equatable",
+        ["__ne__"] = "Equatable",
+        ["__cmp__"] = "Comparable",
+        ["__lt__"] = "Comparable",
+        ["__le__"] = "Comparable",
+        ["__gt__"] = "Comparable",
+        ["__ge__"] = "Comparable",
+
+        // Bitwise operators
+        ["__and__"] = "Bitwiseable",
+        ["__or__"] = "Bitwiseable",
+        ["__xor__"] = "Bitwiseable",
+
+        // Shift operators
+        ["__ashl__"] = "Shiftable",
+        ["__ashr__"] = "Shiftable",
+        ["__lshl__"] = "Shiftable",
+        ["__lshr__"] = "Shiftable",
+        ["__ashl_checked__"] = "CheckedShiftable",
+
+        // Unary operators
+        ["__neg__"] = "Negatable",
+        ["__not__"] = "Invertible",
+
+        // Container operators
+        ["__contains__"] = "Container",
+        ["__notcontains__"] = "Container",
+        ["__getitem__"] = "Indexable",
+        ["__setitem__"] = "Indexable",
+
+        // Sequence operators
+        ["__seq__"] = "Sequential",
+        ["__try_next__"] = "SequenceGenerator"
+    };
+
+    /// <summary>
+    /// Gets the required protocol for a dunder method, or null if no protocol is required.
+    /// </summary>
+    private static string? GetRequiredProtocol(string dunderName)
+    {
+        return DunderToProtocol.GetValueOrDefault(key: dunderName);
+    }
+
     private void CollectImportedDeclaration(ImportedDeclaration imported)
     {
         var routineInfo = new RoutineInfo(name: imported.Name)
@@ -471,6 +550,10 @@ public sealed partial class SemanticAnalyzer
             case VariantDeclaration variant:
                 ResolveVariantBody(variant: variant);
                 break;
+
+            case ChoiceDeclaration choice:
+                ResolveChoiceBody(choice: choice);
+                break;
         }
     }
 
@@ -512,9 +595,41 @@ public sealed partial class SemanticAnalyzer
             typeParameters: record.GenericParameters,
             location: record.Location);
 
+        // Collect fields and other members
+        var fields = new List<FieldInfo>();
+        int fieldIndex = 0;
+
         foreach (Declaration member in record.Members)
         {
+            if (member is VariableDeclaration field)
+            {
+                // Resolve field type
+                TypeSymbol fieldType = field.Type != null
+                    ? ResolveType(typeExpr: field.Type)
+                    : ErrorTypeInfo.Instance;
+
+                // Create field info
+                var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
+                {
+                    IsMutable = field.IsMutable,
+                    Visibility = field.Visibility,
+                    Index = fieldIndex++,
+                    HasDefaultValue = field.Initializer != null,
+                    Location = field.Location,
+                    Owner = _currentType
+                };
+
+                fields.Add(item: fieldInfo);
+            }
+
+            // Still call CollectDeclaration for validation and other member types
             CollectDeclaration(node: member);
+        }
+
+        // Update the record with resolved fields
+        if (fields.Count > 0)
+        {
+            _registry.UpdateRecordFields(recordName: record.Name, fields: fields);
         }
 
         _currentType = previousType;
@@ -605,14 +720,14 @@ public sealed partial class SemanticAnalyzer
                     continue;
                 }
 
-                TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+                TypeSymbol paramType = ResolveProtocolType(typeExpr: param.Type);
                 paramTypes.Add(item: paramType);
                 paramNames.Add(item: param.Name);
             }
 
             // Resolve return type
             TypeSymbol? returnType = sig.ReturnType != null
-                ? ResolveType(typeExpr: sig.ReturnType)
+                ? ResolveProtocolType(typeExpr: sig.ReturnType)
                 : null;
 
             // Extract mutation category from attributes
@@ -680,6 +795,54 @@ public sealed partial class SemanticAnalyzer
                 caseName: variantCase.Name,
                 location: variantCase.Location);
         }
+    }
+
+    /// <summary>
+    /// Resolves choice body, populating the choice cases.
+    /// </summary>
+    private void ResolveChoiceBody(ChoiceDeclaration choice)
+    {
+        TypeSymbol? choiceType = _registry.LookupType(name: choice.Name);
+        if (choiceType is not ChoiceTypeInfo choiceInfo)
+        {
+            return;
+        }
+
+        var cases = new List<ChoiceCaseInfo>();
+        int autoValue = 0;
+
+        foreach (ChoiceCase caseDecl in choice.Cases)
+        {
+            int? explicitValue = null;
+
+            // Evaluate explicit value if provided
+            if (caseDecl.Value != null)
+            {
+                if (caseDecl.Value is LiteralExpression literal && literal.Value is int intVal)
+                {
+                    explicitValue = intVal;
+                    autoValue = intVal + 1;
+                }
+                else if (caseDecl.Value is LiteralExpression litExpr && litExpr.Value is long longVal)
+                {
+                    explicitValue = (int)longVal;
+                    autoValue = explicitValue.Value + 1;
+                }
+                // TODO: Handle other literal types
+            }
+
+            int computedValue = explicitValue ?? autoValue++;
+
+            cases.Add(new ChoiceCaseInfo(name: caseDecl.Name)
+            {
+                Value = explicitValue,
+                ComputedValue = computedValue,
+                Location = caseDecl.Location
+            });
+        }
+
+        // Update the choice with resolved cases
+        _registry.UpdateChoiceCases(choiceName: choice.Name, cases: cases);
     }
 
     #endregion
@@ -832,6 +995,246 @@ public sealed partial class SemanticAnalyzer
             returnType: returnType,
             genericParameters: allGenericParams.Count > 0 ? allGenericParams : null,
             genericConstraints: allConstraints.Count > 0 ? allConstraints : null);
+
+        // Re-lookup the updated routine for validation
+        RoutineInfo? updatedRoutineInfo = _registry.LookupRoutine(fullName: routineInfo.FullName);
+        if (updatedRoutineInfo == null)
+        {
+            return;
+        }
+
+        // Validate operator protocol conformance for dunder methods
+        ValidateOperatorProtocolConformance(routineInfo: updatedRoutineInfo, location: routine.Location);
+
+        // Validate that the method matches the protocol signature if the type declares following a protocol
+        ValidateProtocolMethodSignature(routineInfo: updatedRoutineInfo, location: routine.Location);
+    }
+
+    /// <summary>
+    /// Validates that a method's signature matches the protocol method it implements.
+    /// </summary>
+    private void ValidateProtocolMethodSignature(RoutineInfo routineInfo, SourceLocation? location)
+    {
+        // Only check methods (not functions)
+        if (routineInfo.OwnerType == null)
+        {
+            return;
+        }
+
+        // Re-lookup the owner type to get the updated version with protocols
+        TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.Name);
+        if (currentOwnerType == null)
+        {
+            return;
+        }
+
+        // Get the list of implemented protocols for this type
+        IReadOnlyList<TypeSymbol>? implementedProtocols = currentOwnerType switch
+        {
+            RecordTypeInfo record => record.ImplementedProtocols,
+            EntityTypeInfo entity => entity.ImplementedProtocols,
+            ResidentTypeInfo resident => resident.ImplementedProtocols,
+            _ => null
+        };
+
+        if (implementedProtocols == null || implementedProtocols.Count == 0)
+        {
+            return;
+        }
+
+        // Check each protocol for a method with this name
+        foreach (TypeSymbol implemented in implementedProtocols)
+        {
+            if (implemented is not ProtocolTypeInfo protocol)
+            {
+                continue;
+            }
+
+            // Find the protocol method with this name
+            ProtocolMethodInfo? protoMethod = protocol.Methods.FirstOrDefault(
+                predicate: m => m.Name == routineInfo.Name);
+
+            if (protoMethod == null)
+            {
+                continue;
+            }
+
+            // Validate the signature matches
+            ValidateMethodAgainstProtocol(
+                typeMethod: routineInfo,
+                protoMethod: protoMethod,
+                protocol: protocol,
+                location: location);
+        }
+    }
+
+    /// <summary>
+    /// Validates that a type method matches the expected protocol method signature.
+    /// Reports specific errors for mismatches.
+    /// </summary>
+    private void ValidateMethodAgainstProtocol(
+        RoutineInfo typeMethod,
+        ProtocolMethodInfo protoMethod,
+        ProtocolTypeInfo protocol,
+        SourceLocation? location)
+    {
+        // Check failable matches
+        if (typeMethod.IsFailable != protoMethod.IsFailable)
+        {
+            string expected = protoMethod.IsFailable ? "failable (!)" : "non-failable";
+            string actual = typeMethod.IsFailable ? "failable (!)" : "non-failable";
+            ReportError(
+                SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                $"Method '{typeMethod.Name}' should be {expected} to match protocol '{protocol.Name}', but is {actual}.",
+                location);
+            return;
+        }
+
+        // Check parameter count (excluding 'me' parameter if present)
+        // In-body methods have explicit 'me' as first parameter
+        // Extension methods don't include 'me' in the parameter list
+        int expectedParamCount = protoMethod.ParameterTypes.Count;
+        bool hasMeParam = typeMethod.Parameters.Count > 0 && typeMethod.Parameters[0].Name == "me";
+        int actualParamCount = typeMethod.Parameters.Count - (hasMeParam ? 1 : 0);
+
+        if (actualParamCount != expectedParamCount)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                $"Method '{typeMethod.Name}' has {actualParamCount} parameter(s) but protocol '{protocol.Name}' expects {expectedParamCount}.",
+                location);
+            return;
+        }
+
+        // Check parameter types - skip 'me' if present
+        int startIndex = hasMeParam ? 1 : 0;
+        for (int i = 0; i < expectedParamCount; i++)
+        {
+            TypeSymbol expectedType = protoMethod.ParameterTypes[i];
+            TypeSymbol actualType = typeMethod.Parameters[startIndex + i].Type;
+
+            // Handle protocol self type (Me) - should match the owner type
+            if (expectedType is ProtocolSelfTypeInfo)
+            {
+                if (typeMethod.OwnerType != null && actualType.Name != typeMethod.OwnerType.Name)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                        $"Parameter '{protoMethod.ParameterNames[i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{typeMethod.OwnerType.Name}' (Me).",
+                        location);
+                }
+            }
+            else if (actualType.Name != expectedType.Name)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                    $"Parameter '{protoMethod.ParameterNames[i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{expectedType.Name}'.",
+                    location);
+            }
+        }
+
+        // Check return type
+        if (protoMethod.ReturnType != null && typeMethod.ReturnType != null)
+        {
+            TypeSymbol expectedReturn = protoMethod.ReturnType;
+            TypeSymbol actualReturn = typeMethod.ReturnType;
+
+            // Handle protocol self type (Me)
+            if (expectedReturn is ProtocolSelfTypeInfo)
+            {
+                if (typeMethod.OwnerType != null && actualReturn.Name != typeMethod.OwnerType.Name)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                        $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{typeMethod.OwnerType.Name}' (Me).",
+                        location);
+                }
+            }
+            else if (actualReturn.Name != expectedReturn.Name)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                    $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{expectedReturn.Name}'.",
+                    location);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates that a type follows the required protocol when defining operator methods.
+    /// For example, defining __add__ requires the type to follow Addable.
+    /// </summary>
+    private void ValidateOperatorProtocolConformance(RoutineInfo routineInfo, SourceLocation? location)
+    {
+        // Only check methods (not functions)
+        if (routineInfo.OwnerType == null)
+        {
+            return;
+        }
+
+        // Get the required protocol for this dunder method
+        string? requiredProtocol = GetRequiredProtocol(dunderName: routineInfo.Name);
+        if (requiredProtocol == null)
+        {
+            return; // Not an operator method or no protocol required
+        }
+
+        // Re-lookup the owner type to get the updated version with protocols
+        // (the RoutineInfo.OwnerType may reference an older object from Phase 1)
+        TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.Name);
+        if (currentOwnerType == null)
+        {
+            return;
+        }
+
+        // Check if the owner type EXPLICITLY follows the required protocol
+        // (structural conformance doesn't count - you must declare "follows Protocol")
+        if (!ExplicitlyFollowsProtocol(type: currentOwnerType, protocolName: requiredProtocol))
+        {
+            ReportError(
+                SemanticDiagnosticCode.OperatorWithoutProtocol,
+                $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow '{requiredProtocol}'. " +
+                $"Add 'follows {requiredProtocol}' to the type declaration.",
+                location);
+        }
+    }
+
+    /// <summary>
+    /// Checks if a type explicitly declares following a protocol (not structural conformance).
+    /// This is required for operator methods - you must explicitly declare "follows Protocol".
+    /// </summary>
+    private bool ExplicitlyFollowsProtocol(TypeSymbol type, string protocolName)
+    {
+        // Get the list of explicitly declared protocols for this type
+        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        {
+            RecordTypeInfo record => record.ImplementedProtocols,
+            EntityTypeInfo entity => entity.ImplementedProtocols,
+            ResidentTypeInfo resident => resident.ImplementedProtocols,
+            _ => null
+        };
+
+        if (implementedProtocols == null || implementedProtocols.Count == 0)
+        {
+            return false;
+        }
+
+        // Check if the protocol is directly declared
+        foreach (TypeSymbol implemented in implementedProtocols)
+        {
+            if (implemented.Name == protocolName || GetBaseTypeName(typeName: implemented.Name) == protocolName)
+            {
+                return true;
+            }
+
+            // Check parent protocols recursively (if you follow a protocol that extends the target, that counts)
+            if (implemented is ProtocolTypeInfo proto && CheckParentProtocols(proto: proto, targetName: protocolName))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1023,6 +1426,98 @@ public sealed partial class SemanticAnalyzer
             };
 
             _registry.RegisterRoutine(routine: derivedMethod);
+        }
+    }
+
+    #endregion
+
+    #region Phase 2.7: Protocol Implementation Validation
+
+    /// <summary>
+    /// Validates that all types declaring "follows Protocol" implement all required protocol methods.
+    /// This is called after all routines are registered (Phase 2.5) and derived operators are generated (Phase 2.6).
+    /// </summary>
+    private void ValidateProtocolImplementations()
+    {
+        foreach (TypeSymbol type in _registry.GetAllTypes())
+        {
+            ValidateTypeProtocolImplementation(type: type);
+        }
+    }
+
+    /// <summary>
+    /// Validates that a specific type implements all methods required by its declared protocols.
+    /// </summary>
+    private void ValidateTypeProtocolImplementation(TypeSymbol type)
+    {
+        // Skip stdlib/fallback types (types without source location or in Core namespace)
+        // These are pre-defined types that may not have full method implementations in test environments
+        if (type.Location == null || string.IsNullOrEmpty(type.Location.FileName))
+        {
+            return;
+        }
+
+        // Get the list of implemented protocols for this type
+        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        {
+            RecordTypeInfo record => record.ImplementedProtocols,
+            EntityTypeInfo entity => entity.ImplementedProtocols,
+            ResidentTypeInfo resident => resident.ImplementedProtocols,
+            _ => null
+        };
+
+        if (implementedProtocols == null || implementedProtocols.Count == 0)
+        {
+            return;
+        }
+
+        // Check each protocol
+        foreach (TypeSymbol protocol in implementedProtocols)
+        {
+            if (protocol is ProtocolTypeInfo protoInfo)
+            {
+                ValidateProtocolMethods(type: type, protocol: protoInfo);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates that a type implements all methods required by a protocol.
+    /// </summary>
+    private void ValidateProtocolMethods(TypeSymbol type, ProtocolTypeInfo protocol)
+    {
+        foreach (ProtocolMethodInfo requiredMethod in protocol.Methods)
+        {
+            // Skip methods with default implementations
+            if (requiredMethod.HasDefaultImplementation)
+            {
+                continue;
+            }
+
+            // Look for the method on the type
+            RoutineInfo? typeMethod = _registry.LookupMethod(type: type, methodName: requiredMethod.Name);
+            if (typeMethod == null)
+            {
+                // Also check with failable suffix
+                if (requiredMethod.IsFailable)
+                {
+                    typeMethod = _registry.LookupMethod(type: type, methodName: requiredMethod.Name + "!");
+                }
+            }
+
+            if (typeMethod == null)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MissingProtocolMethod,
+                    $"Type '{type.Name}' declares 'follows {protocol.Name}' but does not implement required method '{requiredMethod.Name}'.",
+                    type.Location ?? new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0));
+            }
+        }
+
+        // Also check parent protocols
+        foreach (ProtocolTypeInfo parentProtocol in protocol.ParentProtocols)
+        {
+            ValidateProtocolMethods(type: type, protocol: parentProtocol);
         }
     }
 
