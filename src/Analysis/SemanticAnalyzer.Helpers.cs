@@ -410,34 +410,35 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
     {
-        // Range returns the element type
-        if (iterableType.Name == "Range")
+        // Type must follow both Sequential and SequenceGenerator protocols
+        bool followsSequential = ImplementsProtocol(type: iterableType, protocolName: "Sequential");
+        bool followsSequenceGenerator = ImplementsProtocol(type: iterableType, protocolName: "SequenceGenerator");
+
+        if (!followsSequential || !followsSequenceGenerator)
         {
-            return _registry.LookupType(name: "s32") ?? ErrorTypeInfo.Instance;
+            ReportError(
+                SemanticDiagnosticCode.TypeNotIterable,
+                $"Type '{iterableType.Name}' is not iterable. Types must follow both 'Sequential' and 'SequenceGenerator' protocols to be used in for-in loops.",
+                location);
+            return ErrorTypeInfo.Instance;
         }
 
-        // Generic collections return their type argument
+        // Look for __seq__ method to get element type from SequenceGenerator<T> return type
+        RoutineInfo? seqMethod = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__seq__");
+        if (seqMethod?.ReturnType?.TypeArguments is { Count: > 0 })
+        {
+            return seqMethod.ReturnType.TypeArguments[0];
+        }
+
+        // Fallback to type arguments if __seq__ method not found but protocol is implemented
         if (iterableType.TypeArguments is { Count: > 0 })
         {
             return iterableType.TypeArguments[0];
         }
 
-        // Text returns letter type
-        if (iterableType.Name == "Text")
-        {
-            return _registry.LookupType(name: "letter") ?? ErrorTypeInfo.Instance;
-        }
-
-        // Look for iterate() method
-        RoutineInfo? iterator = _registry.LookupRoutine(fullName: $"{iterableType.Name}.iterate");
-        if (iterator?.ReturnType?.TypeArguments is { Count: > 0 })
-        {
-            return iterator.ReturnType.TypeArguments[0];
-        }
-
         ReportError(
             SemanticDiagnosticCode.TypeNotIterable,
-            $"Type '{iterableType.Name}' is not iterable.",
+            $"Cannot determine element type for '{iterableType.Name}'. The __seq__ method must return SequenceGenerator<T>.",
             location);
         return ErrorTypeInfo.Instance;
     }
@@ -560,19 +561,38 @@ public sealed partial class SemanticAnalyzer
             return false;
         }
 
-        // Check parameter count (excluding implicit 'me' parameter)
+        // Check parameter count (excluding 'me' parameter if present)
+        // In-body methods have explicit 'me' as first parameter
+        // Extension methods don't include 'me' in the parameter list
         int expectedParamCount = protoMethod.ParameterTypes.Count;
-        int actualParamCount = typeMethod.Parameters.Count;
-
-        // Type methods have 'me' as first parameter if instance method
-        if (typeMethod.Kind == RoutineKind.Method && actualParamCount > 0)
-        {
-            actualParamCount--;
-        }
+        bool hasMeParam = typeMethod.Parameters.Count > 0 && typeMethod.Parameters[0].Name == "me";
+        int actualParamCount = typeMethod.Parameters.Count - (hasMeParam ? 1 : 0);
 
         if (actualParamCount != expectedParamCount)
         {
             return false;
+        }
+
+        // Check parameter types - skip 'me' if present
+        int startIndex = hasMeParam ? 1 : 0;
+        for (int i = 0; i < expectedParamCount; i++)
+        {
+            TypeSymbol expectedType = protoMethod.ParameterTypes[i];
+            TypeSymbol actualType = typeMethod.Parameters[startIndex + i].Type;
+
+            // Handle protocol self type (Me) - should match the implementing type
+            if (expectedType is ProtocolSelfTypeInfo)
+            {
+                // 'Me' in protocol should match the owner type of the method
+                if (typeMethod.OwnerType != null && !TypesMatch(actualType, typeMethod.OwnerType))
+                {
+                    return false;
+                }
+            }
+            else if (!TypesMatch(actualType, expectedType))
+            {
+                return false;
+            }
         }
 
         // Check return type (if specified)
@@ -589,6 +609,37 @@ public sealed partial class SemanticAnalyzer
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Checks if two types match for protocol signature comparison.
+    /// </summary>
+    private bool TypesMatch(TypeSymbol actual, TypeSymbol expected)
+    {
+        // Exact name match
+        if (actual.Name == expected.Name)
+        {
+            return true;
+        }
+
+        // Handle ProtocolSelfTypeInfo in expected position
+        if (expected is ProtocolSelfTypeInfo)
+        {
+            // 'Me' matches the owner type - handled by caller
+            return true;
+        }
+
+        // Handle generic instantiations
+        if (expected.IsGenericDefinition && actual.IsGenericInstantiation)
+        {
+            string baseName = GetBaseTypeName(typeName: actual.Name);
+            if (baseName == expected.Name)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private TypeSymbol CreateViewedType(TypeSymbol innerType)

@@ -245,7 +245,7 @@ public enum SemanticDiagnosticCode
     /// <summary>While condition must be boolean.</summary>
     WhileConditionNotBool = 204,
 
-    /// <summary>Type is not iterable for for-loop.</summary>
+    /// <summary>Type is not iterable for for-loop (does not follow Sequenceable protocol).</summary>
     TypeNotIterable = 205,
 
     /// <summary>Unknown statement type encountered.</summary>
@@ -386,6 +386,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Routine name uses reserved dunder pattern (__name__) that is not a known operator method.</summary>
     UnknownDunderMethod = 410,
+
+    /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
+    OperatorWithoutProtocol = 411,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
