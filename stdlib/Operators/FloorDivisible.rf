@@ -1,0 +1,10 @@
+# FloorDivisible - Protocol for types that support floor division (//) and modulo (%)
+namespace Core
+
+protocol FloorDivisible {
+    @readonly
+    routine Me.__floordiv__(you: Me) -> Me
+
+    @readonly
+    routine Me.__mod__(you: Me) -> Me
+}

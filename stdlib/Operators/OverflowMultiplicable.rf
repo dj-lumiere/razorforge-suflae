@@ -1,0 +1,13 @@
+# OverflowMultiplicable - Protocol for types that support overflow-handling multiplication (*%, *^, *?)
+namespace Core
+
+protocol OverflowMultiplicable {
+    @readonly
+    routine Me.__mul_wrap__(you: Me) -> Me
+
+    @readonly
+    routine Me.__mul_sat__(you: Me) -> Me
+
+    @readonly
+    routine Me.__mul_checked__(you: Me) -> Maybe<Me>
+}

@@ -1,0 +1,7 @@
+# Subtractable - Protocol for types that support subtraction (-)
+namespace Core
+
+protocol Subtractable {
+    @readonly
+    routine Me.__sub__(you: Me) -> Me
+}

@@ -1,0 +1,7 @@
+# Invertible - Protocol for types that support bitwise not (~)
+namespace Core
+
+protocol Invertible {
+    @readonly
+    routine Me.__not__() -> Me
+}

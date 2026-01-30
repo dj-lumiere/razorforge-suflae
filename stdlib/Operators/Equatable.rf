@@ -1,0 +1,8 @@
+# Equatable - Protocol for types that support equality (==, !=)
+# __ne__ is auto-generated from __eq__
+namespace Core
+
+protocol Equatable {
+    @readonly
+    routine Me.__eq__(you: Me) -> Bool
+}

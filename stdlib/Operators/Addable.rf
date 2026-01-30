@@ -1,0 +1,7 @@
+# Addable - Protocol for types that support addition (+)
+namespace Core
+
+protocol Addable {
+    @readonly
+    routine Me.__add__!(you: Me) -> Me
+}

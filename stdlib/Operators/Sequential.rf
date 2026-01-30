@@ -1,0 +1,7 @@
+# Sequential - Protocol for types that can be iterated over in for-in loops
+namespace Core
+
+protocol Sequential<T> {
+    @readonly
+    routine Me.__seq__() -> SequenceGenerator<T>
+}

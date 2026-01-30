@@ -1,0 +1,7 @@
+# SequenceGenerator - Protocol for types that produce elements one at a time
+namespace Core
+
+protocol SequenceGenerator<T> {
+    @writable
+    routine Me.__try_next__() -> Maybe<T>
+}

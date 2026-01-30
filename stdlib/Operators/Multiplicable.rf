@@ -1,0 +1,7 @@
+# Multiplicable - Protocol for types that support multiplication (*)
+namespace Core
+
+protocol Multiplicable {
+    @readonly
+    routine Me.__mul__(you: Me) -> Me
+}

@@ -1,0 +1,7 @@
+# Negatable - Protocol for types that support unary negation (-)
+namespace Core
+
+protocol Negatable {
+    @readonly
+    routine Me.__neg__() -> Me
+}

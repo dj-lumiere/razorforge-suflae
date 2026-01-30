@@ -1,0 +1,7 @@
+# Exponentiable - Protocol for types that support exponentiation (**)
+namespace Core
+
+protocol Exponentiable {
+    @readonly
+    routine Me.__pow__(you: Me) -> Me
+}

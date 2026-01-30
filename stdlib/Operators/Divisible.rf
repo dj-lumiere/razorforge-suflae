@@ -1,0 +1,7 @@
+# Divisible - Protocol for types that support true division (/)
+namespace Core
+
+protocol Divisible {
+    @readonly
+    routine Me.__truediv__(you: Me) -> Me
+}

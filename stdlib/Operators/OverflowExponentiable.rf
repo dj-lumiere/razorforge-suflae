@@ -1,0 +1,13 @@
+# OverflowExponentiable - Protocol for types that support overflow-handling exponentiation (**%, **^, **?)
+namespace Core
+
+protocol OverflowExponentiable {
+    @readonly
+    routine Me.__pow_wrap__(you: Me) -> Me
+
+    @readonly
+    routine Me.__pow_sat__(you: Me) -> Me
+
+    @readonly
+    routine Me.__pow_checked__(you: Me) -> Maybe<Me>
+}

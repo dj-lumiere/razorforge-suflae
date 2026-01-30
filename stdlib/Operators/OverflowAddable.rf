@@ -1,0 +1,13 @@
+# OverflowAddable - Protocol for types that support overflow-handling addition (+%, +^, +?)
+namespace Core
+
+protocol OverflowAddable {
+    @readonly
+    routine Me.__add_wrap__(you: Me) -> Me
+
+    @readonly
+    routine Me.__add_sat__(you: Me) -> Me
+
+    @readonly
+    routine Me.__add_checked__(you: Me) -> Maybe<Me>
+}

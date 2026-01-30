@@ -1,0 +1,10 @@
+# Indexable - Protocol for types that support indexing ([])
+namespace Core
+
+protocol Indexable<K, V> {
+    @readonly
+    routine Me.__getitem__!(key: K) -> V
+
+    @writable
+    routine Me.__setitem__!(key: K, value: V)
+}

@@ -1,0 +1,8 @@
+# Comparable - Protocol for types that support ordering (<, <=, >, >=, <=>)
+# __lt__, __le__, __gt__, __ge__ are auto-generated from __cmp__
+namespace Core
+
+protocol Comparable {
+    @readonly
+    routine Me.__cmp__(you: Me) -> ComparisonSign
+}
