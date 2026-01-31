@@ -1,7 +1,7 @@
 # FixedIntegral - Bundle protocol for fixed-width integer operations
-# Extends Integral with overflow handling (wrapping, saturating, checked)
+# Extends Integral with Invertible (bitwise NOT) and overflow handling
 namespace Core
 
-protocol FixedIntegral follows Integral, OverflowAddable, OverflowSubtractable, OverflowMultiplicable, OverflowExponentiable, CheckedDivisible, CheckedShiftable {
+protocol FixedIntegral follows Integral, Invertible, OverflowAddable, OverflowSubtractable, OverflowMultiplicable, OverflowExponentiable, CheckedDivisible, CheckedShiftable {
     pass
 }

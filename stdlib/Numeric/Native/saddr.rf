@@ -9,7 +9,7 @@
 # Currently blocked by functions using let (result, overflow) = @intrinsic_routine.add.overflow<iptr>(...)
 namespace Core
 # Core SAddr type definition - maps to LLVM iptr/isize
-record SAddr follows SignedIntegral, Invertible, Ordered {
+record SAddr follows SignedIntegral, Ordered {
     public value: @intrinsic_type.iptr
 }
 

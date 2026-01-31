@@ -11,7 +11,7 @@ namespace Core
 import Text.Text
 
 # Core UAddr type definition - maps to LLVM iptr/usize
-record UAddr follows UnsignedIntegral, Invertible, Ordered {
+record UAddr follows UnsignedIntegral, Ordered {
     public value: @intrinsic_type.iptr
 }
 

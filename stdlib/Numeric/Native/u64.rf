@@ -2,7 +2,7 @@
 # Maps directly to LLVM i64 type using compiler intrinsics
 namespace Core
 # Core U64 type definition - maps to LLVM i64
-record U64 follows UnsignedIntegral, Invertible, Ordered {
+record U64 follows UnsignedIntegral, Ordered {
     public value: @intrinsic_type.i64
 }
 

@@ -2,7 +2,7 @@
 # Maps directly to LLVM i128 type using compiler intrinsics
 namespace Core
 # Core U128 type definition - maps to LLVM i128
-record U128 follows UnsignedIntegral, Invertible, Ordered {
+record U128 follows UnsignedIntegral, Ordered {
     public value: @intrinsic_type.i128
 }
 

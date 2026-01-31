@@ -2,7 +2,7 @@
 # Maps directly to LLVM i8 type using compiler intrinsics
 namespace Core
 # Core S8 type definition - maps to LLVM i8
-record S8 follows SignedIntegral, Invertible, Ordered {
+record S8 follows SignedIntegral, Ordered {
     private value: @intrinsic_type.i8
 }
 
