@@ -1,0 +1,8 @@
+# Hashable - Protocol for types that can be hashed
+# Required for use as keys in Dict, Set, and other hash-based collections
+namespace Core
+
+protocol Hashable {
+    @readonly
+    routine Me.hash() -> U64
+}
