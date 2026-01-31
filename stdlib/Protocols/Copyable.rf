@@ -1,0 +1,8 @@
+# Copyable - Protocol for types that support explicit deep copying
+# Primarily for entity and resident types (records are value types with implicit copy)
+namespace Core
+
+protocol Copyable {
+    @readonly
+    routine Me.copy() -> Me
+}

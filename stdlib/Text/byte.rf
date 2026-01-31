@@ -13,7 +13,7 @@
 namespace Core
 
 record Byte {
-    value: U8
+    private value: U8
 }
 
 # Common byte constants

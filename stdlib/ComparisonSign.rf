@@ -1,7 +1,0 @@
-﻿namespace Core
-
-choice ComparisonSign {
-    ME_SMALL: -1
-    EQUAL: 0
-    ME_LARGE: 1
-}

@@ -4,7 +4,7 @@
 # - alert() for stderr (with sep/end parameters)
 # - get_*() for stdin (Text by default, Bytes opt-in)
 
-namespace Console
+namespace IO/Console
 
 import Text/Text
 
