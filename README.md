@@ -166,7 +166,7 @@ bake run
 
 ```razorforge
 # hello.rf
-import Console
+import IO/Console
 
 routine start() {
     show("Hello from RazorForge!")
