@@ -2,7 +2,7 @@
 # Maps directly to LLVM i32 type using compiler intrinsics
 namespace Core
 # Core U32 type definition - maps to LLVM i32
-record U32 {
+record U32 follows UnsignedIntegral, Invertible, Ordered {
     public value: @intrinsic_type.i32
 }
 

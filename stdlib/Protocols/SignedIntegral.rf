@@ -1,0 +1,7 @@
+# SignedIntegral - Bundle protocol for signed fixed-width integers
+# Extends FixedIntegral with Negatable (unary -)
+namespace Core
+
+protocol SignedIntegral follows FixedIntegral, Negatable {
+    pass
+}

@@ -2,7 +2,7 @@
 # Maps directly to LLVM float type using compiler intrinsics
 namespace Core
 # Core F32 type definition - maps to LLVM float
-record F32 {
+record F32 follows Numeric, Ordered {
     private value: @intrinsic_type.float
 }
 

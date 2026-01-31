@@ -1,1 +1,1 @@
-entity Fraction {}
+entity Fraction follows Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered {}

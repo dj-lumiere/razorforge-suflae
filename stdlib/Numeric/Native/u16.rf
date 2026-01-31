@@ -2,7 +2,7 @@
 # Maps directly to LLVM i16 type using compiler intrinsics
 namespace Core
 # Core U16 type definition - maps to LLVM i16
-record U16 {
+record U16 follows UnsignedIntegral, Invertible, Ordered {
     public value: @intrinsic_type.i16
 }
 

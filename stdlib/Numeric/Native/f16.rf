@@ -2,7 +2,7 @@
 # Maps directly to LLVM half type using compiler intrinsics
 namespace Core
 # Core F16 type definition - maps to LLVM half
-record F16 {
+record F16 follows Numeric, Ordered {
     private value: @intrinsic_type.half
 }
 

@@ -2,7 +2,7 @@
 # Maps directly to LLVM double type using compiler intrinsics
 namespace Core
 # Core F64 type definition - maps to LLVM double
-record F64 {
+record F64 follows Numeric, Ordered {
     private value: @intrinsic_type.double
 }
 

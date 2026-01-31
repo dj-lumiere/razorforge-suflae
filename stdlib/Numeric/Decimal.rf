@@ -4,14 +4,14 @@
 # License: Freeware
 
 import Text/Text
-import ErrorHandling/Maybe
+import Errors/Maybe
 
 # Default precision for operations (decimal places)
 preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 
 # Opaque handle to MAPM M_APM structure
 # The actual memory is managed by the native runtime
-entity Decimal {
+entity Decimal follows Numeric, Ordered {
     private handle: UAddr
 }
 

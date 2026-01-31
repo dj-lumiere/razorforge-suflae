@@ -7,7 +7,7 @@ import CSubsystem.CStr
 namespace Core
 
 # Core D64 type definition - stored as 64-bit value in BID encoding
-record D64 {
+record D64 follows Numeric, Ordered {
     private value: U64
 }
 

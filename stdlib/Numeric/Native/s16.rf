@@ -2,7 +2,7 @@
 # Maps directly to LLVM i16 type using compiler intrinsics
 namespace Core
 # Core S16 type definition - maps to LLVM i16
-record S16 {
+record S16 follows SignedIntegral, Invertible, Ordered {
     private value: @intrinsic_type.i16
 }
 

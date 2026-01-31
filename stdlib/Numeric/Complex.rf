@@ -1,0 +1,4 @@
+# RazorForge Complex - Arbitrary precision complex number type
+namespace Core
+
+entity Complex follows Numeric, Equatable {}

@@ -6,7 +6,7 @@ import CSubsystem.CStr
 namespace Core
 
 # Core D32 type definition - stored as 32-bit value in BID encoding
-record D32 {
+record D32 follows Numeric, Ordered {
     private value: U32
 }
 

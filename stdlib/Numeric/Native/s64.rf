@@ -7,7 +7,7 @@ import Text.Text
 import CSubsystem.CStr
 
 # Core S64 type definition - maps to LLVM i64
-record S64 follows Integral {
+record S64 follows SignedIntegral, Invertible, Ordered {
     private value: @intrinsic_type.i64
 }
 

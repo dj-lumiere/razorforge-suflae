@@ -8,7 +8,7 @@ namespace Core
 
 # Core D128 type definition - stored as 128-bit value in BID encoding
 # Uses two U64 fields (low and high) to represent the 128-bit value
-record D128 {
+record D128 follows Numeric, Ordered {
     private low: U64
     private high: U64
 }

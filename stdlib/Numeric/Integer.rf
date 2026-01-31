@@ -3,12 +3,11 @@
 # License: Public Domain (Unlicense)
 
 import Text/Text
-import ErrorHandling/Maybe
+import Errors/Maybe
 
 # Opaque handle to LibTomMath mp_int structure
 # The actual memory is managed by the native runtime
-entity Integer
-follows Comparable {
+entity Integer follows Integral, Divisible, Negatable, Invertible, Ordered {
     private handle: UAddr
 }
 
