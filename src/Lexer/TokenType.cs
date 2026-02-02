@@ -833,6 +833,13 @@ public enum TokenType
     Until,
 
     /// <summary>
+    /// After keyword for task dependency chains.
+    /// Declares dependencies that must complete before the current task can run.
+    /// Used with waitfor/until for declarative task graphs.
+    /// </summary>
+    After,
+
+    /// <summary>
     /// OS thread function declaration keyword.
     /// Marks a function as running on a dedicated OS thread (heavyweight, CPU-bound).
     /// Counterpart to 'suspended' which uses green threads (lightweight, I/O-bound).
