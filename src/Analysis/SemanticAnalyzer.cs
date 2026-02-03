@@ -70,9 +70,10 @@ public sealed partial class SemanticAnalyzer
     /// Initializes a new instance of the <see cref="SemanticAnalyzer"/> class.
     /// </summary>
     /// <param name="language">The language being analyzed (RazorForge or Suflae).</param>
-    public SemanticAnalyzer(Language language)
+    /// <param name="stdlibPath">Optional path to the stdlib directory.</param>
+    public SemanticAnalyzer(Language language, string? stdlibPath = null)
     {
-        _registry = new TypeRegistry(language: language);
+        _registry = new TypeRegistry(language: language, stdlibPath: stdlibPath);
     }
 
     #endregion

@@ -100,6 +100,22 @@ public partial class SuflaeParser
             string name = PeekToken(offset: -1)
                .Text;
 
+            // Support qualified type paths like razorforge/Collections.Dict
+            // This allows referencing types from other modules in type annotations
+            while (Match(type: TokenType.Slash))
+            {
+                string part = ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
+                name += "/" + part;
+
+                // Handle dot separator for type within module: razorforge/Core.Bool
+                if (Match(type: TokenType.Dot))
+                {
+                    string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
+                    name += "." + typeName;
+                    break; // Dot marks the end of the path (rest is the type name)
+                }
+            }
+
             // ─────────────────────────────────────────────────────────────────────
             // Simple type without generics
             // ─────────────────────────────────────────────────────────────────────

@@ -242,9 +242,16 @@ public static class NumericLiteralParser
         try
         {
             nuint size = GetIntegerByteSize(handle);
+            int sign = GetIntegerSign(handle);
+
+            // Handle zero: libbf represents zero with len=0, but we need at least 1 byte
+            if (size == 0)
+            {
+                return ([0], sign);
+            }
+
             byte[] bytes = new byte[(int)size];
             IntegerToBytes(handle, bytes, size);
-            int sign = GetIntegerSign(handle);
             return (bytes, sign);
         }
         finally

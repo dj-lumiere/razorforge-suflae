@@ -368,6 +368,12 @@ public partial class SuflaeParser
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 3.5: GENERIC CONSTRAINTS (requires clause)
+        // ═══════════════════════════════════════════════════════════════════════════
+        List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(
+            genericParams: genericParams, existingConstraints: inlineConstraints);
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // PHASE 4: RETURN TYPE
         // ═══════════════════════════════════════════════════════════════════════════
         TypeExpression? returnType = null;
@@ -399,6 +405,8 @@ public partial class SuflaeParser
             Visibility: visibility,
             Attributes: attributes ?? [],
             Location: location,
+            GenericParameters: genericParams,
+            GenericConstraints: constraints,
             IsFailable: isFailable,
             Storage: storage,
             Async: asyncStatus);
@@ -475,6 +483,13 @@ public partial class SuflaeParser
             {
                 if (Match(type: TokenType.Newline))
                 {
+                    continue;
+                }
+
+                // Allow 'pass' to indicate empty body
+                if (Match(type: TokenType.Pass))
+                {
+                    Match(type: TokenType.Newline);
                     continue;
                 }
 
@@ -587,6 +602,13 @@ public partial class SuflaeParser
             {
                 if (Match(type: TokenType.Newline))
                 {
+                    continue;
+                }
+
+                // Allow 'pass' to indicate empty body
+                if (Match(type: TokenType.Pass))
+                {
+                    Match(type: TokenType.Newline);
                     continue;
                 }
 
@@ -1054,6 +1076,7 @@ public partial class SuflaeParser
         var specificImports = (List<string>?)null;
 
         // Parse module path - could be multiple identifiers separated by slashes
+        // Dot marks a specific type within the module: import razorforge/Core.Bool
         do
         {
             string part = ConsumeIdentifier(errorMessage: "Expected module name");
@@ -1061,6 +1084,13 @@ public partial class SuflaeParser
             if (Match(type: TokenType.Slash))
             {
                 modulePath += "/";
+            }
+            else if (Match(type: TokenType.Dot))
+            {
+                // Dot marks specific type: razorforge/Core.Bool → path "razorforge/Core/Bool"
+                string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
+                modulePath += "/" + typeName;
+                break;
             }
             else
             {
