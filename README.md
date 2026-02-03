@@ -34,7 +34,7 @@ routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection? {
                 p.active_count += 1
                 return conn
             },
-            else => return none  # Pool exhausted
+            else => return None  # Pool exhausted
         }
     }
 }
@@ -193,7 +193,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **No Lifetime Annotations**: Tokens cannot be returned from routines = safety without complexity
 - **Pay Only for What You Use**: No hidden costs, explicit tradeoffs
 - **Danger Blocks**: Opt-in unsafe operations (`danger!`) for zero-overhead code
-- **Six Data Types**: `record`, `resident`, `entity`, `choice`, `variant`, `mutant`
+- **Five Data Types**: `record`, `resident`, `entity`, `choice`, `variant`
 - **Explicit Concurrency**: `Shared<T, Policy>` with `seizing`/`inspecting` for thread-safe access
 - **Freestanding Mode**: Bare metal programming without runtime
 - **C Subsystem**: Full FFI with C libraries
