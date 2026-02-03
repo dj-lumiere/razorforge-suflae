@@ -24,6 +24,7 @@ namespace RazorForge.Diagnostics;
 /// - RF-S750-RF-S799: Error Handling Errors (throw/absent)
 /// - RF-S800-RF-S849: Language Restriction Errors
 /// - RF-S850-RF-S899: Intrinsic and Native Call Errors
+/// - RF-S900-RF-S949: Concurrency and Task Dependency Errors
 /// </summary>
 public enum SemanticDiagnosticCode
 {
@@ -602,6 +603,19 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Invalid intrinsic arguments.</summary>
     InvalidIntrinsicArguments = 853,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONCURRENCY AND TASK DEPENDENCY ERRORS (RF-S900 - RF-S949)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Task dependency expression is not a Lookup&lt;T&gt; type.</summary>
+    DependencyNotLookupType = 900,
+
+    /// <summary>Lookup&lt;T&gt; value not dismantled before end of scope.</summary>
+    LookupNotDismantled = 901,
+
+    /// <summary>Waitfor expression used outside of suspended/threaded routine.</summary>
+    WaitforOutsideSuspendedRoutine = 902,
 }
 
 public static class SemanticDiagnosticCodeExtensions
@@ -639,6 +653,7 @@ public static class SemanticDiagnosticCodeExtensions
             < 800 => "Error Handling",
             < 850 => "Language Restriction",
             < 900 => "Intrinsic",
+            < 950 => "Concurrency",
             _ => "Other"
         };
     }

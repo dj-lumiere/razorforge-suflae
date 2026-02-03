@@ -823,6 +823,57 @@ public record WaitforExpression(Expression Operand, Expression? Timeout, SourceL
     }
 }
 
+/// <summary>
+/// Represents a single task dependency in an 'after' clause.
+/// Specifies a Lookup&lt;T&gt; variable to depend on and an optional binding name.
+/// </summary>
+/// <param name="DependencyExpr">The Lookup&lt;T&gt; variable to depend on</param>
+/// <param name="BindingName">Optional 'as' binding name for the unwrapped value (null if no 'as')</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Task dependency examples:
+/// <list type="bullet">
+/// <item>after a - dependency without value binding (ordering only)</item>
+/// <item>after a as val - dependency with value binding</item>
+/// <item>after (a, b) as (va, vb) - tuple dependencies with bindings</item>
+/// </list>
+/// The binding name introduces a variable of type T (unwrapped from Lookup&lt;T&gt;)
+/// that is only valid within the associated waitfor expression.
+/// </remarks>
+public record TaskDependency(Expression DependencyExpr, string? BindingName, SourceLocation Location);
+
+/// <summary>
+/// Expression that waits for a suspended computation with explicit task dependencies.
+/// Extends waitfor with 'after' clause for declarative task dependency graphs.
+/// </summary>
+/// <param name="Dependencies">List of 'after' dependencies (empty means no dependencies)</param>
+/// <param name="Operand">The suspended computation to wait for</param>
+/// <param name="Timeout">Optional timeout duration (with 'until' keyword)</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Dependent waitfor expression examples:
+/// <list type="bullet">
+/// <item>after a as val waitfor step2!(val) until 5s - single dependency with timeout</item>
+/// <item>after (a, b) as (va, vb) waitfor step3!(va, vb) - multiple dependencies</item>
+/// <item>after a waitfor step2!() - ordering-only dependency (no value binding)</item>
+/// </list>
+/// If any dependency fails (error/None), dependent tasks are not spawned (short-circuit).
+/// The result type is Lookup&lt;R&gt; where R is the return type of the awaited task.
+/// </remarks>
+public record DependentWaitforExpression(
+    List<TaskDependency> Dependencies,
+    Expression Operand,
+    Expression? Timeout,
+    SourceLocation Location
+) : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitDependentWaitforExpression(node: this);
+    }
+}
+
 #endregion
 
 #region Back Index Expressions

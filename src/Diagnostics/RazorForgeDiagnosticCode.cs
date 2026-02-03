@@ -42,6 +42,10 @@ public enum RazorForgeDiagnosticCode
     ExpectedAttributeValue = 116,
     ExpectedTypeArgument = 117,
     ExpectedColonOrFatArrow = 118,
+    ExpectedLeftParen = 119,
+    ExpectedRightParen = 120,
+    ExpectedAs = 121,
+    ExpectedWaitforAfterDependencies = 122,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // UNEXPECTED TOKEN ERRORS (RF-G150 - RF-G199)
@@ -61,6 +65,7 @@ public enum RazorForgeDiagnosticCode
     InvalidDeclarationInBody = 203,
     ThrowRequiresExpression = 204,
     DiscardRequiresCall = 205,
+    TupleDependencyCountMismatch = 206,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (RF-G250 - RF-G299)

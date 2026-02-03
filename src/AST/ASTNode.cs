@@ -254,6 +254,12 @@ public interface IAstVisitor<T>
     /// <remarks>Used in suspended/threaded routines to await Task-like values</remarks>
     T VisitWaitforExpression(WaitforExpression node);
 
+    /// <summary>Visits a dependent waitfor expression node (waitfor with task dependencies)</summary>
+    /// <param name="node">The dependent waitfor expression to visit</param>
+    /// <returns>Result of visiting the dependent waitfor expression</returns>
+    /// <remarks>Used for declarative task dependency graphs with 'after' clause</remarks>
+    T VisitDependentWaitforExpression(DependentWaitforExpression node);
+
     /// <summary>Visits a back index expression node (end-relative indexing like '^1')</summary>
     /// <param name="node">The back index expression to visit</param>
     /// <returns>Result of visiting the back index expression</returns>

@@ -52,6 +52,10 @@ public enum SuflaeDiagnosticCode
     ExpectedClosingParen = 115,
     ExpectedClosingBracket = 116,
     ExpectedClosingAngle = 117,
+    ExpectedLeftParen = 118,
+    ExpectedRightParen = 119,
+    ExpectedAs = 120,
+    ExpectedWaitforAfterDependencies = 121,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // UNEXPECTED TOKEN ERRORS (SF-G150 - SF-G199)
@@ -72,6 +76,7 @@ public enum SuflaeDiagnosticCode
     ThrowRequiresExpression = 204,
     ExpectedDedentAfterBody = 205,
     DiscardRequiresCall = 206,
+    TupleDependencyCountMismatch = 207,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (SF-G250 - SF-G299)

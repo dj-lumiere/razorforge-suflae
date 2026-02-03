@@ -1350,6 +1350,12 @@ public partial class SuflaeParser
             return ParseWhenExpression(location: location);
         }
 
+        // Dependent waitfor with 'after' clause: after dep [as binding] waitfor expr [until timeout]
+        if (Match(type: TokenType.After))
+        {
+            return ParseDependentWaitfor(location: location);
+        }
+
         // Waitfor expression: waitfor expr or waitfor expr until timeout
         // Used for async/concurrency: let result = waitfor asyncOperation
         if (Match(type: TokenType.Waitfor))
@@ -1691,5 +1697,160 @@ public partial class SuflaeParser
         Consume(type: TokenType.Dedent, errorMessage: "Expected dedent after when clauses");
 
         return new WhenExpression(Expression: expression, Clauses: clauses, Location: location);
+    }
+
+    /// <summary>
+    /// Parses a dependent waitfor expression with task dependencies.
+    /// Syntax: after dep [as binding] [, ...] waitfor expr [until timeout]
+    /// </summary>
+    /// <param name="location">Source location of the after keyword</param>
+    /// <returns>The parsed DependentWaitforExpression</returns>
+    private Expression ParseDependentWaitfor(SourceLocation location)
+    {
+        List<TaskDependency> dependencies = ParseTaskDependencies();
+
+        // Expect 'waitfor' keyword
+        Consume(type: TokenType.Waitfor, errorMessage: "Expected 'waitfor' after task dependencies");
+
+        Expression operand = ParseUnary();
+        Expression? timeout = null;
+
+        if (Match(type: TokenType.Until))
+        {
+            timeout = ParseUnary();
+        }
+
+        return new DependentWaitforExpression(
+            Dependencies: dependencies,
+            Operand: operand,
+            Timeout: timeout,
+            Location: location);
+    }
+
+    /// <summary>
+    /// Parses task dependencies for the 'after' clause.
+    /// </summary>
+    /// <returns>List of parsed task dependencies</returns>
+    private List<TaskDependency> ParseTaskDependencies()
+    {
+        List<TaskDependency> dependencies = new();
+
+        // Check for tuple-style: after (a, b) as (va, vb)
+        if (Check(type: TokenType.LeftParen))
+        {
+            // Could be tuple-style or just parenthesized expression
+            // Try tuple-style first by looking ahead for pattern: ( expr, expr ) as ( ident, ident )
+            if (IsTupleDependencyPattern())
+            {
+                return ParseTupleDependencies();
+            }
+        }
+
+        // Parse comma-separated dependencies: after a as va, b as vb
+        do
+        {
+            SourceLocation depLocation = GetLocation();
+            Expression depExpr = ParseUnary();
+            string? binding = null;
+
+            if (Match(type: TokenType.As))
+            {
+                Token bindingToken = Consume(type: TokenType.Identifier,
+                    errorMessage: "Expected identifier after 'as' in task dependency");
+                binding = bindingToken.Text;
+            }
+
+            dependencies.Add(item: new TaskDependency(DependencyExpr: depExpr, BindingName: binding, Location: depLocation));
+        } while (Match(type: TokenType.Comma));
+
+        return dependencies;
+    }
+
+    /// <summary>
+    /// Checks if the current position matches a tuple dependency pattern.
+    /// Pattern: ( expr, ... ) as ( ident, ... )
+    /// </summary>
+    private bool IsTupleDependencyPattern()
+    {
+        // Save position for backtracking
+        int savedPosition = Position;
+
+        try
+        {
+            if (!Match(type: TokenType.LeftParen)) return false;
+
+            // Skip to closing paren, counting nested parens
+            int parenDepth = 1;
+            while (parenDepth > 0 && !IsAtEnd)
+            {
+                if (Match(type: TokenType.LeftParen)) parenDepth++;
+                else if (Match(type: TokenType.RightParen)) parenDepth--;
+                else Advance();
+            }
+
+            // Check for 'as' followed by '('
+            return Match(type: TokenType.As) && Check(type: TokenType.LeftParen);
+        }
+        finally
+        {
+            Position = savedPosition;
+        }
+    }
+
+    /// <summary>
+    /// Parses tuple-style dependencies: (a, b) as (va, vb)
+    /// </summary>
+    private List<TaskDependency> ParseTupleDependencies()
+    {
+        SourceLocation location = GetLocation();
+
+        // Parse expression tuple: (expr, expr, ...)
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' for tuple dependencies");
+
+        List<Expression> expressions = new();
+        do
+        {
+            expressions.Add(item: ParseUnary());
+        } while (Match(type: TokenType.Comma));
+
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple dependencies");
+
+        // Parse 'as' and binding tuple: (ident, ident, ...)
+        Consume(type: TokenType.As, errorMessage: "Expected 'as' after tuple dependencies");
+
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' for tuple bindings");
+
+        List<string> bindings = new();
+        do
+        {
+            Token bindingToken = Consume(type: TokenType.Identifier,
+                errorMessage: "Expected identifier in tuple binding");
+            bindings.Add(item: bindingToken.Text);
+        } while (Match(type: TokenType.Comma));
+
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple bindings");
+
+        // Validate counts match
+        if (expressions.Count != bindings.Count)
+        {
+            Token current = CurrentToken;
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.TupleDependencyCountMismatch,
+                $"Tuple dependency count ({expressions.Count}) does not match binding count ({bindings.Count})",
+                fileName, current.Line, current.Column);
+        }
+
+        // Create TaskDependency for each pair
+        List<TaskDependency> dependencies = new();
+        for (int i = 0; i < expressions.Count; i++)
+        {
+            string? binding = i < bindings.Count ? bindings[index: i] : null;
+            dependencies.Add(item: new TaskDependency(
+                DependencyExpr: expressions[index: i],
+                BindingName: binding,
+                Location: location));
+        }
+
+        return dependencies;
     }
 }

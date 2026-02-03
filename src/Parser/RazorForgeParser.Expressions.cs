@@ -782,12 +782,28 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses unary prefix expressions.
-    /// Syntax: <c>-x</c>, <c>not x</c>, <c>~x</c>, <c>steal x</c>, <c>^n</c>
+    /// Syntax: <c>-x</c>, <c>not x</c>, <c>~x</c>, <c>steal x</c>, <c>^n</c>, <c>waitfor x</c>, <c>after x waitfor y</c>
     /// Special handling for unary minus on numeric literals to support min values.
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParseUnary()
     {
+        SourceLocation location = GetLocation(token: CurrentToken);
+
+        // Handle 'after' keyword for task dependencies
+        // Syntax: after dep [as binding] [, ...] waitfor expr [until timeout]
+        if (Match(type: TokenType.After))
+        {
+            return ParseDependentWaitfor(location: location);
+        }
+
+        // Handle 'waitfor' keyword for async operations
+        // Syntax: waitfor expr [until timeout]
+        if (Match(type: TokenType.Waitfor))
+        {
+            return ParseWaitfor(location: location);
+        }
+
         // Handle steal keyword (RazorForge only - ownership transfer)
         if (Match(type: TokenType.Steal))
         {
@@ -856,6 +872,198 @@ public partial class RazorForgeParser
         Expression expr = ParseUnary();
         return new UnaryExpression(Operator: TokenToUnaryOperator(tokenType: op.Type), Operand: expr, Location: opLocation);
 
+    }
+
+    /// <summary>
+    /// Parses a waitfor expression without dependencies.
+    /// Syntax: <c>waitfor expr [until timeout]</c>
+    /// </summary>
+    /// <param name="location">Source location of the waitfor keyword</param>
+    /// <returns>The parsed WaitforExpression</returns>
+    private Expression ParseWaitfor(SourceLocation location)
+    {
+        Expression operand = ParseUnary();
+        Expression? timeout = null;
+
+        if (Match(type: TokenType.Until))
+        {
+            timeout = ParseUnary();
+        }
+
+        return new WaitforExpression(Operand: operand, Timeout: timeout, Location: location);
+    }
+
+    /// <summary>
+    /// Parses a dependent waitfor expression with task dependencies.
+    /// Syntax: <c>after dep [as binding] [, ...] waitfor expr [until timeout]</c>
+    /// </summary>
+    /// <param name="location">Source location of the after keyword</param>
+    /// <returns>The parsed DependentWaitforExpression</returns>
+    /// <remarks>
+    /// Dependency syntax examples:
+    /// <list type="bullet">
+    /// <item>after a waitfor ... - single dependency, no binding</item>
+    /// <item>after a as val waitfor ... - single dependency with binding</item>
+    /// <item>after a, b waitfor ... - multiple dependencies, no bindings</item>
+    /// <item>after a as va, b as vb waitfor ... - multiple dependencies with bindings</item>
+    /// <item>after (a, b) as (va, vb) waitfor ... - tuple-style dependencies</item>
+    /// </list>
+    /// </remarks>
+    private Expression ParseDependentWaitfor(SourceLocation location)
+    {
+        List<TaskDependency> dependencies = ParseTaskDependencies();
+
+        // Expect 'waitfor' keyword
+        Consume(type: TokenType.Waitfor, code: RazorForgeDiagnosticCode.ExpectedWaitforAfterDependencies,
+            errorMessage: "Expected 'waitfor' after task dependencies");
+
+        Expression operand = ParseUnary();
+        Expression? timeout = null;
+
+        if (Match(type: TokenType.Until))
+        {
+            timeout = ParseUnary();
+        }
+
+        return new DependentWaitforExpression(
+            Dependencies: dependencies,
+            Operand: operand,
+            Timeout: timeout,
+            Location: location);
+    }
+
+    /// <summary>
+    /// Parses task dependencies for the 'after' clause.
+    /// </summary>
+    /// <returns>List of parsed task dependencies</returns>
+    private List<TaskDependency> ParseTaskDependencies()
+    {
+        List<TaskDependency> dependencies = new();
+
+        // Check for tuple-style: after (a, b) as (va, vb)
+        if (Check(type: TokenType.LeftParen))
+        {
+            // Could be tuple-style or just parenthesized expression
+            // Try tuple-style first by looking ahead for pattern: ( expr, expr ) as ( ident, ident )
+            if (IsTupleDependencyPattern())
+            {
+                return ParseTupleDependencies();
+            }
+        }
+
+        // Parse comma-separated dependencies: after a as va, b as vb
+        do
+        {
+            SourceLocation depLocation = GetLocation(token: CurrentToken);
+            Expression depExpr = ParseUnary();
+            string? binding = null;
+
+            if (Match(type: TokenType.As))
+            {
+                Token bindingToken = Consume(type: TokenType.Identifier,
+                    code: RazorForgeDiagnosticCode.ExpectedIdentifier,
+                    errorMessage: "Expected identifier after 'as' in task dependency");
+                binding = bindingToken.Text;
+            }
+
+            dependencies.Add(item: new TaskDependency(DependencyExpr: depExpr, BindingName: binding, Location: depLocation));
+        } while (Match(type: TokenType.Comma));
+
+        return dependencies;
+    }
+
+    /// <summary>
+    /// Checks if the current position matches a tuple dependency pattern.
+    /// Pattern: ( expr, ... ) as ( ident, ... )
+    /// </summary>
+    private bool IsTupleDependencyPattern()
+    {
+        // Save position for backtracking
+        int savedPosition = _position;
+
+        try
+        {
+            if (!Match(type: TokenType.LeftParen)) return false;
+
+            // Skip to closing paren, counting nested parens
+            int parenDepth = 1;
+            while (parenDepth > 0 && !IsAtEnd)
+            {
+                if (Match(type: TokenType.LeftParen)) parenDepth++;
+                else if (Match(type: TokenType.RightParen)) parenDepth--;
+                else Advance();
+            }
+
+            // Check for 'as' followed by '('
+            return Match(type: TokenType.As) && Check(type: TokenType.LeftParen);
+        }
+        finally
+        {
+            _position = savedPosition;
+        }
+    }
+
+    /// <summary>
+    /// Parses tuple-style dependencies: (a, b) as (va, vb)
+    /// </summary>
+    private List<TaskDependency> ParseTupleDependencies()
+    {
+        SourceLocation location = GetLocation(token: CurrentToken);
+
+        // Parse expression tuple: (expr, expr, ...)
+        Consume(type: TokenType.LeftParen, code: RazorForgeDiagnosticCode.ExpectedLeftParen,
+            errorMessage: "Expected '(' for tuple dependencies");
+
+        List<Expression> expressions = new();
+        do
+        {
+            expressions.Add(item: ParseUnary());
+        } while (Match(type: TokenType.Comma));
+
+        Consume(type: TokenType.RightParen, code: RazorForgeDiagnosticCode.ExpectedRightParen,
+            errorMessage: "Expected ')' after tuple dependencies");
+
+        // Parse 'as' and binding tuple: (ident, ident, ...)
+        Consume(type: TokenType.As, code: RazorForgeDiagnosticCode.ExpectedAs,
+            errorMessage: "Expected 'as' after tuple dependencies");
+
+        Consume(type: TokenType.LeftParen, code: RazorForgeDiagnosticCode.ExpectedLeftParen,
+            errorMessage: "Expected '(' for tuple bindings");
+
+        List<string> bindings = new();
+        do
+        {
+            Token bindingToken = Consume(type: TokenType.Identifier,
+                code: RazorForgeDiagnosticCode.ExpectedIdentifier,
+                errorMessage: "Expected identifier in tuple binding");
+            bindings.Add(item: bindingToken.Text);
+        } while (Match(type: TokenType.Comma));
+
+        Consume(type: TokenType.RightParen, code: RazorForgeDiagnosticCode.ExpectedRightParen,
+            errorMessage: "Expected ')' after tuple bindings");
+
+        // Validate counts match
+        if (expressions.Count != bindings.Count)
+        {
+            Token current = CurrentToken;
+            throw new RazorForgeGrammarException(
+                RazorForgeDiagnosticCode.TupleDependencyCountMismatch,
+                $"Tuple dependency count ({expressions.Count}) does not match binding count ({bindings.Count})",
+                _fileName, current.Line, current.Column);
+        }
+
+        // Create TaskDependency for each pair
+        List<TaskDependency> dependencies = new();
+        for (int i = 0; i < expressions.Count; i++)
+        {
+            string? binding = i < bindings.Count ? bindings[index: i] : null;
+            dependencies.Add(item: new TaskDependency(
+                DependencyExpr: expressions[index: i],
+                BindingName: binding,
+                Location: location));
+        }
+
+        return dependencies;
     }
 
     /// <summary>

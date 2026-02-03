@@ -58,6 +58,7 @@ public sealed partial class SemanticAnalyzer
             TypeExpression typeExpr => ResolveType(typeExpr: typeExpr),
             WhenExpression whenExpr => AnalyzeWhenExpression(when: whenExpr),
             WaitforExpression waitfor => AnalyzeWaitforExpression(waitfor: waitfor),
+            DependentWaitforExpression depWaitfor => AnalyzeDependentWaitforExpression(depWaitfor: depWaitfor),
             _ => HandleUnknownExpression(expression: expression)
         };
 
@@ -98,9 +99,10 @@ public sealed partial class SemanticAnalyzer
             TokenType.D64Literal => "D64",
             TokenType.D128Literal => "D128",
 
-            // Arbitrary precision
-            TokenType.Integer => "Integer",
-            TokenType.Decimal => "Decimal",
+            // RazorForge uses fixed-width types (S64, F64) for unsuffixed literals
+            // Suflae uses arbitrary precision types (Integer, Decimal)
+            TokenType.Integer => _registry.Language == Language.Suflae ? "Integer" : "S64",
+            TokenType.Decimal => _registry.Language == Language.Suflae ? "Decimal" : "F64",
 
             // Boolean
             TokenType.True or TokenType.False => "Bool",
@@ -145,8 +147,11 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Contextual type inference for unsuffixed integer literals
-        // If expected type is an integer type and literal is S64 (default unsuffixed), infer to expected type
-        if (expectedType != null && literal.LiteralType == TokenType.S64Literal && IsFixedWidthIntegerType(expectedType))
+        // If expected type is a fixed-width integer type and literal is Integer or S64 (default unsuffixed),
+        // infer to expected type
+        if (expectedType != null &&
+            (literal.LiteralType == TokenType.Integer || literal.LiteralType == TokenType.S64Literal) &&
+            IsFixedWidthIntegerType(expectedType))
         {
             // Check if the literal value fits in the expected type
             if (LiteralFitsInType(literal, expectedType))
@@ -181,6 +186,7 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Checks if a type is a fixed-width integer type (S8-S128, U8-U128, SAddr, UAddr).
     /// </summary>
+    // TODO: remove this
     private static bool IsFixedWidthIntegerType(TypeSymbol type)
     {
         return type.Name is "S8" or "S16" or "S32" or "S64" or "S128"
@@ -196,7 +202,7 @@ public sealed partial class SemanticAnalyzer
         // Get the numeric value from the literal
         if (literal.Value is not long value)
         {
-            // For string-stored values (large numbers), we'd need more sophisticated checking
+            // TODO: For string-stored values (large numbers), we'd need more sophisticated checking
             // For now, allow inference and let runtime handle overflow
             return true;
         }
@@ -258,9 +264,14 @@ public sealed partial class SemanticAnalyzer
                 TokenType.D64Literal => ParseD64Literal(literal: literal, rawValue: rawValue),
                 TokenType.D128Literal => ParseD128Literal(literal: literal, rawValue: rawValue),
 
-                // Arbitrary precision
-                TokenType.Integer => ParseIntegerLiteral(literal: literal, rawValue: rawValue),
-                TokenType.Decimal => ParseDecimalLiteral(literal: literal, rawValue: rawValue),
+                // RazorForge uses fixed-width types (S64, F64) for unsuffixed literals
+                // Suflae uses arbitrary precision types (Integer, Decimal)
+                TokenType.Integer => _registry.Language == Language.Suflae
+                    ? ParseIntegerLiteral(literal: literal, rawValue: rawValue)
+                    : ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
+                TokenType.Decimal => _registry.Language == Language.Suflae
+                    ? ParseDecimalLiteral(literal: literal, rawValue: rawValue)
+                    : ParseF64Literal(literal, rawValue),
 
                 // Imaginary literals for complex numbers
                 TokenType.J32Literal => ParseJ32Literal(literal, rawValue),
@@ -2414,6 +2425,71 @@ public sealed partial class SemanticAnalyzer
         // The result type is the inner type of the async operation
         // For now, return the operand type directly
         return operandType;
+    }
+
+    /// <summary>
+    /// Analyzes a dependent waitfor expression (task dependency graph).
+    /// Syntax: after dep1 [as val1], dep2 [as val2] waitfor expr [until timeout]
+    /// </summary>
+    /// <param name="depWaitfor">The dependent waitfor expression to analyze.</param>
+    /// <returns>Lookup&lt;T&gt; where T is the result type of the awaited operation.</returns>
+    private TypeSymbol AnalyzeDependentWaitforExpression(DependentWaitforExpression depWaitfor)
+    {
+        // Create a new scope for the dependency bindings
+        _registry.EnterScope(kind: ScopeKind.Block, name: "waitfor_deps");
+
+        // Analyze each dependency
+        foreach (TaskDependency dep in depWaitfor.Dependencies)
+        {
+            TypeSymbol depType = AnalyzeExpression(expression: dep.DependencyExpr);
+
+            // Dependency must be Lookup<T> type
+            if (depType is not ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup } lookupType)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.DependencyNotLookupType,
+                    $"Task dependency must be a Lookup<T> type, got '{depType.Name}'.",
+                    dep.Location);
+
+                // If there's a binding, still declare it (as error type) to prevent cascading errors
+                if (dep.BindingName != null)
+                {
+                    _registry.DeclareVariable(name: dep.BindingName, type: ErrorTypeInfo.Instance, isMutable: false);
+                }
+            }
+            else if (dep.BindingName != null)
+            {
+                // Introduce the binding variable with the unwrapped type T from Lookup<T>
+                _registry.DeclareVariable(name: dep.BindingName, type: lookupType.ValueType, isMutable: false);
+            }
+        }
+
+        // Analyze the operand expression (with dependency bindings in scope)
+        TypeSymbol operandType = AnalyzeExpression(expression: depWaitfor.Operand);
+
+        // Analyze optional timeout expression
+        if (depWaitfor.Timeout != null)
+        {
+            TypeSymbol timeoutType = AnalyzeExpression(expression: depWaitfor.Timeout);
+
+            // Validate that timeout is a Duration type
+            TypeSymbol? durationType = _registry.LookupType(name: "Duration");
+            if (durationType != null && !IsAssignableTo(source: timeoutType, target: durationType))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.WaitforTimeoutNotDuration,
+                    $"Waitfor 'until' clause requires a Duration, got '{timeoutType.Name}'.",
+                    depWaitfor.Timeout.Location);
+            }
+        }
+
+        // Exit the dependency scope
+        _registry.ExitScope();
+
+        // TODO: Validate that we're inside a suspended/threaded routine
+
+        // Result type is Lookup<R> where R is the operand type
+        return ErrorHandlingTypeInfo.WellKnown.LookupDefinition.Instantiate(typeArguments: [operandType]);
     }
 
     #endregion
