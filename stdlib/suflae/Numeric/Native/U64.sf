@@ -1,0 +1,166 @@
+# Suflae U64 - Unsigned 64-bit integer (opt-in native type)
+
+import razorforge/Core.U64
+
+record U64:
+    private var value: razorforge/Core.U64
+
+# Arithmetic operators
+routine U64.__add__!(you: U64) -> U64:
+    return U64(value: me.value.__add__!(you.value))
+
+routine U64.__sub__!(you: U64) -> U64:
+    return U64(value: me.value.__sub__!(you.value))
+
+routine U64.__mul__!(you: U64) -> U64:
+    return U64(value: me.value.__mul__!(you.value))
+
+routine U64.__floordiv__!(you: U64) -> U64:
+    return U64(value: me.value.__floordiv__!(you.value))
+
+routine U64.__mod__!(you: U64) -> U64:
+    return U64(value: me.value.__mod__!(you.value))
+
+# Wrapping arithmetic
+routine U64.__add_wrap__(you: U64) -> U64:
+    return U64(value: me.value.__add_wrap__(you.value))
+
+routine U64.__sub_wrap__(you: U64) -> U64:
+    return U64(value: me.value.__sub_wrap__(you.value))
+
+routine U64.__mul_wrap__(you: U64) -> U64:
+    return U64(value: me.value.__mul_wrap__(you.value))
+
+# Saturating arithmetic
+routine U64.__add_sat__(you: U64) -> U64:
+    return U64(value: me.value.__add_sat__(you.value))
+
+routine U64.__sub_sat__(you: U64) -> U64:
+    return U64(value: me.value.__sub_sat__(you.value))
+
+routine U64.__mul_sat__(you: U64) -> U64:
+    return U64(value: me.value.__mul_sat__(you.value))
+
+# Comparison
+routine U64.__eq__(you: U64) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine U64.__cmp__(you: U64) -> ComparisonSign:
+    return me.value.__cmp__(you.value)
+
+# Bitwise operations
+routine U64.__and__(you: U64) -> U64:
+    return U64(value: me.value.__and__(you.value))
+
+routine U64.__or__(you: U64) -> U64:
+    return U64(value: me.value.__or__(you.value))
+
+routine U64.__xor__(you: U64) -> U64:
+    return U64(value: me.value.__xor__(you.value))
+
+routine U64.__not__() -> U64:
+    return U64(value: me.value.__not__())
+
+# Shift operations
+routine U64.__ashl__(bits: U64) -> U64:
+    return U64(value: me.value.__ashl__(bits))
+
+routine U64.__ashr__(bits: U64) -> U64:
+    return U64(value: me.value.__ashr__(bits))
+
+routine U64.__lshl__(bits: U64) -> U64:
+    return U64(value: me.value.__lshl__(bits))
+
+routine U64.__lshr__(bits: U64) -> U64:
+    return U64(value: me.value.__lshr__(bits))
+
+# Math operations
+routine U64.min(you: U64) -> U64:
+    return U64(value: me.value.min(you.value))
+
+routine U64.max(you: U64) -> U64:
+    return U64(value: me.value.max(you.value))
+
+routine U64.clamp(min_val: U64, max_val: U64) -> U64:
+    return U64(value: me.value.clamp(min_val.value, max_val.value))
+
+# Bit manipulation
+routine U64.count_ones() -> U64:
+    return U64(value: me.value.count_ones())
+
+routine U64.count_zeros() -> U64:
+    return U64(value: me.value.count_zeros())
+
+routine U64.leading_zeros() -> U64:
+    return U64(value: me.value.leading_zeros())
+
+routine U64.trailing_zeros() -> U64:
+    return U64(value: me.value.trailing_zeros())
+
+routine U64.reverse_bits() -> U64:
+    return U64(value: me.value.reverse_bits())
+
+routine U64.swap_bytes() -> U64:
+    return U64(value: me.value.swap_bytes())
+
+routine U64.is_power_of_two() -> Bool:
+    return me.value.is_power_of_two()
+
+# Utility methods
+routine U64.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine U64.is_even() -> Bool:
+    return me.value.is_even()
+
+routine U64.is_odd() -> Bool:
+    return me.value.is_odd()
+
+# String conversion
+routine U64.to_text() -> Text:
+    return me.value.to_text()
+
+# ============================================================================
+# Factory constructors (__create__ pattern)
+# ============================================================================
+
+# From smaller unsigned integers (widening - always fits)
+routine U64.__create__(from: U8) -> U64:
+    return U64(value: razorforge/Core.U64.__create__(from.value))
+
+routine U64.__create__(from: U16) -> U64:
+    return U64(value: razorforge/Core.U64.__create__(from.value))
+
+routine U64.__create__(from: U32) -> U64:
+    return U64(value: razorforge/Core.U64.__create__(from.value))
+
+# From larger unsigned integers (narrowing - can overflow)
+routine U64.__create__!(from: U128) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+# From signed integers (can overflow for negative or out-of-range)
+routine U64.__create__!(from: S8) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+routine U64.__create__!(from: S16) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+routine U64.__create__!(from: S32) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+routine U64.__create__!(from: S64) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+routine U64.__create__!(from: S128) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+# From floating point (truncates, can overflow)
+routine U64.__create__!(from: F32) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+routine U64.__create__!(from: F64) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))
+
+# From arbitrary precision (can overflow)
+routine U64.__create__!(from: Integer) -> U64:
+    return U64(value: razorforge/Core.U64.__create__!(from.value))

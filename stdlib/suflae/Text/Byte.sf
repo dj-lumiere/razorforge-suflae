@@ -1,0 +1,8 @@
+# Suflae Byte - Raw 8-bit value
+
+namespace Core
+
+import razorforge/Text.Byte
+
+record Byte:
+    private var value: razorforge/Text.Byte

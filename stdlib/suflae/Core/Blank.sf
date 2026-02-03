@@ -1,0 +1,8 @@
+# Suflae Blank - Unit type (no value)
+
+namespace Core
+
+import razorforge/Core.Blank
+
+record Blank:
+    pass

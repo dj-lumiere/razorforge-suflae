@@ -114,6 +114,7 @@ public sealed class ModuleResolver
     /// <summary>
     /// Builds the namespace index by scanning all stdlib files.
     /// Maps "Namespace.TypeName" to file path based on namespace declarations in files.
+    /// Scans both razorforge/ and suflae/ subdirectories.
     /// </summary>
     private void EnsureNamespaceIndexBuilt()
     {
@@ -129,17 +130,33 @@ public sealed class ModuleResolver
             return;
         }
 
-        // Scan all .rf files in stdlib recursively
-        foreach (string filePath in Directory.GetFiles(StdlibRoot, "*.rf", SearchOption.AllDirectories))
+        // Scan all .rf files in stdlib/razorforge recursively
+        string razorforgePath = Path.Combine(StdlibRoot, "razorforge");
+        if (Directory.Exists(razorforgePath))
         {
-            IndexFile(filePath);
+            foreach (string filePath in Directory.GetFiles(razorforgePath, "*.rf", SearchOption.AllDirectories))
+            {
+                IndexFile(filePath, "razorforge");
+            }
+        }
+
+        // Scan all .sf files in stdlib/suflae recursively
+        string suflaePath = Path.Combine(StdlibRoot, "suflae");
+        if (Directory.Exists(suflaePath))
+        {
+            foreach (string filePath in Directory.GetFiles(suflaePath, "*.sf", SearchOption.AllDirectories))
+            {
+                IndexFile(filePath, "suflae");
+            }
         }
     }
 
     /// <summary>
     /// Indexes a single file by reading its namespace and type declarations.
     /// </summary>
-    private void IndexFile(string filePath)
+    /// <param name="filePath">The file path to index.</param>
+    /// <param name="languagePrefix">The language prefix (razorforge or suflae) for cross-language imports.</param>
+    private void IndexFile(string filePath, string languagePrefix)
     {
         try
         {
@@ -157,7 +174,7 @@ public sealed class ModuleResolver
             // Default namespace based on directory structure
             if (fileNamespace == null)
             {
-                fileNamespace = DeriveNamespaceFromPath(filePath);
+                fileNamespace = DeriveNamespaceFromPath(filePath, languagePrefix);
             }
 
             // Register each type under its namespace
@@ -166,6 +183,15 @@ public sealed class ModuleResolver
                 string key = $"{fileNamespace}.{typeName}";
                 // First registration wins (don't overwrite)
                 _namespaceIndex!.TryAdd(key, filePath);
+
+                // Also register with language prefix for cross-language imports
+                // e.g., "razorforge/Numeric/Integer" or "razorforge.Numeric.Integer"
+                string crossLangKey = $"{languagePrefix}/{fileNamespace.Replace('.', '/')}/{typeName}";
+                _namespaceIndex!.TryAdd(crossLangKey, filePath);
+
+                // Also support dot notation: "razorforge.Numeric.Integer"
+                string crossLangKeyDot = $"{languagePrefix}.{fileNamespace}.{typeName}";
+                _namespaceIndex!.TryAdd(crossLangKeyDot, filePath);
             }
         }
         catch
@@ -250,7 +276,9 @@ public sealed class ModuleResolver
     /// <summary>
     /// Derives namespace from file path relative to stdlib root.
     /// </summary>
-    private string DeriveNamespaceFromPath(string filePath)
+    /// <param name="filePath">The file path to derive namespace from.</param>
+    /// <param name="languagePrefix">The language prefix to skip (razorforge or suflae).</param>
+    private string DeriveNamespaceFromPath(string filePath, string languagePrefix)
     {
         try
         {
@@ -258,14 +286,14 @@ public sealed class ModuleResolver
             if (fileDir == null) return "Core";
 
             string normalizedFileDir = Path.GetFullPath(fileDir);
-            string normalizedStdlibPath = Path.GetFullPath(StdlibRoot);
+            string languageStdlibPath = Path.GetFullPath(Path.Combine(StdlibRoot, languagePrefix));
 
-            if (!normalizedFileDir.StartsWith(normalizedStdlibPath, StringComparison.OrdinalIgnoreCase))
+            if (!normalizedFileDir.StartsWith(languageStdlibPath, StringComparison.OrdinalIgnoreCase))
             {
                 return "Core";
             }
 
-            string relativePath = normalizedFileDir.Substring(normalizedStdlibPath.Length)
+            string relativePath = normalizedFileDir.Substring(languageStdlibPath.Length)
                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
             if (string.IsNullOrEmpty(relativePath))
@@ -359,11 +387,23 @@ public sealed class ModuleResolver
 
     /// <summary>
     /// Resolves a standard library import.
+    /// Handles cross-language imports like "razorforge/Numeric/Integer".
     /// </summary>
     private string? ResolveStdlibImport(string importPath)
     {
+        // First try direct path (may be a cross-language import like "razorforge/Numeric/Integer")
         string fullPath = Path.Combine(path1: StdlibRoot, path2: importPath);
-        return TryFindSourceFile(basePath: fullPath);
+        string? result = TryFindSourceFile(basePath: fullPath);
+        if (result != null) return result;
+
+        // Try in razorforge subdirectory
+        string razorforgePath = Path.Combine(StdlibRoot, "razorforge", importPath);
+        result = TryFindSourceFile(basePath: razorforgePath);
+        if (result != null) return result;
+
+        // Try in suflae subdirectory
+        string suflaePath = Path.Combine(StdlibRoot, "suflae", importPath);
+        return TryFindSourceFile(basePath: suflaePath);
     }
 
     /// <summary>

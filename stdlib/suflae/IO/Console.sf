@@ -1,0 +1,8 @@
+# Suflae Console - Console I/O
+
+namespace Core
+
+import razorforge/IO.Console
+
+entity Console:
+    private var value: razorforge/IO.Console

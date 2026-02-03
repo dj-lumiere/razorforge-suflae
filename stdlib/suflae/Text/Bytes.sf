@@ -1,0 +1,8 @@
+# Suflae Bytes - Byte sequence type
+
+namespace Core
+
+import razorforge/Text.Bytes
+
+entity Bytes:
+    private var value: razorforge/Text.Bytes

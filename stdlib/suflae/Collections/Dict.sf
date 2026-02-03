@@ -1,0 +1,47 @@
+# Suflae Dict - Hash map/dictionary
+
+namespace Core
+
+import razorforge/Collections.Dict
+
+entity Dict<K, V>:
+    private var value: razorforge/Collections.Dict<K, V>
+
+# Core operations
+routine Dict<K, V>.count() -> Integer:
+    return Integer(value: me.value.count())
+
+routine Dict<K, V>.is_empty() -> Bool:
+    return me.value.is_empty()
+
+# Inserting and updating
+routine Dict<K, V>.insert(key: K, item: V):
+    me.value.insert(key, item)
+
+routine Dict<K, V>.__setitem__(key: K, item: V):
+    me.value.__setitem__(key, item)
+
+# Retrieving
+routine Dict<K, V>.__getitem__!(key: K) -> V:
+    return me.value.__getitem__!(key)
+
+routine Dict<K, V>.get(key: K, default: V) -> V:
+    return me.value.get(key, default)
+
+# Removing
+routine Dict<K, V>.remove!(key: K) -> V:
+    return me.value.remove!(key)
+
+routine Dict<K, V>.clear():
+    me.value.clear()
+
+# Search
+routine Dict<K, V>.contains_key(key: K) -> Bool:
+    return me.value.contains_key(key)
+
+# Iteration support
+routine Dict<K, V>.keys() -> List<K>:
+    return List<K>(value: me.value.keys())
+
+routine Dict<K, V>.values() -> List<V>:
+    return List<V>(value: me.value.values())

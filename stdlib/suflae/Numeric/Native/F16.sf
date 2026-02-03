@@ -1,0 +1,74 @@
+# Suflae F16 - Half precision floating point (opt-in native type)
+
+import razorforge/Core.F16
+
+record F16:
+    private var value: razorforge/Core.F16
+
+# Arithmetic operators
+routine F16.__add__(you: F16) -> F16:
+    return F16(value: me.value.__add__(you.value))
+
+routine F16.__sub__(you: F16) -> F16:
+    return F16(value: me.value.__sub__(you.value))
+
+routine F16.__mul__(you: F16) -> F16:
+    return F16(value: me.value.__mul__(you.value))
+
+routine F16.__truediv__(you: F16) -> F16:
+    return F16(value: me.value.__truediv__(you.value))
+
+routine F16.__neg__() -> F16:
+    return F16(value: me.value.__neg__())
+
+# Comparison
+routine F16.__eq__(you: F16) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine F16.__cmp__(you: F16) -> ComparisonSign:
+    return me.value.__cmp__(you.value)
+
+# Math operations
+routine F16.sqrt() -> F16:
+    return F16(value: me.value.sqrt())
+
+routine F16.abs() -> F16:
+    return F16(value: me.value.abs())
+
+routine F16.floor() -> F16:
+    return F16(value: me.value.floor())
+
+routine F16.ceil() -> F16:
+    return F16(value: me.value.ceil())
+
+routine F16.round() -> F16:
+    return F16(value: me.value.round())
+
+routine F16.trunc() -> F16:
+    return F16(value: me.value.trunc())
+
+# Utility methods
+routine F16.min(you: F16) -> F16:
+    return F16(value: me.value.min(you.value))
+
+routine F16.max(you: F16) -> F16:
+    return F16(value: me.value.max(you.value))
+
+routine F16.clamp(min_val: F16, max_val: F16) -> F16:
+    return F16(value: me.value.clamp(min_val.value, max_val.value))
+
+routine F16.is_positive() -> Bool:
+    return me.value.is_positive()
+
+routine F16.is_negative() -> Bool:
+    return me.value.is_negative()
+
+routine F16.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine F16.signum() -> F16:
+    return F16(value: me.value.signum())
+
+# String conversion
+routine F16.to_text() -> Text:
+    return me.value.to_text()

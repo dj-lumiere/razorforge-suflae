@@ -1,0 +1,82 @@
+# Suflae Text - High-level string type
+
+namespace Core
+
+import razorforge/Text.Text
+
+entity Text:
+    private var value: razorforge/Text.Text
+
+# Core operations
+routine Text.count() -> Integer:
+    return Integer(value: me.value.count())
+
+routine Text.is_empty() -> Bool:
+    return me.value.is_empty()
+
+# Indexing
+routine Text.__getitem__!(index: Integer) -> Letter:
+    return me.value.__getitem__!(index.value)
+
+# String operations
+routine Text.__add__(other: Text) -> Text:
+    return Text(value: me.value.__add__(other.value))
+
+routine Text.concat(other: Text) -> Text:
+    return Text(value: me.value.concat(other.value))
+
+routine Text.slice(start: Integer, end: Integer) -> Text:
+    return Text(value: me.value.slice(start.value, end.value))
+
+# Comparison
+routine Text.__eq__(other: Text) -> Bool:
+    return me.value.__eq__(other.value)
+
+routine Text.__cmp__(other: Text) -> ComparisonSign:
+    return me.value.__cmp__(other.value)
+
+# Search
+routine Text.contains(substr: Text) -> Bool:
+    return me.value.contains(substr.value)
+
+routine Text.starts_with(prefix: Text) -> Bool:
+    return me.value.starts_with(prefix.value)
+
+routine Text.ends_with(suffix: Text) -> Bool:
+    return me.value.ends_with(suffix.value)
+
+routine Text.index_of(substr: Text) -> Integer:
+    return Integer(value: me.value.index_of(substr.value))
+
+# Transformation
+routine Text.to_upper() -> Text:
+    return Text(value: me.value.to_upper())
+
+routine Text.to_lower() -> Text:
+    return Text(value: me.value.to_lower())
+
+routine Text.trim() -> Text:
+    return Text(value: me.value.trim())
+
+routine Text.trim_start() -> Text:
+    return Text(value: me.value.trim_start())
+
+routine Text.trim_end() -> Text:
+    return Text(value: me.value.trim_end())
+
+routine Text.replace(old: Text, new: Text) -> Text:
+    return Text(value: me.value.replace(old.value, new.value))
+
+# Splitting
+routine Text.split(delimiter: Text) -> List<Text>:
+    return List<Text>(value: me.value.split(delimiter.value))
+
+routine Text.lines() -> List<Text>:
+    return List<Text>(value: me.value.lines())
+
+# Conversion
+routine Text.to_bytes() -> Bytes:
+    return Bytes(value: me.value.to_bytes())
+
+routine Text.to_buffer() -> TextBuffer:
+    return TextBuffer(value: me.value.to_buffer())

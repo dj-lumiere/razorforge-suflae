@@ -1,0 +1,8 @@
+# Suflae Fraction - Rational number type
+
+namespace Core
+
+import razorforge/Numeric.Fraction
+
+entity Fraction:
+    private var value: razorforge/Numeric.Fraction

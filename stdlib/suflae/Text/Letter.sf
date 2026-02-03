@@ -1,0 +1,8 @@
+# Suflae Letter - Unicode character type
+
+namespace Core
+
+import razorforge/Text.Letter
+
+record Letter:
+    private var value: razorforge/Text.Letter

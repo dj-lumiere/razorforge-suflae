@@ -1,7 +1,10 @@
 namespace Compilers.Analysis.Modules;
 
+using Enums;
 using RazorForge.Lexer;
 using RazorForge.Parser;
+using Suflae.Lexer;
+using Suflae.Parser;
 using Shared.AST;
 using Shared.Lexer;
 
@@ -9,11 +12,18 @@ using Shared.Lexer;
 /// Loads the standard library based on namespace declarations.
 /// Files declaring "namespace Core" are loaded eagerly (auto-imported).
 /// Other namespaces are loaded on-demand when imported.
+/// Supports both RazorForge (.rf) and Suflae (.sf) stdlib files.
 /// </summary>
 public sealed class StdlibLoader
 {
-    /// <summary>The stdlib root directory path.</summary>
+    /// <summary>The stdlib root directory path (e.g., stdlib/razorforge or stdlib/suflae).</summary>
     private readonly string _stdlibPath;
+
+    /// <summary>The language being compiled.</summary>
+    private readonly Language _language;
+
+    /// <summary>The file extension to scan (.rf or .sf).</summary>
+    private readonly string _fileExtension;
 
     /// <summary>Parsed Core namespace programs with their file paths and namespace.</summary>
     private readonly List<(Program Program, string FilePath, string Namespace)> _corePrograms = [];
@@ -28,12 +38,18 @@ public sealed class StdlibLoader
     public IReadOnlyList<(Program Program, string FilePath, string Namespace)> ParsedPrograms => _corePrograms;
 
     /// <summary>
-    /// Creates a new stdlib loader.
+    /// Creates a new stdlib loader for a specific language.
     /// </summary>
-    /// <param name="stdlibPath">Path to the stdlib directory.</param>
-    public StdlibLoader(string stdlibPath)
+    /// <param name="stdlibRoot">Path to the stdlib root directory (containing razorforge/ and suflae/ subdirectories).</param>
+    /// <param name="language">The language being compiled.</param>
+    public StdlibLoader(string stdlibRoot, Language language)
     {
-        _stdlibPath = stdlibPath;
+        _language = language;
+        _fileExtension = language == Language.Suflae ? "*.sf" : "*.rf";
+
+        // Use language-specific subdirectory
+        string subdir = language == Language.Suflae ? "suflae" : "razorforge";
+        _stdlibPath = Path.Combine(stdlibRoot, subdir);
     }
 
     /// <summary>
@@ -61,7 +77,7 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Scans all .rf files in stdlib recursively and categorizes them by namespace.
+    /// Scans all stdlib files recursively and categorizes them by namespace.
     /// Files with "namespace Core" go to _corePrograms.
     /// Other namespaces are cached in _namespacePrograms for on-demand loading.
     /// </summary>
@@ -74,16 +90,13 @@ public sealed class StdlibLoader
 
         _stdlibScanned = true;
 
-        // Recursively find all .rf files
-        foreach (string filePath in Directory.GetFiles(_stdlibPath, "*.rf", SearchOption.AllDirectories))
+        // Recursively find all files with the appropriate extension
+        foreach (string filePath in Directory.GetFiles(_stdlibPath, _fileExtension, SearchOption.AllDirectories))
         {
             try
             {
                 string code = File.ReadAllText(filePath);
-                var tokenizer = new RazorForgeTokenizer(code, filePath);
-                List<Token> tokens = tokenizer.Tokenize();
-                var parser = new RazorForgeParser(tokens, filePath);
-                Program ast = parser.Parse();
+                Program ast = ParseFile(code, filePath);
 
                 // Find namespace declaration, or derive from directory
                 string? fileNamespace = GetDeclaredNamespace(ast);
@@ -109,6 +122,58 @@ public sealed class StdlibLoader
             {
                 Console.Error.WriteLine($"Warning: Failed to parse stdlib file {filePath}: {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Parses a file using the appropriate tokenizer/parser for the current language.
+    /// Used for scanning stdlib files where extension matches language.
+    /// </summary>
+    /// <param name="code">The source code to parse.</param>
+    /// <param name="filePath">The file path for error reporting.</param>
+    /// <returns>The parsed program AST.</returns>
+    private Program ParseFile(string code, string filePath)
+    {
+        if (_language == Language.Suflae)
+        {
+            var tokenizer = new SuflaeTokenizer(code, filePath);
+            List<Token> tokens = tokenizer.Tokenize();
+            var parser = new SuflaeParser(tokens, filePath);
+            return parser.Parse();
+        }
+        else
+        {
+            var tokenizer = new RazorForgeTokenizer(code, filePath);
+            List<Token> tokens = tokenizer.Tokenize();
+            var parser = new RazorForgeParser(tokens, filePath);
+            return parser.Parse();
+        }
+    }
+
+    /// <summary>
+    /// Parses a file using the tokenizer/parser determined by file extension.
+    /// Used for cross-language imports where a Suflae file imports a RazorForge module.
+    /// </summary>
+    /// <param name="code">The source code to parse.</param>
+    /// <param name="filePath">The file path (extension determines parser choice).</param>
+    /// <returns>The parsed program AST.</returns>
+    private static Program ParseFileByExtension(string code, string filePath)
+    {
+        bool isSuflaeFile = filePath.EndsWith(".sf", StringComparison.OrdinalIgnoreCase);
+
+        if (isSuflaeFile)
+        {
+            var tokenizer = new SuflaeTokenizer(code, filePath);
+            List<Token> tokens = tokenizer.Tokenize();
+            var parser = new SuflaeParser(tokens, filePath);
+            return parser.Parse();
+        }
+        else
+        {
+            var tokenizer = new RazorForgeTokenizer(code, filePath);
+            List<Token> tokens = tokenizer.Tokenize();
+            var parser = new RazorForgeParser(tokens, filePath);
+            return parser.Parse();
         }
     }
 
@@ -220,10 +285,8 @@ public sealed class StdlibLoader
         try
         {
             string code = File.ReadAllText(filePath);
-            var tokenizer = new RazorForgeTokenizer(code, filePath);
-            List<Token> tokens = tokenizer.Tokenize();
-            var parser = new RazorForgeParser(tokens, filePath);
-            Program ast = parser.Parse();
+            // Detect file type from extension and use appropriate parser
+            Program ast = ParseFileByExtension(code, filePath);
 
             // Get namespace from file declaration
             string? fileNamespace = GetDeclaredNamespace(ast);

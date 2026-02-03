@@ -1,0 +1,166 @@
+# Suflae U32 - Unsigned 32-bit integer (opt-in native type)
+
+import razorforge/Core.U32
+
+record U32:
+    private var value: razorforge/Core.U32
+
+# Arithmetic operators
+routine U32.__add__!(you: U32) -> U32:
+    return U32(value: me.value.__add__!(you.value))
+
+routine U32.__sub__!(you: U32) -> U32:
+    return U32(value: me.value.__sub__!(you.value))
+
+routine U32.__mul__!(you: U32) -> U32:
+    return U32(value: me.value.__mul__!(you.value))
+
+routine U32.__floordiv__!(you: U32) -> U32:
+    return U32(value: me.value.__floordiv__!(you.value))
+
+routine U32.__mod__!(you: U32) -> U32:
+    return U32(value: me.value.__mod__!(you.value))
+
+# Wrapping arithmetic
+routine U32.__add_wrap__(you: U32) -> U32:
+    return U32(value: me.value.__add_wrap__(you.value))
+
+routine U32.__sub_wrap__(you: U32) -> U32:
+    return U32(value: me.value.__sub_wrap__(you.value))
+
+routine U32.__mul_wrap__(you: U32) -> U32:
+    return U32(value: me.value.__mul_wrap__(you.value))
+
+# Saturating arithmetic
+routine U32.__add_sat__(you: U32) -> U32:
+    return U32(value: me.value.__add_sat__(you.value))
+
+routine U32.__sub_sat__(you: U32) -> U32:
+    return U32(value: me.value.__sub_sat__(you.value))
+
+routine U32.__mul_sat__(you: U32) -> U32:
+    return U32(value: me.value.__mul_sat__(you.value))
+
+# Comparison
+routine U32.__eq__(you: U32) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine U32.__cmp__(you: U32) -> ComparisonSign:
+    return me.value.__cmp__(you.value)
+
+# Bitwise operations
+routine U32.__and__(you: U32) -> U32:
+    return U32(value: me.value.__and__(you.value))
+
+routine U32.__or__(you: U32) -> U32:
+    return U32(value: me.value.__or__(you.value))
+
+routine U32.__xor__(you: U32) -> U32:
+    return U32(value: me.value.__xor__(you.value))
+
+routine U32.__not__() -> U32:
+    return U32(value: me.value.__not__())
+
+# Shift operations
+routine U32.__ashl__(bits: U32) -> U32:
+    return U32(value: me.value.__ashl__(bits))
+
+routine U32.__ashr__(bits: U32) -> U32:
+    return U32(value: me.value.__ashr__(bits))
+
+routine U32.__lshl__(bits: U32) -> U32:
+    return U32(value: me.value.__lshl__(bits))
+
+routine U32.__lshr__(bits: U32) -> U32:
+    return U32(value: me.value.__lshr__(bits))
+
+# Math operations
+routine U32.min(you: U32) -> U32:
+    return U32(value: me.value.min(you.value))
+
+routine U32.max(you: U32) -> U32:
+    return U32(value: me.value.max(you.value))
+
+routine U32.clamp(min_val: U32, max_val: U32) -> U32:
+    return U32(value: me.value.clamp(min_val.value, max_val.value))
+
+# Bit manipulation
+routine U32.count_ones() -> U32:
+    return U32(value: me.value.count_ones())
+
+routine U32.count_zeros() -> U32:
+    return U32(value: me.value.count_zeros())
+
+routine U32.leading_zeros() -> U32:
+    return U32(value: me.value.leading_zeros())
+
+routine U32.trailing_zeros() -> U32:
+    return U32(value: me.value.trailing_zeros())
+
+routine U32.reverse_bits() -> U32:
+    return U32(value: me.value.reverse_bits())
+
+routine U32.swap_bytes() -> U32:
+    return U32(value: me.value.swap_bytes())
+
+routine U32.is_power_of_two() -> Bool:
+    return me.value.is_power_of_two()
+
+# Utility methods
+routine U32.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine U32.is_even() -> Bool:
+    return me.value.is_even()
+
+routine U32.is_odd() -> Bool:
+    return me.value.is_odd()
+
+# String conversion
+routine U32.to_text() -> Text:
+    return me.value.to_text()
+
+# ============================================================================
+# Factory constructors (__create__ pattern)
+# ============================================================================
+
+# From smaller unsigned integers (widening - always fits)
+routine U32.__create__(from: U8) -> U32:
+    return U32(value: razorforge/Core.U32.__create__(from.value))
+
+routine U32.__create__(from: U16) -> U32:
+    return U32(value: razorforge/Core.U32.__create__(from.value))
+
+# From larger unsigned integers (narrowing - can overflow)
+routine U32.__create__!(from: U64) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+routine U32.__create__!(from: U128) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+# From signed integers (can overflow)
+routine U32.__create__!(from: S8) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+routine U32.__create__!(from: S16) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+routine U32.__create__!(from: S32) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+routine U32.__create__!(from: S64) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+routine U32.__create__!(from: S128) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+# From floating point (truncates, can overflow)
+routine U32.__create__!(from: F32) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+routine U32.__create__!(from: F64) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))
+
+# From arbitrary precision (can overflow)
+routine U32.__create__!(from: Integer) -> U32:
+    return U32(value: razorforge/Core.U32.__create__!(from.value))

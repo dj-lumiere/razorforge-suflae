@@ -135,7 +135,7 @@ public sealed class TypeRegistry
 
         if (_stdlibPath != null && Directory.Exists(_stdlibPath))
         {
-            _stdlibLoader ??= new StdlibLoader(_stdlibPath);
+            _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
             _stdlibLoader.LoadCoreNamespace(this);
         }
         else
@@ -211,7 +211,7 @@ public sealed class TypeRegistry
         _loadedModules.Add(moduleId);
 
         // Load the module using StdlibLoader
-        _stdlibLoader ??= new StdlibLoader(_stdlibPath);
+        _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
         return _stdlibLoader.LoadModule(this, resolvedPath, moduleId);
     }
 

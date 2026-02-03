@@ -1,0 +1,149 @@
+# Suflae F32 - Single precision floating point (opt-in native type)
+
+import razorforge/Core.F32
+
+record F32:
+    private var value: razorforge/Core.F32
+
+# Arithmetic operators
+routine F32.__add__(you: F32) -> F32:
+    return F32(value: me.value.__add__(you.value))
+
+routine F32.__sub__(you: F32) -> F32:
+    return F32(value: me.value.__sub__(you.value))
+
+routine F32.__mul__(you: F32) -> F32:
+    return F32(value: me.value.__mul__(you.value))
+
+routine F32.__truediv__(you: F32) -> F32:
+    return F32(value: me.value.__truediv__(you.value))
+
+routine F32.__neg__() -> F32:
+    return F32(value: me.value.__neg__())
+
+# Comparison
+routine F32.__eq__(you: F32) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine F32.__cmp__(you: F32) -> ComparisonSign:
+    return me.value.__cmp__(you.value)
+
+# Math operations
+routine F32.sqrt() -> F32:
+    return F32(value: me.value.sqrt())
+
+routine F32.abs() -> F32:
+    return F32(value: me.value.abs())
+
+routine F32.floor() -> F32:
+    return F32(value: me.value.floor())
+
+routine F32.ceil() -> F32:
+    return F32(value: me.value.ceil())
+
+routine F32.round() -> F32:
+    return F32(value: me.value.round())
+
+routine F32.trunc() -> F32:
+    return F32(value: me.value.trunc())
+
+routine F32.sin() -> F32:
+    return F32(value: me.value.sin())
+
+routine F32.cos() -> F32:
+    return F32(value: me.value.cos())
+
+routine F32.exp() -> F32:
+    return F32(value: me.value.exp())
+
+routine F32.log() -> F32:
+    return F32(value: me.value.log())
+
+routine F32.log10() -> F32:
+    return F32(value: me.value.log10())
+
+routine F32.pow(exp: F32) -> F32:
+    return F32(value: me.value.pow(exp.value))
+
+routine F32.copysign(sign: F32) -> F32:
+    return F32(value: me.value.copysign(sign.value))
+
+# Utility methods
+routine F32.min(you: F32) -> F32:
+    return F32(value: me.value.min(you.value))
+
+routine F32.max(you: F32) -> F32:
+    return F32(value: me.value.max(you.value))
+
+routine F32.clamp(min_val: F32, max_val: F32) -> F32:
+    return F32(value: me.value.clamp(min_val.value, max_val.value))
+
+routine F32.is_positive() -> Bool:
+    return me.value.is_positive()
+
+routine F32.is_negative() -> Bool:
+    return me.value.is_negative()
+
+routine F32.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine F32.signum() -> F32:
+    return F32(value: me.value.signum())
+
+# String conversion
+routine F32.to_text() -> Text:
+    return me.value.to_text()
+
+# ============================================================================
+# Factory constructors (__create__ pattern)
+# ============================================================================
+
+# From signed integers
+routine F32.__create__(from: S8) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: S16) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: S32) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: S64) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: S128) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+# From unsigned integers
+routine F32.__create__(from: U8) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: U16) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: U32) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: U64) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: U128) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+# From other floating point types
+routine F32.__create__(from: F64) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+# From arbitrary precision
+routine F32.__create__(from: Integer) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+routine F32.__create__(from: Decimal) -> F32:
+    return F32(value: razorforge/Core.F32.__create__(from.value))
+
+# Bit representation
+routine F32.__create_from_bits__(bits: U32) -> F32:
+    return F32(value: razorforge/Core.F32.from_bits(bits.value))
+
+routine F32.to_bits() -> U32:
+    return U32(value: me.value.to_bits())

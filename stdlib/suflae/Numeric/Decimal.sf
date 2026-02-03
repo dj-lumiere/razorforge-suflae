@@ -1,0 +1,173 @@
+# Suflae Decimal - Arbitrary precision decimal type
+
+namespace Core
+
+import razorforge/Numeric.Decimal
+
+entity Decimal:
+    private var value: razorforge/Numeric.Decimal
+
+# Arithmetic operators
+routine Decimal.__add__(you: Decimal) -> Decimal:
+    return Decimal(value: me.value.__add__(you.value))
+
+routine Decimal.__sub__(you: Decimal) -> Decimal:
+    return Decimal(value: me.value.__sub__(you.value))
+
+routine Decimal.__mul__(you: Decimal) -> Decimal:
+    return Decimal(value: me.value.__mul__(you.value))
+
+routine Decimal.__truediv__(you: Decimal) -> Decimal:
+    return Decimal(value: me.value.__truediv__(you.value))
+
+routine Decimal.__neg__() -> Decimal:
+    return Decimal(value: me.value.__neg__())
+
+routine Decimal.divide(you: Decimal, precision: Integer) -> Decimal:
+    return Decimal(value: me.value.divide(you.value, precision.value))
+
+# Comparison
+routine Decimal.__eq__(you: Decimal) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine Decimal.__cmp__(you: Decimal) -> ComparisonSign:
+    return me.value.__cmp__(you.value)
+
+# Math operations
+routine Decimal.abs() -> Decimal:
+    return Decimal(value: me.value.abs())
+
+routine Decimal.sqrt(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.sqrt(precision.value))
+
+routine Decimal.pow(exp: Decimal, precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.pow(exp.value, precision.value))
+
+routine Decimal.exp(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.exp(precision.value))
+
+routine Decimal.log(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.log(precision.value))
+
+routine Decimal.log10(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.log10(precision.value))
+
+# Trigonometric functions
+routine Decimal.sin(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.sin(precision.value))
+
+routine Decimal.cos(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.cos(precision.value))
+
+routine Decimal.tan(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.tan(precision.value))
+
+routine Decimal.asin(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.asin(precision.value))
+
+routine Decimal.acos(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.acos(precision.value))
+
+routine Decimal.atan(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.atan(precision.value))
+
+# Hyperbolic functions
+routine Decimal.sinh(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.sinh(precision.value))
+
+routine Decimal.cosh(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.cosh(precision.value))
+
+routine Decimal.tanh(precision: Integer = 50) -> Decimal:
+    return Decimal(value: me.value.tanh(precision.value))
+
+# Rounding operations
+routine Decimal.ceil() -> Decimal:
+    return Decimal(value: me.value.ceil())
+
+routine Decimal.floor() -> Decimal:
+    return Decimal(value: me.value.floor())
+
+routine Decimal.round(decimal_places: Integer = 0) -> Decimal:
+    return Decimal(value: me.value.round(decimal_places.value))
+
+routine Decimal.trunc(decimal_places: Integer = 0) -> Decimal:
+    return Decimal(value: me.value.trunc(decimal_places.value))
+
+# Utility methods
+routine Decimal.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine Decimal.is_negative() -> Bool:
+    return me.value.is_negative()
+
+routine Decimal.is_positive() -> Bool:
+    return me.value.is_positive()
+
+routine Decimal.signum() -> Integer:
+    return Integer(value: me.value.signum())
+
+# String conversion
+routine Decimal.to_text(decimal_places: Integer = 10) -> Text:
+    return me.value.to_text(decimal_places.value)
+
+# Constants
+routine Decimal.pi(precision: Integer = 50) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.pi(precision.value))
+
+routine Decimal.e(precision: Integer = 50) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.e(precision.value))
+
+# Factory methods
+routine Decimal.zero() -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.zero())
+
+routine Decimal.one() -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.one())
+
+# ============================================================================
+# Factory constructors (__create__ pattern)
+# ============================================================================
+
+# From native signed integers
+routine Decimal.__create__(from: S8) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: S16) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: S32) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: S64) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: S128) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+# From native unsigned integers
+routine Decimal.__create__(from: U8) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: U16) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: U32) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: U64) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: U128) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+# From floating point
+routine Decimal.__create__(from: F32) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+routine Decimal.__create__(from: F64) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+
+# From integer
+routine Decimal.__create__(from: Integer) -> Decimal:
+    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
