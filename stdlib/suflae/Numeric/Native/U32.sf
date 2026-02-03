@@ -3,7 +3,7 @@
 import razorforge/Core.U32
 
 record U32:
-    private var value: razorforge/Core.U32
+    private value: razorforge/Core.U32
 
 # Arithmetic operators
 routine U32.__add__!(you: U32) -> U32:

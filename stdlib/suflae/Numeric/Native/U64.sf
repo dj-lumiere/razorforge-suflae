@@ -3,7 +3,7 @@
 import razorforge/Core.U64
 
 record U64:
-    private var value: razorforge/Core.U64
+    private value: razorforge/Core.U64
 
 # Arithmetic operators
 routine U64.__add__!(you: U64) -> U64:

@@ -5,4 +5,4 @@ namespace Core
 import razorforge/Text.Byte
 
 record Byte:
-    private var value: razorforge/Text.Byte
+    private value: razorforge/Text.Byte

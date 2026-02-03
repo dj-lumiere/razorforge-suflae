@@ -4,7 +4,7 @@
 import razorforge/Core.SAddr
 
 record SAddr:
-    private var value: razorforge/Core.SAddr
+    private value: razorforge/Core.SAddr
 
 # Wrapping arithmetic (required for address types)
 routine SAddr.__add_wrap__(you: SAddr) -> SAddr:

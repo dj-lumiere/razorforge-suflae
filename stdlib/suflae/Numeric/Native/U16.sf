@@ -3,7 +3,7 @@
 import razorforge/Core.U16
 
 record U16:
-    private var value: razorforge/Core.U16
+    private value: razorforge/Core.U16
 
 # Arithmetic operators
 routine U16.__add__!(you: U16) -> U16:

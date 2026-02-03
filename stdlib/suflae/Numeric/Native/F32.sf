@@ -3,7 +3,7 @@
 import razorforge/Core.F32
 
 record F32:
-    private var value: razorforge/Core.F32
+    private value: razorforge/Core.F32
 
 # Arithmetic operators
 routine F32.__add__(you: F32) -> F32:

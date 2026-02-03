@@ -5,4 +5,4 @@ namespace Core
 import razorforge/Text.Letter
 
 record Letter:
-    private var value: razorforge/Text.Letter
+    private value: razorforge/Text.Letter

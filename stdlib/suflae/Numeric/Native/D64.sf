@@ -3,7 +3,7 @@
 import razorforge/Core.D64
 
 record D64:
-    private var value: razorforge/Core.D64
+    private value: razorforge/Core.D64
 
 # Arithmetic operators
 routine D64.__add__(you: D64) -> D64:

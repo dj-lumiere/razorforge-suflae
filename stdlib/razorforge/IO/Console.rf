@@ -16,7 +16,6 @@ import Text/Text
 #   routine show(values...: @erased Representable, sep: Text = " ", end: Text = "\n") # Dynamic dispatch
 
 # show for Text
-@prelude
 routine Console.show(value: Text, end: Text = "\n") {
     let bytes_value: Bytes = value.to_utf8_bytes()
     danger! {
@@ -31,7 +30,6 @@ routine Console.show(value: Text, end: Text = "\n") {
 }
 
 # show for Bytes (writes raw bytes directly)
-@prelude
 routine Console.show(value: Bytes, end: Text = "\n") {
     danger! {
         @native.rf_console_print(value.ptr, value.count())
@@ -46,7 +44,6 @@ routine Console.show(value: Bytes, end: Text = "\n") {
 
 # Generic show for any type that implements Representable
 # Converts to Text via .to_text(), then to Bytes (UTF-8) for C interop
-@prelude
 routine Console.show<T>(value: T, end: Text = "\n")
 requires T follows Representable {
     let text_value: Text = value.to_text()
@@ -58,7 +55,6 @@ requires T follows Representable {
 # ============================================================================
 
 # alert for Text
-@prelude
 routine Console.alert(value: Text, end: Text = "\n") {
     let bytes_value: Bytes = value.to_utf8_bytes()
     danger! {
@@ -73,7 +69,6 @@ routine Console.alert(value: Text, end: Text = "\n") {
 }
 
 # alert for Bytes (writes raw bytes directly)
-@prelude
 routine Console.alert(value: Bytes, end: Text = "\n") {
     danger! {
         @native.rf_console_alert(value.ptr, value.count())
@@ -87,7 +82,6 @@ routine Console.alert(value: Bytes, end: Text = "\n") {
 }
 
 # Generic alert for any type that implements Representable
-@prelude
 routine Console.alert<T>(value: T, end: Text = "\n")
 requires T follows Representable {
     let text_value: Text = value.to_text()
@@ -99,7 +93,6 @@ requires T follows Representable {
 # ============================================================================
 
 # Read text until newline (single line)
-@prelude
 routine Console.get_line() -> Text {
     danger! {
         let ptr = @native.rf_console_get_line()
@@ -109,7 +102,6 @@ routine Console.get_line() -> Text {
 }
 
 # Read text until whitespace (single word)
-@prelude
 routine Console.get_word() -> Text {
     danger! {
         let ptr = @native.rf_console_get_word()
@@ -119,7 +111,6 @@ routine Console.get_word() -> Text {
 }
 
 # Read all text until EOF
-@prelude
 routine Console.get_all() -> Text {
     danger! {
         let ptr = @native.rf_console_get_all()
@@ -129,7 +120,6 @@ routine Console.get_all() -> Text {
 }
 
 # Read exactly n codepoints from input
-@prelude
 routine Console.get_letters(count: UAddr) -> Text {
     danger! {
         let ptr = @native.rf_console_get_letters(count)
@@ -139,7 +129,6 @@ routine Console.get_letters(count: UAddr) -> Text {
 }
 
 # Read all lines separated by newline
-@prelude
 routine Console.get_lines() -> List<Text> {
     let all = Console.get_all()
     # TODO: Implement split by newline
@@ -147,7 +136,6 @@ routine Console.get_lines() -> List<Text> {
 }
 
 # Read all words separated by whitespace
-@prelude
 routine Console.get_words() -> List<Text> {
     let all = Console.get_all()
     # TODO: Implement split by whitespace
@@ -159,7 +147,6 @@ routine Console.get_words() -> List<Text> {
 # ============================================================================
 
 # Read all remaining input as raw bytes
-@prelude
 routine Console.get_raw() -> Bytes {
     danger! {
         let ptr = @native.rf_console_get_all()
@@ -168,7 +155,6 @@ routine Console.get_raw() -> Bytes {
 }
 
 # Read up to n bytes
-@prelude
 routine Console.get_bytes(count: UAddr) -> Bytes {
     danger! {
         let ptr = @native.rf_console_get_bytes(count)

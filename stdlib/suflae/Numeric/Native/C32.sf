@@ -3,7 +3,7 @@
 import razorforge/Core.C32
 
 record C32:
-    private var value: razorforge/Core.C32
+    private value: razorforge/Core.C32
 
 # Arithmetic operators
 routine C32.__add__(you: C32) -> C32:

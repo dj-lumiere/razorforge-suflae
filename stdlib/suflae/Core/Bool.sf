@@ -5,7 +5,7 @@ namespace Core
 import razorforge/Core.Bool
 
 record Bool:
-    private var value: razorforge/Core.Bool
+    private value: razorforge/Core.Bool
 
 # Comparison
 routine Bool.__eq__(you: Bool) -> Bool:

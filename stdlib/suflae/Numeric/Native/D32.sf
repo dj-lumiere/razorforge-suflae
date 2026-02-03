@@ -3,7 +3,7 @@
 import razorforge/Core.D32
 
 record D32:
-    private var value: razorforge/Core.D32
+    private value: razorforge/Core.D32
 
 # Arithmetic operators
 routine D32.__add__(you: D32) -> D32:

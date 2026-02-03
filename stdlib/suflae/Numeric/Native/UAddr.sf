@@ -4,7 +4,7 @@
 import razorforge/Core.UAddr
 
 record UAddr:
-    private var value: razorforge/Core.UAddr
+    private value: razorforge/Core.UAddr
 
 # Wrapping arithmetic (required for address types)
 routine UAddr.__add_wrap__(you: UAddr) -> UAddr:

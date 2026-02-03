@@ -4,5 +4,43 @@ namespace Core
 
 import razorforge/IO.Console
 
-entity Console:
-    private var value: razorforge/IO.Console
+# Output: show() - Standard Output (stdout)
+routine Console.show(value: Text, end: Text = "\n"):
+    razorforge/IO.Console.show(value, end: end)
+
+routine Console.show<T>(value: T, end: Text = "\n") requires T follows Representable:
+    razorforge/IO.Console.show<T>(value, end: end)
+
+# Output: alert() - Standard Error (stderr)
+routine Console.alert(value: Text, end: Text = "\n"):
+    razorforge/IO.Console.alert(value, end: end)
+
+routine Console.alert<T>(value: T, end: Text = "\n") requires T follows Representable:
+    razorforge/IO.Console.alert<T>(value, end: end)
+
+# Input: Text functions (default)
+routine Console.get_line() -> Text:
+    return razorforge/IO.Console.get_line()
+
+routine Console.get_word() -> Text:
+    return razorforge/IO.Console.get_word()
+
+routine Console.get_all() -> Text:
+    return razorforge/IO.Console.get_all()
+
+routine Console.get_letters(count: UAddr) -> Text:
+    return razorforge/IO.Console.get_letters(count)
+
+# Input: Bytes functions (opt-in)
+routine Console.get_raw() -> Bytes:
+    return razorforge/IO.Console.get_raw()
+
+routine Console.get_bytes(count: UAddr) -> Bytes:
+    return razorforge/IO.Console.get_bytes(count)
+
+# Utility Functions
+routine Console.flush():
+    razorforge/IO.Console.flush()
+
+routine Console.clear():
+    razorforge/IO.Console.clear()

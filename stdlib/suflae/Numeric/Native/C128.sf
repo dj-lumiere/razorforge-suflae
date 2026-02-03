@@ -3,7 +3,7 @@
 import razorforge/Core.C128
 
 record C128:
-    private var value: razorforge/Core.C128
+    private value: razorforge/Core.C128
 
 # Arithmetic operators
 routine C128.__add__(you: C128) -> C128:
