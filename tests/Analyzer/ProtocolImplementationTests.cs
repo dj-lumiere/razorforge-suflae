@@ -309,15 +309,15 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Displayable:
                             @readonly
-                            routine Me.display() -> S32
+                            routine Me.display() -> Integer
 
                         record Point follows Displayable:
-                            x: F32
-                            y: F32
+                            x: Integer
+                            y: Integer
 
                         @readonly
-                        routine Point.display() -> S32:
-                            return 0s32
+                        routine Point.display() -> Integer:
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);

@@ -398,4 +398,65 @@ public class TypeResolutionTests
     }
 
     #endregion
+
+    #region Integer Literal Type Inference
+
+    [Fact]
+    public void Analyze_ReturnIntegerLiteral_InfersFromReturnType()
+    {
+        string source = """
+                        routine get_value() -> S32 {
+                            return 0
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_ReturnIntegerLiteral_InfersU32()
+    {
+        string source = """
+                        routine get_count() -> U32 {
+                            return 42
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_ReturnIntegerLiteral_InfersS64()
+    {
+        string source = """
+                        routine get_big() -> S64 {
+                            return 123456789
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_ReturnIntegerLiteral_InMethodWithReturnType()
+    {
+        string source = """
+                        record Counter {
+                            value: S32
+                        }
+
+                        @readonly
+                        routine Counter.get_zero() -> S32 {
+                            return 0
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
 }
