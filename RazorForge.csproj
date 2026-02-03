@@ -43,27 +43,7 @@
   <ItemGroup>
     <Folder Include="src\CodeGen\" />
     <Folder Include="src\LanguageServer\" />
-    <Folder Include="stdlib\CSubsystem\" />
-    <Folder Include="stdlib\Runtime\ObjectHacker\"/>
-    <Folder Include="stdlib\Runtime\Reflection\"/>
     <Folder Include="tests\" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="vscode-extension\setup.bat" />
-    <None Remove="vscode-extension\extension.js" />
-    <None Remove="vscode-extension\README.md" />
-    <None Remove="vscode-extension\.vscodeignore" />
-    <None Remove="examples\simple_test2.rf" />
-    <None Remove="examples\simple_test.rf" />
-    <None Update="stdlib\memory\controller\LockPolicy.\rf">
-      <Link>stdlib\memory\controller\LockPolicy\rf</Link>
-    </None>
-    <None Remove="docs\COMPILER-ARCHITECTURE.md" />
-    <None Remove="docs\COMPILER-FLOWCHART.txt" />
-    <None Remove="docs\IMPORT-SYSTEM-IMPLEMENTATION.md" />
-    <None Remove="docs\INTRINSICS-IMPLEMENTATION-SUMMARY.md" />
-    <None Remove="docs\INTRINSICS-API.md" />
   </ItemGroup>
 
 </Project>
