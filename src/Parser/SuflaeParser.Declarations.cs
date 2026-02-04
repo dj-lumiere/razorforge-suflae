@@ -56,12 +56,17 @@ public partial class SuflaeParser
                 {
                     do
                     {
-                        // Check for named argument: name: value
-                        if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-                               .Type == TokenType.Colon)
+                        // Check for named argument: name: value or name = value
+                        TokenType nextToken = PeekToken(offset: 1).Type;
+                        if (Check(type: TokenType.Identifier) &&
+                            (nextToken == TokenType.Colon || nextToken == TokenType.Assign))
                         {
                             string argName = ConsumeIdentifier(errorMessage: "Expected argument name");
-                            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after argument name");
+                            // Accept both ':' and '=' as separators
+                            if (!Match(TokenType.Colon, TokenType.Assign))
+                            {
+                                throw ThrowParseError("Expected ':' or '=' after argument name");
+                            }
                             string argValue = ParseAttributeValue();
                             arguments.Add(item: $"{argName}={argValue}");
                         }

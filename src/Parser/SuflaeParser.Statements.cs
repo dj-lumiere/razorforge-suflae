@@ -290,11 +290,23 @@ public partial class SuflaeParser
             Pattern pattern;
             SourceLocation clauseLocation = GetLocation();
 
-            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
+            // Handle 'is' keyword pattern: type patterns only
+            // Forms: is SomeType, is SomeType varName, is SomeType(field1, field2)
+            // Note: 'is <value>' is NOT allowed - use '== value' for value comparisons
             if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
-                pattern = ParseTypePattern();
+                // 'is' must be followed by a type name (TypeIdentifier or capitalized Identifier)
+                if (Check(type: TokenType.TypeIdentifier) ||
+                    (Check(type: TokenType.Identifier) && char.IsUpper(CurrentToken.Text[0])))
+                {
+                    // Parse as type pattern
+                    pattern = ParseTypePattern();
+                }
+                else
+                {
+                    throw ThrowParseError($"'is' must be followed by a type name. For value comparisons, use '== {CurrentToken.Text}' instead of 'is {CurrentToken.Text}'.");
+                }
                 _inWhenPatternContext = false;
             }
             // Handle 'else' keyword for default case: else => body or else varName => body
@@ -333,12 +345,11 @@ public partial class SuflaeParser
             // 2. is PATTERN:                  (indented block, requires 'becomes')
             //        statements...
             //        becomes value
-            // Set flag to prevent 'is' expression parsing in when clause bodies
-            _inWhenClauseBody = true;
             Statement body;
             if (Match(type: TokenType.Colon))
             {
                 // Multi-line body: is PATTERN: followed by indented block
+                // Block has its own scope, so don't restrict comparisons inside it
                 body = ParseIndentedBlock();
             }
             else if (Match(type: TokenType.FatArrow))
@@ -350,14 +361,15 @@ public partial class SuflaeParser
                     throw ThrowParseError("Block ':' is not allowed after '=>'. Use 'pattern:' with indented block and 'becomes' for multi-statement branches");
                 }
 
+                // Set flag to prevent comparisons from continuing the expression
+                _inWhenClauseBody = true;
                 body = ParseExpressionStatement();
+                _inWhenClauseBody = false;
             }
             else
             {
                 throw ThrowParseError("Expected ':' or '=>' after pattern");
             }
-
-            _inWhenClauseBody = false;
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
 

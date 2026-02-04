@@ -181,6 +181,17 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     private IAstNode ParseDeclaration()
     {
         // ═══════════════════════════════════════════════════════════════════════════
+        // SKIP DOC COMMENTS (### comment lines before declarations)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Doc comments are preserved in the token stream but currently not attached
+        // to declarations. Skip them to prevent "Unexpected token" errors.
+        while (Match(type: TokenType.DocComment))
+        {
+            // Skip any newlines after doc comments
+            while (Match(type: TokenType.Newline)) { }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // FILE-LEVEL DECLARATIONS (must appear at top of file)
         // ═══════════════════════════════════════════════════════════════════════════
 

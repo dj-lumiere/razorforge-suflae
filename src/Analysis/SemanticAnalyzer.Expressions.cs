@@ -1485,8 +1485,12 @@ public sealed partial class SemanticAnalyzer
 
             case WithExpression with:
                 CollectIdentifiersRecursive(expression: with.Base, identifiers: identifiers);
-                foreach ((_, Expression value) in with.Updates)
+                foreach ((_, Expression? index, Expression value) in with.Updates)
                 {
+                    if (index != null)
+                    {
+                        CollectIdentifiersRecursive(expression: index, identifiers: identifiers);
+                    }
                     CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
                 }
                 break;
@@ -1882,17 +1886,24 @@ public sealed partial class SemanticAnalyzer
     {
         TypeSymbol baseType = AnalyzeExpression(expression: with.Base);
 
-        // Validate that base is a record type
-        if (baseType.Category != TypeCategory.Record)
+        // Validate that base is a record type (for field updates) or supports indexing (for index updates)
+        bool hasFieldUpdates = with.Updates.Any(u => u.FieldName != null);
+        if (hasFieldUpdates && baseType.Category != TypeCategory.Record)
         {
-            ReportError(SemanticDiagnosticCode.WithExpressionNotRecord, $"'with' expression requires a record type, got '{baseType.Name}'.", with.Location);
+            ReportError(SemanticDiagnosticCode.WithExpressionNotRecord, $"'with' expression with field updates requires a record type, got '{baseType.Name}'.", with.Location);
         }
 
         // Analyze update expressions
-        foreach ((string FieldName, Expression Value) update in with.Updates)
+        foreach ((string? fieldName, Expression? index, Expression value) in with.Updates)
         {
-            AnalyzeExpression(expression: update.Value);
-            // TODO: Validate field exists and types match
+            // Analyze index expression if present
+            if (index != null)
+            {
+                AnalyzeExpression(expression: index);
+            }
+            AnalyzeExpression(expression: value);
+            // TODO: Validate field exists and types match for field updates
+            // TODO: Validate index type and value type match for index updates
         }
 
         // Returns the same type as the base

@@ -1209,19 +1209,35 @@ public partial class SuflaeParser
             else if (Match(type: TokenType.With))
             {
                 // Functional update expression for records: record with (field: newVal)
+                // Also supports index updates: collection with ([i]: newVal)
                 // Only valid on record types - semantic analyzer will validate this
                 SourceLocation withLocation = GetLocation(token: PeekToken(offset: -1));
                 Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'with'");
 
-                var updates = new List<(string FieldName, Expression Value)>();
+                var updates = new List<(string? FieldName, Expression? Index, Expression Value)>();
 
-                // Parse update list: (field: value, field2: value2, ...)
+                // Parse update list: (field: value, [index]: value, ...)
                 do
                 {
-                    Token fieldToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name in with expression");
-                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after field name in with expression");
+                    string? fieldName = null;
+                    Expression? indexExpr = null;
+
+                    if (Match(type: TokenType.LeftBracket))
+                    {
+                        // Index update: [expr]: value
+                        indexExpr = ParseExpression();
+                        Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index in with expression");
+                    }
+                    else
+                    {
+                        // Field update: field: value
+                        Token fieldToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name in with expression");
+                        fieldName = fieldToken.Text;
+                    }
+
+                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after field name or index in with expression");
                     Expression value = ParseExpression();
-                    updates.Add(item: (fieldToken.Text, value));
+                    updates.Add(item: (fieldName, indexExpr, value));
                 } while (Match(type: TokenType.Comma));
 
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after with updates");

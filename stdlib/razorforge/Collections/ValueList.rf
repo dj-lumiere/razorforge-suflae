@@ -18,6 +18,7 @@ namespace Collections
 record ValueList<T, N>
 requires N is UAddr {
     # N elements of T stored inline by compiler - no explicit fields needed
+    pass
 }
 
 # ============================================================================

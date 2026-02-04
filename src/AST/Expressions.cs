@@ -341,12 +341,14 @@ public record ConstructorExpression(
 /// <list type="bullet">
 /// <item>Field update: record with (field: newValue)</item>
 /// <item>Multiple fields: record with (x: 1, y: 2)</item>
+/// <item>Index update: collection with ([i]: newValue)</item>
 /// </list>
-/// Only valid on record types - creates a copy with specified fields modified.
+/// For field updates, FieldName is set and Index is null.
+/// For index updates, Index is set and FieldName is null.
 /// </remarks>
 public record WithExpression(
     Expression Base,
-    List<(string FieldName, Expression Value)> Updates,
+    List<(string? FieldName, Expression? Index, Expression Value)> Updates,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -752,6 +754,7 @@ public record IntrinsicCallExpression(
 /// </remarks>
 public record NativeCallExpression(
     string FunctionName,
+    List<TypeExpression>? TypeArguments,
     List<Expression> Arguments,
     SourceLocation Location) : Expression(Location: Location)
 {

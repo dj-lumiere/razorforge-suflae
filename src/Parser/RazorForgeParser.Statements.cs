@@ -197,13 +197,18 @@ public partial class RazorForgeParser
         // ═══════════════════════════════════════════════════════════════════════════
         // Subject-based:    when value { is Type => ... }
         // Condition-based:  when { x > 0 => ..., x < 0 => ... }  (like Lisp's cond)
+        //                   when true { x > 0 => ..., x < 0 => ... }  (explicit true)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        bool isConditionBased = Check(type: TokenType.LeftBrace);
+        // Check for condition-based forms: `when {` or `when true {`
+        bool isConditionBased = Check(type: TokenType.LeftBrace) ||
+                                (Check(type: TokenType.True) && PeekToken(offset: 1).Type == TokenType.LeftBrace);
         Expression expression;
         if (isConditionBased)
         {
             // Standalone when - use 'true' as the implicit subject
+            // For `when true {`, consume the 'true' token
+            Match(type: TokenType.True);
             expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
         }
         else
@@ -266,12 +271,24 @@ public partial class RazorForgeParser
                 Expression condition = ParseExpression();
                 pattern = new ExpressionPattern(Expression: condition, Location: clauseLocation);
             }
-            // Case 4: Type pattern with 'is' keyword
+            // Case 4: 'is' keyword - type pattern only
             // Forms: is Type, is Type varName, is Type (field1, field2)
+            // Note: 'is <value>' is NOT allowed - use '== value' for value comparisons
             else if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
-                pattern = ParseTypePattern();
+                // 'is' must be followed by a type name (TypeIdentifier or capitalized Identifier)
+                if (Check(type: TokenType.TypeIdentifier) ||
+                    (Check(type: TokenType.Identifier) && char.IsUpper(CurrentToken.Text[0])))
+                {
+                    // Parse as type pattern
+                    pattern = ParseTypePattern();
+                }
+                else
+                {
+                    throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
+                        $"'is' must be followed by a type name. For value comparisons, use '== {CurrentToken.Text}' instead of 'is {CurrentToken.Text}'.");
+                }
                 _inWhenPatternContext = false;
             }
             // Case 5: Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
@@ -291,30 +308,34 @@ public partial class RazorForgeParser
 
             // ─────────────────────────────────────────────────────────────────────
             // Parse arrow or block
-            // Two forms:
-            //   pattern => expression       (single expression)
+            // Three forms:
+            //   pattern => expression       (single expression/statement)
+            //   pattern => { statements }   (multi-statement block after arrow)
             //   pattern { statements... }   (multi-statement block, requires 'becomes')
             // ─────────────────────────────────────────────────────────────────────
 
-            // Set flag to prevent 'is' expression parsing in when clause bodies
-            _inWhenClauseBody = true;
             Statement body;
 
             if (Match(type: TokenType.FatArrow))
             {
-                // Single-expression branch: pattern => expression
-                // Block is NOT allowed after => (use pattern { } instead)
+                // Arrow branch: pattern => single_statement (no blocks allowed after =>)
                 if (Check(type: TokenType.LeftBrace))
                 {
                     throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
-                        "Block '{ }' is not allowed after '=>'. Use 'pattern { statements... becomes value }' for multi-statement branches");
+                        "Block '{ }' is not allowed after '=>'. Use 'pattern { block }' without '=>' for multi-statement branches.");
                 }
 
+                // Single statement: pattern => statement
+                // Set flag to prevent comparisons from continuing the expression
+                // This prevents `=> value < pattern =>` from being parsed as `=> (value < pattern) =>`
+                _inWhenClauseBody = true;
                 body = ParseStatement();
+                _inWhenClauseBody = false;
             }
             else if (Check(type: TokenType.LeftBrace))
             {
                 // Multi-statement branch: pattern { statements... becomes value }
+                // Block has its own scope, so don't restrict comparisons inside it
                 body = ParseBlockStatement();
             }
             else
@@ -322,8 +343,6 @@ public partial class RazorForgeParser
                 throw ThrowParseError(RazorForgeDiagnosticCode.InvalidPattern,
                     "Expected '=>' or '{' after pattern");
             }
-
-            _inWhenClauseBody = false;
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
 

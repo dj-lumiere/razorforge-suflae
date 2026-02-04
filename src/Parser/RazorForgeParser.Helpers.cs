@@ -142,13 +142,26 @@ public partial class RazorForgeParser
     /// <returns>A <see cref="NativeCallExpression"/> AST node.</returns>
     private NativeCallExpression ParseNativeCall(SourceLocation location)
     {
-        // Expect: .function_name(args)
+        // Expect: .function_name(args) or .function_name<TypeArgs>(args)
         // The @native token has already been consumed
 
         Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@native'");
 
         // Parse function name (can contain underscores like rf_bigint_new)
         string functionName = ConsumeIdentifier(errorMessage: "Expected native function name");
+
+        // Parse optional generic type arguments: <T, U, ...>
+        List<TypeExpression>? typeArgs = null;
+        if (Match(type: TokenType.Less))
+        {
+            typeArgs = new List<TypeExpression>();
+            do
+            {
+                typeArgs.Add(item: ParseType());
+            } while (Match(type: TokenType.Comma));
+
+            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after type arguments");
+        }
 
         // Parse arguments: (arg1, arg2, ...)
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after native function name");
@@ -164,7 +177,7 @@ public partial class RazorForgeParser
 
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after native function arguments");
 
-        return new NativeCallExpression(FunctionName: functionName, Arguments: args, Location: location);
+        return new NativeCallExpression(FunctionName: functionName, TypeArguments: typeArgs, Arguments: args, Location: location);
     }
 
     /// <summary>
