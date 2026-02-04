@@ -125,7 +125,7 @@ routine TextBuffer.__seq__() -> TextBufferIterator {
     return TextBufferIterator(buffer: me, index: 0u64)
 }
 
-routine TextBufferIterator.next!(me: TextBufferIterator) -> Letter {
+routine TextBufferIterator.next!() -> Letter {
     if me.index >= me.buffer.count() {
         absent
     }

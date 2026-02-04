@@ -49,32 +49,32 @@ routine FixedSet<T, N>.__create__() -> FixedSet<T, N> {
 # Internal Slot Access
 # ============================================================================
 
-routine FixedSet<T, N>.get_value(me: FixedSet<T, N>, slot: UAddr) -> T {
+routine FixedSet<T, N>.get_value(slot: UAddr) -> T {
     # Access slot value (internal)
     return me[slot * 3uaddr]
 }
 
-routine FixedSet<T, N>.set_value(me: FixedSet<T, N>, slot: UAddr, value: T) {
+routine FixedSet<T, N>.set_value(slot: UAddr, value: T) {
     me[slot * 3uaddr] = value
 }
 
-routine FixedSet<T, N>.get_state(me: FixedSet<T, N>, slot: UAddr) -> U8 {
+routine FixedSet<T, N>.get_state(slot: UAddr) -> U8 {
     return me[slot * 3uaddr + 1uaddr]
 }
 
-routine FixedSet<T, N>.set_state(me: FixedSet<T, N>, slot: UAddr, state: U8) {
+routine FixedSet<T, N>.set_state(slot: UAddr, state: U8) {
     me[slot * 3uaddr + 1uaddr] = state
 }
 
-routine FixedSet<T, N>.get_probe_dist(me: FixedSet<T, N>, slot: UAddr) -> UAddr {
+routine FixedSet<T, N>.get_probe_dist(slot: UAddr) -> UAddr {
     return me[slot * 3uaddr + 2uaddr]
 }
 
-routine FixedSet<T, N>.set_probe_dist(me: FixedSet<T, N>, slot: UAddr, dist: UAddr) {
+routine FixedSet<T, N>.set_probe_dist(slot: UAddr, dist: UAddr) {
     me[slot * 3uaddr + 2uaddr] = dist
 }
 
-routine FixedSet<T, N>.hash_index(me: FixedSet<T, N>, value: T) -> UAddr {
+routine FixedSet<T, N>.hash_index(value: T) -> UAddr {
     let hash = value.__hash__()
     return hash % N
 }
@@ -87,27 +87,27 @@ routine FixedSet<T, N>.next_slot(slot: UAddr) -> UAddr {
 # Core Operations
 # ============================================================================
 
-routine FixedSet<T, N>.count(me: FixedSet<T, N>) -> UAddr {
+routine FixedSet<T, N>.count() -> UAddr {
     return me.count
 }
 
-routine FixedSet<T, N>.capacity(me: FixedSet<T, N>) -> UAddr {
+routine FixedSet<T, N>.capacity() -> UAddr {
     return N
 }
 
-routine FixedSet<T, N>.is_empty(me: FixedSet<T, N>) -> Bool {
+routine FixedSet<T, N>.is_empty() -> Bool {
     return me.count == 0uaddr
 }
 
-routine FixedSet<T, N>.is_full(me: FixedSet<T, N>) -> Bool {
+routine FixedSet<T, N>.is_full() -> Bool {
     return me.count == N
 }
 
-routine FixedSet<T, N>.remaining(me: FixedSet<T, N>) -> UAddr {
+routine FixedSet<T, N>.remaining() -> UAddr {
     return N - me.count
 }
 
-routine FixedSet<T, N>.clear(me: FixedSet<T, N>) {
+routine FixedSet<T, N>.clear() {
     var i = 0uaddr
     while i < N {
         me.set_state(i, SLOT_EMPTY)
@@ -117,7 +117,7 @@ routine FixedSet<T, N>.clear(me: FixedSet<T, N>) {
     me.tombstones = 0uaddr
 }
 
-routine FixedSet<T, N>.contains(me: FixedSet<T, N>, value: T) -> Bool {
+routine FixedSet<T, N>.contains(value: T) -> Bool {
     var slot = me.hash_index(value)
     var probe_dist = 0uaddr
 
@@ -149,7 +149,7 @@ routine FixedSet<T, N>.contains(me: FixedSet<T, N>, value: T) -> Bool {
     }
 }
 
-routine FixedSet<T, N>.insert!(me: FixedSet<T, N>, value: T) -> Bool {
+routine FixedSet<T, N>.insert!(value: T) -> Bool {
     # Returns true if inserted, false if already exists
     # Throws if full
     if me.count >= N {
@@ -207,7 +207,7 @@ routine FixedSet<T, N>.insert!(me: FixedSet<T, N>, value: T) -> Bool {
     }
 }
 
-routine FixedSet<T, N>.remove(me: FixedSet<T, N>, value: T) -> Bool {
+routine FixedSet<T, N>.remove(value: T) -> Bool {
     # Returns true if removed, false if not found
     var slot = me.hash_index(value)
     var probe_dist = 0uaddr
@@ -241,7 +241,7 @@ routine FixedSet<T, N>.remove(me: FixedSet<T, N>, value: T) -> Bool {
     }
 }
 
-routine FixedSet<T, N>.backward_shift_delete(me: FixedSet<T, N>, slot: UAddr) {
+routine FixedSet<T, N>.backward_shift_delete(slot: UAddr) {
     # Shift elements backward to maintain robin hood invariant
     var current = slot
     var next = FixedSet<T, N>.next_slot(current)
@@ -269,7 +269,7 @@ routine FixedSet<T, N>.backward_shift_delete(me: FixedSet<T, N>, slot: UAddr) {
 # Conversion
 # ============================================================================
 
-routine FixedSet<T, N>.to_list(me: FixedSet<T, N>) -> List<T> {
+routine FixedSet<T, N>.to_list() -> List<T> {
     let result = List<T>(me.count)
     var i = 0uaddr
     while i < N {
@@ -285,7 +285,7 @@ routine FixedSet<T, N>.to_list(me: FixedSet<T, N>) -> List<T> {
 # Iteration
 # ============================================================================
 
-routine FixedSet<T, N>.iter(me: FixedSet<T, N>) -> FixedSetIterator<T, N> {
+routine FixedSet<T, N>.iter() -> FixedSetIterator<T, N> {
     return FixedSetIterator<T, N>(set: me, slot: 0uaddr)
 }
 
@@ -294,7 +294,7 @@ record FixedSetIterator<T, N> {
     slot: UAddr
 }
 
-routine FixedSetIterator<T, N>.next!(me: FixedSetIterator<T, N>) -> T {
+routine FixedSetIterator<T, N>.next!() -> T {
     while me.slot < N {
         if me.set.get_state(me.slot) == SLOT_OCCUPIED {
             let value = me.set.get_value(me.slot)
@@ -310,7 +310,7 @@ routine FixedSetIterator<T, N>.next!(me: FixedSetIterator<T, N>) -> T {
 # Comparison
 # ============================================================================
 
-routine FixedSet<T, N>.__eq__(me: FixedSet<T, N>, other: FixedSet<T, N>) -> Bool {
+routine FixedSet<T, N>.__eq__(other: FixedSet<T, N>) -> Bool {
     if me.count != other.count {
         return false
     }

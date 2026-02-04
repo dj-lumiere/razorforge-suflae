@@ -181,7 +181,7 @@ routine Bytes.__seq__() -> BytesIterator {
     return BytesIterator(bytes: me, index: 0u64)
 }
 
-routine BytesIterator.next!(me: BytesIterator) -> Byte {
+routine BytesIterator.next!() -> Byte {
     if me.index >= me.bytes.count() {
         absent
     }

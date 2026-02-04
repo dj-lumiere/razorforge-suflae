@@ -55,39 +55,39 @@ routine FixedDict<K, V, N>.__create__() -> FixedDict<K, V, N> {
 # Internal Slot Access
 # ============================================================================
 
-routine FixedDict<K, V, N>.get_key(me: FixedDict<K, V, N>, slot: UAddr) -> K {
+routine FixedDict<K, V, N>.get_key(slot: UAddr) -> K {
     return me[slot * 4uaddr]
 }
 
-routine FixedDict<K, V, N>.set_key(me: FixedDict<K, V, N>, slot: UAddr, key: K) {
+routine FixedDict<K, V, N>.set_key(slot: UAddr, key: K) {
     me[slot * 4uaddr] = key
 }
 
-routine FixedDict<K, V, N>.get_value(me: FixedDict<K, V, N>, slot: UAddr) -> V {
+routine FixedDict<K, V, N>.get_value(slot: UAddr) -> V {
     return me[slot * 4uaddr + 1uaddr]
 }
 
-routine FixedDict<K, V, N>.set_value(me: FixedDict<K, V, N>, slot: UAddr, value: V) {
+routine FixedDict<K, V, N>.set_value(slot: UAddr, value: V) {
     me[slot * 4uaddr + 1uaddr] = value
 }
 
-routine FixedDict<K, V, N>.get_state(me: FixedDict<K, V, N>, slot: UAddr) -> U8 {
+routine FixedDict<K, V, N>.get_state(slot: UAddr) -> U8 {
     return me[slot * 4uaddr + 2uaddr]
 }
 
-routine FixedDict<K, V, N>.set_state(me: FixedDict<K, V, N>, slot: UAddr, state: U8) {
+routine FixedDict<K, V, N>.set_state(slot: UAddr, state: U8) {
     me[slot * 4uaddr + 2uaddr] = state
 }
 
-routine FixedDict<K, V, N>.get_probe_dist(me: FixedDict<K, V, N>, slot: UAddr) -> UAddr {
+routine FixedDict<K, V, N>.get_probe_dist(slot: UAddr) -> UAddr {
     return me[slot * 4uaddr + 3uaddr]
 }
 
-routine FixedDict<K, V, N>.set_probe_dist(me: FixedDict<K, V, N>, slot: UAddr, dist: UAddr) {
+routine FixedDict<K, V, N>.set_probe_dist(slot: UAddr, dist: UAddr) {
     me[slot * 4uaddr + 3uaddr] = dist
 }
 
-routine FixedDict<K, V, N>.hash_index(me: FixedDict<K, V, N>, key: K) -> UAddr {
+routine FixedDict<K, V, N>.hash_index(key: K) -> UAddr {
     let hash = key.__hash__()
     return hash % N
 }
@@ -100,27 +100,27 @@ routine FixedDict<K, V, N>.next_slot(slot: UAddr) -> UAddr {
 # Core Operations
 # ============================================================================
 
-routine FixedDict<K, V, N>.count(me: FixedDict<K, V, N>) -> UAddr {
+routine FixedDict<K, V, N>.count() -> UAddr {
     return me.count
 }
 
-routine FixedDict<K, V, N>.capacity(me: FixedDict<K, V, N>) -> UAddr {
+routine FixedDict<K, V, N>.capacity() -> UAddr {
     return N
 }
 
-routine FixedDict<K, V, N>.is_empty(me: FixedDict<K, V, N>) -> Bool {
+routine FixedDict<K, V, N>.is_empty() -> Bool {
     return me.count == 0uaddr
 }
 
-routine FixedDict<K, V, N>.is_full(me: FixedDict<K, V, N>) -> Bool {
+routine FixedDict<K, V, N>.is_full() -> Bool {
     return me.count == N
 }
 
-routine FixedDict<K, V, N>.remaining(me: FixedDict<K, V, N>) -> UAddr {
+routine FixedDict<K, V, N>.remaining() -> UAddr {
     return N - me.count
 }
 
-routine FixedDict<K, V, N>.clear(me: FixedDict<K, V, N>) {
+routine FixedDict<K, V, N>.clear() {
     var i = 0uaddr
     while i < N {
         me.set_state(i, FDICT_SLOT_EMPTY)
@@ -130,7 +130,7 @@ routine FixedDict<K, V, N>.clear(me: FixedDict<K, V, N>) {
     me.tombstones = 0uaddr
 }
 
-routine FixedDict<K, V, N>.contains_key(me: FixedDict<K, V, N>, key: K) -> Bool {
+routine FixedDict<K, V, N>.contains_key(key: K) -> Bool {
     var slot = me.hash_index(key)
     var probe_dist = 0uaddr
 
@@ -160,7 +160,7 @@ routine FixedDict<K, V, N>.contains_key(me: FixedDict<K, V, N>, key: K) -> Bool 
     }
 }
 
-routine FixedDict<K, V, N>.find_slot!(me: FixedDict<K, V, N>, key: K) -> UAddr {
+routine FixedDict<K, V, N>.find_slot!(key: K) -> UAddr {
     # Returns slot index if key found, None otherwise
     var slot = me.hash_index(key)
     var probe_dist = 0uaddr
@@ -191,7 +191,7 @@ routine FixedDict<K, V, N>.find_slot!(me: FixedDict<K, V, N>, key: K) -> UAddr {
     }
 }
 
-routine FixedDict<K, V, N>.insert!(me: FixedDict<K, V, N>, key: K, value: V) -> Bool {
+routine FixedDict<K, V, N>.insert!(key: K, value: V) -> Bool {
     # Returns true if inserted new, false if updated existing
     # Throws if full and key doesn't exist
 
@@ -254,7 +254,7 @@ routine FixedDict<K, V, N>.insert!(me: FixedDict<K, V, N>, key: K, value: V) -> 
     }
 }
 
-routine FixedDict<K, V, N>.remove(me: FixedDict<K, V, N>, key: K) -> Bool {
+routine FixedDict<K, V, N>.remove(key: K) -> Bool {
     var slot = me.hash_index(key)
     var probe_dist = 0uaddr
 
@@ -286,7 +286,7 @@ routine FixedDict<K, V, N>.remove(me: FixedDict<K, V, N>, key: K) -> Bool {
     }
 }
 
-routine FixedDict<K, V, N>.backward_shift_delete(me: FixedDict<K, V, N>, slot: UAddr) {
+routine FixedDict<K, V, N>.backward_shift_delete(slot: UAddr) {
     var current = slot
     var next = FixedDict<K, V, N>.next_slot(current)
 
@@ -308,7 +308,7 @@ routine FixedDict<K, V, N>.backward_shift_delete(me: FixedDict<K, V, N>, slot: U
     }
 }
 
-routine FixedDict<K, V, N>.get!(me: FixedDict<K, V, N>, key: K) -> V {
+routine FixedDict<K, V, N>.get!(key: K) -> V {
     let slot = me.find_slot(key)
     if slot is None {
         absent
@@ -316,7 +316,7 @@ routine FixedDict<K, V, N>.get!(me: FixedDict<K, V, N>, key: K) -> V {
     return me.get_value(slot)
 }
 
-routine FixedDict<K, V, N>.get_or_default(me: FixedDict<K, V, N>, key: K, default_value: V) -> V {
+routine FixedDict<K, V, N>.get_or_default(key: K, default_value: V) -> V {
     let slot = me.find_slot(key)
     if slot is None {
         return default_value
@@ -328,11 +328,11 @@ routine FixedDict<K, V, N>.get_or_default(me: FixedDict<K, V, N>, key: K, defaul
 # Indexing
 # ============================================================================
 
-routine FixedDict<K, V, N>.__getitem__!(me: FixedDict<K, V, N>, key: K) -> V {
+routine FixedDict<K, V, N>.__getitem__!(key: K) -> V {
     return me.get!(key)
 }
 
-routine FixedDict<K, V, N>.__setitem__!(me: FixedDict<K, V, N>, key: K, value: V) {
+routine FixedDict<K, V, N>.__setitem__!(key: K, value: V) {
     me.insert!(key, value)
 }
 
@@ -340,7 +340,7 @@ routine FixedDict<K, V, N>.__setitem__!(me: FixedDict<K, V, N>, key: K, value: V
 # Keys/Values/Entries
 # ============================================================================
 
-routine FixedDict<K, V, N>.keys(me: FixedDict<K, V, N>) -> List<K> {
+routine FixedDict<K, V, N>.keys() -> List<K> {
     let result = List<K>(me.count)
     var i = 0uaddr
     while i < N {
@@ -352,7 +352,7 @@ routine FixedDict<K, V, N>.keys(me: FixedDict<K, V, N>) -> List<K> {
     return result
 }
 
-routine FixedDict<K, V, N>.values(me: FixedDict<K, V, N>) -> List<V> {
+routine FixedDict<K, V, N>.values() -> List<V> {
     let result = List<V>(me.count)
     var i = 0uaddr
     while i < N {
@@ -364,7 +364,7 @@ routine FixedDict<K, V, N>.values(me: FixedDict<K, V, N>) -> List<V> {
     return result
 }
 
-routine FixedDict<K, V, N>.entries(me: FixedDict<K, V, N>) -> List<FixedDictEntry<K, V>> {
+routine FixedDict<K, V, N>.entries() -> List<FixedDictEntry<K, V>> {
     let result = List<FixedDictEntry<K, V>>(me.count)
     var i = 0uaddr
     while i < N {
@@ -380,7 +380,7 @@ routine FixedDict<K, V, N>.entries(me: FixedDict<K, V, N>) -> List<FixedDictEntr
 # Iteration
 # ============================================================================
 
-routine FixedDict<K, V, N>.iter(me: FixedDict<K, V, N>) -> FixedDictIterator<K, V, N> {
+routine FixedDict<K, V, N>.iter() -> FixedDictIterator<K, V, N> {
     return FixedDictIterator<K, V, N>(dict: me, slot: 0uaddr)
 }
 
@@ -389,7 +389,7 @@ record FixedDictIterator<K, V, N> {
     slot: UAddr
 }
 
-routine FixedDictIterator<K, V, N>.next!(me: FixedDictIterator<K, V, N>) -> FixedDictEntry<K, V> {
+routine FixedDictIterator<K, V, N>.next!() -> FixedDictEntry<K, V> {
     while me.slot < N {
         if me.dict.get_state(me.slot) == FDICT_SLOT_OCCUPIED {
             let entry = FixedDictEntry<K, V>(
@@ -408,7 +408,7 @@ routine FixedDictIterator<K, V, N>.next!(me: FixedDictIterator<K, V, N>) -> Fixe
 # Comparison
 # ============================================================================
 
-routine FixedDict<K, V, N>.__eq__(me: FixedDict<K, V, N>, other: FixedDict<K, V, N>) -> Bool {
+routine FixedDict<K, V, N>.__eq__(other: FixedDict<K, V, N>) -> Bool {
     if me.count != other.count {
         return false
     }

@@ -135,7 +135,7 @@ routine Deque<T>.remove_first!() -> T {
     return value
 }
 
-routine Deque<T>.front!() -> T {
+routine Deque<T>.first!() -> T {
     # Peek at front element without removing
     if me.is_empty() {
         absent
@@ -143,7 +143,7 @@ routine Deque<T>.front!() -> T {
     return me.read_at(me.start)
 }
 
-routine Deque<T>.back!() -> T {
+routine Deque<T>.last!() -> T {
     # Peek at back element without removing
     if me.is_empty() {
         absent
@@ -285,26 +285,18 @@ routine DequeIterator<T>.next!() -> T {
 # Utility Operations
 # ============================================================================
 
-routine Deque<T>.first!() -> T {
-    return me.front!()
-}
-
-routine Deque<T>.last!() -> T {
-    return me.back!()
-}
-
 routine Deque<T>.first_or_default(default_value: T) -> T {
     if me.is_empty() {
         return default_value
     }
-    return me.front!()
+    return me.first!()
 }
 
 routine Deque<T>.last_or_default(default_value: T) -> T {
     if me.is_empty() {
         return default_value
     }
-    return me.back!()
+    return me.last!()
 }
 
 routine Deque<T>.contains(value: T) -> Bool {

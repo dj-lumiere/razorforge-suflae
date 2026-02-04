@@ -24,7 +24,7 @@ requires N is UAddr {
 # Indexing with Integral (forward index) - read only
 # ============================================================================
 
-routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: I) -> Bool
+routine ValueBitList<N>.__getitem__!<I>(index: I) -> Bool
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= N {
@@ -37,7 +37,7 @@ requires I follows Integral {
 # Indexing with BackIndex (backward index using ^) - read only
 # ============================================================================
 
-routine ValueBitList<N>.__getitem__!<I>(me: ValueBitList<N>, index: BackIndex<I>) -> Bool
+routine ValueBitList<N>.__getitem__!<I>(index: BackIndex<I>) -> Bool
 requires I follows Integral {
     let idx = index.resolve(N)
     return me[idx]
@@ -47,15 +47,15 @@ requires I follows Integral {
 # Query Operations
 # ============================================================================
 
-routine ValueBitList<N>.count(me: ValueBitList<N>) -> UAddr {
+routine ValueBitList<N>.count() -> UAddr {
     return N
 }
 
-routine ValueBitList<N>.is_empty(me: ValueBitList<N>) -> Bool {
+routine ValueBitList<N>.is_empty() -> Bool {
     return N == 0uaddr
 }
 
-routine ValueBitList<N>.count_ones(me: ValueBitList<N>) -> UAddr {
+routine ValueBitList<N>.count_ones() -> UAddr {
     var count = 0uaddr
     var i = 0uaddr
     while i < N {
@@ -67,11 +67,11 @@ routine ValueBitList<N>.count_ones(me: ValueBitList<N>) -> UAddr {
     return count
 }
 
-routine ValueBitList<N>.count_zeros(me: ValueBitList<N>) -> UAddr {
+routine ValueBitList<N>.count_zeros() -> UAddr {
     return N - me.count_ones()
 }
 
-routine ValueBitList<N>.any(me: ValueBitList<N>) -> Bool {
+routine ValueBitList<N>.any() -> Bool {
     var i = 0uaddr
     while i < N {
         if me[i] {
@@ -82,7 +82,7 @@ routine ValueBitList<N>.any(me: ValueBitList<N>) -> Bool {
     return false
 }
 
-routine ValueBitList<N>.all(me: ValueBitList<N>) -> Bool {
+routine ValueBitList<N>.all() -> Bool {
     var i = 0uaddr
     while i < N {
         if not me[i] {
@@ -93,7 +93,7 @@ routine ValueBitList<N>.all(me: ValueBitList<N>) -> Bool {
     return true
 }
 
-routine ValueBitList<N>.none(me: ValueBitList<N>) -> Bool {
+routine ValueBitList<N>.none() -> Bool {
     return not me.any()
 }
 
@@ -101,7 +101,7 @@ routine ValueBitList<N>.none(me: ValueBitList<N>) -> Bool {
 # Iteration Support
 # ============================================================================
 
-routine ValueBitList<N>.iter(me: ValueBitList<N>) -> ValueBitListIterator<N> {
+routine ValueBitList<N>.iter() -> ValueBitListIterator<N> {
     return ValueBitListIterator<N>(list: me, index: 0uaddr)
 }
 
@@ -110,7 +110,7 @@ record ValueBitListIterator<N> {
     index: UAddr
 }
 
-routine ValueBitListIterator<N>.next!(me: ValueBitListIterator<N>) -> Bool {
+routine ValueBitListIterator<N>.next!() -> Bool {
     if me.index >= N {
         absent
     }
@@ -125,7 +125,7 @@ routine ValueBitListIterator<N>.next!(me: ValueBitListIterator<N>) -> Bool {
 # Bitwise Operations (return new ValueBitList)
 # ============================================================================
 
-routine ValueBitList<N>.__and__(me: ValueBitList<N>, other: ValueBitList<N>) -> ValueBitList<N> {
+routine ValueBitList<N>.__and__(other: ValueBitList<N>) -> ValueBitList<N> {
     # Bitwise AND - compiler handles creating new record with AND'd bits
     var i = 0uaddr
     var result = me
@@ -136,7 +136,7 @@ routine ValueBitList<N>.__and__(me: ValueBitList<N>, other: ValueBitList<N>) -> 
     return result
 }
 
-routine ValueBitList<N>.__or__(me: ValueBitList<N>, other: ValueBitList<N>) -> ValueBitList<N> {
+routine ValueBitList<N>.__or__(other: ValueBitList<N>) -> ValueBitList<N> {
     # Bitwise OR
     var i = 0uaddr
     var result = me
@@ -147,7 +147,7 @@ routine ValueBitList<N>.__or__(me: ValueBitList<N>, other: ValueBitList<N>) -> V
     return result
 }
 
-routine ValueBitList<N>.__xor__(me: ValueBitList<N>, other: ValueBitList<N>) -> ValueBitList<N> {
+routine ValueBitList<N>.__xor__(other: ValueBitList<N>) -> ValueBitList<N> {
     # Bitwise XOR
     var i = 0uaddr
     var result = me
@@ -161,7 +161,7 @@ routine ValueBitList<N>.__xor__(me: ValueBitList<N>, other: ValueBitList<N>) -> 
     return result
 }
 
-routine ValueBitList<N>.__not__(me: ValueBitList<N>) -> ValueBitList<N> {
+routine ValueBitList<N>.__not__() -> ValueBitList<N> {
     # Bitwise NOT - flip all bits
     var i = 0uaddr
     var result = me

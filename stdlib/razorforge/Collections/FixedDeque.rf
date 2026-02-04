@@ -36,27 +36,27 @@ routine FixedDeque<T, N>.__create__() -> FixedDeque<T, N> {
 # Core Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.count(me: FixedDeque<T, N>) -> UAddr {
+routine FixedDeque<T, N>.count() -> UAddr {
     return me.count
 }
 
-routine FixedDeque<T, N>.capacity(me: FixedDeque<T, N>) -> UAddr {
+routine FixedDeque<T, N>.capacity() -> UAddr {
     return N
 }
 
-routine FixedDeque<T, N>.is_empty(me: FixedDeque<T, N>) -> Bool {
+routine FixedDeque<T, N>.is_empty() -> Bool {
     return me.count == 0uaddr
 }
 
-routine FixedDeque<T, N>.is_full(me: FixedDeque<T, N>) -> Bool {
+routine FixedDeque<T, N>.is_full() -> Bool {
     return me.count == N
 }
 
-routine FixedDeque<T, N>.remaining(me: FixedDeque<T, N>) -> UAddr {
+routine FixedDeque<T, N>.remaining() -> UAddr {
     return N - me.count
 }
 
-routine FixedDeque<T, N>.clear(me: FixedDeque<T, N>) {
+routine FixedDeque<T, N>.clear() {
     me.start = 0uaddr
     me.count = 0uaddr
 }
@@ -70,7 +70,7 @@ routine FixedDeque<T, N>.wrap_index(index: UAddr) -> UAddr {
     return index % N
 }
 
-routine FixedDeque<T, N>.physical_index(me: FixedDeque<T, N>, logical: UAddr) -> UAddr {
+routine FixedDeque<T, N>.physical_index(logical: UAddr) -> UAddr {
     # Convert logical index to physical storage index
     return FixedDeque<T, N>.wrap_index(me.start + logical)
 }
@@ -79,7 +79,7 @@ routine FixedDeque<T, N>.physical_index(me: FixedDeque<T, N>, logical: UAddr) ->
 # Push Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.add_last!(me: FixedDeque<T, N>, value: T) {
+routine FixedDeque<T, N>.add_last!(value: T) {
     # Append element to end - O(1)
     if me.is_full() {
         throw IndexOutOfBoundsError(index: me.count, count: N)
@@ -89,7 +89,7 @@ routine FixedDeque<T, N>.add_last!(me: FixedDeque<T, N>, value: T) {
     me.count = me.count + 1uaddr
 }
 
-routine FixedDeque<T, N>.add_first!(me: FixedDeque<T, N>, value: T) {
+routine FixedDeque<T, N>.add_first!(value: T) {
     # Prepend element to front - O(1)
     if me.is_full() {
         throw IndexOutOfBoundsError(index: me.count, count: N)
@@ -108,7 +108,7 @@ routine FixedDeque<T, N>.add_first!(me: FixedDeque<T, N>, value: T) {
 # Pop Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.remove_last!(me: FixedDeque<T, N>) -> T {
+routine FixedDeque<T, N>.remove_last!() -> T {
     # Remove and return last element - O(1)
     if me.is_empty() {
         absent
@@ -118,7 +118,7 @@ routine FixedDeque<T, N>.remove_last!(me: FixedDeque<T, N>) -> T {
     return me[idx]
 }
 
-routine FixedDeque<T, N>.remove_first!(me: FixedDeque<T, N>) -> T {
+routine FixedDeque<T, N>.remove_first!() -> T {
     # Remove and return first element - O(1)
     if me.is_empty() {
         absent
@@ -133,7 +133,7 @@ routine FixedDeque<T, N>.remove_first!(me: FixedDeque<T, N>) -> T {
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine FixedDeque<T, N>.__getitem__!<I>(me: FixedDeque<T, N>, index: I) -> T
+routine FixedDeque<T, N>.__getitem__!<I>(index: I) -> T
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= me.count {
@@ -143,7 +143,7 @@ requires I follows Integral {
     return me[physical]
 }
 
-routine FixedDeque<T, N>.__setitem__!<I>(me: FixedDeque<T, N>, index: I, value: T)
+routine FixedDeque<T, N>.__setitem__!<I>(index: I, value: T)
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= me.count {
@@ -157,14 +157,14 @@ requires I follows Integral {
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine FixedDeque<T, N>.__getitem__!<I>(me: FixedDeque<T, N>, index: BackIndex<I>) -> T
+routine FixedDeque<T, N>.__getitem__!<I>(index: BackIndex<I>) -> T
 requires I follows Integral {
     let idx = index.resolve(me.count)
     let physical = me.physical_index(idx)
     return me[physical]
 }
 
-routine FixedDeque<T, N>.__setitem__!<I>(me: FixedDeque<T, N>, index: BackIndex<I>, value: T)
+routine FixedDeque<T, N>.__setitem__!<I>(index: BackIndex<I>, value: T)
 requires I follows Integral {
     let idx = index.resolve(me.count)
     let physical = me.physical_index(idx)
@@ -175,28 +175,28 @@ requires I follows Integral {
 # Legacy get/set methods
 # ============================================================================
 
-routine FixedDeque<T, N>.get!<I>(me: FixedDeque<T, N>, index: I) -> T
+routine FixedDeque<T, N>.get!<I>(index: I) -> T
 requires I follows Integral {
     return me.__getitem__!(index)
 }
 
-routine FixedDeque<T, N>.set!<I>(me: FixedDeque<T, N>, index: I, value: T)
+routine FixedDeque<T, N>.set!<I>(index: I, value: T)
 requires I follows Integral {
     me.__setitem__!(index, value)
 }
 
 # ============================================================================
-# Front/Back Access
+# First/Last Access
 # ============================================================================
 
-routine FixedDeque<T, N>.front!(me: FixedDeque<T, N>) -> T {
+routine FixedDeque<T, N>.first!() -> T {
     if me.is_empty() {
         absent
     }
     return me[me.start]
 }
 
-routine FixedDeque<T, N>.back!(me: FixedDeque<T, N>) -> T {
+routine FixedDeque<T, N>.last!() -> T {
     if me.is_empty() {
         absent
     }
@@ -204,14 +204,14 @@ routine FixedDeque<T, N>.back!(me: FixedDeque<T, N>) -> T {
     return me[idx]
 }
 
-routine FixedDeque<T, N>.front_or_default(me: FixedDeque<T, N>, default_value: T) -> T {
+routine FixedDeque<T, N>.first_or_default(default_value: T) -> T {
     if me.is_empty() {
         return default_value
     }
     return me[me.start]
 }
 
-routine FixedDeque<T, N>.back_or_default(me: FixedDeque<T, N>, default_value: T) -> T {
+routine FixedDeque<T, N>.last_or_default(default_value: T) -> T {
     if me.is_empty() {
         return default_value
     }
@@ -223,7 +223,7 @@ routine FixedDeque<T, N>.back_or_default(me: FixedDeque<T, N>, default_value: T)
 # Rotation Operations - O(1)
 # ============================================================================
 
-routine FixedDeque<T, N>.rotate_left(me: FixedDeque<T, N>, n: UAddr) {
+routine FixedDeque<T, N>.rotate_left(n: UAddr) {
     # Rotate elements left by n positions
     # First element moves toward end
     if me.count == 0uaddr {
@@ -233,7 +233,7 @@ routine FixedDeque<T, N>.rotate_left(me: FixedDeque<T, N>, n: UAddr) {
     me.start = FixedDeque<T, N>.wrap_index(me.start + shift)
 }
 
-routine FixedDeque<T, N>.rotate_right(me: FixedDeque<T, N>, n: UAddr) {
+routine FixedDeque<T, N>.rotate_right(n: UAddr) {
     # Rotate elements right by n positions
     # Last element moves toward front
     if me.count == 0uaddr {
@@ -251,7 +251,7 @@ routine FixedDeque<T, N>.rotate_right(me: FixedDeque<T, N>, n: UAddr) {
 # Utility Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.contains(me: FixedDeque<T, N>, value: T) -> Bool {
+routine FixedDeque<T, N>.contains(value: T) -> Bool {
     var i = 0uaddr
     while i < me.count {
         let physical = me.physical_index(i)
@@ -263,7 +263,7 @@ routine FixedDeque<T, N>.contains(me: FixedDeque<T, N>, value: T) -> Bool {
     return false
 }
 
-routine FixedDeque<T, N>.index_of!(me: FixedDeque<T, N>, value: T) -> UAddr {
+routine FixedDeque<T, N>.index_of!(value: T) -> UAddr {
     var i = 0uaddr
     while i < me.count {
         let physical = me.physical_index(i)
@@ -275,7 +275,7 @@ routine FixedDeque<T, N>.index_of!(me: FixedDeque<T, N>, value: T) -> UAddr {
     absent
 }
 
-routine FixedDeque<T, N>.swap!<I, J>(me: FixedDeque<T, N>, i: I, j: J)
+routine FixedDeque<T, N>.swap!<I, J>(i: I, j: J)
 requires I follows Integral
 requires J follows Integral {
     let idx_i = i.to_uaddr()
@@ -290,7 +290,7 @@ requires J follows Integral {
     me[phys_j] = temp
 }
 
-routine FixedDeque<T, N>.reverse(me: FixedDeque<T, N>) {
+routine FixedDeque<T, N>.reverse() {
     if me.count <= 1uaddr {
         return
     }
@@ -307,7 +307,7 @@ routine FixedDeque<T, N>.reverse(me: FixedDeque<T, N>) {
 # Iteration Support
 # ============================================================================
 
-routine FixedDeque<T, N>.iter(me: FixedDeque<T, N>) -> FixedDequeIterator<T, N> {
+routine FixedDeque<T, N>.iter() -> FixedDequeIterator<T, N> {
     return FixedDequeIterator<T, N>(deque: me, index: 0uaddr)
 }
 
@@ -316,7 +316,7 @@ record FixedDequeIterator<T, N> {
     index: UAddr
 }
 
-routine FixedDequeIterator<T, N>.next!(me: FixedDequeIterator<T, N>) -> T {
+routine FixedDequeIterator<T, N>.next!() -> T {
     if me.index >= me.deque.count() {
         absent
     }
@@ -329,7 +329,7 @@ routine FixedDequeIterator<T, N>.next!(me: FixedDequeIterator<T, N>) -> T {
 # Comparison Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.__eq__(me: FixedDeque<T, N>, other: FixedDeque<T, N>) -> Bool {
+routine FixedDeque<T, N>.__eq__(other: FixedDeque<T, N>) -> Bool {
     if me.count != other.count {
         return false
     }

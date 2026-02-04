@@ -156,7 +156,7 @@ routine Text.__seq__() -> TextIterator {
     return TextIterator(text: me, index: 0u64)
 }
 
-routine TextIterator.next!(me: TextIterator) -> Letter {
+routine TextIterator.next!() -> Letter {
     if me.index >= me.text.count() {
         absent
     }

@@ -129,7 +129,7 @@ routine BytesBuffer.__seq__() -> BytesBufferIterator {
     return BytesBufferIterator(buffer: me, index: 0u64)
 }
 
-routine BytesBufferIterator.next!(me: BytesBufferIterator) -> Byte {
+routine BytesBufferIterator.next!() -> Byte {
     if me.index >= me.buffer.count() {
         absent
     }

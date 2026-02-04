@@ -24,7 +24,7 @@ requires N is UAddr {
 # Indexing with Integral (forward index) - read only
 # ============================================================================
 
-routine ValueList<T, N>.__getitem__!<I>(me: ValueList<T, N>, index: I) -> T
+routine ValueList<T, N>.__getitem__!<I>(index: I) -> T
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= N {
@@ -37,7 +37,7 @@ requires I follows Integral {
 # Indexing with BackIndex (backward index using ^) - read only
 # ============================================================================
 
-routine ValueList<T, N>.__getitem__!<I>(me: ValueList<T, N>, index: BackIndex<I>) -> T
+routine ValueList<T, N>.__getitem__!<I>(index: BackIndex<I>) -> T
 requires I follows Integral {
     let idx = index.resolve(N)
     return me[idx]
@@ -47,29 +47,29 @@ requires I follows Integral {
 # Query Operations
 # ============================================================================
 
-routine ValueList<T, N>.count(me: ValueList<T, N>) -> UAddr {
+routine ValueList<T, N>.count() -> UAddr {
     return N
 }
 
-routine ValueList<T, N>.is_empty(me: ValueList<T, N>) -> Bool {
+routine ValueList<T, N>.is_empty() -> Bool {
     return N == 0uaddr
 }
 
-routine ValueList<T, N>.first!(me: ValueList<T, N>) -> T {
+routine ValueList<T, N>.first!() -> T {
     if N == 0uaddr {
         absent
     }
     return me[0uaddr]
 }
 
-routine ValueList<T, N>.last!(me: ValueList<T, N>) -> T {
+routine ValueList<T, N>.last!() -> T {
     if N == 0uaddr {
         absent
     }
     return me[N - 1uaddr]
 }
 
-routine ValueList<T, N>.contains(me: ValueList<T, N>, value: T) -> Bool {
+routine ValueList<T, N>.contains(value: T) -> Bool {
     var i = 0uaddr
     while i < N {
         if me[i] == value {
@@ -80,7 +80,7 @@ routine ValueList<T, N>.contains(me: ValueList<T, N>, value: T) -> Bool {
     return false
 }
 
-routine ValueList<T, N>.index_of!(me: ValueList<T, N>, value: T) -> UAddr {
+routine ValueList<T, N>.index_of!(value: T) -> UAddr {
     var i = 0uaddr
     while i < N {
         if me[i] == value {
@@ -95,7 +95,7 @@ routine ValueList<T, N>.index_of!(me: ValueList<T, N>, value: T) -> UAddr {
 # Iteration Support
 # ============================================================================
 
-routine ValueList<T, N>.iter(me: ValueList<T, N>) -> ValueListIterator<T, N> {
+routine ValueList<T, N>.iter() -> ValueListIterator<T, N> {
     return ValueListIterator<T, N>(list: me, index: 0uaddr)
 }
 
@@ -104,7 +104,7 @@ record ValueListIterator<T, N> {
     index: UAddr
 }
 
-routine ValueListIterator<T, N>.next!(me: ValueListIterator<T, N>) -> T {
+routine ValueListIterator<T, N>.next!() -> T {
     if me.index >= N {
         absent
     }

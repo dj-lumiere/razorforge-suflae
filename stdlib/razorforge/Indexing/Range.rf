@@ -44,7 +44,7 @@ routine Range<I>(start: I, end: I, step: UAddr, ascending: Bool) -> Range<I> {
 }
 
 # Get the step size
-routine Range<I>.get_step(me: Range<I>) -> UAddr {
+routine Range<I>.get_step() -> UAddr {
     return me.step
 }
 
@@ -53,7 +53,7 @@ routine Range<I>.get_step(me: Range<I>) -> UAddr {
 # ============================================================================
 
 # Resolve Range<Integral> to start/end UAddr indices
-routine Range<I follows Integral>.resolve_start(me: Range<I>, length: UAddr) -> UAddr {
+routine Range<I follows Integral>.resolve_start(length: UAddr) -> UAddr {
     let idx = me.start.to_uaddr()
     if idx >= length {
         stop!("Range start out of bounds")
@@ -61,7 +61,7 @@ routine Range<I follows Integral>.resolve_start(me: Range<I>, length: UAddr) -> 
     return idx
 }
 
-routine Range<I follows Integral>.resolve_end(me: Range<I>, length: UAddr) -> UAddr {
+routine Range<I follows Integral>.resolve_end(length: UAddr) -> UAddr {
     let idx = me.end.to_uaddr()
     if idx >= length {
         stop!("Range end out of bounds")
@@ -70,7 +70,7 @@ routine Range<I follows Integral>.resolve_end(me: Range<I>, length: UAddr) -> UA
 }
 
 # Check if range is valid (start <= end for ascending, start >= end for descending)
-routine Range<I follows Integral>.is_valid(me: Range<I>) -> Bool {
+routine Range<I follows Integral>.is_valid() -> Bool {
     let s = me.start.to_uaddr()
     let e = me.end.to_uaddr()
     if me.ascending {
@@ -81,7 +81,7 @@ routine Range<I follows Integral>.is_valid(me: Range<I>) -> Bool {
 }
 
 # Get the number of elements in the range (inclusive, accounting for step)
-routine Range<I follows Integral>.count(me: Range<I>) -> UAddr {
+routine Range<I follows Integral>.count() -> UAddr {
     let s = me.start.to_uaddr()
     let e = me.end.to_uaddr()
     if me.ascending {
@@ -154,7 +154,7 @@ record RangeIterator<I follows Integral> {
     done: Bool
 }
 
-routine Range<I>.iter<I>(me: Range<I>) -> RangeIterator<I>
+routine Range<I>.iter<I>() -> RangeIterator<I>
 requires I follows Integral {
     return RangeIterator<I>(
         current: me.start.to_uaddr(),
@@ -165,7 +165,7 @@ requires I follows Integral {
     )
 }
 
-routine RangeIterator<I>.next!<I>(me: RangeIterator<I>) -> UAddr
+routine RangeIterator<I>.next!<I>() -> UAddr
 requires I follows Integral {
     if me.done {
         absent

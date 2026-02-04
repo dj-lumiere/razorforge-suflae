@@ -21,7 +21,7 @@ routine BackIndex<I follows Integral>(offset: I) -> BackIndex<I> {
 }
 
 # Resolve BackIndex to actual index given collection length
-routine BackIndex<I follows Integral>.resolve(me: BackIndex<I>, length: UAddr) -> UAddr {
+routine BackIndex<I follows Integral>.resolve(length: UAddr) -> UAddr {
     let offset_uaddr = me.offset.UAddr()
     if offset_uaddr > length {
         stop!("BackIndex out of bounds")
@@ -30,20 +30,20 @@ routine BackIndex<I follows Integral>.resolve(me: BackIndex<I>, length: UAddr) -
 }
 
 # Get the offset value
-routine BackIndex<I follows Integral>.get_offset(me: BackIndex<I>) -> I {
+routine BackIndex<I follows Integral>.get_offset() -> I {
     return me.offset
 }
 
 # Convert offset to UAddr
-routine BackIndex<I follows Integral>.offset_uaddr(me: BackIndex<I>) -> UAddr {
+routine BackIndex<I follows Integral>.offset_uaddr() -> UAddr {
     return me.offset.UAddr()
 }
 
 # Comparison operations
-routine BackIndex<I follows Integral>.__eq__(me: BackIndex<I>, other: BackIndex<I>) -> Bool {
+routine BackIndex<I follows Integral>.__eq__(other: BackIndex<I>) -> Bool {
     return me.offset.UAddr() == other.offset.UAddr()
 }
 
-routine BackIndex<I follows Integral>.__cmp__(me: BackIndex<I>, other: BackIndex<I>) -> ComparisonSign {
+routine BackIndex<I follows Integral>.__cmp__(other: BackIndex<I>) -> ComparisonSign {
     return -me.offset <=> -other.offset
 }
