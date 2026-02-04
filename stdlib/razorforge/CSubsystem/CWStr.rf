@@ -237,20 +237,20 @@ routine CWStr.to_text() -> Text {
                     let high_bits = (U32(high) - 0xD800u32) << 10u32
                     let low_bits = U32(low) - 0xDC00u32
                     let codepoint = high_bits | low_bits + 0x10000u32
-                    list.push(Letter(codepoint: codepoint))
+                    list.add_last(Letter(codepoint: codepoint))
                     i = i + 2uaddr
                 } else {
                     # Invalid low surrogate - use replacement character
-                    list.push(Letter(codepoint: 0xFFFDu32))
+                    list.add_last(Letter(codepoint: 0xFFFDu32))
                     i = i + 1uaddr
                 }
             } else if high >= 0xDC00u16 and high <= 0xDFFFu16 {
                 # Orphan low surrogate - use replacement character
-                list.push(Letter(codepoint: 0xFFFDu32))
+                list.add_last(Letter(codepoint: 0xFFFDu32))
                 i = i + 1uaddr
             } else {
                 # BMP character (not a surrogate)
-                list.push(Letter(codepoint: U32(high)))
+                list.add_last(Letter(codepoint: U32(high)))
                 i = i + 1uaddr
             }
         }
@@ -270,7 +270,7 @@ routine CWStr.to_units() -> List<U16> {
                 break
             }
             let code_unit = read_as!<U16>(me.ptr + (i * 2uaddr))
-            list.push(code_unit)
+            list.add_last(code_unit)
             i = i + 1uaddr
         }
         return list

@@ -1,12 +1,12 @@
 # RazorForge FixedDeque<T, N> - Fixed-capacity double-ended queue
 # Resident type with fixed capacity N at compile time
-# O(1) push/pop at both ends, O(1) random access
+# O(1) add/remove at both ends, O(1) random access
 # No heap allocation - storage is inline, uses ring buffer
 #
 # Usage:
 #   let buffer: FixedDeque<S32, 16> = FixedDeque()
-#   buffer.push_back!(42)
-#   buffer.push_front!(13)
+#   buffer.add_last!(42)
+#   buffer.add_first!(13)
 #   let first = buffer[0]       # 13
 #   let last = buffer[^1]       # 42
 #   buffer.rotate_left(1)
@@ -79,7 +79,7 @@ routine FixedDeque<T, N>.physical_index(me: FixedDeque<T, N>, logical: UAddr) ->
 # Push Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.push_back!(me: FixedDeque<T, N>, value: T) {
+routine FixedDeque<T, N>.add_last!(me: FixedDeque<T, N>, value: T) {
     # Append element to end - O(1)
     if me.is_full() {
         throw IndexOutOfBoundsError(index: me.count, count: N)
@@ -89,7 +89,7 @@ routine FixedDeque<T, N>.push_back!(me: FixedDeque<T, N>, value: T) {
     me.count = me.count + 1uaddr
 }
 
-routine FixedDeque<T, N>.push_front!(me: FixedDeque<T, N>, value: T) {
+routine FixedDeque<T, N>.add_first!(me: FixedDeque<T, N>, value: T) {
     # Prepend element to front - O(1)
     if me.is_full() {
         throw IndexOutOfBoundsError(index: me.count, count: N)
@@ -108,7 +108,7 @@ routine FixedDeque<T, N>.push_front!(me: FixedDeque<T, N>, value: T) {
 # Pop Operations
 # ============================================================================
 
-routine FixedDeque<T, N>.pop_back!(me: FixedDeque<T, N>) -> T {
+routine FixedDeque<T, N>.remove_last!(me: FixedDeque<T, N>) -> T {
     # Remove and return last element - O(1)
     if me.is_empty() {
         absent
@@ -118,7 +118,7 @@ routine FixedDeque<T, N>.pop_back!(me: FixedDeque<T, N>) -> T {
     return me[idx]
 }
 
-routine FixedDeque<T, N>.pop_front!(me: FixedDeque<T, N>) -> T {
+routine FixedDeque<T, N>.remove_first!(me: FixedDeque<T, N>) -> T {
     # Remove and return first element - O(1)
     if me.is_empty() {
         absent

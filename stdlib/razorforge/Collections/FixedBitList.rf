@@ -1,12 +1,12 @@
 # RazorForge FixedBitList<N> - Fixed-capacity bit list
 # Resident type with fixed capacity N bits at compile time
-# O(1) push/pop at end, O(1) random access
+# O(1) add_last/remove_last at end, O(1) random access
 # No heap allocation - bits stored inline, packed into bytes
 #
 # Usage:
 #   let flags: FixedBitList<64> = FixedBitList()
-#   flags.push!(true)
-#   flags.push!(false)
+#   flags.add_last!(true)
+#   flags.add_last!(false)
 #   let first = flags[0]
 #   if flags.is_full() { }
 
@@ -54,7 +54,7 @@ routine FixedBitList<N>.remaining(me: FixedBitList<N>) -> UAddr {
     return N - me.count
 }
 
-routine FixedBitList<N>.push!(me: FixedBitList<N>, value: Bool) {
+routine FixedBitList<N>.add_last!(me: FixedBitList<N>, value: Bool) {
     # Append bit to end - O(1)
     # Throws if full
     if me.count >= N {
@@ -64,7 +64,7 @@ routine FixedBitList<N>.push!(me: FixedBitList<N>, value: Bool) {
     me.count = me.count + 1uaddr
 }
 
-routine FixedBitList<N>.pop!(me: FixedBitList<N>) -> Bool {
+routine FixedBitList<N>.remove_last!(me: FixedBitList<N>) -> Bool {
     # Remove and return last bit - O(1)
     if me.is_empty() {
         absent
@@ -81,7 +81,7 @@ routine FixedBitList<N>.clear(me: FixedBitList<N>) {
 # Internal bit access
 # ============================================================================
 
-routine FixedBitList<N>.get_bit(me: FixedBitList<N>, index: UAddr) -> Bool {
+private routine FixedBitList<N>.get_bit(me: FixedBitList<N>, index: UAddr) -> Bool {
     # Direct bit access (internal, no bounds check)
     let byte_idx = index / 8uaddr
     let bit_idx = index % 8uaddr
@@ -89,7 +89,7 @@ routine FixedBitList<N>.get_bit(me: FixedBitList<N>, index: UAddr) -> Bool {
     return (byte_val >> bit_idx) & 1u8 == 1u8
 }
 
-routine FixedBitList<N>.set_bit(me: FixedBitList<N>, index: UAddr, value: Bool) {
+private routine FixedBitList<N>.set_bit(me: FixedBitList<N>, index: UAddr, value: Bool) {
     # Direct bit set (internal, no bounds check)
     let byte_idx = index / 8uaddr
     let bit_idx = index % 8uaddr

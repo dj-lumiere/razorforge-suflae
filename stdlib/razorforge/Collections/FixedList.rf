@@ -1,12 +1,12 @@
 # RazorForge FixedList<T, N> - Fixed-capacity list
 # Resident type with fixed capacity N at compile time
-# O(1) push/pop at end, O(1) random access
+# O(1) add_last/remove_last at end, O(1) random access
 # No heap allocation - storage is inline
 #
 # Usage:
 #   let buffer: FixedList<U8, 16> = FixedList()
-#   buffer.push!(42)
-#   buffer.push!(13)
+#   buffer.add_last!(42)
+#   buffer.add_last!(13)
 #   let first = buffer[0]
 #   if buffer.is_full() { }
 
@@ -54,7 +54,7 @@ routine FixedList<T, N>.remaining(me: FixedList<T, N>) -> UAddr {
     return N - me.count
 }
 
-routine FixedList<T, N>.push!(me: FixedList<T, N>, value: T) {
+routine FixedList<T, N>.add_last!(me: FixedList<T, N>, value: T) {
     # Append element to end - O(1)
     # Throws if full
     if me.count >= N {
@@ -64,7 +64,7 @@ routine FixedList<T, N>.push!(me: FixedList<T, N>, value: T) {
     me.count = me.count + 1uaddr
 }
 
-routine FixedList<T, N>.pop!(me: FixedList<T, N>) -> T {
+routine FixedList<T, N>.remove_last!(me: FixedList<T, N>) -> T {
     # Remove and return last element - O(1)
     if me.is_empty() {
         absent
@@ -116,10 +116,10 @@ requires I follows Integral {
 }
 
 # ============================================================================
-# Insert/Remove (O(n) operations)
+# Add/Remove at index (O(n) operations)
 # ============================================================================
 
-routine FixedList<T, N>.insert!<I>(me: FixedList<T, N>, index: I, value: T)
+routine FixedList<T, N>.add_at!<I>(me: FixedList<T, N>, index: I, value: T)
 requires I follows Integral {
     # Insert at index, shifting elements right - O(n)
     let idx = index.to_uaddr()
@@ -140,7 +140,7 @@ requires I follows Integral {
     me.count = me.count + 1uaddr
 }
 
-routine FixedList<T, N>.remove!<I>(me: FixedList<T, N>, index: I) -> T
+routine FixedList<T, N>.remove_at!<I>(me: FixedList<T, N>, index: I) -> T
 requires I follows Integral {
     # Remove at index, shifting elements left - O(n)
     let idx = index.to_uaddr()

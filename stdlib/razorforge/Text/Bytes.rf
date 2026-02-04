@@ -18,7 +18,7 @@ routine Bytes.__create__(from_list: List<Byte>) -> Bytes {
 
 routine Bytes.__create__(from_byte: Byte) -> Bytes {
     let list = List<Byte>()
-    list.push(from_byte)
+    list.add_last(from_byte)
     return Bytes(letters: list)
 }
 
@@ -37,7 +37,7 @@ routine Bytes.__create__(ptr: Snatched<Byte>) -> Bytes {
             if i >= len {
                 break
             }
-            list.push(ptr.offset(i).read())
+            list.add_last(ptr.offset(i).read())
             i += 1u64
         }
         return Bytes(letters: list)
@@ -58,7 +58,7 @@ routine Bytes.__create__(ptr: CStr) -> Bytes {
             }
             let byte_ptr = ptr + i
             let byte_val = read_as!<Byte>(byte_ptr)
-            list.push(byte_val)
+            list.add_last(byte_val)
             i += 1uaddr
         }
         return Bytes(from_list: list)
@@ -104,7 +104,7 @@ routine Bytes.concat(other: Bytes) -> Bytes {
         if i >= me.count() {
             break
         }
-        result.push(me[i])
+        result.add_last(me[i])
         i += 1u64
     }
     i = 0u64
@@ -112,7 +112,7 @@ routine Bytes.concat(other: Bytes) -> Bytes {
         if i >= other.count() {
             break
         }
-        result.push(other[i])
+        result.add_last(other[i])
         i += 1u64
     }
     return Bytes(from_list: result)
@@ -132,7 +132,7 @@ routine Bytes.slice(start: U64, end: U64) -> Bytes {
         if i >= end {
             break
         }
-        result.push(me[i])
+        result.add_last(me[i])
         i += 1u64
     }
     return Bytes(from_list: result)
@@ -177,7 +177,7 @@ entity BytesIterator {
     index: U64
 }
 
-routine Bytes.iter() -> BytesIterator {
+routine Bytes.__seq__() -> BytesIterator {
     return BytesIterator(bytes: me, index: 0u64)
 }
 
@@ -207,22 +207,22 @@ routine Text.to_utf8() -> Bytes {
         let codepoint = current_letter.codepoint()
         when {
             codepoint <= 0x7Fu32 => {
-                result.push(Byte(codepoint: U8(codepoint)))
+                result.add_last(Byte(codepoint: U8(codepoint)))
             }
             codepoint <= 0x7FFu32 => {
-                result.push(Byte(codepoint: U8!(0xC0u32 | (codepoint >> 6u32))))
-                result.push(Byte(codepoint: U8!(0x80u32 | (codepoint & 0x3Fu32))))
+                result.add_last(Byte(codepoint: U8!(0xC0u32 | (codepoint >> 6u32))))
+                result.add_last(Byte(codepoint: U8!(0x80u32 | (codepoint & 0x3Fu32))))
             }
             codepoint <= 0xFFFFu32 => {
-                result.push(Byte(codepoint: U8!(0xE0u32 | (codepoint >> 12u32))))
-                result.push(Byte(codepoint: U8!(0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
-                result.push(Byte(codepoint: U8!(0x80u32 | (codepoint & 0x3Fu32))))
+                result.add_last(Byte(codepoint: U8!(0xE0u32 | (codepoint >> 12u32))))
+                result.add_last(Byte(codepoint: U8!(0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
+                result.add_last(Byte(codepoint: U8!(0x80u32 | (codepoint & 0x3Fu32))))
             }
             _ => {
-                result.push(Byte(codepoint: U8!(0xF0u32 | (codepoint >> 18u32))))
-                result.push(Byte(codepoint: U8!(0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
-                result.push(Byte(codepoint: U8!(0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
-                result.push(Byte(codepoint: U8!(0x80u32 | (codepoint & 0x3Fu32))))
+                result.add_last(Byte(codepoint: U8!(0xF0u32 | (codepoint >> 18u32))))
+                result.add_last(Byte(codepoint: U8!(0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
+                result.add_last(Byte(codepoint: U8!(0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
+                result.add_last(Byte(codepoint: U8!(0x80u32 | (codepoint & 0x3Fu32))))
             }
         }
         i += 1u64
@@ -284,7 +284,7 @@ routine Bytes.to_text() -> Text {
                 i += 1u64
             }
         }
-        result.push(Letter(codepoint: codepoint))
+        result.add_last(Letter(codepoint: codepoint))
     }
     return Text(from_list: result)
 }
@@ -330,11 +330,11 @@ routine Text.to_utf16() -> List<U16> {
         }
         let codepoint = me[i].codepoint()
         if codepoint <= 0xFFFFu32 {
-            result.push(U16(codepoint))
+            result.add_last(U16(codepoint))
         } else {
             let cp = codepoint - 0x10000u32
-            result.push(U16((cp >> 10u32) + 0xD800u32))
-            result.push(U16((cp & 0x3FFu32) + 0xDC00u32))
+            result.add_last(U16((cp >> 10u32) + 0xD800u32))
+            result.add_last(U16((cp & 0x3FFu32) + 0xDC00u32))
         }
         i += 1u64
     }
@@ -352,20 +352,20 @@ routine Text.from_utf16(utf16: List<U16>) -> Text {
         }
         let w1 = U32(utf16[i])
         if w1 < 0xD800u32 or w1 > 0xDFFFu32 {
-            result.push(Letter(codepoint: w1))
+            result.add_last(Letter(codepoint: w1))
             i += 1u64
         } else if 0xD800u32 <= w1 <= 0xDBFFu32 and i + 1u64 < len {
             let w2 = U32(utf16[i + 1u64])
             if 0xDC00u32 <= w2 <= 0xDFFFu32 {
                 let codepoint = ((w1 - 0xD800u32) << 10u32) + (w2 - 0xDC00u32) + 0x10000u32
-                result.push(Letter(codepoint: codepoint))
+                result.add_last(Letter(codepoint: codepoint))
                 i += 2u64
             } else {
-                result.push(Letter(codepoint: 0xFFFDu32))
+                result.add_last(Letter(codepoint: 0xFFFDu32))
                 i += 1u64
             }
         } else {
-            result.push(Letter(codepoint: 0xFFFDu32))
+            result.add_last(Letter(codepoint: 0xFFFDu32))
             i += 1u64
         }
     }

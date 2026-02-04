@@ -5,8 +5,8 @@
 #
 # Usage:
 #   let ids: FixedSet<S32, 64> = FixedSet()
-#   ids.insert(42)
-#   ids.insert(13)
+#   ids.add!(42)
+#   ids.add!(13)
 #   if ids.contains(42) { }
 #   ids.remove(13)
 
@@ -274,7 +274,7 @@ routine FixedSet<T, N>.to_list(me: FixedSet<T, N>) -> List<T> {
     var i = 0uaddr
     while i < N {
         if me.get_state(i) == SLOT_OCCUPIED {
-            result.push(me.get_value(i))
+            result.add_last(me.get_value(i))
         }
         i = i + 1uaddr
     }

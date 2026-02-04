@@ -14,9 +14,9 @@ routine Dict<K, V>.count() -> Integer:
 routine Dict<K, V>.is_empty() -> Bool:
     return me.value.is_empty()
 
-# Inserting and updating
-routine Dict<K, V>.insert(key: K, item: V):
-    me.value.insert(key, item)
+# Adding and updating
+routine Dict<K, V>.add(key: K, item: V):
+    me.value.add(key, item)
 
 routine Dict<K, V>.__setitem__(key: K, item: V):
     me.value.__setitem__(key, item)

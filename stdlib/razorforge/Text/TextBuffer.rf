@@ -1,0 +1,135 @@
+# RazorForge TextBuffer - Mutable text builder
+#
+# A mutable buffer for building Text values efficiently.
+# Use this when you need to incrementally construct text.
+
+namespace Text
+
+entity TextBuffer {
+    private letters: List<Letter>
+}
+
+# Constructor
+
+routine TextBuffer.__create__() -> TextBuffer {
+    return TextBuffer(letters: List<Letter>())
+}
+
+routine TextBuffer.__create__(initial_capacity: U64) -> TextBuffer {
+    return TextBuffer(letters: List<Letter>(initial_capacity))
+}
+
+routine TextBuffer.__create__(from_text: Text) -> TextBuffer {
+    let buffer = TextBuffer()
+    buffer.append_text(from_text)
+    return buffer
+}
+
+# Core operations
+
+routine TextBuffer.count() -> U64 {
+    return me.letters.count()
+}
+
+routine TextBuffer.is_empty() -> Bool {
+    return me.letters.is_empty()
+}
+
+routine TextBuffer.capacity() -> U64 {
+    return me.letters.capacity()
+}
+
+# Appending
+
+routine TextBuffer.append(letter: Letter) {
+    me.letters.add_last(letter)
+}
+
+routine TextBuffer.append_text(text: Text) {
+    var i: U64 = 0u64
+    loop {
+        if i >= text.count() {
+            break
+        }
+        me.letters.add_last(text[i])
+        i += 1u64
+    }
+}
+
+routine TextBuffer.append_buffer(other: TextBuffer) {
+    var i: U64 = 0u64
+    loop {
+        if i >= other.count() {
+            break
+        }
+        me.letters.add_last(other[i])
+        i += 1u64
+    }
+}
+
+# Indexing
+
+routine TextBuffer.__getitem__!<I follows Integral>(index: I) -> Letter {
+    return me.letters[index]
+}
+
+routine TextBuffer.__setitem__!<I follows Integral>(index: I, letter: Letter) {
+    me.letters[index] = letter
+}
+
+# Modification
+
+routine TextBuffer.insert!(index: U64, letter: Letter) {
+    me.letters.add_at!(index, letter)
+}
+
+routine TextBuffer.remove_at!(index: U64) -> Letter {
+    return me.letters.remove_at(index)
+}
+
+routine TextBuffer.remove_last!() -> Letter {
+    return me.letters.pop!()
+}
+
+routine TextBuffer.clear() {
+    me.letters.clear()
+}
+
+routine TextBuffer.reserve(new_capacity: U64) {
+    me.letters.reserve(new_capacity)
+}
+
+# Conversion
+
+routine TextBuffer.to_text() -> Text {
+    let result = List<Letter>()
+    var i: U64 = 0u64
+    loop {
+        if i >= me.count() {
+            break
+        }
+        result.add_last(me.letters[i])
+        i += 1u64
+    }
+    return Text(from_list: result)
+}
+
+# Iteration
+
+entity TextBufferIterator {
+    buffer: TextBuffer
+    index: U64
+}
+
+routine TextBuffer.__seq__() -> TextBufferIterator {
+    return TextBufferIterator(buffer: me, index: 0u64)
+}
+
+routine TextBufferIterator.next!(me: TextBufferIterator) -> Letter {
+    if me.index >= me.buffer.count() {
+        absent
+    }
+    let value = me.buffer[me.index]
+    me.index = me.index + 1u64
+    return value
+}

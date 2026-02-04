@@ -1,13 +1,13 @@
 # RazorForge Deque<T> - Double-ended queue (growable ring buffer)
 # Entity type with heap allocation
-# O(1) push/pop at both ends, O(1) random access
+# O(1) add/remove at both ends, O(1) random access
 #
 # Usage:
 #   let queue = Deque<Task>()
-#   queue.push_back(task1)
-#   queue.push_front(task2)
-#   let front = queue.pop_front!()
-#   let back = queue.pop_back!()
+#   queue.add_last(task1)
+#   queue.add_first(task2)
+#   let front = queue.remove_first!()
+#   let back = queue.remove_last!()
 
 import memory.DynamicSlice
 import memory.MemorySize
@@ -50,7 +50,7 @@ routine Deque<T>.__create__(capacity: UAddr) -> Deque<T> {
 # Internal Helpers
 # ============================================================================
 
-routine Deque<T>.wrap_index(me: Deque<T>, index: UAddr) -> UAddr {
+routine Deque<T>.wrap_index(index: UAddr) -> UAddr {
     # Wrap index around the circular buffer
     if me.capacity == 0uaddr {
         return 0uaddr
@@ -58,17 +58,17 @@ routine Deque<T>.wrap_index(me: Deque<T>, index: UAddr) -> UAddr {
     return index % me.capacity
 }
 
-routine Deque<T>.physical_index(me: Deque<T>, logical_index: UAddr) -> UAddr {
+routine Deque<T>.physical_index(logical_index: UAddr) -> UAddr {
     # Convert logical index (0 = front) to physical index in buffer
     return me.wrap_index(me.start + logical_index)
 }
 
-routine Deque<T>.read_at(me: Deque<T>, physical_idx: UAddr) -> T {
+routine Deque<T>.read_at(physical_idx: UAddr) -> T {
     let byte_offset = physical_idx * data_size<T>()
     return me.data.read<T>(byte_offset)
 }
 
-routine Deque<T>.write_at(me: Deque<T>, physical_idx: UAddr, value: T) {
+routine Deque<T>.write_at(physical_idx: UAddr, value: T) {
     let byte_offset = physical_idx * data_size<T>()
     me.data.write<T>(byte_offset, value)
 }
@@ -77,19 +77,19 @@ routine Deque<T>.write_at(me: Deque<T>, physical_idx: UAddr, value: T) {
 # Core Operations
 # ============================================================================
 
-routine Deque<T>.count(me: Deque<T>) -> UAddr {
+routine Deque<T>.count() -> UAddr {
     return me.count
 }
 
-routine Deque<T>.capacity(me: Deque<T>) -> UAddr {
+routine Deque<T>.capacity() -> UAddr {
     return me.capacity
 }
 
-routine Deque<T>.is_empty(me: Deque<T>) -> Bool {
+routine Deque<T>.is_empty() -> Bool {
     return me.count == 0uaddr
 }
 
-routine Deque<T>.push_back(me: Deque<T>, value: T) {
+routine Deque<T>.add_last(value: T) {
     # Add element to back - O(1) amortized
     if me.count >= me.capacity {
         me.grow()
@@ -99,7 +99,7 @@ routine Deque<T>.push_back(me: Deque<T>, value: T) {
     me.count = me.count + 1uaddr
 }
 
-routine Deque<T>.push_front(me: Deque<T>, value: T) {
+routine Deque<T>.add_first(value: T) {
     # Add element to front - O(1) amortized
     if me.count >= me.capacity {
         me.grow()
@@ -114,7 +114,7 @@ routine Deque<T>.push_front(me: Deque<T>, value: T) {
     me.count = me.count + 1uaddr
 }
 
-routine Deque<T>.pop_back!(me: Deque<T>) -> T {
+routine Deque<T>.remove_last!() -> T {
     # Remove and return back element - O(1)
     if me.is_empty() {
         absent
@@ -124,7 +124,7 @@ routine Deque<T>.pop_back!(me: Deque<T>) -> T {
     return me.read_at(idx)
 }
 
-routine Deque<T>.pop_front!(me: Deque<T>) -> T {
+routine Deque<T>.remove_first!() -> T {
     # Remove and return front element - O(1)
     if me.is_empty() {
         absent
@@ -135,7 +135,7 @@ routine Deque<T>.pop_front!(me: Deque<T>) -> T {
     return value
 }
 
-routine Deque<T>.front!(me: Deque<T>) -> T {
+routine Deque<T>.front!() -> T {
     # Peek at front element without removing
     if me.is_empty() {
         absent
@@ -143,7 +143,7 @@ routine Deque<T>.front!(me: Deque<T>) -> T {
     return me.read_at(me.start)
 }
 
-routine Deque<T>.back!(me: Deque<T>) -> T {
+routine Deque<T>.back!() -> T {
     # Peek at back element without removing
     if me.is_empty() {
         absent
@@ -152,7 +152,7 @@ routine Deque<T>.back!(me: Deque<T>) -> T {
     return me.read_at(idx)
 }
 
-routine Deque<T>.clear(me: Deque<T>) {
+routine Deque<T>.clear() {
     me.start = 0uaddr
     me.count = 0uaddr
 }
@@ -161,12 +161,12 @@ routine Deque<T>.clear(me: Deque<T>) {
 # Growth
 # ============================================================================
 
-routine Deque<T>.grow(me: Deque<T>) {
+routine Deque<T>.grow() {
     let new_capacity = if me.capacity == 0uaddr then 4uaddr else me.capacity * 2uaddr
     me.reserve(new_capacity)
 }
 
-routine Deque<T>.reserve(me: Deque<T>, new_capacity: UAddr) {
+routine Deque<T>.reserve(new_capacity: UAddr) {
     if new_capacity <= me.capacity {
         return
     }
@@ -193,7 +193,7 @@ routine Deque<T>.reserve(me: Deque<T>, new_capacity: UAddr) {
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine Deque<T>.__getitem__!<I>(me: Deque<T>, index: I) -> T
+routine Deque<T>.__getitem__!<I>(index: I) -> T
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= me.count {
@@ -203,7 +203,7 @@ requires I follows Integral {
     return me.read_at(physical_idx)
 }
 
-routine Deque<T>.__setitem__!<I>(me: Deque<T>, index: I, value: T)
+routine Deque<T>.__setitem__!<I>(index: I, value: T)
 requires I follows Integral {
     let idx = index.to_uaddr()
     if idx >= me.count {
@@ -217,14 +217,14 @@ requires I follows Integral {
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine Deque<T>.__getitem__!<I>(me: Deque<T>, index: BackIndex<I>) -> T
+routine Deque<T>.__getitem__!<I>(index: BackIndex<I>) -> T
 requires I follows Integral {
     let idx = index.resolve(me.count)
     let physical_idx = me.physical_index(idx)
     return me.read_at(physical_idx)
 }
 
-routine Deque<T>.__setitem__!<I>(me: Deque<T>, index: BackIndex<I>, value: T)
+routine Deque<T>.__setitem__!<I>(index: BackIndex<I>, value: T)
 requires I follows Integral {
     let idx = index.resolve(me.count)
     let physical_idx = me.physical_index(idx)
@@ -235,7 +235,7 @@ requires I follows Integral {
 # Rotation
 # ============================================================================
 
-routine Deque<T>.rotate_left(me: Deque<T>, n: UAddr) {
+routine Deque<T>.rotate_left(n: UAddr) {
     # Rotate elements left by n positions
     # Front elements move to back
     if me.count == 0uaddr {
@@ -245,7 +245,7 @@ routine Deque<T>.rotate_left(me: Deque<T>, n: UAddr) {
     me.start = me.wrap_index(me.start + shift)
 }
 
-routine Deque<T>.rotate_right(me: Deque<T>, n: UAddr) {
+routine Deque<T>.rotate_right(n: UAddr) {
     # Rotate elements right by n positions
     # Back elements move to front
     if me.count == 0uaddr {
@@ -263,7 +263,7 @@ routine Deque<T>.rotate_right(me: Deque<T>, n: UAddr) {
 # Iteration Support
 # ============================================================================
 
-routine Deque<T>.iter(me: Deque<T>) -> DequeIterator<T> {
+routine Deque<T>.__seq__() -> DequeIterator<T> {
     return DequeIterator<T>(deque: me, index: 0uaddr)
 }
 
@@ -272,7 +272,7 @@ entity DequeIterator<T> {
     index: UAddr
 }
 
-routine DequeIterator<T>.next!(me: DequeIterator<T>) -> T {
+routine DequeIterator<T>.next!() -> T {
     if me.index >= me.deque.count() {
         absent
     }
@@ -285,29 +285,29 @@ routine DequeIterator<T>.next!(me: DequeIterator<T>) -> T {
 # Utility Operations
 # ============================================================================
 
-routine Deque<T>.first!(me: Deque<T>) -> T {
+routine Deque<T>.first!() -> T {
     return me.front!()
 }
 
-routine Deque<T>.last!(me: Deque<T>) -> T {
+routine Deque<T>.last!() -> T {
     return me.back!()
 }
 
-routine Deque<T>.first_or_default(me: Deque<T>, default_value: T) -> T {
+routine Deque<T>.first_or_default(default_value: T) -> T {
     if me.is_empty() {
         return default_value
     }
     return me.front!()
 }
 
-routine Deque<T>.last_or_default(me: Deque<T>, default_value: T) -> T {
+routine Deque<T>.last_or_default(default_value: T) -> T {
     if me.is_empty() {
         return default_value
     }
     return me.back!()
 }
 
-routine Deque<T>.contains(me: Deque<T>, value: T) -> Bool {
+routine Deque<T>.contains(value: T) -> Bool {
     var i = 0uaddr
     while i < me.count {
         if me[i] == value {
@@ -322,7 +322,7 @@ routine Deque<T>.contains(me: Deque<T>, value: T) -> Bool {
 # Comparison Operations
 # ============================================================================
 
-routine Deque<T>.__eq__(me: Deque<T>, other: Deque<T>) -> Bool {
+routine Deque<T>.__eq__(other: Deque<T>) -> Bool {
     if me.count != other.count {
         return false
     }

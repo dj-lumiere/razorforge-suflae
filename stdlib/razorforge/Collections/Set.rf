@@ -5,8 +5,8 @@
 #
 # Usage:
 #   let names = Set<Text>()
-#   names.insert("Alice")
-#   names.insert("Bob")
+#   names.add("Alice")
+#   names.add("Bob")
 #   if names.contains("Alice") { }
 #   names.remove("Bob")
 
@@ -40,7 +40,7 @@ routine Set<T>.__create__() -> Set<T> {
     var i = 0uaddr
     while i < SET_INITIAL_BUCKETS {
         let empty_set = SortedSet<T>()
-        set.buckets.push(empty_set)
+        set.buckets.add_last(empty_set)
         i = i + 1uaddr
     }
     return set
@@ -56,7 +56,7 @@ routine Set<T>.__create__(capacity: UAddr) -> Set<T> {
     var i = 0uaddr
     while i < bucket_count {
         let empty_set = SortedSet<T>()
-        set.buckets.push(empty_set)
+        set.buckets.add_last(empty_set)
         i = i + 1uaddr
     }
     return set
@@ -66,19 +66,19 @@ routine Set<T>.__create__(capacity: UAddr) -> Set<T> {
 # Internal Operations
 # ============================================================================
 
-routine Set<T>.bucket_index(me: Set<T>, value: T) -> UAddr {
+routine Set<T>.bucket_index(value: T) -> UAddr {
     # Get bucket index for value using hash
     let hash = value.__hash__()
     return hash % me.buckets.count()
 }
 
-routine Set<T>.should_rehash(me: Set<T>) -> Bool {
+routine Set<T>.should_rehash() -> Bool {
     # Check if load factor exceeds threshold
     let load = (me.count * 100uaddr) / me.buckets.count()
     return load > SET_LOAD_FACTOR
 }
 
-routine Set<T>.rehash(me: Set<T>) {
+routine Set<T>.rehash() {
     # Double the bucket count and redistribute
     let old_buckets = me.buckets
     let new_bucket_count = old_buckets.count() * 2uaddr
@@ -87,7 +87,7 @@ routine Set<T>.rehash(me: Set<T>) {
     var i = 0uaddr
     while i < new_bucket_count {
         let empty_set = SortedSet<T>()
-        me.buckets.push(empty_set)
+        me.buckets.add_last(empty_set)
         i = i + 1uaddr
     }
     me.count = 0uaddr
@@ -99,7 +99,7 @@ routine Set<T>.rehash(me: Set<T>) {
         let elements = bucket.to_list()
         var j = 0uaddr
         while j < elements.count() {
-            me.insert(elements[j])
+            me.add(elements[j])
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -110,15 +110,15 @@ routine Set<T>.rehash(me: Set<T>) {
 # Core Operations
 # ============================================================================
 
-routine Set<T>.count(me: Set<T>) -> UAddr {
+routine Set<T>.count() -> UAddr {
     return me.count
 }
 
-routine Set<T>.is_empty(me: Set<T>) -> Bool {
+routine Set<T>.is_empty() -> Bool {
     return me.count == 0uaddr
 }
 
-routine Set<T>.clear(me: Set<T>) {
+routine Set<T>.clear() {
     var i = 0uaddr
     while i < me.buckets.count() {
         me.buckets[i].clear()
@@ -127,26 +127,26 @@ routine Set<T>.clear(me: Set<T>) {
     me.count = 0uaddr
 }
 
-routine Set<T>.contains(me: Set<T>, value: T) -> Bool {
+routine Set<T>.contains(value: T) -> Bool {
     let idx = me.bucket_index(value)
     return me.buckets[idx].contains(value)
 }
 
-routine Set<T>.insert(me: Set<T>, value: T) -> Bool {
+routine Set<T>.add(value: T) -> Bool {
     # Returns true if inserted, false if already exists
     if me.should_rehash() {
         me.rehash()
     }
 
     let idx = me.bucket_index(value)
-    if me.buckets[idx].insert(value) {
+    if me.buckets[idx].add(value) {
         me.count = me.count + 1uaddr
         return true
     }
     return false
 }
 
-routine Set<T>.remove(me: Set<T>, value: T) -> Bool {
+routine Set<T>.remove(value: T) -> Bool {
     # Returns true if removed, false if not found
     let idx = me.bucket_index(value)
     if me.buckets[idx].remove(value) {
@@ -160,7 +160,7 @@ routine Set<T>.remove(me: Set<T>, value: T) -> Bool {
 # Set Operations
 # ============================================================================
 
-routine Set<T>.union(me: Set<T>, other: Set<T>) -> Set<T> {
+routine Set<T>.union(other: Set<T>) -> Set<T> {
     # Return new set with all elements from both
     let result = Set<T>(me.count + other.count)
 
@@ -170,7 +170,7 @@ routine Set<T>.union(me: Set<T>, other: Set<T>) -> Set<T> {
         let elements = me.buckets[i].to_list()
         var j = 0uaddr
         while j < elements.count() {
-            result.insert(elements[j])
+            result.add(elements[j])
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -182,7 +182,7 @@ routine Set<T>.union(me: Set<T>, other: Set<T>) -> Set<T> {
         let elements = other.buckets[i].to_list()
         var j = 0uaddr
         while j < elements.count() {
-            result.insert(elements[j])
+            result.add(elements[j])
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -191,7 +191,7 @@ routine Set<T>.union(me: Set<T>, other: Set<T>) -> Set<T> {
     return result
 }
 
-routine Set<T>.intersection(me: Set<T>, other: Set<T>) -> Set<T> {
+routine Set<T>.intersection(other: Set<T>) -> Set<T> {
     # Return new set with elements in both
     let result = Set<T>()
 
@@ -205,7 +205,7 @@ routine Set<T>.intersection(me: Set<T>, other: Set<T>) -> Set<T> {
         var j = 0uaddr
         while j < elements.count() {
             if larger.contains(elements[j]) {
-                result.insert(elements[j])
+                result.add(elements[j])
             }
             j = j + 1uaddr
         }
@@ -215,7 +215,7 @@ routine Set<T>.intersection(me: Set<T>, other: Set<T>) -> Set<T> {
     return result
 }
 
-routine Set<T>.difference(me: Set<T>, other: Set<T>) -> Set<T> {
+routine Set<T>.difference(other: Set<T>) -> Set<T> {
     # Return new set with elements in me but not in other
     let result = Set<T>()
 
@@ -225,7 +225,7 @@ routine Set<T>.difference(me: Set<T>, other: Set<T>) -> Set<T> {
         var j = 0uaddr
         while j < elements.count() {
             if not other.contains(elements[j]) {
-                result.insert(elements[j])
+                result.add(elements[j])
             }
             j = j + 1uaddr
         }
@@ -235,7 +235,7 @@ routine Set<T>.difference(me: Set<T>, other: Set<T>) -> Set<T> {
     return result
 }
 
-routine Set<T>.symmetric_difference(me: Set<T>, other: Set<T>) -> Set<T> {
+routine Set<T>.symmetric_difference(other: Set<T>) -> Set<T> {
     # Return new set with elements in either but not both
     let result = Set<T>()
 
@@ -246,7 +246,7 @@ routine Set<T>.symmetric_difference(me: Set<T>, other: Set<T>) -> Set<T> {
         var j = 0uaddr
         while j < elements.count() {
             if not other.contains(elements[j]) {
-                result.insert(elements[j])
+                result.add(elements[j])
             }
             j = j + 1uaddr
         }
@@ -260,7 +260,7 @@ routine Set<T>.symmetric_difference(me: Set<T>, other: Set<T>) -> Set<T> {
         var j = 0uaddr
         while j < elements.count() {
             if not me.contains(elements[j]) {
-                result.insert(elements[j])
+                result.add(elements[j])
             }
             j = j + 1uaddr
         }
@@ -270,7 +270,7 @@ routine Set<T>.symmetric_difference(me: Set<T>, other: Set<T>) -> Set<T> {
     return result
 }
 
-routine Set<T>.is_subset(me: Set<T>, other: Set<T>) -> Bool {
+routine Set<T>.is_subset(other: Set<T>) -> Bool {
     # Check if all elements of me are in other
     if me.count > other.count {
         return false
@@ -291,11 +291,11 @@ routine Set<T>.is_subset(me: Set<T>, other: Set<T>) -> Bool {
     return true
 }
 
-routine Set<T>.is_superset(me: Set<T>, other: Set<T>) -> Bool {
+routine Set<T>.is_superset(other: Set<T>) -> Bool {
     return other.is_subset(me)
 }
 
-routine Set<T>.is_disjoint(me: Set<T>, other: Set<T>) -> Bool {
+routine Set<T>.is_disjoint(other: Set<T>) -> Bool {
     # Check if no elements in common
     let smaller = if me.count < other.count then me else other
     let larger = if me.count < other.count then other else me
@@ -319,14 +319,14 @@ routine Set<T>.is_disjoint(me: Set<T>, other: Set<T>) -> Bool {
 # Conversion
 # ============================================================================
 
-routine Set<T>.to_list(me: Set<T>) -> List<T> {
+routine Set<T>.to_list() -> List<T> {
     let result = List<T>(me.count)
     var i = 0uaddr
     while i < me.buckets.count() {
         let elements = me.buckets[i].to_list()
         var j = 0uaddr
         while j < elements.count() {
-            result.push(elements[j])
+            result.add_last(elements[j])
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -338,7 +338,7 @@ routine Set<T>.to_list(me: Set<T>) -> List<T> {
 # Iteration
 # ============================================================================
 
-routine Set<T>.iter(me: Set<T>) -> SetIterator<T> {
+routine Set<T>.__seq__() -> SetIterator<T> {
     return SetIterator<T>(
         set: me,
         bucket_idx: 0uaddr,
@@ -354,7 +354,7 @@ entity SetIterator<T> {
     current_elements: List<T>
 }
 
-routine SetIterator<T>.next!(me: SetIterator<T>) -> T {
+routine SetIterator<T>.next!() -> T {
     # Advance to next non-empty bucket if needed
     while me.element_idx >= me.current_elements.count() {
         if me.bucket_idx >= me.set.buckets.count() {
@@ -374,7 +374,7 @@ routine SetIterator<T>.next!(me: SetIterator<T>) -> T {
 # Comparison
 # ============================================================================
 
-routine Set<T>.__eq__(me: Set<T>, other: Set<T>) -> Bool {
+routine Set<T>.__eq__(other: Set<T>) -> Bool {
     if me.count != other.count {
         return false
     }

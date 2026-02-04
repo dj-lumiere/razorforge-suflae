@@ -5,7 +5,7 @@
 #
 # Usage:
 #   let cache: FixedDict<Text, S32, 64> = FixedDict()
-#   cache.insert("key1", 100)
+#   cache.add!("key1", 100)
 #   cache["key2"] = 200
 #   let val = cache["key1"]
 #   if cache.contains_key("key3") { }
@@ -345,7 +345,7 @@ routine FixedDict<K, V, N>.keys(me: FixedDict<K, V, N>) -> List<K> {
     var i = 0uaddr
     while i < N {
         if me.get_state(i) == FDICT_SLOT_OCCUPIED {
-            result.push(me.get_key(i))
+            result.add_last!(me.get_key(i))
         }
         i = i + 1uaddr
     }
@@ -357,7 +357,7 @@ routine FixedDict<K, V, N>.values(me: FixedDict<K, V, N>) -> List<V> {
     var i = 0uaddr
     while i < N {
         if me.get_state(i) == FDICT_SLOT_OCCUPIED {
-            result.push(me.get_value(i))
+            result.add_last!(me.get_value(i))
         }
         i = i + 1uaddr
     }
@@ -369,7 +369,7 @@ routine FixedDict<K, V, N>.entries(me: FixedDict<K, V, N>) -> List<FixedDictEntr
     var i = 0uaddr
     while i < N {
         if me.get_state(i) == FDICT_SLOT_OCCUPIED {
-            result.push(FixedDictEntry<K, V>(key: me.get_key(i), value: me.get_value(i)))
+            result.add_last!(FixedDictEntry<K, V>(key: me.get_key(i), value: me.get_value(i)))
         }
         i = i + 1uaddr
     }

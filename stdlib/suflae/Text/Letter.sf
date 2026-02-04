@@ -6,3 +6,85 @@ import razorforge/Text.Letter
 
 record Letter:
     private value: razorforge/Text.Letter
+
+# Codepoint access
+routine Letter.codepoint() -> U32:
+    return me.value.codepoint()
+
+# Validation
+routine Letter.is_valid() -> Bool:
+    return me.value.is_valid()
+
+routine Letter.is_ascii() -> Bool:
+    return me.value.is_ascii()
+
+# Classification
+routine Letter.is_alphabetic() -> Bool:
+    return me.value.is_alphabetic()
+
+routine Letter.is_numeric() -> Bool:
+    return me.value.is_numeric()
+
+routine Letter.is_alphanumeric() -> Bool:
+    return me.value.is_alphanumeric()
+
+routine Letter.is_uppercase() -> Bool:
+    return me.value.is_uppercase()
+
+routine Letter.is_lowercase() -> Bool:
+    return me.value.is_lowercase()
+
+routine Letter.is_whitespace() -> Bool:
+    return me.value.is_whitespace()
+
+routine Letter.is_control() -> Bool:
+    return me.value.is_control()
+
+routine Letter.is_digit() -> Bool:
+    return me.value.is_digit()
+
+routine Letter.is_letter() -> Bool:
+    return me.value.is_letter()
+
+routine Letter.is_printable() -> Bool:
+    return me.value.is_printable()
+
+routine Letter.is_bmp() -> Bool:
+    return me.value.is_bmp()
+
+routine Letter.is_supplementary() -> Bool:
+    return me.value.is_supplementary()
+
+routine Letter.is_cjk() -> Bool:
+    return me.value.is_cjk()
+
+routine Letter.is_latin() -> Bool:
+    return me.value.is_latin()
+
+routine Letter.is_emoji() -> Bool:
+    return me.value.is_emoji()
+
+# Case conversion
+routine Letter.to_uppercase() -> Letter:
+    return Letter(value: me.value.to_uppercase())
+
+routine Letter.to_lowercase() -> Letter:
+    return Letter(value: me.value.to_lowercase())
+
+# Comparison
+routine Letter.__eq__(other: Letter) -> Bool:
+    return me.value.__eq__(other.value)
+
+routine Letter.__cmp__(other: Letter) -> ComparisonSign:
+    return me.value.__cmp__(other.value)
+
+# Type conversions
+routine Letter.to_byte() -> Byte:
+    return Byte(value: me.value.to_byte())
+
+routine Letter.digit_value() -> S32:
+    return me.value.digit_value()
+
+# Utility
+routine Letter.offset!<I follows Integral>(delta: I) -> Letter:
+    return Letter(value: me.value.offset!(delta))

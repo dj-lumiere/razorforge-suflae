@@ -24,8 +24,8 @@ routine List<T>.add_last(item: T):
 routine List<T>.add_first(item: T):
     me.value.add_first(item)
 
-routine List<T>.insert!(index: Integer, item: T):
-    me.value.insert!(index.value, item)
+routine List<T>.add_at!(index: Integer, item: T):
+    me.value.add_at!(index.value, item)
 
 # Removing elements
 routine List<T>.remove_last!() -> T:

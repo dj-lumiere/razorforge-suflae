@@ -1,0 +1,58 @@
+# Suflae SortedSet - B-tree based sorted set
+
+namespace Core
+
+import razorforge/Collections.SortedSet
+
+entity SortedSet<T>:
+    private var value: razorforge/Collections.SortedSet<T>
+
+# Core operations
+routine SortedSet<T>.count() -> Integer:
+    return Integer(value: me.value.count())
+
+routine SortedSet<T>.is_empty() -> Bool:
+    return me.value.is_empty()
+
+routine SortedSet<T>.clear():
+    me.value.clear()
+
+# Adding and removing
+routine SortedSet<T>.add(item: T) -> Bool:
+    return me.value.add(item)
+
+routine SortedSet<T>.remove(item: T) -> Bool:
+    return me.value.remove(item)
+
+# Indexing
+routine SortedSet<T>.__getitem__!(index: Integer) -> T:
+    return me.value.__getitem__!(index.value)
+
+# Search
+routine SortedSet<T>.contains(item: T) -> Bool:
+    return me.value.contains(item)
+
+# Min/Max
+routine SortedSet<T>.min!() -> T:
+    return me.value.min!()
+
+routine SortedSet<T>.max!() -> T:
+    return me.value.max!()
+
+routine SortedSet<T>.first!() -> T:
+    return me.value.first!()
+
+routine SortedSet<T>.last!() -> T:
+    return me.value.last!()
+
+# Range queries
+routine SortedSet<T>.range(min_val: T, max_val: T) -> List<T>:
+    return List<T>(value: me.value.range(min_val, max_val))
+
+# Conversion
+routine SortedSet<T>.to_list() -> List<T>:
+    return List<T>(value: me.value.to_list())
+
+# Comparison
+routine SortedSet<T>.__eq__(other: SortedSet<T>) -> Bool:
+    return me.value.__eq__(other.value)

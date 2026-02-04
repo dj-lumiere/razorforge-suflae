@@ -6,3 +6,30 @@ import razorforge/Text.Byte
 
 record Byte:
     private value: razorforge/Text.Byte
+
+# Comparison operations
+routine Byte.__eq__(other: Byte) -> Bool:
+    return me.value.__eq__(other.value)
+
+routine Byte.__cmp__(other: Byte) -> ComparisonSign:
+    return me.value.__cmp__(other.value)
+
+# Range check
+routine Byte.in_range(low: U8, high: U8) -> Bool:
+    return me.value.in_range(low, high)
+
+# Parsing helpers
+routine Byte.is_ascii() -> Bool:
+    return me.value.is_ascii()
+
+routine Byte.is_digit() -> Bool:
+    return me.value.is_digit()
+
+routine Byte.digit_value!() -> U8:
+    return me.value.digit_value!()
+
+routine Byte.is_hex_digit() -> Bool:
+    return me.value.is_hex_digit()
+
+routine Byte.hex_value!() -> U8:
+    return me.value.hex_value!()

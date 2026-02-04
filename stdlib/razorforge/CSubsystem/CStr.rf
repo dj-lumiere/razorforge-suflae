@@ -182,7 +182,7 @@ routine CStr.to_text() -> Bytes {
                 break
             }
             let byte_val = read_as!<U8>(me.ptr + i)
-            list.push(Byte(codepoint: byte_val))
+            list.add_last(Byte(codepoint: byte_val))
             i = i + 1uaddr
         }
         return Bytes(from_list: list)
@@ -200,7 +200,7 @@ routine CStr.to_bytes() -> List<U8> {
                 break
             }
             let byte_val = read_as!<U8>(me.ptr + i)
-            list.push(byte_val)
+            list.add_last(byte_val)
             i = i + 1uaddr
         }
         return list

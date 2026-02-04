@@ -36,7 +36,7 @@ routine Text.__create__(from_list: List<Letter>) -> Text {
 
 routine Text.__create__(from_letter: Letter) -> Text {
     let list = List<Letter>()
-    list.push(from_letter)
+    list.add_last(from_letter)
     return Text(letters: list)
 }
 
@@ -79,7 +79,7 @@ routine Text.concat(other: Text) -> Text {
         if i >= me.count() {
             break
         }
-        result.push(me[i])
+        result.add_last(me[i])
         i += 1u64
     }
     i = 0u64
@@ -87,7 +87,7 @@ routine Text.concat(other: Text) -> Text {
         if i >= other.count() {
             break
         }
-        result.push(other[i])
+        result.add_last(other[i])
         i += 1u64
     }
     return Text(from_list: result)
@@ -107,7 +107,7 @@ routine Text.slice(start: U64, end: U64) -> Text {
         if i >= end {
             break
         }
-        result.push(me[i])
+        result.add_last(me[i])
         i += 1u64
     }
     return Text(from_list: result)
@@ -152,7 +152,7 @@ entity TextIterator {
     index: U64
 }
 
-routine Text.iter() -> TextIterator {
+routine Text.__seq__() -> TextIterator {
     return TextIterator(text: me, index: 0u64)
 }
 

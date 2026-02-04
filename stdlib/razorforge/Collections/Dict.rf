@@ -5,7 +5,7 @@
 #
 # Usage:
 #   let ages = Dict<Text, S32>()
-#   ages.insert("Alice", 30)
+#   ages.add("Alice", 30)
 #   ages["Bob"] = 25
 #   let alice_age = ages["Alice"]
 #   if ages.contains_key("Charlie") { }
@@ -47,7 +47,7 @@ routine Dict<K, V>.__create__() -> Dict<K, V> {
     var i = 0uaddr
     while i < DICT_INITIAL_BUCKETS {
         let empty_dict = SortedDict<K, V>()
-        dict.buckets.push(empty_dict)
+        dict.buckets.add_last(empty_dict)
         i = i + 1uaddr
     }
     return dict
@@ -63,7 +63,7 @@ routine Dict<K, V>.__create__(capacity: UAddr) -> Dict<K, V> {
     var i = 0uaddr
     while i < bucket_count {
         let empty_dict = SortedDict<K, V>()
-        dict.buckets.push(empty_dict)
+        dict.buckets.add_last(empty_dict)
         i = i + 1uaddr
     }
     return dict
@@ -73,17 +73,17 @@ routine Dict<K, V>.__create__(capacity: UAddr) -> Dict<K, V> {
 # Internal Operations
 # ============================================================================
 
-routine Dict<K, V>.bucket_index(me: Dict<K, V>, key: K) -> UAddr {
+routine Dict<K, V>.bucket_index(key: K) -> UAddr {
     let hash = key.__hash__()
     return hash % me.buckets.count()
 }
 
-routine Dict<K, V>.should_rehash(me: Dict<K, V>) -> Bool {
+routine Dict<K, V>.should_rehash() -> Bool {
     let load = (me.count * 100uaddr) / me.buckets.count()
     return load > DICT_LOAD_FACTOR
 }
 
-routine Dict<K, V>.rehash(me: Dict<K, V>) {
+routine Dict<K, V>.rehash() {
     let old_buckets = me.buckets
     let new_bucket_count = old_buckets.count() * 2uaddr
 
@@ -91,7 +91,7 @@ routine Dict<K, V>.rehash(me: Dict<K, V>) {
     var i = 0uaddr
     while i < new_bucket_count {
         let empty_dict = SortedDict<K, V>()
-        me.buckets.push(empty_dict)
+        me.buckets.add_last(empty_dict)
         i = i + 1uaddr
     }
     me.count = 0uaddr
@@ -105,7 +105,7 @@ routine Dict<K, V>.rehash(me: Dict<K, V>) {
         while j < keys.count() {
             let key = keys[j]
             let value = bucket[key]
-            me.insert(key, value)
+            me.add(key, value)
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -116,15 +116,15 @@ routine Dict<K, V>.rehash(me: Dict<K, V>) {
 # Core Operations
 # ============================================================================
 
-routine Dict<K, V>.count(me: Dict<K, V>) -> UAddr {
+routine Dict<K, V>.count() -> UAddr {
     return me.count
 }
 
-routine Dict<K, V>.is_empty(me: Dict<K, V>) -> Bool {
+routine Dict<K, V>.is_empty() -> Bool {
     return me.count == 0uaddr
 }
 
-routine Dict<K, V>.clear(me: Dict<K, V>) {
+routine Dict<K, V>.clear() {
     var i = 0uaddr
     while i < me.buckets.count() {
         me.buckets[i].clear()
@@ -133,12 +133,12 @@ routine Dict<K, V>.clear(me: Dict<K, V>) {
     me.count = 0uaddr
 }
 
-routine Dict<K, V>.contains_key(me: Dict<K, V>, key: K) -> Bool {
+routine Dict<K, V>.contains_key(key: K) -> Bool {
     let idx = me.bucket_index(key)
     return me.buckets[idx].contains_key(key)
 }
 
-routine Dict<K, V>.insert(me: Dict<K, V>, key: K, value: V) -> Bool {
+routine Dict<K, V>.add(key: K, value: V) -> Bool {
     # Returns true if inserted new, false if updated existing
     if me.should_rehash() {
         me.rehash()
@@ -146,7 +146,7 @@ routine Dict<K, V>.insert(me: Dict<K, V>, key: K, value: V) -> Bool {
 
     let idx = me.bucket_index(key)
     let existed = me.buckets[idx].contains_key(key)
-    me.buckets[idx].insert(key, value)
+    me.buckets[idx].add(key, value)
     if not existed {
         me.count = me.count + 1uaddr
         return true
@@ -154,7 +154,7 @@ routine Dict<K, V>.insert(me: Dict<K, V>, key: K, value: V) -> Bool {
     return false
 }
 
-routine Dict<K, V>.remove(me: Dict<K, V>, key: K) -> Bool {
+routine Dict<K, V>.remove(key: K) -> Bool {
     # Returns true if removed, false if not found
     let idx = me.bucket_index(key)
     if me.buckets[idx].remove(key) {
@@ -164,12 +164,12 @@ routine Dict<K, V>.remove(me: Dict<K, V>, key: K) -> Bool {
     return false
 }
 
-routine Dict<K, V>.__getitem__!(me: Dict<K, V>, key: K) -> V {
+routine Dict<K, V>.get!(key: K) -> V {
     let idx = me.bucket_index(key)
     return me.buckets[idx][key]
 }
 
-routine Dict<K, V>.get_or_default(me: Dict<K, V>, key: K, default_value: V) -> V {
+routine Dict<K, V>.get_or_default(key: K, default_value: V) -> V {
     let idx = me.bucket_index(key)
     if me.buckets[idx].contains_key(key) {
         return me.buckets[idx][key]
@@ -181,11 +181,11 @@ routine Dict<K, V>.get_or_default(me: Dict<K, V>, key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
-routine Dict<K, V>.__getitem__!(me: Dict<K, V>, key: K) -> V {
+routine Dict<K, V>.__getitem__!(key: K) -> V {
     return me.get!(key)
 }
 
-routine Dict<K, V>.__setitem__(me: Dict<K, V>, key: K, value: V) {
+routine Dict<K, V>.__setitem__(key: K, value: V) {
     let idx = me.bucket_index(key)
     me.buckets[idx][key] = value
 }
@@ -194,14 +194,14 @@ routine Dict<K, V>.__setitem__(me: Dict<K, V>, key: K, value: V) {
 # Keys/Values/Entries
 # ============================================================================
 
-routine Dict<K, V>.keys(me: Dict<K, V>) -> List<K> {
+routine Dict<K, V>.keys() -> List<K> {
     let result = List<K>(me.count)
     var i = 0uaddr
     while i < me.buckets.count() {
         let bucket_keys = me.buckets[i].keys()
         var j = 0uaddr
         while j < bucket_keys.count() {
-            result.push(bucket_keys[j])
+            result.add_last(bucket_keys[j])
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -209,14 +209,14 @@ routine Dict<K, V>.keys(me: Dict<K, V>) -> List<K> {
     return result
 }
 
-routine Dict<K, V>.values(me: Dict<K, V>) -> List<V> {
+routine Dict<K, V>.values() -> List<V> {
     let result = List<V>(me.count)
     var i = 0uaddr
     while i < me.buckets.count() {
         let bucket_values = me.buckets[i].values()
         var j = 0uaddr
         while j < bucket_values.count() {
-            result.push(bucket_values[j])
+            result.add_last(bucket_values[j])
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -224,7 +224,7 @@ routine Dict<K, V>.values(me: Dict<K, V>) -> List<V> {
     return result
 }
 
-routine Dict<K, V>.entries(me: Dict<K, V>) -> List<DictEntry<K, V>> {
+routine Dict<K, V>.entries() -> List<DictEntry<K, V>> {
     let result = List<DictEntry<K, V>>(me.count)
     var i = 0uaddr
     while i < me.buckets.count() {
@@ -233,7 +233,7 @@ routine Dict<K, V>.entries(me: Dict<K, V>) -> List<DictEntry<K, V>> {
         while j < bucket_keys.count() {
             let key = bucket_keys[j]
             let value = me.buckets[i].get!(key)
-            result.push(DictEntry<K, V>(key: key, value: value))
+            result.add_last(DictEntry<K, V>(key: key, value: value))
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -245,7 +245,7 @@ routine Dict<K, V>.entries(me: Dict<K, V>) -> List<DictEntry<K, V>> {
 # Iteration
 # ============================================================================
 
-routine Dict<K, V>.iter(me: Dict<K, V>) -> DictIterator<K, V> {
+routine Dict<K, V>.__seq__() -> DictIterator<K, V> {
     return DictIterator<K, V>(
         dict: me,
         bucket_idx: 0uaddr,
@@ -261,7 +261,7 @@ entity DictIterator<K, V> {
     current_keys: List<K>
 }
 
-routine DictIterator<K, V>.next!(me: DictIterator<K, V>) -> DictEntry<K, V> {
+routine DictIterator<K, V>.next!() -> DictEntry<K, V> {
     # Advance to next non-empty bucket if needed
     while me.entry_idx >= me.current_keys.count() {
         if me.bucket_idx >= me.dict.buckets.count() {
@@ -282,7 +282,7 @@ routine DictIterator<K, V>.next!(me: DictIterator<K, V>) -> DictEntry<K, V> {
 # Comparison
 # ============================================================================
 
-routine Dict<K, V>.__eq__(me: Dict<K, V>, other: Dict<K, V>) -> Bool {
+routine Dict<K, V>.__eq__(other: Dict<K, V>) -> Bool {
     if me.count != other.count {
         return false
     }

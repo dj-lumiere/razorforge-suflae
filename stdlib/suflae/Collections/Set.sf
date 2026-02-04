@@ -15,9 +15,6 @@ routine Set<T>.is_empty() -> Bool:
     return me.value.is_empty()
 
 # Adding elements
-routine Set<T>.insert(item: T):
-    me.value.insert(item)
-
 routine Set<T>.add(item: T):
     me.value.add(item)
 
