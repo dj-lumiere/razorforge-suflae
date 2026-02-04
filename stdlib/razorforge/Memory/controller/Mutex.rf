@@ -13,8 +13,8 @@ routine Mutex.acquire() {
     # Spin until we can acquire the lock
     loop {
         when me.locked.compare_exchange(expected: false, desired: true) {
-            is true => break,  # Successfully acquired
-            is false => pass   # Someone else has it, keep trying
+            == true => break,  # Successfully acquired
+            == false => pass   # Someone else has it, keep trying
         }
     }
 }
