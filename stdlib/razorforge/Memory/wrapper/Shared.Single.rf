@@ -36,17 +36,17 @@ routine Shared<T>.release!() {
         me.controller.decrease_strong_count!()
 
         when me.controller.strong_count() == 0 {
-            true => {
+            == true {
                 # Deallocate the data
                 me.data.invalidate!()
 
                 # Check if we should also deallocate the controller
                 when me.controller.weak_count() == 0 {
-                    true => me.controller.invalidate!(),
-                    false => pass  # Keep controller alive for weak references
+                    == true => me.controller.invalidate!(),
+                    == false => pass  # Keep controller alive for weak references
                 }
             }
-            false => pass  # Still has strong references
+            == false => pass  # Still has strong references
         }
     }
 }
