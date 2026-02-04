@@ -229,6 +229,13 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // Parse visibility and storage class modifiers
         var (visibility, storage) = ParseModifiers();
 
+        // Define declaration with attributes (e.g., @config(target: "windows") define CLong as S32)
+        if (Match(type: TokenType.Define))
+        {
+            // TODO: Pass attributes to DefineDeclaration when supported
+            return ParseDefineDeclaration();
+        }
+
         // Imported declaration with optional calling convention
         // Supports: imported routine foo() or imported("C") routine foo()
         if (visibility == VisibilityModifier.Imported)

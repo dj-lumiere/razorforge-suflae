@@ -297,6 +297,13 @@ public partial class SuflaeParser
         // Parse visibility and storage class modifiers
         var (visibility, storage) = ParseModifiers();
 
+        // Define declaration with attributes (e.g., @config(target: "windows") define CLong as S32)
+        if (Match(type: TokenType.Define))
+        {
+            // TODO: Pass attributes to DefineDeclaration when supported
+            return ParseDefineDeclaration();
+        }
+
         // Field declaration in type bodies: name: Type
         // Detected by identifier followed by colon (no var/let keyword needed)
         // Only allowed inside type bodies (record, entity)
