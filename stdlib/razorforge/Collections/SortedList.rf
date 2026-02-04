@@ -10,8 +10,6 @@
 #   grades.add(92.0)
 #   let median = grades[grades.count() / 2]  # O(log n) access
 
-import memory.DynamicSlice
-import memory.MemorySize
 import errors.IndexOutOfBoundsError
 import Collections.List
 
@@ -109,7 +107,7 @@ routine SortedList<T>.count_of(value: T) -> UAddr {
     if me.root is None {
         return 0uaddr
     }
-    return me.count_in_node(me.root!, value)
+    return me.count_in_node(me.root!!, value)
 }
 
 routine SortedList<T>.count_in_node(node: BTreeListNode<T>, value: T) -> UAddr {

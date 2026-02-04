@@ -478,7 +478,9 @@ public partial class RazorForgeParser
                     do
                     {
                         constraintTypes.Add(item: ParseType());
-                    } while (Match(type: TokenType.Comma) && !Check(type: TokenType.Identifier));
+                        // Continue if comma followed by type name that's NOT a new constraint declaration
+                        // (i.e., identifier NOT followed by follows/is/in)
+                    } while (Match(type: TokenType.Comma) && !IsNewConstraintDeclaration());
 
                     constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                         ConstraintType: ConstraintKind.Follows,
@@ -577,5 +579,23 @@ public partial class RazorForgeParser
         return constraints.Count > 0
             ? constraints
             : null;
+    }
+
+    /// <summary>
+    /// Checks if the current position looks like a new constraint declaration (Identifier follows/is/in).
+    /// Used to distinguish between "K follows A, B" (K follows both A and B) and
+    /// "K follows A, U follows B" (K follows A, then U follows B).
+    /// </summary>
+    private bool IsNewConstraintDeclaration()
+    {
+        // Must start with an identifier (type parameter name)
+        if (!Check(TokenType.Identifier, TokenType.TypeIdentifier))
+        {
+            return false;
+        }
+
+        // Lookahead: check if identifier is followed by a constraint keyword
+        Token next = PeekToken(offset: 1);
+        return next.Type is TokenType.Follows or TokenType.Is or TokenType.In;
     }
 }

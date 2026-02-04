@@ -12,8 +12,6 @@
 #   let last = set[^1]     # 5
 #   let range = set.range(1, 10)
 
-import memory.DynamicSlice
-import memory.MemorySize
 import errors.IndexOutOfBoundsError
 import Collections.List
 
@@ -35,7 +33,7 @@ requires T follows Comparable {
 
 entity SortedSet<T>
 requires T follows Comparable {
-    private root: BTreeSetNode<T>
+    private root: BTreeSetNode<T>?
     private count: UAddr
 }
 
@@ -88,7 +86,7 @@ routine SortedSet<T>.contains(value: T) -> Bool {
     if me.root is None {
         return false
     }
-    return me.search_node(me.root!, value)
+    return me.search_node(me.root!!, value)
 }
 
 routine SortedSet<T>.search_node(node: BTreeSetNode<T>, value: T) -> Bool {
@@ -121,8 +119,8 @@ routine SortedSet<T>.add(value: T) -> Bool {
 
     if me.root is None {
         me.root = BTreeSetNode<T>(is_leaf: true)
-        me.root!.keys.add_last(value)
-        me.root!.subtree_size = 1uaddr
+        me.root!!.keys.add_last(value)
+        me.root!!.subtree_size = 1uaddr
         me.count = 1uaddr
         return true
     }
@@ -133,8 +131,8 @@ routine SortedSet<T>.add(value: T) -> Bool {
     }
 
     # If root is full, split it
-    if me.root!.keys.count() >= B - 1uaddr {
-        let old_root = me.root!
+    if me.root!!.keys.count() >= B - 1uaddr {
+        let old_root = me.root!!
         let new_root = BTreeSetNode<T>(is_leaf: false)
         new_root.children.add_last(old_root)
         me.split_child(new_root, 0uaddr)
@@ -142,7 +140,7 @@ routine SortedSet<T>.add(value: T) -> Bool {
         me.update_subtree_size(new_root)
     }
 
-    me.insert_non_full(me.root!, value)
+    me.insert_non_full(me.root!!, value)
     me.count = me.count + 1uaddr
     return true
 }
@@ -293,16 +291,16 @@ routine SortedSet<T>.remove(value: T) -> Bool {
         return false
     }
 
-    me.remove_from_node(me.root!, value)
+    me.remove_from_node(me.root!!, value)
     me.count = me.count - 1uaddr
 
     # If root has no keys but has children, make first child the new root
-    if me.root!.keys.count() == 0uaddr and not me.root!.is_leaf {
-        me.root = me.root!.children[0]
+    if me.root!!.keys.count() == 0uaddr and not me.root!!.is_leaf {
+        me.root = me.root!!.children[0]
     }
 
     # If tree is empty
-    if me.root!.keys.count() == 0uaddr {
+    if me.root!!.keys.count() == 0uaddr {
         me.root = None
     }
 
@@ -367,13 +365,13 @@ requires I follows Integral {
     if idx >= me.count {
         throw IndexOutOfBoundsError(index: idx, count: me.count)
     }
-    return me.get_by_rank(me.root!, idx)
+    return me.get_by_rank(me.root!!, idx)
 }
 
 routine SortedSet<T>.__getitem__!<I>(index: BackIndex<I>) -> T
 requires I follows Integral {
     let idx = index.resolve(me.count)
-    return me.get_by_rank(me.root!, idx)
+    return me.get_by_rank(me.root!!, idx)
 }
 
 routine SortedSet<T>.get_by_rank(node: BTreeSetNode<T>, rank: UAddr) -> T {
@@ -420,7 +418,7 @@ routine SortedSet<T>.range(min_val: T, max_val: T) -> List<T> {
     if me.root is None {
         return result
     }
-    me.range_collect(me.root!, min_val, max_val, result)
+    me.range_collect(me.root!!, min_val, max_val, result)
     return result
 }
 
@@ -456,7 +454,7 @@ routine SortedSet<T>.min!() -> T {
     if me.is_empty() {
         absent
     }
-    var node = me.root!
+    var node = me.root!!
     while not node.is_leaf {
         node = node.children[0]
     }
@@ -467,7 +465,7 @@ routine SortedSet<T>.max!() -> T {
     if me.is_empty() {
         absent
     }
-    var node = me.root!
+    var node = me.root!!
     while not node.is_leaf {
         node = node.children[node.children.count() - 1uaddr]
     }
@@ -495,7 +493,7 @@ routine SortedSet<T>.to_list() -> List<T> {
     if me.root is None {
         return result
     }
-    me.collect_inorder(me.root!, result)
+    me.collect_inorder(me.root!!, result)
     return result
 }
 

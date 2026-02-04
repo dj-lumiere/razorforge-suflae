@@ -390,7 +390,17 @@ public partial class RazorForgeParser
             if (op.Type is TokenType.Is or TokenType.IsNot)
             {
                 bool isNegated = op.Type == TokenType.IsNot;
-                TypeExpression type = ParseType();
+
+                // Handle 'is None' or 'isnot None' as a special case - None is a keyword
+                TypeExpression type;
+                if (Match(type: TokenType.None))
+                {
+                    type = new TypeExpression(Name: "None", GenericArguments: null, Location: location);
+                }
+                else
+                {
+                    type = ParseType();
+                }
 
                 // Check for destructuring pattern: is Type (...)
                 if (!isNegated && Check(type: TokenType.LeftParen))
@@ -1425,6 +1435,13 @@ public partial class RazorForgeParser
             // Creates a copy of a record with some fields updated.
             // Semantic analyzer validates that expr is actually a record type.
             // ═══════════════════════════════════════════════════════════════════════════
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 7: Force unwrap - expr!! (extract value from Maybe<T>, panic if None)
+            // ═══════════════════════════════════════════════════════════════════════════
+            else if (Match(type: TokenType.BangBang))
+            {
+                expr = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap, Operand: expr, Location: expr.Location);
+            }
             else if (Match(type: TokenType.With))
             {
                 SourceLocation withLocation = GetLocation(token: PeekToken(offset: -1));

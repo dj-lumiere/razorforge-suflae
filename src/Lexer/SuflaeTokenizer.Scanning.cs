@@ -194,11 +194,21 @@ public partial class SuflaeTokenizer
                     Match(expected: '>') ? TokenType.FatArrow : TokenType.Assign);
                 break;
             case '!':
-                AddToken(type: Match(expected: '=')
-                    ? Match(expected: '=')
-                        ? TokenType.ReferenceNotEqual
-                        : TokenType.NotEqual
-                    : TokenType.Bang);
+                if (Match(expected: '='))
+                {
+                    // != or !==
+                    AddToken(type: Match(expected: '=') ? TokenType.ReferenceNotEqual : TokenType.NotEqual);
+                }
+                else if (Match(expected: '!'))
+                {
+                    // !! (force unwrap)
+                    AddToken(type: TokenType.BangBang);
+                }
+                else
+                {
+                    // ! (failable marker or negation)
+                    AddToken(type: TokenType.Bang);
+                }
                 break;
             case '<':
                 ScanLessThanOperator();

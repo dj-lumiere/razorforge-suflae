@@ -699,8 +699,11 @@ public enum TokenType
     /// <summary>None coalescing assignment operator (??=)</summary>
     NoneCoalesceAssign,
 
-    /// <summary>Negation or macro operator (!)</summary>
+    /// <summary>Crashable routine suffix (!)</summary>
     Bang,
+
+    /// <summary>Force unwrap operator (!!)</summary>
+    BangBang,
 
     /// <summary>Optional type operator (?)</summary>
     Question,

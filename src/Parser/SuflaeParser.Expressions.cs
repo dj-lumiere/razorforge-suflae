@@ -404,7 +404,17 @@ public partial class SuflaeParser
             if (op.Type is TokenType.Is or TokenType.IsNot)
             {
                 bool isNegated = op.Type == TokenType.IsNot;
-                TypeExpression type = ParseType();
+
+                // Handle 'is None' or 'isnot None' as a special case - None is a keyword
+                TypeExpression type;
+                if (Match(type: TokenType.None))
+                {
+                    type = new TypeExpression(Name: "None", GenericArguments: null, Location: location);
+                }
+                else
+                {
+                    type = ParseType();
+                }
 
                 switch (isNegated)
                 {
@@ -1188,6 +1198,13 @@ public partial class SuflaeParser
                 {
                     expr = new MemberExpression(Object: expr, PropertyName: member, Location: expr.Location);
                 }
+            }
+            // ═══════════════════════════════════════════════════════════════════════════
+            // CASE 7: Force unwrap - expr!! (extract value from Maybe<T>, panic if None)
+            // ═══════════════════════════════════════════════════════════════════════════
+            else if (Match(type: TokenType.BangBang))
+            {
+                expr = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap, Operand: expr, Location: expr.Location);
             }
             else if (Match(type: TokenType.With))
             {

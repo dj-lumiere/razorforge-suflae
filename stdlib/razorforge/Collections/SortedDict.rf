@@ -13,8 +13,6 @@
 #       # Iterates in sorted key order
 #   }
 
-import memory.DynamicSlice
-import memory.MemorySize
 import errors.IndexOutOfBoundsError
 import Collections.List
 
@@ -40,7 +38,7 @@ requires K follows Comparable {
 
 entity SortedDict<K, V>
 requires K follows Comparable {
-    private root: BTreeDictNode<K, V>
+    private root: BTreeDictNode<K, V>?
     private count: UAddr
 }
 
@@ -92,10 +90,10 @@ routine SortedDict<K, V>.contains_key(key: K) -> Bool {
     if me.root is None {
         return false
     }
-    return me.search_node(me.root!, key) isnot None
+    return me.try_search_node(me.root, key) isnot None
 }
 
-routine SortedDict<K, V>.search_node!(node: BTreeDictNode<K, V>, key: K) -> V {
+routine SortedDict<K, V>.search_node!(node: BTreeDictNode<K, V>?, key: K) -> V {
     var i = 0uaddr
     while i < node.entries.count() and key > node.entries[i].key {
         i = i + 1uaddr
@@ -140,27 +138,27 @@ routine SortedDict<K, V>.add(key: K, value: V) -> Bool {
 
     if me.root is None {
         me.root = BTreeDictNode<K, V>(is_leaf: true)
-        me.root!.entries.add_last(KVPair<K, V>(key: key, value: value))
+        me.root!!.entries.add_last(KVPair<K, V>(key: key, value: value))
         me.count = 1uaddr
         return true
     }
 
     # Check if key exists and update
-    let existing = me.find_and_update(me.root!, key, value)
+    let existing = me.find_and_update(me.root!!, key, value)
     if existing {
         return false
     }
 
     # If root is full, split it
-    if me.root!.entries.count() >= B_DICT - 1uaddr {
-        let old_root = me.root!
+    if me.root!!.entries.count() >= B_DICT - 1uaddr {
+        let old_root = me.root!!
         let new_root = BTreeDictNode<K, V>(is_leaf: false)
         new_root.children.add_last(old_root)
         me.split_child(new_root, 0uaddr)
         me.root = new_root
     }
 
-    me.insert_non_full(me.root!, key, value)
+    me.insert_non_full(me.root!!, key, value)
     me.count = me.count + 1uaddr
     return true
 }
@@ -297,14 +295,14 @@ routine SortedDict<K, V>.remove(key: K) -> Bool {
         return false
     }
 
-    me.remove_from_node(me.root!, key)
+    me.remove_from_node(me.root!!, key)
     me.count = me.count - 1uaddr
 
-    if me.root!.entries.count() == 0uaddr and not me.root!.is_leaf {
-        me.root = me.root!.children[0]
+    if me.root!!.entries.count() == 0uaddr and not me.root!!.is_leaf {
+        me.root = me.root!!.children[0]
     }
 
-    if me.root!.entries.count() == 0uaddr {
+    if me.root!!.entries.count() == 0uaddr {
         me.root = None
     }
 
@@ -358,7 +356,7 @@ routine SortedDict<K, V>.keys() -> List<K> {
     if me.root is None {
         return result
     }
-    me.collect_keys(me.root!, result)
+    me.collect_keys(me.root!!, result)
     return result
 }
 
@@ -381,7 +379,7 @@ routine SortedDict<K, V>.values() -> List<V> {
     if me.root is None {
         return result
     }
-    me.collect_values(me.root!, result)
+    me.collect_values(me.root!!, result)
     return result
 }
 
@@ -407,7 +405,7 @@ routine SortedDict<K, V>.min_key!() -> K {
     if me.is_empty() {
         absent
     }
-    var node = me.root!
+    var node = me.root!!
     while not node.is_leaf {
         node = node.children[0]
     }
@@ -418,7 +416,7 @@ routine SortedDict<K, V>.max_key!() -> K {
     if me.is_empty() {
         absent
     }
-    var node = me.root!
+    var node = me.root!!
     while not node.is_leaf {
         node = node.children[node.children.count() - 1uaddr]
     }
@@ -429,7 +427,7 @@ routine SortedDict<K, V>.first!() -> KVPair<K, V> {
     if me.is_empty() {
         absent
     }
-    var node = me.root!
+    var node = me.root!!
     while not node.is_leaf {
         node = node.children[0]
     }
@@ -440,7 +438,7 @@ routine SortedDict<K, V>.last!() -> KVPair<K, V> {
     if me.is_empty() {
         absent
     }
-    var node = me.root!
+    var node = me.root!!
     while not node.is_leaf {
         node = node.children[node.children.count() - 1uaddr]
     }
@@ -456,7 +454,7 @@ routine SortedDict<K, V>.range(min_key: K, max_key: K) -> List<KVPair<K, V>> {
     if me.root is None {
         return result
     }
-    me.range_collect(me.root!, min_key, max_key, result)
+    me.range_collect(me.root!!, min_key, max_key, result)
     return result
 }
 
@@ -497,7 +495,7 @@ routine SortedDict<K, V>.to_list() -> List<KVPair<K, V>> {
     if me.root is None {
         return result
     }
-    me.collect_inorder(me.root!, result)
+    me.collect_inorder(me.root!!, result)
     return result
 }
 

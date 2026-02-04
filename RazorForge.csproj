@@ -42,7 +42,6 @@
 
   <ItemGroup>
     <Folder Include="src\CodeGen\" />
-    <Folder Include="src\LanguageServer\" />
     <Folder Include="tests\" />
   </ItemGroup>
 

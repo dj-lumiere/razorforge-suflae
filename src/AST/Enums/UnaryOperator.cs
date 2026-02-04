@@ -43,7 +43,21 @@ public enum UnaryOperator
     /// <item>Snatched&lt;T&gt; - internal ownership type</item>
     /// </list>
     /// </remarks>
-    Steal
+    Steal,
+
+    /// <summary>
+    /// Force unwrap operator (x!!).
+    /// Extracts the value from a Maybe&lt;T&gt;, panicking if None.
+    /// </summary>
+    /// <remarks>
+    /// The force unwrap operator is a postfix unary operator that:
+    /// <list type="bullet">
+    /// <item>Returns the inner value if the Maybe is not None</item>
+    /// <item>Panics/stops if the Maybe is None</item>
+    /// </list>
+    /// This should only be used when the programmer is certain the value is not None.
+    /// </remarks>
+    ForceUnwrap
 }
 
 internal static class UnaryOperatorExtensions
@@ -58,6 +72,7 @@ internal static class UnaryOperatorExtensions
                 UnaryOperator.Not => "not",
                 UnaryOperator.BitwiseNot => "~",
                 UnaryOperator.Steal => "steal",
+                UnaryOperator.ForceUnwrap => "!!",
                 _ => null
             };
         }
