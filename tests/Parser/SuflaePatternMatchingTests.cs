@@ -275,7 +275,7 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(value: User?):
                             when value:
-                                is none => show("User not found")
+                                is None => show("User not found")
                                 else user => show(f"Found: {user.name}")
                         """;
 
@@ -317,7 +317,7 @@ public class SuflaePatternMatchingTests
                         routine handle(result: Lookup<User>):
                             when result:
                                 is Crashable e => show(f"Error: {e.message()}")
-                                is none => show("User not found")
+                                is None => show("User not found")
                                 else user => show(f"Found: {user.name}")
                         """;
 
@@ -333,7 +333,7 @@ public class SuflaePatternMatchingTests
                                 is ValidationError e => stop!(f"Invalid config name: {e.message}")
                                 is IOError e => show(f"IO error: {e.message}")
                                 is Crashable e => breach!()
-                                is none => use_default_config()
+                                is None => use_default_config()
                                 else config => apply(config)
                         """;
 
@@ -428,7 +428,7 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(value: Maybe<User>):
                             when value:
-                                is none => show("Not found")
+                                is None => show("Not found")
                                 else u => show(u.name)
                         """;
 
@@ -441,7 +441,7 @@ public class SuflaePatternMatchingTests
         string source = """
                         routine handle(value: Maybe<User>):
                             when value:
-                                is none:
+                                is None:
                                     show("Not found")
                                     return
                                 else user:

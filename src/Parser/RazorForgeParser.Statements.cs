@@ -272,16 +272,18 @@ public partial class RazorForgeParser
                 pattern = new ExpressionPattern(Expression: condition, Location: clauseLocation);
             }
             // Case 4: 'is' keyword - type pattern only
-            // Forms: is Type, is Type varName, is Type (field1, field2)
+            // Forms: is Type, is Type varName, is Type (field1, field2), is None
             // Note: 'is <value>' is NOT allowed - use '== value' for value comparisons
+            // Semantic analysis validates whether the identifier is a valid type or variant
             else if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
-                // 'is' must be followed by a type name (TypeIdentifier or capitalized Identifier)
+                // 'is' must be followed by a type/variant name - semantic analysis validates
                 if (Check(type: TokenType.TypeIdentifier) ||
-                    (Check(type: TokenType.Identifier) && char.IsUpper(CurrentToken.Text[0])))
+                    Check(type: TokenType.None) ||
+                    Check(type: TokenType.Identifier))
                 {
-                    // Parse as type pattern
+                    // Parse as type pattern - semantic analysis will validate if it's a valid type
                     pattern = ParseTypePattern();
                 }
                 else
