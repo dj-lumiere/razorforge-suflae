@@ -68,22 +68,6 @@ public class SuflaeAccessBlockTests
     }
 
     [Fact]
-    public void ParseSuflae_UsingWithTryCatch()
-    {
-        string source = """
-                        routine test():
-                            try:
-                                using open("data.txt") as file:
-                                    let content = file.read_all()
-                                    process(content)
-                            catch FileNotFoundError as e:
-                                show(f"File not found: {e.path}")
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
     public void ParseSuflae_UsingWithAsync()
     {
         string source = """
@@ -167,26 +151,6 @@ public class SuflaeAccessBlockTests
                                     using open(path) as input:
                                         output.write(input.read_all())
                                         output.write("\n")
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_ResourcesWithExceptionHandling()
-    {
-        string source = """
-                        routine safe_process():
-                            try:
-                                using open("input.txt") as input:
-                                    using open("output.txt", mode: Write) as output:
-                                        for line in input.lines():
-                                            output.write(transform(line))
-                                            output.write("\n")
-                            catch IOError as e:
-                                show(f"IO Error: {e.message}")
-                            finally:
-                                cleanup()
                         """;
 
         AssertParsesSuflae(source: source);

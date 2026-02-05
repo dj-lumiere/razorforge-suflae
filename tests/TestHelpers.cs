@@ -72,11 +72,21 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Asserts that parsing succeeds without throwing.
+    /// Asserts that parsing succeeds without errors.
     /// </summary>
     public static Program AssertParses(string source, [CallerMemberName] string? fileName = null)
     {
-        Program program = Parse(source: source, fileName: fileName);
+        (Program program, RazorForgeParser parser) = ParseWithErrors(source: source, fileName: fileName);
+
+        if (parser.HasErrors)
+        {
+            IReadOnlyList<string> errors = parser.GetErrors();
+            string errorMessages = string.Join(separator: "\n",
+                values: errors.Select(selector: e => $"  - {e}"));
+            Assert.Fail(
+                message: $"Expected no parse errors but got {errors.Count}:\n{errorMessages}");
+        }
+
         Assert.NotNull(@object: program);
         Assert.NotEmpty(collection: program.Declarations);
         return program;
@@ -158,11 +168,21 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Asserts that Suflae parsing succeeds without throwing.
+    /// Asserts that Suflae parsing succeeds without errors.
     /// </summary>
     public static Program AssertParsesSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        Program program = ParseSuflae(source: source, fileName: fileName);
+        (Program program, SuflaeParser parser) = ParseSuflaeWithErrors(source: source, fileName: fileName);
+
+        if (parser.HasErrors)
+        {
+            IReadOnlyList<string> errors = parser.GetErrors();
+            string errorMessages = string.Join(separator: "\n",
+                values: errors.Select(selector: e => $"  - {e}"));
+            Assert.Fail(
+                message: $"Expected no parse errors but got {errors.Count}:\n{errorMessages}");
+        }
+
         Assert.NotNull(@object: program);
         Assert.NotEmpty(collection: program.Declarations);
         return program;

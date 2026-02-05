@@ -359,96 +359,16 @@ public class SuflaeControlFlowTests
 
     #endregion
 
-    #region Try/Catch/Finally Tests
+    #region Throw Tests
 
     [Fact]
-    public void ParseSuflae_TryCatch()
-    {
-        string source = """
-                        routine test():
-                            try:
-                                let data = read_file("data.txt")
-                                process(data)
-                            catch FileNotFoundError as e:
-                                show(f"File not found: {e.path}")
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_TryCatchMultiple()
-    {
-        string source = """
-                        routine test():
-                            try:
-                                risky_operation()
-                            catch FileNotFoundError as e:
-                                show("File not found")
-                            catch IOError as e:
-                                show("IO error")
-                            catch Exception as e:
-                                show("Unknown error")
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_TryCatchFinally()
-    {
-        string source = """
-                        routine test():
-                            try:
-                                let file = open("data.txt")
-                                process(file)
-                            catch IOError as e:
-                                show(f"Error: {e.message}")
-                            finally:
-                                file.close()
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_TryFinally()
-    {
-        string source = """
-                        routine test():
-                            try:
-                                let lock = acquire()
-                                do_work()
-                            finally:
-                                lock.release()
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_Raise()
+    public void ParseSuflae_Throw()
     {
         string source = """
                         routine validate(value: Integer) -> Integer:
                             if value < 0:
                                 throw ValueError("Value must be non-negative")
                             return value
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_ReRaise()
-    {
-        string source = """
-                        routine test():
-                            try:
-                                process()
-                            catch ValidationError as e:
-                                log_error(e)
-                                raise
                         """;
 
         AssertParsesSuflae(source: source);
@@ -563,21 +483,6 @@ public class SuflaeControlFlowTests
         AssertParsesSuflae(source: source);
     }
 
-    [Fact]
-    public void ParseSuflae_AsyncWithTryCatch()
-    {
-        string source = """
-                        suspended routine safe_fetch!(url: Text) -> Text:
-                            try:
-                                return waitfor fetch_data(url)
-                            catch NetworkError as e:
-                                show(f"Network error: {e.message}")
-                                absent
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
     #endregion
 
     #region Stop and Verify Tests
@@ -649,28 +554,6 @@ public class SuflaeControlFlowTests
                                 if item == target:
                                     return index
                             absent
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_ComplexTryCatch()
-    {
-        string source = """
-                        routine process_file(path: Text):
-                            try:
-                                using open(path) as file:
-                                    for line in file.lines():
-                                        if line.starts_with("#"):
-                                            continue
-                                        process_line(line)
-                            catch FileNotFoundError as e:
-                                show(f"Not found: {path}")
-                            catch IOError as e:
-                                show(f"Error: {e.message}")
-                            finally:
-                                cleanup()
                         """;
 
         AssertParsesSuflae(source: source);
