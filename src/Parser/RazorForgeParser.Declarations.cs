@@ -282,14 +282,15 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses attributes like @crash_only, @inline, @intrinsic("name"), etc.
+    /// Parses attributes like @crash_only, @inline, @intrinsic("name"), @[readonly, inline], etc.
     /// Attributes are prefixed with @ and followed by an identifier, optionally with arguments.
+    /// Also supports compound attributes: @[attr1, attr2, attr3]
     /// </summary>
     private List<string> ParseAttributes()
     {
         var attributes = new List<string>();
 
-        // Handle both @attribute and special tokens (@intrinsic_type, @intrinsic_routine, @native)
+        // Handle both @attribute, @[...] compound, and special tokens (@intrinsic_type, @intrinsic_routine, @native)
         while (Check(TokenType.At, TokenType.IntrinsicType, TokenType.IntrinsicRoutine, TokenType.Native))
         {
             string attrName;
@@ -298,69 +299,102 @@ public partial class RazorForgeParser
             {
                 // @intrinsic_type was tokenized as a single IntrinsicType token
                 attrName = "intrinsic_type";
+                attributes.Add(item: attrName);
             }
             else if (Match(type: TokenType.IntrinsicRoutine))
             {
                 // @intrinsic_routine was tokenized as a single IntrinsicRoutine token
                 attrName = "intrinsic_routine";
+                attributes.Add(item: attrName);
             }
             else if (Match(type: TokenType.Native))
             {
                 // @native was tokenized as a single Native token
                 attrName = "native";
+                attributes.Add(item: attrName);
             }
             else if (Match(type: TokenType.At))
             {
-                // Regular attribute: @identifier
-                attrName = ConsumeIdentifier(errorMessage: "Expected attribute name after '@'");
+                // Check for compound attribute syntax: @[attr1, attr2, ...]
+                if (Match(type: TokenType.LeftBracket))
+                {
+                    // Parse comma-separated list of attribute names
+                    do
+                    {
+                        string compoundAttr = ConsumeIdentifier(errorMessage: "Expected attribute name in compound attribute");
+
+                        // Check for optional arguments on each attribute
+                        if (Match(type: TokenType.LeftParen))
+                        {
+                            compoundAttr += "(" + ParseAttributeArgumentList() + ")";
+                        }
+
+                        attributes.Add(item: compoundAttr);
+                    } while (Match(type: TokenType.Comma));
+
+                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after compound attributes");
+                }
+                else
+                {
+                    // Regular attribute: @identifier
+                    attrName = ConsumeIdentifier(errorMessage: "Expected attribute name after '@'");
+
+                    // Check for attribute arguments: @intrinsic.sitofp() or @config(name: "value", count: 5)
+                    if (Match(type: TokenType.LeftParen))
+                    {
+                        attrName += "(" + ParseAttributeArgumentList() + ")";
+                    }
+
+                    attributes.Add(item: attrName);
+                }
             }
             else
             {
                 break; // No more attributes
             }
-
-            // Check for attribute arguments: @intrinsic.sitofp() or @config(name: "value", count: 5)
-            if (Match(type: TokenType.LeftParen))
-            {
-                var arguments = new List<string>();
-
-                if (!Check(type: TokenType.RightParen))
-                {
-                    do
-                    {
-                        // Check for named argument: name = value or name: value
-                        TokenType nextToken = PeekToken(offset: 1).Type;
-                        if (Check(type: TokenType.Identifier) &&
-                            (nextToken == TokenType.Colon || nextToken == TokenType.Assign))
-                        {
-                            string argName = ConsumeIdentifier(errorMessage: "Expected argument name");
-                            // Accept both '=' and ':' as separators
-                            if (!Match(TokenType.Colon, TokenType.Assign))
-                            {
-                                throw ThrowParseError(RazorForgeDiagnosticCode.UnexpectedToken,
-                                    "Expected '=' or ':' after argument name");
-                            }
-                            string argValue = ParseAttributeValue();
-                            arguments.Add(item: $"{argName}={argValue}");
-                        }
-                        else
-                        {
-                            // Positional argument (string literal, number, identifier)
-                            arguments.Add(item: ParseAttributeValue());
-                        }
-                    } while (Match(type: TokenType.Comma));
-                }
-
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after attribute arguments");
-
-                // Store attribute as: intrinsic("size_of") or config(name="value", count=5)
-                attrName += "(" + string.Join(separator: ", ", values: arguments) + ")";
-            }
-
-            attributes.Add(item: attrName);
         }
 
         return attributes;
+    }
+
+    /// <summary>
+    /// Parses the argument list for an attribute (the content inside parentheses).
+    /// </summary>
+    /// <returns>String representation of the argument list.</returns>
+    private string ParseAttributeArgumentList()
+    {
+        var arguments = new List<string>();
+
+        if (!Check(type: TokenType.RightParen))
+        {
+            do
+            {
+                // Check for named argument: name = value or name: value
+                TokenType nextToken = PeekToken(offset: 1).Type;
+                if (Check(type: TokenType.Identifier) &&
+                    (nextToken == TokenType.Colon || nextToken == TokenType.Assign))
+                {
+                    string argName = ConsumeIdentifier(errorMessage: "Expected argument name");
+                    // Accept both '=' and ':' as separators
+                    if (!Match(TokenType.Colon, TokenType.Assign))
+                    {
+                        throw ThrowParseError(RazorForgeDiagnosticCode.UnexpectedToken,
+                            "Expected '=' or ':' after argument name");
+                    }
+                    string argValue = ParseAttributeValue();
+                    arguments.Add(item: $"{argName}={argValue}");
+                }
+                else
+                {
+                    // Positional argument (string literal, number, identifier)
+                    arguments.Add(item: ParseAttributeValue());
+                }
+            } while (Match(type: TokenType.Comma));
+        }
+
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after attribute arguments");
+
+        return string.Join(separator: ", ", values: arguments);
     }
 
     /// <summary>

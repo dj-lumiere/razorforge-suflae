@@ -694,8 +694,16 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation();
         var statements = new List<Statement>();
 
-        // Consume newline after colon
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+        // Consume newline after colon (optional if we're already at Indent)
+        // This handles cases like when clause blocks where token stream varies
+        if (Check(type: TokenType.Newline))
+        {
+            Advance(); // consume newline
+        }
+        else if (!Check(type: TokenType.Indent))
+        {
+            throw ThrowParseError("Expected newline after ':'");
+        }
 
         // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
@@ -778,37 +786,60 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a using statement for resource management.
-    /// Syntax: <c>using resource_expr as name:</c> followed by indented body.
+    /// Syntax: <c>using resource_expr as name:</c> or <c>using r1 as n1, r2 as n2:</c>
     /// Similar to Python's 'with' statement or C#'s 'using' statement.
     /// </summary>
     /// <remarks>
     /// The resource is acquired when entering the block and automatically released when exiting.
+    /// Supports multiple resources which are nested as inner using statements.
     /// <code>
     /// using open("file.txt") as file:
     ///     let content = file.read_all()
     ///     process(content)
     /// # file is automatically closed here
+    ///
+    /// # Multiple resources:
+    /// using open("input.txt") as input, open("output.txt") as output:
+    ///     output.write(input.read_all())
     /// </code>
     /// </remarks>
-    /// <returns>A <see cref="UsingStatement"/> AST node.</returns>
+    /// <returns>A <see cref="UsingStatement"/> AST node (nested for multiple resources).</returns>
     private Statement ParseUsingStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // Parse resource expression
-        Expression resource = ParseExpression();
+        // Parse all resource bindings: resource as name [, resource as name, ...]
+        var resources = new List<(Expression Resource, string Name, SourceLocation Location)>();
 
-        // Expect 'as'
-        Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
+        do
+        {
+            SourceLocation resourceLocation = GetLocation();
 
-        // Parse the binding name
-        string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
+            // Parse resource expression
+            Expression resource = ParseExpression();
+
+            // Expect 'as'
+            Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
+
+            // Parse the binding name
+            string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
+
+            resources.Add((resource, name, resourceLocation));
+        } while (Match(type: TokenType.Comma));
 
         // Expect ':' and indented body
         Consume(type: TokenType.Colon, errorMessage: "Expected ':' after using statement");
         Statement body = ParseIndentedBlock();
 
-        return new UsingStatement(Resource: resource, Name: name, Body: body, Location: location);
+        // Build nested UsingStatements from inside out
+        // The last resource gets the actual body, others wrap around it
+        for (int i = resources.Count - 1; i >= 0; i--)
+        {
+            var (resource, name, resLocation) = resources[i];
+            body = new UsingStatement(Resource: resource, Name: name, Body: body, Location: i == 0 ? location : resLocation);
+        }
+
+        return body;
     }
 
     /// <summary>

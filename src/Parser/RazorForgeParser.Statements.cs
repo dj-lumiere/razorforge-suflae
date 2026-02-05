@@ -793,25 +793,41 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses a using declaration (resource management)
-    /// Syntax: <c>using file as a</c>
+    /// Syntax: <c>using file as a</c> or <c>using file1 as a, file2 as b</c>
     /// </summary>
-    /// <returns>A <see cref="UsingStatement"/> AST node.</returns>
-    private UsingStatement ParseUsingStatement()
+    /// <returns>A <see cref="UsingStatement"/> AST node (nested for multiple resources).</returns>
+    private Statement ParseUsingStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // Parse resource expression
-        Expression resource = ParseExpression();
+        var resources = new List<(Expression Resource, string Name, SourceLocation Location)>();
 
-        // Expect 'as'
-        Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
+        // Parse comma-separated resources: using r1 as n1, r2 as n2 { ... }
+        do
+        {
+            SourceLocation resourceLocation = GetLocation();
+            Expression resource = ParseExpression();
 
-        // Parse the binding name
-        string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
+            // Expect 'as'
+            Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
 
-        BlockStatement body = ParseBlockStatement();
+            // Parse the binding name
+            string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
 
-        return new UsingStatement(Resource: resource, Name: name, Body: body, Location: location);
+            resources.Add(item: (resource, name, resourceLocation));
+        } while (Match(type: TokenType.Comma));
+
+        Statement body = ParseBlockStatement();
+
+        // Build nested UsingStatements from inside out
+        for (int i = resources.Count - 1; i >= 0; i--)
+        {
+            (Expression resource, string name, SourceLocation resLocation) = resources[index: i];
+            body = new UsingStatement(Resource: resource, Name: name, Body: body,
+                Location: i == 0 ? location : resLocation);
+        }
+
+        return (UsingStatement)body;
     }
 
     /// <summary>
