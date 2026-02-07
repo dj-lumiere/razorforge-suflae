@@ -84,12 +84,12 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Validates a namespace declaration.
-    /// Rejects "namespace Core" as it's reserved for stdlib.
+    /// Rejects "namespace Core" as it's reserved for stdlib (user code cannot declare it).
     /// </summary>
     private void ValidateNamespaceDeclaration(NamespaceDeclaration ns)
     {
         // Namespace "Core" is reserved for stdlib only
-        if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase))
+        if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase) && !IsStdlibFile(_currentFilePath))
         {
             ReportError(
                 SemanticDiagnosticCode.ReservedNamespaceCore,

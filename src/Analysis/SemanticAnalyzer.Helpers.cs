@@ -1279,4 +1279,23 @@ public sealed partial class SemanticAnalyzer
     }
 
     #endregion
+
+    #region Stdlib File Detection
+
+    /// <summary>
+    /// Checks whether a file path is inside the stdlib directory.
+    /// Used to allow stdlib files to use reserved features (e.g., namespace Core).
+    /// </summary>
+    private bool IsStdlibFile(string filePath)
+    {
+        string? stdlibPath = _registry.StdlibPath;
+        if (string.IsNullOrEmpty(stdlibPath) || string.IsNullOrEmpty(filePath))
+            return false;
+
+        string normalizedFile = Path.GetFullPath(filePath);
+        string normalizedStdlib = Path.GetFullPath(stdlibPath);
+        return normalizedFile.StartsWith(normalizedStdlib, StringComparison.OrdinalIgnoreCase);
+    }
+
+    #endregion
 }

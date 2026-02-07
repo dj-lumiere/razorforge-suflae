@@ -37,6 +37,9 @@ public sealed class TypeRegistry
     /// <summary>Path to the stdlib directory.</summary>
     private readonly string? _stdlibPath;
 
+    /// <summary>Gets the stdlib directory path.</summary>
+    public string? StdlibPath => _stdlibPath;
+
     /// <summary>Set of loaded module paths (e.g., "Collections.List", "ErrorHandling.Maybe").</summary>
     private readonly HashSet<string> _loadedModules = new(StringComparer.OrdinalIgnoreCase);
 
