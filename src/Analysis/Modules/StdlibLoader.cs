@@ -278,9 +278,9 @@ public sealed class StdlibLoader
     /// </summary>
     /// <param name="registry">The type registry to populate.</param>
     /// <param name="filePath">The resolved file path of the module.</param>
-    /// <param name="moduleId">The module identifier (e.g., "Collections.List") - used as namespace.</param>
-    /// <returns>True if the module was loaded successfully, false on error.</returns>
-    public bool LoadModule(TypeRegistry registry, string filePath, string moduleId)
+    /// <param name="moduleId">The module identifier (e.g., "Collections.List").</param>
+    /// <returns>The effective namespace of the loaded module, or null on failure.</returns>
+    public string? LoadModule(TypeRegistry registry, string filePath, string moduleId)
     {
         try
         {
@@ -288,9 +288,9 @@ public sealed class StdlibLoader
             // Detect file type from extension and use appropriate parser
             Program ast = ParseFileByExtension(code, filePath);
 
-            // Get namespace from file declaration
+            // Get namespace from file declaration, or derive from directory structure
             string? fileNamespace = GetDeclaredNamespace(ast);
-            string effectiveNamespace = fileNamespace ?? moduleId;
+            string effectiveNamespace = fileNamespace ?? DeriveNamespaceFromPath(filePath);
 
             // Two-pass registration for single module
             RegisterProgramTypes(registry, ast, effectiveNamespace);
@@ -302,16 +302,16 @@ public sealed class StdlibLoader
                 if (node is ImportDeclaration import)
                 {
                     // Recursively load imported modules
-                    registry.LoadModule(import.ModulePath, filePath, import.Location);
+                    registry.LoadModule(import.ModulePath, filePath, import.Location, out _);
                 }
             }
 
-            return true;
+            return effectiveNamespace;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Warning: Failed to load module '{moduleId}' from {filePath}: {ex.Message}");
-            return false;
+            return null;
         }
     }
 

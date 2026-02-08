@@ -170,7 +170,7 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        TypeSymbol? type = _registry.LookupType(name: typeName);
+        TypeSymbol? type = LookupTypeWithImports(name: typeName);
         if (type == null)
         {
             ReportError(
@@ -875,7 +875,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Try to look up as type (for static access)
-        TypeSymbol? type = _registry.LookupType(name: id.Name);
+        TypeSymbol? type = LookupTypeWithImports(name: id.Name);
         if (type != null)
         {
             return type;
@@ -1072,7 +1072,7 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Could be a type constructor
-            TypeSymbol? type = _registry.LookupType(name: id.Name);
+            TypeSymbol? type = LookupTypeWithImports(name: id.Name);
             if (type != null)
             {
                 // Constructor call - also validate token uniqueness
@@ -1569,7 +1569,7 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol AnalyzeConstructorExpression(ConstructorExpression ctor)
     {
-        TypeSymbol? type = _registry.LookupType(name: ctor.TypeName);
+        TypeSymbol? type = LookupTypeWithImports(name: ctor.TypeName);
         if (type == null)
         {
             ReportError(SemanticDiagnosticCode.UnknownType, $"Unknown type '{ctor.TypeName}'.", ctor.Location);
@@ -1840,7 +1840,7 @@ public sealed partial class SemanticAnalyzer
     {
         AnalyzeExpression(expression: conv.Expression);
 
-        TypeSymbol? targetType = _registry.LookupType(name: conv.TargetType);
+        TypeSymbol? targetType = LookupTypeWithImports(name: conv.TargetType);
         if (targetType == null)
         {
             ReportError(SemanticDiagnosticCode.UnknownConversionTargetType, $"Unknown conversion target type '{conv.TargetType}'.", conv.Location);

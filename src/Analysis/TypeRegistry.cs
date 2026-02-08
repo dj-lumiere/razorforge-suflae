@@ -43,6 +43,9 @@ public sealed class TypeRegistry
     /// <summary>Set of loaded module paths (e.g., "Collections.List", "ErrorHandling.Maybe").</summary>
     private readonly HashSet<string> _loadedModules = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Maps module IDs to their effective namespaces (for import tracking).</summary>
+    private readonly Dictionary<string, string> _moduleNamespaces = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The module resolver for finding module files.</summary>
     private ModuleResolver? _moduleResolver;
 
@@ -169,8 +172,10 @@ public sealed class TypeRegistry
     /// <param name="importPath">The import path (e.g., "Collections/List", "ErrorHandling/Maybe").</param>
     /// <param name="currentFile">The file containing the import statement (for relative import resolution).</param>
     /// <param name="location">Source location for error reporting.</param>
+    /// <param name="effectiveNamespace">The effective namespace of the loaded module, or null on failure.</param>
     /// <returns>True if the module was loaded successfully or was already loaded, false on error.</returns>
-    public bool LoadModule(string importPath, string currentFile, SourceLocation location)
+    public bool LoadModule(string importPath, string currentFile, SourceLocation location,
+        out string? effectiveNamespace)
     {
         // Normalize the import path to a module identifier (e.g., "Collections/List" -> "Collections.List")
         string moduleId = importPath.Replace('/', '.').Replace('\\', '.');
@@ -178,6 +183,7 @@ public sealed class TypeRegistry
         // Check if already loaded
         if (_loadedModules.Contains(moduleId))
         {
+            _moduleNamespaces.TryGetValue(moduleId, out effectiveNamespace);
             return true;
         }
 
@@ -189,12 +195,15 @@ public sealed class TypeRegistry
         {
             LoadCoreNamespace();
             _loadedModules.Add(moduleId);
+            effectiveNamespace = "Core";
+            _moduleNamespaces[moduleId] = "Core";
             return true;
         }
 
         // Ensure stdlib path is available
         if (_stdlibPath == null || !Directory.Exists(_stdlibPath))
         {
+            effectiveNamespace = null;
             return false;
         }
 
@@ -207,6 +216,7 @@ public sealed class TypeRegistry
         string? resolvedPath = _moduleResolver.ResolveImport(importPath, currentFile, location);
         if (resolvedPath == null)
         {
+            effectiveNamespace = null;
             return false;
         }
 
@@ -215,7 +225,14 @@ public sealed class TypeRegistry
 
         // Load the module using StdlibLoader
         _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
-        return _stdlibLoader.LoadModule(this, resolvedPath, moduleId);
+        effectiveNamespace = _stdlibLoader.LoadModule(this, resolvedPath, moduleId);
+
+        if (effectiveNamespace != null)
+        {
+            _moduleNamespaces[moduleId] = effectiveNamespace;
+        }
+
+        return effectiveNamespace != null;
     }
 
     /// <summary>

@@ -14,6 +14,33 @@ public sealed partial class SemanticAnalyzer
     #region Type Resolution
 
     /// <summary>
+    /// Looks up a type by name, searching imported namespaces for the current file.
+    /// Example: after "import Collections/List", namespace "Collections" is imported,
+    /// so looking up "List" also tries "Collections.List" (namespace.type).
+    /// </summary>
+    private TypeSymbol? LookupTypeWithImports(string name)
+    {
+        // Try the registry's built-in lookup (exact match + Core fallback)
+        TypeSymbol? result = _registry.LookupType(name: name);
+        if (result != null)
+        {
+            return result;
+        }
+
+        // Try each imported namespace
+        foreach (string ns in _importedNamespaces)
+        {
+            result = _registry.LookupType(name: $"{ns}.{name}");
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Resolves a type expression to a TypeInfo.
     /// Nullable types (T?) are desugared to Maybe&lt;T&gt; at parse time,
     /// so by the time we see them here, they're already Maybe&lt;T&gt;.
@@ -33,8 +60,8 @@ public sealed partial class SemanticAnalyzer
             return ResolveGenericType(typeExpr: typeExpr);
         }
 
-        // Try to look up the type by name
-        TypeSymbol? resolved = _registry.LookupType(name: typeExpr.Name);
+        // Try to look up the type by name (including imported namespaces)
+        TypeSymbol? resolved = LookupTypeWithImports(name: typeExpr.Name);
         if (resolved != null)
         {
             return resolved;
@@ -79,7 +106,7 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol ResolveGenericType(TypeExpression typeExpr)
     {
-        TypeSymbol? genericDef = _registry.LookupType(name: typeExpr.Name);
+        TypeSymbol? genericDef = LookupTypeWithImports(name: typeExpr.Name);
         if (genericDef == null)
         {
             ReportError(
@@ -242,7 +269,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         TypeExpression baseTypeExpr = constraint.ConstraintTypes[0];
-        TypeSymbol? baseType = _registry.LookupType(name: baseTypeExpr.Name);
+        TypeSymbol? baseType = LookupTypeWithImports(name: baseTypeExpr.Name);
         if (baseType == null)
         {
             return; // Base type not found, error already reported

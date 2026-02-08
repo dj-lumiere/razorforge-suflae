@@ -109,7 +109,8 @@ public sealed partial class SemanticAnalyzer
         bool success = _registry.LoadModule(
             importPath: import.ModulePath,
             currentFile: _currentFilePath,
-            location: import.Location);
+            location: import.Location,
+            out string? effectiveNamespace);
 
         if (!success)
         {
@@ -117,6 +118,13 @@ public sealed partial class SemanticAnalyzer
                 SemanticDiagnosticCode.ModuleNotFound,
                 $"Cannot resolve import '{import.ModulePath}'. Module not found.",
                 import.Location);
+            return;
+        }
+
+        // Track the imported namespace for per-file type resolution
+        if (effectiveNamespace != null)
+        {
+            _importedNamespaces.Add(effectiveNamespace);
         }
     }
 
@@ -276,7 +284,7 @@ public sealed partial class SemanticAnalyzer
             routineName = routine.Name[(dotIndex + 1)..]; // Just the method name
 
             kind = RoutineKind.Method;
-            ownerType = _registry.LookupType(name: typeName);
+            ownerType = LookupTypeWithImports(name: typeName);
         }
         else
         {

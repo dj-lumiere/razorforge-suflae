@@ -62,6 +62,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>The source file path of the program being analyzed (for import resolution).</summary>
     private string _currentFilePath = string.Empty;
 
+    /// <summary>Namespaces imported by the current file. Used for type resolution of non-Core types.</summary>
+    private readonly HashSet<string> _importedNamespaces = new(StringComparer.OrdinalIgnoreCase);
+
     #endregion
 
     #region Constructor
@@ -90,6 +93,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Store file path for import resolution
         _currentFilePath = filePath ?? program.Location.FileName;
+        _importedNamespaces.Clear();
 
         // Phase 1: Collect all type and routine declarations (forward declarations)
         CollectDeclarations(program: program);

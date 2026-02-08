@@ -446,7 +446,7 @@ public sealed partial class SemanticAnalyzer
     private bool ImplementsProtocol(TypeSymbol type, string protocolName)
     {
         // Get the protocol type
-        TypeSymbol? protocol = _registry.LookupType(name: protocolName);
+        TypeSymbol? protocol = LookupTypeWithImports(name: protocolName);
         if (protocol == null || protocol.Category != TypeCategory.Protocol)
         {
             return false;
