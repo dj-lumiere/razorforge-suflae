@@ -1,5 +1,7 @@
 ﻿namespace Compilers.Analysis;
 
+using Enums;
+using Scopes;
 using Types;
 using Shared.AST;
 using global::RazorForge.Diagnostics;
@@ -12,6 +14,29 @@ public sealed partial class SemanticAnalyzer
 {
     #region Pattern Analysis
 
+    /// <summary>
+    /// Declares a pattern binding variable, checking for shadowing of variables in outer scopes.
+    /// </summary>
+    private void DeclarePatternVariable(string name, TypeSymbol type, SourceLocation location,
+        bool isMutable = false)
+    {
+        // Check if this name exists in a parent scope (shadowing)
+        Scope? parent = _registry.CurrentScope.Parent;
+        if (parent?.LookupVariable(name: name) != null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.IdentifierShadowing,
+                $"Pattern variable '{name}' shadows an existing variable in an outer scope.",
+                location);
+        }
+
+        // Still declare the variable even if shadowing, to avoid cascading errors
+        _registry.DeclareVariable(
+            name: name,
+            type: type,
+            isMutable: isMutable);
+    }
+
     private void AnalyzePattern(Pattern pattern, TypeSymbol matchedType)
     {
         switch (pattern)
@@ -23,20 +48,32 @@ public sealed partial class SemanticAnalyzer
 
             case IdentifierPattern id:
                 // Bind the matched value to the identifier
-                _registry.DeclareVariable(
+                DeclarePatternVariable(
                     name: id.Name,
                     type: matchedType,
-                    isMutable: false);
+                    location: id.Location);
                 break;
 
             case TypePattern typePat:
                 TypeSymbol patternType = ResolveType(typeExpr: typePat.Type);
+
+                // Check type compatibility between matched type and pattern type
+                if (patternType is not ErrorTypeInfo
+                    && matchedType is not ErrorTypeInfo
+                    && !IsTypePatternCompatible(matchedType: matchedType, patternType: patternType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.PatternTypeMismatch,
+                        $"Type pattern 'is {patternType.Name}' can never match a value of type '{matchedType.Name}'.",
+                        typePat.Location);
+                }
+
                 if (typePat.VariableName != null)
                 {
-                    _registry.DeclareVariable(
+                    DeclarePatternVariable(
                         name: typePat.VariableName,
                         type: patternType,
-                        isMutable: false);
+                        location: typePat.Location);
                 }
 
                 // Process destructuring bindings if present
@@ -52,10 +89,10 @@ public sealed partial class SemanticAnalyzer
                         }
                         else if (binding.BindingName != null)
                         {
-                            _registry.DeclareVariable(
+                            DeclarePatternVariable(
                                 name: binding.BindingName,
                                 type: fieldType,
-                                isMutable: false);
+                                location: binding.Location);
                         }
                     }
                 }
@@ -89,10 +126,10 @@ public sealed partial class SemanticAnalyzer
             case ElsePattern elsePat:
                 if (elsePat.VariableName != null)
                 {
-                    _registry.DeclareVariable(
+                    DeclarePatternVariable(
                         name: elsePat.VariableName,
                         type: matchedType,
-                        isMutable: false);
+                        location: elsePat.Location);
                 }
 
                 break;
@@ -147,9 +184,10 @@ public sealed partial class SemanticAnalyzer
             }
             else if (binding.BindingName != null)
             {
-                _registry.DeclareVariable(
+                DeclarePatternVariable(
                     name: binding.BindingName,
                     type: fieldType,
+                    location: binding.Location,
                     isMutable: isMutable);
             }
         }
@@ -221,10 +259,10 @@ public sealed partial class SemanticAnalyzer
             }
             else if (binding.BindingName != null)
             {
-                _registry.DeclareVariable(
+                DeclarePatternVariable(
                     name: binding.BindingName,
                     type: payloadType,
-                    isMutable: false);
+                    location: binding.Location);
             }
         }
         else
@@ -240,10 +278,10 @@ public sealed partial class SemanticAnalyzer
                 }
                 else if (binding.BindingName != null)
                 {
-                    _registry.DeclareVariable(
+                    DeclarePatternVariable(
                         name: binding.BindingName,
                         type: fieldType,
-                        isMutable: false);
+                        location: binding.Location);
                 }
             }
         }
@@ -267,10 +305,10 @@ public sealed partial class SemanticAnalyzer
             }
             else if (binding.BindingName != null)
             {
-                _registry.DeclareVariable(
+                DeclarePatternVariable(
                     name: binding.BindingName,
                     type: fieldType,
-                    isMutable: false);
+                    location: binding.Location);
             }
         }
     }
@@ -314,6 +352,54 @@ public sealed partial class SemanticAnalyzer
                     isMutable: false);
             }
         }
+    }
+
+    /// <summary>
+    /// Checks if a type pattern can potentially match a value of the given matched type.
+    /// Returns true if the match is possible, false if provably impossible.
+    /// </summary>
+    private bool IsTypePatternCompatible(TypeSymbol matchedType, TypeSymbol patternType)
+    {
+        // Same type - always compatible
+        if (matchedType.Name == patternType.Name)
+        {
+            return true;
+        }
+
+        // If either is a type parameter, we can't know at analysis time
+        if (matchedType.Category == TypeCategory.TypeParameter
+            || patternType.Category == TypeCategory.TypeParameter)
+        {
+            return true;
+        }
+
+        // If matched type is a protocol, any concrete type could conform
+        if (matchedType.Category == TypeCategory.Protocol)
+        {
+            return true;
+        }
+
+        // If pattern type is a protocol, check if matched type implements it
+        if (patternType.Category == TypeCategory.Protocol)
+        {
+            return ImplementsProtocol(type: matchedType, protocolName: patternType.Name);
+        }
+
+        // Error handling types (Maybe<T>, Result<T>, Lookup<T>) - allow matching inner types
+        if (matchedType.Category == TypeCategory.ErrorHandling)
+        {
+            return true;
+        }
+
+        // IsAssignableTo in either direction covers subtyping
+        if (IsAssignableTo(source: matchedType, target: patternType)
+            || IsAssignableTo(source: patternType, target: matchedType))
+        {
+            return true;
+        }
+
+        // Provably incompatible
+        return false;
     }
 
     #endregion

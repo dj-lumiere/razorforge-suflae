@@ -1924,6 +1924,8 @@ public sealed partial class SemanticAnalyzer
 
         foreach (WhenClause clause in when.Clauses)
         {
+            _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
+
             // Analyze the pattern
             AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
 
@@ -2020,6 +2022,8 @@ public sealed partial class SemanticAnalyzer
                 // Analyze as regular statement
                 AnalyzeStatement(statement: clause.Body);
             }
+
+            _registry.ExitScope();
         }
 
         // Warn if no else clause (expression may not cover all cases)
