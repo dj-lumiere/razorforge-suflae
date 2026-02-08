@@ -364,19 +364,16 @@ public sealed partial class SemanticAnalyzer
         "__ashl__", "__ashl_checked__", "__ashr__", "__lshl__", "__lshr__",
 
         // Unary operators
-        "__neg__", "__pos__", "__not__", "__bitnot__",
+        "__neg__", "__not__",
 
         // Membership operators
         "__contains__", "__notcontains__",
 
-        // Conversion and representation
-        "__repr__", "__str__", "__hash__", "__bool__",
-
         // Iteration
-        "__iter__", "__next__",
+        "__seq__", "__next__",
 
         // Indexing
-        "__getitem__", "__setitem__", "__delitem__", "__len__",
+        "__getitem__", "__setitem__",
 
         // Context management
         "__enter__", "__exit__",
