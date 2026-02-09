@@ -85,7 +85,7 @@ public partial class RazorForgeParser
     /// Syntax: <c>module path/to/module</c>
     /// </summary>
     /// <returns>A <see cref="ModuleDeclaration"/> AST node.</returns>
-    private ModuleDeclaration ParseNamespaceDeclaration()
+    private ModuleDeclaration ParseModuleDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -169,7 +169,7 @@ public partial class RazorForgeParser
         else
         {
             // Module import: Collections
-            _importedNamespaces.Add(item: modulePath);
+            _importedModules.Add(item: modulePath);
         }
 
         return new ImportDeclaration(ModulePath: modulePath,

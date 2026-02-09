@@ -112,7 +112,7 @@ public partial class SuflaeParser
     /// Set of imported module names for qualified type resolution.
     /// Contains module names like "Collections", "core" from import statements.
     /// </summary>
-    private readonly HashSet<string> _importedNamespaces = [];
+    private readonly HashSet<string> _importedModules = [];
 
     /// <summary>
     /// Stack of generic parameter scopes for type name resolution.
@@ -255,10 +255,10 @@ public partial class SuflaeParser
         // FILE-LEVEL DECLARATIONS (must appear at top of file)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Namespace declaration (must appear at top of file)
-        if (Match(type: TokenType.Namespace))
+        // Module declaration (must appear at top of file)
+        if (Match(type: TokenType.Module))
         {
-            return ParseNamespaceDeclaration();
+            return ParseModuleDeclaration();
         }
 
         // Import declaration

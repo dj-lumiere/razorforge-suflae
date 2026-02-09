@@ -1079,7 +1079,7 @@ public partial class SuflaeParser
     /// Uses slash separators for module paths.
     /// </summary>
     /// <returns>A <see cref="ModuleDeclaration"/> AST node.</returns>
-    private ModuleDeclaration ParseNamespaceDeclaration()
+    private ModuleDeclaration ParseModuleDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1163,7 +1163,7 @@ public partial class SuflaeParser
         else
         {
             // Module import: Collections
-            _importedNamespaces.Add(item: modulePath);
+            _importedModules.Add(item: modulePath);
         }
 
         return new ImportDeclaration(ModulePath: modulePath,

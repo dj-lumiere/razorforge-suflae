@@ -187,7 +187,7 @@ public partial class RazorForgeTokenizer
 
         // Module system
         [key: "import"] = TokenType.Import,
-        [key: "module"] = TokenType.Namespace,
+        [key: "module"] = TokenType.Module,
 
         // Special keywords
         [key: "using"] = TokenType.Using,

@@ -402,7 +402,7 @@ public enum TokenType
     Import,
 
     /// <summary>Module declaration keyword (maps to 'module' keyword)</summary>
-    Namespace,
+    Module,
 
     #endregion
 

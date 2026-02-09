@@ -95,7 +95,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     /// Set of imported module names for qualified type resolution.
     /// Contains module names like "Collections", "core" from import statements.
     /// </summary>
-    private readonly HashSet<string> _importedNamespaces = [];
+    private readonly HashSet<string> _importedModules = [];
 
     /// <summary>
     /// Stack of generic parameter scopes for type name resolution.
@@ -196,9 +196,9 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Module declaration (must appear at top of file)
-        if (Match(type: TokenType.Namespace))
+        if (Match(type: TokenType.Module))
         {
-            return ParseNamespaceDeclaration();
+            return ParseModuleDeclaration();
         }
 
         // Import declaration
