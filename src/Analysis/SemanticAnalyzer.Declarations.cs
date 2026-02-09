@@ -591,7 +591,7 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Update the type with resolved protocols
-            _registry.UpdateRecordProtocols(recordName: record.Name, protocols: resolvedProtocols);
+            _registry.UpdateRecordProtocols(recordName: _currentType!.FullName, protocols: resolvedProtocols);
         }
 
         // Validate generic constraints reference declared type parameters
@@ -634,7 +634,7 @@ public sealed partial class SemanticAnalyzer
         // Update the record with resolved fields
         if (fields.Count > 0)
         {
-            _registry.UpdateRecordFields(recordName: record.Name, fields: fields);
+            _registry.UpdateRecordFields(recordName: _currentType!.FullName, fields: fields);
         }
 
         _currentType = previousType;
@@ -648,6 +648,29 @@ public sealed partial class SemanticAnalyzer
 
         _currentType = _registry.LookupType(name: entity.Name);
         _currentTypeFieldNames = [];
+
+        // Resolve implemented protocols
+        if (_currentType is EntityTypeInfo && entity.Protocols.Count > 0)
+        {
+            var resolvedProtocols = new List<TypeInfo>();
+            foreach (TypeExpression protoExpr in entity.Protocols)
+            {
+                TypeSymbol protoType = ResolveType(typeExpr: protoExpr);
+                if (protoType is ProtocolTypeInfo proto)
+                {
+                    resolvedProtocols.Add(item: proto);
+                }
+                else if (protoType is not ErrorTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.NotAProtocol,
+                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        protoExpr.Location);
+                }
+            }
+
+            _registry.UpdateEntityProtocols(entityName: _currentType!.FullName, protocols: resolvedProtocols);
+        }
 
         foreach (Declaration member in entity.Members)
         {
@@ -665,6 +688,29 @@ public sealed partial class SemanticAnalyzer
 
         _currentType = _registry.LookupType(name: resident.Name);
         _currentTypeFieldNames = [];
+
+        // Resolve implemented protocols
+        if (_currentType is ResidentTypeInfo && resident.Protocols.Count > 0)
+        {
+            var resolvedProtocols = new List<TypeInfo>();
+            foreach (TypeExpression protoExpr in resident.Protocols)
+            {
+                TypeSymbol protoType = ResolveType(typeExpr: protoExpr);
+                if (protoType is ProtocolTypeInfo proto)
+                {
+                    resolvedProtocols.Add(item: proto);
+                }
+                else if (protoType is not ErrorTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.NotAProtocol,
+                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        protoExpr.Location);
+                }
+            }
+
+            _registry.UpdateResidentProtocols(residentName: _currentType!.FullName, protocols: resolvedProtocols);
+        }
 
         foreach (Declaration member in resident.Members)
         {
@@ -847,7 +893,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Update the choice with resolved cases
-        _registry.UpdateChoiceCases(choiceName: choice.Name, cases: cases);
+        _registry.UpdateChoiceCases(choiceName: choiceInfo.FullName, cases: cases);
     }
 
     #endregion
@@ -1335,7 +1381,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.DerivedOperatorOverride,
-                    $"Cannot define '__ne__' when '__eq__' is defined. " +
+                    "Cannot define '__ne__' when '__eq__' is defined. " +
                              "'__ne__' is auto-generated from '__eq__'.",
                     existingNe.Location);
             }

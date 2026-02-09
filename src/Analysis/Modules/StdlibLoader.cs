@@ -62,8 +62,20 @@ public sealed class StdlibLoader
         // Scan all stdlib files and categorize by namespace
         ScanStdlibFiles();
 
-        // Two-pass registration ensures all types are available before routines reference them.
-        // Pass 1: Register all types (record, entity, choice, variant, protocol)
+        // Three-pass registration ensures protocols exist before types reference them in 'follows' clauses.
+        // Pass 1a: Register all protocols first (so 'follows' clauses can resolve)
+        foreach (var (program, _, ns) in _corePrograms)
+        {
+            RegisterProgramProtocols(registry, program, ns);
+        }
+
+        // Pass 1a.2: Resolve parent protocol hierarchies (now that all protocols are registered)
+        foreach (var (program, _, _) in _corePrograms)
+        {
+            ResolveProtocolParents(registry, program);
+        }
+
+        // Pass 1b: Register all other types (record, entity, choice, variant)
         foreach (var (program, _, ns) in _corePrograms)
         {
             RegisterProgramTypes(registry, program, ns);
@@ -216,7 +228,7 @@ public sealed class StdlibLoader
                 return "Core";
             }
 
-            string relativePath = normalizedFileDir.Substring(normalizedStdlibPath.Length)
+            string relativePath = normalizedFileDir[normalizedStdlibPath.Length..]
                                                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
             if (string.IsNullOrEmpty(relativePath))
@@ -257,7 +269,17 @@ public sealed class StdlibLoader
             return false;
         }
 
-        // Two-pass registration
+        // Three-pass registration: protocols first, then other types, then routines
+        foreach (var (program, _, ns) in programs)
+        {
+            RegisterProgramProtocols(registry, program, ns);
+        }
+
+        foreach (var (program, _, _) in programs)
+        {
+            ResolveProtocolParents(registry, program);
+        }
+
         foreach (var (program, _, ns) in programs)
         {
             RegisterProgramTypes(registry, program, ns);
@@ -316,8 +338,58 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
+    /// Resolves parent protocol relationships for all protocols in a program.
+    /// Must run after all protocols are registered (pass 1a) so parent lookups succeed.
+    /// </summary>
+    private static void ResolveProtocolParents(TypeRegistry registry, Program program)
+    {
+        foreach (var node in program.Declarations)
+        {
+            if (node is ProtocolDeclaration protocol && protocol.ParentProtocols.Count > 0)
+            {
+                // Look up the registered protocol to get its FullName
+                var registeredProto = registry.LookupType(protocol.Name);
+                if (registeredProto is not Types.ProtocolTypeInfo)
+                {
+                    continue;
+                }
+
+                var parentProtocols = new List<Types.ProtocolTypeInfo>();
+                foreach (var parentExpr in protocol.ParentProtocols)
+                {
+                    var parentType = ResolveSimpleType(registry, parentExpr);
+                    if (parentType is Types.ProtocolTypeInfo parentProto)
+                    {
+                        parentProtocols.Add(parentProto);
+                    }
+                }
+
+                if (parentProtocols.Count > 0)
+                {
+                    registry.UpdateProtocolParents(registeredProto.FullName, parentProtocols);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers protocol declarations from a program.
+    /// This is pass 1a — protocols must be registered before other types so 'follows' clauses can resolve.
+    /// </summary>
+    private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string namespaceName)
+    {
+        foreach (var node in program.Declarations)
+        {
+            if (node is ProtocolDeclaration protocol)
+            {
+                RegisterProtocolType(registry, protocol, namespaceName);
+            }
+        }
+    }
+
+    /// <summary>
     /// Registers type declarations (record, entity, choice, variant, protocol) from a program.
-    /// This is pass 1 of namespace-based loading.
+    /// This is pass 1b of namespace-based loading. Protocols may already be registered from pass 1a.
     /// </summary>
     /// <param name="registry">The type registry to register types into.</param>
     /// <param name="program">The parsed program AST.</param>
@@ -379,8 +451,8 @@ public sealed class StdlibLoader
         int dotIndex = routineName.IndexOf('.');
         if (dotIndex > 0)
         {
-            string typeName = routineName.Substring(0, dotIndex);
-            methodName = routineName.Substring(dotIndex + 1); // Just the method part (e.g., "__add__")
+            string typeName = routineName[..dotIndex];
+            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "__add__")
             ownerType = registry.LookupType(typeName);
         }
 
@@ -506,11 +578,23 @@ public sealed class StdlibLoader
             }
         }
 
+        // Resolve implemented protocols (follows clause)
+        var protocols = new List<Types.TypeInfo>();
+        foreach (var protoExpr in entity.Protocols)
+        {
+            var protoType = ResolveSimpleType(registry, protoExpr);
+            if (protoType != null)
+            {
+                protocols.Add(protoType);
+            }
+        }
+
         var typeInfo = new Types.EntityTypeInfo(entity.Name)
         {
             Namespace = namespaceName,
             Visibility = entity.Visibility,
             Fields = fields,
+            ImplementedProtocols = protocols,
             GenericParameters = entity.GenericParameters
         };
 

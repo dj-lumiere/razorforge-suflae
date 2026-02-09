@@ -367,6 +367,103 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
+    /// Updates an entity type's implemented protocols.
+    /// </summary>
+    /// <param name="entityName">The name of the entity to update.</param>
+    /// <param name="protocols">The resolved protocol types.</param>
+    public void UpdateEntityProtocols(string entityName, IReadOnlyList<TypeInfo> protocols)
+    {
+        if (!_types.TryGetValue(key: entityName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not EntityTypeInfo entity)
+        {
+            return;
+        }
+
+        var updatedEntity = new EntityTypeInfo(name: entity.Name)
+        {
+            Fields = entity.Fields,
+            ImplementedProtocols = protocols,
+            GenericParameters = entity.GenericParameters,
+            GenericConstraints = entity.GenericConstraints,
+            TypeArguments = entity.TypeArguments,
+            Visibility = entity.Visibility,
+            Location = entity.Location,
+            Namespace = entity.Namespace
+        };
+
+        _types[key: entityName] = updatedEntity;
+    }
+
+    /// <summary>
+    /// Updates a resident type's implemented protocols.
+    /// </summary>
+    /// <param name="residentName">The name of the resident to update.</param>
+    /// <param name="protocols">The resolved protocol types.</param>
+    public void UpdateResidentProtocols(string residentName, IReadOnlyList<TypeInfo> protocols)
+    {
+        if (!_types.TryGetValue(key: residentName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not ResidentTypeInfo resident)
+        {
+            return;
+        }
+
+        var updatedResident = new ResidentTypeInfo(name: resident.Name)
+        {
+            Fields = resident.Fields,
+            ImplementedProtocols = protocols,
+            FixedSize = resident.FixedSize,
+            GenericParameters = resident.GenericParameters,
+            GenericConstraints = resident.GenericConstraints,
+            TypeArguments = resident.TypeArguments,
+            Visibility = resident.Visibility,
+            Location = resident.Location,
+            Namespace = resident.Namespace
+        };
+
+        _types[key: residentName] = updatedResident;
+    }
+
+    /// <summary>
+    /// Updates a protocol type's parent protocols.
+    /// </summary>
+    /// <param name="protocolName">The name of the protocol to update.</param>
+    /// <param name="parentProtocols">The resolved parent protocol types.</param>
+    public void UpdateProtocolParents(string protocolName, IReadOnlyList<ProtocolTypeInfo> parentProtocols)
+    {
+        if (!_types.TryGetValue(key: protocolName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not ProtocolTypeInfo protocol)
+        {
+            return;
+        }
+
+        var updatedProtocol = new ProtocolTypeInfo(name: protocol.Name)
+        {
+            Methods = protocol.Methods,
+            ParentProtocols = parentProtocols,
+            GenericParameters = protocol.GenericParameters,
+            GenericConstraints = protocol.GenericConstraints,
+            TypeArguments = protocol.TypeArguments,
+            Visibility = protocol.Visibility,
+            Location = protocol.Location,
+            Namespace = protocol.Namespace
+        };
+
+        _types[key: protocolName] = updatedProtocol;
+    }
+
+    /// <summary>
     /// Updates a choice type with its resolved cases.
     /// </summary>
     /// <param name="choiceName">The name of the choice to update.</param>
