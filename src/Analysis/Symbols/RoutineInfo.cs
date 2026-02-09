@@ -22,9 +22,9 @@ public sealed class RoutineInfo
                 return $"{OwnerType.Name}.{Name}";
             }
 
-            return string.IsNullOrEmpty(value: Namespace)
+            return string.IsNullOrEmpty(value: Module)
                 ? Name
-                : $"{Namespace}.{Name}";
+                : $"{Module}.{Name}";
         }
     }
 
@@ -76,8 +76,8 @@ public sealed class RoutineInfo
     /// <summary>Source location where this routine is defined.</summary>
     public SourceLocation? Location { get; init; }
 
-    /// <summary>The namespace/module this routine belongs to.</summary>
-    public string? Namespace { get; init; }
+    /// <summary>The module this routine belongs to.</summary>
+    public string? Module { get; init; }
 
     /// <summary>Attributes on this routine (e.g., @readonly, @inline).</summary>
     public IReadOnlyList<string> Attributes { get; init; } = [];
@@ -160,7 +160,7 @@ public sealed class RoutineInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Namespace = Namespace,
+            Module = Module,
             Attributes = Attributes,
             CallingConvention = CallingConvention,
             IsVariadic = IsVariadic,

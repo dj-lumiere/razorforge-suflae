@@ -174,7 +174,7 @@ public partial class SuflaeTokenizer
 
         // Module system
         [key: "import"] = TokenType.Import,
-        [key: "namespace"] = TokenType.Namespace,
+        [key: "module"] = TokenType.Namespace,
 
         // Special keywords
         [key: "using"] = TokenType.Using,

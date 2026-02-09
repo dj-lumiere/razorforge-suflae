@@ -1,4 +1,4 @@
-﻿# RazorForge C FFI Type Definitions
+# RazorForge C FFI Type Definitions
 # Type aliases for C integer types used in FFI
 #
 # For character and string types, see:
@@ -7,7 +7,7 @@
 # - CStr.rf   - null-terminated char* (narrow strings)
 # - CWStr.rf  - null-terminated wchar_t* (wide strings)
 
-namespace CSubsystem
+module CSubsystem
 
 # ============================================================================
 # Pointer/Special Types

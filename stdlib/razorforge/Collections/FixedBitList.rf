@@ -12,7 +12,7 @@
 
 import errors.IndexOutOfBoundsError
 
-namespace Collections
+module Collections
 
 # Fixed-capacity bit list with reference semantics
 # N bits stored inline, packed into bytes by compiler

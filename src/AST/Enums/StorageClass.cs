@@ -5,7 +5,7 @@
 /// <remarks>
 /// Storage class determines the lifetime and association of a symbol:
 /// <list type="bullet">
-/// <item>None - Instance member (default for fields/methods) or namespace-level (for routines)</item>
+/// <item>None - Instance member (default for fields/methods) or module-level (for routines)</item>
 /// <item>Common - Type-level static, accessed via Type.member()</item>
 /// <item>Global - File-scope static variable, not valid for routines</item>
 /// </list>
@@ -19,7 +19,7 @@
 /// </remarks>
 public enum StorageClass
 {
-    /// <summary>Default storage: instance member or namespace-level</summary>
+    /// <summary>Default storage: instance member or module-level</summary>
     None,
 
     /// <summary>Type-level static (like static in C#/Java), accessed via Type.member()</summary>

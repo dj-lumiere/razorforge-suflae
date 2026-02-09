@@ -1,6 +1,6 @@
 # RazorForge U64 (unsigned 64-bit integer) native type implementation
 # Maps directly to LLVM i64 type using compiler intrinsics
-namespace Core
+module Core
 # Core U64 type definition - maps to LLVM i64
 record U64 follows UnsignedIntegral, Ordered {
     public value: @intrinsic_type.i64

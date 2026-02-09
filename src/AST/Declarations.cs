@@ -13,7 +13,7 @@ namespace Compilers.Shared.AST;
 /// <item>Variables: local and global state</item>
 /// <item>Functions: executable procedures and routines</item>
 /// <item>Types: classes, structs, enums, variants, traits</item>
-/// <item>Modules: imports and namespace organization</item>
+/// <item>Modules: imports and module organization</item>
 /// </list>
 /// </remarks>
 public abstract record Declaration(SourceLocation Location) : AstNode(Location: Location);
@@ -364,26 +364,26 @@ public record ProtocolDeclaration(
 #region Import and Module Declarations
 
 /// <summary>
-/// Namespace declaration that establishes the module path for all symbols in a file.
+/// Module declaration that establishes the module path for all symbols in a file.
 /// Must appear at the top of a source file, before any other declarations.
 /// </summary>
-/// <param name="Path">Slash-separated namespace path (e.g., "Standard/Errors")</param>
+/// <param name="Path">Slash-separated module path (e.g., "Standard/Errors")</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Namespace declarations establish module identity:
+/// Module declarations establish module identity:
 /// <list type="bullet">
-/// <item>Module path: namespace Standard/Errors</item>
-/// <item>Nested namespaces: namespace Company/Project/Utils</item>
+/// <item>Module path: module Standard/Errors</item>
+/// <item>Nested modules: module Company/Project/Utils</item>
 /// <item>Symbol qualification: types become fully qualified as Path.TypeName</item>
-/// <item>Import resolution: other files import this namespace by path</item>
+/// <item>Import resolution: other files import this module by path</item>
 /// </list>
 /// </remarks>
-public record NamespaceDeclaration(string Path, SourceLocation Location)
+public record ModuleDeclaration(string Path, SourceLocation Location)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
-        return visitor.VisitNamespaceDeclaration(node: this);
+        return visitor.VisitModuleDeclaration(node: this);
     }
 }
 

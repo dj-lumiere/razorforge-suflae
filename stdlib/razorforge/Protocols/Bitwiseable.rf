@@ -1,5 +1,5 @@
 # Bitwiseable - Protocol for types that support bitwise operations (&, |, ^)
-namespace Core
+module Core
 
 protocol Bitwiseable {
     @readonly

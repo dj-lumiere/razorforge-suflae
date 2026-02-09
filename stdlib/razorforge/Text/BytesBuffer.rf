@@ -3,7 +3,7 @@
 # A mutable buffer for building Bytes values efficiently.
 # Use this when you need to incrementally construct byte sequences.
 
-namespace Text
+module Text
 
 entity BytesBuffer {
     private bytes: List<Byte>

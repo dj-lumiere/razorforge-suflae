@@ -1,4 +1,4 @@
-namespace Core
+module Core
 
 record MemorySize {
     private value: UAddr

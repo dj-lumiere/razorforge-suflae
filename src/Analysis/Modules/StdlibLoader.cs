@@ -9,9 +9,9 @@ using Shared.AST;
 using Shared.Lexer;
 
 /// <summary>
-/// Loads the standard library based on namespace declarations.
-/// Files declaring "namespace Core" are loaded eagerly (auto-imported).
-/// Other namespaces are loaded on-demand when imported.
+/// Loads the standard library based on module declarations.
+/// Files declaring "module Core" are loaded eagerly (auto-imported).
+/// Other modules are loaded on-demand when imported.
 /// Supports both RazorForge (.rf) and Suflae (.sf) stdlib files.
 /// </summary>
 public sealed class StdlibLoader
@@ -25,17 +25,17 @@ public sealed class StdlibLoader
     /// <summary>The file extension to scan (.rf or .sf).</summary>
     private readonly string _fileExtension;
 
-    /// <summary>Parsed Core namespace programs with their file paths and namespace.</summary>
-    private readonly List<(Program Program, string FilePath, string Namespace)> _corePrograms = [];
+    /// <summary>Parsed Core module programs with their file paths and module.</summary>
+    private readonly List<(Program Program, string FilePath, string Module)> _corePrograms = [];
 
-    /// <summary>Cache of parsed non-Core programs by namespace.</summary>
-    private readonly Dictionary<string, List<(Program Program, string FilePath, string Namespace)>> _namespacePrograms = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Cache of parsed non-Core programs by module.</summary>
+    private readonly Dictionary<string, List<(Program Program, string FilePath, string Module)>> _modulePrograms = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Set of already scanned directories to avoid re-scanning.</summary>
     private bool _stdlibScanned;
 
-    /// <summary>Gets the parsed Core namespace programs.</summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Namespace)> ParsedPrograms => _corePrograms;
+    /// <summary>Gets the parsed Core module programs.</summary>
+    public IReadOnlyList<(Program Program, string FilePath, string Module)> ParsedPrograms => _corePrograms;
 
     /// <summary>
     /// Creates a new stdlib loader for a specific language.
@@ -53,13 +53,13 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Loads the Core namespace types into the type registry.
-    /// Scans all stdlib files and loads those declaring "namespace Core".
+    /// Loads the Core module types into the type registry.
+    /// Scans all stdlib files and loads those declaring "module Core".
     /// </summary>
     /// <param name="registry">The type registry to populate.</param>
-    public void LoadCoreNamespace(TypeRegistry registry)
+    public void LoadCoreModule(TypeRegistry registry)
     {
-        // Scan all stdlib files and categorize by namespace
+        // Scan all stdlib files and categorize by module
         ScanStdlibFiles();
 
         // Three-pass registration ensures protocols exist before types reference them in 'follows' clauses.
@@ -89,9 +89,9 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Scans all stdlib files recursively and categorizes them by namespace.
-    /// Files with "namespace Core" go to _corePrograms.
-    /// Other namespaces are cached in _namespacePrograms for on-demand loading.
+    /// Scans all stdlib files recursively and categorizes them by module.
+    /// Files with "module Core" go to _corePrograms.
+    /// Other modules are cached in _modulePrograms for on-demand loading.
     /// </summary>
     private void ScanStdlibFiles()
     {
@@ -110,24 +110,24 @@ public sealed class StdlibLoader
                 string code = File.ReadAllText(filePath);
                 Program ast = ParseFile(code, filePath);
 
-                // Find namespace declaration, or derive from directory
-                string? fileNamespace = GetDeclaredNamespace(ast);
-                fileNamespace ??= DeriveNamespaceFromPath(filePath);
+                // Find module declaration, or derive from directory
+                string? fileModule = GetDeclaredModule(ast);
+                fileModule ??= DeriveModuleFromPath(filePath);
 
-                // Categorize by namespace
-                if (fileNamespace.Equals("Core", StringComparison.OrdinalIgnoreCase))
+                // Categorize by module
+                if (fileModule.Equals("Core", StringComparison.OrdinalIgnoreCase))
                 {
-                    _corePrograms.Add((ast, filePath, fileNamespace));
+                    _corePrograms.Add((ast, filePath, fileModule));
                 }
                 else
                 {
                     // Cache for on-demand loading
-                    if (!_namespacePrograms.TryGetValue(fileNamespace, out var programs))
+                    if (!_modulePrograms.TryGetValue(fileModule, out var programs))
                     {
                         programs = [];
-                        _namespacePrograms[fileNamespace] = programs;
+                        _modulePrograms[fileModule] = programs;
                     }
-                    programs.Add((ast, filePath, fileNamespace));
+                    programs.Add((ast, filePath, fileModule));
                 }
             }
             catch (Exception ex)
@@ -190,13 +190,13 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Gets the declared namespace from a program AST.
+    /// Gets the declared module from a program AST.
     /// </summary>
-    private static string? GetDeclaredNamespace(Program program)
+    private static string? GetDeclaredModule(Program program)
     {
         foreach (var node in program.Declarations)
         {
-            if (node is NamespaceDeclaration ns)
+            if (node is ModuleDeclaration ns)
             {
                 return ns.Path;
             }
@@ -205,12 +205,12 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Derives a namespace from the file path relative to the stdlib root.
+    /// Derives a module from the file path relative to the stdlib root.
     /// Example: stdlib/Collections/List.rf -> Collections
     /// Example: stdlib/Text/Encoding/UTF8.rf -> Text.Encoding
     /// Files directly in stdlib root default to Core.
     /// </summary>
-    private string DeriveNamespaceFromPath(string filePath)
+    private string DeriveModuleFromPath(string filePath)
     {
         try
         {
@@ -236,7 +236,7 @@ public sealed class StdlibLoader
                 return "Core";
             }
 
-            // Convert directory separators to namespace dots
+            // Convert directory separators to module dots
             return relativePath.Replace(Path.DirectorySeparatorChar, '.')
                                .Replace(Path.AltDirectorySeparatorChar, '.');
         }
@@ -247,24 +247,24 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Loads a specific namespace on-demand.
+    /// Loads a specific module on-demand.
     /// </summary>
     /// <param name="registry">The type registry to populate.</param>
-    /// <param name="namespaceName">The namespace to load (e.g., "Collections").</param>
-    /// <returns>True if the namespace was loaded successfully, false if not found.</returns>
-    public bool LoadNamespace(TypeRegistry registry, string namespaceName)
+    /// <param name="moduleName">The module to load (e.g., "Collections").</param>
+    /// <returns>True if the module was loaded successfully, false if not found.</returns>
+    public bool LoadModule(TypeRegistry registry, string moduleName)
     {
         // Ensure stdlib is scanned
         ScanStdlibFiles();
 
         // Core is already loaded
-        if (namespaceName.Equals("Core", StringComparison.OrdinalIgnoreCase))
+        if (moduleName.Equals("Core", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        // Check if we have files for this namespace
-        if (!_namespacePrograms.TryGetValue(namespaceName, out var programs) || programs.Count == 0)
+        // Check if we have files for this module
+        if (!_modulePrograms.TryGetValue(moduleName, out var programs) || programs.Count == 0)
         {
             return false;
         }
@@ -296,12 +296,12 @@ public sealed class StdlibLoader
     /// <summary>
     /// Loads a specific module on-demand.
     /// Parses the module file and registers its types and routines.
-    /// Uses namespace-based imports: the import path determines the namespace.
+    /// Uses module-based imports: the import path determines the module.
     /// </summary>
     /// <param name="registry">The type registry to populate.</param>
     /// <param name="filePath">The resolved file path of the module.</param>
     /// <param name="moduleId">The module identifier (e.g., "Collections.List").</param>
-    /// <returns>The effective namespace of the loaded module, or null on failure.</returns>
+    /// <returns>The effective module of the loaded module, or null on failure.</returns>
     public string? LoadModule(TypeRegistry registry, string filePath, string moduleId)
     {
         try
@@ -310,13 +310,13 @@ public sealed class StdlibLoader
             // Detect file type from extension and use appropriate parser
             Program ast = ParseFileByExtension(code, filePath);
 
-            // Get namespace from file declaration, or derive from directory structure
-            string? fileNamespace = GetDeclaredNamespace(ast);
-            string effectiveNamespace = fileNamespace ?? DeriveNamespaceFromPath(filePath);
+            // Get module from file declaration, or derive from directory structure
+            string? fileModule = GetDeclaredModule(ast);
+            string effectiveModule = fileModule ?? DeriveModuleFromPath(filePath);
 
             // Two-pass registration for single module
-            RegisterProgramTypes(registry, ast, effectiveNamespace);
-            RegisterProgramRoutines(registry, ast, effectiveNamespace);
+            RegisterProgramTypes(registry, ast, effectiveModule);
+            RegisterProgramRoutines(registry, ast, effectiveModule);
 
             // Handle any imports within this module (recursive loading)
             foreach (var node in ast.Declarations)
@@ -328,7 +328,7 @@ public sealed class StdlibLoader
                 }
             }
 
-            return effectiveNamespace;
+            return effectiveModule;
         }
         catch (Exception ex)
         {
@@ -376,47 +376,47 @@ public sealed class StdlibLoader
     /// Registers protocol declarations from a program.
     /// This is pass 1a — protocols must be registered before other types so 'follows' clauses can resolve.
     /// </summary>
-    private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string namespaceName)
+    private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string moduleName)
     {
         foreach (var node in program.Declarations)
         {
             if (node is ProtocolDeclaration protocol)
             {
-                RegisterProtocolType(registry, protocol, namespaceName);
+                RegisterProtocolType(registry, protocol, moduleName);
             }
         }
     }
 
     /// <summary>
     /// Registers type declarations (record, entity, choice, variant, protocol) from a program.
-    /// This is pass 1b of namespace-based loading. Protocols may already be registered from pass 1a.
+    /// This is pass 1b of module-based loading. Protocols may already be registered from pass 1a.
     /// </summary>
     /// <param name="registry">The type registry to register types into.</param>
     /// <param name="program">The parsed program AST.</param>
-    /// <param name="namespaceName">The namespace for the types (from declaration or directory-derived).</param>
-    private static void RegisterProgramTypes(TypeRegistry registry, Program program, string namespaceName)
+    /// <param name="moduleName">The module for the types (from declaration or directory-derived).</param>
+    private static void RegisterProgramTypes(TypeRegistry registry, Program program, string moduleName)
     {
         foreach (var node in program.Declarations)
         {
             switch (node)
             {
                 case RecordDeclaration record:
-                    RegisterRecordType(registry, record, namespaceName);
+                    RegisterRecordType(registry, record, moduleName);
                     break;
                 case ResidentDeclaration resident:
-                    RegisterResidentType(registry, resident, namespaceName);
+                    RegisterResidentType(registry, resident, moduleName);
                     break;
                 case EntityDeclaration entity:
-                    RegisterEntityType(registry, entity, namespaceName);
+                    RegisterEntityType(registry, entity, moduleName);
                     break;
                 case ChoiceDeclaration choice:
-                    RegisterChoiceType(registry, choice, namespaceName);
+                    RegisterChoiceType(registry, choice, moduleName);
                     break;
                 case VariantDeclaration variant:
-                    RegisterVariantType(registry, variant, namespaceName);
+                    RegisterVariantType(registry, variant, moduleName);
                     break;
                 case ProtocolDeclaration protocol:
-                    RegisterProtocolType(registry, protocol, namespaceName);
+                    RegisterProtocolType(registry, protocol, moduleName);
                     break;
             }
         }
@@ -424,15 +424,15 @@ public sealed class StdlibLoader
 
     /// <summary>
     /// Registers routine declarations from a program.
-    /// This is pass 2 of namespace-based loading - all types are already registered.
+    /// This is pass 2 of module-based loading - all types are already registered.
     /// </summary>
-    private static void RegisterProgramRoutines(TypeRegistry registry, Program program, string namespaceName)
+    private static void RegisterProgramRoutines(TypeRegistry registry, Program program, string moduleName)
     {
         foreach (var node in program.Declarations)
         {
             if (node is RoutineDeclaration routine)
             {
-                RegisterRoutine(registry, routine, namespaceName);
+                RegisterRoutine(registry, routine, moduleName);
             }
         }
     }
@@ -441,7 +441,7 @@ public sealed class StdlibLoader
     /// Registers a routine from stdlib (including type methods like S32.__add__).
     /// </summary>
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
-        string namespaceName)
+        string moduleName)
     {
         // Parse method names like "S32.__add__" or "Type.method"
         string routineName = routine.Name;
@@ -476,7 +476,7 @@ public sealed class StdlibLoader
             OwnerType = ownerType,
             Parameters = parameters,
             ReturnType = returnType,
-            Namespace = namespaceName,
+            Module = moduleName,
             IsFailable = routine.IsFailable
         };
 
@@ -494,7 +494,7 @@ public sealed class StdlibLoader
     /// Registers a record type from stdlib.
     /// </summary>
     private static void RegisterRecordType(TypeRegistry registry, RecordDeclaration record,
-        string namespaceName)
+        string moduleName)
     {
         // Skip if already registered
         if (registry.LookupType(record.Name) != null)
@@ -532,7 +532,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.RecordTypeInfo(record.Name)
         {
-            Namespace = namespaceName,
+            Module = moduleName,
             Visibility = record.Visibility,
             Fields = fields,
             ImplementedProtocols = protocols,
@@ -553,7 +553,7 @@ public sealed class StdlibLoader
     /// Registers an entity type from stdlib.
     /// </summary>
     private static void RegisterEntityType(TypeRegistry registry, EntityDeclaration entity,
-        string namespaceName)
+        string moduleName)
     {
         // Skip if already registered
         if (registry.LookupType(entity.Name) != null)
@@ -591,7 +591,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.EntityTypeInfo(entity.Name)
         {
-            Namespace = namespaceName,
+            Module = moduleName,
             Visibility = entity.Visibility,
             Fields = fields,
             ImplementedProtocols = protocols,
@@ -606,7 +606,7 @@ public sealed class StdlibLoader
     /// Residents are fixed-size reference types with stable memory addresses.
     /// </summary>
     private static void RegisterResidentType(TypeRegistry registry, ResidentDeclaration resident,
-        string namespaceName)
+        string moduleName)
     {
         // Skip if already registered
         if (registry.LookupType(resident.Name) != null)
@@ -644,7 +644,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.ResidentTypeInfo(resident.Name)
         {
-            Namespace = namespaceName,
+            Module = moduleName,
             Visibility = resident.Visibility,
             Fields = fields,
             ImplementedProtocols = protocols,
@@ -658,7 +658,7 @@ public sealed class StdlibLoader
     /// Registers a choice type from stdlib.
     /// </summary>
     private static void RegisterChoiceType(TypeRegistry registry, ChoiceDeclaration choice,
-        string namespaceName)
+        string moduleName)
     {
         // Skip if already registered
         if (registry.LookupType(choice.Name) != null)
@@ -678,7 +678,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.ChoiceTypeInfo(choice.Name)
         {
-            Namespace = namespaceName, Visibility = choice.Visibility, Cases = cases
+            Module = moduleName, Visibility = choice.Visibility, Cases = cases
         };
 
         registry.RegisterType(typeInfo);
@@ -688,7 +688,7 @@ public sealed class StdlibLoader
     /// Registers a variant type (tagged union) from stdlib.
     /// </summary>
     private static void RegisterVariantType(TypeRegistry registry, VariantDeclaration variant,
-        string namespaceName)
+        string moduleName)
     {
         // Skip if already registered
         if (registry.LookupType(variant.Name) != null)
@@ -716,7 +716,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.VariantTypeInfo(variant.Name)
         {
-            Namespace = namespaceName,
+            Module = moduleName,
             Cases = cases,
             GenericParameters = variant.GenericParameters
         };
@@ -728,7 +728,7 @@ public sealed class StdlibLoader
     /// Registers a protocol type from stdlib.
     /// </summary>
     private static void RegisterProtocolType(TypeRegistry registry, ProtocolDeclaration protocol,
-        string namespaceName)
+        string moduleName)
     {
         // Skip if already registered
         if (registry.LookupType(protocol.Name) != null)
@@ -767,7 +767,7 @@ public sealed class StdlibLoader
 
         var typeInfo = new Types.ProtocolTypeInfo(protocol.Name)
         {
-            Namespace = namespaceName,
+            Module = moduleName,
             Visibility = protocol.Visibility,
             Methods = methods,
             GenericParameters = protocol.GenericParameters

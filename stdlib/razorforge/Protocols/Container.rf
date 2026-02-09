@@ -1,5 +1,5 @@
 # Container - Protocol for types that support membership testing (in, notin)
-namespace Core
+module Core
 
 protocol Container<T> {
     @readonly

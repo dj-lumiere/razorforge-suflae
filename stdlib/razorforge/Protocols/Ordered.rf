@@ -1,5 +1,5 @@
 # Ordered - Bundle protocol combining equality and comparison
-namespace Core
+module Core
 
 protocol Ordered follows Equatable, Comparable {
     pass

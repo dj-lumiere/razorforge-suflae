@@ -1,6 +1,6 @@
 # RazorForge U32 (unsigned 32-bit integer) native type implementation
 # Maps directly to LLVM i32 type using compiler intrinsics
-namespace Core
+module Core
 # Core U32 type definition - maps to LLVM i32
 record U32 follows UnsignedIntegral, Ordered {
     public value: @intrinsic_type.i32

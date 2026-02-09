@@ -1,6 +1,6 @@
 # RazorForge F128 (quadruple precision floating point) native type implementation
 # Maps directly to LLVM fp128 type using compiler intrinsics
-namespace Core
+module Core
 # Core F128 type definition - maps to LLVM fp128
 record F128 follows Numeric, Ordered {
     private value: @intrinsic_type.fp128

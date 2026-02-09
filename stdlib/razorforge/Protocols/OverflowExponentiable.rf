@@ -1,5 +1,5 @@
 # OverflowExponentiable - Protocol for types that support overflow-handling exponentiation (**%, **^, **?)
-namespace Core
+module Core
 
 protocol OverflowExponentiable {
     @readonly

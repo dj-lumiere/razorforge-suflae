@@ -1,7 +1,7 @@
 # RazorForge S64 (signed 64-bit integer) native type implementation
 # Maps directly to LLVM i64 type using compiler intrinsics
 
-namespace Core
+module Core
 
 import Text.Text
 import CSubsystem.CStr

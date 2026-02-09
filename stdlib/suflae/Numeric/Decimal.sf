@@ -1,6 +1,6 @@
 # Suflae Decimal - Arbitrary precision decimal type
 
-namespace Core
+module Core
 
 import razorforge/Numeric.Decimal
 

@@ -3,7 +3,7 @@
 # Data cannot be modified, only read
 # Equivalent to Arc<T> in Rust (without Mutex/RwLock)
 
-namespace Core
+module Core
 
 record RejectEdit follows LockPolicy {
     pass # Empty - no lock state needed for immutable data

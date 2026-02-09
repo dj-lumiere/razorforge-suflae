@@ -28,7 +28,7 @@ public sealed class TypeRegistry
     /// <summary>Generic type instantiations cache.</summary>
     private readonly Dictionary<string, TypeInfo> _instantiations = new();
 
-    /// <summary>Whether Core namespace has been loaded from stdlib.</summary>
+    /// <summary>Whether Core module has been loaded from stdlib.</summary>
     private bool _coreNamespaceLoaded;
 
     /// <summary>The stdlib loader instance.</summary>
@@ -43,7 +43,7 @@ public sealed class TypeRegistry
     /// <summary>Set of loaded module paths (e.g., "Collections.List", "ErrorHandling.Maybe").</summary>
     private readonly HashSet<string> _loadedModules = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Maps module IDs to their effective namespaces (for import tracking).</summary>
+    /// <summary>Maps module IDs to their effective module names (for import tracking).</summary>
     private readonly Dictionary<string, string> _moduleNamespaces = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The module resolver for finding module files.</summary>
@@ -89,7 +89,7 @@ public sealed class TypeRegistry
         // Register intrinsic types (always needed)
         RegisterIntrinsics();
 
-        // Load Core namespace eagerly - Core types are fundamental to every program
+        // Load Core module eagerly - Core types are fundamental to every program
         LoadCoreNamespace();
 
         // Register well-known error handling types
@@ -127,7 +127,7 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Loads the Core namespace from stdlib files.
+    /// Loads the Core module from stdlib files.
     /// Called on-demand when Core types are first used or when import Core is encountered.
     /// </summary>
     public void LoadCoreNamespace()
@@ -142,19 +142,19 @@ public sealed class TypeRegistry
         if (_stdlibPath != null && Directory.Exists(_stdlibPath))
         {
             _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
-            _stdlibLoader.LoadCoreNamespace(this);
+            _stdlibLoader.LoadCoreModule(this);
         }
         else
         {
             string searchPath = _stdlibPath ?? "not specified";
             throw new InvalidOperationException(
                 $"Standard library (stdlib) not found at '{searchPath}'. " +
-                "Ensure stdlib directory exists and contains the Core namespace.");
+                "Ensure stdlib directory exists and contains the Core module.");
         }
     }
 
     /// <summary>
-    /// Checks if the Core namespace has been loaded.
+    /// Checks if the Core module has been loaded.
     /// </summary>
     public bool IsCoreNamespaceLoaded => _coreNamespaceLoaded;
 
@@ -162,7 +162,7 @@ public sealed class TypeRegistry
     /// Gets the parsed stdlib programs (for code generation).
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Namespace)> StdlibPrograms
+    public IReadOnlyList<(Program Program, string FilePath, string Module)> StdlibPrograms
         => _stdlibLoader?.ParsedPrograms ?? [];
 
     /// <summary>
@@ -172,7 +172,7 @@ public sealed class TypeRegistry
     /// <param name="importPath">The import path (e.g., "Collections/List", "ErrorHandling/Maybe").</param>
     /// <param name="currentFile">The file containing the import statement (for relative import resolution).</param>
     /// <param name="location">Source location for error reporting.</param>
-    /// <param name="effectiveNamespace">The effective namespace of the loaded module, or null on failure.</param>
+    /// <param name="effectiveNamespace">The effective module name of the loaded module, or null on failure.</param>
     /// <returns>True if the module was loaded successfully or was already loaded, false on error.</returns>
     public bool LoadModule(string importPath, string currentFile, SourceLocation location,
         out string? effectiveNamespace)
@@ -187,7 +187,7 @@ public sealed class TypeRegistry
             return true;
         }
 
-        // Core namespace is special - always loaded at startup
+        // Core module is special - always loaded at startup
         if (moduleId.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
             moduleId.StartsWith("Core.", StringComparison.OrdinalIgnoreCase) ||
             moduleId.Equals("NativeDataTypes", StringComparison.OrdinalIgnoreCase) ||
@@ -327,7 +327,7 @@ public sealed class TypeRegistry
             TypeArguments = record.TypeArguments,
             Visibility = record.Visibility,
             Location = record.Location,
-            Namespace = record.Namespace
+            Module = record.Module
         };
 
         _types[key: recordName] = updatedRecord;
@@ -360,7 +360,7 @@ public sealed class TypeRegistry
             TypeArguments = record.TypeArguments,
             Visibility = record.Visibility,
             Location = record.Location,
-            Namespace = record.Namespace
+            Module = record.Module
         };
 
         _types[key: recordName] = updatedRecord;
@@ -392,7 +392,7 @@ public sealed class TypeRegistry
             TypeArguments = entity.TypeArguments,
             Visibility = entity.Visibility,
             Location = entity.Location,
-            Namespace = entity.Namespace
+            Module = entity.Module
         };
 
         _types[key: entityName] = updatedEntity;
@@ -425,7 +425,7 @@ public sealed class TypeRegistry
             TypeArguments = resident.TypeArguments,
             Visibility = resident.Visibility,
             Location = resident.Location,
-            Namespace = resident.Namespace
+            Module = resident.Module
         };
 
         _types[key: residentName] = updatedResident;
@@ -457,7 +457,7 @@ public sealed class TypeRegistry
             TypeArguments = protocol.TypeArguments,
             Visibility = protocol.Visibility,
             Location = protocol.Location,
-            Namespace = protocol.Namespace
+            Module = protocol.Module
         };
 
         _types[key: protocolName] = updatedProtocol;
@@ -489,7 +489,7 @@ public sealed class TypeRegistry
             GenericConstraints = choice.GenericConstraints,
             Visibility = choice.Visibility,
             Location = choice.Location,
-            Namespace = choice.Namespace
+            Module = choice.Module
         };
 
         _types[key: choiceName] = updatedChoice;
@@ -542,7 +542,7 @@ public sealed class TypeRegistry
             return instantiation;
         }
 
-        // Try Core namespace prefix (Core types are auto-imported)
+        // Try Core module prefix (Core types are auto-imported)
         if (!name.Contains('.') && _types.TryGetValue(key: $"Core.{name}", value: out type))
         {
             return type;
@@ -820,7 +820,7 @@ public sealed class TypeRegistry
             GenericConstraints = genericConstraints,
             Visibility = routine.Visibility,
             Location = routine.Location,
-            Namespace = routine.Namespace,
+            Module = routine.Module,
             Attributes = routine.Attributes,
             CallingConvention = routine.CallingConvention,
             IsVariadic = routine.IsVariadic

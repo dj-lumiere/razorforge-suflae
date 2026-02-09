@@ -8,7 +8,7 @@ public enum ScopeKind
     /// <summary>Global/module level scope.</summary>
     Global,
 
-    /// <summary>Namespace scope.</summary>
+    /// <summary>Module scope.</summary>
     Namespace,
 
     /// <summary>Type body scope (record, entity, etc.).</summary>

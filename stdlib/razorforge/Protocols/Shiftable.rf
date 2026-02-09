@@ -1,5 +1,5 @@
 # Shiftable - Protocol for types that support shift operations (<<, >>, <<<, >>>)
-namespace Core
+module Core
 
 protocol Shiftable {
     @readonly

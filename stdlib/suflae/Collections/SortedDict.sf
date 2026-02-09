@@ -1,6 +1,6 @@
 # Suflae SortedDict - B-tree based sorted dictionary
 
-namespace Core
+module Core
 
 import razorforge/Collections.SortedDict
 

@@ -14,9 +14,9 @@ public sealed partial class SemanticAnalyzer
     #region Type Resolution
 
     /// <summary>
-    /// Looks up a type by name, searching imported namespaces for the current file.
-    /// Example: after "import Collections/List", namespace "Collections" is imported,
-    /// so looking up "List" also tries "Collections.List" (namespace.type).
+    /// Looks up a type by name, searching imported modules for the current file.
+    /// Example: after "import Collections/List", module "Collections" is imported,
+    /// so looking up "List" also tries "Collections.List" (module.type).
     /// </summary>
     private TypeSymbol? LookupTypeWithImports(string name)
     {
@@ -27,7 +27,7 @@ public sealed partial class SemanticAnalyzer
             return result;
         }
 
-        // Try each imported namespace
+        // Try each imported module
         foreach (string ns in _importedNamespaces)
         {
             result = _registry.LookupType(name: $"{ns}.{name}");
@@ -60,7 +60,7 @@ public sealed partial class SemanticAnalyzer
             return ResolveGenericType(typeExpr: typeExpr);
         }
 
-        // Try to look up the type by name (including imported namespaces)
+        // Try to look up the type by name (including imported modules)
         TypeSymbol? resolved = LookupTypeWithImports(name: typeExpr.Name);
         if (resolved != null)
         {

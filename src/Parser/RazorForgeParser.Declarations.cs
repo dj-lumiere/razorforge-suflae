@@ -81,25 +81,25 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses a namespace declaration.
-    /// Syntax: <c>namespace path/to/module</c>
+    /// Parses a module declaration.
+    /// Syntax: <c>module path/to/module</c>
     /// </summary>
-    /// <returns>A <see cref="NamespaceDeclaration"/> AST node.</returns>
-    private NamespaceDeclaration ParseNamespaceDeclaration()
+    /// <returns>A <see cref="ModuleDeclaration"/> AST node.</returns>
+    private ModuleDeclaration ParseNamespaceDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string namespacePath = "";
+        string modulePath = "";
 
-        // Parse namespace path - could be multiple identifiers separated by slashes
-        // e.g., namespace standard/errors
+        // Parse module path - could be multiple identifiers separated by slashes
+        // e.g., module standard/errors
         do
         {
-            string part = ConsumeIdentifier(errorMessage: "Expected namespace name");
-            namespacePath += part;
+            string part = ConsumeIdentifier(errorMessage: "Expected module name");
+            modulePath += part;
             if (Match(type: TokenType.Slash))
             {
-                namespacePath += "/";
+                modulePath += "/";
             }
             else
             {
@@ -109,13 +109,13 @@ public partial class RazorForgeParser
 
         ConsumeStatementTerminator();
 
-        return new NamespaceDeclaration(Path: namespacePath, Location: location);
+        return new ModuleDeclaration(Path: modulePath, Location: location);
     }
 
     /// <summary>
     /// Parses an import declaration.
     /// Syntax: <c>import module/path</c> or <c>import module/path as alias</c>
-    /// Registers imported types/namespaces for generic disambiguation.
+    /// Registers imported types/modules for generic disambiguation.
     /// </summary>
     /// <returns>An <see cref="ImportDeclaration"/> AST node.</returns>
     private ImportDeclaration ParseImportDeclaration()
@@ -157,9 +157,9 @@ public partial class RazorForgeParser
 
         ConsumeStatementTerminator();
 
-        // Register imported types/namespaces for generic disambiguation
+        // Register imported types/modules for generic disambiguation
         // import Collections/SortedDict -> adds "SortedDict" to known types (bare name usage)
-        // import Collections -> adds "Collections" to namespaces (qualified name usage)
+        // import Collections -> adds "Collections" to modules (qualified name usage)
         if (modulePath.Contains(value: '/'))
         {
             // Specific type import: Collections/SortedDict
@@ -168,7 +168,7 @@ public partial class RazorForgeParser
         }
         else
         {
-            // Namespace import: Collections
+            // Module import: Collections
             _importedNamespaces.Add(item: modulePath);
         }
 
@@ -457,7 +457,7 @@ public partial class RazorForgeParser
     /// <summary>
     /// Parses a function/routine declaration.
     /// Syntax: <c>routine name&lt;T&gt;(params) -&gt; ReturnType where T is/isnot/in/notin/follows/notfollows Constraint { body }</c>
-    /// Supports generic parameters, namespace-qualified names, failable routines (!), and inline constraints.
+    /// Supports generic parameters, module-qualified names, failable routines (!), and inline constraints.
     /// </summary>
     /// <param name="visibility">The visibility modifier for the function.</param>
     /// <param name="attributes">List of attributes applied to the function (e.g., @intrinsic).</param>
@@ -1493,7 +1493,7 @@ public partial class RazorForgeParser
 
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
-        // Support namespace-qualified names like Console.print
+        // Support module-qualified names like Console.print
         while (Match(type: TokenType.Dot))
         {
             string part = ConsumeIdentifier(errorMessage: "Expected identifier after '.'");

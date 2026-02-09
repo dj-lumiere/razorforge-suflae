@@ -2,7 +2,7 @@
 # Provides thread-safe atomic operations for simple types
 # Equivalent to std::atomic<T> in C++ or AtomicUsize/AtomicBool in Rust
 
-namespace Core
+module Core
 
 ### Generic atomic wrapper for lock-free operations
 ###

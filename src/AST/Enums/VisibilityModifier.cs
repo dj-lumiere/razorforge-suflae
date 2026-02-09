@@ -27,7 +27,7 @@ public enum VisibilityModifier
     /// <summary>Only accessible within the declaring file</summary>
     Private,
 
-    /// <summary>Accessible within the same module/namespace</summary>
+    /// <summary>Accessible within the same module</summary>
     Internal,
 
     /// <summary>Public read, private write (public getter, private setter)</summary>

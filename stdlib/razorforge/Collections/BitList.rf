@@ -15,7 +15,7 @@ import memory.DynamicSlice
 import memory.MemorySize
 import errors.IndexOutOfBoundsError
 
-namespace Collections
+module Collections
 
 entity BitList {
     private data: DynamicSlice      # Heap-allocated byte array (8 bits per Byte)

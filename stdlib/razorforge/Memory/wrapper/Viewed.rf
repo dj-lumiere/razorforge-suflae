@@ -19,7 +19,7 @@
 #
 # This type is a marker for the type system - the compiler handles all operations.
 
-namespace Core
+module Core
 record Viewed<T> {
     private ptr: Snatched<T>
 }

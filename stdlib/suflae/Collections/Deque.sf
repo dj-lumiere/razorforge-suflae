@@ -1,6 +1,6 @@
 # Suflae Deque - Double-ended queue
 
-namespace Core
+module Core
 
 import razorforge/Collections.Deque
 

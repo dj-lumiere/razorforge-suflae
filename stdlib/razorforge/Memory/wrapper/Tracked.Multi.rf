@@ -1,6 +1,6 @@
 # RazorForge Tracked<T, P> - Weak reference to Shared<T, P>
 # Multi-threaded weak references
-namespace Core
+module Core
 
 record Tracked<T, P>
 requires P follows LockPolicy {

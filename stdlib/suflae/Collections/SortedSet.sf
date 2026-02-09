@@ -1,6 +1,6 @@
 # Suflae SortedSet - B-tree based sorted set
 
-namespace Core
+module Core
 
 import razorforge/Collections.SortedSet
 

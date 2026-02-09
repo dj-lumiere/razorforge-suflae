@@ -16,7 +16,7 @@
 import errors.IndexOutOfBoundsError
 import Collections.List
 
-namespace Collections
+module Collections
 
 # B-tree order
 preset B_DICT: UAddr = 32uaddr

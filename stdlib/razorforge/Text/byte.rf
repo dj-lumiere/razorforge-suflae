@@ -10,7 +10,7 @@
 # - Any raw byte data
 #
 # For text processing, use Letter (Unicode codepoint) and Text types.
-namespace Core
+module Core
 
 record Byte {
     private value: U8

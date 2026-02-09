@@ -6,12 +6,12 @@ using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Resolves import paths to actual source files.
-/// Uses namespace-based resolution: import path matches the namespace declaration in the file.
+/// Uses module-based resolution: import path matches the module declaration in the file.
 /// </summary>
 /// <remarks>
 /// Import path resolution rules:
 /// <list type="bullet">
-/// <item>Namespace-based: import Core.Maybe → finds file declaring "namespace Core" with type "Maybe"</item>
+/// <item>Module-based: import Core.Maybe → finds file declaring "module Core" with type "Maybe"</item>
 /// <item>Relative imports: import ../Sibling/Module → relative to current file</item>
 /// <item>Project imports: import MyModule/SubPath → project root</item>
 /// </list>
@@ -34,8 +34,8 @@ public sealed class ModuleResolver
     private readonly Dictionary<string, string?> _resolvedPaths = [];
 
     /// <summary>
-    /// Namespace index: maps "Namespace.TypeName" to file path.
-    /// Built by scanning stdlib files and reading their namespace declarations.
+    /// Module index: maps "Module.TypeName" to file path.
+    /// Built by scanning stdlib files and reading their module declarations.
     /// </summary>
     private Dictionary<string, string>? _namespaceIndex;
 
@@ -55,7 +55,7 @@ public sealed class ModuleResolver
 
     /// <summary>
     /// Resolves an import path to a source file.
-    /// Uses namespace-based resolution: looks up "Namespace.Type" in the index.
+    /// Uses module-based resolution: looks up "Module.Type" in the index.
     /// </summary>
     /// <param name="importPath">The import path (e.g., "Collections.List", "Core.Maybe").</param>
     /// <param name="currentFile">The file containing the import statement.</param>
@@ -81,7 +81,7 @@ public sealed class ModuleResolver
         }
         else
         {
-            // Namespace-based resolution: look up in the index
+            // Module-based resolution: look up in the index
             EnsureNamespaceIndexBuilt();
 
             if (_namespaceIndex != null && _namespaceIndex.TryGetValue(importPath, out string? filePath))
@@ -112,8 +112,8 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
-    /// Builds the namespace index by scanning all stdlib files.
-    /// Maps "Namespace.TypeName" to file path based on namespace declarations in files.
+    /// Builds the module index by scanning all stdlib files.
+    /// Maps "Module.TypeName" to file path based on module declarations in files.
     /// Scans both razorforge/ and suflae/ subdirectories.
     /// </summary>
     private void EnsureNamespaceIndexBuilt()
@@ -152,7 +152,7 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
-    /// Indexes a single file by reading its namespace and type declarations.
+    /// Indexes a single file by reading its module and type declarations.
     /// </summary>
     /// <param name="filePath">The file path to index.</param>
     /// <param name="languagePrefix">The language prefix (razorforge or suflae) for cross-language imports.</param>
@@ -161,7 +161,7 @@ public sealed class ModuleResolver
         try
         {
             string content = File.ReadAllText(filePath);
-            string? fileNamespace = ExtractNamespace(content);
+            string? fileNamespace = ExtractModule(content);
             List<string> typeNames = ExtractTypeNames(content);
 
             // Use file name as type name if no type declarations found
@@ -171,13 +171,13 @@ public sealed class ModuleResolver
                 typeNames.Add(fileName);
             }
 
-            // Default namespace based on directory structure
+            // Default module based on directory structure
             if (fileNamespace == null)
             {
                 fileNamespace = DeriveNamespaceFromPath(filePath, languagePrefix);
             }
 
-            // Register each type under its namespace
+            // Register each type under its module
             foreach (string typeName in typeNames)
             {
                 string key = $"{fileNamespace}.{typeName}";
@@ -201,18 +201,18 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
-    /// Extracts namespace declaration from file content.
-    /// Looks for "namespace Foo.Bar" pattern.
+    /// Extracts module declaration from file content.
+    /// Looks for "module Foo.Bar" pattern.
     /// </summary>
-    private static string? ExtractNamespace(string content)
+    private static string? ExtractModule(string content)
     {
-        // Simple regex-free parsing for "namespace X" or "namespace X.Y.Z"
+        // Simple regex-free parsing for "module X" or "module X.Y.Z"
         foreach (string line in content.Split('\n'))
         {
             string trimmed = line.Trim();
-            if (trimmed.StartsWith("namespace "))
+            if (trimmed.StartsWith("module "))
             {
-                string ns = trimmed["namespace ".Length..].Trim();
+                string ns = trimmed["module ".Length..].Trim();
                 // Remove any trailing comments or whitespace
                 int commentIdx = ns.IndexOf('#');
                 if (commentIdx >= 0)
@@ -274,9 +274,9 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
-    /// Derives namespace from file path relative to stdlib root.
+    /// Derives module name from file path relative to stdlib root.
     /// </summary>
-    /// <param name="filePath">The file path to derive namespace from.</param>
+    /// <param name="filePath">The file path to derive module name from.</param>
     /// <param name="languagePrefix">The language prefix to skip (razorforge or suflae).</param>
     private string DeriveNamespaceFromPath(string filePath, string languagePrefix)
     {
@@ -317,12 +317,12 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
-    /// Normalizes an import path by converting namespace separators and removing file extensions.
+    /// Normalizes an import path by converting module separators and removing file extensions.
     /// Handles both dot notation (Collections.List) and slash notation (Collections/List).
     /// </summary>
     private static string NormalizePath(string importPath)
     {
-        // Convert dots to path separators (namespace-based imports)
+        // Convert dots to path separators (module-based imports)
         // e.g., "Collections.List" -> "Collections/List"
         string normalized = importPath.Replace(oldChar: '.', newChar: Path.DirectorySeparatorChar);
 
@@ -473,11 +473,11 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
-    /// Extracts the module namespace from an import path.
-    /// The namespace is the import path converted to dot notation.
+    /// Extracts the module path from an import path.
+    /// The module path is the import path converted to dot notation.
     /// </summary>
     /// <param name="importPath">The import path (e.g., "Collections/List").</param>
-    /// <returns>The namespace (e.g., "Collections.List").</returns>
+    /// <returns>The module path (e.g., "Collections.List").</returns>
     public static string GetNamespaceFromImport(string importPath)
     {
         return importPath

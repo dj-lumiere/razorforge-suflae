@@ -1170,13 +1170,13 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case VisibilityModifier.Internal:
-                // Internal members are accessible within the same namespace
-                if (!IsAccessingFromSameNamespace(memberNamespace: ownerType?.Namespace))
+                // Internal members are accessible within the same module
+                if (!IsAccessingFromSameNamespace(memberNamespace: ownerType?.Module))
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(
                         SemanticDiagnosticCode.InternalMemberAccess,
-                        $"Cannot access internal {memberKind} '{memberName}' of '{typeName}' from outside the namespace.",
+                        $"Cannot access internal {memberKind} '{memberName}' of '{typeName}' from outside the module.",
                         accessLocation);
                 }
                 break;
@@ -1206,26 +1206,26 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if the current access context is within the same namespace as the member.
-    /// Module = Namespace exactly (sub-namespaces are different modules).
+    /// Checks if the current access context is within the same module as the member.
+    /// Module comparison is exact (sub-modules are different modules).
     /// </summary>
     private bool IsAccessingFromSameNamespace(string? memberNamespace)
     {
         string? currentNamespace = GetCurrentNamespace();
 
-        // If both are in no namespace, they're in the same "namespace"
+        // If both are in no module, they're in the same module
         if (string.IsNullOrEmpty(value: memberNamespace) && string.IsNullOrEmpty(value: currentNamespace))
         {
             return true;
         }
 
-        // If either is null/empty but not both, they're not in the same namespace
+        // If either is null/empty but not both, they're not in the same module
         if (string.IsNullOrEmpty(value: memberNamespace) || string.IsNullOrEmpty(value: currentNamespace))
         {
             return false;
         }
 
-        // Module = Namespace exactly - sub-namespaces are different modules
+        // Module comparison is exact - sub-modules are different modules
         return currentNamespace == memberNamespace;
     }
 
@@ -1257,7 +1257,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Checks whether a file path is inside the stdlib directory.
-    /// Used to allow stdlib files to use reserved features (e.g., namespace Core).
+    /// Used to allow stdlib files to use reserved features (e.g., module Core).
     /// </summary>
     private bool IsStdlibFile(string filePath)
     {

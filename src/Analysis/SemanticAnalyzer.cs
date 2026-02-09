@@ -62,7 +62,7 @@ public sealed partial class SemanticAnalyzer
     /// <summary>The source file path of the program being analyzed (for import resolution).</summary>
     private string _currentFilePath = string.Empty;
 
-    /// <summary>Namespaces imported by the current file. Used for type resolution of non-Core types.</summary>
+    /// <summary>Modules imported by the current file. Used for type resolution of non-Core types.</summary>
     private readonly HashSet<string> _importedNamespaces = new(StringComparer.OrdinalIgnoreCase);
 
     #endregion

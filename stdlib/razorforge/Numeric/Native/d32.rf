@@ -3,7 +3,7 @@
 # Uses Intel DFP library via imported C functions
 import CSubsystem.CStr
 
-namespace Core
+module Core
 
 # Core D32 type definition - stored as 32-bit value in BID encoding
 record D32 follows Numeric, Ordered {

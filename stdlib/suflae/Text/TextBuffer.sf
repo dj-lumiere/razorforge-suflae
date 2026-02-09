@@ -1,6 +1,6 @@
 # Suflae TextBuffer - Mutable text builder
 
-namespace Core
+module Core
 
 import razorforge/Text.TextBuffer
 

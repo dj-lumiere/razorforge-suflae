@@ -38,19 +38,19 @@ public abstract class TypeInfo
     /// <summary>Source location where this type is defined.</summary>
     public SourceLocation? Location { get; init; }
 
-    /// <summary>The namespace/module this type belongs to.</summary>
-    public string? Namespace { get; init; }
+    /// <summary>The module this type belongs to.</summary>
+    public string? Module { get; init; }
 
     /// <summary>
-    /// The fully qualified name of this type (namespace + name + generic args).
+    /// The fully qualified name of this type (module + name + generic args).
     /// </summary>
     public string FullName
     {
         get
         {
-            string baseName = string.IsNullOrEmpty(value: Namespace)
+            string baseName = string.IsNullOrEmpty(value: Module)
                 ? Name
-                : $"{Namespace}.{Name}";
+                : $"{Module}.{Name}";
 
             if (TypeArguments is not { Count: > 0 })
             {

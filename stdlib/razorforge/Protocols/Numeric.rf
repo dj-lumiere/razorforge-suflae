@@ -1,5 +1,5 @@
 # Numeric - Bundle protocol combining common numeric operations
-namespace Core
+module Core
 
 protocol Numeric follows Addable, Subtractable, Multiplicable, Divisible, Negatable, Exponentiable {
     pass

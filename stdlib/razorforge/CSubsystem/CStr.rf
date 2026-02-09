@@ -1,4 +1,4 @@
-﻿# RazorForge C String Type (CStr)
+# RazorForge C String Type (CStr)
 # Null-terminated char* wrapper for C FFI interop
 #
 # CStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
@@ -22,7 +22,7 @@ import Collections.List
 import Text.Bytes
 import Text.List
 
-namespace CSubsystem
+module CSubsystem
 
 # ============================================================================
 # CStr Record Definition

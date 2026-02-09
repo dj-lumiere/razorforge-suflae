@@ -393,8 +393,8 @@ internal class Program
                 Console.WriteLine($"{prefix}import {import.ModulePath}");
                 break;
 
-            case NamespaceDeclaration ns:
-                Console.WriteLine($"{prefix}namespace {ns.Path}");
+            case ModuleDeclaration ns:
+                Console.WriteLine($"{prefix}module {ns.Path}");
                 break;
 
             default:

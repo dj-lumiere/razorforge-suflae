@@ -3,7 +3,7 @@
 # A mutable buffer for building Text values efficiently.
 # Use this when you need to incrementally construct text.
 
-namespace Text
+module Text
 
 entity TextBuffer {
     private letters: List<Letter>

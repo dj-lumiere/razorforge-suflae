@@ -1,6 +1,6 @@
 # Suflae Fraction - Rational number type
 
-namespace Core
+module Core
 
 import razorforge/Numeric.Fraction
 

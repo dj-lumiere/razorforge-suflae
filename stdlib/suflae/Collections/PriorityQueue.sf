@@ -1,6 +1,6 @@
 # Suflae PriorityQueue - Binary min-heap
 
-namespace Core
+module Core
 
 import razorforge/Collections.PriorityQueue
 

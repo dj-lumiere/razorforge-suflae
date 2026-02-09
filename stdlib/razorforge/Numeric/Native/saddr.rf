@@ -7,7 +7,7 @@
 
 # TODO: Add "namespace Core" once tuple destructuring is implemented in codegen
 # Currently blocked by functions using let (result, overflow) = @intrinsic_routine.add.overflow<iptr>(...)
-namespace Core
+module Core
 # Core SAddr type definition - maps to LLVM iptr/isize
 record SAddr follows SignedIntegral, Ordered {
     public value: @intrinsic_type.iptr

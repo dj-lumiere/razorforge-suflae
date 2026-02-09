@@ -1,5 +1,5 @@
 # Subtractable - Protocol for types that support subtraction (-)
-namespace Core
+module Core
 
 protocol Subtractable {
     @readonly

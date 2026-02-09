@@ -1,5 +1,5 @@
 # Sequential - Protocol for types that can be iterated over in for-in loops
-namespace Core
+module Core
 
 protocol Sequential<T> {
     @readonly

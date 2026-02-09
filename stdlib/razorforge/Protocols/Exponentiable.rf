@@ -1,5 +1,5 @@
 # Exponentiable - Protocol for types that support exponentiation (**)
-namespace Core
+module Core
 
 protocol Exponentiable {
     @readonly

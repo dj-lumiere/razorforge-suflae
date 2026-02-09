@@ -1,5 +1,5 @@
 # Multiplicable - Protocol for types that support multiplication (*)
-namespace Core
+module Core
 
 protocol Multiplicable {
     @readonly

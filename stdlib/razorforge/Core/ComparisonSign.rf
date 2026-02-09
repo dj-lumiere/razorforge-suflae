@@ -3,7 +3,7 @@
 # Used as the return type for __cmp__ operator.
 # ME_SMALL means `me < you`, SAME means `me == you`, ME_LARGE means `me > you`.
 
-namespace Core
+module Core
 
 choice ComparisonSign {
     ME_SMALL: -1

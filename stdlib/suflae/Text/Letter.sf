@@ -1,6 +1,6 @@
 # Suflae Letter - Unicode character type
 
-namespace Core
+module Core
 
 import razorforge/Text.Letter
 

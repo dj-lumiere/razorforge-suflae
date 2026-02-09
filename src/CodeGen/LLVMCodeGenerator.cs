@@ -22,7 +22,7 @@ public partial class LLVMCodeGenerator
     private readonly Program _program;
 
     /// <summary>The stdlib programs to include routine bodies from.</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath, string Namespace)> _stdlibPrograms;
+    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)> _stdlibPrograms;
 
     /// <summary>Output buffer for type declarations.</summary>
     private readonly StringBuilder _typeDeclarations = new();
@@ -76,7 +76,7 @@ public partial class LLVMCodeGenerator
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Namespace)>? stdlibPrograms = null)
+    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null)
     {
         _program = program;
         _registry = registry;

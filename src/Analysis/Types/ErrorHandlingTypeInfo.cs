@@ -66,7 +66,7 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Namespace = Namespace
+            Module = Module
         };
     }
 

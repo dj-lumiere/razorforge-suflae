@@ -13,7 +13,7 @@
 
 import errors.IndexOutOfBoundsError
 
-namespace Collections
+module Collections
 
 # Fixed-capacity deque with reference semantics
 # N elements of T stored inline by compiler, ring buffer structure

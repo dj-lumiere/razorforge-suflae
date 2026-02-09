@@ -1,6 +1,6 @@
 # Suflae Blank - Unit type (no value)
 
-namespace Core
+module Core
 
 import razorforge/Core.Blank
 

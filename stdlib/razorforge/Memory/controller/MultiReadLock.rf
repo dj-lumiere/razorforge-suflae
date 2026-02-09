@@ -2,7 +2,7 @@
 # Allows multiple concurrent readers OR one exclusive writer
 # Equivalent to std::shared_mutex or pthread_rwlock
 
-namespace Core
+module Core
 
 record MultiReadLock follows LockPolicy {
     private readers: Atomic<S32>  # Number of active readers

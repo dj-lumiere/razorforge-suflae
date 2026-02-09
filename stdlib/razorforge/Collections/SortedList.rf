@@ -13,7 +13,7 @@
 import errors.IndexOutOfBoundsError
 import Collections.List
 
-namespace Collections
+module Collections
 
 # B-tree order (max children per node)
 preset B_LIST: UAddr = 32uaddr

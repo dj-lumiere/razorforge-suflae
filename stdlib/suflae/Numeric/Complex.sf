@@ -1,6 +1,6 @@
 # Suflae Complex - Arbitrary precision complex type
 
-namespace Core
+module Core
 
 import razorforge/Numeric.Complex
 

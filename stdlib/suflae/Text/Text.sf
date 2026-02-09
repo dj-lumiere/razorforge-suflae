@@ -1,6 +1,6 @@
 # Suflae Text - High-level string type
 
-namespace Core
+module Core
 
 import razorforge/Text.Text
 

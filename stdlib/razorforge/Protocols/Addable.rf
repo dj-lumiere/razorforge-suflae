@@ -1,5 +1,5 @@
 # Addable - Protocol for types that support addition (+)
-namespace Core
+module Core
 
 protocol Addable {
     @readonly

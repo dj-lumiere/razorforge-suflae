@@ -1,6 +1,6 @@
 # UnsignedIntegral - Bundle protocol for unsigned fixed-width integers
 # Same as FixedIntegral but without Negatable
-namespace Core
+module Core
 
 protocol UnsignedIntegral follows FixedIntegral {
     pass

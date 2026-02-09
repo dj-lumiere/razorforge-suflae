@@ -163,7 +163,7 @@ public record TupleLiteralExpression(
 /// <list type="bullet">
 /// <item>Variables: local scope, then enclosing scopes, then global</item>
 /// <item>Functions: may be resolved with overloading based on call context</item>
-/// <item>Types: resolved in type namespace with visibility rules</item>
+/// <item>Types: resolved in type scope with visibility rules</item>
 /// <item>Qualified names: may represent member access chains</item>
 /// </list>
 /// </remarks>

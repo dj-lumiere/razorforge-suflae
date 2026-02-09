@@ -14,7 +14,7 @@ import Collections.List
 import Collections.SortedSet
 import errors.IndexOutOfBoundsError
 
-namespace Collections
+module Collections
 
 # Initial number of buckets
 preset SET_INITIAL_BUCKETS: UAddr = 16uaddr

@@ -1,4 +1,4 @@
-﻿# RazorForge Wide C Character Type (CWChar)
+# RazorForge Wide C Character Type (CWChar)
 # Wrapper record for C's `wchar_t` type
 #
 # CWChar is a wrapper record for wide characters, providing type safety for C FFI.
@@ -10,7 +10,7 @@
 # - CChar - single `char`
 # - CWStr - null-terminated wchar_t* string
 
-namespace CSubsystem
+module CSubsystem
 
 # ============================================================================
 # CWChar Record Definition (Platform-Dependent)

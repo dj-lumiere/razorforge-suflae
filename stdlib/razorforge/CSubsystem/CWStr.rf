@@ -1,4 +1,4 @@
-﻿# RazorForge Wide C String Type (CWStr)
+# RazorForge Wide C String Type (CWStr)
 # Null-terminated wchar_t* wrapper for C FFI interop
 #
 # CWStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
@@ -25,7 +25,7 @@
 import Collections.List
 import Text.Text
 
-namespace CSubsystem
+module CSubsystem
 
 # ============================================================================
 # Platform-Dependent Wide Character Type

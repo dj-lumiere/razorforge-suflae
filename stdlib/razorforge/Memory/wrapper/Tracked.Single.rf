@@ -1,6 +1,6 @@
 # RazorForge Tracked<T> - Weak reference to Shared<T>
 # Single-threaded weak references
-namespace Core
+module Core
 
 record Tracked<T> {
     private controller: Snatched<SingleShareController>

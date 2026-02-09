@@ -1,6 +1,6 @@
 # Suflae BitList - Dynamic bit vector
 
-namespace Core
+module Core
 
 import razorforge/Collections.BitList
 

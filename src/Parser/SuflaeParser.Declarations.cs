@@ -1074,26 +1074,26 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses a namespace declaration.
-    /// Syntax: <c>namespace path/to/module</c>
-    /// Uses slash separators for namespace paths.
+    /// Parses a module declaration.
+    /// Syntax: <c>module path/to/module</c>
+    /// Uses slash separators for module paths.
     /// </summary>
-    /// <returns>A <see cref="NamespaceDeclaration"/> AST node.</returns>
-    private NamespaceDeclaration ParseNamespaceDeclaration()
+    /// <returns>A <see cref="ModuleDeclaration"/> AST node.</returns>
+    private ModuleDeclaration ParseNamespaceDeclaration()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string namespacePath = "";
+        string modulePath = "";
 
-        // Parse namespace path - could be multiple identifiers separated by slashes
-        // e.g., namespace standard/errors
+        // Parse module path - could be multiple identifiers separated by slashes
+        // e.g., module standard/errors
         do
         {
-            string part = ConsumeIdentifier(errorMessage: "Expected namespace name");
-            namespacePath += part;
+            string part = ConsumeIdentifier(errorMessage: "Expected module name");
+            modulePath += part;
             if (Match(type: TokenType.Slash))
             {
-                namespacePath += "/";
+                modulePath += "/";
             }
             else
             {
@@ -1103,7 +1103,7 @@ public partial class SuflaeParser
 
         ConsumeStatementTerminator();
 
-        return new NamespaceDeclaration(Path: namespacePath, Location: location);
+        return new ModuleDeclaration(Path: modulePath, Location: location);
     }
 
     /// <summary>
@@ -1151,9 +1151,9 @@ public partial class SuflaeParser
 
         ConsumeStatementTerminator();
 
-        // Register imported types/namespaces for generic disambiguation
+        // Register imported types/modules for generic disambiguation
         // import Collections/SortedDict -> adds "SortedDict" to known types (bare name usage)
-        // import Collections -> adds "Collections" to namespaces (qualified name usage)
+        // import Collections -> adds "Collections" to modules (qualified name usage)
         if (modulePath.Contains(value: '/'))
         {
             // Specific type import: Collections/SortedDict
@@ -1162,7 +1162,7 @@ public partial class SuflaeParser
         }
         else
         {
-            // Namespace import: Collections
+            // Module import: Collections
             _importedNamespaces.Add(item: modulePath);
         }
 

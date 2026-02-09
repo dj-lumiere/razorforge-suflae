@@ -1,4 +1,4 @@
-namespace Core
+module Core
 
 record Bool {
     private value: @intrinsic_type.i1

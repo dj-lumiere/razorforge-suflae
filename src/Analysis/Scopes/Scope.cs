@@ -13,7 +13,7 @@ public sealed class Scope
     /// <summary>The kind of this scope.</summary>
     public ScopeKind Kind { get; }
 
-    /// <summary>Optional name for the scope (namespace name, function name, etc.).</summary>
+    /// <summary>Optional name for the scope (module name, function name, etc.).</summary>
     public string? Name { get; init; }
 
     /// <summary>The parent scope, or null for the global scope.</summary>

@@ -1,4 +1,4 @@
-﻿# RazorForge C Character Type (CChar)
+# RazorForge C Character Type (CChar)
 # Wrapper record for C's `char` type
 #
 # CChar is a wrapper record around U8, providing type safety for C FFI.
@@ -9,7 +9,7 @@
 # - CUChar (U8) - for explicit `unsigned char` in C
 # - CStr - null-terminated char* string
 
-namespace CSubsystem
+module CSubsystem
 
 # ============================================================================
 # CChar Record Definition

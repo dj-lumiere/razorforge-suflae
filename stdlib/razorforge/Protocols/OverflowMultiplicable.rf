@@ -1,5 +1,5 @@
 # OverflowMultiplicable - Protocol for types that support overflow-handling multiplication (*%, *^, *?)
-namespace Core
+module Core
 
 protocol OverflowMultiplicable {
     @readonly

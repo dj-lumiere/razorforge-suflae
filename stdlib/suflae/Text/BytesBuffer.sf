@@ -1,6 +1,6 @@
 # Suflae BytesBuffer - Mutable bytes builder
 
-namespace Core
+module Core
 
 import razorforge/Text.BytesBuffer
 

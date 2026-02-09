@@ -1,5 +1,5 @@
 # SequenceGenerator - Protocol for types that produce elements one at a time
-namespace Core
+module Core
 
 protocol SequenceGenerator<T> {
     @writable

@@ -207,7 +207,7 @@ public sealed class ErrorHandlingGenerator
             GenericConstraints = original.GenericConstraints,
             Visibility = original.Visibility,
             Location = original.Location,
-            Namespace = original.Namespace,
+            Module = original.Module,
             Attributes = original.Attributes
         };
     }
@@ -240,7 +240,7 @@ public sealed class ErrorHandlingGenerator
             GenericConstraints = original.GenericConstraints,
             Visibility = original.Visibility,
             Location = original.Location,
-            Namespace = original.Namespace,
+            Module = original.Module,
             Attributes = original.Attributes
         };
     }
@@ -274,7 +274,7 @@ public sealed class ErrorHandlingGenerator
             GenericConstraints = original.GenericConstraints,
             Visibility = original.Visibility,
             Location = original.Location,
-            Namespace = original.Namespace,
+            Module = original.Module,
             Attributes = original.Attributes
         };
     }

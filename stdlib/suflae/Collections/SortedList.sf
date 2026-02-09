@@ -1,6 +1,6 @@
 # Suflae SortedList - B-tree based sorted list with duplicates
 
-namespace Core
+module Core
 
 import razorforge/Collections.SortedList
 

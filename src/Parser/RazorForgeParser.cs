@@ -92,8 +92,8 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     private readonly HashSet<string> _knownTypeNames = [];
 
     /// <summary>
-    /// Set of imported namespace names for qualified type resolution.
-    /// Contains namespace names like "Collections", "core" from import statements.
+    /// Set of imported module names for qualified type resolution.
+    /// Contains module names like "Collections", "core" from import statements.
     /// </summary>
     private readonly HashSet<string> _importedNamespaces = [];
 
@@ -145,14 +145,14 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
 
     /// <summary>
     /// Parses a single top-level or nested declaration.
-    /// Handles all declaration types: namespace, import, define, using, preset,
+    /// Handles all declaration types: module, import, define, using, preset,
     /// routines, entities, records, residents, choices, variants, mutants, and protocols.
     /// </summary>
     /// <remarks>
     /// Declaration parsing order (checked in sequence):
     ///
     /// FILE-LEVEL DECLARATIONS (must appear first):
-    ///   namespace    - Module namespace declaration
+    ///   module       - Module declaration
     ///   import       - Import external modules
     ///   define       - Type alias/redefinition
     ///   preset       - Compile-time constant
@@ -195,7 +195,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // FILE-LEVEL DECLARATIONS (must appear at top of file)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Namespace declaration (must appear at top of file)
+        // Module declaration (must appear at top of file)
         if (Match(type: TokenType.Namespace))
         {
             return ParseNamespaceDeclaration();

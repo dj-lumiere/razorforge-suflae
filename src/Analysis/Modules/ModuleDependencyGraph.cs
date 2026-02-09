@@ -6,14 +6,14 @@ using global::RazorForge.Diagnostics;
 
 /// <summary>
 /// Represents a module in the dependency graph.
-/// A module corresponds to a unique namespace path (e.g., "Collections", "Banking/Core").
+/// A module corresponds to a unique module path (e.g., "Collections", "Banking/Core").
 /// </summary>
 public sealed class ModuleNode
 {
-    /// <summary>The module's namespace path (e.g., "Collections", "Standard/Errors").</summary>
+    /// <summary>The module path (e.g., "Collections", "Standard/Errors").</summary>
     public string ModulePath { get; }
 
-    /// <summary>The source file that defines this module (first file with this namespace).</summary>
+    /// <summary>The source file that defines this module (first file with this module declaration).</summary>
     public string? SourceFile { get; set; }
 
     /// <summary>Modules that this module imports.</summary>
@@ -57,7 +57,7 @@ public sealed class ModuleDependencyGraph
     /// <summary>
     /// Registers a module in the graph.
     /// </summary>
-    /// <param name="modulePath">The namespace path of the module.</param>
+    /// <param name="modulePath">The path of the module.</param>
     /// <param name="sourceFile">The source file defining this module.</param>
     /// <returns>The registered or existing module node.</returns>
     public ModuleNode GetOrCreateModule(string modulePath, string? sourceFile = null)
@@ -80,8 +80,8 @@ public sealed class ModuleDependencyGraph
     /// Records that one module imports another.
     /// Immediately checks for circular dependencies.
     /// </summary>
-    /// <param name="fromModule">The importing module's namespace path.</param>
-    /// <param name="toModule">The imported module's namespace path.</param>
+    /// <param name="fromModule">The importing module's path.</param>
+    /// <param name="toModule">The imported module's path.</param>
     /// <param name="importLocation">Source location of the import statement.</param>
     /// <returns>True if the import is valid, false if it creates a cycle.</returns>
     public bool AddDependency(string fromModule, string toModule, SourceLocation importLocation)

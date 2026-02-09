@@ -1,5 +1,5 @@
 # OverflowSubtractable - Protocol for types that support overflow-handling subtraction (-%, -^, -?)
-namespace Core
+module Core
 
 protocol OverflowSubtractable {
     @readonly

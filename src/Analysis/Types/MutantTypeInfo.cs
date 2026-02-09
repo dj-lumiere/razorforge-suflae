@@ -68,7 +68,7 @@ public sealed class MutantTypeInfo : TypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Namespace = Namespace
+            Module = Module
         };
     }
 

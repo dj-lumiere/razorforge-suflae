@@ -292,7 +292,7 @@ public enum TokenType
     /// <summary>Private access modifier - visible only within the declaring type</summary>
     Private,
 
-    /// <summary>Internal access modifier - visible within the same module/namespace</summary>
+    /// <summary>Internal access modifier - visible within the same module</summary>
     Internal,
 
     /// <summary>Published access modifier - public get, private set</summary>
@@ -401,7 +401,7 @@ public enum TokenType
     /// <summary>Import statement keyword</summary>
     Import,
 
-    /// <summary>Namespace declaration keyword</summary>
+    /// <summary>Module declaration keyword (maps to 'module' keyword)</summary>
     Namespace,
 
     #endregion
@@ -503,7 +503,7 @@ public enum TokenType
     /// <summary>Multiplication operator (*)</summary>
     Star,
 
-    /// <summary>Regular division or namespace separation operator (/)</summary>
+    /// <summary>Regular division or module path separation operator (/)</summary>
     Slash,
 
     /// <summary>Integer division operator (//)</summary>

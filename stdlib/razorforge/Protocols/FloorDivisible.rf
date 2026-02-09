@@ -1,5 +1,5 @@
 # FloorDivisible - Protocol for types that support floor division (//) and modulo (%)
-namespace Core
+module Core
 
 protocol FloorDivisible {
     @readonly

@@ -1,5 +1,5 @@
 # OverflowAddable - Protocol for types that support overflow-handling addition (+%, +^, +?)
-namespace Core
+module Core
 
 protocol OverflowAddable {
     @readonly

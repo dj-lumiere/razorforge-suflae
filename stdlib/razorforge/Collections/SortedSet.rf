@@ -15,7 +15,7 @@
 import errors.IndexOutOfBoundsError
 import Collections.List
 
-namespace Collections
+module Collections
 
 # B-tree order (max children per node)
 # B = 32 means each node has 16-31 keys (except root)

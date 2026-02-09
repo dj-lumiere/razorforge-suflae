@@ -1,5 +1,5 @@
 # Indexable - Protocol for types that support indexing ([])
-namespace Core
+module Core
 
 protocol Indexable<K, V> {
     @readonly

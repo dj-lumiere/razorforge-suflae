@@ -1,6 +1,6 @@
 # Suflae Integer - Arbitrary precision integer type
 
-namespace Core
+module Core
 
 import razorforge/Numeric.Integer
 

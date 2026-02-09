@@ -1,5 +1,5 @@
 # CheckedDivisible - Protocol for types that support checked division (//?. %?)
-namespace Core
+module Core
 
 protocol CheckedDivisible {
     @readonly

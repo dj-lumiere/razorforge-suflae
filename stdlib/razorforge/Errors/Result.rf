@@ -1,4 +1,4 @@
-namespace Core
+module Core
 
 record Result<T> {
     private state: DataState

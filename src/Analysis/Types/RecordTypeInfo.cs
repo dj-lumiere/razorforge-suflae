@@ -118,7 +118,7 @@ public sealed class RecordTypeInfo : TypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Namespace = Namespace
+            Module = Module
         };
     }
 

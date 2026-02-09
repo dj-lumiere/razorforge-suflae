@@ -1,6 +1,6 @@
 # Equatable - Protocol for types that support equality (==, !=)
 # __ne__ is auto-generated from __eq__
-namespace Core
+module Core
 
 protocol Equatable {
     @readonly

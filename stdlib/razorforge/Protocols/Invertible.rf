@@ -1,5 +1,5 @@
 # Invertible - Protocol for types that support bitwise not (~)
-namespace Core
+module Core
 
 protocol Invertible {
     @readonly

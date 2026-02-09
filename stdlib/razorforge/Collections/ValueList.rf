@@ -11,7 +11,7 @@
 
 import errors.IndexOutOfBoundsError
 
-namespace Collections
+module Collections
 
 # Fixed-size array with value semantics
 # Compiler lays out N elements of T inline

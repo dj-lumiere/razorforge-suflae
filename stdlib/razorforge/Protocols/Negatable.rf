@@ -1,5 +1,5 @@
 # Negatable - Protocol for types that support unary negation (-)
-namespace Core
+module Core
 
 protocol Negatable {
     @readonly

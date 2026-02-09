@@ -13,7 +13,7 @@
 import errors.IndexOutOfBoundsError
 import Collections.List
 
-namespace Collections
+module Collections
 
 # Slot states for robin hood hashing
 preset SLOT_EMPTY: U8 = 0u8

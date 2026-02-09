@@ -1,6 +1,6 @@
 # Suflae Set - Hash set
 
-namespace Core
+module Core
 
 import razorforge/Collections.Set
 

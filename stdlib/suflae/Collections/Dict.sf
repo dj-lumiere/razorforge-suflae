@@ -1,6 +1,6 @@
 # Suflae Dict - Hash map/dictionary
 
-namespace Core
+module Core
 
 import razorforge/Collections.Dict
 

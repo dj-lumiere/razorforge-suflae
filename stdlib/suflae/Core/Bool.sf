@@ -1,6 +1,6 @@
 # Suflae Bool - Boolean type
 
-namespace Core
+module Core
 
 import razorforge/Core.Bool
 

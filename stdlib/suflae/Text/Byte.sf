@@ -1,6 +1,6 @@
 # Suflae Byte - Raw 8-bit value
 
-namespace Core
+module Core
 
 import razorforge/Text.Byte
 

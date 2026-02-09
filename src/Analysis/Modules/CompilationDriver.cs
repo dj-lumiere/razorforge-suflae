@@ -15,13 +15,13 @@ using global::RazorForge.Diagnostics;
 /// Result of compiling a single source file.
 /// </summary>
 /// <param name="FilePath">The path to the source file.</param>
-/// <param name="Namespace">The namespace declared in the file (module path).</param>
+/// <param name="Module">The module declared in the file (module path).</param>
 /// <param name="Ast">The parsed AST.</param>
 /// <param name="Imports">Import declarations found in the file.</param>
 /// <param name="ParseWarnings">Warnings from parsing.</param>
 public sealed record FileCompilationUnit(
     string FilePath,
-    string? Namespace,
+    string? Module,
     Program Ast,
     IReadOnlyList<ImportDeclaration> Imports,
     IReadOnlyList<CompileWarning> ParseWarnings);
@@ -158,7 +158,7 @@ public sealed class CompilationDriver
             }
 
             // Register the module
-            string modulePath = unit.Namespace ?? Path.GetFileNameWithoutExtension(path: filePath);
+            string modulePath = unit.Module ?? Path.GetFileNameWithoutExtension(path: filePath);
             _dependencyGraph.GetOrCreateModule(modulePath: modulePath, sourceFile: filePath);
 
             // Track dependencies from imports
@@ -263,15 +263,15 @@ public sealed class CompilationDriver
                 warnings = parser.GetWarnings();
             }
 
-            // Extract namespace and imports
-            string? namespacePath = null;
+            // Extract module and imports
+            string? modulePath = null;
             var imports = new List<ImportDeclaration>();
 
             foreach (IAstNode decl in ast.Declarations)
             {
-                if (decl is NamespaceDeclaration ns)
+                if (decl is ModuleDeclaration ns)
                 {
-                    namespacePath = ns.Path;
+                    modulePath = ns.Path;
                 }
                 else if (decl is ImportDeclaration import)
                 {
@@ -281,7 +281,7 @@ public sealed class CompilationDriver
 
             return new FileCompilationUnit(
                 FilePath: filePath,
-                Namespace: namespacePath,
+                Module: modulePath,
                 Ast: ast,
                 Imports: imports,
                 ParseWarnings: warnings);
@@ -313,7 +313,7 @@ public sealed class CompilationDriver
 
         if (_compiledUnits.TryGetValue(key: filePath, value: out FileCompilationUnit? unit))
         {
-            return unit.Namespace ?? Path.GetFileNameWithoutExtension(path: filePath);
+            return unit.Module ?? Path.GetFileNameWithoutExtension(path: filePath);
         }
 
         return Path.GetFileNameWithoutExtension(path: filePath);

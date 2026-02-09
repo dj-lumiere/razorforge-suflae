@@ -1,5 +1,5 @@
 # Divisible - Protocol for types that support true division (/)
-namespace Core
+module Core
 
 protocol Divisible {
     @readonly

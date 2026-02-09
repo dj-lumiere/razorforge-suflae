@@ -1,6 +1,6 @@
 # Suflae Bytes - Byte sequence type
 
-namespace Core
+module Core
 
 import razorforge/Text.Bytes
 

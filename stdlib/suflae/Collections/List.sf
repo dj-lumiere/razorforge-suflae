@@ -1,6 +1,6 @@
 # Suflae List - Dynamic array/list
 
-namespace Core
+module Core
 
 import razorforge/Collections.List
 

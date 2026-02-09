@@ -1,6 +1,6 @@
 # RazorForge U16 (unsigned 16-bit integer) native type implementation
 # Maps directly to LLVM i16 type using compiler intrinsics
-namespace Core
+module Core
 # Core U16 type definition - maps to LLVM i16
 record U16 follows UnsignedIntegral, Ordered {
     public value: @intrinsic_type.i16

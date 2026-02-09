@@ -12,7 +12,7 @@
 
 import errors.IndexOutOfBoundsError
 
-namespace Collections
+module Collections
 
 # Fixed-capacity list with reference semantics
 # N elements of T stored inline, count tracks active elements

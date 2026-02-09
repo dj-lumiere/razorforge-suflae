@@ -1,6 +1,6 @@
 # Suflae Console - Console I/O
 
-namespace Core
+module Core
 
 import razorforge/IO.Console
 

@@ -72,7 +72,7 @@ public sealed partial class SemanticAnalyzer
                 CollectFieldDeclaration(field: variable);
                 break;
 
-            case NamespaceDeclaration ns:
+            case ModuleDeclaration ns:
                 ValidateNamespaceDeclaration(ns: ns);
                 break;
 
@@ -83,17 +83,17 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates a namespace declaration.
-    /// Rejects "namespace Core" as it's reserved for stdlib (user code cannot declare it).
+    /// Validates a module declaration.
+    /// Rejects "module Core" as it's reserved for stdlib (user code cannot declare it).
     /// </summary>
-    private void ValidateNamespaceDeclaration(NamespaceDeclaration ns)
+    private void ValidateNamespaceDeclaration(ModuleDeclaration ns)
     {
-        // Namespace "Core" is reserved for stdlib only
+        // Module "Core" is reserved for stdlib only
         if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase) && !IsStdlibFile(_currentFilePath))
         {
             ReportError(
                 SemanticDiagnosticCode.ReservedNamespaceCore,
-                "Namespace 'Core' is reserved for the standard library and cannot be used in user code.",
+                "Module 'Core' is reserved for the standard library and cannot be used in user code.",
                 ns.Location);
         }
     }
@@ -121,7 +121,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Track the imported namespace for per-file type resolution
+        // Track the imported module for per-file type resolution
         if (effectiveNamespace != null)
         {
             _importedNamespaces.Add(effectiveNamespace);
@@ -181,7 +181,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = record.GenericConstraints,
             Visibility = record.Visibility,
             Location = record.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         TryRegisterType(type: typeInfo, location: record.Location);
@@ -195,7 +195,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = entity.GenericConstraints,
             Visibility = entity.Visibility,
             Location = entity.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         TryRegisterType(type: typeInfo, location: entity.Location);
@@ -218,7 +218,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = resident.GenericConstraints,
             Visibility = resident.Visibility,
             Location = resident.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         TryRegisterType(type: typeInfo, location: resident.Location);
@@ -230,7 +230,7 @@ public sealed partial class SemanticAnalyzer
         {
             Visibility = choice.Visibility,
             Location = choice.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         TryRegisterType(type: typeInfo, location: choice.Location);
@@ -243,7 +243,7 @@ public sealed partial class SemanticAnalyzer
             GenericParameters = variant.GenericParameters,
             GenericConstraints = variant.GenericConstraints,
             Location = variant.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         TryRegisterType(type: typeInfo, location: variant.Location);
@@ -257,7 +257,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = protocol.GenericConstraints,
             Visibility = protocol.Visibility,
             Location = protocol.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         TryRegisterType(type: typeInfo, location: protocol.Location);
@@ -327,7 +327,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = routine.GenericConstraints,
             Visibility = routine.Visibility,
             Location = routine.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
@@ -495,7 +495,7 @@ public sealed partial class SemanticAnalyzer
             IsVariadic = imported.IsVariadic,
             Visibility = VisibilityModifier.Public, // Imported declarations are always public
             Location = imported.Location,
-            Namespace = GetCurrentNamespace()
+            Module = GetCurrentNamespace()
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
@@ -821,7 +821,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = protocolInfo.GenericConstraints,
             Visibility = protocolInfo.Visibility,
             Location = protocolInfo.Location,
-            Namespace = protocolInfo.Namespace
+            Module = protocolInfo.Module
         };
 
         // Replace the protocol in the registry
@@ -1407,7 +1407,7 @@ public sealed partial class SemanticAnalyzer
             MutationCategory = MutationCategory.Readonly,
             Visibility = eqMethod.Visibility,
             Location = eqMethod.Location,
-            Namespace = eqMethod.Namespace,
+            Module = eqMethod.Module,
             Attributes = ["readonly"],
             IsSynthesized = true
         };
@@ -1471,7 +1471,7 @@ public sealed partial class SemanticAnalyzer
                 MutationCategory = MutationCategory.Readonly,
                 Visibility = cmpMethod.Visibility,
                 Location = cmpMethod.Location,
-                Namespace = cmpMethod.Namespace,
+                Module = cmpMethod.Module,
                 Attributes = ["readonly"],
                 IsSynthesized = true
             };
@@ -1501,7 +1501,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void ValidateTypeProtocolImplementation(TypeSymbol type)
     {
-        // Skip stdlib/fallback types (types without source location or in Core namespace)
+        // Skip stdlib/fallback types (types without source location or in Core module)
         // These are pre-defined types that may not have full method implementations in test environments
         if (type.Location == null || string.IsNullOrEmpty(type.Location.FileName))
         {

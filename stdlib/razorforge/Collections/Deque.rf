@@ -14,7 +14,7 @@ import memory.MemorySize
 import errors.IndexOutOfBoundsError
 import Runtime/CompilerService
 
-namespace Collections
+module Collections
 
 entity Deque<T> {
     private data: DynamicSlice    # Circular buffer

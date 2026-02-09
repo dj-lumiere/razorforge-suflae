@@ -358,7 +358,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Type with this name is already defined.</summary>
     DuplicateTypeDefinition = 400,
 
-    /// <summary>Namespace 'Core' is reserved for standard library.</summary>
+    /// <summary>Module 'Core' is reserved for standard library.</summary>
     ReservedNamespaceCore = 401,
 
     /// <summary>Invalid getter/setter visibility combination.</summary>
@@ -367,7 +367,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot access private member from outside its defining file.</summary>
     PrivateMemberAccess = 403,
 
-    /// <summary>Cannot access internal member from outside the namespace.</summary>
+    /// <summary>Cannot access internal member from outside the module.</summary>
     InternalMemberAccess = 404,
 
     /// <summary>Cannot define derived operator when base operator exists.</summary>
