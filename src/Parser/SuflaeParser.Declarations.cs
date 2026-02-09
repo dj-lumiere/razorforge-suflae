@@ -1157,7 +1157,7 @@ public partial class SuflaeParser
         if (modulePath.Contains(value: '/'))
         {
             // Specific type import: Collections/SortedDict
-            string typeName = modulePath.Substring(startIndex: modulePath.LastIndexOf(value: '/') + 1);
+            string typeName = modulePath[(modulePath.LastIndexOf(value: '/') + 1)..];
             _knownTypeNames.Add(item: typeName);
         }
         else

@@ -212,12 +212,12 @@ public sealed class ModuleResolver
             string trimmed = line.Trim();
             if (trimmed.StartsWith("namespace "))
             {
-                string ns = trimmed.Substring("namespace ".Length).Trim();
+                string ns = trimmed["namespace ".Length..].Trim();
                 // Remove any trailing comments or whitespace
                 int commentIdx = ns.IndexOf('#');
                 if (commentIdx >= 0)
                 {
-                    ns = ns.Substring(0, commentIdx).Trim();
+                    ns = ns[..commentIdx].Trim();
                 }
                 return ns;
             }
@@ -293,7 +293,7 @@ public sealed class ModuleResolver
                 return "Core";
             }
 
-            string relativePath = normalizedFileDir.Substring(languageStdlibPath.Length)
+            string relativePath = normalizedFileDir[languageStdlibPath.Length..]
                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
             if (string.IsNullOrEmpty(relativePath))

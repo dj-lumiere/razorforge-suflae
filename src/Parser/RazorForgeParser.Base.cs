@@ -707,7 +707,7 @@ public partial class RazorForgeParser
     private static string CleanNumericSuffix(string text, string suffix)
     {
         string cleaned = text.EndsWith(value: suffix)
-            ? text.Substring(startIndex: 0, length: text.Length - suffix.Length)
+            ? text[..^suffix.Length]
             : text;
         return cleaned.Replace(oldValue: "_", newValue: "");
     }
@@ -723,7 +723,7 @@ public partial class RazorForgeParser
     {
         // Remove the type suffix
         string cleanText = text.EndsWith(value: suffix)
-            ? text.Substring(startIndex: 0, length: text.Length - suffix.Length)
+            ? text[..^suffix.Length]
             : text;
         return (T)Convert.ChangeType(value: cleanText, conversionType: typeof(T));
     }

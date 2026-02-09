@@ -874,7 +874,7 @@ public partial class RazorForgeParser
             if (literal is LiteralExpression { Value: string strVal } litExpr)
             {
                 // Toggle negative sign: if already negative, remove it; otherwise add it
-                string newValue = strVal.StartsWith(value: "-") ? strVal.Substring(startIndex: 1) : "-" + strVal;
+                string newValue = strVal.StartsWith(value: "-") ? strVal[1..] : "-" + strVal;
                 return new LiteralExpression(Value: newValue, LiteralType: litExpr.LiteralType, Location: opLocation);
             }
         }
