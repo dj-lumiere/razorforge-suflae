@@ -229,9 +229,7 @@ public class ParserErrorTests
     [Fact]
     public void Parse_InvalidOperator_Throws()
     {
-        string source = """
-                        let x = 1 @@ 2
-                        """;
+        string source = "let x = 1 @@ 2";
 
         // Parser uses error recovery, check for errors instead of exception
         AssertParseError(source: source);

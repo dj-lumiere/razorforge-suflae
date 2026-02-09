@@ -987,7 +987,7 @@ public partial class SuflaeParser
             // Support failable methods: "method!"
             if (Match(type: TokenType.Bang))
             {
-                methodName = methodName + "!";
+                methodName += "!";
             }
 
             // Parameters
@@ -1118,7 +1118,7 @@ public partial class SuflaeParser
 
         string modulePath = "";
         string? alias = null;
-        var specificImports = (List<string>?)null;
+        List<string>? specificImports = null;
 
         // Parse module path - could be multiple identifiers separated by slashes
         // Dot marks a specific type within the module: import razorforge/Core.Bool

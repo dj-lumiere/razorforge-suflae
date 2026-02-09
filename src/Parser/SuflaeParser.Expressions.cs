@@ -968,7 +968,8 @@ public partial class SuflaeParser
 
                             break;
                         }
-                        else if (depth < 0)
+
+                        if (depth < 0)
                         {
                             break;
                         }
@@ -1609,7 +1610,7 @@ public partial class SuflaeParser
             return charContent switch
             {
                 "\\'" => '\'',
-                "\\\\" => '\\',
+                @"\\" => '\\',
                 "\\n" => '\n',
                 "\\t" => '\t',
                 "\\r" => '\r',

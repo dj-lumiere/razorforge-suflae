@@ -404,7 +404,7 @@ public partial class SuflaeParser
         // If we have attributes but no declaration, that's an error
         if (attributes.Count > 0)
         {
-            throw ThrowParseError($"Attributes must be followed by a declaration (routine, entity, record, etc.)");
+            throw ThrowParseError("Attributes must be followed by a declaration (routine, entity, record, etc.)");
         }
 
         // Otherwise parse as statement

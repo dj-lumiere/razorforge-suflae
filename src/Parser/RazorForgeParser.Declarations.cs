@@ -1389,7 +1389,7 @@ public partial class RazorForgeParser
                 // Support failable methods: "method!"
                 if (Match(type: TokenType.Bang))
                 {
-                    methodName = methodName + "!";
+                    methodName += "!";
                 }
 
                 // Step 5c: Parse parameters
@@ -1503,7 +1503,7 @@ public partial class RazorForgeParser
         // Support ! suffix for failable routines
         if (Match(type: TokenType.Bang))
         {
-            name = name + "!";
+            name += "!";
         }
 
         // Check for generic parameters with inline constraints

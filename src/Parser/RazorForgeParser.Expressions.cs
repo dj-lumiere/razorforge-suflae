@@ -1764,7 +1764,7 @@ public partial class RazorForgeParser
             return charContent switch
             {
                 "\\'" => '\'',
-                "\\\\" => '\\',
+                @"\\" => '\\',
                 "\\n" => '\n',
                 "\\t" => '\t',
                 "\\r" => '\r',
