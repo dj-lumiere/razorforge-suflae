@@ -199,47 +199,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type supports the true division operator (/).
-    /// True division is NOT supported on native integers - they must use floor division (//).
-    /// </summary>
-    private bool SupportsTrueDivision(TypeSymbol type)
-    {
-        // Check if the type has the __truediv__ method
-        return _registry.LookupRoutine(fullName: $"{type.Name}.__truediv__") != null
-            || _registry.LookupRoutine(fullName: $"{type.Name}.__truediv__!") != null;
-    }
-
-    /// <summary>
-    /// Checks if a type supports floor division operator (//).
-    /// </summary>
-    private bool SupportsFloorDivision(TypeSymbol type)
-    {
-        return _registry.LookupRoutine(fullName: $"{type.Name}.__floordiv__") != null
-            || _registry.LookupRoutine(fullName: $"{type.Name}.__floordiv__!") != null;
-    }
-
-    /// <summary>
-    /// Checks if a type supports overflow-handling arithmetic operators (+%, -%, *%, etc.).
-    /// These are only valid for fixed-width integer types.
-    /// </summary>
-    private bool SupportsOverflowArithmetic(TypeSymbol type, string operatorSuffix)
-    {
-        // Check for the specific overflow variant method
-        // operatorSuffix is "wrap", "sat", or "checked"
-        string[] baseOps = ["__add_", "__sub_", "__mul_"];
-        foreach (string baseOp in baseOps)
-        {
-            string methodName = $"{type.Name}.{baseOp}{operatorSuffix}__";
-            if (_registry.LookupRoutine(fullName: methodName) != null)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// Checks if a type supports a specific binary operator by looking up the operator method.
     /// </summary>
     private bool SupportsOperator(TypeSymbol type, BinaryOperator op)
@@ -320,16 +279,18 @@ public sealed partial class SemanticAnalyzer
         // For ordering/equality operators in chained comparisons, verify the type supports them
         // Note: For single comparisons, these are desugared to method calls in the parser.
         // This validation only runs for chained comparisons (a < b < c) where operators are NOT desugared.
-        if (op is BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater or BinaryOperator.GreaterEqual
-            or BinaryOperator.Equal)
+        if (op is not (BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
+            or BinaryOperator.GreaterEqual or BinaryOperator.Equal))
         {
-            if (!SupportsOperator(type: left, op: op))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.OrderingNotSupported,
-                    $"Type '{left.Name}' does not support comparison operator '{op.ToStringRepresentation()}'.",
-                    location);
-            }
+            return;
+        }
+
+        if (!SupportsOperator(type: left, op: op))
+        {
+            ReportError(
+                SemanticDiagnosticCode.OrderingNotSupported,
+                $"Type '{left.Name}' does not support comparison operator '{op.ToStringRepresentation()}'.",
+                location);
         }
     }
 
@@ -447,7 +408,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Get the protocol type
         TypeSymbol? protocol = LookupTypeWithImports(name: protocolName);
-        if (protocol == null || protocol.Category != TypeCategory.Protocol)
+        if (protocol is not { Category: TypeCategory.Protocol })
         {
             return false;
         }
@@ -502,7 +463,19 @@ public sealed partial class SemanticAnalyzer
                 return true;
             }
 
-            if (CheckParentProtocols(proto: parent, targetName: targetName))
+            // Re-lookup parent from registry to get the latest version with populated ParentProtocols,
+            // since immutable type updates may leave stale references in the hierarchy.
+            ProtocolTypeInfo latestParent = parent;
+            if (parent.ParentProtocols.Count == 0)
+            {
+                TypeSymbol? looked = _registry.LookupType(name: parent.Name);
+                if (looked is ProtocolTypeInfo latest)
+                {
+                    latestParent = latest;
+                }
+            }
+
+            if (CheckParentProtocols(proto: latestParent, targetName: targetName))
             {
                 return true;
             }
