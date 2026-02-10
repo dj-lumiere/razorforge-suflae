@@ -360,21 +360,21 @@ public partial class SuflaeTokenizer
     }
 
     /// <summary>
-    /// Scans and validates a Unicode escape sequence (\uXXXXXXXX).
+    /// Scans and validates a Unicode escape sequence (\uXXXXXX).
     /// </summary>
     /// <remarks>
-    /// Requires exactly 8 hex digits for Unicode codepoints (U+00000000 to U+0010FFFF).
+    /// Requires exactly 6 hex digits for Unicode codepoints (U+000000 to U+10FFFF).
     /// </remarks>
     /// <exception cref="LexerException">Thrown when insufficient hex digits are provided.</exception>
     private void ScanUnicodeEscape()
     {
-        for (int i = 0; i < 8; i += 1)
+        for (int i = 0; i < 6; i += 1)
         {
             if (!IsHexDigit(c: Peek()))
             {
                 throw new SuflaeGrammarException(
                     SuflaeDiagnosticCode.InvalidEscapeSequence,
-                    "Invalid Unicode escape: expected 8 hex digits (\\uXXXXXXXX)",
+                    "Invalid Unicode escape: expected 6 hex digits (\\uXXXXXX)",
                     _fileName, _line, _column);
             }
 
@@ -403,8 +403,8 @@ public partial class SuflaeTokenizer
 
         if (c == 'u')
         {
-            // Unicode escape: \uXXXXXXXX (exactly 8 hex digits)
-            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 8);
+            // Unicode escape: \uXXXXXX (exactly 6 hex digits)
+            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 6);
             int codePoint = Convert.ToInt32(value: hexStr, fromBase: 16);
 
             if (codePoint > 0x10FFFF)

@@ -15,7 +15,7 @@ using Compilers.Shared.Lexer;
 ///   <item><description>Prefixed strings (r"raw", f"formatted", b"bytes")</description></item>
 ///   <item><description>Character literals ('a' - letter, 32-bit UTF-32)</description></item>
 ///   <item><description>Byte character literals (b'x' - byte, 8-bit)</description></item>
-///   <item><description>Escape sequence processing (\n, \t, \uXXXXXXXX, etc.)</description></item>
+///   <item><description>Escape sequence processing (\n, \t, \uXXXXXX, etc.)</description></item>
 /// </list>
 /// </para>
 /// </remarks>
@@ -266,7 +266,7 @@ public partial class RazorForgeTokenizer
     /// </para>
     /// <para>
     /// The prefix affects the number of hex digits required for \u escapes:
-    /// b requires 2 (\uXX), unprefixed requires 8 (\uXXXXXXXX).
+    /// b requires 2 (\uXX), unprefixed requires 6 (\uXXXXXX).
     /// </para>
     /// </remarks>
     private bool TryParseLetterPrefix()
@@ -436,21 +436,21 @@ public partial class RazorForgeTokenizer
     }
 
     /// <summary>
-    /// Scans and validates a Unicode escape sequence (\uXXXXXXXX).
+    /// Scans and validates a Unicode escape sequence (\uXXXXXX).
     /// </summary>
     /// <remarks>
-    /// Requires exactly 8 hex digits for Unicode codepoints (U+00000000 to U+0010FFFF).
+    /// Requires exactly 6 hex digits for Unicode codepoints (U+000000 to U+10FFFF).
     /// </remarks>
     /// <exception cref="LexerException">Thrown when insufficient hex digits are provided.</exception>
     private void ScanUnicodeEscape()
     {
-        for (int i = 0; i < 8; i += 1)
+        for (int i = 0; i < 6; i += 1)
         {
             if (!IsHexDigit(c: Peek()))
             {
                 throw new RazorForgeGrammarException(
                     RazorForgeDiagnosticCode.InvalidEscapeSequence,
-                    "Invalid Unicode escape: expected 8 hex digits (\\uXXXXXXXX)",
+                    "Invalid Unicode escape: expected 6 hex digits (\\uXXXXXX)",
                     _fileName, _line, _column);
             }
 
@@ -483,8 +483,8 @@ public partial class RazorForgeTokenizer
 
         if (c == 'u')
         {
-            // Unicode escape: \uXXXXXXXX (exactly 8 hex digits)
-            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 8);
+            // Unicode escape: \uXXXXXX (exactly 6 hex digits)
+            string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 6);
             int codePoint = Convert.ToInt32(value: hexStr, fromBase: 16);
 
             if (codePoint > 0x10FFFF)

@@ -266,7 +266,7 @@ public partial class RazorForgeTokenizer
     /// <c>true</c> if the character is 0-9, a-f, or A-F; <c>false</c> otherwise.
     /// </returns>
     /// <remarks>
-    /// Used for parsing hexadecimal literals (0x...) and Unicode escape sequences (\uXXXX).
+    /// Used for parsing hexadecimal literals (0x...) and Unicode escape sequences (\uXXXXXX).
     /// </remarks>
     private static bool IsHexDigit(char c)
     {
