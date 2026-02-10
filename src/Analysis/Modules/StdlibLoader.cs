@@ -205,10 +205,10 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Derives a module from the file path relative to the stdlib root.
-    /// Example: stdlib/Collections/List.rf -> Collections
-    /// Example: stdlib/Text/Encoding/UTF8.rf -> Text.Encoding
-    /// Files directly in stdlib root default to Core.
+    /// Derives a module from the file path relative to the standard library root.
+    /// Example: standard/razorforge/Collections/List.rf -> Collections
+    /// Example: standard/razorforge/Text/Encoding/UTF8.rf -> Text.Encoding
+    /// Files directly in the language root default to Core.
     /// </summary>
     private string DeriveModuleFromPath(string filePath)
     {
@@ -802,11 +802,11 @@ public sealed class StdlibLoader
     /// </summary>
     public static string GetDefaultStdlibPath()
     {
-        // Try to find stdlib relative to the executable
+        // Try to find standard library relative to the executable
         string? exeDir = Path.GetDirectoryName(typeof(StdlibLoader).Assembly.Location);
         if (exeDir != null)
         {
-            string stdlibPath = Path.Combine(exeDir, "stdlib");
+            string stdlibPath = Path.Combine(exeDir, "standard");
             if (Directory.Exists(stdlibPath))
             {
                 return stdlibPath;
@@ -819,7 +819,7 @@ public sealed class StdlibLoader
                 current = Path.GetDirectoryName(current);
                 if (current == null) break;
 
-                stdlibPath = Path.Combine(current, "stdlib");
+                stdlibPath = Path.Combine(current, "standard");
                 if (Directory.Exists(stdlibPath))
                 {
                     return stdlibPath;
@@ -828,6 +828,6 @@ public sealed class StdlibLoader
         }
 
         // Fallback to current directory
-        return Path.Combine(Directory.GetCurrentDirectory(), "stdlib");
+        return Path.Combine(Directory.GetCurrentDirectory(), "standard");
     }
 }

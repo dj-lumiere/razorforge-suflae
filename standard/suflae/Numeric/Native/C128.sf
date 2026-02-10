@@ -1,0 +1,45 @@
+module Numeric
+
+# Suflae C128 - Complex128 floating point (opt-in native type)
+
+import razorforge/Core.C128
+
+record C128:
+    private value: razorforge/Core.C128
+
+# Arithmetic operators
+routine C128.__add__(you: C128) -> C128:
+    return C128(value: me.value.__add__(you.value))
+
+routine C128.__sub__(you: C128) -> C128:
+    return C128(value: me.value.__sub__(you.value))
+
+routine C128.__mul__(you: C128) -> C128:
+    return C128(value: me.value.__mul__(you.value))
+
+routine C128.__truediv__(you: C128) -> C128:
+    return C128(value: me.value.__truediv__(you.value))
+
+routine C128.__neg__() -> C128:
+    return C128(value: me.value.__neg__())
+
+# Comparison
+routine C128.__eq__(you: C128) -> Bool:
+    return me.value.__eq__(you.value)
+
+# Complex-specific operations
+routine C128.real() -> F128:
+    return me.value.real()
+
+routine C128.imag() -> F128:
+    return me.value.imag()
+
+routine C128.abs() -> F128:
+    return me.value.abs()
+
+routine C128.conjugate() -> C128:
+    return C128(value: me.value.conjugate())
+
+# String conversion
+routine C128.to_text() -> Text:
+    return me.value.to_text()

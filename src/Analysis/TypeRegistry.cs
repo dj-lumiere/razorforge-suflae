@@ -148,8 +148,8 @@ public sealed class TypeRegistry
         {
             string searchPath = _stdlibPath ?? "not specified";
             throw new InvalidOperationException(
-                $"Standard library (stdlib) not found at '{searchPath}'. " +
-                "Ensure stdlib directory exists and contains the Core module.");
+                $"Standard library not found at '{searchPath}'. " +
+                "Ensure standard/ directory exists and contains the Core module.");
         }
     }
 
@@ -189,9 +189,7 @@ public sealed class TypeRegistry
 
         // Core module is special - always loaded at startup
         if (moduleId.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
-            moduleId.StartsWith("Core.", StringComparison.OrdinalIgnoreCase) ||
-            moduleId.Equals("NativeDataTypes", StringComparison.OrdinalIgnoreCase) ||
-            moduleId.StartsWith("NativeDataTypes.", StringComparison.OrdinalIgnoreCase))
+            moduleId.StartsWith("Core.", StringComparison.OrdinalIgnoreCase))
         {
             LoadCoreNamespace();
             _loadedModules.Add(moduleId);

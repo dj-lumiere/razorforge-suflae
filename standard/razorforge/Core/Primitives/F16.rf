@@ -1,0 +1,297 @@
+# RazorForge F16 (half precision floating point) native type implementation
+# Maps directly to LLVM half type using compiler intrinsics
+module Core
+# Core F16 type definition - maps to LLVM half
+record F16 follows Numeric, Ordered {
+    private value: @intrinsic_type.half
+}
+
+# IEEE 754 half precision constants
+preset F16_EPSILON: F16 = 9.765625e-4_f16
+preset F16_MIN: F16 = -65504.0_f16
+preset F16_MAX: F16 = 65504.0_f16
+preset F16_MIN_POSITIVE: F16 = 6.103515625e-5_f16
+preset F16_ZERO: F16 = 0.0_f16
+preset F16_ONE: F16 = 1.0_f16
+
+# Mathematical constants
+preset F16_PI: F16 = 3.140625_f16
+preset F16_E: F16 = 2.71875_f16
+preset F16_SQRT_2: F16 = 1.414063_f16
+
+# Convert integers to F16 using LLVM intrinsics
+routine F16.__create__(from: S8) -> F16 {
+    danger! {
+        return @intrinsic_routine.sitofp<i8, half>(from)
+    }
+}
+
+routine F16.__create__(from: S16) -> F16 {
+    danger! {
+        return @intrinsic_routine.sitofp<i16, half>(from)
+    }
+}
+
+routine F16.__create__(from: S32) -> F16 {
+    danger! {
+        return @intrinsic_routine.sitofp<i32, half>(from)
+    }
+}
+
+routine F16.__create__(from: S64) -> F16 {
+    danger! {
+        return @intrinsic_routine.sitofp<i64, half>(from)
+    }
+}
+
+routine F16.__create__(from: S128) -> F16 {
+    danger! {
+        return @intrinsic_routine.sitofp<i128, half>(from)
+    }
+}
+
+routine F16.__create__(from: U8) -> F16 {
+    danger! {
+        return @intrinsic_routine.uitofp<i8, half>(from)
+    }
+}
+
+routine F16.__create__(from: U16) -> F16 {
+    danger! {
+        return @intrinsic_routine.uitofp<i16, half>(from)
+    }
+}
+
+routine F16.__create__(from: U32) -> F16 {
+    danger! {
+        return @intrinsic_routine.uitofp<i32, half>(from)
+    }
+}
+
+routine F16.__create__(from: U64) -> F16 {
+    danger! {
+        return @intrinsic_routine.uitofp<i64, half>(from)
+    }
+}
+
+routine F16.__create__(from: U128) -> F16 {
+    danger! {
+        return @intrinsic_routine.uitofp<i128, half>(from)
+    }
+}
+
+routine F16.__create__(from: F16) -> F16 {
+    return from
+}
+
+# Truncate from larger float types using LLVM intrinsics
+routine F16.__create__(from: F32) -> F16 {
+    danger! {
+        return @intrinsic_routine.fptrunc<float, half>(from)
+    }
+}
+
+routine F16.__create__(from: F64) -> F16 {
+    danger! {
+        return @intrinsic_routine.fptrunc<double, half>(from)
+    }
+}
+
+routine F16.__create__(from: F128) -> F16 {
+    danger! {
+        return @intrinsic_routine.fptrunc<fp128, half>(from)
+    }
+}
+
+# Convert from decimal types via native (no LLVM intrinsic for decimal)
+routine F16.__create__(from: D32) -> F16 {
+    danger! {
+        let f32_val = @native.rf_d32_to_f32(from.to_bits())
+        return @intrinsic_routine.fptrunc<float, half>(f32_val)
+    }
+}
+
+routine F16.__create__(from: D64) -> F16 {
+    danger! {
+        let f32_val = @native.rf_d64_to_f32(from.to_bits())
+        return @intrinsic_routine.fptrunc<float, half>(f32_val)
+    }
+}
+
+routine F16.__create__(from: D128) -> F16 {
+    danger! {
+        let f32_val = @native.rf_d128_to_f32(from.low_bits(), from.high_bits())
+        return @intrinsic_routine.fptrunc<float, half>(f32_val)
+    }
+}
+
+# From SAddr - convert using LLVM intrinsic
+routine F16.__create__(from: SAddr) -> F16 {
+    danger! {
+        return @intrinsic_routine.sitofp<iptr, half>(from)
+    }
+}
+
+# From UAddr - convert using LLVM intrinsic
+routine F16.__create__(from: UAddr) -> F16 {
+    danger! {
+        return @intrinsic_routine.uitofp<uptr, half>(from)
+    }
+}
+
+# ============================================================================
+# Arithmetic Operations (IEEE 754 semantics)
+# ============================================================================
+
+routine F16.__add__(you: F16) -> F16 {
+    danger! {
+        return @intrinsic_routine.add.wrapping<half>(me, you)
+    }
+}
+
+routine F16.__sub__(you: F16) -> F16 {
+    danger! {
+        return @intrinsic_routine.sub.wrapping<half>(me, you)
+    }
+}
+
+routine F16.__mul__(you: F16) -> F16 {
+    danger! {
+        return @intrinsic_routine.mul.wrapping<half>(me, you)
+    }
+}
+
+routine F16.__truediv__(you: F16) -> F16 {
+    danger! {
+        return @intrinsic_routine.div.wrapping<half>(me, you)
+    }
+}
+
+routine F16.__neg__() -> F16 {
+    danger! {
+        return @intrinsic_routine.sub.wrapping<half>(0.0_f16, me)
+    }
+}
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+routine F16.__eq__(you: F16) -> Bool {
+    danger! {
+        return @intrinsic_routine.fcmp.oeq<half>(me, you)
+    }
+}
+
+routine F16.__cmp__(you: F16) -> ComparisonSign {
+    danger! {
+        if @intrinsic_routine.fcmp.olt<half>(me, you) {
+            return ME_SMALL
+        }
+        if @intrinsic_routine.fcmp.ogt<half>(me, you) {
+            return ME_LARGE
+        }
+        return EQUAL
+    }
+}
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+routine F16.sqrt() -> F16 {
+    danger! {
+        return @intrinsic_routine.sqrt<half>(me)
+    }
+}
+
+routine F16.abs() -> F16 {
+    danger! {
+        return @intrinsic_routine.fabs<half>(me)
+    }
+}
+
+routine F16.floor() -> F16 {
+    danger! {
+        return @intrinsic_routine.floor<half>(me)
+    }
+}
+
+routine F16.ceil() -> F16 {
+    danger! {
+        return @intrinsic_routine.ceil<half>(me)
+    }
+}
+
+routine F16.round() -> F16 {
+    danger! {
+        return @intrinsic_routine.round<half>(me)
+    }
+}
+
+routine F16.trunc() -> F16 {
+    danger! {
+        return @intrinsic_routine.trunc_float<half>(me)
+    }
+}
+
+routine F16.copysign(sign: F16) -> F16 {
+    danger! {
+        return @intrinsic_routine.copysign<half>(me, sign)
+    }
+}
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine F16.min(you: F16) -> F16 {
+    return if me <= you then me else you
+}
+
+routine F16.max(you: F16) -> F16 {
+    return if me >= you then me else you
+}
+
+routine F16.clamp(min_val: F16, max_val: F16) -> F16 {
+    return me.min(max_val).max(min_val)
+}
+
+routine F16.is_positive() -> Bool {
+    return me > 0.0_f16
+}
+
+routine F16.is_negative() -> Bool {
+    return me < 0.0_f16
+}
+
+routine F16.is_zero() -> Bool {
+    return me == 0.0_f16
+}
+
+routine F16.signum() -> F16 {
+    when {
+        me > 0.0_f16 => 1.0_f16,
+        me < 0.0_f16 => -1.0_f16,
+        _ => 0.0_f16
+    }
+}
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+# Reinterpret bits as U16 (type punning)
+routine F16.to_bits() -> U16 {
+    danger! {
+        return @intrinsic_routine.bitcast<half, i16>(me)
+    }
+}
+
+# Create F16 from U16 bits (type punning)
+routine F16.from_bits(bits: U16) -> F16 {
+    danger! {
+        return @intrinsic_routine.bitcast<i16, half>(bits)
+    }
+}
+

@@ -174,7 +174,7 @@ public sealed class ModuleResolver
             // Default module based on directory structure
             if (fileNamespace == null)
             {
-                fileNamespace = DeriveNamespaceFromPath(filePath, languagePrefix);
+                fileNamespace = DeriveModuleNameFromPath(filePath, languagePrefix);
             }
 
             // Register each type under its module
@@ -278,7 +278,7 @@ public sealed class ModuleResolver
     /// </summary>
     /// <param name="filePath">The file path to derive module name from.</param>
     /// <param name="languagePrefix">The language prefix to skip (razorforge or suflae).</param>
-    private string DeriveNamespaceFromPath(string filePath, string languagePrefix)
+    private string DeriveModuleNameFromPath(string filePath, string languagePrefix)
     {
         try
         {
@@ -297,12 +297,6 @@ public sealed class ModuleResolver
                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
             if (string.IsNullOrEmpty(relativePath))
-            {
-                return "Core";
-            }
-
-            // NativeDataTypes -> Core
-            if (relativePath.Equals("NativeDataTypes", StringComparison.OrdinalIgnoreCase))
             {
                 return "Core";
             }

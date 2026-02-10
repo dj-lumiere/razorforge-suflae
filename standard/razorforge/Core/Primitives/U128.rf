@@ -1,0 +1,544 @@
+# RazorForge U128 (unsigned 128-bit integer) native type implementation
+# Maps directly to LLVM i128 type using compiler intrinsics
+module Core
+# Core U128 type definition - maps to LLVM i128
+record U128 follows UnsignedIntegral, Ordered {
+    public value: @intrinsic_type.i128
+}
+
+# Constants for U128 limits
+preset U128_MIN: U128 = 0_u128
+preset U128_MAX: U128 = 340282366920938463463374607431768211455_u128
+preset U128_ZERO: U128 = 0_u128
+preset U128_ONE: U128 = 1_u128
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+# From S8 - crashes if value is negative
+routine U128.__create__!(from: S8) -> U128 {
+    if from < 0_s8 {
+        throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    }
+    danger! {
+        return @intrinsic_routine.sext<i8, i128>(from)
+    }
+}
+
+# From S16 - crashes if value is negative
+routine U128.__create__!(from: S16) -> U128 {
+    if from < 0_s16 {
+        throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    }
+    danger! {
+        return @intrinsic_routine.sext<i16, i128>(from)
+    }
+}
+
+# From S32 - crashes if value is negative
+routine U128.__create__!(from: S32) -> U128 {
+    if from < 0_s32 {
+        throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    }
+    danger! {
+        return @intrinsic_routine.sext<i32, i128>(from)
+    }
+}
+
+# From S64 - crashes if value is negative
+routine U128.__create__!(from: S64) -> U128 {
+    if from < 0_s64 {
+        throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    }
+    danger! {
+        return @intrinsic_routine.sext<i64, i128>(from)
+    }
+}
+
+# From S128 - crashes if value is negative
+routine U128.__create__!(from: S128) -> U128 {
+    if from < 0_s128 {
+        throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    }
+    danger! {
+        return @intrinsic_routine.bitcast<i128, i128>(from)
+    }
+}
+
+routine U128.__create__!(from: U8) -> U128 {
+    danger! {
+        return @intrinsic_routine.zext<i8, i128>(from)
+    }
+}
+
+routine U128.__create__!(from: U16) -> U128 {
+    danger! {
+        return @intrinsic_routine.zext<i16, i128>(from)
+    }
+}
+
+routine U128.__create__!(from: U32) -> U128 {
+    danger! {
+        return @intrinsic_routine.zext<i32, i128>(from)
+    }
+}
+
+routine U128.__create__!(from: U64) -> U128 {
+    danger! {
+        return @intrinsic_routine.zext<i64, i128>(from)
+    }
+}
+
+routine U128.__create__(from: U128) -> U128 {
+    return from
+}
+
+# From floating point - truncates fractional part and crashes if overflow
+routine U128.__create__!(from: F16) -> U128 {
+    return from.U64!().U128()
+}
+
+routine U128.__create__!(from: F32) -> U128 {
+    return from.U64!().U128()
+}
+
+routine U128.__create__!(from: F64) -> U128 {
+    return from.U64!().U128()
+}
+
+routine U128.__create__!(from: F128) -> U128 {
+    return from.U64!().U128()
+}
+
+# From decimal - truncates fractional part and crashes if overflow
+routine U128.__create__!(from: D32) -> U128 {
+    return from.U64!().U128()
+}
+
+routine U128.__create__!(from: D64) -> U128 {
+    return from.U64!().U128()
+}
+
+routine U128.__create__!(from: D128) -> U128 {
+    return from.U64!().U128()
+}
+
+# From SAddr - sign extend to U128 (wraps if negative)
+routine U128.__create__!(from: SAddr) -> U128 {
+    danger! {
+        return @intrinsic_routine.sext<iptr, i128>(from)
+    }
+}
+
+# From UAddr - zero extend to U128
+routine U128.__create__!(from: UAddr) -> U128 {
+    danger! {
+        return @intrinsic_routine.zext<uptr, i128>(from)
+    }
+}
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+@crash_only
+routine U128.__add__!(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.add<i128>(me, you)
+    }
+}
+
+@crash_only
+routine U128.__sub__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.sub<i128>(me, you)
+    }
+}
+
+@crash_only
+routine U128.__mul__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.mul<i128>(me, you)
+    }
+}
+
+@crash_only
+routine U128.__floordiv__(you: U128) -> U128 {
+    if you == 0 {
+        throw DivisionByZeroError()
+    }
+    danger! {
+        return @intrinsic_routine.udiv<i128>(me, you)
+    }
+}
+
+@crash_only
+routine U128.__mod__!(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.urem<i128>(me, you)
+    }
+}
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+routine U128.__add_wrap__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.add.wrapping<i128>(me, you)
+    }
+}
+
+routine U128.__sub_wrap__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.sub.wrapping<i128>(me, you)
+    }
+}
+
+routine U128.__mul_wrap__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.mul.wrapping<i128>(me, you)
+    }
+}
+
+# ============================================================================
+# Saturating Arithmetic (+^, -^, *^)
+# ============================================================================
+
+routine U128.__add_sat__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.add.saturate<i128>(me, you)
+    }
+}
+
+routine U128.__sub_sat__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.sub.saturate<i128>(me, you)
+    }
+}
+
+routine U128.__mul_sat__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.mul.saturate<i128>(me, you)
+    }
+}
+
+# ============================================================================
+# Checked Arithmetic (+?, -?, *?) - returns Maybe<T>
+# ============================================================================
+
+routine U128.__add_checked__(you: U128) -> Maybe<U128> {
+    danger! {
+        let (result, overflow) = @intrinsic_routine.add.overflow<i128>(me, you)
+        return if overflow then None else result
+    }
+}
+
+routine U128.__sub_checked__(you: U128) -> Maybe<U128> {
+    danger! {
+        let (result, overflow) = @intrinsic_routine.sub.overflow<i128>(me, you)
+        return if overflow then None else result
+    }
+}
+
+routine U128.__mul_checked__(you: U128) -> Maybe<U128> {
+    danger! {
+        let (result, overflow) = @intrinsic_routine.mul.overflow<i128>(me, you)
+        return if overflow then None else result
+    }
+}
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+# Power operator (**) - can overflow
+@crash_only
+routine U128.__pow__!(exp: U128) -> U128 {
+    danger! {
+        var result: U128 = 1
+        var base: U128 = me
+        var e: U32 = exp
+        if me == 0 and exp == 0 {
+            throw IndeterminateResultError()
+        }
+        while e > 0 {
+            if (e & 1) == 1 {
+                result = @intrinsic_routine.mul<i128>(result, base)
+            }
+            base = @intrinsic_routine.mul<i128>(base, base)
+            e = e >> 1
+        }
+        return result
+    }
+}
+
+# Wrapping power (**%)
+@crash_only
+routine U128.__pow_wrap__!(exp: U128) -> U128 {
+    danger! {
+        var result: U128 = 1
+        var base: U128 = me
+        var e: U32 = exp
+        if me == 0 and exp == 0 {
+            throw IndeterminateResultError()
+        }
+        while e > 0 {
+            if (e & 1) == 1 {
+                result = @intrinsic_routine.mul.wrapping<i128>(result, base)
+            }
+            base = @intrinsic_routine.mul.wrapping<i128>(base, base)
+            e = e >> 1
+        }
+        return result
+    }
+}
+
+# Saturating power (**^)
+@crash_only
+routine U128.__pow_sat__!(exp: U128) -> U128 {
+    danger! {
+        var result: U128 = 1
+        var base: U128 = me
+        var e: U32 = exp
+        if me == 0 and exp == 0 {
+            throw IndeterminateResultError()
+        }
+        while e > 0 {
+            if (e & 1) == 1 {
+                result = @intrinsic_routine.mul.saturate<i128>(result, base)
+            }
+            base = @intrinsic_routine.mul.saturate<i128>(base, base)
+            e = e >> 1
+        }
+        return result
+    }
+}
+
+# Checked power (**?) - returns Maybe<U128>
+routine U128.__pow_checked__(exp: U128) -> Maybe<U128> {
+    danger! {
+        var result: U128 = 1
+        var base: U128 = me
+        var e: U32 = exp
+        if me == 0 {
+            return None
+        }
+        while e > 0 {
+            if (e & 1) == 1 {
+                let (new_result, overflow) = @intrinsic_routine.mul.overflow<i128>(result, base)
+                if overflow {
+                    return None
+                }
+                result = new_result
+            }
+            let (new_base, overflow) = @intrinsic_routine.mul.overflow<i128>(base, base)
+            if overflow and e > 1 {
+                return None
+            }
+            base = new_base
+            e = e >> 1
+        }
+        return result
+    }
+}
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+routine U128.__and__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.and<i128>(me, you)
+    }
+}
+
+routine U128.__or__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.or<i128>(me, you)
+    }
+}
+
+routine U128.__xor__(you: U128) -> U128 {
+    danger! {
+        return @intrinsic_routine.xor<i128>(me, you)
+    }
+}
+
+routine U128.__not__() -> U128 {
+    danger! {
+        return @intrinsic_routine.not<i128>(me)
+    }
+}
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# For unsigned types, arithmetic and logical shifts behave identically
+# ============================================================================
+
+# Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
+routine U128.__ashl__(bits: U32) -> U128 {
+    danger! {
+        return @intrinsic_routine.shl<i128>(me, bits)
+    }
+}
+
+# Checked arithmetic left shift (<<?) - returns Maybe<U128>
+routine U128.__ashl_checked__(bits: U32) -> Maybe<U128> {
+    danger! {
+        if bits >= 128 {
+            return None
+        }
+        let result = @intrinsic_routine.shl<i128>(me, bits)
+        # Check if we can recover the original value
+        let recovered = @intrinsic_routine.lshr<i128>(result, bits)
+        if recovered != me {
+            return None
+        }
+        return result
+    }
+}
+
+# Arithmetic right shift (>>) - for unsigned, same as logical
+routine U128.__ashr__(bits: U32) -> U128 {
+    danger! {
+        return @intrinsic_routine.lshr<i128>(me, bits)
+    }
+}
+
+# Logical left shift (<<<) - same as <<
+routine U128.__lshl__(bits: U32) -> U128 {
+    danger! {
+        return @intrinsic_routine.shl<i128>(me, bits)
+    }
+}
+
+# Logical right shift (>>>) - fills with zeros
+routine U128.__lshr__(bits: U32) -> U128 {
+    danger! {
+        return @intrinsic_routine.lshr<i128>(me, bits)
+    }
+}
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine U128.__eq__(you: U128) -> Bool {
+    danger! {
+        return @intrinsic_routine.icmp.eq<i128>(me, you)
+    }
+}
+
+routine U128.__cmp__(you: U128) -> ComparisonSign {
+    danger! {
+        if @intrinsic_routine.icmp.ult<i128>(me, you) {
+            return ME_SMALL
+        }
+        if @intrinsic_routine.icmp.ugt<i128>(me, you) {
+            return ME_LARGE
+        }
+        return EQUAL
+    }
+}
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine U128.min(you: U128) -> U128 {
+    return if me <= you then me else you
+}
+
+routine U128.max(you: U128) -> U128 {
+    return if me >= you then me else you
+}
+
+routine U128.clamp(min_val: U128, max_val: U128) -> U128 {
+    return me.min(max_val).max(min_val)
+}
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+routine U128.count_ones() -> U128 {
+    danger! {
+        return @intrinsic_routine.ctpop<i128>(me)
+    }
+}
+
+routine U128.count_zeros() -> U128 {
+    return 128_u128 - me.count_ones()
+}
+
+routine U128.leading_zeros() -> U128 {
+    danger! {
+        return @intrinsic_routine.ctlz<i128>(me)
+    }
+}
+
+routine U128.trailing_zeros() -> U128 {
+    danger! {
+        return @intrinsic_routine.cttz<i128>(me)
+    }
+}
+
+routine U128.leading_ones() -> U128 {
+    return me.__not__().leading_zeros()
+}
+
+routine U128.trailing_ones() -> U128 {
+    return me.__not__().trailing_zeros()
+}
+
+routine U128.reverse_bits() -> U128 {
+    danger! {
+        return @intrinsic_routine.bitreverse<i128>(me)
+    }
+}
+
+routine U128.swap_bytes() -> U128 {
+    danger! {
+        return @intrinsic_routine.bswap<i128>(me)
+    }
+}
+
+routine U128.is_power_of_two() -> Bool {
+    return me != 0_u128 and (me & (me - 1_u128)) == 0_u128
+}
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine U128.is_zero() -> Bool {
+    return me == 0_u128
+}
+
+routine U128.is_even() -> Bool {
+    danger! {
+        let result = @intrinsic_routine.and<i128>(me, 1_u128)
+        return @intrinsic_routine.icmp.eq<i128>(result, 0_u128)
+    }
+}
+
+routine U128.is_odd() -> Bool {
+    return not me.is_even()
+}
+
+# High/low 64-bit extraction utilities
+routine U128.high64() -> U64 {
+    danger! {
+        let shifted = @intrinsic_routine.lshr<i128>(me, 64_u32)
+        return @intrinsic_routine.trunc<i128, i64>(shifted)
+    }
+}
+
+routine U128.low64() -> U64 {
+    danger! {
+        return @intrinsic_routine.trunc<i128, i64>(me)
+    }
+}
+

@@ -1,4 +1,0 @@
-record C32 follows Numeric, Equatable {
-    public real: F32
-    public imag: F32
-}

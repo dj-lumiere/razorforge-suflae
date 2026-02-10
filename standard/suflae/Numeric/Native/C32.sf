@@ -1,0 +1,45 @@
+module Numeric
+
+# Suflae C32 - Complex32 floating point (opt-in native type)
+
+import razorforge/Core.C32
+
+record C32:
+    private value: razorforge/Core.C32
+
+# Arithmetic operators
+routine C32.__add__(you: C32) -> C32:
+    return C32(value: me.value.__add__(you.value))
+
+routine C32.__sub__(you: C32) -> C32:
+    return C32(value: me.value.__sub__(you.value))
+
+routine C32.__mul__(you: C32) -> C32:
+    return C32(value: me.value.__mul__(you.value))
+
+routine C32.__truediv__(you: C32) -> C32:
+    return C32(value: me.value.__truediv__(you.value))
+
+routine C32.__neg__() -> C32:
+    return C32(value: me.value.__neg__())
+
+# Comparison
+routine C32.__eq__(you: C32) -> Bool:
+    return me.value.__eq__(you.value)
+
+# Complex-specific operations
+routine C32.real() -> F32:
+    return me.value.real()
+
+routine C32.imag() -> F32:
+    return me.value.imag()
+
+routine C32.abs() -> F32:
+    return me.value.abs()
+
+routine C32.conjugate() -> C32:
+    return C32(value: me.value.conjugate())
+
+# String conversion
+routine C32.to_text() -> Text:
+    return me.value.to_text()

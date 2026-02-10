@@ -1,4 +1,0 @@
-resident FixedText<N>
-requires N is UAddr {
-    private letters: FixedList<Letter, N>
-}

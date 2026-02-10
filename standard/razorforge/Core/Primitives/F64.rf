@@ -1,0 +1,332 @@
+# RazorForge F64 (double precision floating point) native type implementation
+# Maps directly to LLVM double type using compiler intrinsics
+module Core
+# Core F64 type definition - maps to LLVM double
+record F64 follows Numeric, Ordered {
+    private value: @intrinsic_type.double
+}
+
+# IEEE 754 double precision constants
+preset F64_EPSILON: F64 = 2.220446049250313e-16_f64
+preset F64_MIN: F64 = 2.2250738585072014e-308_f64
+preset F64_MAX: F64 = 1.7976931348623157e+308_f64
+preset F64_ZERO: F64 = 0.0_f64
+preset F64_ONE: F64 = 1.0_f64
+preset F64_NAN: F64 = 0.0_f64 / 0.0_f64  # TODO: Proper NaN constant
+preset F64_INFINITY: F64 = 1.0_f64 / 0.0_f64  # TODO: Proper infinity constant
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+routine F64.__create__(from: S8) -> F64 {
+    danger! {
+        return @intrinsic_routine.sitofp<i8, double>(from)
+    }
+}
+
+routine F64.__create__(from: S16) -> F64 {
+    danger! {
+        return @intrinsic_routine.sitofp<i16, double>(from)
+    }
+}
+
+routine F64.__create__(from: S32) -> F64 {
+    danger! {
+        return @intrinsic_routine.sitofp<i32, double>(from)
+    }
+}
+
+routine F64.__create__(from: S64) -> F64 {
+    danger! {
+        return @intrinsic_routine.sitofp<i64, double>(from)
+    }
+}
+
+routine F64.__create__(from: S128) -> F64 {
+    danger! {
+        return @intrinsic_routine.sitofp<i128, double>(from)
+    }
+}
+
+routine F64.__create__(from: U8) -> F64 {
+    danger! {
+        return @intrinsic_routine.uitofp<i8, double>(from)
+    }
+}
+
+routine F64.__create__(from: U16) -> F64 {
+    danger! {
+        return @intrinsic_routine.uitofp<i16, double>(from)
+    }
+}
+
+routine F64.__create__(from: U32) -> F64 {
+    danger! {
+        return @intrinsic_routine.uitofp<i32, double>(from)
+    }
+}
+
+routine F64.__create__(from: U64) -> F64 {
+    danger! {
+        return @intrinsic_routine.uitofp<i64, double>(from)
+    }
+}
+
+routine F64.__create__(from: U128) -> F64 {
+    danger! {
+        return @intrinsic_routine.uitofp<i128, double>(from)
+    }
+}
+
+routine F64.__create__(from: F16) -> F64 {
+    danger! {
+        return @intrinsic_routine.fpext<half, double>(from)
+    }
+}
+
+routine F64.__create__(from: F32) -> F64 {
+    danger! {
+        return @intrinsic_routine.fpext<float, double>(from)
+    }
+}
+
+routine F64.__create__(from: F64) -> F64 {
+    return from
+}
+
+routine F64.__create__(from: F128) -> F64 {
+    danger! {
+        return @intrinsic_routine.fptrunc<fp128, double>(from)
+    }
+}
+
+routine F64.__create__(from: D32) -> F64 {
+    danger! {
+        let bits = @intrinsic_routine.bitcast<D32, U32>(from)
+        return @native.rf_d32_to_f64(bits)
+    }
+}
+
+routine F64.__create__(from: D64) -> F64 {
+    danger! {
+        let bits = @intrinsic_routine.bitcast<D64, U64>(from)
+        return @native.rf_d64_to_f64(bits)
+    }
+}
+
+routine F64.__create__(from: D128) -> F64 {
+    danger! {
+        return @native.rf_d128_to_f64(from.low_bits(), from.high_bits())
+    }
+}
+
+# From SAddr - convert to float (may lose precision)
+routine F64.__create__(from: SAddr) -> F64 {
+    danger! {
+        return @intrinsic_routine.sitofp<iptr, double>(from)
+    }
+}
+
+# From UAddr - convert to float (may lose precision)
+routine F64.__create__(from: UAddr) -> F64 {
+    danger! {
+        return @intrinsic_routine.uitofp<uptr, double>(from)
+    }
+}
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+routine F64.__add__(you: F64) -> F64 {
+    danger! {
+        return @intrinsic_routine.add.wrapping<double>(me, you)
+    }
+}
+
+routine F64.__sub__(you: F64) -> F64 {
+    danger! {
+        return @intrinsic_routine.sub.wrapping<double>(me, you)
+    }
+}
+
+routine F64.__mul__(you: F64) -> F64 {
+    danger! {
+        return @intrinsic_routine.mul.wrapping<double>(me, you)
+    }
+}
+
+routine F64.__truediv__(you: F64) -> F64 {
+    danger! {
+        return @intrinsic_routine.div.wrapping<double>(me, you)
+    }
+}
+
+routine F64.__neg__() -> F64 {
+    danger! {
+        return @intrinsic_routine.sub.wrapping<double>(0.0_f64, me)
+    }
+}
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+routine F64.__eq__(you: F64) -> Bool {
+    danger! {
+        return @intrinsic_routine.fcmp.oeq<double>(me, you)
+    }
+}
+
+routine F64.__cmp__(you: F64) -> ComparisonSign {
+    danger! {
+        if @intrinsic_routine.fcmp.olt<double>(me, you) {
+            return ME_SMALL
+        }
+        if @intrinsic_routine.fcmp.ogt<double>(me, you) {
+            return ME_LARGE
+        }
+        return EQUAL
+    }
+}
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+routine F64.sqrt() -> F64 {
+    danger! {
+        return @intrinsic_routine.sqrt<double>(me)
+    }
+}
+
+routine F64.abs() -> F64 {
+    danger! {
+        return @intrinsic_routine.fabs<double>(me)
+    }
+}
+
+routine F64.floor() -> F64 {
+    danger! {
+        return @intrinsic_routine.floor<double>(me)
+    }
+}
+
+routine F64.ceil() -> F64 {
+    danger! {
+        return @intrinsic_routine.ceil<double>(me)
+    }
+}
+
+routine F64.round() -> F64 {
+    danger! {
+        return @intrinsic_routine.round<double>(me)
+    }
+}
+
+routine F64.trunc() -> F64 {
+    danger! {
+        return @intrinsic_routine.trunc_float<double>(me)
+    }
+}
+
+# Trigonometric functions
+routine F64.sin() -> F64 {
+    danger! {
+        return @intrinsic_routine.sin<double>(me)
+    }
+}
+
+routine F64.cos() -> F64 {
+    danger! {
+        return @intrinsic_routine.cos<double>(me)
+    }
+}
+
+# Exponential and logarithmic
+routine F64.exp() -> F64 {
+    danger! {
+        return @intrinsic_routine.exp<double>(me)
+    }
+}
+
+routine F64.log() -> F64 {
+    danger! {
+        return @intrinsic_routine.log<double>(me)
+    }
+}
+
+routine F64.log10() -> F64 {
+    danger! {
+        return @intrinsic_routine.log10<double>(me)
+    }
+}
+
+routine F64.pow(exp: F64) -> F64 {
+    danger! {
+        return @intrinsic_routine.pow<double>(me, exp)
+    }
+}
+
+routine F64.copysign(sign: F64) -> F64 {
+    danger! {
+        return @intrinsic_routine.copysign<double>(me, sign)
+    }
+}
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine F64.min(you: F64) -> F64 {
+    return if me <= you then me else you
+}
+
+routine F64.max(you: F64) -> F64 {
+    return if me >= you then me else you
+}
+
+routine F64.clamp(min_val: F64, max_val: F64) -> F64 {
+    return me.min(max_val).max(min_val)
+}
+
+routine F64.is_positive() -> Bool {
+    return me > 0.0_f64
+}
+
+routine F64.is_negative() -> Bool {
+    return me < 0.0_f64
+}
+
+routine F64.is_zero() -> Bool {
+    return me == 0.0_f64
+}
+
+# TODO: Implement NaN/Infinity checks when we have proper constants
+routine F64.is_finite() -> Bool {
+    # Placeholder - needs proper implementation
+    return true
+}
+
+routine F64.signum() -> F64 {
+    when {
+        me > 0.0_f64 => 1.0_f64,
+        me < 0.0_f64 => -1.0_f64,
+        _ => 0.0_f64
+    }
+}
+
+# Reinterpret bits as U64 (type punning)
+routine F64.to_bits() -> U64 {
+    danger! {
+        return @intrinsic_routine.bitcast<double, i64>(me)
+    }
+}
+
+# Create F64 from U64 bits (type punning)
+routine F64.from_bits(bits: U64) -> F64 {
+    danger! {
+        return @intrinsic_routine.bitcast<i64, double>(bits)
+    }
+}

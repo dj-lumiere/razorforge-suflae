@@ -1,0 +1,183 @@
+module Numeric
+
+# Suflae S32 - Signed 32-bit integer (opt-in native type)
+
+import razorforge/Core.S32
+
+record S32:
+    private value: razorforge/Core.S32
+
+# Arithmetic operators
+routine S32.__add__!(you: S32) -> S32:
+    return S32(value: me.value.__add__!(you.value))
+
+routine S32.__sub__!(you: S32) -> S32:
+    return S32(value: me.value.__sub__!(you.value))
+
+routine S32.__mul__!(you: S32) -> S32:
+    return S32(value: me.value.__mul__!(you.value))
+
+routine S32.__floordiv__!(you: S32) -> S32:
+    return S32(value: me.value.__floordiv__!(you.value))
+
+routine S32.__mod__!(you: S32) -> S32:
+    return S32(value: me.value.__mod__!(you.value))
+
+routine S32.__neg__!() -> S32:
+    return S32(value: me.value.__neg__!())
+
+# Wrapping arithmetic
+routine S32.__add_wrap__(you: S32) -> S32:
+    return S32(value: me.value.__add_wrap__(you.value))
+
+routine S32.__sub_wrap__(you: S32) -> S32:
+    return S32(value: me.value.__sub_wrap__(you.value))
+
+routine S32.__mul_wrap__(you: S32) -> S32:
+    return S32(value: me.value.__mul_wrap__(you.value))
+
+# Saturating arithmetic
+routine S32.__add_sat__(you: S32) -> S32:
+    return S32(value: me.value.__add_sat__(you.value))
+
+routine S32.__sub_sat__(you: S32) -> S32:
+    return S32(value: me.value.__sub_sat__(you.value))
+
+routine S32.__mul_sat__(you: S32) -> S32:
+    return S32(value: me.value.__mul_sat__(you.value))
+
+# Comparison
+routine S32.__eq__(you: S32) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine S32.__cmp__(you: S32) -> ComparisonSign:
+    return me.value.__cmp__(you.value)
+
+# Bitwise operations
+routine S32.__and__(you: S32) -> S32:
+    return S32(value: me.value.__and__(you.value))
+
+routine S32.__or__(you: S32) -> S32:
+    return S32(value: me.value.__or__(you.value))
+
+routine S32.__xor__(you: S32) -> S32:
+    return S32(value: me.value.__xor__(you.value))
+
+routine S32.__not__() -> S32:
+    return S32(value: me.value.__not__())
+
+# Shift operations
+routine S32.__ashl__(bits: U32) -> S32:
+    return S32(value: me.value.__ashl__(bits))
+
+routine S32.__ashr__(bits: U32) -> S32:
+    return S32(value: me.value.__ashr__(bits))
+
+routine S32.__lshl__(bits: U32) -> S32:
+    return S32(value: me.value.__lshl__(bits))
+
+routine S32.__lshr__(bits: U32) -> S32:
+    return S32(value: me.value.__lshr__(bits))
+
+# Math operations
+routine S32.abs() -> S32:
+    return S32(value: me.value.abs())
+
+routine S32.min(you: S32) -> S32:
+    return S32(value: me.value.min(you.value))
+
+routine S32.max(you: S32) -> S32:
+    return S32(value: me.value.max(you.value))
+
+routine S32.clamp(min_val: S32, max_val: S32) -> S32:
+    return S32(value: me.value.clamp(min_val.value, max_val.value))
+
+# Bit manipulation
+routine S32.count_ones() -> S32:
+    return S32(value: me.value.count_ones())
+
+routine S32.count_zeros() -> S32:
+    return S32(value: me.value.count_zeros())
+
+routine S32.leading_zeros() -> S32:
+    return S32(value: me.value.leading_zeros())
+
+routine S32.trailing_zeros() -> S32:
+    return S32(value: me.value.trailing_zeros())
+
+routine S32.reverse_bits() -> S32:
+    return S32(value: me.value.reverse_bits())
+
+routine S32.swap_bytes() -> S32:
+    return S32(value: me.value.swap_bytes())
+
+# Utility methods
+routine S32.is_positive() -> Bool:
+    return me.value.is_positive()
+
+routine S32.is_negative() -> Bool:
+    return me.value.is_negative()
+
+routine S32.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine S32.is_even() -> Bool:
+    return me.value.is_even()
+
+routine S32.is_odd() -> Bool:
+    return me.value.is_odd()
+
+routine S32.signum() -> S32:
+    return S32(value: me.value.signum())
+
+routine S32.is_power_of_two() -> Bool:
+    return me.value.is_power_of_two()
+
+# String conversion
+routine S32.to_text() -> Text:
+    return me.value.to_text()
+
+# ============================================================================
+# Factory constructors (__create__ pattern)
+# ============================================================================
+
+# From smaller signed integers (widening - always fits)
+routine S32.__create__(from: S8) -> S32:
+    return S32(value: razorforge/Core.S32.__create__(from.value))
+
+routine S32.__create__(from: S16) -> S32:
+    return S32(value: razorforge/Core.S32.__create__(from.value))
+
+# From larger signed integers (narrowing - can overflow)
+routine S32.__create__!(from: S64) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+routine S32.__create__!(from: S128) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+# From unsigned integers (can overflow for large values)
+routine S32.__create__(from: U8) -> S32:
+    return S32(value: razorforge/Core.S32.__create__(from.value))
+
+routine S32.__create__(from: U16) -> S32:
+    return S32(value: razorforge/Core.S32.__create__(from.value))
+
+routine S32.__create__!(from: U32) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+routine S32.__create__!(from: U64) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+routine S32.__create__!(from: U128) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+# From floating point (truncates, can overflow)
+routine S32.__create__!(from: F32) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+routine S32.__create__!(from: F64) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))
+
+# From arbitrary precision (can overflow)
+routine S32.__create__!(from: Integer) -> S32:
+    return S32(value: razorforge/Core.S32.__create__!(from.value))

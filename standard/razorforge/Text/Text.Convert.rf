@@ -1,0 +1,160 @@
+module Text
+
+# Text representations for Core types
+#
+# These Text.__create__(from: X) routines provide string conversion for all
+# Core types. They were moved here from Core module files to eliminate the
+# Core → Text dependency during stdlib loading.
+
+
+# ============================================================================
+# Bool and Blank
+# ============================================================================
+
+routine Text.__create__(from: Bool) -> Text {
+    if from {
+        return "true"
+    }
+    return "false"
+}
+
+routine Text.__create__(from: Blank) -> Text {
+    return "Blank"
+}
+
+# ============================================================================
+# Signed Integers
+# ============================================================================
+
+routine Text.__create__(from: S8) -> Text {
+    danger! {
+        return @native.rf_format_s8(from)
+    }
+}
+
+routine Text.__create__(from: S16) -> Text {
+    danger! {
+        return @native.rf_format_s16(from)
+    }
+}
+
+routine Text.__create__(from: S32) -> Text {
+    danger! {
+        return @native.rf_format_s32(from)
+    }
+}
+
+routine Text.__create__(from: S64) -> Text {
+    danger! {
+        return @native.rf_format_s64(from)
+    }
+}
+
+routine Text.__create__(from: S128) -> Text {
+    danger! {
+        return @native.rf_format_s128(from)
+    }
+}
+
+routine Text.__create__(from: SAddr) -> Text {
+    # TODO: Should format as hex.
+    danger! {
+        return @native.rf_format_saddr(from)
+    }
+}
+
+# ============================================================================
+# Unsigned Integers
+# ============================================================================
+
+routine Text.__create__(from: U8) -> Text {
+    danger! {
+        return @native.rf_format_u8(from)
+    }
+}
+
+routine Text.__create__(from: U16) -> Text {
+    danger! {
+        return @native.rf_format_u16(from)
+    }
+}
+
+routine Text.__create__(from: U32) -> Text {
+    danger! {
+        return @native.rf_format_u32(from)
+    }
+}
+
+routine Text.__create__(from: U64) -> Text {
+    danger! {
+        return @native.rf_format_u64(from)
+    }
+}
+
+routine Text.__create__(from: U128) -> Text {
+    danger! {
+        return @native.rf_format_u128(from)
+    }
+}
+
+routine Text.__create__(from: UAddr) -> Text {
+    danger! {
+        let ptr = @native.rf_format_u64(from)
+        return Bytes(ptr: CStr(ptr: ptr)).decode_as_utf8!()
+    }
+}
+
+# ============================================================================
+# Binary Floating Point
+# ============================================================================
+
+routine Text.__create__(from: F16) -> Text {
+    danger! {
+        return @native.rf_format_f16(from)
+    }
+}
+
+routine Text.__create__(from: F32) -> Text {
+    danger! {
+        return @native.rf_format_f32(from)
+    }
+}
+
+routine Text.__create__(from: F64) -> Text {
+    danger! {
+        return @native.rf_format_f64(from)
+    }
+}
+
+routine Text.__create__(from: F128) -> Text {
+    danger! {
+        return @native.rf_format_f128(from)
+    }
+}
+
+# ============================================================================
+# Decimal Floating Point
+# ============================================================================
+
+routine Text.__create__(from: D32) -> Text {
+    danger! {
+        let bits = @intrinsic_routine.bitcast<D32, U32>(from)
+        let cstr_result = @native.rf_d32_to_string(bits)
+        return Text.from_cstr(cstr_result)
+    }
+}
+
+routine Text.__create__(from: D64) -> Text {
+    danger! {
+        let bits = @intrinsic_routine.bitcast<D64, U64>(from)
+        let cstr_result = @native.rf_d64_to_string(bits)
+        return Text.from_cstr(cstr_result)
+    }
+}
+
+routine Text.__create__(from: D128) -> Text {
+    danger! {
+        let cstr_result = @native.rf_d128_to_string(from.low_bits(), from.high_bits())
+        return Text.from_cstr(cstr_result)
+    }
+}

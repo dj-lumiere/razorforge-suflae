@@ -1,0 +1,291 @@
+# RazorForge Wide C String Type (CWStr)
+# Null-terminated wchar_t* wrapper for C FFI interop
+#
+# CWStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
+# sequence of wide characters. It provides safe access to wide C strings
+# without copying unless explicitly requested.
+#
+# Platform differences:
+# - Windows: wchar_t is 16-bit (UCS-2/UTF-16LE)
+# - Unix/Linux: wchar_t is 32-bit (UTF-32)
+#
+# Key characteristics:
+# - Value semantics (no heap allocation for the wrapper itself)
+# - Wraps existing wide C string memory - does not own the memory by default
+# - Null-terminated (C convention)
+# - Platform-dependent encoding
+#
+# Memory ownership:
+# - CWStr(from_ptr: UAddr) - wraps existing memory, does NOT take ownership
+# - CWStr(from_text: Text) - allocates NEW memory, caller owns it
+# - CWStr.copy() - allocates NEW memory, caller owns it
+#
+# For narrow character strings (char*), see CStr.rf
+import Collections.List
+import Text.Text
+
+module Core
+
+# ============================================================================
+# Platform-Dependent Wide Character Type
+# ============================================================================
+
+# Wide character size in bytes (2 on Windows, 4 on Unix)
+@config(target="windows")
+preset CWCHAR_SIZE: UAddr = 2uaddr
+
+@config(target="unix")
+preset CWCHAR_SIZE: UAddr = 4uaddr
+
+# ============================================================================
+# CWStr Record Definition
+# ============================================================================
+
+# Wide C string record (null-terminated wchar_t*)
+# Value type wrapper around raw pointer - no heap allocation for wrapper
+record CWStr {
+    ptr: UAddr  # Raw pointer to null-terminated wide character sequence
+}
+
+# Null pointer constant for CWStr comparisons
+preset cwstr_null: CWStr = CWStr(ptr: 0uaddr)
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+# Create CWStr from raw pointer (wraps existing memory, does NOT copy)
+# WARNING: The pointed-to memory must remain valid for the lifetime of this CWStr
+routine CWStr.__create__(from_ptr: UAddr) -> CWStr {
+    return CWStr(ptr: from_ptr)
+}
+
+# Create CWStr from Text (encodes codepoints to UTF-16 with surrogates)
+# For Windows compatibility - encodes supplementary characters as surrogate pairs
+# The caller is responsible for freeing this memory when done
+routine CWStr.__create__(from_codepoints: Text) -> CWStr {
+    danger! {
+        let len = from_codepoints.count()
+        # Worst case: each codepoint needs 2 code units (surrogate pair)
+        let max_units = len * 2u64
+        let byte_len = (max_units + 1u64) * 2u64
+        let buffer = DynamicSlice(MemorySize(byte_len))
+
+        var write_pos: U64 = 0u64
+        var i: U64 = 0u64
+        loop {
+            if i >= len {
+                break
+            }
+            let codepoint = from_codepoints[i].codepoint()
+
+            if codepoint <= 0xFFFFu32 {
+                # BMP character - single code unit
+                buffer.write!<U16>(write_pos * 2u64, U16!(codepoint))
+                write_pos = write_pos + 1u64
+            } else if codepoint <= 0x10FFFFu32 {
+                # Supplementary character - surrogate pair
+                let adjusted = codepoint - 0x10000u32
+                let high = U16!((adjusted >> 10u32) + 0xD800u32)
+                let low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
+                buffer.write!<U16>(write_pos * 2u64, high)
+                buffer.write!<U16>((write_pos + 1u64) * 2u64, low)
+                write_pos = write_pos + 2u64
+            } else {
+                # Invalid codepoint - use replacement character
+                buffer.write!<U16>(write_pos * 2u64, 0xFFFDu16)
+                write_pos = write_pos + 1u64
+            }
+
+            i = i + 1u64
+        }
+        # Null terminator (2 bytes)
+        buffer.write!<U16>(write_pos * 2u64, 0u16)
+
+        return CWStr(ptr: buffer.snatch())
+    }
+}
+
+# Create CWStr from List<U16> (allocates NEW memory with null terminator)
+# Treats the list as raw UTF-16 code units
+# The caller is responsible for freeing this memory when done
+routine CWStr.__create__(from_units: List<U16>) -> CWStr {
+    danger! {
+        let len = from_units.count()
+        let byte_len = (len + 1u64) * 2u64
+        let buffer = DynamicSlice(MemorySize(byte_len))
+
+        var i: U64 = 0u64
+        loop {
+            if i >= len {
+                break
+            }
+            buffer.write!<U16>(i * 2u64, from_units[i])
+            i = i + 1u64
+        }
+        # Null terminator
+        buffer.write!<U16>(len * 2u64, 0u16)
+
+        return CWStr(ptr: buffer.snatch())
+    }
+}
+
+# ============================================================================
+# Core Methods
+# ============================================================================
+
+# Get length of wide C string in characters (excluding null terminator)
+# O(n) - must scan for null terminator
+routine CWStr.length() -> UAddr {
+    danger! {
+        return @native.rf_wcslen(me.ptr)
+    }
+}
+
+# Check if wide C string pointer is null
+routine CWStr.is_null() -> Bool {
+    return me.ptr == 0uaddr
+}
+
+# Check if wide C string is empty (null or zero-length)
+routine CWStr.is_empty() -> Bool {
+    return me.is_null() or me.length() == 0uaddr
+}
+
+# ============================================================================
+# Indexing (assumes 16-bit wchar_t - Windows style)
+# ============================================================================
+
+# Get code unit at index (no bounds checking)
+routine CWStr.__getitem__!(index: UAddr) -> U16 {
+    if index >= me.length() {
+        throw IndexOutOfBoundsError()
+    }
+    danger! {
+        return read_as!<U16>(me.ptr + (index * 2uaddr))
+    }
+}
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+routine CWStr.__eq__(other: CWStr) -> Bool {
+    danger! {
+        return @native.rf_wcscmp(me.ptr, other.ptr) == 0s32
+    }
+}
+
+routine CWStr.__cmp__(other: CWStr) -> ComparisonSign {
+    danger! {
+        let cmp = @native.rf_wcscmp(me.ptr, other.ptr)
+        if cmp < 0s32 {
+            return ME_SMALL
+        }
+        if cmp > 0s32 {
+            return ME_LARGE
+        }
+        return EQUAL
+    }
+}
+
+# ============================================================================
+# Copying
+# ============================================================================
+
+# Copy wide C string to new allocated memory
+# The caller is responsible for freeing the returned memory
+routine CWStr.copy() -> CWStr {
+    danger! {
+        let len = me.length()
+        let byte_len = (len + 1uaddr) * 2uaddr  # Assuming 16-bit wchar_t
+        let buffer = DynamicSlice(MemorySize(byte_len))
+        let dest = buffer.snatch()
+        @native.rf_wcscpy(dest, me.ptr)
+        return CWStr(ptr: dest)
+    }
+}
+
+# ============================================================================
+# Conversion to RazorForge Types
+# ============================================================================
+
+# Convert CWStr to Text (decodes UTF-16 surrogate pairs to codepoints)
+# Handles surrogate pairs correctly for supplementary characters
+routine CWStr.to_text() -> Text {
+    danger! {
+        let len = me.length()
+        if len == 0uaddr {
+            return Text()
+        }
+
+        let list = List<Letter>()
+        var i: UAddr = 0uaddr
+        loop {
+            if i >= len {
+                break
+            }
+            let high = read_as!<U16>(me.ptr + (i * 2uaddr))
+
+            # Check for high surrogate (U+D800 to U+DBFF)
+            if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1uaddr < len {
+                let low = read_as!<U16>(me.ptr + ((i + 1uaddr) * 2uaddr))
+                # Check for low surrogate (U+DC00 to U+DFFF)
+                if low >= 0xDC00u16 and low <= 0xDFFFu16 {
+                    # Valid surrogate pair - decode to codepoint
+                    let high_bits = (U32(high) - 0xD800u32) << 10u32
+                    let low_bits = U32(low) - 0xDC00u32
+                    let codepoint = high_bits | low_bits + 0x10000u32
+                    list.add_last(Letter(codepoint: codepoint))
+                    i = i + 2uaddr
+                } else {
+                    # Invalid low surrogate - use replacement character
+                    list.add_last(Letter(codepoint: 0xFFFDu32))
+                    i = i + 1uaddr
+                }
+            } else if high >= 0xDC00u16 and high <= 0xDFFFu16 {
+                # Orphan low surrogate - use replacement character
+                list.add_last(Letter(codepoint: 0xFFFDu32))
+                i = i + 1uaddr
+            } else {
+                # BMP character (not a surrogate)
+                list.add_last(Letter(codepoint: U32(high)))
+                i = i + 1uaddr
+            }
+        }
+        return Text(from_list: list)
+    }
+}
+
+# Convert CWStr to List<U16> (copies raw code units)
+# Useful for binary manipulation or passing to APIs expecting raw data
+routine CWStr.to_units() -> List<U16> {
+    danger! {
+        let len = me.length()
+        let list = List<U16>(len)
+        var i: UAddr = 0uaddr
+        loop {
+            if i >= len {
+                break
+            }
+            let code_unit = read_as!<U16>(me.ptr + (i * 2uaddr))
+            list.add_last(code_unit)
+            i = i + 1uaddr
+        }
+        return list
+    }
+}
+
+# ============================================================================
+# Pointer Arithmetic (Danger Zone)
+# ============================================================================
+
+# Get pointer offset by n wide characters
+routine CWStr.offset(n: UAddr) -> CWStr {
+    return CWStr(ptr: me.ptr + (n * 2uaddr))  # Assuming 16-bit wchar_t
+}
+
+# Get pointer to substring starting at character index
+routine CWStr.from_index(start: UAddr) -> CWStr {
+    return CWStr(ptr: me.ptr + (start * 2uaddr))  # Assuming 16-bit wchar_t
+}

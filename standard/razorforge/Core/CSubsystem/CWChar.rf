@@ -1,0 +1,83 @@
+# RazorForge Wide C Character Type (CWChar)
+# Wrapper record for C's `wchar_t` type
+#
+# CWChar is a wrapper record for wide characters, providing type safety for C FFI.
+# The size is platform-dependent:
+# - Windows: 16-bit (UTF-16 code unit)
+# - Unix/Linux: 32-bit (UTF-32 codepoint)
+#
+# Related types:
+# - CChar - single `char`
+# - CWStr - null-terminated wchar_t* string
+
+module Core
+
+# ============================================================================
+# CWChar Record Definition (Platform-Dependent)
+# ============================================================================
+
+# Windows: wchar_t is 16-bit (UTF-16 code unit)
+@config(target: "windows")
+public record CWChar {
+    public value: U16
+}
+
+# Unix/Linux: wchar_t is 32-bit (UTF-32 codepoint)
+@config(target: "unix")
+public record CWChar {
+    public value: U32
+}
+
+# ============================================================================
+# Constructors (Windows - U16)
+# ============================================================================
+
+@config(target: "windows")
+public routine CWChar.__create__(value: U16) -> CWChar {
+    return CWChar(value: value)
+}
+
+@config(target: "windows")
+public routine CWChar.__create__!(codepoint: U32) -> CWChar {
+    if codepoint > 0xFFFFu32 {
+        throw IntegerOverflowError()
+    }
+    return CWChar(value: U16!(codepoint))
+}
+
+# ============================================================================
+# Constructors (Unix - U32)
+# ============================================================================
+
+@config(target: "unix")
+public routine CWChar.__create__(value: U32) -> CWChar {
+    return CWChar(value: value)
+}
+
+# ============================================================================
+# Comparison (Windows)
+# ============================================================================
+
+@config(target: "windows")
+public routine CWChar.__eq__(you: CWChar) -> Bool {
+    return me.value == you.value
+}
+
+@config(target: "windows")
+public routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
+    return me.value.__cmp__(you.value)
+}
+
+# ============================================================================
+# Comparison (Unix)
+# ============================================================================
+
+@config(target: "unix")
+public routine CWChar.__eq__(you: CWChar) -> Bool {
+    return me.value == you.value
+}
+
+@config(target: "unix")
+public routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
+    return me.value.__cmp__(you.value)
+}

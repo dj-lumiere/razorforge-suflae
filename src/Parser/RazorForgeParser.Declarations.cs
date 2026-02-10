@@ -138,7 +138,7 @@ public partial class RazorForgeParser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Dot marks specific type: CSubsystem.CStr → path "CSubsystem", type "CStr"
+                // Dot marks specific type: Collections.List → path "Collections", type "List"
                 string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
                 modulePath += "/" + typeName;
                 break;

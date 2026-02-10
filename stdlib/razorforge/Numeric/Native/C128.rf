@@ -1,4 +1,0 @@
-record C128 follows Numeric, Equatable {
-    public real: F128
-    public imag: F128
-}

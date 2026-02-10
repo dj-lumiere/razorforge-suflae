@@ -1,0 +1,142 @@
+module Text
+
+# Parsing routines for Core types
+#
+# These X.__create__!(from_text:) routines parse text into Core types.
+# They were moved here from Core module files to eliminate the
+# Core → Text dependency during stdlib loading.
+
+# ============================================================================
+# Signed Integers
+# ============================================================================
+
+routine S8.__create__!(from_text: Text) -> S8 {
+    danger! {
+        return @native.rf_parse_s8(from_text)
+    }
+}
+
+routine S16.__create__!(from_text: Text) -> S16 {
+    danger! {
+        return @native.rf_parse_s16(from_text)
+    }
+}
+
+routine S32.__create__!(from_text: Text) -> S32 {
+    danger! {
+        return @native.rf_parse_s32(from_text)
+    }
+}
+
+routine S64.__create__!(from_text: Text) -> S64 {
+    danger! {
+        return @native.rf_parse_s64(from_text)
+    }
+}
+
+routine S128.__create__!(from_text: Text) -> S128 {
+    danger! {
+        return @native.rf_parse_s128(from_text)
+    }
+}
+
+routine SAddr.__create__!(from_text: Text) -> SAddr {
+    danger! {
+        return @native.rf_parse_saddr(from_text)
+    }
+}
+
+# ============================================================================
+# Unsigned Integers
+# ============================================================================
+
+routine U8.__create__!(from_text: Text) -> U8 {
+    danger! {
+        return @native.parse_u8(from_text.CStr().address)
+    }
+}
+
+routine U16.__create__!(from_text: Text) -> U16 {
+    danger! {
+        return @native.rf_parse_u16(from_text)
+    }
+}
+
+routine U32.__create__!(from_text: Text) -> U32 {
+    danger! {
+        return @native.rf_parse_u32(from_text)
+    }
+}
+
+routine U64.__create__!(from_text: Text) -> U64 {
+    danger! {
+        return @native.rf_parse_u64(from_text)
+    }
+}
+
+routine U128.__create__!(from_text: Text) -> U128 {
+    danger! {
+        return @native.rf_parse_u128(from_text)
+    }
+}
+
+routine UAddr.__create__!(from_text: Text) -> UAddr {
+    danger! {
+        return @native.rf_parse_uaddr(from_text)
+    }
+}
+
+# ============================================================================
+# Binary Floating Point
+# ============================================================================
+
+routine F16.__create__!(from_text: Text) -> F16 {
+    danger! {
+        return @native.rf_parse_f16(from_text)
+    }
+}
+
+routine F32.__create__!(from_text: Text) -> F32 {
+    danger! {
+        return @native.rf_parse_f32(from_text)
+    }
+}
+
+routine F64.__create__!(from_text: Text) -> F64 {
+    danger! {
+        return @native.rf_parse_f64(from_text)
+    }
+}
+
+routine F128.__create__!(from_text: Text) -> F128 {
+    danger! {
+        return @native.rf_parse_f128(from_text)
+    }
+}
+
+# ============================================================================
+# Decimal Floating Point
+# ============================================================================
+
+routine D32.__create__!(from_text: Text) -> D32 {
+    danger! {
+        let cstr_val = from_text.to_cstr()
+        let bits = @native.rf_d32_from_string(cstr_val)
+        return @intrinsic_routine.bitcast<U32, D32>(bits)
+    }
+}
+
+routine D64.__create__!(from_text: Text) -> D64 {
+    danger! {
+        let cstr_val = from_text.to_cstr()
+        let bits = @native.rf_d64_from_string(cstr_val)
+        return @intrinsic_routine.bitcast<U64, D64>(bits)
+    }
+}
+
+routine D128.__create__!(from_text: Text) -> D128 {
+    danger! {
+        let cstr_val = from_text.to_cstr()
+        return @native.rf_d128_from_string(cstr_val)
+    }
+}

@@ -1,0 +1,45 @@
+module Numeric
+
+# Suflae C64 - Complex64 floating point (opt-in native type)
+
+import razorforge/Core.C64
+
+record C64:
+    private value: razorforge/Core.C64
+
+# Arithmetic operators
+routine C64.__add__(you: C64) -> C64:
+    return C64(value: me.value.__add__(you.value))
+
+routine C64.__sub__(you: C64) -> C64:
+    return C64(value: me.value.__sub__(you.value))
+
+routine C64.__mul__(you: C64) -> C64:
+    return C64(value: me.value.__mul__(you.value))
+
+routine C64.__truediv__(you: C64) -> C64:
+    return C64(value: me.value.__truediv__(you.value))
+
+routine C64.__neg__() -> C64:
+    return C64(value: me.value.__neg__())
+
+# Comparison
+routine C64.__eq__(you: C64) -> Bool:
+    return me.value.__eq__(you.value)
+
+# Complex-specific operations
+routine C64.real() -> F64:
+    return me.value.real()
+
+routine C64.imag() -> F64:
+    return me.value.imag()
+
+routine C64.abs() -> F64:
+    return me.value.abs()
+
+routine C64.conjugate() -> C64:
+    return C64(value: me.value.conjugate())
+
+# String conversion
+routine C64.to_text() -> Text:
+    return me.value.to_text()

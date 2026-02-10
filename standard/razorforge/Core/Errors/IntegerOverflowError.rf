@@ -1,0 +1,11 @@
+module Errors
+
+# IntegerOverflowError - Error for integer conversion overflow
+# Used when converting between integer types and the value doesn't fit
+
+record IntegerOverflowError follows Crashable {
+}
+
+routine IntegerOverflowError.crash_message(message: Text) -> Text {
+    return message
+}
