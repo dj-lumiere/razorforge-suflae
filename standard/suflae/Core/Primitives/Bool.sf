@@ -22,10 +22,8 @@ routine Bool.__not__() -> Bool:
     return Bool(value: me.value.__not__())
 
 # String conversion
-routine Text.__create__(from: Bool) -> Text {
-    if from {
+routine Text.__create__(from: Bool) -> Text:
+    if from:
         return "true"
-    }
     return "false"
-}
 
