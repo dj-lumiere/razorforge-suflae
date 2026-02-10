@@ -16,7 +16,7 @@ import errors.IndexOutOfBoundsError
 module Collections
 
 entity BitList {
-    private data: DynamicSlice      # Heap-allocated byte array (8 bits per Byte)
+    private data: Snatched<Byte>    # Heap-allocated byte array (8 bits per Byte)
     private count: U64              # Current number of bits
     private capacity: U64           # Total bit capacity (in bits, not bytes)
 }
@@ -28,7 +28,7 @@ entity BitList {
 routine BitList.__create__() -> BitList {
     # Create empty bit list with default capacity
     return BitList(
-        data: DynamicSlice(0b),
+        data: snatched_none<Byte>(),
         count: 0u64,
         capacity: 0u64
     )
@@ -38,7 +38,7 @@ routine BitList.__create__(capacity: U64) -> BitList {
     # Create bit list with pre-allocated capacity (in bits)
     let byte_size = (capacity + 7u64) // 8u64  # Round up to nearest byte
     return BitList(
-        data: DynamicSlice(MemorySize(byte_size)),
+        data: Snatched<Byte>(address: @native.rf_alloc(byte_size)),
         count: 0u64,
         capacity: capacity
     )
@@ -126,13 +126,13 @@ routine BitList.reserve(new_capacity: U64) {
     # Ensure capacity is at least new_capacity (in bits)
     if new_capacity > me.capacity {
         let new_byte_size = (new_capacity + 7u64) / 8u64
-        let new_data = DynamicSlice(MemorySize(new_byte_size))
-        new_data.zero!()  # Initialize all bits to 0
+        let new_data = Snatched<Byte>(address: @native.rf_alloc(new_byte_size))
+        @native.rf_memset(new_data.address, 0u8, new_byte_size)  # Initialize all bits to 0
 
         # Copy existing bytes
         if me.count > 0u64 {
             let copy_bytes = (me.count + 7u64) / 8u64
-            new_data.copy_from(me.data, 0, 0, copy_bytes)
+            @native.rf_memcpy(new_data.address, me.data.address, copy_bytes)
         }
 
         me.data = new_data

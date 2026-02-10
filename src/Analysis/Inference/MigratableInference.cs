@@ -6,9 +6,9 @@ using Shared.AST;
 
 /// <summary>
 /// Performs migratable inference for routines.
-/// Detects methods that can relocate container buffers (DynamicSlice).
+/// Detects methods that can relocate container buffers (Snatched<Byte>).
 ///
-/// Base case: A method is migratable if it can relocate the DynamicSlice buffer
+/// Base case: A method is migratable if it can relocate the Snatched<Byte> buffer
 /// (by changing pointer, size, or capacity in ways that trigger reallocation).
 ///
 /// Migratable operations are banned during iteration to prevent iterator invalidation.
@@ -34,7 +34,7 @@ public sealed class MigratableInference
     /// </summary>
     public void InferAll()
     {
-        // Phase 1: Detect direct DynamicSlice modifications
+        // Phase 1: Detect direct Snatched<U8> modifications
         DetectDirectMigrations();
 
         // Phase 2: Propagate through call graph
@@ -42,13 +42,13 @@ public sealed class MigratableInference
     }
 
     /// <summary>
-    /// Phase 1: Detects methods that directly modify DynamicSlice.
+    /// Phase 1: Detects methods that directly modify Snatched<U8>.
     /// </summary>
     /// <remarks>
     /// TODO: Implement base case detection for migratable methods.
-    /// A method is migratable if it reassigns the internal DynamicSlice field of an entity.
-    /// All entity types use DynamicSlice internally for their dynamic storage.
-    /// Detection should analyze method bodies for assignments to DynamicSlice-typed fields.
+    /// A method is migratable if it reassigns the internal Snatched<U8> field of an entity.
+    /// All entity types use Snatched<U8> internally for their dynamic storage.
+    /// Detection should analyze method bodies for assignments to Snatched<U8>-typed fields.
     /// </remarks>
     private void DetectDirectMigrations()
     {
@@ -60,11 +60,11 @@ public sealed class MigratableInference
             }
 
             // TODO: Base case detection - a method is migratable if it:
-            // 1. Operates on an entity type (all entities have internal DynamicSlice)
-            // 2. Contains assignments that modify the DynamicSlice field
+            // 1. Operates on an entity type (all entities have internal Snatched<U8>)
+            // 2. Contains assignments that modify the Snatched<U8> field
             //    (pointer, size, or capacity changes that could trigger reallocation)
             //
-            // This requires analyzing the method body for DynamicSlice field writes.
+            // This requires analyzing the method body for Snatched<U8> field writes.
             // Currently no detection is implemented - this is a placeholder.
         }
     }

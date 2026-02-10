@@ -69,7 +69,7 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr {
         # Worst case: each codepoint needs 2 code units (surrogate pair)
         let max_units = len * 2u64
         let byte_len = (max_units + 1u64) * 2u64
-        let buffer = DynamicSlice(MemorySize(byte_len))
+        let buffer = Snatched<U8>(address: @native.rf_alloc(byte_len))
 
         var write_pos: U64 = 0u64
         var i: U64 = 0u64
@@ -81,28 +81,28 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr {
 
             if codepoint <= 0xFFFFu32 {
                 # BMP character - single code unit
-                buffer.write!<U16>(write_pos * 2u64, U16!(codepoint))
+                Snatched<U16>(address: buffer.address + write_pos * 2u64).write(U16!(codepoint))
                 write_pos = write_pos + 1u64
             } else if codepoint <= 0x10FFFFu32 {
                 # Supplementary character - surrogate pair
                 let adjusted = codepoint - 0x10000u32
                 let high = U16!((adjusted >> 10u32) + 0xD800u32)
                 let low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
-                buffer.write!<U16>(write_pos * 2u64, high)
-                buffer.write!<U16>((write_pos + 1u64) * 2u64, low)
+                Snatched<U16>(address: buffer.address + write_pos * 2u64).write(high)
+                Snatched<U16>(address: buffer.address + (write_pos + 1u64) * 2u64).write(low)
                 write_pos = write_pos + 2u64
             } else {
                 # Invalid codepoint - use replacement character
-                buffer.write!<U16>(write_pos * 2u64, 0xFFFDu16)
+                Snatched<U16>(address: buffer.address + write_pos * 2u64).write(0xFFFDu16)
                 write_pos = write_pos + 1u64
             }
 
             i = i + 1u64
         }
         # Null terminator (2 bytes)
-        buffer.write!<U16>(write_pos * 2u64, 0u16)
+        Snatched<U16>(address: buffer.address + write_pos * 2u64).write(0u16)
 
-        return CWStr(ptr: buffer.snatch())
+        return CWStr(ptr: buffer.address)
     }
 }
 
@@ -113,20 +113,20 @@ routine CWStr.__create__(from_units: List<U16>) -> CWStr {
     danger! {
         let len = from_units.count()
         let byte_len = (len + 1u64) * 2u64
-        let buffer = DynamicSlice(MemorySize(byte_len))
+        let buffer = Snatched<U8>(address: @native.rf_alloc(byte_len))
 
         var i: U64 = 0u64
         loop {
             if i >= len {
                 break
             }
-            buffer.write!<U16>(i * 2u64, from_units[i])
+            Snatched<U16>(address: buffer.address + i * 2u64).write(from_units[i])
             i = i + 1u64
         }
         # Null terminator
-        buffer.write!<U16>(len * 2u64, 0u16)
+        Snatched<U16>(address: buffer.address + len * 2u64).write(0u16)
 
-        return CWStr(ptr: buffer.snatch())
+        return CWStr(ptr: buffer.address)
     }
 }
 
@@ -199,10 +199,9 @@ routine CWStr.copy() -> CWStr {
     danger! {
         let len = me.length()
         let byte_len = (len + 1uaddr) * 2uaddr  # Assuming 16-bit wchar_t
-        let buffer = DynamicSlice(MemorySize(byte_len))
-        let dest = buffer.snatch()
-        @native.rf_wcscpy(dest, me.ptr)
-        return CWStr(ptr: dest)
+        let buffer = Snatched<U8>(address: @native.rf_alloc(byte_len))
+        @native.rf_wcscpy(buffer.address, me.ptr)
+        return CWStr(ptr: buffer.address)
     }
 }
 

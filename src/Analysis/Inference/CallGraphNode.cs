@@ -29,7 +29,7 @@ public sealed class CallGraphNode
     public bool DirectlyMutates { get; set; }
 
     /// <summary>
-    /// Whether this routine directly modifies DynamicSlice (migratable).
+    /// Whether this routine directly modifies the internal Snatched buffer (migratable).
     /// </summary>
     public bool DirectlyMigrates { get; set; }
 

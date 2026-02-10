@@ -50,20 +50,20 @@ routine CStr.__create__(from_ptr: UAddr) -> CStr {
 routine CStr.__create__(from_text: Bytes) -> CStr {
     danger! {
         let len = from_text.count()
-        let buffer = DynamicSlice(MemorySize(len + 1u64))
+        let buffer = Snatched<U8>(address: @native.rf_alloc(len + 1u64))
 
         var i: U64 = 0u64
         loop {
             if i >= len {
                 break
             }
-            buffer.write<U8>(i, from_text[i].codepoint())
+            Snatched<U8>(address: buffer.address + i).write(from_text[i].codepoint())
             i = i + 1u64
         }
         # Null terminator
-        buffer.write!<U8>(len, 0u8)
+        Snatched<U8>(address: buffer.address + len).write(0u8)
 
-        return CStr(ptr: buffer.snatch())
+        return CStr(ptr: buffer.address)
     }
 }
 
@@ -132,10 +132,9 @@ routine CStr.__cmp__(you: CStr) -> ComparisonSign {
 routine CStr.copy() -> CStr {
     danger! {
         let len = me.length()
-        let buffer = DynamicSlice(MemorySize(len + 1uaddr))
-        let dest = buffer.snatch()
-        @native.rf_strcpy(dest, me.ptr)
-        return CStr(ptr: dest)
+        let buffer = Snatched<U8>(address: @native.rf_alloc(len + 1uaddr))
+        @native.rf_strcpy(buffer.address, me.ptr)
+        return CStr(ptr: buffer.address)
     }
 }
 

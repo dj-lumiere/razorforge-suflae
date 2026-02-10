@@ -14,7 +14,7 @@ import errors.IndexOutOfBoundsError
 module Collections
 
 entity Deque<T> {
-    private data: DynamicSlice    # Circular buffer
+    private data: Snatched<U8>    # Circular buffer (raw storage for T elements)
     private start: UAddr          # Index of first element
     private count: UAddr          # Number of elements
     private capacity: UAddr       # Total allocated slots
@@ -26,7 +26,7 @@ entity Deque<T> {
 
 routine Deque<T>.__create__() -> Deque<T> {
     return Deque<T>(
-        data: DynamicSlice(0b),
+        data: snatched_none<U8>(),
         start: 0uaddr,
         count: 0uaddr,
         capacity: 0uaddr
@@ -36,7 +36,7 @@ routine Deque<T>.__create__() -> Deque<T> {
 routine Deque<T>.__create__(capacity: UAddr) -> Deque<T> {
     let byte_size = capacity * data_size<T>()
     return Deque<T>(
-        data: DynamicSlice(MemorySize(byte_size)),
+        data: Snatched<U8>(address: @native.rf_alloc(byte_size)),
         start: 0uaddr,
         count: 0uaddr,
         capacity: capacity
@@ -169,7 +169,7 @@ routine Deque<T>.reserve(new_capacity: UAddr) {
     }
 
     let new_byte_size = new_capacity * data_size<T>()
-    let new_data = DynamicSlice(MemorySize(new_byte_size))
+    let new_data = Snatched<U8>(address: @native.rf_alloc(new_byte_size))
 
     # Copy elements in logical order (unwrap the ring)
     var i = 0uaddr
@@ -177,7 +177,7 @@ routine Deque<T>.reserve(new_capacity: UAddr) {
         let old_idx = me.physical_index(i)
         let value = me.read_at(old_idx)
         let new_byte_offset = i * data_size<T>()
-        new_data.write<T>(new_byte_offset, value)
+        Snatched<T>(address: new_data.address + new_byte_offset).write(value)
         i = i + 1uaddr
     }
 
