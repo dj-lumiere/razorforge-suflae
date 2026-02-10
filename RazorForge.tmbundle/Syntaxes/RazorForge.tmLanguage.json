@@ -106,9 +106,9 @@
     "text-literals": {
       "patterns": [
         {
-          "comment": "Prefixed text literals (brf, br, bf, rf, b, r, f)",
+          "comment": "Prefixed text literals (br,  rf, b, r, f)",
           "name": "string.quoted.double.razorforge",
-          "begin": "(brf|br|bf|rf|b|r|f)\"",
+          "begin": "(br|rf|b|r|f)\"",
           "beginCaptures": {
             "1": { "name": "storage.modifier.razorforge" }
           },

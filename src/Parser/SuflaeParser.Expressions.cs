@@ -1490,9 +1490,7 @@ public partial class SuflaeParser
                 TokenType.RawText,
                 TokenType.RawFormattedText,
                 TokenType.BytesLiteral,
-                TokenType.BytesFormatted,
-                TokenType.BytesRawLiteral,
-                TokenType.BytesRawFormatted))
+                TokenType.BytesRawLiteral))
         {
             return false;
         }

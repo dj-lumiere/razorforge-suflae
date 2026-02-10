@@ -298,7 +298,7 @@ public partial class SuflaeTokenizer
     /// Maps text literal prefixes to their corresponding token types.
     /// </summary>
     /// <remarks>
-    /// Suflae uses a simplified prefix system: r, f, rf for text, and b, br, bf, brf for bytes.
+    /// Suflae uses a simplified prefix system: r, f, rf for text, and b, br for bytes.
     /// </remarks>
     private readonly Dictionary<string, TokenType> _textPrefixToTokenType = new()
     {

@@ -1703,9 +1703,7 @@ public partial class RazorForgeParser
                 TokenType.RawText,
                 TokenType.RawFormattedText,
                 TokenType.BytesLiteral,
-                TokenType.BytesFormatted,
-                TokenType.BytesRawLiteral,
-                TokenType.BytesRawFormatted))
+                TokenType.BytesRawLiteral))
         {
             return false;
         }

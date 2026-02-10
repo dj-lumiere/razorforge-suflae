@@ -43,7 +43,7 @@ public partial class SuflaeTokenizer
     }
 
     /// <summary>
-    /// Attempts to parse a text prefix (r, f, rf, b, br, bf, brf) followed by a quoted string.
+    /// Attempts to parse a text prefix (r, f, rf, b, br) followed by a quoted string.
     /// </summary>
     /// <returns>
     /// <c>true</c> if a valid text prefix was found; <c>false</c> otherwise.

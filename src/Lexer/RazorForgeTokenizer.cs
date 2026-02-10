@@ -339,8 +339,6 @@ public partial class RazorForgeTokenizer
     ///   <item><description>rf - Raw formatted text</description></item>
     ///   <item><description>b - Bytes literal (UTF-8)</description></item>
     ///   <item><description>br - Raw bytes literal</description></item>
-    ///   <item><description>bf - Formatted bytes literal</description></item>
-    ///   <item><description>brf - Raw formatted bytes literal</description></item>
     /// </list>
     /// </remarks>
     private readonly Dictionary<string, TokenType> _textPrefixToTokenType = new()

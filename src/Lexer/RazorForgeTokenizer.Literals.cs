@@ -46,7 +46,7 @@ public partial class RazorForgeTokenizer
     }
 
     /// <summary>
-    /// Attempts to parse a text prefix (r, f, b, br, bf, brf) followed by a quoted string.
+    /// Attempts to parse a text prefix (r, f, b, br) followed by a quoted string.
     /// </summary>
     /// <returns>
     /// <c>true</c> if a valid text prefix was found and the string was processed;
@@ -55,7 +55,6 @@ public partial class RazorForgeTokenizer
     /// <remarks>
     /// <para>
     /// This method uses greedy matching to find the longest valid prefix.
-    /// For example, "brf" would match before "br" or "b".
     /// </para>
     /// <para>
     /// If a valid prefix is found but not followed by a quote, the method
@@ -69,8 +68,6 @@ public partial class RazorForgeTokenizer
     ///   <item><description>f - Formatted (string interpolation)</description></item>
     ///   <item><description>b - Bytes (UTF-8, 8-bit)</description></item>
     ///   <item><description>br - Raw bytes</description></item>
-    ///   <item><description>bf - Formatted bytes</description></item>
-    ///   <item><description>brf - Raw formatted bytes</description></item>
     /// </list>
     /// </para>
     /// </remarks>
