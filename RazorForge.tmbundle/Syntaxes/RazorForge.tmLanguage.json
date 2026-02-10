@@ -127,9 +127,9 @@
     "escapes": {
       "patterns": [
         {
-          "comment": "Unicode escape \\uXXXXXXXX (8 hex)",
+          "comment": "Unicode escape \\uXXXXXX (6 hex)",
           "name": "constant.character.escape.razorforge",
-          "match": "\\\\u[0-9a-fA-F]{8}"
+          "match": "\\\\u[0-9a-fA-F]{6}"
         },
         {
           "comment": "Hex byte escape \\xFF (2 hex)",
