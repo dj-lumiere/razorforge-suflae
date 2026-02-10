@@ -61,12 +61,6 @@ public enum TokenType
     /// <summary>Bytes raw literal with explicit prefix (br"C:\path")</summary>
     BytesRawLiteral,
 
-    /// <summary>Bytes formatted literal with explicit prefix (bf"value: {x}")</summary>
-    BytesFormatted,
-
-    /// <summary>Bytes raw formatted text literal with explicit prefix (brf"dir: {path}\file")</summary>
-    BytesRawFormatted,
-
     #endregion
 
     #region Typed Numeric Literals

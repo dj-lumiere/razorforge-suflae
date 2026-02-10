@@ -306,9 +306,7 @@ public partial class SuflaeTokenizer
         [key: "f"] = TokenType.FormattedText,
         [key: "rf"] = TokenType.RawFormattedText,
         [key: "b"] = TokenType.BytesLiteral,
-        [key: "br"] = TokenType.BytesRawLiteral,
-        [key: "bf"] = TokenType.BytesFormatted,
-        [key: "brf"] = TokenType.BytesRawFormatted
+        [key: "br"] = TokenType.BytesRawLiteral
     };
 
     /// <summary>
@@ -316,7 +314,7 @@ public partial class SuflaeTokenizer
     /// </summary>
     private readonly List<string> _textPrefixes =
     [
-        "r", "f", "rf", "b", "br", "bf", "brf"
+        "r", "f", "rf", "b", "br"
     ];
 
     #endregion
