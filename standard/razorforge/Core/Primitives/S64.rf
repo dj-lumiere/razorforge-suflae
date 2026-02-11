@@ -195,7 +195,7 @@ routine S64.__floordiv__!(you: S64) -> S64 {
 
 # Remainder
 @crash_only
-routine S64.__rem__!(you: S64) -> S64 {
+routine S64.__mod__!(you: S64) -> S64 {
     danger! {
         return @intrinsic_routine.rem.wrapping<i64>(me, you)
     }

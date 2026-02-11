@@ -16,7 +16,7 @@ using Compilers.Shared.Lexer;
 ///   <item><description>Floats: f16, f32, f64, f128</description></item>
 ///   <item><description>Decimals: d32, d64, d128</description></item>
 ///   <item><description>Arbitrary precision: n suffix (42n → Integer, 3.14n → Decimal)</description></item>
-///   <item><description>Memory sizes: b, kb, kib, mb, mib, gb, gib</description></item>
+///   <item><description>ByteSizes: b, kb, kib, mb, mib, gb, gib</description></item>
 ///   <item><description>Durations: w, d, h, m, s, ms, us, ns</description></item>
 /// </list>
 /// <para>
@@ -110,7 +110,7 @@ public partial class SuflaeTokenizer
             {
                 AddToken(type: numericType);
             }
-            else if (_memorySuffixToTokenType.TryGetValue(key: suffix,
+            else if (_byteSizeSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType memoryType))
             {
                 AddToken(type: memoryType);

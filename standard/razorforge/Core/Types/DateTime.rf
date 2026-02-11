@@ -80,13 +80,13 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64 {
 # Uses the same March-based algorithm in reverse.
 routine days_to_year(days_since_epoch: S64) -> S64 {
     let z = days_since_epoch + 719468_s64
-    let era = (if z >= 0_s64 { z } else { z - 146096_s64 }) // 146097_s64
+    let era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
     let doe = z - era *% 146097_s64
     let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
     let y = yoe + era *% 400_s64
     let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
     let mp = (5_s64 *% doy + 2_s64) // 153_s64
-    let m = mp + (if mp < 10_s64 { 3_s64 } else { 0_s64 - 9_s64 })
+    let m = mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
     if m <= 2_s64 {
         return y + 1_s64
     }
@@ -95,17 +95,17 @@ routine days_to_year(days_since_epoch: S64) -> S64 {
 
 routine days_to_month(days_since_epoch: S64) -> S64 {
     let z = days_since_epoch + 719468_s64
-    let era = (if z >= 0_s64 { z } else { z - 146096_s64 }) // 146097_s64
+    let era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
     let doe = z - era *% 146097_s64
     let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
     let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
     let mp = (5_s64 *% doy + 2_s64) // 153_s64
-    return mp + (if mp < 10_s64 { 3_s64 } else { 0_s64 - 9_s64 })
+    return mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
 }
 
 routine days_to_day(days_since_epoch: S64) -> S64 {
     let z = days_since_epoch + 719468_s64
-    let era = (if z >= 0_s64 { z } else { z - 146096_s64 }) // 146097_s64
+    let era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
     let doe = z - era *% 146097_s64
     let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
     let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
@@ -133,7 +133,9 @@ routine DateTime.from_timestamp(seconds: S64) -> DateTime {
 
 routine DateTime.now() -> DateTime {
     # Implemented by compiler intrinsic / native runtime
-    return @native.rf_datetime_now()
+    danger! {
+        return @native.rf_datetime_now()
+    }
 }
 
 # ============================================================================

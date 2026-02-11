@@ -1,4 +1,4 @@
-using Compilers.Analysis.Types;
+﻿using Compilers.Analysis.Types;
 using Compilers.Shared.Lexer;
 
 namespace Compilers.Shared.AST;
@@ -53,7 +53,7 @@ public abstract record Expression(SourceLocation Location) : AstNode(Location: L
 /// <item>Text and characters: Letter, Byte, Text, Bytes</item>
 /// <item>Booleans: true, false</item>
 /// <item>Duration: w, d, h, m, s, ms, us, ns</item>
-/// <item>MemorySize: b, kb, kib, mb, mib, gb, gib</item>
+/// <item>ByteSize: b, kb, kib, mb, mib, gb, gib</item>
 /// </list>
 /// </remarks>
 public record LiteralExpression(object Value, TokenType LiteralType, SourceLocation Location)

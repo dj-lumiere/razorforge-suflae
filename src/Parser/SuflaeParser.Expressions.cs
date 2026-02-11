@@ -1,4 +1,4 @@
-using Compilers.Shared.AST;
+﻿using Compilers.Shared.AST;
 using Compilers.Shared.Lexer;
 using Compilers.Shared.Parser;
 using RazorForge.Diagnostics;
@@ -1305,8 +1305,8 @@ public partial class SuflaeParser
             return letterExpr!;
         }
 
-        // Memory size literals
-        if (TryParseMemoryLiteral(location: location, result: out Expression? memoryExpr))
+        // ByteSize literals
+        if (TryParseByteSizeLiteral(location: location, result: out Expression? memoryExpr))
         {
             return memoryExpr!;
         }
@@ -1543,11 +1543,11 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Tries to parse a memory size literal (bytes, kilobytes, etc.).
-    /// All memory literals are stored as raw strings for semantic analysis.
+    /// Tries to parse a ByteSize literal (bytes, kilobytes, etc.).
+    /// All ByteSize literals are stored as raw strings for semantic analysis.
     /// The semantic analyzer will parse the value and validate it fits in the target type.
     /// </summary>
-    private bool TryParseMemoryLiteral(SourceLocation location, out Expression? result)
+    private bool TryParseByteSizeLiteral(SourceLocation location, out Expression? result)
     {
         result = null;
 

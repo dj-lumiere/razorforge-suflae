@@ -1,4 +1,4 @@
-# RazorForge Snatched<T> - Unsafe raw pointer wrapper
+﻿# RazorForge Snatched<T> - Unsafe raw pointer wrapper
 #
 # Snatched<T> is created ONLY via .snatch() method inside danger! blocks.
 # It represents raw, unsafe memory access with NO safety guarantees.
@@ -113,7 +113,7 @@ routine Snatched<T>.is_none() -> Bool {
 }
 
 # Offset pointer by bytes (pointer arithmetic)
-routine Snatched<T>.offset(bytes: MemorySize) -> Snatched<T> {
+routine Snatched<T>.offset(bytes: ByteSize) -> Snatched<T> {
     return Snatched<T>(address: me.address + bytes)
 }
 

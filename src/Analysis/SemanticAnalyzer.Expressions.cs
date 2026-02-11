@@ -1,4 +1,4 @@
-namespace Compilers.Analysis;
+﻿namespace Compilers.Analysis;
 
 using Enums;
 using Results;
@@ -114,11 +114,11 @@ public sealed partial class SemanticAnalyzer
             TokenType.ByteLetterLiteral => "Byte",
             TokenType.LetterLiteral => "Letter",
 
-            // Memory size literals (all map to MemorySize type)
+            // byte size literals (all map to ByteSize type)
             TokenType.ByteLiteral or
             TokenType.KilobyteLiteral or TokenType.KibibyteLiteral or
             TokenType.MegabyteLiteral or TokenType.MebibyteLiteral or
-            TokenType.GigabyteLiteral or TokenType.GibibyteLiteral => "MemorySize",
+            TokenType.GigabyteLiteral or TokenType.GibibyteLiteral => "ByteSize",
 
             // Duration literals (all map to Duration type)
             TokenType.WeekLiteral or TokenType.DayLiteral or
@@ -226,7 +226,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Parses a deferred numeric literal using native libraries or managed parsing.
-    /// Called for all numeric, duration, and memory size literals stored as strings.
+    /// Called for all numeric, duration, and byte size literals stored as strings.
     /// </summary>
     /// <param name="literal">The literal expression.</param>
     /// <param name="rawValue">The raw string value to parse.</param>
@@ -289,14 +289,14 @@ public sealed partial class SemanticAnalyzer
                 TokenType.DayLiteral => ParseDurationLiteral(literal, rawValue, "d", 86_400_000_000_000L),
                 TokenType.WeekLiteral => ParseDurationLiteral(literal, rawValue, "w", 604_800_000_000_000L),
 
-                // Memory size literals
-                TokenType.ByteLiteral => ParseMemorySizeLiteral(literal, rawValue, "b", 1UL),
-                TokenType.KilobyteLiteral => ParseMemorySizeLiteral(literal, rawValue, "kb", 1_000UL),
-                TokenType.KibibyteLiteral => ParseMemorySizeLiteral(literal, rawValue, "kib", 1_024UL),
-                TokenType.MegabyteLiteral => ParseMemorySizeLiteral(literal, rawValue, "mb", 1_000_000UL),
-                TokenType.MebibyteLiteral => ParseMemorySizeLiteral(literal, rawValue, "mib", 1_048_576UL),
-                TokenType.GigabyteLiteral => ParseMemorySizeLiteral(literal, rawValue, "gb", 1_000_000_000UL),
-                TokenType.GibibyteLiteral => ParseMemorySizeLiteral(literal, rawValue, "gib", 1_073_741_824UL),
+                // byte size literals
+                TokenType.ByteLiteral => ParseByteSizeLiteral(literal, rawValue, "b", 1UL),
+                TokenType.KilobyteLiteral => ParseByteSizeLiteral(literal, rawValue, "kb", 1_000UL),
+                TokenType.KibibyteLiteral => ParseByteSizeLiteral(literal, rawValue, "kib", 1_024UL),
+                TokenType.MegabyteLiteral => ParseByteSizeLiteral(literal, rawValue, "mb", 1_000_000UL),
+                TokenType.MebibyteLiteral => ParseByteSizeLiteral(literal, rawValue, "mib", 1_048_576UL),
+                TokenType.GigabyteLiteral => ParseByteSizeLiteral(literal, rawValue, "gb", 1_000_000_000UL),
+                TokenType.GibibyteLiteral => ParseByteSizeLiteral(literal, rawValue, "gib", 1_073_741_824UL),
 
                 _ => null
             };
@@ -568,12 +568,12 @@ public sealed partial class SemanticAnalyzer
 
     #endregion
 
-    #region Memory Size Literal Parsing
+    #region ByteSize Literal Parsing
 
     /// <summary>
-    /// Parses a memory size literal and converts to bytes.
+    /// Parses a ByteSize literal and converts to ByteSize.
     /// </summary>
-    private ParsedLiteral? ParseMemorySizeLiteral(LiteralExpression literal, string rawValue, string unit, ulong multiplier)
+    private ParsedLiteral? ParseByteSizeLiteral(LiteralExpression literal, string rawValue, string unit, ulong multiplier)
     {
         // Extract numeric part (remove unit suffix)
         string numericPart = ExtractNumericPart(rawValue, unit);
@@ -581,7 +581,7 @@ public sealed partial class SemanticAnalyzer
 
         if (!TryParseUnsignedInteger(cleanedValue, out ulong value))
         {
-            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid memory size literal: '{rawValue}'", literal.Location);
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid byte size literal: '{rawValue}'", literal.Location);
             return null;
         }
 
@@ -591,13 +591,13 @@ public sealed partial class SemanticAnalyzer
             checked
             {
                 ulong bytes = value * multiplier;
-                return new ParsedMemorySize(Location: literal.Location, Bytes: bytes, OriginalUnit: unit);
+                return new ParsedByteSize(Location: literal.Location, Bytes: bytes, OriginalUnit: unit);
             }
         }
         catch (OverflowException)
         {
-            ReportError(SemanticDiagnosticCode.MemorySizeLiteralOverflow,
-                $"Memory size literal '{rawValue}' overflows the maximum representable size.",
+            ReportError(SemanticDiagnosticCode.ByteSizeLiteralOverflow,
+                $"ByteSize literal '{rawValue}' overflows the maximum representable size.",
                 literal.Location);
             return null;
         }

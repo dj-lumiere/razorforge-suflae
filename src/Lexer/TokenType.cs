@@ -1,4 +1,4 @@
-namespace Compilers.Shared.Lexer;
+﻿namespace Compilers.Shared.Lexer;
 
 #region Token Type Enumeration
 
@@ -11,7 +11,7 @@ namespace Compilers.Shared.Lexer;
 /// <list type="bullet">
 /// <item>Basic literals (integers, decimals, characters, strings)</item>
 /// <item>Typed numeric literals with explicit bit widths</item>
-/// <item>Memory size literals (bytes, kilobytes, etc.)</item>
+/// <item>ByteSize literals (bytes, kilobytes, etc.)</item>
 /// <item>Duration literals (seconds, milliseconds, etc.)</item>
 /// <item>Keywords for declarations, control flow, and special operations</item>
 /// <item>Operators (arithmetic, comparison, bitwise, assignment)</item>
@@ -141,30 +141,30 @@ public enum TokenType
 
     #endregion
 
-    #region Memory Size Literals
+    #region ByteSize Literals
 
-    /// <summary>Byte memory size literal (100b)</summary>
+    /// <summary>Byte ByteSize literal (100b)</summary>
     ByteLiteral,
 
     // Kilobyte variants
-    /// <summary>Kilobyte memory size literal using decimal (1000 bytes) (8kb)</summary>
+    /// <summary>Kilobyte ByteSize literal using decimal (1000 bytes) (8kb)</summary>
     KilobyteLiteral,
 
-    /// <summary>Kibibyte memory size literal using binary (1024 bytes) (8kib)</summary>
+    /// <summary>Kibibyte ByteSize literal using binary (1024 bytes) (8kib)</summary>
     KibibyteLiteral,
 
     // Megabyte variants
-    /// <summary>Megabyte memory size literal using decimal (1000² bytes) (100mb)</summary>
+    /// <summary>Megabyte ByteSize literal using decimal (1000² bytes) (100mb)</summary>
     MegabyteLiteral,
 
-    /// <summary>Mebibyte memory size literal using binary (1024² bytes) (100mib)</summary>
+    /// <summary>Mebibyte ByteSize literal using binary (1024² bytes) (100mib)</summary>
     MebibyteLiteral,
 
     // Gigabyte variants
-    /// <summary>Gigabyte memory size literal using decimal (1000³ bytes) (4gb)</summary>
+    /// <summary>Gigabyte ByteSize literal using decimal (1000³ bytes) (4gb)</summary>
     GigabyteLiteral,
 
-    /// <summary>Gibibyte memory size literal using binary (1024³ bytes) (4gib)</summary>
+    /// <summary>Gibibyte ByteSize literal using binary (1024³ bytes) (4gib)</summary>
     GibibyteLiteral,
 
     #endregion

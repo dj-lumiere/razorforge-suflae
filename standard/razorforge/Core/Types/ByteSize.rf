@@ -1,57 +1,57 @@
-module Core
+﻿module Core
 
-record MemorySize {
+record ByteSize {
     private value: UAddr
 }
 
-routine MemorySize.__create__(bytes: UAddr) {
+routine ByteSize.__create__(bytes: UAddr) {
     me.value = bytes
 }
 
 # Gets the size in bytes
-routine MemorySize.byte_size() -> UAddr {
+routine ByteSize.byte_size() -> UAddr {
     return me.value
 }
 
 # Gets the size in bits
-routine MemorySize.bit_size() -> UAddr {
+routine ByteSize.bit_size() -> UAddr {
     return me.value * 8
 }
 
 # Gets the size in kibibytes (binary, 1024)
-routine MemorySize.kib_size() -> F64 {
+routine ByteSize.kib_size() -> F64 {
     return F64(me.value) / 1024.0
 }
 
 # Gets the size in mebibytes (binary, 1024^2)
-routine MemorySize.mib_size() -> F64 {
+routine ByteSize.mib_size() -> F64 {
     return F64(me.value) / 1048576.0
 }
 
 # Gets the size in gibibytes (binary, 1024^3)
-routine MemorySize.gib_size() -> F64 {
+routine ByteSize.gib_size() -> F64 {
     return F64(me.value) / 1073741824.0
 }
 
 # Gets the size in kilobytes (decimal, 1000)
-routine MemorySize.kb_size() -> F64 {
+routine ByteSize.kb_size() -> F64 {
     return F64(me.value) / 1000.0
 }
 
 # Gets the size in megabytes (decimal, 1000^2)
-routine MemorySize.mb_size() -> F64 {
+routine ByteSize.mb_size() -> F64 {
     return F64(me.value) / 1000000.0
 }
 
 # Gets the size in gigabytes (decimal, 1000^3)
-routine MemorySize.gb_size() -> F64 {
+routine ByteSize.gb_size() -> F64 {
     return F64(me.value) / 1000000000.0
 }
 
-routine MemorySize.to_text(memory_size: MemorySize) {
+routine ByteSize.to_text(byte_size: ByteSize) {
     return f"{me.value} bytes"
 }
 
-routine MemorySize.__add__(you: MemorySize) {
-    return MemorySize(me.value + you.value)
+routine ByteSize.__add__(you: ByteSize) {
+    return ByteSize(me.value + you.value)
 }

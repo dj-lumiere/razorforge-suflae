@@ -16,7 +16,7 @@ using Compilers.Shared.Lexer;
 ///   <item><description>Hexadecimal literals (0xFF, 0x1234_5678)</description></item>
 ///   <item><description>Binary literals (0b1010, 0b1111_0000)</description></item>
 ///   <item><description>Type suffixes (s32, u64, f32, etc.)</description></item>
-///   <item><description>Memory size suffixes (kb, mib, gb, etc.)</description></item>
+///   <item><description>ByteSize suffixes (kb, mib, gb, etc.)</description></item>
 ///   <item><description>Duration suffixes (s, ms, h, etc.)</description></item>
 /// </list>
 /// </para>
@@ -122,7 +122,7 @@ public partial class RazorForgeTokenizer
             {
                 AddToken(type: numericType);
             }
-            else if (_memorySuffixToTokenType.TryGetValue(key: suffix,
+            else if (_byteSizeSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType memoryType))
             {
                 AddToken(type: memoryType);

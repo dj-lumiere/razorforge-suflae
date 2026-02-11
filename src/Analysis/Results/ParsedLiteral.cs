@@ -117,15 +117,15 @@ public sealed record ParsedDuration(
 }
 
 /// <summary>
-/// Parsed MemorySize literal value stored as bytes.
+/// Parsed ByteSize literal value.
 /// Supports: b, kb, kib, mb, mib, gb, gib suffixes.
 /// </summary>
-public sealed record ParsedMemorySize(
+public sealed record ParsedByteSize(
     SourceLocation Location,
     ulong Bytes,
     string OriginalUnit) : ParsedLiteral(Location)
 {
-    public override string ToString() => $"MemorySize({Bytes}b, original={OriginalUnit})";
+    public override string ToString() => $"ByteSize({Bytes}b, original={OriginalUnit})";
 }
 
 /// <summary>

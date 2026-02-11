@@ -1,4 +1,4 @@
-namespace Compilers.RazorForge.Lexer;
+﻿namespace Compilers.RazorForge.Lexer;
 
 using Compilers.Shared.Lexer;
 
@@ -18,7 +18,7 @@ using Compilers.Shared.Lexer;
 ///   <item><description>Text literals with prefixes (r"raw", f"formatted", b"bytes")</description></item>
 ///   <item><description>Character literals: 'x' (letter, 32-bit) and b'x' (byte, 8-bit)</description></item>
 ///   <item><description>Overflow operators (+%, -^, *?, etc.)</description></item>
-///   <item><description>Memory size literals (1kb, 2mib, etc.)</description></item>
+///   <item><description>Byte size literals (1kb, 2mib, etc.)</description></item>
 ///   <item><description>Duration literals (1s, 500ms, 2h, etc.)</description></item>
 ///   <item><description>Documentation comments (###)</description></item>
 /// </list>
@@ -291,14 +291,14 @@ public partial class RazorForgeTokenizer
     private const string ArbitraryPrecisionSuffix = "n";
 
     /// <summary>
-    /// Maps memory size suffixes to their corresponding token types.
+    /// Maps bytesize suffixes to their corresponding token types.
     /// </summary>
     /// <remarks>
     /// Supports byte (b), SI units (kb, mb, gb), and binary units (kib, mib, gib).
     /// Larger sizes (tb/tib, pb/pib) and bit units are not supported as literals;
-    /// use constructors like Memory.terabytes(n) instead.
+    /// use constructors like ByteSize.terabytes(n) instead.
     /// </remarks>
-    private readonly Dictionary<string, TokenType> _memorySuffixToTokenType = new()
+    private readonly Dictionary<string, TokenType> _byteSizeSuffixToTokenType = new()
     {
         [key: "b"] = TokenType.ByteLiteral,
         [key: "kb"] = TokenType.KilobyteLiteral,

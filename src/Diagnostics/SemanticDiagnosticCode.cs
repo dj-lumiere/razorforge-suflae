@@ -68,8 +68,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Duration literal value overflows (exceeds maximum representable duration).</summary>
     DurationLiteralOverflow = 12,
 
-    /// <summary>Memory size literal value overflows (exceeds maximum representable size).</summary>
-    MemorySizeLiteralOverflow = 13,
+    /// <summary>Byte size literal value overflows (exceeds maximum representable size).</summary>
+    ByteSizeLiteralOverflow = 13,
 
     /// <summary>Failed to parse imaginary literal for complex number.</summary>
     ImaginaryLiteralParseFailed = 14,

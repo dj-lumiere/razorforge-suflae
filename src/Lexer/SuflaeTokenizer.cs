@@ -266,9 +266,9 @@ public partial class SuflaeTokenizer
     private const string ArbitraryPrecisionSuffix = "n";
 
     /// <summary>
-    /// Maps memory size suffixes to their corresponding token types.
+    /// Maps ByteSize suffixes to their corresponding token types.
     /// </summary>
-    private readonly Dictionary<string, TokenType> _memorySuffixToTokenType = new()
+    private readonly Dictionary<string, TokenType> _byteSizeSuffixToTokenType = new()
     {
         [key: "b"] = TokenType.ByteLiteral,
         [key: "kb"] = TokenType.KilobyteLiteral,
