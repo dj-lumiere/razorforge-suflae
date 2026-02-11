@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae C128 - Complex128 floating point (opt-in native type)
 
-import razorforge/Core.C128
+import RazorForge/Core.C128
 
 record C128:
-    private value: razorforge/Core.C128
+    private value: RazorForge/Core.C128
 
 # Arithmetic operators
 routine C128.__add__(you: C128) -> C128:

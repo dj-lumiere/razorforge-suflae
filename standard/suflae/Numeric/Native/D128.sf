@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae D128 - Decimal128 floating point (opt-in native type)
 
-import razorforge/Core.D128
+import RazorForge/Core.D128
 
 record D128:
-    private value: razorforge/Core.D128
+    private value: RazorForge/Core.D128
 
 # Arithmetic operators
 routine D128.__add__(you: D128) -> D128:
@@ -72,53 +72,53 @@ routine D128.to_text() -> Text:
 
 # From signed integers
 routine D128.__create__(from: S8) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: S16) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: S32) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: S64) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: S128) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 # From unsigned integers
 routine D128.__create__(from: U8) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: U16) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: U32) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: U64) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: U128) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 # From binary floating point
 routine D128.__create__(from: F32) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: F64) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 # From other decimal types (widening)
 routine D128.__create__(from: D32) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: D64) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 # From arbitrary precision
 routine D128.__create__(from: Integer) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))
 
 routine D128.__create__(from: Decimal) -> D128:
-    return D128(value: razorforge/Core.D128.__create__(from.value))
+    return D128(value: RazorForge/Core.D128.__create__(from.value))

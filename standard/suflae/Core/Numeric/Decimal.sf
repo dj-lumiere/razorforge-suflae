@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Numeric.Decimal
+import RazorForge/Numeric.Decimal
 
 entity Decimal:
-    private var value: razorforge/Numeric.Decimal
+    private var value: RazorForge/Numeric.Decimal
 
 # Arithmetic operators
 routine Decimal.__add__(you: Decimal) -> Decimal:
@@ -113,17 +113,17 @@ routine Decimal.to_text(decimal_places: Integer = 10) -> Text:
 
 # Constants
 routine Decimal.pi(precision: Integer = 50) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.pi(precision.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.pi(precision.value))
 
 routine Decimal.e(precision: Integer = 50) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.e(precision.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.e(precision.value))
 
 # Factory methods
 routine Decimal.zero() -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.zero())
+    return Decimal(value: RazorForge/Numeric.Decimal.zero())
 
 routine Decimal.one() -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.one())
+    return Decimal(value: RazorForge/Numeric.Decimal.one())
 
 # ============================================================================
 # Factory constructors (__create__ pattern)
@@ -131,43 +131,43 @@ routine Decimal.one() -> Decimal:
 
 # From native signed integers
 routine Decimal.__create__(from: S8) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: S16) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: S32) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: S64) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: S128) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 # From native unsigned integers
 routine Decimal.__create__(from: U8) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: U16) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: U32) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: U64) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: U128) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 # From floating point
 routine Decimal.__create__(from: F32) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 routine Decimal.__create__(from: F64) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
 
 # From integer
 routine Decimal.__create__(from: Integer) -> Decimal:
-    return Decimal(value: razorforge/Numeric.Decimal.__create__(from.value))
+    return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))

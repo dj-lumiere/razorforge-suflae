@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae U32 - Unsigned 32-bit integer (opt-in native type)
 
-import razorforge/Core.U32
+import RazorForge/Core.U32
 
 record U32:
-    private value: razorforge/Core.U32
+    private value: RazorForge/Core.U32
 
 # Arithmetic operators
 routine U32.__add__!(you: U32) -> U32:
@@ -128,41 +128,41 @@ routine U32.to_text() -> Text:
 
 # From smaller unsigned integers (widening - always fits)
 routine U32.__create__(from: U8) -> U32:
-    return U32(value: razorforge/Core.U32.__create__(from.value))
+    return U32(value: RazorForge/Core.U32.__create__(from.value))
 
 routine U32.__create__(from: U16) -> U32:
-    return U32(value: razorforge/Core.U32.__create__(from.value))
+    return U32(value: RazorForge/Core.U32.__create__(from.value))
 
 # From larger unsigned integers (narrowing - can overflow)
 routine U32.__create__!(from: U64) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 routine U32.__create__!(from: U128) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 # From signed integers (can overflow)
 routine U32.__create__!(from: S8) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 routine U32.__create__!(from: S16) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 routine U32.__create__!(from: S32) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 routine U32.__create__!(from: S64) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 routine U32.__create__!(from: S128) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 # From floating point (truncates, can overflow)
 routine U32.__create__!(from: F32) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 routine U32.__create__!(from: F64) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))
 
 # From arbitrary precision (can overflow)
 routine U32.__create__!(from: Integer) -> U32:
-    return U32(value: razorforge/Core.U32.__create__!(from.value))
+    return U32(value: RazorForge/Core.U32.__create__!(from.value))

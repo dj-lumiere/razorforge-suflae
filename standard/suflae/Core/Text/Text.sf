@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Text.Text
+import RazorForge/Text.Text
 
 entity Text:
-    private var value: razorforge/Text.Text
+    private var value: RazorForge/Text.Text
 
 # Core operations
 routine Text.count() -> Integer:

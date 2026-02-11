@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Collections.BitList
+import RazorForge/Collections.BitList
 
 entity BitList:
-    private var value: razorforge/Collections.BitList
+    private var value: RazorForge/Collections.BitList
 
 # Core operations
 routine BitList.count() -> Integer:

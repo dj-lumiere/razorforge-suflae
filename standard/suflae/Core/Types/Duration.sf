@@ -1,0 +1,137 @@
+# Suflae Duration - Time span with nanosecond precision
+
+module Core
+
+import RazorForge/Core.Duration
+
+entity Duration:
+    private var value: RazorForge/Core.Duration
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+routine Duration.zero() -> Duration:
+    return Duration(value: RazorForge/Core.Duration.zero())
+
+routine Duration.from_nanoseconds(ns: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_nanoseconds(ns.value))
+
+routine Duration.from_microseconds(us: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_microseconds(us.value))
+
+routine Duration.from_milliseconds(ms: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_milliseconds(ms.value))
+
+routine Duration.from_seconds(s: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_seconds(s.value))
+
+routine Duration.from_minutes(m: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_minutes(m.value))
+
+routine Duration.from_hours(h: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_hours(h.value))
+
+routine Duration.from_days(d: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_days(d.value))
+
+routine Duration.from_weeks(w: Integer) -> Duration:
+    return Duration(value: RazorForge/Core.Duration.from_weeks(w.value))
+
+# ============================================================================
+# Total unit accessors (convert entire duration to a single unit)
+# ============================================================================
+
+routine Duration.total_nanoseconds() -> Integer:
+    return Integer(value: me.value.total_nanoseconds())
+
+routine Duration.total_microseconds() -> Integer:
+    return Integer(value: me.value.total_microseconds())
+
+routine Duration.total_milliseconds() -> Integer:
+    return Integer(value: me.value.total_milliseconds())
+
+routine Duration.total_seconds() -> Integer:
+    return Integer(value: me.value.total_seconds())
+
+routine Duration.total_minutes() -> Integer:
+    return Integer(value: me.value.total_minutes())
+
+routine Duration.total_hours() -> Integer:
+    return Integer(value: me.value.total_hours())
+
+routine Duration.total_days() -> Integer:
+    return Integer(value: me.value.total_days())
+
+# ============================================================================
+# Component accessors (extract individual components of the duration)
+# ============================================================================
+
+routine Duration.get_days() -> Integer:
+    return Integer(value: me.value.get_days())
+
+routine Duration.get_hours() -> Integer:
+    return Integer(value: me.value.get_hours())
+
+routine Duration.get_minutes() -> Integer:
+    return Integer(value: me.value.get_minutes())
+
+routine Duration.get_seconds() -> Integer:
+    return Integer(value: me.value.get_seconds())
+
+routine Duration.get_milliseconds() -> Integer:
+    return Integer(value: me.value.get_milliseconds())
+
+routine Duration.get_microseconds() -> Integer:
+    return Integer(value: me.value.get_microseconds())
+
+routine Duration.get_nanoseconds() -> Integer:
+    return Integer(value: me.value.get_nanoseconds())
+
+# ============================================================================
+# Utility
+# ============================================================================
+
+routine Duration.is_zero() -> Bool:
+    return me.value.is_zero()
+
+routine Duration.is_negative() -> Bool:
+    return me.value.is_negative()
+
+routine Duration.abs() -> Duration:
+    return Duration(value: me.value.abs())
+
+# ============================================================================
+# Arithmetic operators
+# ============================================================================
+
+routine Duration.__add__!(you: Duration) -> Duration:
+    return Duration(value: me.value.__add__!(you.value))
+
+routine Duration.__sub__(you: Duration) -> Duration:
+    return Duration(value: me.value.__sub__(you.value))
+
+routine Duration.__neg__() -> Duration:
+    return Duration(value: me.value.__neg__())
+
+routine Duration.scale(factor: Integer) -> Duration:
+    return Duration(value: me.value.scale(factor.value))
+
+routine Duration.__floordiv__(you: Duration) -> Duration:
+    return Duration(value: me.value.__floordiv__(you.value))
+
+routine Duration.__mod__(you: Duration) -> Duration:
+    return Duration(value: me.value.__mod__(you.value))
+
+routine Duration.div_by(divisor: Integer) -> Duration:
+    return Duration(value: me.value.div_by(divisor.value))
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+routine Duration.__eq__(you: Duration) -> Bool:
+    return me.value.__eq__(you.value)
+
+routine Duration.__cmp__(you: Duration) -> ComparisonSign:
+    return me.value.__cmp__(you.value)

@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Collections.Deque
+import RazorForge/Collections.Deque
 
 entity Deque<T>:
-    private var value: razorforge/Collections.Deque<T>
+    private var value: RazorForge/Collections.Deque<T>
 
 # Core operations
 routine Deque<T>.count() -> Integer:

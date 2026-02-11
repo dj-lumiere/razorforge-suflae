@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae U8 - Unsigned 8-bit integer (opt-in native type)
 
-import razorforge/Core.U8
+import RazorForge/Core.U8
 
 record U8:
-    private value: razorforge/Core.U8
+    private value: RazorForge/Core.U8
 
 # Arithmetic operators
 routine U8.__add__!(you: U8) -> U8:
@@ -125,40 +125,40 @@ routine U8.to_text() -> Text:
 
 # From other unsigned integers (narrowing - can overflow)
 routine U8.__create__!(from: U16) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: U32) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: U64) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: U128) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 # From signed integers (can overflow)
 routine U8.__create__!(from: S8) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: S16) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: S32) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: S64) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: S128) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 # From floating point (truncates, can overflow)
 routine U8.__create__!(from: F32) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 routine U8.__create__!(from: F64) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))
 
 # From arbitrary precision (can overflow)
 routine U8.__create__!(from: Integer) -> U8:
-    return U8(value: razorforge/Core.U8.__create__!(from.value))
+    return U8(value: RazorForge/Core.U8.__create__!(from.value))

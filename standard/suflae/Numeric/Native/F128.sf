@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae F128 - Quad precision floating point (opt-in native type)
 
-import razorforge/Core.F128
+import RazorForge/Core.F128
 
 record F128:
-    private value: razorforge/Core.F128
+    private value: RazorForge/Core.F128
 
 # Arithmetic operators
 routine F128.__add__(you: F128) -> F128:

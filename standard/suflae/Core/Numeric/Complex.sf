@@ -2,7 +2,7 @@
 
 module Core
 
-import razorforge/Numeric.Complex
+import RazorForge/Numeric.Complex
 
 entity Complex:
-    private var value: razorforge/Numeric.Complex
+    private var value: RazorForge/Numeric.Complex

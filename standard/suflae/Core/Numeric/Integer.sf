@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Numeric.Integer
+import RazorForge/Numeric.Integer
 
 entity Integer:
-    private var value: razorforge/Numeric.Integer
+    private var value: RazorForge/Numeric.Integer
 
 # Arithmetic operators
 routine Integer.__add__(you: Integer) -> Integer:
@@ -84,16 +84,16 @@ routine Integer.to_text(radix: Integer = 10) -> Text:
 
 # Factory methods
 routine Integer.zero() -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.zero())
+    return Integer(value: RazorForge/Numeric.Integer.zero())
 
 routine Integer.one() -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.one())
+    return Integer(value: RazorForge/Numeric.Integer.one())
 
 routine Integer.from_binary!(text: Text) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.from_binary!(text))
+    return Integer(value: RazorForge/Numeric.Integer.from_binary!(text))
 
 routine Integer.from_hex!(text: Text) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.from_hex!(text))
+    return Integer(value: RazorForge/Numeric.Integer.from_hex!(text))
 
 # ============================================================================
 # Factory constructors (__create__ pattern)
@@ -101,43 +101,43 @@ routine Integer.from_hex!(text: Text) -> Integer:
 
 # From native signed integers
 routine Integer.__create__(from: S8) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: S16) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: S32) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: S64) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: S128) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 # From native unsigned integers
 routine Integer.__create__(from: U8) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: U16) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: U32) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: U64) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 routine Integer.__create__(from: U128) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 # From floating point (truncates)
 routine Integer.__create__!(from: F32) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__!(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__!(from.value))
 
 routine Integer.__create__!(from: F64) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__!(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__!(from.value))
 
 # From decimal (truncates)
 routine Integer.__create__(from: Decimal) -> Integer:
-    return Integer(value: razorforge/Numeric.Integer.__create__(from.value))
+    return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))

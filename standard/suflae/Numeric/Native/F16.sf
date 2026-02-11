@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae F16 - Half precision floating point (opt-in native type)
 
-import razorforge/Core.F16
+import RazorForge/Core.F16
 
 record F16:
-    private value: razorforge/Core.F16
+    private value: RazorForge/Core.F16
 
 # Arithmetic operators
 routine F16.__add__(you: F16) -> F16:

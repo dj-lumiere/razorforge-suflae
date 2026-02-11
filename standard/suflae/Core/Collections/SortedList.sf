@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Collections.SortedList
+import RazorForge/Collections.SortedList
 
 entity SortedList<T>:
-    private var value: razorforge/Collections.SortedList<T>
+    private var value: RazorForge/Collections.SortedList<T>
 
 # Core operations
 routine SortedList<T>.count() -> Integer:

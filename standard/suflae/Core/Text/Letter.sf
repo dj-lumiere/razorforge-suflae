@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Text.Letter
+import RazorForge/Text.Letter
 
 record Letter:
-    private value: razorforge/Text.Letter
+    private value: RazorForge/Text.Letter
 
 # Codepoint access
 routine Letter.codepoint() -> U32:

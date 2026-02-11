@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Text.Byte
+import RazorForge/Text.Byte
 
 record Byte:
-    private value: razorforge/Text.Byte
+    private value: RazorForge/Text.Byte
 
 # Comparison operations
 routine Byte.__eq__(other: Byte) -> Bool:

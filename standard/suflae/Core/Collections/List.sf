@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Collections.List
+import RazorForge/Collections.List
 
 entity List<T>:
-    private var value: razorforge/Collections.List<T>
+    private var value: RazorForge/Collections.List<T>
 
 # Core operations
 routine List<T>.count() -> Integer:

@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Text.BytesBuffer
+import RazorForge/Text.BytesBuffer
 
 entity BytesBuffer:
-    private var value: razorforge/Text.BytesBuffer
+    private var value: RazorForge/Text.BytesBuffer
 
 # Core operations
 routine BytesBuffer.count() -> Integer:

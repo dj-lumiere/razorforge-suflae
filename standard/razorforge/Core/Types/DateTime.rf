@@ -1,0 +1,277 @@
+module Core
+
+# DateTime - Point in time with nanosecond precision
+#
+# Internal representation: seconds since Unix epoch (1970-01-01) + nanoseconds
+# within second. Nanoseconds always normalized to [0, 1_000_000_000).
+#
+# Uses the proleptic Gregorian calendar for date calculations.
+# Civil date conversion algorithm based on Howard Hinnant's chrono approach.
+#
+# Usage:
+#   let now = DateTime.now()
+#   let deadline = now + 5m
+#   let elapsed = deadline - now   # Duration
+#   let meeting = DateTime(year: 2026, month: 2, day: 15, hour: 14, minute: 0, second: 0)
+
+# ============================================================================
+# Record definition
+# ============================================================================
+
+record DateTime follows Ordered {
+    private seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
+    private nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
+}
+
+# ============================================================================
+# Normalization helper
+# ============================================================================
+
+routine normalize_datetime(seconds: S64, nanoseconds: S64) -> DateTime {
+    var s = seconds
+    var ns = nanoseconds
+
+    if ns >= NS_PER_SECOND {
+        s = s + ns // NS_PER_SECOND
+        ns = ns % NS_PER_SECOND
+    } else if ns < 0_s64 {
+        let borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
+        s = s - borrow
+        ns = ns + borrow *% NS_PER_SECOND
+    }
+
+    return DateTime(seconds: s, nanoseconds: U32(ns))
+}
+
+# ============================================================================
+# Civil calendar helpers (proleptic Gregorian)
+# ============================================================================
+
+# Convert civil date (year, month, day) to days since epoch.
+# Algorithm: shift March-based year so leap day falls at end of year.
+routine ymd_to_days(year: S64, month: S64, day: S64) -> S64 {
+    # Shift year so March is month 0
+    var y = year
+    var m = month
+    if m <= 2_s64 {
+        y = y - 1_s64
+    }
+
+    # Era-based calculation for proleptic Gregorian
+    let era_year = y - (y // 400_s64) *% 400_s64
+    let era = y // 400_s64
+
+    # Day of year within March-based year
+    if m > 2_s64 {
+        m = m - 3_s64
+    } else {
+        m = m + 9_s64
+    }
+    let doy = (153_s64 *% m + 2_s64) // 5_s64 + day - 1_s64
+
+    # Day of era
+    let doe = era_year *% 365_s64 + era_year // 4_s64 - era_year // 100_s64 + doy
+
+    # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
+    return era *% 146097_s64 + doe - 719468_s64
+}
+
+# Convert days since epoch to civil date (year, month, day).
+# Uses the same March-based algorithm in reverse.
+routine days_to_year(days_since_epoch: S64) -> S64 {
+    let z = days_since_epoch + 719468_s64
+    let era = (if z >= 0_s64 { z } else { z - 146096_s64 }) // 146097_s64
+    let doe = z - era *% 146097_s64
+    let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
+    let y = yoe + era *% 400_s64
+    let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
+    let mp = (5_s64 *% doy + 2_s64) // 153_s64
+    let m = mp + (if mp < 10_s64 { 3_s64 } else { 0_s64 - 9_s64 })
+    if m <= 2_s64 {
+        return y + 1_s64
+    }
+    return y
+}
+
+routine days_to_month(days_since_epoch: S64) -> S64 {
+    let z = days_since_epoch + 719468_s64
+    let era = (if z >= 0_s64 { z } else { z - 146096_s64 }) // 146097_s64
+    let doe = z - era *% 146097_s64
+    let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
+    let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
+    let mp = (5_s64 *% doy + 2_s64) // 153_s64
+    return mp + (if mp < 10_s64 { 3_s64 } else { 0_s64 - 9_s64 })
+}
+
+routine days_to_day(days_since_epoch: S64) -> S64 {
+    let z = days_since_epoch + 719468_s64
+    let era = (if z >= 0_s64 { z } else { z - 146096_s64 }) // 146097_s64
+    let doe = z - era *% 146097_s64
+    let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
+    let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
+    let mp = (5_s64 *% doy + 2_s64) // 153_s64
+    return doy - (153_s64 *% mp + 2_s64) // 5_s64 + 1_s64
+}
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+routine DateTime.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> DateTime {
+    let d = ymd_to_days(year, month, day)
+    let s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
+    return DateTime(seconds: s, nanoseconds: 0_u32)
+}
+
+routine DateTime.epoch() -> DateTime {
+    return DateTime(seconds: 0_s64, nanoseconds: 0_u32)
+}
+
+routine DateTime.from_timestamp(seconds: S64) -> DateTime {
+    return DateTime(seconds: seconds, nanoseconds: 0_u32)
+}
+
+routine DateTime.now() -> DateTime {
+    # Implemented by compiler intrinsic / native runtime
+    return @native.rf_datetime_now()
+}
+
+# ============================================================================
+# Date accessors (derived from seconds field)
+# ============================================================================
+
+@readonly
+routine DateTime.year() -> S64 {
+    return days_to_year(me.seconds // SECONDS_PER_DAY)
+}
+
+@readonly
+routine DateTime.month() -> S64 {
+    return days_to_month(me.seconds // SECONDS_PER_DAY)
+}
+
+@readonly
+routine DateTime.day() -> S64 {
+    return days_to_day(me.seconds // SECONDS_PER_DAY)
+}
+
+@readonly
+routine DateTime.day_of_week() -> S64 {
+    # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
+    let days = me.seconds // SECONDS_PER_DAY
+    let dow = (days + 3_s64) % 7_s64
+    if dow < 0_s64 {
+        return dow + 7_s64
+    }
+    return dow
+}
+
+# ============================================================================
+# Time accessors (derived from seconds and nanoseconds fields)
+# ============================================================================
+
+@readonly
+routine DateTime.hour() -> S64 {
+    return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
+}
+
+@readonly
+routine DateTime.minute() -> S64 {
+    return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
+}
+
+@readonly
+routine DateTime.second() -> S64 {
+    return me.seconds % SECONDS_PER_MINUTE
+}
+
+@readonly
+routine DateTime.millisecond() -> S64 {
+    return S64(me.nanoseconds) // NS_PER_MILLISECOND
+}
+
+@readonly
+routine DateTime.microsecond() -> S64 {
+    return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
+}
+
+@readonly
+routine DateTime.nanosecond() -> S64 {
+    return S64(me.nanoseconds) % NS_PER_MICROSECOND
+}
+
+# ============================================================================
+# Conversion
+# ============================================================================
+
+# Unix timestamp in seconds
+@readonly
+routine DateTime.timestamp() -> S64 {
+    return me.seconds
+}
+
+# Unix timestamp in milliseconds
+@readonly
+routine DateTime.timestamp_ms() -> S64 {
+    return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
+}
+
+# ============================================================================
+# Arithmetic with Duration
+# ============================================================================
+
+@readonly
+routine DateTime.add_duration(duration: Duration) -> DateTime {
+    return normalize_datetime(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
+}
+
+@readonly
+routine DateTime.subtract_duration(duration: Duration) -> DateTime {
+    return me.add_duration(duration.__neg__())
+}
+
+# DateTime - DateTime -> Duration
+@readonly
+routine DateTime.elapsed_since(earlier: DateTime) -> Duration {
+    return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
+}
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+@readonly
+routine DateTime.__eq__(you: DateTime) -> Bool {
+    return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
+}
+
+@readonly
+routine DateTime.__cmp__(you: DateTime) -> ComparisonSign {
+    if me.seconds < you.seconds {
+        return ME_SMALL
+    }
+    if me.seconds > you.seconds {
+        return ME_LARGE
+    }
+    if me.nanoseconds < you.nanoseconds {
+        return ME_SMALL
+    }
+    if me.nanoseconds > you.nanoseconds {
+        return ME_LARGE
+    }
+    return SAME
+}
+
+# ============================================================================
+# Text representation
+# ============================================================================
+
+routine Text.__create__(from: DateTime) -> Text {
+    let y = from.year()
+    let mo = from.month()
+    let d = from.day()
+    let h = from.hour()
+    let mi = from.minute()
+    let s = from.second()
+    return f"{y}-{mo}-{d} {h}:{mi}:{s}"
+}

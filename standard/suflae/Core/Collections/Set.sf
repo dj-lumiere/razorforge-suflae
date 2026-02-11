@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Collections.Set
+import RazorForge/Collections.Set
 
 entity Set<T>:
-    private var value: razorforge/Collections.Set<T>
+    private var value: RazorForge/Collections.Set<T>
 
 # Core operations
 routine Set<T>.count() -> Integer:

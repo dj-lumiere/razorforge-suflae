@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae D32 - Decimal32 floating point (opt-in native type)
 
-import razorforge/Core.D32
+import RazorForge/Core.D32
 
 record D32:
-    private value: razorforge/Core.D32
+    private value: RazorForge/Core.D32
 
 # Arithmetic operators
 routine D32.__add__(you: D32) -> D32:
@@ -72,53 +72,53 @@ routine D32.to_text() -> Text:
 
 # From signed integers
 routine D32.__create__(from: S8) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: S16) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: S32) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: S64) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: S128) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From unsigned integers
 routine D32.__create__(from: U8) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: U16) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: U32) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: U64) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: U128) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From binary floating point
 routine D32.__create__(from: F32) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: F64) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From other decimal types
 routine D32.__create__(from: D64) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: D128) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From arbitrary precision
 routine D32.__create__(from: Integer) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 routine D32.__create__(from: Decimal) -> D32:
-    return D32(value: razorforge/Core.D32.__create__(from.value))
+    return D32(value: RazorForge/Core.D32.__create__(from.value))

@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae C64 - Complex64 floating point (opt-in native type)
 
-import razorforge/Core.C64
+import RazorForge/Core.C64
 
 record C64:
-    private value: razorforge/Core.C64
+    private value: RazorForge/Core.C64
 
 # Arithmetic operators
 routine C64.__add__(you: C64) -> C64:

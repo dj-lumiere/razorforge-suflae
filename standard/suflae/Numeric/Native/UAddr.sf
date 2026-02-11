@@ -3,10 +3,10 @@ module Numeric
 # Suflae UAddr - System-sized unsigned integer (opt-in native type)
 # Maps to U32 on 32-bit platforms, U64 on 64-bit platforms
 
-import razorforge/Core.UAddr
+import RazorForge/Core.UAddr
 
 record UAddr:
-    private value: razorforge/Core.UAddr
+    private value: RazorForge/Core.UAddr
 
 # Wrapping arithmetic (required for address types)
 routine UAddr.__add_wrap__(you: UAddr) -> UAddr:

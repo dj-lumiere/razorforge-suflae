@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae S16 - Signed 16-bit integer (opt-in native type)
 
-import razorforge/Core.S16
+import RazorForge/Core.S16
 
 record S16:
-    private value: razorforge/Core.S16
+    private value: RazorForge/Core.S16
 
 # Arithmetic operators
 routine S16.__add__!(you: S16) -> S16:
@@ -143,41 +143,41 @@ routine S16.to_text() -> Text:
 
 # From smaller signed integers (widening - always fits)
 routine S16.__create__(from: S8) -> S16:
-    return S16(value: razorforge/Core.S16.__create__(from.value))
+    return S16(value: RazorForge/Core.S16.__create__(from.value))
 
 # From larger signed integers (narrowing - can overflow)
 routine S16.__create__!(from: S32) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: S64) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: S128) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 # From unsigned integers (can overflow)
 routine S16.__create__!(from: U8) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: U16) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: U32) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: U64) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: U128) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 # From floating point (truncates, can overflow)
 routine S16.__create__!(from: F32) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 routine S16.__create__!(from: F64) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))
 
 # From arbitrary precision (can overflow)
 routine S16.__create__!(from: Integer) -> S16:
-    return S16(value: razorforge/Core.S16.__create__!(from.value))
+    return S16(value: RazorForge/Core.S16.__create__!(from.value))

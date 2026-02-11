@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Collections.SortedDict
+import RazorForge/Collections.SortedDict
 
 entity SortedDict<K, V>:
-    private var value: razorforge/Collections.SortedDict<K, V>
+    private var value: RazorForge/Collections.SortedDict<K, V>
 
 # Core operations
 routine SortedDict<K, V>.count() -> Integer:

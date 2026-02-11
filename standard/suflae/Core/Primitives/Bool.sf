@@ -2,10 +2,10 @@
 
 module Core
 
-import razorforge/Core.Bool
+import RazorForge/Core.Bool
 
 record Bool:
-    private value: razorforge/Core.Bool
+    private value: RazorForge/Core.Bool
 
 # Comparison
 routine Bool.__eq__(you: Bool) -> Bool:

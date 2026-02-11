@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae D64 - Decimal64 floating point (opt-in native type)
 
-import razorforge/Core.D64
+import RazorForge/Core.D64
 
 record D64:
-    private value: razorforge/Core.D64
+    private value: RazorForge/Core.D64
 
 # Arithmetic operators
 routine D64.__add__(you: D64) -> D64:
@@ -72,54 +72,54 @@ routine D64.to_text() -> Text:
 
 # From signed integers
 routine D64.__create__(from: S8) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: S16) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: S32) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: S64) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: S128) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 # From unsigned integers
 routine D64.__create__(from: U8) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: U16) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: U32) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: U64) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: U128) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 # From binary floating point
 routine D64.__create__(from: F32) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: F64) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 # From other decimal types (widening)
 routine D64.__create__(from: D32) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 # From other decimal types (narrowing)
 routine D64.__create__(from: D128) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 # From arbitrary precision
 routine D64.__create__(from: Integer) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))
 
 routine D64.__create__(from: Decimal) -> D64:
-    return D64(value: razorforge/Core.D64.__create__(from.value))
+    return D64(value: RazorForge/Core.D64.__create__(from.value))

@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae U128 - Unsigned 128-bit integer (opt-in native type)
 
-import razorforge/Core.U128
+import RazorForge/Core.U128
 
 record U128:
-    private value: razorforge/Core.U128
+    private value: RazorForge/Core.U128
 
 # Arithmetic operators
 routine U128.__add__!(you: U128) -> U128:
@@ -128,40 +128,40 @@ routine U128.to_text() -> Text:
 
 # From smaller unsigned integers (widening - always fits)
 routine U128.__create__(from: U8) -> U128:
-    return U128(value: razorforge/Core.U128.__create__(from.value))
+    return U128(value: RazorForge/Core.U128.__create__(from.value))
 
 routine U128.__create__(from: U16) -> U128:
-    return U128(value: razorforge/Core.U128.__create__(from.value))
+    return U128(value: RazorForge/Core.U128.__create__(from.value))
 
 routine U128.__create__(from: U32) -> U128:
-    return U128(value: razorforge/Core.U128.__create__(from.value))
+    return U128(value: RazorForge/Core.U128.__create__(from.value))
 
 routine U128.__create__(from: U64) -> U128:
-    return U128(value: razorforge/Core.U128.__create__(from.value))
+    return U128(value: RazorForge/Core.U128.__create__(from.value))
 
 # From signed integers (can overflow for negative values)
 routine U128.__create__!(from: S8) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 routine U128.__create__!(from: S16) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 routine U128.__create__!(from: S32) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 routine U128.__create__!(from: S64) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 routine U128.__create__!(from: S128) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 # From floating point (truncates, can overflow)
 routine U128.__create__!(from: F32) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 routine U128.__create__!(from: F64) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))
 
 # From arbitrary precision (can overflow)
 routine U128.__create__!(from: Integer) -> U128:
-    return U128(value: razorforge/Core.U128.__create__!(from.value))
+    return U128(value: RazorForge/Core.U128.__create__!(from.value))

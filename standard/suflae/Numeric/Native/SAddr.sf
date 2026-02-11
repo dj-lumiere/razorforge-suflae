@@ -3,10 +3,10 @@ module Numeric
 # Suflae SAddr - System-sized signed integer (opt-in native type)
 # Maps to S32 on 32-bit platforms, S64 on 64-bit platforms
 
-import razorforge/Core.SAddr
+import RazorForge/Core.SAddr
 
 record SAddr:
-    private value: razorforge/Core.SAddr
+    private value: RazorForge/Core.SAddr
 
 # Wrapping arithmetic (required for address types)
 routine SAddr.__add_wrap__(you: SAddr) -> SAddr:

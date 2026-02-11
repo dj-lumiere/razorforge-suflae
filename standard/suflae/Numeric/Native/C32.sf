@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae C32 - Complex32 floating point (opt-in native type)
 
-import razorforge/Core.C32
+import RazorForge/Core.C32
 
 record C32:
-    private value: razorforge/Core.C32
+    private value: RazorForge/Core.C32
 
 # Arithmetic operators
 routine C32.__add__(you: C32) -> C32:

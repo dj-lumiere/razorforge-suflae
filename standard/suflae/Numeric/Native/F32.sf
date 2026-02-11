@@ -2,10 +2,10 @@ module Numeric
 
 # Suflae F32 - Single precision floating point (opt-in native type)
 
-import razorforge/Core.F32
+import RazorForge/Core.F32
 
 record F32:
-    private value: razorforge/Core.F32
+    private value: RazorForge/Core.F32
 
 # Arithmetic operators
 routine F32.__add__(you: F32) -> F32:
@@ -102,50 +102,50 @@ routine F32.to_text() -> Text:
 
 # From signed integers
 routine F32.__create__(from: S8) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: S16) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: S32) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: S64) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: S128) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 # From unsigned integers
 routine F32.__create__(from: U8) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: U16) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: U32) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: U64) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: U128) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 # From other floating point types
 routine F32.__create__(from: F64) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 # From arbitrary precision
 routine F32.__create__(from: Integer) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 routine F32.__create__(from: Decimal) -> F32:
-    return F32(value: razorforge/Core.F32.__create__(from.value))
+    return F32(value: RazorForge/Core.F32.__create__(from.value))
 
 # Bit representation
 routine F32.__create_from_bits__(bits: U32) -> F32:
-    return F32(value: razorforge/Core.F32.from_bits(bits.value))
+    return F32(value: RazorForge/Core.F32.from_bits(bits.value))
 
 routine F32.to_bits() -> U32:
     return U32(value: me.value.to_bits())

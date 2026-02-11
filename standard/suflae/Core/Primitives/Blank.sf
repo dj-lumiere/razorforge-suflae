@@ -2,7 +2,7 @@
 
 module Core
 
-import razorforge/Core.Blank
+import RazorForge/Core.Blank
 
 record Blank:
     pass
