@@ -13,7 +13,6 @@
 #       # Iterates in sorted key order
 #   }
 
-import errors.IndexOutOfBoundsError
 import Collections.List
 
 module Collections

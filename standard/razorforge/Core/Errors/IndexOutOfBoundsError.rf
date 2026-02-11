@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # IndexOutOfBoundsError - Error for invalid index access in collections
 # Used by List<T> and other indexed collections

@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # Error - Base error record with message and stack trace
 #
@@ -6,8 +6,6 @@ module Errors
 # All fields are compiler-generated when throw is executed.
 #
 # Size: ~228 bytes (fixed, fits inline in type unions)
-
-import Errors.StackTrace
 
 record RuntimeError follows Crashable {
 }

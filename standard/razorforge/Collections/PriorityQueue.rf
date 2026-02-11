@@ -10,7 +10,6 @@
 #   let next = tasks.remove!()              # Gets priority 1 task first
 
 import Collections.List
-import errors.IndexOutOfBoundsError
 
 module Collections
 

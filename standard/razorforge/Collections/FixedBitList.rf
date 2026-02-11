@@ -10,8 +10,6 @@
 #   let first = flags[0]
 #   if flags.is_full() { }
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 # Fixed-capacity bit list with reference semantics

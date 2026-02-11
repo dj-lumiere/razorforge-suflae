@@ -9,8 +9,6 @@
 #   let front = queue.remove_first!()
 #   let back = queue.remove_last!()
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 entity Deque<T> {

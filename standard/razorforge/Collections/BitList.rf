@@ -11,8 +11,6 @@
 #   let first = bits[0]  # true
 #   let last = bits[^1]  # true
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 entity BitList {

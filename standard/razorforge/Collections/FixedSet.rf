@@ -10,7 +10,6 @@
 #   if ids.contains(42) { }
 #   ids.remove(13)
 
-import errors.IndexOutOfBoundsError
 import Collections.List
 
 module Collections

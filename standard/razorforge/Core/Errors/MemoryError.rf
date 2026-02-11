@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # MemoryError - Error types for memory operations
 

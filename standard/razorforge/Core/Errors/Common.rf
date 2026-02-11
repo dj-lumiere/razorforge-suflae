@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # Common Error Types
 #

@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # StackTrace - Collection of stack frames captured at error time
 #

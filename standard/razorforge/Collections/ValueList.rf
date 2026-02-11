@@ -9,8 +9,6 @@
 #   # To "modify", use with statement or create new:
 #   let moved = coords with { [0]: 5.0 }
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 # Fixed-size array with value semantics

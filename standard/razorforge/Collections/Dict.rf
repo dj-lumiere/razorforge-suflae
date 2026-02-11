@@ -12,7 +12,6 @@
 
 import Collections.List
 import Collections.SortedDict
-import errors.IndexOutOfBoundsError
 
 module Collections
 

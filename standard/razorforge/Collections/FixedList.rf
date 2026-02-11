@@ -10,8 +10,6 @@
 #   let first = buffer[0]
 #   if buffer.is_full() { }
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 # Fixed-capacity list with reference semantics

@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # StackFrame - Runtime stack frame for error tracking
 #

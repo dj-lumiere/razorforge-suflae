@@ -11,8 +11,6 @@
 #   let last = buffer[^1]       # 42
 #   buffer.rotate_left(1)
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 # Fixed-capacity deque with reference semantics

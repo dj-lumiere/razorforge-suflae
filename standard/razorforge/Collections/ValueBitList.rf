@@ -9,8 +9,6 @@
 #   # To "modify", use with statement:
 #   let toggled = flags with { [0]: true }
 
-import errors.IndexOutOfBoundsError
-
 module Collections
 
 # Fixed-size bit array with value semantics

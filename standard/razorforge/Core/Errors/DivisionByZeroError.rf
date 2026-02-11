@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # DivisionByZeroError - thrown on division by zero
 record DivisionByZeroError follows Crashable {

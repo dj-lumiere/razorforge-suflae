@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 record IndeterminateResultError follows Crashable {
     # No fields needed, as this error only has one cause (0**0)

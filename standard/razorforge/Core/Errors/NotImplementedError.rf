@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 # NotImplementedError - Error for unimplemented functionality
 # Used as a placeholder for methods/routines that are not yet implemented

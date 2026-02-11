@@ -10,7 +10,6 @@
 #   grades.add(92.0)
 #   let median = grades[grades.count() / 2]  # O(log n) access
 
-import errors.IndexOutOfBoundsError
 import Collections.List
 
 module Collections

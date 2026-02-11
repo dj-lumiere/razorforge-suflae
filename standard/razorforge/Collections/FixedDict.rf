@@ -10,7 +10,6 @@
 #   let val = cache["key1"]
 #   if cache.contains_key("key3") { }
 
-import errors.IndexOutOfBoundsError
 import Collections.List
 
 module Collections

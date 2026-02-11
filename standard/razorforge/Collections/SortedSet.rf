@@ -12,7 +12,6 @@
 #   let last = set[^1]     # 5
 #   let range = set.range(1, 10)
 
-import errors.IndexOutOfBoundsError
 import Collections.List
 
 module Collections

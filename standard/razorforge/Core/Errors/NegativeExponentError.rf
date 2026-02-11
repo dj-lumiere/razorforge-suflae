@@ -1,4 +1,4 @@
-module Errors
+module Core
 
 record NegativeExponentError follows Crashable {
     private exp: S128
