@@ -48,7 +48,7 @@ public sealed class StdlibLoader
         _fileExtension = language == Language.Suflae ? "*.sf" : "*.rf";
 
         // Use language-specific subdirectory
-        string subdir = language == Language.Suflae ? "suflae" : "razorforge";
+        string subdir = language == Language.Suflae ? "Suflae" : "RazorForge";
         _stdlibPath = Path.Combine(stdlibRoot, subdir);
     }
 

@@ -130,23 +130,23 @@ public sealed class ModuleResolver
             return;
         }
 
-        // Scan all .rf files in stdlib/razorforge recursively
-        string razorforgePath = Path.Combine(StdlibRoot, "razorforge");
+        // Scan all .rf files in Standard/RazorForge recursively
+        string razorforgePath = Path.Combine(StdlibRoot, "RazorForge");
         if (Directory.Exists(razorforgePath))
         {
             foreach (string filePath in Directory.GetFiles(razorforgePath, "*.rf", SearchOption.AllDirectories))
             {
-                IndexFile(filePath, "razorforge");
+                IndexFile(filePath, "RazorForge");
             }
         }
 
-        // Scan all .sf files in stdlib/suflae recursively
-        string suflaePath = Path.Combine(StdlibRoot, "suflae");
+        // Scan all .sf files in Standard/Suflae recursively
+        string suflaePath = Path.Combine(StdlibRoot, "Suflae");
         if (Directory.Exists(suflaePath))
         {
             foreach (string filePath in Directory.GetFiles(suflaePath, "*.sf", SearchOption.AllDirectories))
             {
-                IndexFile(filePath, "suflae");
+                IndexFile(filePath, "Suflae");
             }
         }
     }
@@ -178,6 +178,8 @@ public sealed class ModuleResolver
             }
 
             // Register each type under its module
+            // Keys use "Module.TypeName" format to match parser output
+            // e.g., "Errors.Common", "Collections.List"
             foreach (string typeName in typeNames)
             {
                 string key = $"{fileNamespace}.{typeName}";
@@ -185,13 +187,9 @@ public sealed class ModuleResolver
                 _namespaceIndex!.TryAdd(key, filePath);
 
                 // Also register with language prefix for cross-language imports
-                // e.g., "razorforge/Numeric/Integer" or "razorforge.Numeric.Integer"
-                string crossLangKey = $"{languagePrefix}/{fileNamespace.Replace('.', '/')}/{typeName}";
+                // e.g., "RazorForge/Numeric.Integer"
+                string crossLangKey = $"{languagePrefix}/{fileNamespace}.{typeName}";
                 _namespaceIndex!.TryAdd(crossLangKey, filePath);
-
-                // Also support dot notation: "razorforge.Numeric.Integer"
-                string crossLangKeyDot = $"{languagePrefix}.{fileNamespace}.{typeName}";
-                _namespaceIndex!.TryAdd(crossLangKeyDot, filePath);
             }
         }
         catch
@@ -390,13 +388,13 @@ public sealed class ModuleResolver
         string? result = TryFindSourceFile(basePath: fullPath);
         if (result != null) return result;
 
-        // Try in razorforge subdirectory
-        string razorforgePath = Path.Combine(StdlibRoot, "razorforge", importPath);
+        // Try in RazorForge subdirectory
+        string razorforgePath = Path.Combine(StdlibRoot, "RazorForge", importPath);
         result = TryFindSourceFile(basePath: razorforgePath);
         if (result != null) return result;
 
-        // Try in suflae subdirectory
-        string suflaePath = Path.Combine(StdlibRoot, "suflae", importPath);
+        // Try in Suflae subdirectory
+        string suflaePath = Path.Combine(StdlibRoot, "Suflae", importPath);
         return TryFindSourceFile(basePath: suflaePath);
     }
 

@@ -1132,9 +1132,9 @@ public partial class SuflaeParser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Dot marks specific type: razorforge/Core.Bool → path "razorforge/Core/Bool"
+                // Dot marks specific type: RazorForge/Core.Bool → module "RazorForge/Core", type "Bool"
                 string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
-                modulePath += "/" + typeName;
+                modulePath += "." + typeName;
                 break;
             }
             else
@@ -1152,12 +1152,12 @@ public partial class SuflaeParser
         ConsumeStatementTerminator();
 
         // Register imported types/modules for generic disambiguation
-        // import Collections/SortedDict -> adds "SortedDict" to known types (bare name usage)
+        // import Collections.SortedDict -> adds "SortedDict" to known types (bare name usage)
         // import Collections -> adds "Collections" to modules (qualified name usage)
-        if (modulePath.Contains(value: '/'))
+        if (modulePath.Contains(value: '.'))
         {
-            // Specific type import: Collections/SortedDict
-            string typeName = modulePath[(modulePath.LastIndexOf(value: '/') + 1)..];
+            // Specific type import: Collections.SortedDict
+            string typeName = modulePath[(modulePath.LastIndexOf(value: '.') + 1)..];
             _knownTypeNames.Add(item: typeName);
         }
         else
