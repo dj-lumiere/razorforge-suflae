@@ -1,57 +1,195 @@
 ﻿module Core
 
-record ByteSize {
-    private value: UAddr
+# ByteSize - Byte size measurement type
+#
+# Internal representation: raw byte count as U64.
+# Supports both binary (KiB, MiB, GiB) and decimal (KB, MB, GB) units.
+#
+# Literal support: 100b, 64kib, 256kb, 100mib, 1mb, 1gib, 1gb
+#
+# Usage:
+#   let cache = 64kib
+#   let total = cache * 4
+#   let pages = 1gib // 4kib    # 262,144
+#   let remainder = 1024b % 300b # 124b
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+preset BYTES_PER_KIB: U64 = 1_024_u64
+preset BYTES_PER_MIB: U64 = 1_048_576_u64
+preset BYTES_PER_GIB: U64 = 1_073_741_824_u64
+preset BYTES_PER_TIB: U64 = 1_099_511_627_776_u64
+preset BYTES_PER_PIB: U64 = 1_125_899_906_842_624_u64
+
+preset BYTES_PER_KB: U64 = 1_000_u64
+preset BYTES_PER_MB: U64 = 1_000_000_u64
+preset BYTES_PER_GB: U64 = 1_000_000_000_u64
+preset BYTES_PER_TB: U64 = 1_000_000_000_000_u64
+preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
+
+# ============================================================================
+# Record definition
+# ============================================================================
+
+record ByteSize follows Ordered, Addable, Subtractable, FloorDivisible {
+    private value: U64
 }
 
-routine ByteSize.__create__(bytes: UAddr) {
+# ============================================================================
+# Constructors
+# ============================================================================
+
+routine ByteSize.__create__(bytes: U64) {
     me.value = bytes
 }
 
-# Gets the size in bytes
-routine ByteSize.byte_size() -> UAddr {
+# Factory methods for larger sizes (no literal support)
+routine ByteSize.terabytes(n: U64) -> ByteSize {
+    return ByteSize(n *% BYTES_PER_TB)
+}
+
+routine ByteSize.tebibytes(n: U64) -> ByteSize {
+    return ByteSize(n *% BYTES_PER_TIB)
+}
+
+routine ByteSize.petabytes(n: U64) -> ByteSize {
+    return ByteSize(n *% BYTES_PER_PB)
+}
+
+routine ByteSize.pebibytes(n: U64) -> ByteSize {
+    return ByteSize(n *% BYTES_PER_PIB)
+}
+
+# ============================================================================
+# Size accessors
+# ============================================================================
+
+# Gets the raw byte count
+@readonly
+routine ByteSize.byte_size() -> U64 {
     return me.value
 }
 
 # Gets the size in bits
-routine ByteSize.bit_size() -> UAddr {
-    return me.value * 8
+@readonly
+routine ByteSize.bit_size() -> U64 {
+    return me.value * 8_u64
 }
 
-# Gets the size in kibibytes (binary, 1024)
+# ============================================================================
+# Binary unit conversions (powers of 1024)
+# ============================================================================
+
+@readonly
 routine ByteSize.kib_size() -> F64 {
     return F64(me.value) / 1024.0
 }
 
-# Gets the size in mebibytes (binary, 1024^2)
+@readonly
 routine ByteSize.mib_size() -> F64 {
     return F64(me.value) / 1048576.0
 }
 
-# Gets the size in gibibytes (binary, 1024^3)
+@readonly
 routine ByteSize.gib_size() -> F64 {
     return F64(me.value) / 1073741824.0
 }
 
-# Gets the size in kilobytes (decimal, 1000)
+# ============================================================================
+# Decimal unit conversions (powers of 1000)
+# ============================================================================
+
+@readonly
 routine ByteSize.kb_size() -> F64 {
     return F64(me.value) / 1000.0
 }
 
-# Gets the size in megabytes (decimal, 1000^2)
+@readonly
 routine ByteSize.mb_size() -> F64 {
     return F64(me.value) / 1000000.0
 }
 
-# Gets the size in gigabytes (decimal, 1000^3)
+@readonly
 routine ByteSize.gb_size() -> F64 {
     return F64(me.value) / 1000000000.0
 }
 
-routine ByteSize.to_text(byte_size: ByteSize) {
-    return f"{me.value} bytes"
+# ============================================================================
+# Arithmetic operators
+# ============================================================================
+
+@readonly
+routine ByteSize.__add__(you: ByteSize) -> ByteSize {
+    return ByteSize(me.value + you.value)
 }
 
-routine ByteSize.__add__(you: ByteSize) {
-    return ByteSize(me.value + you.value)
+@readonly
+routine ByteSize.__sub__(you: ByteSize) -> ByteSize {
+    return ByteSize(me.value - you.value)
+}
+
+# Scale by integer
+@readonly
+routine ByteSize.__mul__(factor: U64) -> ByteSize {
+    return ByteSize(me.value *% factor)
+}
+
+# Floor division: how many units fit
+@readonly
+routine ByteSize.__floordiv__(you: ByteSize) -> U64 {
+    return me.value // you.value
+}
+
+# Divide size evenly by integer
+@readonly
+routine ByteSize.div_by(divisor: U64) -> ByteSize {
+    return ByteSize(me.value // divisor)
+}
+
+# Remainder after floor division
+@readonly
+routine ByteSize.__mod__(you: ByteSize) -> ByteSize {
+    return ByteSize(me.value % you.value)
+}
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+@readonly
+routine ByteSize.__eq__(you: ByteSize) -> Bool {
+    return me.value == you.value
+}
+
+@readonly
+routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign {
+    if me.value < you.value {
+        return ME_SMALL
+    }
+    if me.value > you.value {
+        return ME_LARGE
+    }
+    return SAME
+}
+
+# ============================================================================
+# Display
+# ============================================================================
+
+routine Text.__create__(from: ByteSize) -> Text {
+    if from.value >= BYTES_PER_GIB {
+        let gib = F64(from.value) / 1073741824.0
+        return f"{gib} GiB"
+    }
+    if from.value >= BYTES_PER_MIB {
+        let mib = F64(from.value) / 1048576.0
+        return f"{mib} MiB"
+    }
+    if from.value >= BYTES_PER_KIB {
+        let kib = F64(from.value) / 1024.0
+        return f"{kib} KiB"
+    }
+    return f"{from.value} bytes"
 }
