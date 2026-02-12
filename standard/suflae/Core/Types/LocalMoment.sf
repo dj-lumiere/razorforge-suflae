@@ -1,0 +1,67 @@
+# Suflae LocalMoment - Point in time with UTC offset
+
+module Core
+
+import RazorForge/Core.LocalMoment
+
+entity LocalMoment
+    private var value: RazorForge/Core.LocalMoment
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+routine LocalMoment.__create__(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer, offset: Duration) -> LocalMoment
+    return LocalMoment(value: RazorForge/Core.LocalMoment.__create__(year.value, month.value, day.value, hour.value, minute.value, second.value, offset.value))
+
+routine LocalMoment.__create__(moment: Moment, offset: Duration) -> LocalMoment
+    return LocalMoment(value: RazorForge/Core.LocalMoment(moment: moment.value, offset: offset.value))
+
+# ============================================================================
+# Accessors
+# ============================================================================
+
+routine LocalMoment.to_moment() -> Moment
+    return Moment(value: me.value.to_moment())
+
+routine LocalMoment.utc_offset() -> Duration
+    return Duration(value: me.value.utc_offset())
+
+# ============================================================================
+# Local date accessors
+# ============================================================================
+
+routine LocalMoment.year() -> Integer
+    return Integer(value: me.value.year())
+
+routine LocalMoment.month() -> Integer
+    return Integer(value: me.value.month())
+
+routine LocalMoment.day() -> Integer
+    return Integer(value: me.value.day())
+
+routine LocalMoment.day_of_week() -> Integer
+    return Integer(value: me.value.day_of_week())
+
+# ============================================================================
+# Local time accessors
+# ============================================================================
+
+routine LocalMoment.hour() -> Integer
+    return Integer(value: me.value.hour())
+
+routine LocalMoment.minute() -> Integer
+    return Integer(value: me.value.minute())
+
+routine LocalMoment.second() -> Integer
+    return Integer(value: me.value.second())
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+routine LocalMoment.__eq__(you: LocalMoment) -> Bool
+    return me.value.__eq__(you.value)
+
+routine LocalMoment.__cmp__(you: LocalMoment) -> ComparisonSign
+    return me.value.__cmp__(you.value)

@@ -4,7 +4,7 @@ module Core
 
 import RazorForge/Core.Duration
 
-entity Duration
+record Duration
     private var value: RazorForge/Core.Duration
 
 # ============================================================================

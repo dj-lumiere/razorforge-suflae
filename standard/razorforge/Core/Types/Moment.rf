@@ -1,6 +1,6 @@
 module Core
 
-# DateTime - Point in time with nanosecond precision
+# Moment - Point in time with nanosecond precision
 #
 # Internal representation: seconds since Unix epoch (1970-01-01) + nanoseconds
 # within second. Nanoseconds always normalized to [0, 1_000_000_000).
@@ -9,16 +9,16 @@ module Core
 # Civil date conversion algorithm based on Howard Hinnant's chrono approach.
 #
 # Usage:
-#   let now = DateTime.now()
+#   let now = Moment.now()
 #   let deadline = now + 5m
 #   let elapsed = deadline - now   # Duration
-#   let meeting = DateTime(year: 2026, month: 2, day: 15, hour: 14, minute: 0, second: 0)
+#   let meeting = Moment(year: 2026, month: 2, day: 15, hour: 14, minute: 0, second: 0)
 
 # ============================================================================
 # Record definition
 # ============================================================================
 
-record DateTime follows Ordered {
+record Moment follows Ordered {
     private seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
     private nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 }
@@ -27,7 +27,7 @@ record DateTime follows Ordered {
 # Normalization helper
 # ============================================================================
 
-routine normalize_datetime(seconds: S64, nanoseconds: S64) -> DateTime {
+routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment {
     var s = seconds
     var ns = nanoseconds
 
@@ -40,7 +40,7 @@ routine normalize_datetime(seconds: S64, nanoseconds: S64) -> DateTime {
         ns = ns + borrow *% NS_PER_SECOND
     }
 
-    return DateTime(seconds: s, nanoseconds: U32(ns))
+    return Moment(seconds: s, nanoseconds: U32(ns))
 }
 
 # ============================================================================
@@ -117,24 +117,24 @@ routine days_to_day(days_since_epoch: S64) -> S64 {
 # Constructors
 # ============================================================================
 
-routine DateTime.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> DateTime {
+routine Moment.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment {
     let d = ymd_to_days(year, month, day)
     let s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
-    return DateTime(seconds: s, nanoseconds: 0_u32)
+    return Moment(seconds: s, nanoseconds: 0_u32)
 }
 
-routine DateTime.epoch() -> DateTime {
-    return DateTime(seconds: 0_s64, nanoseconds: 0_u32)
+routine Moment.epoch() -> Moment {
+    return Moment(seconds: 0_s64, nanoseconds: 0_u32)
 }
 
-routine DateTime.from_timestamp(seconds: S64) -> DateTime {
-    return DateTime(seconds: seconds, nanoseconds: 0_u32)
+routine Moment.from_timestamp(seconds: S64) -> Moment {
+    return Moment(seconds: seconds, nanoseconds: 0_u32)
 }
 
-routine DateTime.now() -> DateTime {
+routine Moment.now() -> Moment {
     # Implemented by compiler intrinsic / native runtime
     danger! {
-        return @native.rf_datetime_now()
+        return @native.rf_moment_now()
     }
 }
 
@@ -143,22 +143,22 @@ routine DateTime.now() -> DateTime {
 # ============================================================================
 
 @readonly
-routine DateTime.year() -> S64 {
+routine Moment.year() -> S64 {
     return days_to_year(me.seconds // SECONDS_PER_DAY)
 }
 
 @readonly
-routine DateTime.month() -> S64 {
+routine Moment.month() -> S64 {
     return days_to_month(me.seconds // SECONDS_PER_DAY)
 }
 
 @readonly
-routine DateTime.day() -> S64 {
+routine Moment.day() -> S64 {
     return days_to_day(me.seconds // SECONDS_PER_DAY)
 }
 
 @readonly
-routine DateTime.day_of_week() -> S64 {
+routine Moment.day_of_week() -> S64 {
     # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
     let days = me.seconds // SECONDS_PER_DAY
     let dow = (days + 3_s64) % 7_s64
@@ -173,32 +173,32 @@ routine DateTime.day_of_week() -> S64 {
 # ============================================================================
 
 @readonly
-routine DateTime.hour() -> S64 {
+routine Moment.hour() -> S64 {
     return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
 }
 
 @readonly
-routine DateTime.minute() -> S64 {
+routine Moment.minute() -> S64 {
     return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
 }
 
 @readonly
-routine DateTime.second() -> S64 {
+routine Moment.second() -> S64 {
     return me.seconds % SECONDS_PER_MINUTE
 }
 
 @readonly
-routine DateTime.millisecond() -> S64 {
+routine Moment.millisecond() -> S64 {
     return S64(me.nanoseconds) // NS_PER_MILLISECOND
 }
 
 @readonly
-routine DateTime.microsecond() -> S64 {
+routine Moment.microsecond() -> S64 {
     return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
 }
 
 @readonly
-routine DateTime.nanosecond() -> S64 {
+routine Moment.nanosecond() -> S64 {
     return S64(me.nanoseconds) % NS_PER_MICROSECOND
 }
 
@@ -208,13 +208,13 @@ routine DateTime.nanosecond() -> S64 {
 
 # Unix timestamp in seconds
 @readonly
-routine DateTime.timestamp() -> S64 {
+routine Moment.timestamp() -> S64 {
     return me.seconds
 }
 
 # Unix timestamp in milliseconds
 @readonly
-routine DateTime.timestamp_ms() -> S64 {
+routine Moment.timestamp_ms() -> S64 {
     return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
 }
 
@@ -223,18 +223,18 @@ routine DateTime.timestamp_ms() -> S64 {
 # ============================================================================
 
 @readonly
-routine DateTime.add_duration(duration: Duration) -> DateTime {
-    return normalize_datetime(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
+routine Moment.add_duration(duration: Duration) -> Moment {
+    return normalize_moment(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
 }
 
 @readonly
-routine DateTime.subtract_duration(duration: Duration) -> DateTime {
+routine Moment.subtract_duration(duration: Duration) -> Moment {
     return me.add_duration(duration.__neg__())
 }
 
-# DateTime - DateTime -> Duration
+# Moment - Moment -> Duration
 @readonly
-routine DateTime.elapsed_since(earlier: DateTime) -> Duration {
+routine Moment.elapsed_since(earlier: Moment) -> Duration {
     return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
 }
 
@@ -243,12 +243,12 @@ routine DateTime.elapsed_since(earlier: DateTime) -> Duration {
 # ============================================================================
 
 @readonly
-routine DateTime.__eq__(you: DateTime) -> Bool {
+routine Moment.__eq__(you: Moment) -> Bool {
     return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 }
 
 @readonly
-routine DateTime.__cmp__(you: DateTime) -> ComparisonSign {
+routine Moment.__cmp__(you: Moment) -> ComparisonSign {
     if me.seconds < you.seconds {
         return ME_SMALL
     }
@@ -268,7 +268,7 @@ routine DateTime.__cmp__(you: DateTime) -> ComparisonSign {
 # Text representation
 # ============================================================================
 
-routine Text.__create__(from: DateTime) -> Text {
+routine Text.__create__(from: Moment) -> Text {
     let y = from.year()
     let mo = from.month()
     let d = from.day()

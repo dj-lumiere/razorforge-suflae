@@ -1,95 +1,95 @@
-# Suflae DateTime - Point in time with nanosecond precision
+# Suflae Moment - Point in time with nanosecond precision
 
 module Core
 
-import RazorForge/Core.DateTime
+import RazorForge/Core.Moment
 
-entity DateTime
-    private var value: RazorForge/Core.DateTime
+record Moment
+    private var value: RazorForge/Core.Moment
 
 # ============================================================================
 # Constructors
 # ============================================================================
 
-routine DateTime.__create__(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer) -> DateTime
-    return DateTime(value: RazorForge/Core.DateTime.__create__(year.value, month.value, day.value, hour.value, minute.value, second.value))
+routine Moment.__create__(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer) -> Moment
+    return Moment(value: RazorForge/Core.Moment.__create__(year.value, month.value, day.value, hour.value, minute.value, second.value))
 
-routine DateTime.epoch() -> DateTime
-    return DateTime(value: RazorForge/Core.DateTime.epoch())
+routine Moment.epoch() -> Moment
+    return Moment(value: RazorForge/Core.Moment.epoch())
 
-routine DateTime.from_timestamp(seconds: Integer) -> DateTime
-    return DateTime(value: RazorForge/Core.DateTime.from_timestamp(seconds.value))
+routine Moment.from_timestamp(seconds: Integer) -> Moment
+    return Moment(value: RazorForge/Core.Moment.from_timestamp(seconds.value))
 
-routine DateTime.now() -> DateTime
-    return DateTime(value: RazorForge/Core.DateTime.now())
+routine Moment.now() -> Moment
+    return Moment(value: RazorForge/Core.Moment.now())
 
 # ============================================================================
 # Date accessors
 # ============================================================================
 
-routine DateTime.year() -> Integer
+routine Moment.year() -> Integer
     return Integer(value: me.value.year())
 
-routine DateTime.month() -> Integer
+routine Moment.month() -> Integer
     return Integer(value: me.value.month())
 
-routine DateTime.day() -> Integer
+routine Moment.day() -> Integer
     return Integer(value: me.value.day())
 
-routine DateTime.day_of_week() -> Integer
+routine Moment.day_of_week() -> Integer
     return Integer(value: me.value.day_of_week())
 
 # ============================================================================
 # Time accessors
 # ============================================================================
 
-routine DateTime.hour() -> Integer
+routine Moment.hour() -> Integer
     return Integer(value: me.value.hour())
 
-routine DateTime.minute() -> Integer
+routine Moment.minute() -> Integer
     return Integer(value: me.value.minute())
 
-routine DateTime.second() -> Integer
+routine Moment.second() -> Integer
     return Integer(value: me.value.second())
 
-routine DateTime.millisecond() -> Integer
+routine Moment.millisecond() -> Integer
     return Integer(value: me.value.millisecond())
 
-routine DateTime.microsecond() -> Integer
+routine Moment.microsecond() -> Integer
     return Integer(value: me.value.microsecond())
 
-routine DateTime.nanosecond() -> Integer
+routine Moment.nanosecond() -> Integer
     return Integer(value: me.value.nanosecond())
 
 # ============================================================================
 # Conversion
 # ============================================================================
 
-routine DateTime.timestamp() -> Integer
+routine Moment.timestamp() -> Integer
     return Integer(value: me.value.timestamp())
 
-routine DateTime.timestamp_ms() -> Integer
+routine Moment.timestamp_ms() -> Integer
     return Integer(value: me.value.timestamp_ms())
 
 # ============================================================================
 # Arithmetic with Duration
 # ============================================================================
 
-routine DateTime.add_duration(duration: Duration) -> DateTime
-    return DateTime(value: me.value.add_duration(duration.value))
+routine Moment.add_duration(duration: Duration) -> Moment
+    return Moment(value: me.value.add_duration(duration.value))
 
-routine DateTime.subtract_duration(duration: Duration) -> DateTime
-    return DateTime(value: me.value.subtract_duration(duration.value))
+routine Moment.subtract_duration(duration: Duration) -> Moment
+    return Moment(value: me.value.subtract_duration(duration.value))
 
-routine DateTime.elapsed_since(earlier: DateTime) -> Duration
+routine Moment.elapsed_since(earlier: Moment) -> Duration
     return Duration(value: me.value.elapsed_since(earlier.value))
 
 # ============================================================================
 # Comparison operators
 # ============================================================================
 
-routine DateTime.__eq__(you: DateTime) -> Bool
+routine Moment.__eq__(you: Moment) -> Bool
     return me.value.__eq__(you.value)
 
-routine DateTime.__cmp__(you: DateTime) -> ComparisonSign
+routine Moment.__cmp__(you: Moment) -> ComparisonSign
     return me.value.__cmp__(you.value)

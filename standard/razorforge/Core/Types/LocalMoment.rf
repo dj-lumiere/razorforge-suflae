@@ -1,0 +1,126 @@
+module Core
+
+# LocalMoment - Point in time with UTC offset
+#
+# Combines a UTC Moment with a Duration offset for timezone-aware time.
+# The offset represents the difference from UTC (e.g., +9h for KST, -5h for EST).
+#
+# Date/time accessors return local values (adjusted by the offset).
+#
+# Usage:
+#   let utc = Moment.now()
+#   let kst = LocalMoment(moment: utc, offset: 9h)
+#   let meeting = LocalMoment(year: 2026, month: 3, day: 15, hour: 14, minute: 0, second: 0, offset: 9h)
+
+# ============================================================================
+# Record definition
+# ============================================================================
+
+record LocalMoment follows Ordered {
+    private moment: Moment    # The underlying UTC moment
+    private offset: Duration  # UTC offset (positive = east, negative = west)
+}
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+# Create from local civil date components and UTC offset.
+# The stored Moment is adjusted to UTC: local time - offset = UTC.
+routine LocalMoment.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment {
+    let local_moment = Moment(year: year, month: month, day: day, hour: hour, minute: minute, second: second)
+    return LocalMoment(moment: local_moment.subtract_duration(offset), offset: offset)
+}
+
+# ============================================================================
+# Accessors
+# ============================================================================
+
+# Get the underlying UTC moment
+@readonly
+routine LocalMoment.to_moment() -> Moment {
+    return me.moment
+}
+
+# Get the UTC offset
+@readonly
+routine LocalMoment.utc_offset() -> Duration {
+    return me.offset
+}
+
+# ============================================================================
+# Local date accessors (adjusted by offset)
+# ============================================================================
+
+@readonly
+routine LocalMoment.year() -> S64 {
+    return me.moment.add_duration(me.offset).year()
+}
+
+@readonly
+routine LocalMoment.month() -> S64 {
+    return me.moment.add_duration(me.offset).month()
+}
+
+@readonly
+routine LocalMoment.day() -> S64 {
+    return me.moment.add_duration(me.offset).day()
+}
+
+@readonly
+routine LocalMoment.day_of_week() -> S64 {
+    return me.moment.add_duration(me.offset).day_of_week()
+}
+
+# ============================================================================
+# Local time accessors (adjusted by offset)
+# ============================================================================
+
+@readonly
+routine LocalMoment.hour() -> S64 {
+    return me.moment.add_duration(me.offset).hour()
+}
+
+@readonly
+routine LocalMoment.minute() -> S64 {
+    return me.moment.add_duration(me.offset).minute()
+}
+
+@readonly
+routine LocalMoment.second() -> S64 {
+    return me.moment.add_duration(me.offset).second()
+}
+
+# ============================================================================
+# Comparison operators (compare by UTC moment)
+# ============================================================================
+
+@readonly
+routine LocalMoment.__eq__(you: LocalMoment) -> Bool {
+    return me.moment.__eq__(you.moment)
+}
+
+@readonly
+routine LocalMoment.__cmp__(you: LocalMoment) -> ComparisonSign {
+    return me.moment.__cmp__(you.moment)
+}
+
+# ============================================================================
+# Text representation
+# ============================================================================
+
+routine Text.__create__(from: LocalMoment) -> Text {
+    let local = from.moment.add_duration(from.offset)
+    let y = local.year()
+    let mo = local.month()
+    let d = local.day()
+    let h = local.hour()
+    let mi = local.minute()
+    let s = local.second()
+    let off_h = from.offset.total_hours()
+    let off_m = (from.offset.total_minutes() % 60_s64)
+    if off_h >= 0_s64 {
+        return f"{y}-{mo}-{d} {h}:{mi}:{s}+{off_h}:{off_m}"
+    }
+    return f"{y}-{mo}-{d} {h}:{mi}:{s}{off_h}:{off_m}"
+}

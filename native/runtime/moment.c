@@ -1,6 +1,6 @@
 /*
- * RazorForge Runtime - DateTime
- * Native implementation of DateTime.now()
+ * RazorForge Runtime - Moment
+ * Native implementation of Moment.now()
  */
 
 #include "types.h"
@@ -11,16 +11,16 @@
 #include <time.h>
 #endif
 
-// DateTime record layout: { S64 seconds, U32 nanoseconds }
-typedef struct rf_DateTime {
+// Moment record layout: { S64 seconds, U32 nanoseconds }
+typedef struct rf_Moment {
     rf_s64 seconds;
     rf_u32 nanoseconds;
-} rf_DateTime;
+} rf_Moment;
 
 // Get current time as seconds since Unix epoch + nanoseconds
-rf_DateTime rf_datetime_now()
+rf_Moment rf_moment_now()
 {
-    rf_DateTime result;
+    rf_Moment result;
 
 #ifdef _WIN32
     // FILETIME: 100-nanosecond intervals since 1601-01-01
@@ -29,8 +29,8 @@ rf_DateTime rf_datetime_now()
     GetSystemTimePreciseAsFileTime(&ft);
 
     ULARGE_INTEGER uli;
-    uli.LowPart = ft.dwLowDateTime;
-    uli.HighPart = ft.dwHighDateTime;
+    uli.LowPart = ft.dwLowMoment;
+    uli.HighPart = ft.dwHighMoment;
 
     // Convert to Unix epoch (subtract offset)
     const uint64_t EPOCH_OFFSET = 116444736000000000ULL;
