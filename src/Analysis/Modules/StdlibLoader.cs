@@ -858,7 +858,7 @@ public sealed class StdlibLoader
         string? exeDir = Path.GetDirectoryName(typeof(StdlibLoader).Assembly.Location);
         if (exeDir != null)
         {
-            string stdlibPath = Path.Combine(exeDir, "standard");
+            string stdlibPath = Path.Combine(exeDir, "Standard");
             if (Directory.Exists(stdlibPath))
             {
                 return stdlibPath;
@@ -871,7 +871,7 @@ public sealed class StdlibLoader
                 current = Path.GetDirectoryName(current);
                 if (current == null) break;
 
-                stdlibPath = Path.Combine(current, "standard");
+                stdlibPath = Path.Combine(current, "Standard");
                 if (Directory.Exists(stdlibPath))
                 {
                     return stdlibPath;
@@ -880,6 +880,6 @@ public sealed class StdlibLoader
         }
 
         // Fallback to current directory
-        return Path.Combine(Directory.GetCurrentDirectory(), "standard");
+        return Path.Combine(Directory.GetCurrentDirectory(), "Standard");
     }
 }
