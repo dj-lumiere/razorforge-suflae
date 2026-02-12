@@ -115,7 +115,7 @@ public partial class RazorForgeParser
         //   User                  -> simple type
         //   List<T>               -> generic type
         //   Dict<Text, S32>       -> multi-param generic
-        //   ValueBytes<4>         -> const generic (number as type arg)
+        //   FixedBytes<4>         -> const generic (number as type arg)
         if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
         {
             string name = PeekToken(offset: -1)
@@ -150,7 +150,7 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses a type expression or a const generic literal.
-    /// Used for generic arguments like ValueBytes&lt;4&gt;.
+    /// Used for generic arguments like FixedBytes&lt;4&gt;.
     /// Supports: integers, booleans, letters, bytes, and choice values (e.g., Color.Red).
     /// </summary>
     private TypeExpression ParseTypeOrConstGeneric()

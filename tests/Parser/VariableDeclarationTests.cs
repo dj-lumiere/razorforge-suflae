@@ -291,7 +291,7 @@ public class VariableDeclarationTests
     {
         string source = """
                         routine test() {
-                            let data: ValueBytes<4> = bytes
+                            let data: FixedBytes<4> = bytes
                         }
                         """;
 
