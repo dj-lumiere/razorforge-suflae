@@ -86,6 +86,12 @@ public sealed class StdlibLoader
         {
             RegisterProgramRoutines(registry, program, ns);
         }
+
+        // Pass 3: Register all presets (module-level constants accessible across files)
+        foreach (var (program, _, _) in _corePrograms)
+        {
+            RegisterProgramPresets(registry, program);
+        }
     }
 
     /// <summary>
@@ -290,6 +296,12 @@ public sealed class StdlibLoader
             RegisterProgramRoutines(registry, program, ns);
         }
 
+        // Register presets for the module
+        foreach (var (program, _, _) in programs)
+        {
+            RegisterProgramPresets(registry, program);
+        }
+
         return true;
     }
 
@@ -433,6 +445,25 @@ public sealed class StdlibLoader
             if (node is RoutineDeclaration routine)
             {
                 RegisterRoutine(registry, routine, moduleName);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers preset (compile-time constant) declarations from a program.
+    /// Presets are module-level constants accessible across files within the same module.
+    /// </summary>
+    private static void RegisterProgramPresets(TypeRegistry registry, Program program)
+    {
+        foreach (var node in program.Declarations)
+        {
+            if (node is PresetDeclaration preset)
+            {
+                var presetType = ResolveSimpleType(registry, preset.Type);
+                if (presetType != null)
+                {
+                    registry.RegisterPreset(preset.Name, presetType);
+                }
             }
         }
     }
@@ -740,6 +771,14 @@ public sealed class StdlibLoader
         var methods = new List<Types.ProtocolMethodInfo>();
         foreach (var method in protocol.Methods)
         {
+            // Strip "!" suffix and "Me." prefix from method name
+            // (Parser stores raw names like "Me.__eq__" or "Me.__add__!")
+            string rawName = method.Name;
+            bool isFailable = rawName.EndsWith('!');
+            string fullName = isFailable ? rawName[..^1] : rawName;
+            bool isInstance = fullName.StartsWith("Me.");
+            string methodName = isInstance ? fullName[3..] : fullName;
+
             var returnType = method.ReturnType != null
                 ? ResolveSimpleType(registry, method.ReturnType)
                 : null;
@@ -749,7 +788,13 @@ public sealed class StdlibLoader
 
             foreach (var param in method.Parameters)
             {
-                var paramType = ResolveSimpleType(registry, param.Type);
+                // Skip the 'me' parameter - it's implicit for instance methods
+                if (param.Name == "me") continue;
+
+                // Handle the special 'Me' type (protocol self-type)
+                var paramType = param.Type?.Name == "Me"
+                    ? (Types.TypeInfo)Types.ProtocolSelfTypeInfo.Instance
+                    : ResolveSimpleType(registry, param.Type);
                 if (paramType != null)
                 {
                     parameterTypes.Add(paramType);
@@ -757,11 +802,18 @@ public sealed class StdlibLoader
                 }
             }
 
-            methods.Add(new Types.ProtocolMethodInfo(method.Name)
+            // Handle the special 'Me' type in return type
+            var resolvedReturnType = method.ReturnType?.Name == "Me"
+                ? (Types.TypeInfo)Types.ProtocolSelfTypeInfo.Instance
+                : returnType;
+
+            methods.Add(new Types.ProtocolMethodInfo(methodName)
             {
+                IsInstanceMethod = isInstance,
                 ParameterTypes = parameterTypes,
                 ParameterNames = parameterNames,
-                ReturnType = returnType
+                ReturnType = resolvedReturnType,
+                IsFailable = isFailable
             });
         }
 
