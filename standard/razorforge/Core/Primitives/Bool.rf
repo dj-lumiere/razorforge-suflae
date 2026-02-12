@@ -1,6 +1,6 @@
 module Core
 
-record Bool {
+record Bool follows Equatable {
     private value: @intrinsic_type.i1
 }
 

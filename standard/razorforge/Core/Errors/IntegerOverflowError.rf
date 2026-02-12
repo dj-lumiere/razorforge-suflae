@@ -6,6 +6,6 @@ module Core
 record IntegerOverflowError follows Crashable {
 }
 
-routine IntegerOverflowError.crash_message(message: Text) -> Text {
-    return message
+routine IntegerOverflowError.crash_message() -> Text {
+    return "Integer overflow: value does not fit in the target type."
 }

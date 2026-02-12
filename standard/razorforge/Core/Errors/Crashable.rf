@@ -2,5 +2,5 @@ module Core
 
 protocol Crashable {
     @readonly
-    routine Me.crash_message() -> FixedText<256>
+    routine Me.crash_message() -> Text
 }
