@@ -2,7 +2,7 @@
 
 module Core
 
-import RazorForge/Text.BytesBuffer
+import RazorForge/Bytes.BytesBuffer
 
 entity BytesBuffer
     private var value: RazorForge/Text.BytesBuffer

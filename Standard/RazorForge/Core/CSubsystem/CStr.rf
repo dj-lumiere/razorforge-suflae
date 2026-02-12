@@ -18,7 +18,7 @@
 #
 # For wide character strings (wchar_t*), see CWStr.rf
 import Collections.List
-import Text.Bytes
+import Bytes.Bytes
 
 module Core
 

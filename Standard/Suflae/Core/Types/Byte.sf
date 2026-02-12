@@ -2,7 +2,7 @@
 
 module Core
 
-import RazorForge/Text.Byte
+import RazorForge/Core.Byte
 
 record Byte
     private value: RazorForge/Text.Byte

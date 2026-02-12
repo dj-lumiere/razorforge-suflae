@@ -287,11 +287,11 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_ValueListType()
+    public void Parse_ConstGenericType()
     {
         string source = """
                         routine test() {
-                            let items: ValueList<S32, 5> = [1, 2, 3, 4, 5]
+                            let data: ValueBytes<4> = bytes
                         }
                         """;
 
