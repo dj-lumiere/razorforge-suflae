@@ -18,8 +18,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_SimpleWhen()
     {
         string source = """
-                        routine test(x: Integer):
-                            when x:
+                        routine test(x: Integer)
+                            when x
                                 1 => show("one")
                                 2 => show("two")
                                 else => show("other")
@@ -39,9 +39,9 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenWithBlock()
     {
         string source = """
-                        routine test(x: Integer):
-                            when x:
-                                1:
+                        routine test(x: Integer)
+                            when x
+                                1
                                     show("one")
                                     do_something()
                                 else => show("other")
@@ -54,8 +54,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenAsExpression()
     {
         string source = """
-                        routine describe(x: Integer) -> Text:
-                            return when x:
+                        routine describe(x: Integer) -> Text
+                            return when x
                                 0 => "zero"
                                 1 => "one"
                                 else => "many"
@@ -68,8 +68,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenWithAssignment()
     {
         string source = """
-                        routine test(status: Status):
-                            let description = when status:
+                        routine test(status: Status)
+                            let description = when status
                                 is ACTIVE => "Running"
                                 else => "Not running"
                         """;
@@ -85,8 +85,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenIsType()
     {
         string source = """
-                        routine test(value: Any):
-                            when value:
+                        routine test(value: Any)
+                            when value
                                 is Integer n => show(f"Integer: {n}")
                                 is Text t => show(f"Text: {t}")
                                 else => show("Unknown type")
@@ -99,8 +99,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenIsTypeWithoutBinding()
     {
         string source = """
-                        routine test(value: Any):
-                            when value:
+                        routine test(value: Any)
+                            when value
                                 is Integer => show("It's an integer")
                                 is Text => show("It's text")
                                 else => show("Unknown")
@@ -113,8 +113,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenIsCustomType()
     {
         string source = """
-                        routine test(value: Any):
-                            when value:
+                        routine test(value: Any)
+                            when value
                                 is Point p => show(f"Point: ({p.x}, {p.y})")
                                 is Circle c => show(f"Circle: r={c.radius}")
                                 else => show("Unknown shape")
@@ -131,8 +131,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenChoice()
     {
         string source = """
-                        routine handle(status: Status):
-                            when status:
+                        routine handle(status: Status)
+                            when status
                                 is Status.PENDING => show("Waiting...")
                                 is Status.ACTIVE => show("In progress")
                                 is Status.COMPLETED => show("Done!")
@@ -146,8 +146,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenChoiceShorthand()
     {
         string source = """
-                        routine handle(status: Status):
-                            when status:
+                        routine handle(status: Status)
+                            when status
                                 is PENDING => show("Waiting...")
                                 is ACTIVE => show("In progress")
                                 is COMPLETED => show("Done!")
@@ -165,8 +165,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenVariant()
     {
         string source = """
-                        routine handle(msg: Message):
-                            when msg:
+                        routine handle(msg: Message)
+                            when msg
                                 is TEXT content => process(content)
                                 is NUMBER n => compute(n)
                                 is QUIT => exit()
@@ -179,11 +179,11 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenVariantDestructuring()
     {
         string source = """
-                        routine handle(shape: Shape):
-                            when shape:
-                                is CIRCLE (center, radius):
+                        routine handle(shape: Shape)
+                            when shape
+                                is CIRCLE (center, radius)
                                     show(f"Circle at ({center.x}, {center.y}) with radius {radius}")
-                                is RECTANGLE (top_left, size):
+                                is RECTANGLE (top_left, size)
                                     show(f"Rectangle at ({top_left.x}, {top_left.y})")
                         """;
 
@@ -194,9 +194,9 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenVariantDestructuringWithAlias()
     {
         string source = """
-                        routine handle(shape: Shape):
-                            when shape:
-                                is CIRCLE (center: c, radius: r):
+                        routine handle(shape: Shape)
+                            when shape
+                                is CIRCLE (center: c, radius: r)
                                     show(f"Circle: center={c}, r={r}")
                                 else => show("Not a circle")
                         """;
@@ -208,11 +208,11 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenNestedDestructuring()
     {
         string source = """
-                        routine handle(shape: Shape):
-                            when shape:
-                                is CIRCLE ((x, y), radius):
+                        routine handle(shape: Shape)
+                            when shape
+                                is CIRCLE ((x, y), radius)
                                     show(f"Circle at ({x}, {y}) with radius {radius}")
-                                is RECTANGLE ((x, y), (width, height)):
+                                is RECTANGLE ((x, y), (width, height))
                                     show(f"Rectangle at ({x}, {y}), {width}x{height}")
                         """;
 
@@ -227,8 +227,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenWithGuard()
     {
         string source = """
-                        routine classify(n: Integer):
-                            when n:
+                        routine classify(n: Integer)
+                            when n
                                 is Integer x if x > 0 => show("Positive")
                                 is Integer x if x < 0 => show("Negative")
                                 is Integer x => show("Zero")
@@ -241,8 +241,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenLiteralWithGuard()
     {
         string source = """
-                        routine test(x: Integer, y: Integer):
-                            when x:
+                        routine test(x: Integer, y: Integer)
+                            when x
                                 0 if y > 0 => show("x=0, y positive")
                                 0 => show("x=0, y non-positive")
                                 else => show("x not zero")
@@ -255,8 +255,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenTypeWithComplexGuard()
     {
         string source = """
-                        routine handle(error: Crashable):
-                            when error:
+                        routine handle(error: Crashable)
+                            when error
                                 is NetworkError e if e.code == 404 => show("Not found")
                                 is NetworkError e if e.code >= 500 => show("Server error")
                                 is Crashable e => show(f"Error: {e.message()}")
@@ -273,8 +273,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenMaybe()
     {
         string source = """
-                        routine handle(value: User?):
-                            when value:
+                        routine handle(value: User?)
+                            when value
                                 is None => show("User not found")
                                 else user => show(f"Found: {user.name}")
                         """;
@@ -286,8 +286,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenResult()
     {
         string source = """
-                        routine handle(result: Result<User>):
-                            when result:
+                        routine handle(result: Result<User>)
+                            when result
                                 is Crashable err => show(f"Error: {err.message()}")
                                 else user => show(f"Found: {user.name}")
                         """;
@@ -299,8 +299,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenResultSpecificError()
     {
         string source = """
-                        routine handle(result: Result<File>):
-                            when result:
+                        routine handle(result: Result<File>)
+                            when result
                                 is FileNotFoundError e => show(f"Not found: {e.path}")
                                 is PermissionError e => show(f"Access denied: {e.path}")
                                 is Crashable e => show(f"Unknown error: {e.message()}")
@@ -314,8 +314,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenLookup()
     {
         string source = """
-                        routine handle(result: Lookup<User>):
-                            when result:
+                        routine handle(result: Lookup<User>)
+                            when result
                                 is Crashable e => show(f"Error: {e.message()}")
                                 is None => show("User not found")
                                 else user => show(f"Found: {user.name}")
@@ -328,8 +328,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenLookupSpecificErrors()
     {
         string source = """
-                        routine handle(result: Lookup<Config>):
-                            when result:
+                        routine handle(result: Lookup<Config>)
+                            when result
                                 is ValidationError e => stop!(f"Invalid config name: {e.message}")
                                 is IOError e => show(f"IO error: {e.message}")
                                 is Crashable e => breach!()
@@ -348,8 +348,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenLiteralInteger()
     {
         string source = """
-                        routine describe(n: Integer) -> Text:
-                            return when n:
+                        routine describe(n: Integer) -> Text
+                            return when n
                                 0 => "zero"
                                 1 => "one"
                                 2 => "two"
@@ -363,8 +363,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenLiteralText()
     {
         string source = """
-                        routine handle(cmd: Text):
-                            when cmd:
+                        routine handle(cmd: Text)
+                            when cmd
                                 "help" => show_help()
                                 "version" => show_version()
                                 "quit" => exit()
@@ -378,8 +378,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenLiteralBool()
     {
         string source = """
-                        routine test(flag: bool):
-                            when flag:
+                        routine test(flag: bool)
+                            when flag
                                 true => show("enabled")
                                 false => show("disabled")
                         """;
@@ -395,8 +395,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenWildcard()
     {
         string source = """
-                        routine handle(result: Result<Integer>):
-                            when result:
+                        routine handle(result: Result<Integer>)
+                            when result
                                 is Crashable => absent
                                 else value => value
                         """;
@@ -408,9 +408,9 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenWildcardInDestructuring()
     {
         string source = """
-                        routine handle(shape: Shape):
-                            when shape:
-                                is CIRCLE (_, radius):
+                        routine handle(shape: Shape)
+                            when shape
+                                is CIRCLE (_, radius)
                                     show(f"Radius: {radius}")
                                 else => show("Not a circle")
                         """;
@@ -426,8 +426,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenElseWithBinding()
     {
         string source = """
-                        routine handle(value: Maybe<User>):
-                            when value:
+                        routine handle(value: Maybe<User>)
+                            when value
                                 is None => show("Not found")
                                 else u => show(u.name)
                         """;
@@ -439,12 +439,12 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenElseWithBlock()
     {
         string source = """
-                        routine handle(value: Maybe<User>):
-                            when value:
-                                is None:
+                        routine handle(value: Maybe<User>)
+                            when value
+                                is None
                                     show("Not found")
                                     return
-                                else user:
+                                else user
                                     show(user.name)
                                     process(user)
                         """;
@@ -460,7 +460,7 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_LetDestructuringRecord()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let (x, y) = Point(x: 5, y: 6)
                         """;
 
@@ -471,7 +471,7 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_LetDestructuringWithAlias()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let (center: c, radius: r) = Circle(center: Point(5, 6), radius: 7)
                         """;
 
@@ -482,7 +482,7 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_LetNestedDestructuring()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
                         """;
 
@@ -499,9 +499,9 @@ public class SuflaePatternMatchingTests
         // Fixed: 'becomes' should only be used in multi-statement blocks, not after '=>'
         // The else clause uses '=>' for single expression (no becomes needed)
         string source = """
-                        routine test(value: Integer):
-                            let result = when value:
-                                is A:
+                        routine test(value: Integer)
+                            let result = when value
+                                is A
                                     let x = compute()
                                     becomes transform(x)
                                 else => default()
@@ -518,21 +518,21 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_ComplexNestedPatterns()
     {
         string source = """
-                        routine process(result: Lookup<Shape>):
-                            when result:
-                                is Crashable e:
+                        routine process(result: Lookup<Shape>)
+                            when result
+                                is Crashable e
                                     log_error(e)
                                     return
-                                is None:
+                                is None
                                     show("No shape found")
                                     return
-                                else shape:
-                                    when shape:
-                                        is CIRCLE (center, radius) if radius > 10:
+                                else shape
+                                    when shape
+                                        is CIRCLE (center, radius) if radius > 10
                                             show("Large circle")
-                                        is CIRCLE (center, radius):
+                                        is CIRCLE (center, radius)
                                             show("Small circle")
-                                        is RECTANGLE ((x, y), (w, h)) if w == h:
+                                        is RECTANGLE ((x, y), (w, h)) if w == h
                                             show("Square")
                                         else => show("Other shape")
                         """;
@@ -544,18 +544,18 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenWithMultipleStatements()
     {
         string source = """
-                        routine handle(event: Event):
-                            when event:
-                                is CLICK pos:
+                        routine handle(event: Event)
+                            when event
+                                is CLICK pos
                                     let x = pos.x
                                     let y = pos.y
                                     handle_click(x, y)
-                                is KEY (code, modifiers):
-                                    if modifiers.ctrl:
+                                is KEY (code, modifiers)
+                                    if modifiers.ctrl
                                         handle_ctrl_key(code)
-                                    else:
+                                    else
                                         handle_key(code)
-                                else:
+                                else
                                     pass
                         """;
 
@@ -570,8 +570,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonNotEqual()
     {
         string source = """
-                        routine test(x: Integer):
-                            when x:
+                        routine test(x: Integer)
+                            when x
                                 != 0 => show("non-zero")
                                 else => show("zero")
                         """;
@@ -583,8 +583,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonLessThan()
     {
         string source = """
-                        routine classify(n: Integer):
-                            when n:
+                        routine classify(n: Integer)
+                            when n
                                 < 0 => show("negative")
                                 == 0 => show("zero")
                                 else => show("positive")
@@ -597,8 +597,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonGreaterThan()
     {
         string source = """
-                        routine classify(n: Integer) -> Text:
-                            return when n:
+                        routine classify(n: Integer) -> Text
+                            return when n
                                 > 100 => "large"
                                 > 10 => "medium"
                                 else => "small"
@@ -611,8 +611,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonLessThanOrEqual()
     {
         string source = """
-                        routine grade(score: Integer) -> Text:
-                            return when score:
+                        routine grade(score: Integer) -> Text
+                            return when score
                                 <= 50 => "fail"
                                 <= 70 => "pass"
                                 <= 90 => "good"
@@ -626,8 +626,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonGreaterThanOrEqual()
     {
         string source = """
-                        routine classify(temp: Integer) -> Text:
-                            return when temp:
+                        routine classify(temp: Integer) -> Text
+                            return when temp
                                 >= 100 => "boiling"
                                 >= 30 => "hot"
                                 >= 0 => "cold"
@@ -641,8 +641,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonStrictEqual()
     {
         string source = """
-                        routine test(a: Data, b: Data):
-                            when a:
+                        routine test(a: Data, b: Data)
+                            when a
                                 === b => show("same reference")
                                 else => show("different reference")
                         """;
@@ -654,8 +654,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonStrictNotEqual()
     {
         string source = """
-                        routine test(a: Data, b: Data):
-                            when a:
+                        routine test(a: Data, b: Data)
+                            when a
                                 !== b => show("different reference")
                                 else => show("same reference")
                         """;
@@ -667,8 +667,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonWithMemberAccess()
     {
         string source = """
-                        routine handle(code: Integer):
-                            when code:
+                        routine handle(code: Integer)
+                            when code
                                 == HttpStatus.OK => show("success")
                                 == HttpStatus.NOT_FOUND => show("not found")
                                 >= HttpStatus.SERVER_ERROR => show("server error")
@@ -682,8 +682,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonWithMethodCall()
     {
         string source = """
-                        routine test(value: Integer):
-                            when value:
+                        routine test(value: Integer)
+                            when value
                                 == get_threshold() => show("at threshold")
                                 > get_threshold() => show("above threshold")
                                 else => show("below threshold")
@@ -696,8 +696,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenMixedComparisonPatterns()
     {
         string source = """
-                        routine categorize(n: Integer):
-                            when n:
+                        routine categorize(n: Integer)
+                            when n
                                 < 0 => show("negative")
                                 == 0 => show("zero")
                                 < 50 => show("small")
@@ -714,8 +714,8 @@ public class SuflaePatternMatchingTests
         // Regression test: return when + < comparison pattern
         // Previously failed due to ParseWhenExpression not using ProcessIndentToken
         string source = """
-                        routine classify(n: Integer) -> Text:
-                            return when n:
+                        routine classify(n: Integer) -> Text
+                            return when n
                                 < 0 => "negative"
                                 else => "positive"
                         """;
@@ -731,9 +731,9 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenBlockWithBecomes()
     {
         string source = """
-                        routine describe(n: Integer) -> Text:
-                            return when n:
-                                == 0:
+                        routine describe(n: Integer) -> Text
+                            return when n
+                                == 0
                                     log("found zero")
                                     becomes "zero"
                                 else => "non-zero"
@@ -746,17 +746,17 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenMultipleBlocksWithBecomes()
     {
         string source = """
-                        routine process(status: Status) -> Text:
-                            return when status:
-                                == Status.PENDING:
+                        routine process(status: Status) -> Text
+                            return when status
+                                == Status.PENDING
                                     log("still waiting")
                                     notify_user()
                                     becomes "pending"
-                                == Status.ACTIVE:
+                                == Status.ACTIVE
                                     log("running")
                                     update_progress()
                                     becomes "active"
-                                else:
+                                else
                                     log("completed or unknown")
                                     becomes "done"
                         """;
@@ -768,17 +768,17 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenTypePatternWithBlockAndBecomes()
     {
         string source = """
-                        routine handle(shape: Shape) -> Float:
-                            return when shape:
-                                is Circle (center, radius):
+                        routine handle(shape: Shape) -> Float
+                            return when shape
+                                is Circle (center, radius)
                                     let area = 3.14159 * radius * radius
                                     log(f"Circle area: {area}")
                                     becomes area
-                                is Rectangle (_, size):
+                                is Rectangle (_, size)
                                     let area = size.width * size.height
                                     log(f"Rectangle area: {area}")
                                     becomes area
-                                else:
+                                else
                                     becomes 0.0
                         """;
 
@@ -789,12 +789,12 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenBlockWithBecomesExpression()
     {
         string source = """
-                        routine compute(n: Integer):
-                            when n:
-                                == 0:
+                        routine compute(n: Integer)
+                            when n
+                                == 0
                                     let x = 0
                                     becomes x
-                                else:
+                                else
                                     becomes n * 2
                         """;
 
@@ -809,8 +809,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonWithGuard()
     {
         string source = """
-                        routine test(x: Integer, y: Integer):
-                            when x:
+                        routine test(x: Integer, y: Integer)
+                            when x
                                 > 0 if y > 0 => show("both positive")
                                 > 0 => show("x positive, y not")
                                 < 0 if y < 0 => show("both negative")
@@ -824,8 +824,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenComparisonWithComplexGuard()
     {
         string source = """
-                        routine validate(score: Integer, bonus: Integer) -> Text:
-                            return when score:
+                        routine validate(score: Integer, bonus: Integer) -> Text
+                            return when score
                                 >= 90 if bonus > 0 => "A+"
                                 >= 90 => "A"
                                 >= 80 if bonus >= 5 => "B+"
@@ -844,8 +844,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenGuardWithAnd()
     {
         string source = """
-                        routine test(n: Integer, m: Integer):
-                            when n:
+                        routine test(n: Integer, m: Integer)
+                            when n
                                 is Integer x if x > 0 and m > 0 => show("both positive")
                                 else => show("not both positive")
                         """;
@@ -857,8 +857,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenGuardWithOr()
     {
         string source = """
-                        routine test(n: Integer):
-                            when n:
+                        routine test(n: Integer)
+                            when n
                                 is Integer x if x < -100 or x > 100 => show("extreme")
                                 else => show("moderate")
                         """;
@@ -870,8 +870,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenGuardWithAndOr()
     {
         string source = """
-                        routine classify(x: Integer, y: Integer, z: Integer):
-                            when x:
+                        routine classify(x: Integer, y: Integer, z: Integer)
+                            when x
                                 > 0 if y > 0 and z > 0 => show("all positive")
                                 > 0 if y > 0 or z > 0 => show("x and at least one other positive")
                                 > 0 => show("only x positive")
@@ -885,8 +885,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenGuardWithFieldAccess()
     {
         string source = """
-                        routine handle(user: User):
-                            when user:
+                        routine handle(user: User)
+                            when user
                                 is User u if u.age >= 18 and u.verified => show("verified adult")
                                 is User u if u.age >= 18 => show("unverified adult")
                                 else => show("minor")
@@ -899,8 +899,8 @@ public class SuflaePatternMatchingTests
     public void ParseSuflae_WhenGuardWithMethodCall()
     {
         string source = """
-                        routine process(item: Item):
-                            when item:
+                        routine process(item: Item)
+                            when item
                                 is Item i if i.is_valid() and i.count() > 0 => process_valid(i)
                                 is Item i if i.is_valid() => handle_empty(i)
                                 else => reject(item)

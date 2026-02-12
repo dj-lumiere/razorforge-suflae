@@ -307,16 +307,16 @@ public class ProtocolImplementationTests
     public void AnalyzeSuflae_ImplementsProtocol_NoError()
     {
         string source = """
-                        protocol Displayable:
+                        protocol Displayable
                             @readonly
                             routine Me.display() -> Integer
 
-                        record Point follows Displayable:
+                        record Point follows Displayable
                             x: Integer
                             y: Integer
 
                         @readonly
-                        routine Point.display() -> Integer:
+                        routine Point.display() -> Integer
                             return 0
                         """;
 
@@ -328,11 +328,11 @@ public class ProtocolImplementationTests
     public void AnalyzeSuflae_MissingProtocolMethod_ReportsError()
     {
         string source = """
-                        protocol Displayable:
+                        protocol Displayable
                             @readonly
                             routine Me.display() -> S32
 
-                        record Point follows Displayable:
+                        record Point follows Displayable
                             x: F32
                             y: F32
                         """;

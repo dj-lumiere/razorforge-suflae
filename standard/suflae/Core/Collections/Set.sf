@@ -4,47 +4,47 @@ module Core
 
 import RazorForge/Collections.Set
 
-entity Set<T>:
+entity Set<T>
     private var value: RazorForge/Collections.Set<T>
 
 # Core operations
-routine Set<T>.count() -> Integer:
+routine Set<T>.count() -> Integer
     return Integer(value: me.value.count())
 
-routine Set<T>.is_empty() -> Bool:
+routine Set<T>.is_empty() -> Bool
     return me.value.is_empty()
 
 # Adding elements
-routine Set<T>.add(item: T):
+routine Set<T>.add(item: T)
     me.value.add(item)
 
 # Removing elements
-routine Set<T>.remove(item: T) -> Bool:
+routine Set<T>.remove(item: T) -> Bool
     return me.value.remove(item)
 
-routine Set<T>.clear():
+routine Set<T>.clear()
     me.value.clear()
 
 # Search
-routine Set<T>.contains(item: T) -> Bool:
+routine Set<T>.contains(item: T) -> Bool
     return me.value.contains(item)
 
 # Set operations
-routine Set<T>.union(other: Set<T>) -> Set<T>:
+routine Set<T>.union(other: Set<T>) -> Set<T>
     return Set<T>(value: me.value.union(other.value))
 
-routine Set<T>.intersection(other: Set<T>) -> Set<T>:
+routine Set<T>.intersection(other: Set<T>) -> Set<T>
     return Set<T>(value: me.value.intersection(other.value))
 
-routine Set<T>.difference(other: Set<T>) -> Set<T>:
+routine Set<T>.difference(other: Set<T>) -> Set<T>
     return Set<T>(value: me.value.difference(other.value))
 
-routine Set<T>.is_subset(other: Set<T>) -> Bool:
+routine Set<T>.is_subset(other: Set<T>) -> Bool
     return me.value.is_subset(other.value)
 
-routine Set<T>.is_superset(other: Set<T>) -> Bool:
+routine Set<T>.is_superset(other: Set<T>) -> Bool
     return me.value.is_superset(other.value)
 
 # Conversion
-routine Set<T>.to_list() -> List<T>:
+routine Set<T>.to_list() -> List<T>
     return List<T>(value: me.value.to_list())

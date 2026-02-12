@@ -4,65 +4,65 @@ module Core
 
 import RazorForge/Collections.List
 
-entity List<T>:
+entity List<T>
     private var value: RazorForge/Collections.List<T>
 
 # Core operations
-routine List<T>.count() -> Integer:
+routine List<T>.count() -> Integer
     return Integer(value: me.value.count())
 
-routine List<T>.capacity() -> Integer:
+routine List<T>.capacity() -> Integer
     return Integer(value: me.value.capacity())
 
-routine List<T>.is_empty() -> Bool:
+routine List<T>.is_empty() -> Bool
     return me.value.is_empty()
 
 # Adding elements
-routine List<T>.add_last(item: T):
+routine List<T>.add_last(item: T)
     me.value.add_last(item)
 
-routine List<T>.add_first(item: T):
+routine List<T>.add_first(item: T)
     me.value.add_first(item)
 
-routine List<T>.add_at!(index: Integer, item: T):
+routine List<T>.add_at!(index: Integer, item: T)
     me.value.add_at!(index.value, item)
 
 # Removing elements
-routine List<T>.remove_last!() -> T:
+routine List<T>.remove_last!() -> T
     return me.value.remove_last!()
 
-routine List<T>.remove_first!() -> T:
+routine List<T>.remove_first!() -> T
     return me.value.remove_first!()
 
-routine List<T>.remove_at!(index: Integer) -> T:
+routine List<T>.remove_at!(index: Integer) -> T
     return me.value.remove_at!(index.value)
 
-routine List<T>.clear():
+routine List<T>.clear()
     me.value.clear()
 
 # Indexing
-routine List<T>.__getitem__!(index: Integer) -> T:
+routine List<T>.__getitem__!(index: Integer) -> T
     return me.value.__getitem__!(index.value)
 
-routine List<T>.__setitem__!(index: Integer, item: T):
+routine List<T>.__setitem__!(index: Integer, item: T)
     me.value.__setitem__!(index.value, item)
 
 # Search
-routine List<T>.contains(item: T) -> Bool:
+routine List<T>.contains(item: T) -> Bool
     return me.value.contains(item)
 
-routine List<T>.index_of(item: T) -> Integer:
+routine List<T>.index_of(item: T) -> Integer
     return Integer(value: me.value.index_of(item))
 
 # Utility
-routine List<T>.reserve(new_capacity: Integer):
+routine List<T>.reserve(new_capacity: Integer)
     me.value.reserve(new_capacity.value)
 
-routine List<T>.reverse():
+routine List<T>.reverse()
     me.value.reverse()
 
-routine List<T>.first!() -> T:
+routine List<T>.first!() -> T
     return me.value.first!()
 
-routine List<T>.last!() -> T:
+routine List<T>.last!() -> T
     return me.value.last!()

@@ -4,52 +4,52 @@ module Core
 
 import RazorForge/Collections.SortedDict
 
-entity SortedDict<K, V>:
+entity SortedDict<K, V>
     private var value: RazorForge/Collections.SortedDict<K, V>
 
 # Core operations
-routine SortedDict<K, V>.count() -> Integer:
+routine SortedDict<K, V>.count() -> Integer
     return Integer(value: me.value.count())
 
-routine SortedDict<K, V>.is_empty() -> Bool:
+routine SortedDict<K, V>.is_empty() -> Bool
     return me.value.is_empty()
 
-routine SortedDict<K, V>.clear():
+routine SortedDict<K, V>.clear()
     me.value.clear()
 
 # Adding and updating
-routine SortedDict<K, V>.add(key: K, item: V) -> Bool:
+routine SortedDict<K, V>.add(key: K, item: V) -> Bool
     return me.value.add(key, item)
 
-routine SortedDict<K, V>.__setitem__(key: K, item: V):
+routine SortedDict<K, V>.__setitem__(key: K, item: V)
     me.value.__setitem__(key, item)
 
 # Retrieving
-routine SortedDict<K, V>.__getitem__!(key: K) -> V:
+routine SortedDict<K, V>.__getitem__!(key: K) -> V
     return me.value.__getitem__!(key)
 
 # Removing
-routine SortedDict<K, V>.remove(key: K) -> Bool:
+routine SortedDict<K, V>.remove(key: K) -> Bool
     return me.value.remove(key)
 
 # Search
-routine SortedDict<K, V>.contains_key(key: K) -> Bool:
+routine SortedDict<K, V>.contains_key(key: K) -> Bool
     return me.value.contains_key(key)
 
 # Keys and values
-routine SortedDict<K, V>.keys() -> List<K>:
+routine SortedDict<K, V>.keys() -> List<K>
     return List<K>(value: me.value.keys())
 
-routine SortedDict<K, V>.values() -> List<V>:
+routine SortedDict<K, V>.values() -> List<V>
     return List<V>(value: me.value.values())
 
 # Min/Max
-routine SortedDict<K, V>.min_key!() -> K:
+routine SortedDict<K, V>.min_key!() -> K
     return me.value.min_key!()
 
-routine SortedDict<K, V>.max_key!() -> K:
+routine SortedDict<K, V>.max_key!() -> K
     return me.value.max_key!()
 
 # Comparison
-routine SortedDict<K, V>.__eq__(other: SortedDict<K, V>) -> Bool:
+routine SortedDict<K, V>.__eq__(other: SortedDict<K, V>) -> Bool
     return me.value.__eq__(other.value)

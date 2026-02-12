@@ -17,7 +17,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_SimpleRecord_WithFields()
     {
         string source = """
-                        record Point:
+                        record Point
                             x: F32
                             y: F32
                         """;
@@ -33,7 +33,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_GenericRecord()
     {
         string source = """
-                        record Container<T>:
+                        record Container<T>
                             value: T
                         """;
 
@@ -51,7 +51,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         record Wrapper<T>
-                        requires T follows Comparable:
+                        requires T follows Comparable
                             value: T
                         """;
 
@@ -66,7 +66,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Record_FollowsProtocol()
     {
         string source = """
-                        record Version follows Comparable:
+                        record Version follows Comparable
                             major: S32
                             minor: S32
                         """;
@@ -85,7 +85,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_SimpleEntity()
     {
         string source = """
-                        entity User:
+                        entity User
                             var name: Text
                             var age: U32
                         """;
@@ -101,7 +101,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Entity_MixedMutability()
     {
         string source = """
-                        entity Document:
+                        entity Document
                             let id: U64
                             var content: Text
                         """;
@@ -120,7 +120,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_GenericEntity()
     {
         string source = """
-                        entity Stack<T>:
+                        entity Stack<T>
                             var items: List<T>
                         """;
 
@@ -139,7 +139,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_SimpleChoice()
     {
         string source = """
-                        choice Direction:
+                        choice Direction
                             NORTH
                             SOUTH
                             EAST
@@ -157,7 +157,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Choice_WithValues()
     {
         string source = """
-                        choice HttpStatus:
+                        choice HttpStatus
                             OK: 200
                             NOT_FOUND: 404
                             ERROR: 500
@@ -178,7 +178,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_SimpleVariant()
     {
         string source = """
-                        variant NetworkEvent:
+                        variant NetworkEvent
                             Connect
                             Disconnect
                         """;
@@ -194,7 +194,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Variant_WithPayloads()
     {
         string source = """
-                        variant ParseResult:
+                        variant ParseResult
                             Success: S32
                             Error: Text
                         """;
@@ -215,7 +215,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_SimpleProtocol()
     {
         string source = """
-                        protocol Displayable:
+                        protocol Displayable
                             routine display() -> Text
                         """;
 
@@ -230,7 +230,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_GenericProtocol()
     {
         string source = """
-                        protocol Iterable<T>:
+                        protocol Iterable<T>
                             routine iterate() -> Iterator<T>
                         """;
 
@@ -245,7 +245,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Protocol_Inheritance()
     {
         string source = """
-                        protocol Ordered follows Comparable:
+                        protocol Ordered follows Comparable
                             routine __cmp__(other: Me) -> ComparisonSign
                         """;
 
@@ -263,7 +263,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_SimpleRoutine()
     {
         string source = """
-                        routine greet(name: Text) -> Text:
+                        routine greet(name: Text) -> Text
                             return name
                         """;
 
@@ -278,7 +278,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_FailableRoutine()
     {
         string source = """
-                        routine get_value!() -> S32:
+                        routine get_value!() -> S32
                             return 42
                         """;
 
@@ -292,8 +292,8 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Routine_WithThrow()
     {
         string source = """
-                        routine validate!(x: S32) -> S32:
-                            if x < 0:
+                        routine validate!(x: S32) -> S32
+                            if x < 0
                                 throw ValidationError("negative")
                             return x
                         """;
@@ -308,8 +308,8 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Routine_WithAbsent()
     {
         string source = """
-                        routine find!(id: U64) -> User:
-                            unless has_user(id):
+                        routine find!(id: U64) -> User
+                            unless has_user(id)
                                 absent
                             return get_user(id)
                         """;
@@ -329,7 +329,7 @@ public class SuflaeTypeDeclarationTests
     {
         // Resident is RazorForge-only, Suflae should not support it
         string source = """
-                        resident SystemLogger:
+                        resident SystemLogger
                             var log_count: U32
                         """;
 
@@ -342,11 +342,11 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_WhenStatement()
     {
         string source = """
-                        routine handle(value: User?):
-                            when value:
-                                is None:
+                        routine handle(value: User?)
+                            when value
+                                is None
                                     show("not found")
-                                else u:
+                                else u
                                     show(u.name)
                         """;
 
@@ -357,8 +357,8 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_ForLoop()
     {
         string source = """
-                        routine count():
-                            for i in 0 to 10:
+                        routine count()
+                            for i in 0 to 10
                                 show(i)
                         """;
 

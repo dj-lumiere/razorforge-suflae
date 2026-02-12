@@ -17,7 +17,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_SimpleMethodCall()
     {
         string source = """
-                        routine test():
+                        routine test()
                             show("hello")
                         """;
 
@@ -28,7 +28,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MethodCallWithMultipleArgs()
     {
         string source = """
-                        routine test():
+                        routine test()
                             compute(1, 2, 3)
                         """;
 
@@ -39,7 +39,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MethodCallWithNamedArgs()
     {
         string source = """
-                        routine test():
+                        routine test()
                             create_user(name: "Alice", age: 30)
                         """;
 
@@ -50,7 +50,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MethodCallChain()
     {
         string source = """
-                        routine test():
+                        routine test()
                             data.where().select().List()
                         """;
 
@@ -61,7 +61,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MethodCallOnLiteral()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let len = "hello".count()
                         """;
 
@@ -72,7 +72,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MethodCallWithConversion()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = "42".S32!()
                         """;
 
@@ -83,7 +83,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_StaticMethodCall()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let pi = Math.pi()
                         """;
 
@@ -98,7 +98,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_SimpleFieldAccess()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let x = point.x
                         """;
 
@@ -109,7 +109,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ChainedFieldAccess()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let city = user.address.city
                         """;
 
@@ -120,7 +120,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MixedFieldAndMethodAccess()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = user.name.to_upper().length()
                         """;
 
@@ -132,7 +132,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         @readonly
-                        routine Point.get_x() -> F32:
+                        routine Point.get_x() -> F32
                             return me.x
                         """;
 
@@ -147,7 +147,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ArrayIndexing()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let first = items[0]
                         """;
 
@@ -158,7 +158,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MultiDimensionalIndexing()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let cell = matrix[i][j]
                         """;
 
@@ -169,7 +169,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_DictIndexing()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let value = dict["key"]
                         """;
 
@@ -180,7 +180,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_IndexAssignment()
     {
         string source = """
-                        routine test():
+                        routine test()
                             var items = [1, 2, 3]
                             items[0] = 42
                         """;
@@ -196,7 +196,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_RecordConstructor()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let point = Point(x: 10.0, y: 20.0)
                         """;
 
@@ -207,7 +207,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_EntityConstructor()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let user = User(name: "Alice", age: 30)
                         """;
 
@@ -218,7 +218,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_NestedConstructor()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
                         """;
 
@@ -229,7 +229,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_GenericConstructor()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let container = Container<Integer>(value: 42)
                         """;
 
@@ -244,7 +244,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_SimpleLambda()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let add = (a, b) => a + b
                         """;
 
@@ -255,7 +255,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_SingleParamLambda()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let double = x => x * 2
                         """;
 
@@ -266,7 +266,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_LambdaAsArgument()
     {
         string source = """
-                        routine test():
+                        routine test()
                             items.select(x => x * 2)
                         """;
 
@@ -277,7 +277,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_LambdaWithCapture()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let multiplier = 10
                             let scale = x => x * multiplier
                         """;
@@ -289,7 +289,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_NoParamLambda()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let get_value = () => 42
                         """;
 
@@ -304,7 +304,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_SimpleInterpolation()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let msg = f"Hello, {name}!"
                         """;
 
@@ -315,7 +315,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_InterpolationWithExpression()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let msg = f"Sum: {a + b}"
                         """;
 
@@ -326,7 +326,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_MultipleInterpolations()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let msg = f"{first} + {second} = {first + second}"
                         """;
 
@@ -337,7 +337,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_InterpolationWithMethodCall()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let msg = f"Name: {user.name.to_upper()}"
                         """;
 
@@ -352,7 +352,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_TypeConversionMethod()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let x = value.S64!()
                         """;
 
@@ -363,7 +363,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_TypeConversionFromLiteral()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let x = 42.F64()
                         """;
 
@@ -374,7 +374,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ChainedTypeConversion()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = "42".S32!().F64!()
                         """;
 
@@ -389,7 +389,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ParenthesizedExpression()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = (a + b) * c
                         """;
 
@@ -400,7 +400,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_NestedParentheses()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = ((a + b) * (c - d)) / e
                         """;
 
@@ -415,7 +415,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_RangeExpression()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let range = 0 to 10
                         """;
 
@@ -426,7 +426,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_RangeExpressionWithStep()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let range = 0 to 100 by 5
                         """;
 
@@ -441,7 +441,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ComplexChainedExpression()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = items.where(x => x > 0).select(x => x * 2).take(10).to_list()
                         """;
 
@@ -452,7 +452,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ConditionalExpression()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let value = if condition then compute_a() else compute_b()
                         """;
 
@@ -463,8 +463,8 @@ public class SuflaeExpressionTests
     public void ParseSuflae_WhenAsExpression()
     {
         string source = """
-                        routine test():
-                            let description = when status:
+                        routine test()
+                            let description = when status
                                 is PENDING => "Waiting"
                                 is ACTIVE => "Running"
                                 else => "Unknown"
@@ -477,7 +477,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_NoneCoalescingChain()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let value = first_option() ?? second_option() ?? default_value
                         """;
 
@@ -492,7 +492,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_VariantConstruction()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let msg = Message.TEXT("Hello")
                         """;
 
@@ -503,7 +503,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_VariantWithoutPayload()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let msg = Message.QUIT
                         """;
 
@@ -514,12 +514,12 @@ public class SuflaeExpressionTests
     public void ParseSuflae_VariantImmediatePatternMatch()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let result = parse_number("123")
-                            when result:
-                                is SUCCESS value:
+                            when result
+                                is SUCCESS value
                                     show(f"Got: {value}")
-                                is ERROR msg:
+                                is ERROR msg
                                     show(f"Error: {msg}")
                         """;
 
@@ -534,7 +534,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ChoiceValue()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let status = AppStatus.ACTIVE
                         """;
 
@@ -545,7 +545,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ChoiceMethodCall()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let dir = Direction.NORTH
                             let opposite = dir.opposite()
                         """;
@@ -557,9 +557,9 @@ public class SuflaeExpressionTests
     public void ParseSuflae_ChoiceEquality()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let status = FileAccess.READ
-                            if status == READ:
+                            if status == READ
                                 show("Read access")
                         """;
 
@@ -574,7 +574,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_RoutineTypeVariable()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let add: Routine<S32, S32, S32> = (a, b) => a + b
                         """;
 
@@ -585,7 +585,7 @@ public class SuflaeExpressionTests
     public void ParseSuflae_RoutineTypeNoParams()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let get_value: Routine<S32> = () => 42
                         """;
 

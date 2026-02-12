@@ -4,5 +4,5 @@ module Core
 
 import RazorForge/Core.Blank
 
-record Blank:
+record Blank
     pass

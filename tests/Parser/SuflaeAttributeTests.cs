@@ -19,7 +19,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @readonly
-                        routine Point.distance() -> Decimal:
+                        routine Point.distance() -> Decimal
                             return 0.0
                         """;
 
@@ -34,7 +34,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @writable
-                        routine Counter.increment():
+                        routine Counter.increment()
                             me.count += 1
                         """;
 
@@ -46,8 +46,8 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @crash_only
-                        routine internal_divide!(a: Integer, b: Integer) -> Integer:
-                            if b == 0:
+                        routine internal_divide!(a: Integer, b: Integer) -> Integer
+                            if b == 0
                                 throw DivisionByZeroError()
                             return a // b
                         """;
@@ -60,7 +60,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @prelude
-                        routine show(msg: Text):
+                        routine show(msg: Text)
                             pass
                         """;
 
@@ -72,7 +72,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @static
-                        routine Math.pi() -> Decimal:
+                        routine Math.pi() -> Decimal
                             return 3.14159265359
                         """;
 
@@ -84,7 +84,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @inline
-                        routine add(a: Integer, b: Integer) -> Integer:
+                        routine add(a: Integer, b: Integer) -> Integer
                             return a + b
                         """;
 
@@ -100,7 +100,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @config(target_os: "windows")
-                        routine get_config_path() -> Text:
+                        routine get_config_path() -> Text
                             return "C:\\config.toml"
                         """;
 
@@ -112,7 +112,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @config(feature: "debug")
-                        routine debug_log(msg: Text):
+                        routine debug_log(msg: Text)
                             show(f"[DEBUG] {msg}")
                         """;
 
@@ -124,7 +124,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @deprecated(message: "Use new_function instead")
-                        routine old_function():
+                        routine old_function()
                             pass
                         """;
 
@@ -140,8 +140,8 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @[readonly, crash_only]
-                        routine validate!(value: Integer) -> Integer:
-                            if value < 0:
+                        routine validate!(value: Integer) -> Integer
+                            if value < 0
                                 throw ValidationError()
                             return value
                         """;
@@ -154,7 +154,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @[inline, readonly, prelude]
-                        routine identity(x: Integer) -> Integer:
+                        routine identity(x: Integer) -> Integer
                             return x
                         """;
 
@@ -170,7 +170,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @derive(Debug, Clone)
-                        record Point:
+                        record Point
                             x: F32
                             y: F32
                         """;
@@ -183,7 +183,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @serializable
-                        entity User:
+                        entity User
                             var name: Text
                             var age: U32
                         """;
@@ -196,7 +196,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @prelude
-                        protocol Displayable:
+                        protocol Displayable
                             @readonly
                             routine display() -> Text
                         """;
@@ -212,7 +212,7 @@ public class SuflaeAttributeTests
     public void ParseSuflae_AttributeOnField()
     {
         string source = """
-                        record Config:
+                        record Config
                             @optional
                             name: Text
 
@@ -227,7 +227,7 @@ public class SuflaeAttributeTests
     public void ParseSuflae_AttributeOnEntityField()
     {
         string source = """
-                        entity User:
+                        entity User
                             @readonly
                             let id: U64
 
@@ -249,7 +249,7 @@ public class SuflaeAttributeTests
                         @readonly
                         @inline
                         @config(feature: "optimized")
-                        routine fast_compute(x: Integer) -> Integer:
+                        routine fast_compute(x: Integer) -> Integer
                             return x * 2
                         """;
 
@@ -261,15 +261,15 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @derive(Debug)
-                        record Calculator:
+                        record Calculator
                             value: Integer
 
                         @readonly
-                        routine Calculator.get() -> Integer:
+                        routine Calculator.get() -> Integer
                             return me.value
 
                         @writable
-                        routine Calculator.set(v: Integer):
+                        routine Calculator.set(v: Integer)
                             me.value = v
                         """;
 
@@ -285,7 +285,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @readonly
-                        public routine Point.distance() -> Decimal:
+                        public routine Point.distance() -> Decimal
                             return 0.0
                         """;
 
@@ -297,7 +297,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @inline
-                        private routine helper(x: Integer) -> Integer:
+                        private routine helper(x: Integer) -> Integer
                             return x * 2
                         """;
 
@@ -309,7 +309,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @serializable
-                        internal record InternalData:
+                        internal record InternalData
                             value: Integer
                         """;
 
@@ -324,7 +324,7 @@ public class SuflaeAttributeTests
     public void ParseSuflae_ProtocolMethodAttributes()
     {
         string source = """
-                        protocol Container:
+                        protocol Container
                             @readonly
                             routine count() -> uaddr
 
@@ -347,7 +347,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @timeout(5000)
-                        suspended routine fetch_data(url: Text) -> Text:
+                        suspended routine fetch_data(url: Text) -> Text
                             let response = waitfor http.get(url)
                             return response.body
                         """;
@@ -364,7 +364,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @test
-                        routine test_addition():
+                        routine test_addition()
                             verify!(1 + 1 == 2)
                         """;
 
@@ -376,7 +376,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @bench
-                        routine bench_sort():
+                        routine bench_sort()
                             let items = generate_random_list(1000)
                             sort(items)
                         """;

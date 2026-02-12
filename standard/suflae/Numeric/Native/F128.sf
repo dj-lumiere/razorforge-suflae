@@ -4,94 +4,94 @@ module Numeric
 
 import RazorForge/Core.F128
 
-record F128:
+record F128
     private value: RazorForge/Core.F128
 
 # Arithmetic operators
-routine F128.__add__(you: F128) -> F128:
+routine F128.__add__(you: F128) -> F128
     return F128(value: me.value.__add__(you.value))
 
-routine F128.__sub__(you: F128) -> F128:
+routine F128.__sub__(you: F128) -> F128
     return F128(value: me.value.__sub__(you.value))
 
-routine F128.__mul__(you: F128) -> F128:
+routine F128.__mul__(you: F128) -> F128
     return F128(value: me.value.__mul__(you.value))
 
-routine F128.__truediv__(you: F128) -> F128:
+routine F128.__truediv__(you: F128) -> F128
     return F128(value: me.value.__truediv__(you.value))
 
-routine F128.__neg__() -> F128:
+routine F128.__neg__() -> F128
     return F128(value: me.value.__neg__())
 
 # Comparison
-routine F128.__eq__(you: F128) -> Bool:
+routine F128.__eq__(you: F128) -> Bool
     return me.value.__eq__(you.value)
 
-routine F128.__cmp__(you: F128) -> ComparisonSign:
+routine F128.__cmp__(you: F128) -> ComparisonSign
     return me.value.__cmp__(you.value)
 
 # Math operations
-routine F128.sqrt() -> F128:
+routine F128.sqrt() -> F128
     return F128(value: me.value.sqrt())
 
-routine F128.abs() -> F128:
+routine F128.abs() -> F128
     return F128(value: me.value.abs())
 
-routine F128.floor() -> F128:
+routine F128.floor() -> F128
     return F128(value: me.value.floor())
 
-routine F128.ceil() -> F128:
+routine F128.ceil() -> F128
     return F128(value: me.value.ceil())
 
-routine F128.round() -> F128:
+routine F128.round() -> F128
     return F128(value: me.value.round())
 
-routine F128.trunc() -> F128:
+routine F128.trunc() -> F128
     return F128(value: me.value.trunc())
 
-routine F128.sin() -> F128:
+routine F128.sin() -> F128
     return F128(value: me.value.sin())
 
-routine F128.cos() -> F128:
+routine F128.cos() -> F128
     return F128(value: me.value.cos())
 
-routine F128.exp() -> F128:
+routine F128.exp() -> F128
     return F128(value: me.value.exp())
 
-routine F128.log() -> F128:
+routine F128.log() -> F128
     return F128(value: me.value.log())
 
-routine F128.log10() -> F128:
+routine F128.log10() -> F128
     return F128(value: me.value.log10())
 
-routine F128.pow(exp: F128) -> F128:
+routine F128.pow(exp: F128) -> F128
     return F128(value: me.value.pow(exp.value))
 
-routine F128.copysign(sign: F128) -> F128:
+routine F128.copysign(sign: F128) -> F128
     return F128(value: me.value.copysign(sign.value))
 
 # Utility methods
-routine F128.min(you: F128) -> F128:
+routine F128.min(you: F128) -> F128
     return F128(value: me.value.min(you.value))
 
-routine F128.max(you: F128) -> F128:
+routine F128.max(you: F128) -> F128
     return F128(value: me.value.max(you.value))
 
-routine F128.clamp(min_val: F128, max_val: F128) -> F128:
+routine F128.clamp(min_val: F128, max_val: F128) -> F128
     return F128(value: me.value.clamp(min_val.value, max_val.value))
 
-routine F128.is_positive() -> Bool:
+routine F128.is_positive() -> Bool
     return me.value.is_positive()
 
-routine F128.is_negative() -> Bool:
+routine F128.is_negative() -> Bool
     return me.value.is_negative()
 
-routine F128.is_zero() -> Bool:
+routine F128.is_zero() -> Bool
     return me.value.is_zero()
 
-routine F128.signum() -> F128:
+routine F128.signum() -> F128
     return F128(value: me.value.signum())
 
 # String conversion
-routine F128.to_text() -> Text:
+routine F128.to_text() -> Text
     return me.value.to_text()

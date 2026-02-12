@@ -4,87 +4,87 @@ module Core
 
 import RazorForge/Collections.BitList
 
-entity BitList:
+entity BitList
     private var value: RazorForge/Collections.BitList
 
 # Core operations
-routine BitList.count() -> Integer:
+routine BitList.count() -> Integer
     return Integer(value: me.value.count())
 
-routine BitList.capacity() -> Integer:
+routine BitList.capacity() -> Integer
     return Integer(value: me.value.capacity())
 
-routine BitList.is_empty() -> Bool:
+routine BitList.is_empty() -> Bool
     return me.value.is_empty()
 
 # Adding and removing
-routine BitList.add_last(bit: Bool):
+routine BitList.add_last(bit: Bool)
     me.value.add_last(bit)
 
-routine BitList.pop!() -> Bool:
-    return me.value.pop!()
+routine BitList.remove_last!() -> Bool
+    return me.value.remove_last!()
 
-routine BitList.clear():
+routine BitList.clear()
     me.value.clear()
 
-routine BitList.reserve(new_capacity: Integer):
+routine BitList.reserve(new_capacity: Integer)
     me.value.reserve(new_capacity.value)
 
 # Indexing
-routine BitList.__getitem__!(index: Integer) -> Bool:
+routine BitList.__getitem__!(index: Integer) -> Bool
     return me.value.__getitem__!(index.value)
 
-routine BitList.__setitem__!(index: Integer, bit: Bool):
+routine BitList.__setitem__!(index: Integer, bit: Bool)
     me.value.__setitem__!(index.value, bit)
 
 # Bit operations
-routine BitList.set_all(bit: Bool):
+routine BitList.set_all(bit: Bool)
     me.value.set_all(bit)
 
-routine BitList.flip!(index: Integer):
+routine BitList.flip!(index: Integer)
     me.value.flip!(index.value)
 
-routine BitList.flip_all():
+routine BitList.flip_all()
     me.value.flip_all()
 
-routine BitList.count_ones() -> Integer:
+routine BitList.count_ones() -> Integer
     return Integer(value: me.value.count_ones())
 
-routine BitList.count_zeros() -> Integer:
+routine BitList.count_zeros() -> Integer
     return Integer(value: me.value.count_zeros())
 
-routine BitList.any() -> Bool:
+routine BitList.any() -> Bool
     return me.value.any()
 
-routine BitList.all() -> Bool:
+routine BitList.all() -> Bool
     return me.value.all()
 
-routine BitList.none() -> Bool:
+routine BitList.none() -> Bool
     return me.value.none()
 
 # Bitwise operations
-routine BitList.__and__(other: BitList) -> BitList:
+routine BitList.__and__(other: BitList) -> BitList
     return BitList(value: me.value.__and__(other.value))
 
-routine BitList.__or__(other: BitList) -> BitList:
+routine BitList.__or__(other: BitList) -> BitList
     return BitList(value: me.value.__or__(other.value))
 
-routine BitList.__xor__(other: BitList) -> BitList:
+routine BitList.__xor__(other: BitList) -> BitList
     return BitList(value: me.value.__xor__(other.value))
 
-routine BitList.__not__() -> BitList:
+routine BitList.__not__() -> BitList
     return BitList(value: me.value.__not__())
 
 # Utility
-routine BitList.first!() -> Bool:
+routine BitList.first!() -> Bool
     return me.value.first!()
 
-routine BitList.last!() -> Bool:
+routine BitList.last!() -> Bool
     return me.value.last!()
 
-routine BitList.reverse() -> BitList:
+routine BitList.reverse() -> BitList
     return BitList(value: me.value.reverse())
 
 # Comparison
-routine BitList.__eq__(other: BitList) -> Bool:
+routine BitList.__eq__(other: BitList) -> Bool
     return me.value.__eq__(other.value)

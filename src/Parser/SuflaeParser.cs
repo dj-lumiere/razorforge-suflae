@@ -7,7 +7,7 @@ namespace Compilers.Suflae.Parser;
 
 /// <summary>
 /// Parser for Suflae language (indentation-based syntax)
-/// Handles Python-like indentation with colons and blocks
+/// Handles indentation-based syntax with blocks
 /// </summary>
 public partial class SuflaeParser
 {

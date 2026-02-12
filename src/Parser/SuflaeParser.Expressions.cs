@@ -1632,9 +1632,8 @@ public partial class SuflaeParser
     private WhenExpression ParseWhenExpression(SourceLocation location)
     {
         Expression expression = ParseExpression();
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after when expression");
 
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after when header");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after when expression");
         Consume(type: TokenType.Indent, errorMessage: "Expected indented block after when");
 
         var clauses = new List<WhenClause>();
@@ -1689,33 +1688,20 @@ public partial class SuflaeParser
 
             // Suflae supports two clause syntaxes:
             // 1. is PATTERN => expr           (single expression)
-            // 2. is PATTERN:                  (indented block)
+            // 2. is PATTERN                   (indented block)
             //        statements...
             // Set flag to prevent 'is' expression parsing in when clause bodies
             _inWhenClauseBody = true;
             Statement body;
-            if (Match(type: TokenType.Colon))
-            {
-                // Multi-line body: is PATTERN: followed by indented block
-                body = ParseIndentedBlock();
-            }
-            else if (Match(type: TokenType.FatArrow))
+            if (Match(type: TokenType.FatArrow))
             {
                 // Single-line body: is PATTERN => expression
-                // Optional colon after => for multi-line body
-                if (Check(type: TokenType.Colon))
-                {
-                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after '=>'");
-                    body = ParseIndentedBlock();
-                }
-                else
-                {
-                    body = ParseExpressionStatement();
-                }
+                body = ParseExpressionStatement();
             }
             else
             {
-                throw ThrowParseError("Expected ':' or '=>' after pattern");
+                // Multi-line body: is PATTERN followed by indented block
+                body = ParseIndentedBlock();
             }
 
             _inWhenClauseBody = false;

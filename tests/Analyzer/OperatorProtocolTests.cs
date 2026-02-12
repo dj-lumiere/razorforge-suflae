@@ -297,16 +297,16 @@ public class OperatorProtocolTests
     public void AnalyzeSuflae_AddableWithFollows_NoError()
     {
         string source = """
-                        protocol Addable:
+                        protocol Addable
                             @readonly
                             routine Me.__add__(you: Me) -> Me
 
-                        record Vector follows Addable:
+                        record Vector follows Addable
                             x: Integer
                             y: Integer
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector:
+                        routine Vector.__add__(you: Vector) -> Vector
                             return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
@@ -318,16 +318,16 @@ public class OperatorProtocolTests
     public void AnalyzeSuflae_AddWithoutAddable_ReportsError()
     {
         string source = """
-                        protocol Addable:
+                        protocol Addable
                             @readonly
                             routine Me.__add__(you: Me) -> Me
 
-                        record Vector:
+                        record Vector
                             x: Integer
                             y: Integer
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector:
+                        routine Vector.__add__(you: Vector) -> Vector
                             return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 

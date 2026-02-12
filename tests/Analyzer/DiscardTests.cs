@@ -149,10 +149,10 @@ public class DiscardTests
     public void AnalyzeSuflae_DiscardCall_NoWarning()
     {
         string source = """
-                        routine get_value() -> Integer:
+                        routine get_value() -> Integer
                             return 42
 
-                        routine test():
+                        routine test()
                             discard get_value()
                         """;
 
@@ -165,10 +165,10 @@ public class DiscardTests
     public void AnalyzeSuflae_CallWithoutDiscard_NonBlankReturn_Warning()
     {
         string source = """
-                        routine get_value() -> Integer:
+                        routine get_value() -> Integer
                             return 42
 
-                        routine test():
+                        routine test()
                             get_value()
                         """;
 
@@ -187,10 +187,10 @@ public class DiscardTests
     public void AnalyzeSuflae_CallWithoutDiscard_BlankReturn_NoWarning()
     {
         string source = """
-                        routine do_something():
+                        routine do_something()
                             pass
 
-                        routine test():
+                        routine test()
                             do_something()
                         """;
 
@@ -203,10 +203,10 @@ public class DiscardTests
     public void AnalyzeSuflae_AssignedCall_NoWarning()
     {
         string source = """
-                        routine get_value() -> Integer:
+                        routine get_value() -> Integer
                             return 42
 
-                        routine test():
+                        routine test()
                             let x = get_value()
                         """;
 
@@ -226,7 +226,7 @@ public class DiscardTests
     public void ParseSuflae_DiscardVariable_ReportsError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let x = 42
                             discard x
                         """;
@@ -240,7 +240,7 @@ public class DiscardTests
     public void ParseSuflae_DiscardLiteral_ReportsError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             discard 42
                         """;
 
@@ -253,7 +253,7 @@ public class DiscardTests
     public void ParseSuflae_DiscardStringLiteral_ReportsError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             discard "hello"
                         """;
 

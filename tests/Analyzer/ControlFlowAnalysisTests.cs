@@ -293,10 +293,10 @@ public class ControlFlowAnalysisTests
     public void AnalyzeSuflae_AllPathsReturn_NoError()
     {
         string source = """
-                        routine get_value(condition: bool) -> Integer:
-                            if condition:
+                        routine get_value(condition: bool) -> Integer
+                            if condition
                                 return 1
-                            else:
+                            else
                                 return 0
                         """;
 
@@ -307,9 +307,9 @@ public class ControlFlowAnalysisTests
     public void AnalyzeSuflae_BreakInsideLoop_NoError()
     {
         string source = """
-                        routine test():
-                            for i in 0 to 10:
-                                if i == 5:
+                        routine test()
+                            for i in 0 to 10
+                                if i == 5
                                     break
                         """;
 
@@ -320,7 +320,7 @@ public class ControlFlowAnalysisTests
     public void AnalyzeSuflae_BreakOutsideLoop_ReportsError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             break
                         """;
 
@@ -444,9 +444,9 @@ public class ControlFlowAnalysisTests
     {
         // Multi-statement block with becomes is valid in Suflae
         string source = """
-                        routine test(value: Integer) -> Integer:
-                            let result = when value:
-                                == 1:
+                        routine test(value: Integer) -> Integer
+                            let result = when value
+                                == 1
                                     let x = value * 2
                                     becomes x
                                 else => 0
@@ -463,9 +463,9 @@ public class ControlFlowAnalysisTests
     {
         // Multi-statement block in when expression without becomes should error in Suflae
         string source = """
-                        routine test(value: Integer) -> Integer:
-                            let result = when value:
-                                == 1:
+                        routine test(value: Integer) -> Integer
+                            let result = when value
+                                == 1
                                     let x = value * 2
                                     x
                                 else => 0

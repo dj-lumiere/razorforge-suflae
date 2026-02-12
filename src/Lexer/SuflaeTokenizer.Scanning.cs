@@ -33,7 +33,6 @@ public partial class SuflaeTokenizer
     /// Unlike RazorForge, Suflae:
     /// <list type="bullet">
     ///   <item><description>Has no braces - uses indentation-based INDENT/DEDENT tokens</description></item>
-    ///   <item><description>Tracks whether colons start blocks (for _expectIndent)</description></item>
     ///   <item><description>Treats newlines as significant in most contexts</description></item>
     /// </list>
     /// </para>
@@ -158,7 +157,6 @@ public partial class SuflaeTokenizer
                 }
 
                 AddToken(type: TokenType.Colon);
-                _expectIndent = IsBlockStarterColon();
                 break;
 
             // Arithmetic operators with overflow variants

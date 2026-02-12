@@ -83,15 +83,6 @@ public partial class SuflaeTokenizer
     private int _currentIndentLevel;
 
     /// <summary>
-    /// Flag indicating that an INDENT token is expected on the next non-empty line.
-    /// </summary>
-    /// <remarks>
-    /// Set to true after encountering a colon that ends a line (block starter).
-    /// The next line must have greater indentation than the current level.
-    /// </remarks>
-    private bool _expectIndent;
-
-    /// <summary>
     /// Flag tracking whether any non-whitespace tokens have been processed on the current line.
     /// </summary>
     /// <remarks>

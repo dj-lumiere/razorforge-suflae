@@ -4,137 +4,137 @@ module Numeric
 
 import RazorForge/Core.S128
 
-record S128:
+record S128
     private value: RazorForge/Core.S128
 
 # Arithmetic operators
-routine S128.__add__!(you: S128) -> S128:
+routine S128.__add__!(you: S128) -> S128
     return S128(value: me.value.__add__!(you.value))
 
-routine S128.__sub__!(you: S128) -> S128:
+routine S128.__sub__!(you: S128) -> S128
     return S128(value: me.value.__sub__!(you.value))
 
-routine S128.__mul__!(you: S128) -> S128:
+routine S128.__mul__!(you: S128) -> S128
     return S128(value: me.value.__mul__!(you.value))
 
-routine S128.__floordiv__!(you: S128) -> S128:
+routine S128.__floordiv__!(you: S128) -> S128
     return S128(value: me.value.__floordiv__!(you.value))
 
-routine S128.__mod__!(you: S128) -> S128:
+routine S128.__mod__!(you: S128) -> S128
     return S128(value: me.value.__mod__!(you.value))
 
-routine S128.__neg__!() -> S128:
+routine S128.__neg__!() -> S128
     return S128(value: me.value.__neg__!())
 
 # Wrapping arithmetic
-routine S128.__add_wrap__(you: S128) -> S128:
+routine S128.__add_wrap__(you: S128) -> S128
     return S128(value: me.value.__add_wrap__(you.value))
 
-routine S128.__sub_wrap__(you: S128) -> S128:
+routine S128.__sub_wrap__(you: S128) -> S128
     return S128(value: me.value.__sub_wrap__(you.value))
 
-routine S128.__mul_wrap__(you: S128) -> S128:
+routine S128.__mul_wrap__(you: S128) -> S128
     return S128(value: me.value.__mul_wrap__(you.value))
 
 # Saturating arithmetic
-routine S128.__add_sat__(you: S128) -> S128:
+routine S128.__add_sat__(you: S128) -> S128
     return S128(value: me.value.__add_sat__(you.value))
 
-routine S128.__sub_sat__(you: S128) -> S128:
+routine S128.__sub_sat__(you: S128) -> S128
     return S128(value: me.value.__sub_sat__(you.value))
 
-routine S128.__mul_sat__(you: S128) -> S128:
+routine S128.__mul_sat__(you: S128) -> S128
     return S128(value: me.value.__mul_sat__(you.value))
 
 # Comparison
-routine S128.__eq__(you: S128) -> Bool:
+routine S128.__eq__(you: S128) -> Bool
     return me.value.__eq__(you.value)
 
-routine S128.__cmp__(you: S128) -> ComparisonSign:
+routine S128.__cmp__(you: S128) -> ComparisonSign
     return me.value.__cmp__(you.value)
 
 # Bitwise operations
-routine S128.__and__(you: S128) -> S128:
+routine S128.__and__(you: S128) -> S128
     return S128(value: me.value.__and__(you.value))
 
-routine S128.__or__(you: S128) -> S128:
+routine S128.__or__(you: S128) -> S128
     return S128(value: me.value.__or__(you.value))
 
-routine S128.__xor__(you: S128) -> S128:
+routine S128.__xor__(you: S128) -> S128
     return S128(value: me.value.__xor__(you.value))
 
-routine S128.__not__() -> S128:
+routine S128.__not__() -> S128
     return S128(value: me.value.__not__())
 
 # Shift operations
-routine S128.__ashl__(bits: U128) -> S128:
+routine S128.__ashl__(bits: U128) -> S128
     return S128(value: me.value.__ashl__(bits))
 
-routine S128.__ashr__(bits: U128) -> S128:
+routine S128.__ashr__(bits: U128) -> S128
     return S128(value: me.value.__ashr__(bits))
 
-routine S128.__lshl__(bits: U128) -> S128:
+routine S128.__lshl__(bits: U128) -> S128
     return S128(value: me.value.__lshl__(bits))
 
-routine S128.__lshr__(bits: U128) -> S128:
+routine S128.__lshr__(bits: U128) -> S128
     return S128(value: me.value.__lshr__(bits))
 
 # Math operations
-routine S128.abs() -> S128:
+routine S128.abs() -> S128
     return S128(value: me.value.abs())
 
-routine S128.min(you: S128) -> S128:
+routine S128.min(you: S128) -> S128
     return S128(value: me.value.min(you.value))
 
-routine S128.max(you: S128) -> S128:
+routine S128.max(you: S128) -> S128
     return S128(value: me.value.max(you.value))
 
-routine S128.clamp(min_val: S128, max_val: S128) -> S128:
+routine S128.clamp(min_val: S128, max_val: S128) -> S128
     return S128(value: me.value.clamp(min_val.value, max_val.value))
 
 # Bit manipulation
-routine S128.count_ones() -> S128:
+routine S128.count_ones() -> S128
     return S128(value: me.value.count_ones())
 
-routine S128.count_zeros() -> S128:
+routine S128.count_zeros() -> S128
     return S128(value: me.value.count_zeros())
 
-routine S128.leading_zeros() -> S128:
+routine S128.leading_zeros() -> S128
     return S128(value: me.value.leading_zeros())
 
-routine S128.trailing_zeros() -> S128:
+routine S128.trailing_zeros() -> S128
     return S128(value: me.value.trailing_zeros())
 
-routine S128.reverse_bits() -> S128:
+routine S128.reverse_bits() -> S128
     return S128(value: me.value.reverse_bits())
 
-routine S128.swap_bytes() -> S128:
+routine S128.swap_bytes() -> S128
     return S128(value: me.value.swap_bytes())
 
 # Utility methods
-routine S128.is_positive() -> Bool:
+routine S128.is_positive() -> Bool
     return me.value.is_positive()
 
-routine S128.is_negative() -> Bool:
+routine S128.is_negative() -> Bool
     return me.value.is_negative()
 
-routine S128.is_zero() -> Bool:
+routine S128.is_zero() -> Bool
     return me.value.is_zero()
 
-routine S128.is_even() -> Bool:
+routine S128.is_even() -> Bool
     return me.value.is_even()
 
-routine S128.is_odd() -> Bool:
+routine S128.is_odd() -> Bool
     return me.value.is_odd()
 
-routine S128.signum() -> S128:
+routine S128.signum() -> S128
     return S128(value: me.value.signum())
 
-routine S128.is_power_of_two() -> Bool:
+routine S128.is_power_of_two() -> Bool
     return me.value.is_power_of_two()
 
 # String conversion
-routine S128.to_text() -> Text:
+routine S128.to_text() -> Text
     return me.value.to_text()
 
 # ============================================================================
@@ -142,41 +142,41 @@ routine S128.to_text() -> Text:
 # ============================================================================
 
 # From smaller signed integers (widening - always fits)
-routine S128.__create__(from: S8) -> S128:
+routine S128.__create__(from: S8) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__(from: S16) -> S128:
+routine S128.__create__(from: S16) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__(from: S32) -> S128:
+routine S128.__create__(from: S32) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__(from: S64) -> S128:
+routine S128.__create__(from: S64) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
 # From unsigned integers (can overflow for large values)
-routine S128.__create__(from: U8) -> S128:
+routine S128.__create__(from: U8) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__(from: U16) -> S128:
+routine S128.__create__(from: U16) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__(from: U32) -> S128:
+routine S128.__create__(from: U32) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__(from: U64) -> S128:
+routine S128.__create__(from: U64) -> S128
     return S128(value: RazorForge/Core.S128.__create__(from.value))
 
-routine S128.__create__!(from: U128) -> S128:
+routine S128.__create__!(from: U128) -> S128
     return S128(value: RazorForge/Core.S128.__create__!(from.value))
 
 # From floating point (truncates, can overflow)
-routine S128.__create__!(from: F32) -> S128:
+routine S128.__create__!(from: F32) -> S128
     return S128(value: RazorForge/Core.S128.__create__!(from.value))
 
-routine S128.__create__!(from: F64) -> S128:
+routine S128.__create__!(from: F64) -> S128
     return S128(value: RazorForge/Core.S128.__create__!(from.value))
 
 # From arbitrary precision (can overflow)
-routine S128.__create__!(from: Integer) -> S128:
+routine S128.__create__!(from: Integer) -> S128
     return S128(value: RazorForge/Core.S128.__create__!(from.value))

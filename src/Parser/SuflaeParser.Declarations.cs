@@ -280,7 +280,7 @@ public partial class SuflaeParser
     ///   - Optional: -> ReturnType
     ///
     /// PHASE 5: BODY
-    ///   - Parse indented block after colon
+    ///   - Parse indented block
     /// </remarks>
     /// <param name="visibility">Access modifier for the routine.</param>
     /// <param name="attributes">List of attributes applied to the routine.</param>
@@ -428,9 +428,8 @@ public partial class SuflaeParser
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // PHASE 5: BODY (indented block after colon)
+        // PHASE 5: BODY (indented block)
         // ═══════════════════════════════════════════════════════════════════════════
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after routine header");
 
         _inRoutineBody = true;
         Statement body;
@@ -504,13 +503,10 @@ public partial class SuflaeParser
             } while (Match(type: TokenType.Comma));
         }
 
-        // Colon to start indented block
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after entity header");
-
         var members = new List<Declaration>();
 
         // Parse entity body as indented block
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after entity header");
 
         // Enable field declaration syntax inside entity body
         // Entities allow modifiers on fields (unlike records)
@@ -624,13 +620,10 @@ public partial class SuflaeParser
             } while (Match(type: TokenType.Comma));
         }
 
-        // Colon to start indented block
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after record header");
-
         var members = new List<Declaration>();
 
         // Parse record body as indented block
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after record header");
 
         // Enable field declaration syntax inside record body
         // Records are strict: no modifiers allowed on fields
@@ -712,14 +705,11 @@ public partial class SuflaeParser
         // Register this type name for generic disambiguation
         _knownTypeNames.Add(item: name);
 
-        // Colon to start indented block
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after option header");
-
         var variants = new List<ChoiceCase>();
         var methods = new List<RoutineDeclaration>();
 
         // Parse option body as indented block
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after option header");
 
         if (!Check(type: TokenType.Indent))
         {
@@ -814,13 +804,12 @@ public partial class SuflaeParser
             _genericParameterScopes.Push(item: [..genericParams]);
         }
 
-        // Colon to start indented block
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after variant header");
+        // Indented block follows variant header
 
         var cases = new List<VariantCase>();
 
         // Parse variant body as indented block
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after variant header");
 
         if (!Check(type: TokenType.Indent))
         {
@@ -925,18 +914,16 @@ public partial class SuflaeParser
             {
                 while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 parentProtocols.Add(item: ParseType());
-                while (Match(type: TokenType.Newline)) { } // Skip newlines after protocol name
             }
             while (Match(type: TokenType.Comma));
         }
 
-        // Colon to start indented block
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after protocol header");
+        // Indented block follows protocol header
 
         var methods = new List<RoutineSignature>();
 
         // Parse protocol body as indented block
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after ':'");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after protocol header");
 
         if (!Check(type: TokenType.Indent))
         {

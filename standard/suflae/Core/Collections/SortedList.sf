@@ -4,61 +4,61 @@ module Core
 
 import RazorForge/Collections.SortedList
 
-entity SortedList<T>:
+entity SortedList<T>
     private var value: RazorForge/Collections.SortedList<T>
 
 # Core operations
-routine SortedList<T>.count() -> Integer:
+routine SortedList<T>.count() -> Integer
     return Integer(value: me.value.count())
 
-routine SortedList<T>.is_empty() -> Bool:
+routine SortedList<T>.is_empty() -> Bool
     return me.value.is_empty()
 
-routine SortedList<T>.clear():
+routine SortedList<T>.clear()
     me.value.clear()
 
 # Adding and removing
-routine SortedList<T>.add(item: T):
+routine SortedList<T>.add(item: T)
     me.value.add(item)
 
-routine SortedList<T>.remove(item: T) -> Bool:
+routine SortedList<T>.remove(item: T) -> Bool
     return me.value.remove(item)
 
-routine SortedList<T>.remove_all(item: T) -> Integer:
+routine SortedList<T>.remove_all(item: T) -> Integer
     return Integer(value: me.value.remove_all(item))
 
 # Indexing
-routine SortedList<T>.__getitem__!(index: Integer) -> T:
+routine SortedList<T>.__getitem__!(index: Integer) -> T
     return me.value.__getitem__!(index.value)
 
 # Search
-routine SortedList<T>.contains(item: T) -> Bool:
+routine SortedList<T>.contains(item: T) -> Bool
     return me.value.contains(item)
 
-routine SortedList<T>.count_of(item: T) -> Integer:
+routine SortedList<T>.count_of(item: T) -> Integer
     return Integer(value: me.value.count_of(item))
 
 # Min/Max
-routine SortedList<T>.min!() -> T:
+routine SortedList<T>.min!() -> T
     return me.value.min!()
 
-routine SortedList<T>.max!() -> T:
+routine SortedList<T>.max!() -> T
     return me.value.max!()
 
-routine SortedList<T>.first!() -> T:
+routine SortedList<T>.first!() -> T
     return me.value.first!()
 
-routine SortedList<T>.last!() -> T:
+routine SortedList<T>.last!() -> T
     return me.value.last!()
 
 # Range queries
-routine SortedList<T>.range(min_val: T, max_val: T) -> List<T>:
+routine SortedList<T>.range(min_val: T, max_val: T) -> List<T>
     return List<T>(value: me.value.range(min_val, max_val))
 
 # Conversion
-routine SortedList<T>.to_list() -> List<T>:
+routine SortedList<T>.to_list() -> List<T>
     return List<T>(value: me.value.to_list())
 
 # Comparison
-routine SortedList<T>.__eq__(other: SortedList<T>) -> Bool:
+routine SortedList<T>.__eq__(other: SortedList<T>) -> Bool
     return me.value.__eq__(other.value)

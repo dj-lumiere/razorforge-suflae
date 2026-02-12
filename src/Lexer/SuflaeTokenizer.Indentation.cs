@@ -16,7 +16,6 @@ using Compilers.Shared.Lexer;
 ///   <item><description>Measuring indentation at the start of each line</description></item>
 ///   <item><description>Emitting INDENT tokens when indentation increases</description></item>
 ///   <item><description>Emitting DEDENT tokens when indentation decreases</description></item>
-///   <item><description>Detecting block-starting colons (colons at end of line)</description></item>
 ///   <item><description>Determining which newlines are significant</description></item>
 /// </list>
 /// </remarks>
@@ -39,14 +38,12 @@ public partial class SuflaeTokenizer
     ///   <item><description>Each indentation level is 4 spaces</description></item>
     ///   <item><description>Tabs are counted as 4 spaces</description></item>
     ///   <item><description>Indentation must be a multiple of 4</description></item>
-    ///   <item><description>After a block-starter colon, indentation must increase</description></item>
-    ///   <item><description>Unexpected increases in indentation are errors</description></item>
+    ///   <item><description>Indentation increases start a new block</description></item>
     /// </list>
     /// </para>
     /// </remarks>
     /// <exception cref="LexerException">
-    /// Thrown when indentation is misaligned (not a multiple of 4),
-    /// when expected indent is missing, or when unexpected indent is found.
+    /// Thrown when indentation is misaligned (not a multiple of 4).
     /// </exception>
     private void HandleIndentation()
     {
@@ -91,20 +88,19 @@ public partial class SuflaeTokenizer
                 _fileName, _line, _column);
         }
 
-        // Handle expected indent after block-starter colon
-        if (_expectIndent)
+        // Handle indentation increase (new block)
+        if (newIndentLevel > _currentIndentLevel)
         {
-            if (newIndentLevel <= _currentIndentLevel)
+            // Ensure a Newline precedes the Indent token
+            // (some tokens like > suppress newlines as continuation,
+            //  but an indent always starts a new logical line)
+            if (_tokens.Count == 0 || _tokens[^1].Type != TokenType.Newline)
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.ExpectedIndent,
-                    "Expected indent after ':'",
-                    _fileName, _line, _column);
+                AddToken(type: TokenType.Newline, text: "\\n");
             }
 
             AddToken(type: TokenType.Indent, text: "");
             _currentIndentLevel = newIndentLevel;
-            _expectIndent = false;
             return;
         }
 
@@ -113,15 +109,6 @@ public partial class SuflaeTokenizer
         {
             AddToken(type: TokenType.Dedent, text: "");
             _currentIndentLevel -= 1;
-        }
-
-        // Unexpected increase in indentation
-        if (newIndentLevel > _currentIndentLevel)
-        {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.ExpectedIndent,
-                "Unexpected indent",
-                _fileName, _line, _column);
         }
     }
 
@@ -173,9 +160,6 @@ public partial class SuflaeTokenizer
     ///   <item><description>The last token was already a newline</description></item>
     /// </list>
     /// </para>
-    /// <para>
-    /// A newline after a colon IS significant (the colon starts a block).
-    /// </para>
     /// </remarks>
     private bool IsNewlineSignificant()
     {
@@ -221,7 +205,7 @@ public partial class SuflaeTokenizer
             // Already a newline - don't duplicate
             TokenType.Newline => false,
 
-            // Colon at end of line is significant (block starter)
+            // Colon is significant (type annotations)
             TokenType.Colon => true,
 
             // Everything else is significant
@@ -229,50 +213,6 @@ public partial class SuflaeTokenizer
         };
     }
 
-    /// <summary>
-    /// Determines whether a colon at the current position starts a block.
-    /// </summary>
-    /// <returns>
-    /// <c>true</c> if the colon is followed only by whitespace/comments until newline;
-    /// <c>false</c> if there's more content on the line (type annotation).
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// In Suflae, colons have two meanings:
-    /// <list type="bullet">
-    ///   <item><description>Block starter: <c>if condition:</c> (followed by newline)</description></item>
-    ///   <item><description>Type annotation: <c>let x: s32 = 5</c> (followed by type)</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// This method looks ahead to determine which case applies.
-    /// </para>
-    /// </remarks>
-    private bool IsBlockStarterColon()
-    {
-        int pos = _position;
-
-        // Skip whitespace
-        while (pos < _source.Length && (_source[index: pos] == ' ' || _source[index: pos] == '\t'))
-        {
-            pos += 1;
-        }
-
-        // If we hit end of file or newline, it's a block starter
-        if (pos >= _source.Length || _source[index: pos] == '\n' || _source[index: pos] == '\r')
-        {
-            return true;
-        }
-
-        // If we hit a comment, it's still a block starter
-        if (_source[index: pos] == '#')
-        {
-            return true;
-        }
-
-        // Otherwise, it's a type annotation
-        return false;
-    }
 
     #endregion
 }

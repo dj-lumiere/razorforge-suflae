@@ -4,66 +4,66 @@ module Numeric
 
 import RazorForge/Core.D32
 
-record D32:
+record D32
     private value: RazorForge/Core.D32
 
 # Arithmetic operators
-routine D32.__add__(you: D32) -> D32:
+routine D32.__add__(you: D32) -> D32
     return D32(value: me.value.__add__(you.value))
 
-routine D32.__sub__(you: D32) -> D32:
+routine D32.__sub__(you: D32) -> D32
     return D32(value: me.value.__sub__(you.value))
 
-routine D32.__mul__(you: D32) -> D32:
+routine D32.__mul__(you: D32) -> D32
     return D32(value: me.value.__mul__(you.value))
 
-routine D32.__truediv__(you: D32) -> D32:
+routine D32.__truediv__(you: D32) -> D32
     return D32(value: me.value.__truediv__(you.value))
 
-routine D32.__neg__() -> D32:
+routine D32.__neg__() -> D32
     return D32(value: me.value.__neg__())
 
 # Comparison
-routine D32.__eq__(you: D32) -> Bool:
+routine D32.__eq__(you: D32) -> Bool
     return me.value.__eq__(you.value)
 
-routine D32.__cmp__(you: D32) -> ComparisonSign:
+routine D32.__cmp__(you: D32) -> ComparisonSign
     return me.value.__cmp__(you.value)
 
 # Math operations
-routine D32.abs() -> D32:
+routine D32.abs() -> D32
     return D32(value: me.value.abs())
 
-routine D32.floor() -> D32:
+routine D32.floor() -> D32
     return D32(value: me.value.floor())
 
-routine D32.ceil() -> D32:
+routine D32.ceil() -> D32
     return D32(value: me.value.ceil())
 
-routine D32.round() -> D32:
+routine D32.round() -> D32
     return D32(value: me.value.round())
 
-routine D32.trunc() -> D32:
+routine D32.trunc() -> D32
     return D32(value: me.value.trunc())
 
 # Utility methods
-routine D32.min(you: D32) -> D32:
+routine D32.min(you: D32) -> D32
     return D32(value: me.value.min(you.value))
 
-routine D32.max(you: D32) -> D32:
+routine D32.max(you: D32) -> D32
     return D32(value: me.value.max(you.value))
 
-routine D32.is_positive() -> Bool:
+routine D32.is_positive() -> Bool
     return me.value.is_positive()
 
-routine D32.is_negative() -> Bool:
+routine D32.is_negative() -> Bool
     return me.value.is_negative()
 
-routine D32.is_zero() -> Bool:
+routine D32.is_zero() -> Bool
     return me.value.is_zero()
 
 # String conversion
-routine D32.to_text() -> Text:
+routine D32.to_text() -> Text
     return me.value.to_text()
 
 # ============================================================================
@@ -71,54 +71,54 @@ routine D32.to_text() -> Text:
 # ============================================================================
 
 # From signed integers
-routine D32.__create__(from: S8) -> D32:
+routine D32.__create__(from: S8) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: S16) -> D32:
+routine D32.__create__(from: S16) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: S32) -> D32:
+routine D32.__create__(from: S32) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: S64) -> D32:
+routine D32.__create__(from: S64) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: S128) -> D32:
+routine D32.__create__(from: S128) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From unsigned integers
-routine D32.__create__(from: U8) -> D32:
+routine D32.__create__(from: U8) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: U16) -> D32:
+routine D32.__create__(from: U16) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: U32) -> D32:
+routine D32.__create__(from: U32) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: U64) -> D32:
+routine D32.__create__(from: U64) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: U128) -> D32:
+routine D32.__create__(from: U128) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From binary floating point
-routine D32.__create__(from: F32) -> D32:
+routine D32.__create__(from: F32) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: F64) -> D32:
+routine D32.__create__(from: F64) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From other decimal types
-routine D32.__create__(from: D64) -> D32:
+routine D32.__create__(from: D64) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: D128) -> D32:
+routine D32.__create__(from: D128) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
 # From arbitrary precision
-routine D32.__create__(from: Integer) -> D32:
+routine D32.__create__(from: Integer) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))
 
-routine D32.__create__(from: Decimal) -> D32:
+routine D32.__create__(from: Decimal) -> D32
     return D32(value: RazorForge/Core.D32.__create__(from.value))

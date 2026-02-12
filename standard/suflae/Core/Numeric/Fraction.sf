@@ -4,5 +4,5 @@ module Core
 
 import RazorForge/Numeric.Fraction
 
-entity Fraction:
+entity Fraction
     private var value: RazorForge/Numeric.Fraction

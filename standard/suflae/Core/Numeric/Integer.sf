@@ -4,95 +4,95 @@ module Core
 
 import RazorForge/Numeric.Integer
 
-entity Integer:
+entity Integer
     private var value: RazorForge/Numeric.Integer
 
 # Arithmetic operators
-routine Integer.__add__(you: Integer) -> Integer:
+routine Integer.__add__(you: Integer) -> Integer
     return Integer(value: me.value.__add__(you.value))
 
-routine Integer.__sub__(you: Integer) -> Integer:
+routine Integer.__sub__(you: Integer) -> Integer
     return Integer(value: me.value.__sub__(you.value))
 
-routine Integer.__mul__(you: Integer) -> Integer:
+routine Integer.__mul__(you: Integer) -> Integer
     return Integer(value: me.value.__mul__(you.value))
 
-routine Integer.__floordiv__(you: Integer) -> Integer:
+routine Integer.__floordiv__(you: Integer) -> Integer
     return Integer(value: me.value.__floordiv__(you.value))
 
-routine Integer.__rem__(you: Integer) -> Integer:
+routine Integer.__rem__(you: Integer) -> Integer
     return Integer(value: me.value.__rem__(you.value))
 
-routine Integer.__neg__() -> Integer:
+routine Integer.__neg__() -> Integer
     return Integer(value: me.value.__neg__())
 
-routine Integer.__pow__(exp: Integer) -> Integer:
+routine Integer.__pow__(exp: Integer) -> Integer
     return Integer(value: me.value.__pow__(exp.value))
 
 # Comparison
-routine Integer.__eq__(you: Integer) -> Bool:
+routine Integer.__eq__(you: Integer) -> Bool
     return me.value.__eq__(you.value)
 
-routine Integer.__cmp__(you: Integer) -> ComparisonSign:
+routine Integer.__cmp__(you: Integer) -> ComparisonSign
     return me.value.__cmp__(you.value)
 
 # Bitwise operations
-routine Integer.__and__(you: Integer) -> Integer:
+routine Integer.__and__(you: Integer) -> Integer
     return Integer(value: me.value.__and__(you.value))
 
-routine Integer.__or__(you: Integer) -> Integer:
+routine Integer.__or__(you: Integer) -> Integer
     return Integer(value: me.value.__or__(you.value))
 
-routine Integer.__xor__(you: Integer) -> Integer:
+routine Integer.__xor__(you: Integer) -> Integer
     return Integer(value: me.value.__xor__(you.value))
 
-routine Integer.__shl__(bits: Integer) -> Integer:
+routine Integer.__shl__(bits: Integer) -> Integer
     return Integer(value: me.value.__shl__(bits.value))
 
-routine Integer.__shr__(bits: Integer) -> Integer:
+routine Integer.__shr__(bits: Integer) -> Integer
     return Integer(value: me.value.__shr__(bits.value))
 
 # Math operations
-routine Integer.abs() -> Integer:
+routine Integer.abs() -> Integer
     return Integer(value: me.value.abs())
 
-routine Integer.sqrt() -> Integer:
+routine Integer.sqrt() -> Integer
     return Integer(value: me.value.sqrt())
 
-routine Integer.gcd(you: Integer) -> Integer:
+routine Integer.gcd(you: Integer) -> Integer
     return Integer(value: me.value.gcd(you.value))
 
-routine Integer.lcm(you: Integer) -> Integer:
+routine Integer.lcm(you: Integer) -> Integer
     return Integer(value: me.value.lcm(you.value))
 
 # Utility methods
-routine Integer.is_zero() -> Bool:
+routine Integer.is_zero() -> Bool
     return me.value.is_zero()
 
-routine Integer.is_negative() -> Bool:
+routine Integer.is_negative() -> Bool
     return me.value.is_negative()
 
-routine Integer.is_positive() -> Bool:
+routine Integer.is_positive() -> Bool
     return me.value.is_positive()
 
-routine Integer.signum() -> Integer:
+routine Integer.signum() -> Integer
     return Integer(value: me.value.signum())
 
 # String conversion
-routine Integer.to_text(radix: Integer = 10) -> Text:
+routine Integer.to_text(radix: Integer = 10) -> Text
     return me.value.to_text(radix.value)
 
 # Factory methods
-routine Integer.zero() -> Integer:
+routine Integer.zero() -> Integer
     return Integer(value: RazorForge/Numeric.Integer.zero())
 
-routine Integer.one() -> Integer:
+routine Integer.one() -> Integer
     return Integer(value: RazorForge/Numeric.Integer.one())
 
-routine Integer.from_binary!(text: Text) -> Integer:
+routine Integer.from_binary!(text: Text) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.from_binary!(text))
 
-routine Integer.from_hex!(text: Text) -> Integer:
+routine Integer.from_hex!(text: Text) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.from_hex!(text))
 
 # ============================================================================
@@ -100,44 +100,44 @@ routine Integer.from_hex!(text: Text) -> Integer:
 # ============================================================================
 
 # From native signed integers
-routine Integer.__create__(from: S8) -> Integer:
+routine Integer.__create__(from: S8) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: S16) -> Integer:
+routine Integer.__create__(from: S16) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: S32) -> Integer:
+routine Integer.__create__(from: S32) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: S64) -> Integer:
+routine Integer.__create__(from: S64) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: S128) -> Integer:
+routine Integer.__create__(from: S128) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 # From native unsigned integers
-routine Integer.__create__(from: U8) -> Integer:
+routine Integer.__create__(from: U8) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: U16) -> Integer:
+routine Integer.__create__(from: U16) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: U32) -> Integer:
+routine Integer.__create__(from: U32) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: U64) -> Integer:
+routine Integer.__create__(from: U64) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
-routine Integer.__create__(from: U128) -> Integer:
+routine Integer.__create__(from: U128) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))
 
 # From floating point (truncates)
-routine Integer.__create__!(from: F32) -> Integer:
+routine Integer.__create__!(from: F32) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__!(from.value))
 
-routine Integer.__create__!(from: F64) -> Integer:
+routine Integer.__create__!(from: F64) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__!(from.value))
 
 # From decimal (truncates)
-routine Integer.__create__(from: Decimal) -> Integer:
+routine Integer.__create__(from: Decimal) -> Integer
     return Integer(value: RazorForge/Numeric.Integer.__create__(from.value))

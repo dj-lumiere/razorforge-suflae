@@ -45,7 +45,6 @@ public partial class SuflaeParser
         // PHASE 1: INITIAL IF (condition and then-block)
         // ═══════════════════════════════════════════════════════════════════════════
         Expression condition = ParseExpression();
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after if condition");
         Statement thenBranch = ParseIndentedBlock();
 
         Statement? elseBranch = null;
@@ -57,7 +56,6 @@ public partial class SuflaeParser
         {
             SourceLocation elseifLocation = GetLocation(token: PeekToken(offset: -1));
             Expression elseifCondition = ParseExpression();
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after elseif condition");
             Statement elseifBranch = ParseIndentedBlock();
 
             // Create nested if statement for this elseif
@@ -95,7 +93,7 @@ public partial class SuflaeParser
                 Location: location);
         }
 
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+        // Block colon removed — indentation determines block structure
         Statement finalElse = ParseIndentedBlock();
 
         if (elseBranch == null)
@@ -148,13 +146,12 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after if condition");
         Statement thenBranch = ParseIndentedBlock();
         Statement? elseBranch = null;
 
         if (Match(type: TokenType.Else))
         {
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+            // Block colon removed — indentation determines block structure
             elseBranch = ParseIndentedBlock();
         }
 
@@ -178,14 +175,13 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after while condition");
         Statement body = ParseIndentedBlock();
 
         // Check for Python-style else clause (runs if loop completes without break)
         Statement? elseBranch = null;
         if (Match(type: TokenType.Else))
         {
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+            // Block colon removed — indentation determines block structure
             elseBranch = ParseIndentedBlock();
         }
 
@@ -202,9 +198,8 @@ public partial class SuflaeParser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // loop: body is equivalent to while true: body
+        // loop body is equivalent to while true body
         Expression trueCondition = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after loop");
         Statement body = ParseIndentedBlock();
 
         return new WhileStatement(Condition: trueCondition, Body: body, ElseBranch: null, Location: location);
@@ -236,14 +231,13 @@ public partial class SuflaeParser
 
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in for loop");
         Expression iterable = ParseExpression();
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after for header");
         Statement body = ParseIndentedBlock();
 
         // Check for Python-style else clause (runs if loop completes without break)
         Statement? elseBranch = null;
         if (Match(type: TokenType.Else))
         {
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after else");
+            // Block colon removed — indentation determines block structure
             elseBranch = ParseIndentedBlock();
         }
 
@@ -266,9 +260,8 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression expression = ParseExpression();
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after when expression");
 
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after when header");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after when expression");
 
         // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
@@ -314,10 +307,10 @@ public partial class SuflaeParser
             // Handle 'else' keyword for default case: else => body or else varName => body
             else if (Match(type: TokenType.Else))
             {
-                // Check for variable binding: else varName => or else varName:
+                // Check for variable binding: else varName => or else varName (followed by indent)
                 TokenType nextAfterIdent = PeekToken(offset: 1).Type;
                 if (Check(type: TokenType.Identifier) &&
-                    (nextAfterIdent == TokenType.FatArrow || nextAfterIdent == TokenType.Colon))
+                    (nextAfterIdent == TokenType.FatArrow || nextAfterIdent == TokenType.Newline))
                 {
                     string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
                     pattern = new IdentifierPattern(Name: varName, Location: clauseLocation);
@@ -344,25 +337,13 @@ public partial class SuflaeParser
 
             // Suflae supports two clause syntaxes:
             // 1. is PATTERN => expr           (single expression)
-            // 2. is PATTERN:                  (indented block, requires 'becomes')
+            // 2. is PATTERN                   (indented block, requires 'becomes')
             //        statements...
             //        becomes value
             Statement body;
-            if (Match(type: TokenType.Colon))
-            {
-                // Multi-line body: is PATTERN: followed by indented block
-                // Block has its own scope, so don't restrict comparisons inside it
-                body = ParseIndentedBlock();
-            }
-            else if (Match(type: TokenType.FatArrow))
+            if (Match(type: TokenType.FatArrow))
             {
                 // Single-line body: is PATTERN => expression
-                // Block is NOT allowed after => (use PATTERN: with indented block instead)
-                if (Check(type: TokenType.Colon))
-                {
-                    throw ThrowParseError("Block ':' is not allowed after '=>'. Use 'pattern:' with indented block and 'becomes' for multi-statement branches");
-                }
-
                 // Set flag to prevent comparisons from continuing the expression
                 _inWhenClauseBody = true;
                 body = ParseExpressionStatement();
@@ -370,7 +351,8 @@ public partial class SuflaeParser
             }
             else
             {
-                throw ThrowParseError("Expected ':' or '=>' after pattern");
+                // Multi-line body: is PATTERN followed by indented block
+                body = ParseIndentedBlock();
             }
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
@@ -694,7 +676,7 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation();
         var statements = new List<Statement>();
 
-        // Consume newline after colon (optional if we're already at Indent)
+        // Consume newline before indent (optional if we're already at Indent)
         // This handles cases like when clause blocks where token stream varies
         if (Check(type: TokenType.Newline))
         {
@@ -702,13 +684,13 @@ public partial class SuflaeParser
         }
         else if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError("Expected newline after ':'");
+            throw ThrowParseError("Expected newline before indented block");
         }
 
         // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError("Expected indented block after ':'");
+            throw ThrowParseError("Expected indented block");
         }
 
         // Process the indent token
@@ -827,8 +809,7 @@ public partial class SuflaeParser
             resources.Add((resource, name, resourceLocation));
         } while (Match(type: TokenType.Comma));
 
-        // Expect ':' and indented body
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after using statement");
+        // Indented body follows
         Statement body = ParseIndentedBlock();
 
         // Build nested UsingStatements from inside out

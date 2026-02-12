@@ -5,69 +5,69 @@ module Numeric
 
 import RazorForge/Core.SAddr
 
-record SAddr:
+record SAddr
     private value: RazorForge/Core.SAddr
 
 # Wrapping arithmetic (required for address types)
-routine SAddr.__add_wrap__(you: SAddr) -> SAddr:
+routine SAddr.__add_wrap__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__add_wrap__(you.value))
 
-routine SAddr.__sub_wrap__(you: SAddr) -> SAddr:
+routine SAddr.__sub_wrap__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__sub_wrap__(you.value))
 
-routine SAddr.__mul_wrap__(you: SAddr) -> SAddr:
+routine SAddr.__mul_wrap__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__mul_wrap__(you.value))
 
 # Saturating arithmetic
-routine SAddr.__add_sat__(you: SAddr) -> SAddr:
+routine SAddr.__add_sat__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__add_sat__(you.value))
 
-routine SAddr.__sub_sat__(you: SAddr) -> SAddr:
+routine SAddr.__sub_sat__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__sub_sat__(you.value))
 
-routine SAddr.__mul_sat__(you: SAddr) -> SAddr:
+routine SAddr.__mul_sat__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__mul_sat__(you.value))
 
 # Comparison
-routine SAddr.__eq__(you: SAddr) -> Bool:
+routine SAddr.__eq__(you: SAddr) -> Bool
     return me.value.__eq__(you.value)
 
-routine SAddr.__cmp__(you: SAddr) -> ComparisonSign:
+routine SAddr.__cmp__(you: SAddr) -> ComparisonSign
     return me.value.__cmp__(you.value)
 
 # Bitwise operations
-routine SAddr.__and__(you: SAddr) -> SAddr:
+routine SAddr.__and__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__and__(you.value))
 
-routine SAddr.__or__(you: SAddr) -> SAddr:
+routine SAddr.__or__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__or__(you.value))
 
-routine SAddr.__xor__(you: SAddr) -> SAddr:
+routine SAddr.__xor__(you: SAddr) -> SAddr
     return SAddr(value: me.value.__xor__(you.value))
 
-routine SAddr.__not__() -> SAddr:
+routine SAddr.__not__() -> SAddr
     return SAddr(value: me.value.__not__())
 
 # Math operations
-routine SAddr.abs() -> SAddr:
+routine SAddr.abs() -> SAddr
     return SAddr(value: me.value.abs())
 
-routine SAddr.min(you: SAddr) -> SAddr:
+routine SAddr.min(you: SAddr) -> SAddr
     return SAddr(value: me.value.min(you.value))
 
-routine SAddr.max(you: SAddr) -> SAddr:
+routine SAddr.max(you: SAddr) -> SAddr
     return SAddr(value: me.value.max(you.value))
 
 # Utility methods
-routine SAddr.is_positive() -> Bool:
+routine SAddr.is_positive() -> Bool
     return me.value.is_positive()
 
-routine SAddr.is_negative() -> Bool:
+routine SAddr.is_negative() -> Bool
     return me.value.is_negative()
 
-routine SAddr.is_zero() -> Bool:
+routine SAddr.is_zero() -> Bool
     return me.value.is_zero()
 
 # String conversion
-routine SAddr.to_text() -> Text:
+routine SAddr.to_text() -> Text
     return me.value.to_text()

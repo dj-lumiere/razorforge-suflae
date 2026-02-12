@@ -217,7 +217,7 @@ public class MutabilityTests
     public void AnalyzeSuflae_LetReassignment_ReportsError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let x = 42
                             x = 10
                         """;
@@ -230,7 +230,7 @@ public class MutabilityTests
     public void AnalyzeSuflae_VarReassignment_NoError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             var x = 42
                             x = 10
                         """;
@@ -242,11 +242,11 @@ public class MutabilityTests
     public void AnalyzeSuflae_ReadonlyMethodMutating_ReportsError()
     {
         string source = """
-                        entity Counter:
+                        entity Counter
                             var count: Integer
 
                         @readonly
-                        routine Counter.increment():
+                        routine Counter.increment()
                             me.count += 1
                         """;
 
@@ -258,11 +258,11 @@ public class MutabilityTests
     public void AnalyzeSuflae_WritableMethodMutating_NoError()
     {
         string source = """
-                        entity Counter:
+                        entity Counter
                             var count: Integer
 
                         @writable
-                        routine Counter.increment():
+                        routine Counter.increment()
                             me.count += 1
                         """;
 

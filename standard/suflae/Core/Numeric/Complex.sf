@@ -4,5 +4,5 @@ module Core
 
 import RazorForge/Numeric.Complex
 
-entity Complex:
+entity Complex
     private var value: RazorForge/Numeric.Complex

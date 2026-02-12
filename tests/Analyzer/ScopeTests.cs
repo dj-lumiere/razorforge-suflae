@@ -329,7 +329,7 @@ public class ScopeTests
     public void AnalyzeSuflae_VariableInScope_Resolves()
     {
         string source = """
-                        routine test():
+                        routine test()
                             let x = 42
                             show(x)
                         """;
@@ -341,7 +341,7 @@ public class ScopeTests
     public void AnalyzeSuflae_UndefinedVariable_ReportsError()
     {
         string source = """
-                        routine test():
+                        routine test()
                             show(undefined_var)
                         """;
 
@@ -353,8 +353,8 @@ public class ScopeTests
     public void AnalyzeSuflae_ForLoopVariable_InScope()
     {
         string source = """
-                        routine test():
-                            for i in 0 to 10:
+                        routine test()
+                            for i in 0 to 10
                                 show(i)
                         """;
 
@@ -365,8 +365,8 @@ public class ScopeTests
     public void AnalyzeSuflae_ForLoopVariable_OutOfScope()
     {
         string source = """
-                        routine test():
-                            for i in 0 to 10:
+                        routine test()
+                            for i in 0 to 10
                                 show(i)
                             show(i)
                         """;
