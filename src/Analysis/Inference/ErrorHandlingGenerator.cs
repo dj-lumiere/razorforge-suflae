@@ -67,7 +67,14 @@ public sealed class ErrorHandlingGenerator
         // Phase 1: Keyword Detection
         ErrorHandlingAnalysis analysis = AnalyzeBody(body: body);
 
-        // Validate: ! functions must use throw or absent
+        // Propagated failability: calling other failable functions counts as HasThrow
+        // because their throws propagate through this function
+        if (routine.HasFailableCalls)
+        {
+            analysis.HasThrow = true;
+        }
+
+        // Validate: ! functions must use throw, absent, or call other failable functions
         if (analysis is { HasThrow: false, HasAbsent: false })
         {
             return new ErrorHandlingResult

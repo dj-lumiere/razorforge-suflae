@@ -1059,6 +1059,12 @@ public sealed partial class SemanticAnalyzer
             RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
             if (routine != null)
             {
+                // Track failable calls for error handling variant generation
+                if (routine.IsFailable && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
                 // Validate routine access
                 ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
 
@@ -1084,6 +1090,25 @@ public sealed partial class SemanticAnalyzer
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
                 return type;
             }
+
+            // Try module-prefixed routine lookup (e.g., Core.normalize_duration)
+            // This is done after type constructor check to avoid shadowing type constructors
+            // with identically-named convenience functions (e.g., "routine U32(from: U8)")
+            routine = LookupRoutineWithImports(name: id.Name);
+            if (routine != null)
+            {
+                // Track failable calls for error handling variant generation
+                if (routine.IsFailable && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
+                ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
+                AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+                return routine.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
         }
 
         if (call.Callee is MemberExpression member)
@@ -1092,6 +1117,12 @@ public sealed partial class SemanticAnalyzer
             RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
             if (method != null)
             {
+                // Track failable calls for error handling variant generation
+                if (method.IsFailable && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
                 // Validate method access
                 ValidateRoutineAccess(routine: method, accessLocation: call.Location);
 

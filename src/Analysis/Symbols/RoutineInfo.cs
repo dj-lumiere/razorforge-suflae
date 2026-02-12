@@ -49,6 +49,9 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine contains absent statements.</summary>
     public bool HasAbsent { get; set; }
 
+    /// <summary>Whether this routine calls other failable functions (propagated failability).</summary>
+    public bool HasFailableCalls { get; set; }
+
     /// <summary>The declared mutation category for this routine (from source annotation).</summary>
     public MutationCategory DeclaredMutation { get; init; } = MutationCategory.Migratable;
 

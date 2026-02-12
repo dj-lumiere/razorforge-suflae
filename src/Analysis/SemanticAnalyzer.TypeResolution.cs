@@ -41,6 +41,36 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Looks up a routine by name, searching the Core module and imported modules.
+    /// Called after type constructor resolution to avoid shadowing type constructors
+    /// with identically-named convenience functions (e.g., "routine U32(from: U8)").
+    /// </summary>
+    private Symbols.RoutineInfo? LookupRoutineWithImports(string name)
+    {
+        // Try Core module prefix (Core routines are auto-imported)
+        if (!name.Contains('.'))
+        {
+            Symbols.RoutineInfo? result = _registry.LookupRoutine(fullName: $"Core.{name}");
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        // Try each imported module
+        foreach (string ns in _importedNamespaces)
+        {
+            Symbols.RoutineInfo? result = _registry.LookupRoutine(fullName: $"{ns}.{name}");
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Resolves a type expression to a TypeInfo.
     /// Nullable types (T?) are desugared to Maybe&lt;T&gt; at parse time,
     /// so by the time we see them here, they're already Maybe&lt;T&gt;.
