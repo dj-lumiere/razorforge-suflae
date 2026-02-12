@@ -79,6 +79,10 @@ public sealed partial class SemanticAnalyzer
             case ImportDeclaration import:
                 ProcessImportDeclaration(import: import);
                 break;
+
+            case PresetDeclaration preset:
+                CollectPresetDeclaration(preset: preset);
+                break;
         }
     }
 
@@ -171,6 +175,12 @@ public sealed partial class SemanticAnalyzer
         }
 
         // TODO: Register field in the current type's field list when type body resolution is implemented
+    }
+
+    private void CollectPresetDeclaration(PresetDeclaration preset)
+    {
+        TypeSymbol presetType = ResolveType(typeExpr: preset.Type);
+        _registry.DeclareVariable(name: preset.Name, type: presetType, isMutable: false, isPreset: true);
     }
 
     private void CollectRecordDeclaration(RecordDeclaration record)

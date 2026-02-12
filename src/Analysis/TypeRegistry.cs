@@ -64,6 +64,13 @@ public sealed class TypeRegistry
 
     #endregion
 
+    #region Preset Storage
+
+    /// <summary>Module-level preset constants registered by StdlibLoader (accessible across files).</summary>
+    private readonly Dictionary<string, VariableInfo> _presets = new();
+
+    #endregion
+
     #region Scope Management
 
     /// <summary>The global scope.</summary>
@@ -1002,13 +1009,31 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Looks up a variable by name in the current scope chain.
+    /// Registers a module-level preset constant (from StdlibLoader).
+    /// Presets registered here are accessible across files within the same module.
+    /// </summary>
+    /// <param name="name">The preset name.</param>
+    /// <param name="type">The type of the preset.</param>
+    public void RegisterPreset(string name, TypeInfo type)
+    {
+        var variable = new VariableInfo(name: name, type: type)
+        {
+            IsMutable = false,
+            IsPreset = true
+        };
+
+        _presets[name] = variable;
+    }
+
+    /// <summary>
+    /// Looks up a variable by name in the current scope chain,
+    /// falling back to module-level presets if not found in local scopes.
     /// </summary>
     /// <param name="name">The name of the variable to look up.</param>
     /// <returns>The variable info if found, null otherwise.</returns>
     public VariableInfo? LookupVariable(string name)
     {
-        return _currentScope.LookupVariable(name: name);
+        return _currentScope.LookupVariable(name: name) ?? _presets.GetValueOrDefault(name);
     }
 
     /// <summary>
