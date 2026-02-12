@@ -9,7 +9,7 @@
 #   # To "modify", use with statement or create new:
 #   let moved = coords with { [0]: 5.0 }
 
-module Collections
+module Core
 
 # Fixed-size array with value semantics
 # Compiler lays out N elements of T inline
