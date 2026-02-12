@@ -7,7 +7,7 @@
 #   let copy = coords          # Full copy (value semantics)
 #
 #   # To "modify", use with statement or create new:
-#   let moved = coords with { [0]: 5.0 }
+#   let moved = coords with [0] = 5.0
 
 module Core
 
