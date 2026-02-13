@@ -1887,13 +1887,23 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
-        // Determine if all elements are value types
+        // Determine tuple kind based on element types:
         // ValueTuple: all elements are value types (Record, Choice, Variant, ValueTuple)
-        // Tuple: at least one element is a reference type (Entity, Resident, Tuple)
+        // FixedTuple: all elements are resident-compatible (records + residents, no entities)
+        // Tuple: any element is an entity or other reference type
         bool allValueTypes = elementTypes.All(predicate: TypeRegistry.IsValueType);
+        if (allValueTypes)
+        {
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
+        }
 
-        // Create the tuple type using the registry's caching mechanism
-        return _registry.GetOrCreateTupleType(elementTypes: elementTypes, isValueTuple: allValueTypes);
+        bool allResidentCompatible = elementTypes.All(predicate: TypeRegistry.IsResidentCompatible);
+        if (allResidentCompatible)
+        {
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Fixed);
+        }
+
+        return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Reference);
     }
 
     private TypeSymbol AnalyzeTypeConversionExpression(TypeConversionExpression conv)

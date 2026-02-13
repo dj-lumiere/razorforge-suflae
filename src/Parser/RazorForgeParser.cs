@@ -87,7 +87,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
 
     /// <summary>
     /// Set of known type names for generic disambiguation.
-    /// Contains simple names like "List", "DictEntry" that have been declared or imported.
+    /// Contains simple names like "List", "Dict" that have been declared or imported.
     /// </summary>
     private readonly HashSet<string> _knownTypeNames = [];
 

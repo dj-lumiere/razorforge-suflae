@@ -4,11 +4,27 @@ using Enums;
 using Symbols;
 
 /// <summary>
+/// The kind of tuple: ValueTuple (record-like), FixedTuple (resident-like), or Tuple (entity-like).
+/// </summary>
+public enum TupleKind
+{
+    /// <summary>Value type (like record). Copy semantics. Only contains value types.</summary>
+    Value,
+
+    /// <summary>Resident type (like resident). Reference semantics, fixed size. Contains records + residents.</summary>
+    Fixed,
+
+    /// <summary>Reference type (like entity). Reference semantics, heap-allocated. Contains anything.</summary>
+    Reference
+}
+
+/// <summary>
 /// Type information for compiler-generated tuple types.
 /// Tuples are variadic and can contain any number of elements.
 ///
 /// - ValueTuple: All elements are value types (copy semantics)
-/// - Tuple: Any element is a reference type (reference semantics)
+/// - FixedTuple: All elements are resident-compatible (resident semantics, fixed size)
+/// - Tuple: Any element is a reference type (reference semantics, heap-allocated)
 /// </summary>
 public sealed class TupleTypeInfo : TypeInfo
 {
@@ -18,10 +34,19 @@ public sealed class TupleTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Tuple;
 
     /// <summary>
-    /// Whether this is a ValueTuple (all elements are value types).
-    /// If false, this is a Tuple (at least one element is a reference type).
+    /// The kind of this tuple (Value, Fixed, or Reference).
     /// </summary>
-    public bool IsValueTuple { get; }
+    public TupleKind Kind { get; }
+
+    /// <summary>
+    /// Whether this is a ValueTuple (all elements are value types).
+    /// </summary>
+    public bool IsValueTuple => Kind == TupleKind.Value;
+
+    /// <summary>
+    /// Whether this is a FixedTuple (resident-like, all elements are resident-compatible).
+    /// </summary>
+    public bool IsFixedTuple => Kind == TupleKind.Fixed;
 
     /// <summary>
     /// The element types in order (item0, item1, ..., itemN).
@@ -34,15 +59,20 @@ public sealed class TupleTypeInfo : TypeInfo
     public IReadOnlyList<FieldInfo> Fields { get; }
 
     /// <summary>
-    /// Creates a new tuple type with the specified element types.
+    /// Creates a new tuple type with the specified element types and kind.
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
-    /// <param name="isValueTuple">True if all elements are value types.</param>
-    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes, bool isValueTuple)
-        : base(name: isValueTuple ? "ValueTuple" : "Tuple")
+    /// <param name="kind">The kind of tuple (Value, Fixed, or Reference).</param>
+    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes, TupleKind kind)
+        : base(name: kind switch
+        {
+            TupleKind.Value => "ValueTuple",
+            TupleKind.Fixed => "FixedTuple",
+            _ => "Tuple"
+        })
     {
         ElementTypes = elementTypes;
-        IsValueTuple = isValueTuple;
+        Kind = kind;
 
         // Generate synthetic fields: item0, item1, ..., itemN
         var fields = new List<FieldInfo>(capacity: elementTypes.Count);
@@ -60,6 +90,17 @@ public sealed class TupleTypeInfo : TypeInfo
 
         // Set TypeArguments so FullName displays correctly (e.g., "ValueTuple<S32, S32>")
         TypeArguments = elementTypes;
+    }
+
+    /// <summary>
+    /// Creates a new tuple type with the specified element types.
+    /// Backward-compatible constructor: maps true → Value, false → Reference.
+    /// </summary>
+    /// <param name="elementTypes">The types of each element in the tuple.</param>
+    /// <param name="isValueTuple">True if all elements are value types.</param>
+    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes, bool isValueTuple)
+        : this(elementTypes: elementTypes, kind: isValueTuple ? TupleKind.Value : TupleKind.Reference)
+    {
     }
 
     /// <summary>

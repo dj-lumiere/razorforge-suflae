@@ -615,18 +615,23 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Gets or creates a tuple type with the given element types.
+    /// Gets or creates a tuple type with the given element types and kind.
     /// Tuple types are cached by their element type signature.
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
-    /// <param name="isValueTuple">Whether all elements are value types (determines ValueTuple vs Tuple).</param>
+    /// <param name="kind">The kind of tuple (Value, Fixed, or Reference).</param>
     /// <returns>The cached or newly created tuple type.</returns>
     public TupleTypeInfo GetOrCreateTupleType(
         IReadOnlyList<TypeInfo> elementTypes,
-        bool isValueTuple)
+        TupleKind kind)
     {
         // Build the cache key
-        string prefix = isValueTuple ? "ValueTuple" : "Tuple";
+        string prefix = kind switch
+        {
+            TupleKind.Value => "ValueTuple",
+            TupleKind.Fixed => "FixedTuple",
+            _ => "Tuple"
+        };
         string typeList = string.Join(separator: ", ", values: elementTypes.Select(selector: t => t.FullName));
         string key = $"{prefix}<{typeList}>";
 
@@ -637,10 +642,23 @@ public sealed class TypeRegistry
         }
 
         // Create and cache
-        var newType = new TupleTypeInfo(elementTypes: elementTypes, isValueTuple: isValueTuple);
+        var newType = new TupleTypeInfo(elementTypes: elementTypes, kind: kind);
         _instantiations[key: key] = newType;
 
         return newType;
+    }
+
+    /// <summary>
+    /// Gets or creates a tuple type with the given element types.
+    /// Backward-compatible overload: maps true → ValueTuple, false → Tuple.
+    /// </summary>
+    public TupleTypeInfo GetOrCreateTupleType(
+        IReadOnlyList<TypeInfo> elementTypes,
+        bool isValueTuple)
+    {
+        return GetOrCreateTupleType(
+            elementTypes: elementTypes,
+            kind: isValueTuple ? TupleKind.Value : TupleKind.Reference);
     }
 
     /// <summary>
@@ -686,6 +704,24 @@ public sealed class TypeRegistry
             TypeCategory.Choice => true,
             TypeCategory.Variant => true, // Variants are value types (stack-allocated)
             TypeCategory.Tuple when type is TupleTypeInfo tt => tt.IsValueTuple,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Determines if a type can be contained in a resident (records, choices, residents, FixedTuples, ValueTuples).
+    /// </summary>
+    /// <param name="type">The type to check.</param>
+    /// <returns>True if the type can be contained in a resident, false otherwise.</returns>
+    public static bool IsResidentCompatible(TypeInfo type)
+    {
+        return type.Category switch
+        {
+            TypeCategory.Record => true,
+            TypeCategory.Choice => true,
+            TypeCategory.Variant => true,
+            TypeCategory.Resident => true,
+            TypeCategory.Tuple when type is TupleTypeInfo tt => tt.Kind is TupleKind.Value or TupleKind.Fixed,
             _ => false
         };
     }
