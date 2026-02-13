@@ -1100,4 +1100,96 @@ public class ExpressionTests
     }
 
     #endregion
+
+    #region Slice Expression Tests
+
+    [Fact]
+    public void Parse_SliceExpression()
+    {
+        string source = """
+                        routine test() {
+                            let sub = list[0 to 5]
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_SliceExpressionWithBackIndex()
+    {
+        string source = """
+                        routine test() {
+                            let sub = list[1 to ^1]
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_SliceExpression_ASTStructure()
+    {
+        string source = """
+                        routine test() {
+                            let sub = list[0 to 5]
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var initializer = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer;
+
+        Assert.IsType<Compilers.Shared.AST.SliceExpression>(initializer);
+        var slice = (Compilers.Shared.AST.SliceExpression)initializer!;
+        Assert.IsType<Compilers.Shared.AST.IdentifierExpression>(slice.Object);
+        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.Start);
+        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.End);
+    }
+
+    [Fact]
+    public void Parse_SliceExpression_RejectsDownto()
+    {
+        string source = """
+                        routine test() {
+                            let sub = list[5 downto 0]
+                        }
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    [Fact]
+    public void Parse_SliceExpression_RejectsStep()
+    {
+        string source = """
+                        routine test() {
+                            let sub = list[0 to 10 by 2]
+                        }
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    [Fact]
+    public void Parse_RegularIndexExpression_StillWorks()
+    {
+        string source = """
+                        routine test() {
+                            let item = list[5]
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var initializer = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer;
+
+        Assert.IsType<Compilers.Shared.AST.IndexExpression>(initializer);
+    }
+
+    #endregion
 }

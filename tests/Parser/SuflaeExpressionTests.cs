@@ -805,4 +805,75 @@ public class SuflaeExpressionTests
     }
 
     #endregion
+
+    #region Slice Expression Tests
+
+    [Fact]
+    public void ParseSuflae_SliceExpression()
+    {
+        string source = """
+                        routine test()
+                            let sub = list[0 to 5]
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_SliceExpressionWithBackIndex()
+    {
+        string source = """
+                        routine test()
+                            let sub = list[1 to ^1]
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_SliceExpression_ASTStructure()
+    {
+        string source = """
+                        routine test()
+                            let sub = list[0 to 5]
+                        """;
+
+        var ast = ParseSuflae(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var initializer = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer;
+
+        Assert.IsType<Compilers.Shared.AST.SliceExpression>(initializer);
+        var slice = (Compilers.Shared.AST.SliceExpression)initializer!;
+        Assert.IsType<Compilers.Shared.AST.IdentifierExpression>(slice.Object);
+        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.Start);
+        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.End);
+    }
+
+    [Fact]
+    public void ParseSuflae_SliceExpression_RejectsDownto()
+    {
+        string source = """
+                        routine test()
+                            let sub = list[5 downto 0]
+                        """;
+
+        (_, var parser1) = ParseSuflaeWithErrors(source: source);
+        Assert.True(condition: parser1.HasErrors, userMessage: "Expected parse errors for 'downto' in slice syntax");
+    }
+
+    [Fact]
+    public void ParseSuflae_SliceExpression_RejectsStep()
+    {
+        string source = """
+                        routine test()
+                            let sub = list[0 to 10 by 2]
+                        """;
+
+        (_, var parser) = ParseSuflaeWithErrors(source: source);
+        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for 'by' step in slice syntax");
+    }
+
+    #endregion
 }
