@@ -1329,7 +1329,31 @@ public partial class RazorForgeParser
             {
                 Expression index = ParseExpression();
                 Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index");
-                expr = new IndexExpression(Object: expr, Index: index, Location: expr.Location);
+
+                if (index is RangeExpression range)
+                {
+                    // [a to b] → SliceExpression (desugars to __getslice__)
+                    if (range.IsDescending)
+                    {
+                        throw new RazorForgeGrammarException(
+                            RazorForgeDiagnosticCode.UnexpectedToken,
+                            "'downto' is not supported in slice syntax. Use ascending 'to' only.",
+                            _fileName, CurrentToken.Line, CurrentToken.Column);
+                    }
+                    if (range.Step != null)
+                    {
+                        throw new RazorForgeGrammarException(
+                            RazorForgeDiagnosticCode.UnexpectedToken,
+                            "Step ('by') is not supported in slice syntax.",
+                            _fileName, CurrentToken.Line, CurrentToken.Column);
+                    }
+                    expr = new SliceExpression(Object: expr, Start: range.Start, End: range.End,
+                        Location: expr.Location);
+                }
+                else
+                {
+                    expr = new IndexExpression(Object: expr, Index: index, Location: expr.Location);
+                }
             }
             // ═══════════════════════════════════════════════════════════════════════════
             // CASE 5: Member access - expr.member

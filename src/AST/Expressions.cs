@@ -411,6 +411,25 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
 }
 
 /// <summary>
+/// Slice expression: obj[start to end]
+/// Desugars to obj.__getslice__(from: start, to: end).
+/// Returns Sequence&lt;T&gt; (lazy). Both bounds required, exclusive end.
+/// </summary>
+/// <param name="Object">The collection being sliced</param>
+/// <param name="Start">Start index expression</param>
+/// <param name="End">End index expression (exclusive)</param>
+/// <param name="Location">Source location for error reporting</param>
+public record SliceExpression(Expression Object, Expression Start, Expression End, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitSliceExpression(node: this);
+    }
+}
+
+/// <summary>
 /// Expression that selects between two values based on a boolean condition.
 /// Represents the ternary conditional operator (if condition then true_value else false_value).
 /// </summary>

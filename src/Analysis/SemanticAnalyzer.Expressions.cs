@@ -35,6 +35,7 @@ public sealed partial class SemanticAnalyzer
             CallExpression call => AnalyzeCallExpression(call: call),
             MemberExpression member => AnalyzeMemberExpression(member: member),
             IndexExpression index => AnalyzeIndexExpression(index: index),
+            SliceExpression slice => AnalyzeSliceExpression(slice: slice),
             ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
             LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda),
             RangeExpression range => AnalyzeRangeExpression(range: range),
@@ -1253,6 +1254,28 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
+    private TypeSymbol AnalyzeSliceExpression(SliceExpression slice)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: slice.Object);
+        AnalyzeExpression(expression: slice.Start);
+        AnalyzeExpression(expression: slice.End);
+
+        // Look for __getslice__ method
+        RoutineInfo? getSlice = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getslice__");
+        if (getSlice?.ReturnType != null)
+        {
+            return getSlice.ReturnType;
+        }
+
+        // For generic types like List<T>, return the element type
+        if (objectType.TypeArguments is { Count: > 0 })
+        {
+            return objectType.TypeArguments[0];
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
     private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond)
     {
         TypeSymbol conditionType = AnalyzeExpression(expression: cond.Condition);
@@ -1453,6 +1476,12 @@ public sealed partial class SemanticAnalyzer
             case IndexExpression index:
                 CollectIdentifiersRecursive(expression: index.Object, identifiers: identifiers);
                 CollectIdentifiersRecursive(expression: index.Index, identifiers: identifiers);
+                break;
+
+            case SliceExpression slice:
+                CollectIdentifiersRecursive(expression: slice.Object, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: slice.Start, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: slice.End, identifiers: identifiers);
                 break;
 
             case ConditionalExpression cond:

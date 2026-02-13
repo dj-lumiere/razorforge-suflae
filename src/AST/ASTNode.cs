@@ -177,6 +177,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the index expression</returns>
     T VisitIndexExpression(IndexExpression node);
 
+    /// <summary>Visits a slice expression node (subscript slice like list[a to b])</summary>
+    /// <param name="node">The slice expression to visit</param>
+    /// <returns>Result of visiting the slice expression</returns>
+    T VisitSliceExpression(SliceExpression node);
+
     /// <summary>Visits a conditional expression node (ternary operator: if condition then true else false)</summary>
     /// <param name="node">The conditional expression to visit</param>
     /// <returns>Result of visiting the conditional expression</returns>
