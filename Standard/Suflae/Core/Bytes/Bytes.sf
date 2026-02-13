@@ -36,5 +36,5 @@ routine Bytes.__eq__(other: Bytes) -> Bool
 routine Bytes.to_text() -> Text
     return Text(value: me.value.to_text())
 
-routine Bytes.to_buffer() -> BytesBuffer
-    return BytesBuffer(value: me.value.to_buffer())
+routine List<Byte>.__create__(from: Bytes) -> List<Byte>
+    return from.List()

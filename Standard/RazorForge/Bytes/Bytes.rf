@@ -157,19 +157,10 @@ routine Bytes.__eq__(other: Bytes) -> Bool {
     return true
 }
 
-# Conversion to mutable
+# Conversion to mutable list
 
-routine Bytes.to_buffer() -> BytesBuffer {
-    let buffer = BytesBuffer()
-    var i: U64 = 0u64
-    loop {
-        if i >= me.count() {
-            break
-        }
-        buffer.append(me[i])
-        i += 1u64
-    }
-    return buffer
+routine List<Byte>.__create__(from: Bytes) {
+    return from.letters
 }
 
 # Iteration

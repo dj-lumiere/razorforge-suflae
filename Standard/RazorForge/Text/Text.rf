@@ -10,7 +10,7 @@ module Text
 #       - Compact storage, ideal for I/O
 #       - Use for file/network operations
 #
-# Both are immutable - use TextBuffer/BytesBuffer for mutable text
+# Both are immutable - use List<Letter>/List<Byte> for mutable building
 
 import Collections.List
 
@@ -128,19 +128,10 @@ routine Text.__eq__(other: Text) -> Bool {
     return true
 }
 
-# Conversion to mutable
+# Conversion to mutable list
 
-routine Text.to_buffer() -> TextBuffer {
-    let buffer = TextBuffer()
-    var i: U64 = 0u64
-    loop {
-        if i >= me.count() {
-            break
-        }
-        buffer.append(me[i])
-        i += 1u64
-    }
-    return buffer
+routine List<Letter>.__create__(from: Text) {
+    return from.letters
 }
 
 # Iteration

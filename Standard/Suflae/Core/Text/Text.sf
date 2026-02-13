@@ -78,5 +78,5 @@ routine Text.lines() -> List<Text>
 routine Text.to_bytes() -> Bytes
     return Bytes(value: me.value.to_bytes())
 
-routine Text.to_buffer() -> TextBuffer
-    return TextBuffer(value: me.value.to_buffer())
+routine Text.List() -> List<Letter>
+    return me.value.List()
