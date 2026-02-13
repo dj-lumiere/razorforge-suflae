@@ -87,13 +87,13 @@ routine Bytes.__getitem__<I follows Integral>(index: BackIndex<I>) -> Byte {
     return me.letters[index]
 }
 
-routine Bytes.__getitem__<I follows Integral>(range: Range<I>) -> Bytes {
-    let sliced_list = me.letters[range]
+routine Bytes.__getslice__<I follows Integral>(start: I, end: I) -> Bytes {
+    let sliced_list = me.letters[start to end]
     return Bytes(from_list: sliced_list)
 }
 
-routine Bytes.__getitem__<I follows Integral>(range: Range<BackIndex<I>>) -> Bytes {
-    let sliced_list = me.letters[range]
+routine Bytes.__getslice__<I follows Integral>(start: BackIndex<I>, end: BackIndex<I>) -> Bytes {
+    let sliced_list = me.letters[start to end]
     return Bytes(from_list: sliced_list)
 }
 
@@ -122,22 +122,6 @@ routine Bytes.concat(other: Bytes) -> Bytes {
 
 routine Bytes.__add__(other: Bytes) -> Bytes {
     return me.concat(other)
-}
-
-routine Bytes.slice(start: U64, end: U64) -> Bytes {
-    if start >= end or end > me.count() {
-        stop!("Invalid slice range")
-    }
-    let result = List<Byte>()
-    var i = start
-    loop {
-        if i >= end {
-            break
-        }
-        result.add_last(me[i])
-        i += 1u64
-    }
-    return Bytes(from_list: result)
 }
 
 routine Bytes.__eq__(other: Bytes) -> Bool {

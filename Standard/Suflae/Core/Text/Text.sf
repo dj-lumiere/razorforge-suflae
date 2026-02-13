@@ -25,9 +25,6 @@ routine Text.__add__(other: Text) -> Text
 routine Text.concat(other: Text) -> Text
     return Text(value: me.value.concat(other.value))
 
-routine Text.slice(start: Integer, end: Integer) -> Text
-    return Text(value: me.value.slice(start.value, end.value))
-
 # Comparison
 routine Text.__eq__(other: Text) -> Bool
     return me.value.__eq__(other.value)

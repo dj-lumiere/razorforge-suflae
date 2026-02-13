@@ -58,13 +58,13 @@ routine Text.__getitem__!<I follows Integral>(index: BackIndex<I>) -> Letter {
     return me.letters[index]
 }
 
-routine Text.__getitem__!<I follows Integral>(range: Range<I>) -> Text {
-    let sliced_list = me.letters[range]
+routine Text.__getslice__!<I follows Integral>(start: I, end: I) -> Text {
+    let sliced_list = me.letters[start to end]
     return Text(from_list: sliced_list)
 }
 
-routine Text.__getitem__!<I follows Integral>(range: Range<BackIndex<I>>) -> Text {
-    let sliced_list = me.letters[range]
+routine Text.__getslice__!<I follows Integral>(start: BackIndex<I>, end: BackIndex<I>) -> Text {
+    let sliced_list = me.letters[start to end]
     return Text(from_list: sliced_list)
 }
 
@@ -93,22 +93,6 @@ routine Text.concat(other: Text) -> Text {
 
 routine Text.__add__(other: Text) -> Text {
     return me.concat(other)
-}
-
-routine Text.slice(start: U64, end: U64) -> Text {
-    if start >= end or end > me.count() {
-        stop!("Invalid slice range")
-    }
-    let result = List<Letter>()
-    var i = start
-    loop {
-        if i >= end {
-            break
-        }
-        result.add_last(me[i])
-        i += 1u64
-    }
-    return Text(from_list: result)
 }
 
 routine Text.__eq__(other: Text) -> Bool {

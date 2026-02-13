@@ -26,7 +26,7 @@ requires N is UAddr {
 
 routine ValueList<T, N>.__getitem__!<I>(index: I) -> T
 requires I follows Integral {
-    let idx = index.to_uaddr()
+    let idx = index.UAddr!()
     if idx >= N {
         throw IndexOutOfBoundsError(index: idx, count: N)
     }
@@ -59,14 +59,14 @@ routine ValueList<T, N>.first!() -> T {
     if N == 0uaddr {
         absent
     }
-    return me[0uaddr]
+    return me[0]
 }
 
 routine ValueList<T, N>.last!() -> T {
     if N == 0uaddr {
         absent
     }
-    return me[N - 1uaddr]
+    return me[^1]
 }
 
 routine ValueList<T, N>.contains(value: T) -> Bool {

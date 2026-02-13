@@ -25,9 +25,6 @@ routine Bytes.__add__(other: Bytes) -> Bytes
 routine Bytes.concat(other: Bytes) -> Bytes
     return Bytes(value: me.value.concat(other.value))
 
-routine Bytes.slice(start: Integer, end: Integer) -> Bytes
-    return Bytes(value: me.value.slice(start.value, end.value))
-
 # Comparison
 routine Bytes.__eq__(other: Bytes) -> Bool
     return me.value.__eq__(other.value)

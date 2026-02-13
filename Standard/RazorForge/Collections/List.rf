@@ -176,74 +176,50 @@ requires I follows Integral {
 }
 
 # ============================================================================
-# Indexing with Range<Integral> (forward range slicing)
+# Slicing with [a to b] syntax (forward index)
 # ============================================================================
 
-routine List<T>.__getitem__!<I>(range: Range<I>) -> List<T>
+routine List<T>.__getslice__!<I>(start: I, end: I) -> List<T>
 requires I follows Integral {
-    let start = range.resolve_start(me.count)
-    let end = range.resolve_end(me.count)
-    let step = range.get_step()
+    let s = start.to_u64()
+    let e = end.to_u64()
+
+    if s > me.count or e > me.count {
+        throw IndexOutOfBoundsError(index: e.to_uaddr(), count: me.count.to_uaddr())
+    }
 
     let result = List<T>()
-
-    if range.ascending {
-        var i = start
-        loop {
-            if i > end {
-                break
-            }
-            let byte_offset = i * data_size<T>()
-            result.add_last(me.data.offset(byte_offset).read())
-            i = i + step
+    var i = s
+    loop {
+        if i >= e {
+            break
         }
-    } else {
-        var i = start
-        loop {
-            let byte_offset = i * data_size<T>()
-            result.add_last(me.data.offset(byte_offset).read())
-            if i <= end or i < step {
-                break
-            }
-            i = i - step
-        }
+        let byte_offset = i * data_size<T>()
+        result.add_last(me.data.offset(byte_offset).read())
+        i = i + 1u64
     }
 
     return result
 }
 
 # ============================================================================
-# Indexing with Range<BackIndex> (backward range slicing)
+# Slicing with [a to b] syntax (backward index using ^)
 # ============================================================================
 
-routine List<T>.__getitem__!<I>(range: Range<BackIndex<I>>) -> List<T>
+routine List<T>.__getslice__!<I>(start: BackIndex<I>, end: BackIndex<I>) -> List<T>
 requires I follows Integral {
-    let start = range.resolve_start(me.count)
-    let end = range.resolve_end(me.count)
-    let step = range.get_step()
+    let s = start.resolve(me.count)
+    let e = end.resolve(me.count)
 
     let result = List<T>()
-
-    if range.ascending {
-        var i = start
-        loop {
-            if i > end {
-                break
-            }
-            let byte_offset = i * data_size<T>()
-            result.add_last(me.data.offset(byte_offset).read())
-            i = i + step
+    var i = s
+    loop {
+        if i >= e {
+            break
         }
-    } else {
-        var i = start
-        loop {
-            let byte_offset = i * data_size<T>()
-            result.add_last(me.data.offset(byte_offset).read())
-            if i <= end or i < step {
-                break
-            }
-            i = i - step
-        }
+        let byte_offset = i * data_size<T>()
+        result.add_last(me.data.offset(byte_offset).read())
+        i = i + 1u64
     }
 
     return result
