@@ -179,7 +179,16 @@ public partial class RazorForgeTokenizer
             }
             else
             {
-                content.Append(value: Advance());
+                char c = Advance();
+                if (bitWidth == 8 && c > '\x7F')
+                {
+                    throw new RazorForgeGrammarException(
+                        RazorForgeDiagnosticCode.InvalidEscapeSequence,
+                        $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
+                        "Byte literals only accept ASCII (0x00-0x7F). Use \"text\".encode_as(UTF8) instead.",
+                        _fileName, _line, _column);
+                }
+                content.Append(value: c);
             }
         }
 
@@ -209,7 +218,7 @@ public partial class RazorForgeTokenizer
     /// been consumed when this method is called.
     /// </para>
     /// <para>
-    /// Examples: 'a', '\n', '\u0041'
+    /// Examples: 'a', '\n', '\u000041'
     /// </para>
     /// </remarks>
     /// <exception cref="LexerException">Thrown when the character literal is unterminated.</exception>
@@ -312,6 +321,15 @@ public partial class RazorForgeTokenizer
         }
         else
         {
+            char c = Peek();
+            if (bitWidth == 8 && c > '\x7F')
+            {
+                throw new RazorForgeGrammarException(
+                    RazorForgeDiagnosticCode.InvalidEscapeSequence,
+                    $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
+                    "Byte literals only accept ASCII (0x00-0x7F).",
+                    _fileName, _line, _column);
+            }
             Advance(); // consume the character
         }
 
@@ -376,6 +394,13 @@ public partial class RazorForgeTokenizer
                 ScanHexByteEscape();
                 break;
             case 'u':
+                if (bitWidth == 8)
+                {
+                    throw new RazorForgeGrammarException(
+                        RazorForgeDiagnosticCode.InvalidEscapeSequence,
+                        "Unicode escape \\u is not valid in byte literals. Use \\x for hex byte values.",
+                        _fileName, _line, _column);
+                }
                 Advance(); // consume 'u'
                 ScanUnicodeEscape();
                 break;

@@ -65,15 +65,16 @@ public partial class RazorForgeTokenizer
                 break;
 
             // Potential prefixed literals or identifiers
-            case 'l':
-                if (!TryParseLetterPrefix())
+            case 'r' or 'f':
+                if (!TryParseTextPrefix())
                 {
                     ScanIdentifier();
                 }
 
                 break;
-            case 'r' or 'f' or 't':
-                if (!TryParseTextPrefix())
+            case 'b':
+                // Could be bytes prefix (b"..."), byte character (b'x'), or identifier
+                if (!TryParseTextPrefix() && !TryParseLetterPrefix())
                 {
                     ScanIdentifier();
                 }

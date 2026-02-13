@@ -593,4 +593,216 @@ public class SuflaeExpressionTests
     }
 
     #endregion
+
+    #region Byte Literal Tests
+
+    [Fact]
+    public void ParseSuflae_ByteStringLiteral()
+    {
+        string source = """
+                        routine test()
+                            let data = b"hello"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_ByteCharLiteral()
+    {
+        string source = """
+                        routine test()
+                            let ch = b'A'
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_ByteStringHexEscape()
+    {
+        string source = """
+                        routine test()
+                            let data = b"\x48\x65\x6C\x6C\x6F"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeByteStringLiteral_CorrectTokenType()
+    {
+        string source = """b"hello" """;
+        List<Compilers.Shared.Lexer.Token> tokens = TokenizeSuflae(source: source);
+
+        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.BytesLiteral,
+            actual: tokens[index: 0].Type);
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeByteCharLiteral_CorrectTokenType()
+    {
+        string source = """b'A' """;
+        List<Compilers.Shared.Lexer.Token> tokens = TokenizeSuflae(source: source);
+
+        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.ByteLetterLiteral,
+            actual: tokens[index: 0].Type);
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeByteStringNonAscii_ThrowsError()
+    {
+        string source = "b\"\uD55C\uAD6D\""; // b"한국" - non-ASCII
+
+        Assert.ThrowsAny<Exception>(testCode: () => TokenizeSuflae(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeByteStringUnicodeEscape_ThrowsError()
+    {
+        string source = """b"\u00E9" """;
+
+        Assert.ThrowsAny<Exception>(testCode: () => TokenizeSuflae(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeByteCharNonAscii_ThrowsError()
+    {
+        string source = "b'\u00E9'"; // b'é' - non-ASCII
+
+        Assert.ThrowsAny<Exception>(testCode: () => TokenizeSuflae(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeUnicodeEscape_Exactly6Digits()
+    {
+        // \u00004E is exactly 6 hex digits — valid
+        string source = "\"\\u00004E\"";
+
+        List<Compilers.Shared.Lexer.Token> tokens = TokenizeSuflae(source: source);
+        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.TextLiteral,
+            actual: tokens[index: 0].Type);
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeUnicodeEscape_TooFewDigits_ThrowsError()
+    {
+        // \u00E9 is only 4 hex digits — should fail (need exactly 6)
+        string source = "\"\\u00E9\"";
+
+        Assert.ThrowsAny<Exception>(testCode: () => TokenizeSuflae(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_SuflaeUnicodeEscape_TwoDigits_ThrowsError()
+    {
+        // \u41 is only 2 hex digits — should fail
+        string source = "\"\\u41\"";
+
+        Assert.ThrowsAny<Exception>(testCode: () => TokenizeSuflae(source: source));
+    }
+
+    #endregion
+
+    #region With Expression Tests
+
+    [Fact]
+    public void ParseSuflae_WithFieldUpdate()
+    {
+        string source = """
+                        routine test()
+                            let p2 = p1 with .x = 5.0
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WithMultipleFields()
+    {
+        string source = """
+                        routine test()
+                            let p2 = p1 with .x = 5.0, .y = 3.0
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WithIndexUpdate()
+    {
+        string source = """
+                        routine test()
+                            let c2 = coords with [0] = 5.0
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WithNestedField()
+    {
+        string source = """
+                        routine test()
+                            let p2 = person with .address.city = "Shelbyville"
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WithMixedUpdates()
+    {
+        string source = """
+                        routine test()
+                            let p2 = data with .name = "test", [0] = 42
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_WithExpression_ASTStructure()
+    {
+        string source = """
+                        routine test()
+                            let p2 = p1 with .x = 5.0, .y = 3.0
+                        """;
+
+        var ast = ParseSuflae(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
+            as Compilers.Shared.AST.WithExpression;
+
+        Assert.NotNull(withExpr);
+        Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
+        Assert.Equal(expected: "x", actual: withExpr.Updates[0].FieldPath![0]);
+        Assert.Equal(expected: "y", actual: withExpr.Updates[1].FieldPath![0]);
+    }
+
+    [Fact]
+    public void ParseSuflae_WithExpression_NestedFieldPath_ASTStructure()
+    {
+        string source = """
+                        routine test()
+                            let p2 = person with .address.city = "NYC"
+                        """;
+
+        var ast = ParseSuflae(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
+            as Compilers.Shared.AST.WithExpression;
+
+        Assert.NotNull(withExpr);
+        Assert.Single(withExpr!.Updates);
+        Assert.Equal(expected: 2, actual: withExpr.Updates[0].FieldPath!.Count);
+        Assert.Equal(expected: "address", actual: withExpr.Updates[0].FieldPath![0]);
+        Assert.Equal(expected: "city", actual: withExpr.Updates[0].FieldPath![1]);
+    }
+
+    #endregion
 }

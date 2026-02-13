@@ -842,4 +842,262 @@ public class ExpressionTests
     }
 
     #endregion
+
+    #region Byte Literal Tests
+
+    [Fact]
+    public void Parse_ByteStringLiteral()
+    {
+        string source = """
+                        routine test() {
+                            let data = b"hello"
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_ByteCharLiteral()
+    {
+        string source = """
+                        routine test() {
+                            let ch = b'A'
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_ByteStringHexEscape()
+    {
+        string source = """
+                        routine test() {
+                            let data = b"\x48\x65\x6C\x6C\x6F"
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_ByteRawStringLiteral()
+    {
+        string source = """
+                        routine test() {
+                            let data = br"no escapes here \n"
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Tokenize_ByteStringLiteral_CorrectTokenType()
+    {
+        string source = """b"hello" """;
+        List<Compilers.Shared.Lexer.Token> tokens = Tokenize(source: source);
+
+        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.BytesLiteral,
+            actual: tokens[index: 0].Type);
+    }
+
+    [Fact]
+    public void Tokenize_ByteCharLiteral_CorrectTokenType()
+    {
+        string source = """b'A' """;
+        List<Compilers.Shared.Lexer.Token> tokens = Tokenize(source: source);
+
+        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.ByteLetterLiteral,
+            actual: tokens[index: 0].Type);
+    }
+
+    [Fact]
+    public void Tokenize_ByteStringNonAscii_ThrowsError()
+    {
+        string source = "b\"\uD55C\uAD6D\""; // b"한국" - non-ASCII
+
+        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_ByteStringUnicodeEscape_ThrowsError()
+    {
+        string source = """b"\u00E9" """;
+
+        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_ByteCharNonAscii_ThrowsError()
+    {
+        string source = "b'\u00E9'"; // b'é' - non-ASCII
+
+        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_UnicodeEscape_Exactly6Digits()
+    {
+        // \u00004E is exactly 6 hex digits — valid
+        string source = "\"\\u00004E\"";
+
+        List<Compilers.Shared.Lexer.Token> tokens = Tokenize(source: source);
+        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.TextLiteral,
+            actual: tokens[index: 0].Type);
+    }
+
+    [Fact]
+    public void Tokenize_UnicodeEscape_TooFewDigits_ThrowsError()
+    {
+        // \u00E9 is only 4 hex digits — should fail (need exactly 6)
+        string source = "\"\\u00E9\"";
+
+        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
+    }
+
+    [Fact]
+    public void Tokenize_UnicodeEscape_TwoDigits_ThrowsError()
+    {
+        // \u41 is only 2 hex digits — should fail
+        string source = "\"\\u41\"";
+
+        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
+    }
+
+    #endregion
+
+    #region With Expression Tests
+
+    [Fact]
+    public void Parse_WithFieldUpdate()
+    {
+        string source = """
+                        routine test() {
+                            let p2 = p1 with .x = 5.0
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WithMultipleFields()
+    {
+        string source = """
+                        routine test() {
+                            let p2 = p1 with .x = 5.0, .y = 3.0
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WithIndexUpdate()
+    {
+        string source = """
+                        routine test() {
+                            let c2 = coords with [0] = 5.0
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WithNestedField()
+    {
+        string source = """
+                        routine test() {
+                            let p2 = person with .address.city = "Shelbyville"
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WithMixedUpdates()
+    {
+        string source = """
+                        routine test() {
+                            let p2 = data with .name = "test", [0] = 42
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WithExpression_ASTStructure()
+    {
+        string source = """
+                        routine test() {
+                            let p2 = p1 with .x = 5.0, .y = 3.0
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
+            as Compilers.Shared.AST.WithExpression;
+
+        Assert.NotNull(withExpr);
+        Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
+        Assert.Equal(expected: "x", actual: withExpr.Updates[0].FieldPath![0]);
+        Assert.Equal(expected: "y", actual: withExpr.Updates[1].FieldPath![0]);
+        Assert.Null(withExpr.Updates[0].Index);
+        Assert.Null(withExpr.Updates[1].Index);
+    }
+
+    [Fact]
+    public void Parse_WithExpression_NestedFieldPath_ASTStructure()
+    {
+        string source = """
+                        routine test() {
+                            let p2 = person with .address.city = "NYC"
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
+            as Compilers.Shared.AST.WithExpression;
+
+        Assert.NotNull(withExpr);
+        Assert.Single(withExpr!.Updates);
+        Assert.Equal(expected: 2, actual: withExpr.Updates[0].FieldPath!.Count);
+        Assert.Equal(expected: "address", actual: withExpr.Updates[0].FieldPath![0]);
+        Assert.Equal(expected: "city", actual: withExpr.Updates[0].FieldPath![1]);
+    }
+
+    [Fact]
+    public void Parse_WithExpression_IndexUpdate_ASTStructure()
+    {
+        string source = """
+                        routine test() {
+                            let c2 = coords with [0] = 5.0
+                        }
+                        """;
+
+        var ast = Parse(source: source);
+        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
+        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
+        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
+            as Compilers.Shared.AST.WithExpression;
+
+        Assert.NotNull(withExpr);
+        Assert.Single(withExpr!.Updates);
+        Assert.Null(withExpr.Updates[0].FieldPath);
+        Assert.NotNull(withExpr.Updates[0].Index);
+    }
+
+    #endregion
 }

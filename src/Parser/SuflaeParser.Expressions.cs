@@ -29,7 +29,7 @@ public partial class SuflaeParser
     /// <returns>The parsed expression, possibly an assignment.</returns>
     private Expression ParseAssignment()
     {
-        Expression expr = ParseInlineConditional();
+        Expression expr = ParseWith();
         Expression value;
         // Check for simple assignment
         if (Match(type: TokenType.Assign))
@@ -103,6 +103,65 @@ public partial class SuflaeParser
         }
 
         return op;
+    }
+
+    /// <summary>
+    /// Parses with expressions (lowest precedence operator).
+    /// Syntax: <c>expr with .field = value, .nested.field = value, [index] = value</c>
+    /// </summary>
+    /// <returns>The parsed expression, possibly a with expression.</returns>
+    private Expression ParseWith()
+    {
+        Expression expr = ParseInlineConditional();
+
+        if (Match(type: TokenType.With))
+        {
+            SourceLocation withLocation = GetLocation(token: PeekToken(offset: -1));
+            var updates = new List<(List<string>? FieldPath, Expression? Index, Expression Value)>();
+
+            do
+            {
+                List<string>? fieldPath = null;
+                Expression? indexExpr = null;
+
+                if (Match(type: TokenType.LeftBracket))
+                {
+                    // Index update: [expr] = value
+                    indexExpr = ParseExpression();
+                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index in with expression");
+                }
+                else if (Match(type: TokenType.Dot))
+                {
+                    // Field update: .field or .field.nested
+                    fieldPath = new List<string>();
+                    Token fieldToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name after '.' in with expression");
+                    fieldPath.Add(item: fieldToken.Text);
+
+                    // Parse nested field path: .address.city
+                    while (Check(type: TokenType.Dot) && PeekToken(offset: 1).Type == TokenType.Identifier)
+                    {
+                        Advance(); // consume dot
+                        Token nestedToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name in with expression");
+                        fieldPath.Add(item: nestedToken.Text);
+                    }
+                }
+                else
+                {
+                    throw new SuflaeGrammarException(
+                        SuflaeDiagnosticCode.UnexpectedToken,
+                        "Expected '.' or '[' in with expression",
+                        fileName, CurrentToken.Line, CurrentToken.Column);
+                }
+
+                Consume(type: TokenType.Assign, errorMessage: "Expected '=' after field or index in with expression");
+                Expression value = ParseInlineConditional();
+                updates.Add(item: (fieldPath, indexExpr, value));
+            } while (Match(type: TokenType.Comma));
+
+            expr = new WithExpression(Base: expr, Updates: updates, Location: withLocation);
+        }
+
+        return expr;
     }
 
     /// <summary>
@@ -1206,44 +1265,6 @@ public partial class SuflaeParser
             else if (Match(type: TokenType.BangBang))
             {
                 expr = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap, Operand: expr, Location: expr.Location);
-            }
-            else if (Match(type: TokenType.With))
-            {
-                // Functional update expression for records: record with (field: newVal)
-                // Also supports index updates: collection with ([i]: newVal)
-                // Only valid on record types - semantic analyzer will validate this
-                SourceLocation withLocation = GetLocation(token: PeekToken(offset: -1));
-                Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'with'");
-
-                var updates = new List<(string? FieldName, Expression? Index, Expression Value)>();
-
-                // Parse update list: (field: value, [index]: value, ...)
-                do
-                {
-                    string? fieldName = null;
-                    Expression? indexExpr = null;
-
-                    if (Match(type: TokenType.LeftBracket))
-                    {
-                        // Index update: [expr]: value
-                        indexExpr = ParseExpression();
-                        Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index in with expression");
-                    }
-                    else
-                    {
-                        // Field update: field: value
-                        Token fieldToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name in with expression");
-                        fieldName = fieldToken.Text;
-                    }
-
-                    Consume(type: TokenType.Colon, errorMessage: "Expected ':' after field name or index in with expression");
-                    Expression value = ParseExpression();
-                    updates.Add(item: (fieldName, indexExpr, value));
-                } while (Match(type: TokenType.Comma));
-
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after with updates");
-
-                expr = new WithExpression(Base: expr, Updates: updates, Location: withLocation);
             }
             else
             {

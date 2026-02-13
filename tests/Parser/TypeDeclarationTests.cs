@@ -443,4 +443,41 @@ public class TypeDeclarationTests
     }
 
     #endregion
+
+    #region Published Record Field Tests
+
+    [Fact]
+    public void Parse_RecordWithPublishedField()
+    {
+        string source = """
+                        record Percentage {
+                            published value: F64
+                        }
+                        """;
+
+        Program program = AssertParses(source: source);
+        RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
+
+        Assert.Equal(expected: "Percentage", actual: record.Name);
+        Assert.Single(collection: record.Members);
+    }
+
+    [Fact]
+    public void Parse_RecordWithMixedVisibilityFields()
+    {
+        string source = """
+                        record Config {
+                            published name: Text
+                            private secret: Text
+                            value: S32
+                        }
+                        """;
+
+        Program program = AssertParses(source: source);
+        RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
+
+        Assert.Equal(expected: 3, actual: record.Members.Count);
+    }
+
+    #endregion
 }

@@ -339,16 +339,17 @@ public record ConstructorExpression(
 /// <remarks>
 /// With expression patterns:
 /// <list type="bullet">
-/// <item>Field update: record with (field: newValue)</item>
-/// <item>Multiple fields: record with (x: 1, y: 2)</item>
-/// <item>Index update: collection with ([i]: newValue)</item>
+/// <item>Field update: record with .field = newValue</item>
+/// <item>Multiple fields: record with .x = 1, .y = 2</item>
+/// <item>Nested field: record with .address.city = "NYC"</item>
+/// <item>Index update: collection with [i] = newValue</item>
 /// </list>
-/// For field updates, FieldName is set and Index is null.
-/// For index updates, Index is set and FieldName is null.
+/// For field updates, FieldPath is set and Index is null.
+/// For index updates, Index is set and FieldPath is null.
 /// </remarks>
 public record WithExpression(
     Expression Base,
-    List<(string? FieldName, Expression? Index, Expression Value)> Updates,
+    List<(List<string>? FieldPath, Expression? Index, Expression Value)> Updates,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>

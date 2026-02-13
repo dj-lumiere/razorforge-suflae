@@ -312,13 +312,13 @@ public partial class SuflaeParser
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
-            // In record bodies, only private/internal/public are allowed (not published/imported)
-            if (_parsingStrictRecordBody && visibility is VisibilityModifier.Published or VisibilityModifier.Imported)
+            // In record bodies, imported is not allowed
+            if (_parsingStrictRecordBody && visibility is VisibilityModifier.Imported)
             {
                 throw new SuflaeGrammarException(
                     SuflaeDiagnosticCode.InvalidDeclarationInBody,
                     $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
-                    "Record fields can use 'private', 'internal', or 'public'",
+                    "Record fields can use 'private', 'internal', 'published', or 'public'",
                     fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseFieldDeclaration(visibility: visibility);
