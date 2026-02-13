@@ -5,7 +5,7 @@ module Core
 import RazorForge/Numeric.Decimal
 
 entity Decimal
-    private var value: RazorForge/Numeric.Decimal
+    private value: RazorForge/Numeric.Decimal
 
 # Arithmetic operators
 routine Decimal.__add__(you: Decimal) -> Decimal

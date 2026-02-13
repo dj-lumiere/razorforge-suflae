@@ -5,7 +5,7 @@ module Core
 import RazorForge/Core.LocalMoment
 
 record LocalMoment
-    private var value: RazorForge/Core.LocalMoment
+    private value: RazorForge/Core.LocalMoment
 
 # ============================================================================
 # Constructors

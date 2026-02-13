@@ -5,7 +5,7 @@ module Core
 import RazorForge/Numeric.Integer
 
 entity Integer
-    private var value: RazorForge/Numeric.Integer
+    private value: RazorForge/Numeric.Integer
 
 # Arithmetic operators
 routine Integer.__add__(you: Integer) -> Integer

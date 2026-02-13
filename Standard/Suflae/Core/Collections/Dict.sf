@@ -5,7 +5,7 @@ module Core
 import RazorForge/Collections.Dict
 
 entity Dict<K, V>
-    private var value: RazorForge/Collections.Dict<K, V>
+    private value: RazorForge/Collections.Dict<K, V>
 
 # Core operations
 routine Dict<K, V>.count() -> Integer

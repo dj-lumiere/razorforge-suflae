@@ -5,7 +5,7 @@ module Core
 import RazorForge/Core.ByteSize
 
 record ByteSize
-    private var value: RazorForge/Core.ByteSize
+    private value: RazorForge/Core.ByteSize
 
 # ============================================================================
 # Constructors

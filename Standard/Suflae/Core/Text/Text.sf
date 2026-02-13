@@ -5,7 +5,7 @@ module Core
 import RazorForge/Text.Text
 
 entity Text
-    private var value: RazorForge/Text.Text
+    private value: RazorForge/Text.Text
 
 # Core operations
 routine Text.count() -> Integer

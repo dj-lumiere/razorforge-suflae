@@ -5,7 +5,7 @@ module Core
 import RazorForge/Core.Duration
 
 record Duration
-    private var value: RazorForge/Core.Duration
+    private value: RazorForge/Core.Duration
 
 # ============================================================================
 # Constructors

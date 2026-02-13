@@ -5,7 +5,7 @@ module Core
 import RazorForge/Collections.PriorityQueue
 
 entity PriorityQueue<TElement, TPriority>
-    private var value: RazorForge/Collections.PriorityQueue<TElement, TPriority>
+    private value: RazorForge/Collections.PriorityQueue<TElement, TPriority>
 
 # Core operations
 routine PriorityQueue<TElement, TPriority>.count() -> Integer

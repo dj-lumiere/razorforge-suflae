@@ -1,6 +1,6 @@
 module Numeric
 
 entity Fraction follows Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered {
-    private var numerator: Integer
-    private var denominator: Integer
+    private numerator: Integer
+    private denominator: Integer
 }

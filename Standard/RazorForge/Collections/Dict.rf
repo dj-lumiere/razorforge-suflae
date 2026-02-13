@@ -22,8 +22,8 @@ preset DICT_LOAD_FACTOR: UAddr = 75uaddr
 
 entity Dict<K, V>
 requires K follows Hashable, Comparable {
-    private var buckets: List<SortedDict<K, V>>
-    private var count: UAddr
+    private buckets: List<SortedDict<K, V>>
+    private count: UAddr
 }
 
 # ============================================================================

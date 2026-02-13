@@ -5,7 +5,7 @@ module Core
 import RazorForge/Collections.Set
 
 entity Set<T>
-    private var value: RazorForge/Collections.Set<T>
+    private value: RazorForge/Collections.Set<T>
 
 # Core operations
 routine Set<T>.count() -> Integer

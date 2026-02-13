@@ -5,7 +5,7 @@ module Core
 import RazorForge/Collections.BitList
 
 entity BitList
-    private var value: RazorForge/Collections.BitList
+    private value: RazorForge/Collections.BitList
 
 # Core operations
 routine BitList.count() -> Integer

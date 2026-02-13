@@ -2,6 +2,6 @@
 module Numeric
 
 entity Complex follows Numeric, Equatable {
-    private var real: Decimal
-    private var imag: Decimal
+    private real: Decimal
+    private imag: Decimal
 }
