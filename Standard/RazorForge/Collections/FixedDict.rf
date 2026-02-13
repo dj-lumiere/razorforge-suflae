@@ -19,13 +19,6 @@ preset FDICT_SLOT_EMPTY: U8 = 0u8
 preset FDICT_SLOT_OCCUPIED: U8 = 1u8
 preset FDICT_SLOT_TOMBSTONE: U8 = 2u8
 
-# Key-value entry for iteration
-record FixedDictEntry<K, V>
-requires K follows Hashable {
-    key: K
-    value: V
-}
-
 # Fixed-capacity hash map with reference semantics
 # Uses robin hood open addressing for cache-friendly probing
 resident FixedDict<K, V, N>
@@ -363,12 +356,12 @@ routine FixedDict<K, V, N>.values() -> List<V> {
     return result
 }
 
-routine FixedDict<K, V, N>.entries() -> List<FixedDictEntry<K, V>> {
-    let result = List<FixedDictEntry<K, V>>(me.count)
+routine FixedDict<K, V, N>.entries() -> List<FixedTuple<K, V>> {
+    let result = List<FixedTuple<K, V>>(me.count)
     var i = 0uaddr
     while i < N {
         if me.get_state(i) == FDICT_SLOT_OCCUPIED {
-            result.add_last!(FixedDictEntry<K, V>(key: me.get_key(i), value: me.get_value(i)))
+            result.add_last!((me.get_key(i), me.get_value(i)))
         }
         i = i + 1uaddr
     }
@@ -388,13 +381,10 @@ record FixedDictIterator<K, V, N> {
     slot: UAddr
 }
 
-routine FixedDictIterator<K, V, N>.next!() -> FixedDictEntry<K, V> {
+routine FixedDictIterator<K, V, N>.next!() -> FixedTuple<K, V> {
     while me.slot < N {
         if me.dict.get_state(me.slot) == FDICT_SLOT_OCCUPIED {
-            let entry = FixedDictEntry<K, V>(
-                key: me.dict.get_key(me.slot),
-                value: me.dict.get_value(me.slot)
-            )
+            let entry = (me.dict.get_key(me.slot), me.dict.get_value(me.slot))
             me.slot = me.slot + 1uaddr
             return entry
         }

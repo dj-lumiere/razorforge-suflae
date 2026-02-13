@@ -20,13 +20,6 @@ preset DICT_INITIAL_BUCKETS: UAddr = 16uaddr
 # Load factor threshold for rehashing (as percentage)
 preset DICT_LOAD_FACTOR: UAddr = 75uaddr
 
-# Key-value pair for iteration
-record DictEntry<K, V>
-requires K follows Hashable, Comparable {
-    key: K
-    value: V
-}
-
 entity Dict<K, V>
 requires K follows Hashable, Comparable {
     private var buckets: List<SortedDict<K, V>>
@@ -223,8 +216,8 @@ routine Dict<K, V>.values() -> List<V> {
     return result
 }
 
-routine Dict<K, V>.entries() -> List<DictEntry<K, V>> {
-    let result = List<DictEntry<K, V>>(me.count)
+routine Dict<K, V>.entries() -> List<Tuple<K, V>> {
+    let result = List<Tuple<K, V>>(me.count)
     var i = 0uaddr
     while i < me.buckets.count() {
         let bucket_keys = me.buckets[i].keys()
@@ -232,7 +225,7 @@ routine Dict<K, V>.entries() -> List<DictEntry<K, V>> {
         while j < bucket_keys.count() {
             let key = bucket_keys[j]
             let value = me.buckets[i].get!(key)
-            result.add_last(DictEntry<K, V>(key: key, value: value))
+            result.add_last((key, value))
             j = j + 1uaddr
         }
         i = i + 1uaddr
@@ -260,7 +253,7 @@ entity DictIterator<K, V> {
     current_keys: List<K>
 }
 
-routine DictIterator<K, V>.next!() -> DictEntry<K, V> {
+routine DictIterator<K, V>.next!() -> Tuple<K, V> {
     # Advance to next non-empty bucket if needed
     while me.entry_idx >= me.current_keys.count() {
         if me.bucket_idx >= me.dict.buckets.count() {
@@ -274,7 +267,7 @@ routine DictIterator<K, V>.next!() -> DictEntry<K, V> {
     let key = me.current_keys[me.entry_idx]
     let value = me.dict.get!(key)
     me.entry_idx = me.entry_idx + 1uaddr
-    return DictEntry<K, V>(key: key, value: value)
+    return (key, value)
 }
 
 # ============================================================================
