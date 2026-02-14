@@ -18,9 +18,9 @@ A precision systems language for absolute control and deterministic performance.
 
 ```razorforge
 entity ConnectionPool {
-    var connections: List<Connection>
-    var active_count: S64
-    var max_connections: S64
+    connections: List<Connection>
+    active_count: S64
+    max_connections: S64
 }
 
 routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection? {
@@ -64,31 +64,31 @@ routine monitor_pool(weak: Tracked<ConnectionPool>) {
 A productivity-first language for building modern applications quickly and safely.
 
 ```suflae
-entity UserCache:
+entity UserCache
     private cache: Dict<Integer, User>
     private hit_count: Integer
     private miss_count: Integer
 
-public routine UserCache.__create__():
+public routine UserCache.__create__()
     me.cache = Dict()
     me.hit_count = 0
     me.miss_count = 0
 
-public suspended routine UserCache.fetch_user!(id: Integer) -> User:
+public suspended routine UserCache.fetch_user!(id: Integer) -> User
     # Check cache first
-    when me.cache.try_getitem(id):
-        is None:
+    when me.cache.try_getitem(id)
+        is None
             me.miss_count += 1
             let user = waitfor http.get(f"/api/users/{id}")
-            unless user:
+            unless user
                 throw NetworkError()
             me.cache.insert(id, user)
             return user
-        else cached:
+        else cached
             me.hit_count += 1
             return cached
 
-routine start():
+routine start()
     # Create an actor (spawns a green thread)
     let cache = UserCache().act()  # Type: Actor<UserCache>
 
@@ -315,9 +315,9 @@ RazorForge makes memory operations **visible and explicit** through inline token
 
 ```razorforge
 entity Node {
-    var value: S32,
-    var next: Shared<Node>?,
-    var prev: Tracked<Node>?  # Weak to prevent cycles
+    value: S32,
+    next: Shared<Node>?,
+    prev: Tracked<Node>?  # Weak to prevent cycles
 }
 
 routine process_node(node: Node) {
@@ -350,7 +350,7 @@ RazorForge provides **explicit control** over concurrent access with configurabl
 
 ```razorforge
 entity Counter {
-    var value: S64
+    value: S64
 }
 
 routine start() {
@@ -435,24 +435,24 @@ routine start() {
 Suflae uses the **actor model** for safe, simple concurrency:
 
 ```suflae
-entity Counter:
-    var value: S32
+entity Counter
+    value: S32
 
-routine Counter.increment():
+routine Counter.increment()
     me.value += 1
 
-routine Counter.get() -> S32:
+routine Counter.get() -> S32
     return me.value
 
 let counter = Counter(value: 0).act()  # Type: Actor<Counter>
 
-suspended routine increment_worker():
-    for j in 0 to 100:
+suspended routine increment_worker()
+    for j in 0 to 100
         counter.increment()  # Sends message to actor
 
-suspended routine start():
+suspended routine start()
     # Start 10 workers (fire-and-forget)
-    for i in 0 to 10:
+    for i in 0 to 10
         increment_worker()
 
     # counter.get() will return 1000 (always correct, no races!)
@@ -469,10 +469,10 @@ suspended routine start():
 ### Suflae: Async/Await with Tasks
 
 ```suflae
-suspended routine fetch(url: Text) -> Text:
+suspended routine fetch(url: Text) -> Text
     return waitfor http.get(url)
 
-suspended routine start():
+suspended routine start()
     # Sequential execution
     let a = waitfor fetch("url1")
     let b = waitfor fetch("url2")
