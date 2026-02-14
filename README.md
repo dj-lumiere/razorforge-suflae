@@ -25,7 +25,7 @@ entity ConnectionPool {
 
 routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection? {
     # Scoped access for multiple operations
-    hijacking pool as p {
+    using pool.hijack() as p {
         # Check capacity with pattern matching
         when p.active_count < p.max_connections {
             == true => {
@@ -188,13 +188,13 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 
 ### RazorForge
 
-- **Theatrical Memory Model**: Inline tokens (`.view()`, `.hijack()`) + scoped blocks (`viewing`, `hijacking`) + explicit
+- **Theatrical Memory Model**: Inline tokens (`.view()`, `.hijack()`) + scoped blocks (`using X.view() as y`, `using X.hijack() as y`) + explicit
   ownership (`steal`)
 - **No Lifetime Annotations**: Tokens cannot be returned from routines = safety without complexity
 - **Pay Only for What You Use**: No hidden costs, explicit tradeoffs
 - **Danger Blocks**: Opt-in unsafe operations (`danger!`) for zero-overhead code
 - **Five Data Types**: `record`, `resident`, `entity`, `choice`, `variant`
-- **Explicit Concurrency**: `Shared<T, Policy>` with `seizing`/`inspecting` for thread-safe access
+- **Explicit Concurrency**: `Shared<T, Policy>` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
 - **Freestanding Mode**: Bare metal programming without runtime
 - **C Subsystem**: Full FFI with C libraries
 
@@ -328,12 +328,12 @@ routine process_node(node: Node) {
     node.hijack().value += 1
 
     # Multiple operations - use scoped syntax
-    hijacking node as h {
+    using node.hijack() as h {
         h.value += 10
         h.value *= 2
 
         # Downgrade to read-only within hijack
-        viewing h as v {
+        using h.view() as v {
             show(v.value)
         }
     }
@@ -362,14 +362,14 @@ routine start() {
     # Spawn reader threads - can run concurrently!
     for i in 0 to 5 {
         let reader = shared  # Clone Arc (atomic increment)
-        inspecting reader as r {
+        using reader.inspect!() as r {
             show(f"Thread {i} reads: {r.value}")
         }  # Read lock released automatically
     }
 
     # Writer thread - exclusive access
     let writer = shared
-    seizing writer as w {
+    using writer.seize!() as w {
         w.value += 1
     }  # Write lock released automatically
 }
@@ -491,7 +491,7 @@ suspended routine start()
 |------------------|---------------------------|--------------------------------------------------|
 | **Philosophy**   | "Just use actors"         | "Choose your primitive"                          |
 | **Primitives**   | Actors only               | Atomics, Mutex, MultiReadLock, Channels          |
-| **Syntax**       | `counter.increment()`     | `seizing counter as c { c.increment() }`         |
+| **Syntax**       | `counter.increment()`     | `using counter.seize!() as c { c.increment() }`  |
 | **Field Access** | Forbidden on actors       | Allowed in lock scope                            |
 | **Channels**     | Not exposed (internal)    | Exposed for direct use                           |
 | **Atomics**      | Not exposed               | Exposed for lock-free ops                        |
