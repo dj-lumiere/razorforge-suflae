@@ -394,6 +394,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Record field has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
     RecordContainsNonValueType = 412,
 
+    /// <summary>Entity cannot be directly assigned from another variable. Must use .share() or steal.</summary>
+    BareEntityAssignment = 413,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

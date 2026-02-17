@@ -269,6 +269,20 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // RazorForge: Entity bare assignment prohibition
+        // `let b = a` where `a` is an entity is a compile error (must use .share() or steal)
+        // Only applies to bare identifier references, not constructor calls or function returns
+        if (_registry.Language == Language.RazorForge
+            && varDecl.Initializer is IdentifierExpression
+            && varType is EntityTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BareEntityAssignment,
+                $"Cannot directly assign entity of type '{varType.Name}' to variable '{varDecl.Name}'. " +
+                "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
+                varDecl.Location);
+        }
+
         // Register variable in current scope
         bool declared = _registry.DeclareVariable(
             name: varDecl.Name,

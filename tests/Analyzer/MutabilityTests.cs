@@ -1,4 +1,5 @@
 ﻿using Compilers.Analysis.Results;
+using RazorForge.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -338,6 +339,81 @@ public class MutabilityTests
                     comparisonType: StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains(value: "nested",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    #endregion
+
+    #region Entity Bare Assignment Prohibition
+
+    [Fact]
+    public void Analyze_EntityBareAssignment_ReportsError()
+    {
+        string source = """
+                        entity Document {
+                            title: Text
+                        }
+
+                        routine test() {
+                            let doc1 = Document(title: "My Doc")
+                            let doc2 = doc1
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    [Fact]
+    public void Analyze_EntityConstructorAssignment_NoError()
+    {
+        string source = """
+                        entity Document {
+                            title: Text
+                        }
+
+                        routine test() {
+                            let doc1 = Document(title: "My Doc")
+                            let doc2 = Document(title: "Other")
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    [Fact]
+    public void Analyze_RecordBareAssignment_NoError()
+    {
+        string source = """
+                        record Point {
+                            x: S32
+                            y: S32
+                        }
+
+                        routine test() {
+                            let p1 = Point(x: 1, y: 2)
+                            let p2 = p1
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    [Fact]
+    public void AnalyzeSuflae_EntityBareAssignment_NoError()
+    {
+        string source = """
+                        entity Document
+                            title: Text
+
+                        routine test()
+                            let doc1 = Document(title: "My Doc")
+                            let doc2 = doc1
+                        """;
+
+        AnalysisResult result = AnalyzeSuflae(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
 
     #endregion

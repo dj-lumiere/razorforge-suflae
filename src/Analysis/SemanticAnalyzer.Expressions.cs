@@ -1016,6 +1016,19 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // RazorForge: Entity bare assignment prohibition
+        // `b = a` where `a` is a bare identifier of entity type is a compile error
+        if (_registry.Language == Language.RazorForge
+            && value is IdentifierExpression
+            && valueType is EntityTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BareEntityAssignment,
+                $"Cannot directly assign entity of type '{valueType.Name}'. " +
+                "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
+                location);
+        }
+
         // Check type compatibility
         if (!IsAssignableTo(source: valueType, target: targetType))
         {
