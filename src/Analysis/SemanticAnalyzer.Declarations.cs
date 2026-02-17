@@ -666,6 +666,7 @@ public sealed partial class SemanticAnalyzer
                 // Entities, wrappers (Shared, Tracked, Viewed, etc.), and reference tuples are not allowed
                 if (fieldType is TypeInfo fieldTypeInfo
                     && fieldTypeInfo is not ErrorTypeInfo
+                    && fieldTypeInfo is not GenericParameterTypeInfo
                     && !TypeRegistry.IsValueType(type: fieldTypeInfo)
                     && !(fieldTypeInfo is WrapperTypeInfo { Name: "Snatched" }))
                 {
