@@ -55,6 +55,21 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case TypePattern typePat:
+                // None is a keyword, not a registered type — handle it directly
+                if (typePat.Type.Name == "None")
+                {
+                    if (matchedType is not ErrorTypeInfo
+                        && matchedType.Category != TypeCategory.ErrorHandling)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.PatternTypeMismatch,
+                            $"Type pattern 'is None' can never match a value of type '{matchedType.Name}'.",
+                            typePat.Location);
+                    }
+
+                    break;
+                }
+
                 TypeSymbol patternType = ResolveType(typeExpr: typePat.Type);
 
                 // Check type compatibility between matched type and pattern type

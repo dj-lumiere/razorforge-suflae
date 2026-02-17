@@ -1138,6 +1138,27 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
+    /// Narrows the type of a variable in the current scope.
+    /// Used for type narrowing after pattern checks (e.g., after "unless x is None").
+    /// </summary>
+    /// <param name="name">The variable name to narrow.</param>
+    /// <param name="narrowedType">The narrowed type.</param>
+    public void NarrowVariable(string name, TypeInfo narrowedType)
+    {
+        _currentScope.NarrowVariable(name: name, narrowedType: narrowedType);
+    }
+
+    /// <summary>
+    /// Gets the narrowed type for a variable in the current scope chain.
+    /// </summary>
+    /// <param name="name">The variable name to look up.</param>
+    /// <returns>The narrowed type if found, null otherwise.</returns>
+    public TypeInfo? GetNarrowedType(string name)
+    {
+        return _currentScope.GetNarrowedType(name: name);
+    }
+
+    /// <summary>
     /// Gets all variables visible in the current scope as a dictionary.
     /// Used for lambda capture analysis to track which variables from enclosing scopes are captured.
     /// </summary>

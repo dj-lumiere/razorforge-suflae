@@ -1308,4 +1308,140 @@ public sealed partial class SemanticAnalyzer
     }
 
     #endregion
+
+    #region Type Narrowing
+
+    /// <summary>
+    /// Information about type narrowing extracted from a condition expression.
+    /// </summary>
+    private record NarrowingInfo(string VariableName, TypeSymbol? ThenBranchType, TypeSymbol? ElseBranchType);
+
+    /// <summary>
+    /// Attempts to extract type narrowing information from a condition expression.
+    /// Handles patterns like "x is None", "x isnot None", "Not(x is None)".
+    /// </summary>
+    private NarrowingInfo? TryExtractNarrowingFromCondition(Expression condition)
+    {
+        // Handle: x is None / x is Crashable / x isnot None / x isnot Crashable
+        if (condition is IsPatternExpression isPat)
+        {
+            return ExtractFromIsPattern(isPat: isPat);
+        }
+
+        // Handle desugared unless: Not(x is None) → if Not(condition) { ... }
+        if (condition is UnaryExpression { Operator: UnaryOperator.Not, Operand: IsPatternExpression innerIsPat })
+        {
+            // Negating the condition swaps then/else narrowing
+            NarrowingInfo? inner = ExtractFromIsPattern(isPat: innerIsPat);
+            if (inner == null) return null;
+            return new NarrowingInfo(inner.VariableName, inner.ElseBranchType, inner.ThenBranchType);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts narrowing info from an IsPatternExpression.
+    /// </summary>
+    private NarrowingInfo? ExtractFromIsPattern(IsPatternExpression isPat)
+    {
+        // The expression must be a simple identifier
+        if (isPat.Expression is not IdentifierExpression id) return null;
+
+        // Look up the variable to get its current type
+        VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+        if (varInfo == null) return null;
+
+        // Check for existing narrowing
+        TypeSymbol varType = _registry.GetNarrowedType(name: id.Name) ?? varInfo.Type;
+
+        bool eliminateNone = IsNonePattern(pattern: isPat.Pattern);
+        bool eliminateCrashable = IsCrashablePattern(pattern: isPat.Pattern);
+
+        if (!eliminateNone && !eliminateCrashable) return null;
+
+        TypeSymbol? narrowedType = ComputeNarrowedType(
+            type: varType,
+            eliminateNone: eliminateNone,
+            eliminateCrashable: eliminateCrashable);
+
+        if (narrowedType == null) return null;
+
+        if (isPat.IsNegated)
+        {
+            // "x isnot None" → then branch gets the narrowed type
+            return new NarrowingInfo(id.Name, ThenBranchType: narrowedType, ElseBranchType: null);
+        }
+
+        // "x is None" → else branch gets the narrowed type
+        return new NarrowingInfo(id.Name, ThenBranchType: null, ElseBranchType: narrowedType);
+    }
+
+    /// <summary>
+    /// Checks if a pattern represents a None check.
+    /// The parser creates TypePattern(type: "None") rather than NonePattern.
+    /// </summary>
+    private static bool IsNonePattern(Pattern pattern)
+    {
+        return pattern is NonePattern
+            or TypePattern { Type.Name: "None" };
+    }
+
+    /// <summary>
+    /// Checks if a pattern represents a Crashable check.
+    /// The parser creates TypePattern(type: "Crashable") rather than CrashablePattern.
+    /// </summary>
+    private static bool IsCrashablePattern(Pattern pattern)
+    {
+        return pattern is CrashablePattern
+            or TypePattern { Type.Name: "Crashable" };
+    }
+
+    /// <summary>
+    /// Computes the narrowed type after eliminating None and/or Crashable possibilities.
+    /// </summary>
+    /// <returns>The narrowed type, or null if narrowing is not possible.</returns>
+    private static TypeSymbol? ComputeNarrowedType(TypeSymbol type, bool eliminateNone, bool eliminateCrashable)
+    {
+        if (type is not ErrorHandlingTypeInfo ehType) return null;
+
+        return ehType.Kind switch
+        {
+            // Maybe<T>: eliminate None → T
+            ErrorHandlingKind.Maybe when eliminateNone => ehType.ValueType,
+
+            // Result<T>: eliminate Crashable → T
+            ErrorHandlingKind.Result when eliminateCrashable => ehType.ValueType,
+
+            // Lookup<T>: must eliminate both None and Crashable → T
+            ErrorHandlingKind.Lookup when eliminateNone && eliminateCrashable => ehType.ValueType,
+
+            // Partial elimination on Lookup is not sufficient
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Checks if a statement always exits the current scope (return, throw, absent, break, continue).
+    /// Used for guard clause narrowing.
+    /// </summary>
+    private static bool HasDefiniteExit(Statement statement)
+    {
+        return statement switch
+        {
+            ReturnStatement => true,
+            ThrowStatement => true,
+            AbsentStatement => true,
+            BreakStatement => true,
+            ContinueStatement => true,
+            BlockStatement block => block.Statements.Count > 0
+                                    && HasDefiniteExit(statement: block.Statements[^1]),
+            IfStatement { ElseStatement: not null } ifStmt =>
+                HasDefiniteExit(statement: ifStmt.ThenStatement)
+                && HasDefiniteExit(statement: ifStmt.ElseStatement),
+            _ => false
+        };
+    }
+
+    #endregion
 }

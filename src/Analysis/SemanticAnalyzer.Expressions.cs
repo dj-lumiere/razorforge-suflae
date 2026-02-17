@@ -857,7 +857,9 @@ public sealed partial class SemanticAnalyzer
         VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
         if (varInfo != null)
         {
-            return varInfo.Type;
+            // Check for type narrowing (e.g., after "unless x is None")
+            TypeSymbol? narrowed = _registry.GetNarrowedType(name: id.Name);
+            return narrowed ?? varInfo.Type;
         }
 
         // Try to look up as choice case (SCREAMING_SNAKE_CASE identifiers like ME_SMALL, SAME)
@@ -1053,7 +1055,7 @@ public sealed partial class SemanticAnalyzer
                     ReportError(SemanticDiagnosticCode.LogicalNotRequiresBool, "Logical 'not' operator requires a boolean operand.", unary.Location);
                 }
 
-                return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+                return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
 
             case UnaryOperator.Minus:
                 if (!IsNumericType(type: operandType))
@@ -1979,7 +1981,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Chained comparisons always return bool
-        return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
     }
 
     private TypeSymbol AnalyzeBlockExpression(BlockExpression block)
@@ -2246,7 +2248,7 @@ public sealed partial class SemanticAnalyzer
         AnalyzePattern(pattern: isPat.Pattern, matchedType: exprType);
 
         // 'is' expressions always return bool
-        return _registry.LookupType(name: "bool") ?? ErrorTypeInfo.Instance;
+        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
     }
 
     private TypeSymbol HandleUnknownExpression(Expression expression)

@@ -60,14 +60,6 @@ public partial class RazorForgeTokenizer
 
         string text = _source.Substring(startIndex: _tokenStart, length: _position - _tokenStart);
 
-        // Check for optional ? suffix for failable types (e.g., s32?)
-        // Only consume single ? - double ?? is the none coalescing operator
-        if (Peek() == '?' && Peek(offset: 1) != '?')
-        {
-            Advance();
-            text += "?";
-        }
-
         // Check if it's a keyword
         if (_keywords.TryGetValue(key: text, value: out TokenType type))
         {

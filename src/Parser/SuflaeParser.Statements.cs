@@ -313,12 +313,12 @@ public partial class SuflaeParser
                     (nextAfterIdent == TokenType.FatArrow || nextAfterIdent == TokenType.Newline))
                 {
                     string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
-                    pattern = new IdentifierPattern(Name: varName, Location: clauseLocation);
+                    pattern = new ElsePattern(VariableName: varName, Location: clauseLocation);
                 }
                 else
                 {
-                    // Plain else without variable binding - treat as wildcard
-                    pattern = new WildcardPattern(Location: clauseLocation);
+                    // Plain else without variable binding
+                    pattern = new ElsePattern(VariableName: null, Location: clauseLocation);
                 }
             }
             // Comparison patterns (==, !=, <, >, <=, >=, ===, !==)

@@ -392,13 +392,45 @@ public sealed partial class SemanticAnalyzer
                 ifStmt.Condition.Location);
         }
 
-        // Analyze then branch
-        AnalyzeStatement(statement: ifStmt.ThenStatement);
+        // Extract narrowing info from condition
+        NarrowingInfo? narrowing = TryExtractNarrowingFromCondition(condition: ifStmt.Condition);
 
-        // Analyze else branch if present
+        // Analyze then branch (with narrowing if applicable)
+        if (narrowing?.ThenBranchType != null)
+        {
+            _registry.EnterScope(kind: ScopeKind.Block, name: "if_then");
+            _registry.NarrowVariable(name: narrowing.VariableName, narrowedType: narrowing.ThenBranchType);
+            AnalyzeStatement(statement: ifStmt.ThenStatement);
+            _registry.ExitScope();
+        }
+        else
+        {
+            AnalyzeStatement(statement: ifStmt.ThenStatement);
+        }
+
+        // Analyze else branch if present (with inverse narrowing if applicable)
         if (ifStmt.ElseStatement != null)
         {
-            AnalyzeStatement(statement: ifStmt.ElseStatement);
+            if (narrowing?.ElseBranchType != null)
+            {
+                _registry.EnterScope(kind: ScopeKind.Block, name: "if_else");
+                _registry.NarrowVariable(name: narrowing.VariableName, narrowedType: narrowing.ElseBranchType);
+                AnalyzeStatement(statement: ifStmt.ElseStatement);
+                _registry.ExitScope();
+            }
+            else
+            {
+                AnalyzeStatement(statement: ifStmt.ElseStatement);
+            }
+        }
+
+        // Guard clause narrowing: if the then branch definitely exits,
+        // apply else narrowing to the remainder of the current scope
+        if (ifStmt.ElseStatement == null
+            && narrowing?.ElseBranchType != null
+            && HasDefiniteExit(statement: ifStmt.ThenStatement))
+        {
+            _registry.NarrowVariable(name: narrowing.VariableName, narrowedType: narrowing.ElseBranchType);
         }
     }
 
@@ -467,9 +499,49 @@ public sealed partial class SemanticAnalyzer
     {
         TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
 
+        // Track handled patterns for narrowing the else clause
+        bool handledNone = false;
+        bool handledCrashable = false;
+
         foreach (WhenClause clause in whenStmt.Clauses)
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
+
+            // Track which patterns are handled (before the else clause)
+            if (IsNonePattern(pattern: clause.Pattern))
+            {
+                handledNone = true;
+            }
+            else if (IsCrashablePattern(pattern: clause.Pattern))
+            {
+                handledCrashable = true;
+            }
+
+            switch (clause.Pattern)
+            {
+                case ElsePattern elsePat when matchedType is ErrorHandlingTypeInfo ehType:
+                {
+                    // Compute narrowed type for else clause binding
+                    TypeSymbol? narrowedType = ComputeNarrowedType(
+                        type: ehType,
+                        eliminateNone: handledNone,
+                        eliminateCrashable: handledCrashable);
+
+                    if (narrowedType != null && elsePat.VariableName != null)
+                    {
+                        // Declare with narrowed type instead of original matchedType
+                        DeclarePatternVariable(
+                            name: elsePat.VariableName,
+                            type: narrowedType,
+                            location: elsePat.Location);
+                        AnalyzeStatement(statement: clause.Body);
+                        _registry.ExitScope();
+                        continue;
+                    }
+
+                    break;
+                }
+            }
 
             // Analyze pattern and bind variables
             AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);

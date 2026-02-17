@@ -22,6 +22,9 @@ public sealed class Scope
     /// <summary>Variables declared in this scope.</summary>
     private readonly Dictionary<string, VariableInfo> _variables = new();
 
+    /// <summary>Type narrowings applied in this scope (e.g., after null checks).</summary>
+    private readonly Dictionary<string, TypeSymbol> _typeNarrowings = new();
+
     /// <summary>Child scopes.</summary>
     private readonly List<Scope> _children = [];
 
@@ -68,6 +71,29 @@ public sealed class Scope
     public bool IsDeclaredLocally(string name)
     {
         return _variables.ContainsKey(key: name);
+    }
+
+    /// <summary>
+    /// Narrows the type of a variable in this scope.
+    /// Used for type narrowing after pattern checks (e.g., after "unless x is None").
+    /// </summary>
+    /// <param name="name">The variable name to narrow.</param>
+    /// <param name="narrowedType">The narrowed type.</param>
+    public void NarrowVariable(string name, TypeSymbol narrowedType)
+    {
+        _typeNarrowings[key: name] = narrowedType;
+    }
+
+    /// <summary>
+    /// Gets the narrowed type for a variable, searching this scope and parent scopes.
+    /// </summary>
+    /// <param name="name">The variable name to look up.</param>
+    /// <returns>The narrowed type if found, null otherwise.</returns>
+    public TypeSymbol? GetNarrowedType(string name)
+    {
+        return _typeNarrowings.TryGetValue(key: name, value: out TypeSymbol? type)
+            ? type
+            : Parent?.GetNarrowedType(name: name);
     }
 
     /// <summary>
