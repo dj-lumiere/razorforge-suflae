@@ -1,6 +1,7 @@
 ﻿using Compilers.Analysis.Results;
 using Compilers.Analysis.Symbols;
 using Compilers.Analysis.Types;
+using RazorForge.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -456,6 +457,100 @@ public class TypeResolutionTests
 
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region Variant Restrictions
+
+    [Fact]
+    public void Analyze_VariantInField_ReportsError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        entity Canvas {
+                            current: Shape
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_VariantAsParameter_ReportsError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        routine process(shape: Shape) {
+                            pass
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_VariantMethodDefinition_ReportsError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        @readonly
+                        routine Shape.area() -> F64 {
+                            return 0.0
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_VariantReturnType_NoError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        routine make_shape() -> Shape {
+                            return CIRCLE(1.0)
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
+    }
+
+    [Fact]
+    public void AnalyzeSuflae_VariantInField_ReportsError()
+    {
+        string source = """
+                        variant Shape
+                            Circle: F32
+                            Rect: F32
+
+                        entity Canvas
+                            current: Shape
+                        """;
+
+        AnalysisResult result = AnalyzeSuflae(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
     }
 
     #endregion

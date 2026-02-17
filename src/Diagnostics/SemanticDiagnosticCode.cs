@@ -397,6 +397,15 @@ public enum SemanticDiagnosticCode
     /// <summary>Entity cannot be directly assigned from another variable. Must use .share() or steal.</summary>
     BareEntityAssignment = 413,
 
+    /// <summary>Variant type cannot be stored in fields.</summary>
+    VariantFieldNotAllowed = 414,
+
+    /// <summary>Variant type cannot be used as a parameter type.</summary>
+    VariantParameterNotAllowed = 415,
+
+    /// <summary>Variant type cannot have methods or follow protocols.</summary>
+    VariantMethodNotAllowed = 416,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

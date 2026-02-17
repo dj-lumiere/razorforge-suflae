@@ -163,6 +163,16 @@ public sealed partial class SemanticAnalyzer
         // Validate that tokens cannot be stored in fields
         ValidateNotTokenFieldType(type: fieldType, fieldName: field.Name, location: field.Location);
 
+        // Validate that variant types cannot be stored in fields
+        if (fieldType is VariantTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantFieldNotAllowed,
+                $"Variant type '{fieldType.Name}' cannot be stored in field '{field.Name}'. " +
+                "Variants must be dismantled immediately with pattern matching.",
+                field.Location);
+        }
+
         // Validate that Result<T> and Lookup<T> are not used as field types
         if (fieldType is ErrorHandlingTypeInfo errorHandlingType &&
             errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
@@ -300,6 +310,16 @@ public sealed partial class SemanticAnalyzer
         {
             // Top-level function
             kind = RoutineKind.Function;
+        }
+
+        // Validate that variants cannot have methods
+        if (ownerType is VariantTypeInfo && kind == RoutineKind.Method)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantMethodNotAllowed,
+                $"Variant type '{ownerType.Name}' cannot have methods. " +
+                "Variants only support 'is', 'isnot', and pattern matching with 'when'.",
+                routine.Location);
         }
 
         // Validate reserved prefixes (try_, check_, lookup_) for user functions
@@ -1068,6 +1088,16 @@ public sealed partial class SemanticAnalyzer
             }
 
             TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+
+            // Validate that variant types cannot be used as parameter types
+            if (paramType is VariantTypeInfo)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.VariantParameterNotAllowed,
+                    $"Variant type '{paramType.Name}' cannot be used as a parameter type. " +
+                    "Return variants from routines and dismantle them with pattern matching.",
+                    param.Location);
+            }
 
             // Validate that Result<T> and Lookup<T> are not used as parameter types
             if (paramType is ErrorHandlingTypeInfo errorHandlingType &&
