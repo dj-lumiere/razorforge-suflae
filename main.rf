@@ -1,9 +1,0 @@
-# Test at root level
-import Console
-
-routine start() {
-    let a: s64 = 42
-    let b: s64 = 10
-    let c = a + b
-    show(c.to_text())
-}
