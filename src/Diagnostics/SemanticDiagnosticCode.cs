@@ -609,6 +609,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Feature only available in RazorForge.</summary>
     FeatureOnlyInRazorForge = 804,
 
+    /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
+    BlankAsTypeArgument = 805,
+
+    /// <summary>Data? / Maybe&lt;Data&gt; is not allowed — Data already holds None natively.</summary>
+    NullableDataProhibited = 806,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // INTRINSIC AND NATIVE CALL ERRORS (RF-S850 - RF-S899)
     // ═══════════════════════════════════════════════════════════════════════════

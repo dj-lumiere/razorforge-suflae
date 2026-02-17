@@ -1,5 +1,5 @@
 # Blank - Unit type representing "completed with no value"
-# Used for void failable functions: Maybe<Blank>, Result<Blank>, Lookup<Blank>
+# Cannot be used as a generic type argument, except Result<Blank> and Lookup<Blank> for failable void routines
 module Core
 
 record Blank {

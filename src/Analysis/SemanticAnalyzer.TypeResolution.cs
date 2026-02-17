@@ -171,6 +171,35 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
+        // Reject Blank as a type argument (except Result<Blank> and Lookup<Blank> for failable void routines)
+        foreach (TypeSymbol arg in typeArgs)
+        {
+            if (arg is not { Name: "Blank" } || genericDef is ErrorHandlingTypeInfo
+                {
+                    Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
+                })
+            {
+                continue;
+            }
+
+            ReportError(
+                SemanticDiagnosticCode.BlankAsTypeArgument,
+                "'Blank' cannot be used as a type argument. " +
+                "'Blank' is a unit type with no value.",
+                typeExpr.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Reject Maybe<Data> — Data already supports None
+        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe }
+            && typeArgs[0] is { Name: "Data" })
+        {
+            ReportError(
+                SemanticDiagnosticCode.NullableDataProhibited,
+                "'Data?' is not allowed. 'Data' already supports 'None' natively.",
+                typeExpr.Location);
+        }
+
         // Validate generic constraints
         ValidateGenericConstraints(
             genericDef: genericDef,
