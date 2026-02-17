@@ -232,6 +232,43 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Operator dunder methods that choices are NOT allowed to define or call.
+    /// Choices only support compiler-generated __eq__/__ne__ and regular (non-dunder) methods.
+    /// </summary>
+    private static readonly HashSet<string> OperatorDunders =
+    [
+        // Arithmetic
+        "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__",
+        // Wrapping arithmetic
+        "__add_wrap__", "__sub_wrap__", "__mul_wrap__", "__pow_wrap__",
+        // Saturating arithmetic
+        "__add_sat__", "__sub_sat__", "__mul_sat__", "__pow_sat__",
+        // Checked arithmetic
+        "__add_checked__", "__sub_checked__", "__mul_checked__",
+        "__floordiv_checked__", "__mod_checked__", "__pow_checked__",
+        // Comparison (user-defined — compiler auto-generates __eq__/__ne__)
+        "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
+        // Bitwise
+        "__and__", "__or__", "__xor__",
+        "__ashl__", "__ashl_checked__", "__ashr__", "__lshl__", "__lshr__",
+        // Unary
+        "__neg__", "__not__",
+        // Membership
+        "__contains__", "__notcontains__",
+        // Indexing
+        "__getitem__", "__setitem__",
+        // Iteration
+        "__seq__", "__next__",
+        // Context management
+        "__enter__", "__exit__"
+    ];
+
+    private static bool IsOperatorDunder(string name)
+    {
+        return OperatorDunders.Contains(value: name);
+    }
+
+    /// <summary>
     /// Validates comparison operands for type compatibility and operator support.
     /// Called from both AnalyzeBinaryExpression (for non-desugared operators like ===, is, follows)
     /// and AnalyzeChainedComparisonExpression (for chained comparisons like a &lt; b &lt; c).

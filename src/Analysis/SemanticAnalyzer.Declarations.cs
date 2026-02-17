@@ -322,6 +322,16 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
+        // Validate that choice types cannot define operator dunders (only compiler-generated __eq__/__ne__)
+        if (ownerType is ChoiceTypeInfo && kind == RoutineKind.Method && IsOperatorDunder(name: routineName))
+        {
+            ReportError(
+                SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                $"Choice type '{ownerType.Name}' cannot define operator '{routineName}'. " +
+                "Choices only support compiler-generated '==' and '!=' operators. Use regular methods for additional behavior.",
+                routine.Location);
+        }
+
         // Validate reserved prefixes (try_, check_, lookup_) for user functions
         string baseName = routineName.Contains(value: '.')
             ? routineName[(routineName.IndexOf(value: '.') + 1)..]
@@ -999,6 +1009,17 @@ public sealed partial class SemanticAnalyzer
                 ComputedValue = computedValue,
                 Location = caseDecl.Location
             });
+        }
+
+        // Validate all-or-nothing explicit values
+        int explicitCount = choice.Cases.Count(c => c.Value != null);
+        if (explicitCount > 0 && explicitCount < choice.Cases.Count)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ChoiceMixedValues,
+                $"Choice '{choice.Name}' mixes explicit and implicit case values. " +
+                "Either all cases must have explicit values or none should.",
+                choice.Location);
         }
 
         // Update the choice with resolved cases

@@ -406,6 +406,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Variant type cannot have methods or follow protocols.</summary>
     VariantMethodNotAllowed = 416,
 
+    /// <summary>Choice cases must have either all explicit values or all implicit values.</summary>
+    ChoiceMixedValues = 417,
+
+    /// <summary>Arithmetic operators cannot be used on choice types.</summary>
+    ArithmeticOnChoiceType = 418,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

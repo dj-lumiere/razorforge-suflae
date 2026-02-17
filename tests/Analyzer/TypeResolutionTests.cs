@@ -554,4 +554,92 @@ public class TypeResolutionTests
     }
 
     #endregion
+
+    #region Choice Restrictions
+
+    [Fact]
+    public void Analyze_ChoiceOperatorDefinition_ReportsError()
+    {
+        string source = """
+                        choice HttpStatus {
+                            OK
+                            NOT_FOUND
+                        }
+
+                        @readonly
+                        routine HttpStatus.__add__(you: HttpStatus) -> HttpStatus {
+                            return OK
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceRegularMethod_NoError()
+    {
+        string source = """
+                        choice Color {
+                            RED
+                            GREEN
+                            BLUE
+                        }
+
+                        @readonly
+                        routine Color.is_warm() -> Bool {
+                            return false
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceMixedValues_ReportsError()
+    {
+        string source = """
+                        choice HttpStatus {
+                            OK: 200
+                            NOT_FOUND
+                            INTERNAL_ERROR: 500
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceAllExplicitValues_NoError()
+    {
+        string source = """
+                        choice HttpStatus {
+                            OK: 200
+                            NOT_FOUND: 404
+                            INTERNAL_ERROR: 500
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceAllImplicitValues_NoError()
+    {
+        string source = """
+                        choice Color {
+                            RED
+                            GREEN
+                            BLUE
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
+    }
+
+    #endregion
 }

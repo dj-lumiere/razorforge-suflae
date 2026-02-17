@@ -1140,6 +1140,17 @@ public sealed partial class SemanticAnalyzer
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
+            // Choice types cannot use custom operator dunders (only compiler-generated __eq__/__ne__)
+            if (objectType is ChoiceTypeInfo && IsOperatorDunder(name: member.PropertyName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                    $"Operator '{member.PropertyName}' cannot be used with choice type '{objectType.Name}'. " +
+                    "Choices only support '==' and '!=' operators. Use regular methods for additional behavior.",
+                    call.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
             RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
             if (method != null)
             {
