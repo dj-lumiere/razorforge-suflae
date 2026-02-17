@@ -127,6 +127,68 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Validates routine bodies in the standard library.
+    /// Analyzes all stdlib routine bodies that were registered during loading,
+    /// catching type errors, unknown identifiers, and other semantic issues.
+    /// </summary>
+    /// <returns>List of errors found in stdlib routine bodies.</returns>
+    public IReadOnlyList<SemanticError> ValidateStdlibBodies()
+    {
+        string previousFilePath = _currentFilePath;
+        var previousImports = new HashSet<string>(_importedNamespaces, StringComparer.OrdinalIgnoreCase);
+        int errorsBefore = _errors.Count;
+
+        foreach (var (program, filePath, module) in _registry.StdlibPrograms)
+        {
+            _currentFilePath = filePath;
+            _importedNamespaces.Clear();
+
+            // Core module types are auto-imported
+            _importedNamespaces.Add("Core");
+
+            // Add the file's own module so sibling types resolve
+            if (!string.IsNullOrEmpty(module))
+            {
+                _importedNamespaces.Add(module);
+            }
+
+            // Process import declarations for this stdlib file
+            foreach (var node in program.Declarations)
+            {
+                if (node is ImportDeclaration import)
+                {
+                    string importModule = import.ModulePath;
+                    int dotIdx = importModule.IndexOf('.');
+                    if (dotIdx > 0)
+                    {
+                        _importedNamespaces.Add(importModule[..dotIdx]);
+                    }
+                    _importedNamespaces.Add(importModule);
+                }
+            }
+
+            AnalyzeBodies(program);
+        }
+
+        // Collect stdlib-specific errors
+        var stdlibErrors = new List<SemanticError>();
+        for (int i = errorsBefore; i < _errors.Count; i++)
+        {
+            stdlibErrors.Add(_errors[i]);
+        }
+
+        // Restore previous state
+        _currentFilePath = previousFilePath;
+        _importedNamespaces.Clear();
+        foreach (string ns in previousImports)
+        {
+            _importedNamespaces.Add(ns);
+        }
+
+        return stdlibErrors;
+    }
+
+    /// <summary>
     /// Gets the type registry after analysis.
     /// </summary>
     public TypeRegistry Registry => _registry;

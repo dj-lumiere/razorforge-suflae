@@ -7,6 +7,7 @@ using Compilers.Shared.AST;
 using Compilers.Shared.Parser;
 using Compilers.Analysis;
 using Compilers.Analysis.Enums;
+using Compilers.Analysis.Results;
 using Compilers.CodeGen;
 
 namespace Compilers;
@@ -28,7 +29,7 @@ internal class Program
         string command = args[0].ToLowerInvariant().TrimStart('-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "help";
+        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "validate-stdlib" || command == "help";
 
         if (!isCommand)
         {
@@ -63,6 +64,13 @@ internal class Program
                 }
                 return GenerateCode(sourceFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
 
+            case "validate-stdlib":
+            {
+                string lang = args.Length >= 2 ? args[1].ToLowerInvariant() : "rf";
+                Language stdlibLang = lang == "sf" || lang == "suflae" ? Language.Suflae : Language.RazorForge;
+                return ValidateStdlib(stdlibLang);
+            }
+
             case "help":
                 PrintUsage();
                 return 0;
@@ -82,6 +90,7 @@ internal class Program
         Console.WriteLine("  RazorForge parse <source-file>              - Parse file and show AST summary");
         Console.WriteLine("  RazorForge tokenize <source-file>           - Tokenize file and show tokens");
         Console.WriteLine("  RazorForge codegen <source-file> [out.ll]   - Generate LLVM IR");
+        Console.WriteLine("  RazorForge validate-stdlib [rf|sf]           - Validate stdlib routine bodies");
         Console.WriteLine("  RazorForge help                             - Show this help");
         Console.WriteLine();
         Console.WriteLine("  <source-file>: .rf file for RazorForge or .sf file for Suflae");
@@ -220,6 +229,59 @@ internal class Program
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    private static int ValidateStdlib(Language language)
+    {
+        try
+        {
+            string langName = language == Language.Suflae ? "Suflae" : "RazorForge";
+            Console.WriteLine($"Validating {langName} stdlib routine bodies...");
+            Console.WriteLine();
+
+            var analyzer = new SemanticAnalyzer(language);
+            var stdlibErrors = analyzer.ValidateStdlibBodies();
+
+            if (stdlibErrors.Count == 0)
+            {
+                Console.WriteLine("All stdlib routine bodies validated successfully!");
+                return 0;
+            }
+
+            // Group errors by file
+            var errorsByFile = new Dictionary<string, List<SemanticError>>();
+            foreach (var error in stdlibErrors)
+            {
+                string file = error.Location.FileName;
+                if (!errorsByFile.TryGetValue(file, out var list))
+                {
+                    list = [];
+                    errorsByFile[file] = list;
+                }
+                list.Add(error);
+            }
+
+            Console.WriteLine($"=== STDLIB VALIDATION ERRORS ({stdlibErrors.Count} errors in {errorsByFile.Count} files) ===");
+            Console.WriteLine();
+
+            foreach (var (file, errors) in errorsByFile.OrderBy(kvp => kvp.Key))
+            {
+                Console.WriteLine($"  {Path.GetFileName(file)} ({errors.Count} errors):");
+                foreach (var error in errors)
+                {
+                    Console.WriteLine($"    {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+            }
+
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Stdlib validation failed: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
             return 1;
         }
