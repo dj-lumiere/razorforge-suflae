@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae U8 - Unsigned 8-bit integer (opt-in native type)
 

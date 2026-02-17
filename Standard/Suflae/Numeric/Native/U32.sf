@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae U32 - Unsigned 32-bit integer (opt-in native type)
 

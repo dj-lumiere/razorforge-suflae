@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae S32 - Signed 32-bit integer (opt-in native type)
 

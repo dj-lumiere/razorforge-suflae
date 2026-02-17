@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # RazorForge Decimal - Arbitrary precision decimal floating-point type
 # Powered by MAPM - Mike's Arbitrary Precision Math Library

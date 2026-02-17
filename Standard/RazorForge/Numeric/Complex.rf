@@ -1,5 +1,5 @@
 # RazorForge Complex - Arbitrary precision complex number type
-module Numeric
+module Numerics
 
 entity Complex follows Numeric, Equatable {
     private real: Decimal

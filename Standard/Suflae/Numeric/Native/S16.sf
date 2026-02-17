@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae S16 - Signed 16-bit integer (opt-in native type)
 

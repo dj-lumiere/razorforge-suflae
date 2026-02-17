@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae U16 - Unsigned 16-bit integer (opt-in native type)
 

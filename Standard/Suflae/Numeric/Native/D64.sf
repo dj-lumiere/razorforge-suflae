@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae D64 - Decimal64 floating point (opt-in native type)
 

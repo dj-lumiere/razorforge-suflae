@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae U64 - Unsigned 64-bit integer (opt-in native type)
 

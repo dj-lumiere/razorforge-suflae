@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae UAddr - System-sized unsigned integer (opt-in native type)
 # Maps to U32 on 32-bit platforms, U64 on 64-bit platforms

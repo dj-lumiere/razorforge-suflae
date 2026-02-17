@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 entity Fraction follows Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered {
     private numerator: Integer

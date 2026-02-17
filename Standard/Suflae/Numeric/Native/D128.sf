@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae D128 - Decimal128 floating point (opt-in native type)
 

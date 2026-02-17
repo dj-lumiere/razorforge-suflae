@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae F32 - Single precision floating point (opt-in native type)
 

@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae S8 - Signed 8-bit integer (opt-in native type)
 

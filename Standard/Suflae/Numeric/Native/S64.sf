@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae S64 - Signed 64-bit integer (opt-in native type)
 

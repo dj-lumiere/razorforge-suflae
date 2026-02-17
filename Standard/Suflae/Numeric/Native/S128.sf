@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae S128 - Signed 128-bit integer (opt-in native type)
 

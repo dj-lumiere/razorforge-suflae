@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # Suflae SAddr - System-sized signed integer (opt-in native type)
 # Maps to S32 on 32-bit platforms, S64 on 64-bit platforms

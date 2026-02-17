@@ -1,4 +1,4 @@
-module Numeric
+module Numerics
 
 # RazorForge Integer - Arbitrary precision integer type
 # Powered by LibTomMath (https://github.com/libtom/libtommath)
