@@ -288,7 +288,7 @@ public class ScopeTests
     {
         string source = """
                         entity Data {
-                            var value: S32
+                            value: S32
                         }
 
                         routine test(data: Data) {
@@ -306,7 +306,7 @@ public class ScopeTests
     {
         string source = """
                         entity Data {
-                            var value: S32
+                            value: S32
                         }
 
                         routine test(data: Data) {

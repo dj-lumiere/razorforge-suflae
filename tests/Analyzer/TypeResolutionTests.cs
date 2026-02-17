@@ -37,7 +37,7 @@ public class TypeResolutionTests
     {
         string source = """
                         entity User {
-                            var name: Text
+                            name: Text
                         }
                         """;
 
@@ -127,8 +127,8 @@ public class TypeResolutionTests
     {
         string source = """
                         entity Pair<K, V> {
-                            var key: K
-                            var value: V
+                            key: K
+                            value: V
                         }
                         """;
 
@@ -224,8 +224,8 @@ public class TypeResolutionTests
     {
         string source = """
                         entity Document {
-                            var title: Text
-                            var page_count: U32
+                            title: Text
+                            page_count: U32
                         }
                         """;
 

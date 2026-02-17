@@ -258,7 +258,7 @@ public class OperatorProtocolTests
     {
         string source = """
                         entity Resource {
-                            var handle: S32
+                            handle: S32
                         }
 
                         routine Resource.__destroy__() {
@@ -301,7 +301,7 @@ public class OperatorProtocolTests
                             @readonly
                             routine Me.__add__(you: Me) -> Me
 
-                        record Vector follows Addable
+                        entity Vector follows Addable
                             x: Integer
                             y: Integer
 

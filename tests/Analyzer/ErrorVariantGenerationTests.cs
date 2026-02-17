@@ -28,7 +28,7 @@ public class ErrorVariantGenerationTests
                         }
 
                         entity User {
-                            var name: Text
+                            name: Text
                         }
 
                         routine has_user(id: U64) -> bool {
@@ -60,7 +60,7 @@ public class ErrorVariantGenerationTests
         // - try_validate() -> T?
         string source = """
                         entity ValidationError follows Crashable {
-                            var message: Text
+                            message: Text
                         }
 
                         @readonly
@@ -104,7 +104,7 @@ public class ErrorVariantGenerationTests
         // - try_get_user() -> T?
         string source = """
                         entity DatabaseError follows Crashable {
-                            var code: S32
+                            code: S32
                         }
 
                         @readonly
@@ -118,7 +118,7 @@ public class ErrorVariantGenerationTests
                         }
 
                         entity User {
-                            var name: Text
+                            name: Text
                         }
 
                         routine get_user!(id: U64) -> User {
@@ -160,7 +160,7 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         entity Cache {
-                            var data: Dict<Text, S32>
+                            data: Dict<Text, S32>
                         }
 
                         routine Cache.get!(key: Text) -> S32 {
@@ -224,7 +224,7 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         entity SomeError follows Crashable {
-                            var msg: Text
+                            msg: Text
                         }
 
                         @readonly
@@ -305,7 +305,7 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         entity SomeError follows Crashable {
-                            var msg: Text
+                            msg: Text
                         }
 
                         @readonly
@@ -344,7 +344,7 @@ public class ErrorVariantGenerationTests
         // It is an internal type for error handling flow, not a first-class type
         string source = """
                         entity User {
-                            var name: Text
+                            name: Text
                         }
 
                         routine handle_result(result: Result<User>) {
@@ -369,7 +369,7 @@ public class ErrorVariantGenerationTests
         // It is an internal type for error handling flow, not a first-class type
         string source = """
                         entity User {
-                            var name: Text
+                            name: Text
                         }
 
                         routine handle_lookup(result: Lookup<User>) {

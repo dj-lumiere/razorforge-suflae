@@ -623,6 +623,20 @@ public sealed partial class SemanticAnalyzer
                     ? ResolveType(typeExpr: field.Type)
                     : ErrorTypeInfo.Instance;
 
+                // Records can only contain value types + Snatched<T>
+                // Entities, wrappers (Shared, Tracked, Viewed, etc.), and reference tuples are not allowed
+                if (fieldType is TypeInfo fieldTypeInfo
+                    && fieldTypeInfo is not ErrorTypeInfo
+                    && !TypeRegistry.IsValueType(type: fieldTypeInfo)
+                    && !(fieldTypeInfo is WrapperTypeInfo { Name: "Snatched" }))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.RecordContainsNonValueType,
+                        $"Record field '{field.Name}' has type '{fieldType.Name}' which is not a value type. " +
+                        "Records can only contain value types (records, choices, variants, value tuples) and Snatched<T>.",
+                        field.Location);
+                }
+
                 // Create field info
                 var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
                 {
@@ -682,9 +696,37 @@ public sealed partial class SemanticAnalyzer
             _registry.UpdateEntityProtocols(entityName: _currentType!.FullName, protocols: resolvedProtocols);
         }
 
+        // Collect fields and other members
+        var fields = new List<FieldInfo>();
+        int fieldIndex = 0;
+
         foreach (Declaration member in entity.Members)
         {
+            if (member is VariableDeclaration field)
+            {
+                TypeSymbol fieldType = field.Type != null
+                    ? ResolveType(typeExpr: field.Type)
+                    : ErrorTypeInfo.Instance;
+
+                var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
+                {
+                    IsMutable = field.IsMutable,
+                    Visibility = field.Visibility,
+                    Index = fieldIndex++,
+                    HasDefaultValue = field.Initializer != null,
+                    Location = field.Location,
+                    Owner = _currentType
+                };
+
+                fields.Add(item: fieldInfo);
+            }
+
             CollectDeclaration(node: member);
+        }
+
+        if (fields.Count > 0)
+        {
+            _registry.UpdateEntityFields(entityName: _currentType!.FullName, fields: fields);
         }
 
         _currentType = previousType;
@@ -722,9 +764,37 @@ public sealed partial class SemanticAnalyzer
             _registry.UpdateResidentProtocols(residentName: _currentType!.FullName, protocols: resolvedProtocols);
         }
 
+        // Collect fields and other members
+        var fields = new List<FieldInfo>();
+        int fieldIndex = 0;
+
         foreach (Declaration member in resident.Members)
         {
+            if (member is VariableDeclaration field)
+            {
+                TypeSymbol fieldType = field.Type != null
+                    ? ResolveType(typeExpr: field.Type)
+                    : ErrorTypeInfo.Instance;
+
+                var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
+                {
+                    IsMutable = field.IsMutable,
+                    Visibility = field.Visibility,
+                    Index = fieldIndex++,
+                    HasDefaultValue = field.Initializer != null,
+                    Location = field.Location,
+                    Owner = _currentType
+                };
+
+                fields.Add(item: fieldInfo);
+            }
+
             CollectDeclaration(node: member);
+        }
+
+        if (fields.Count > 0)
+        {
+            _registry.UpdateResidentFields(residentName: _currentType!.FullName, fields: fields);
         }
 
         _currentType = previousType;

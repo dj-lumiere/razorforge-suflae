@@ -83,7 +83,7 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter {
-                            var count: S32
+                            count: S32
                         }
 
                         @writable
@@ -98,10 +98,12 @@ public class MutabilityTests
     [Fact]
     public void Analyze_LetFieldMutation_ReportsError()
     {
+        // All entity fields are immutable (no var/let distinction)
+        // Mutating any field should produce an error
         string source = """
                         entity User {
-                            let id: U64
-                            var name: Text
+                            id: U64
+                            name: Text
                         }
 
                         @writable
@@ -123,7 +125,7 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter {
-                            var count: S32
+                            count: S32
                         }
 
                         @readonly
@@ -141,7 +143,7 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter {
-                            var count: S32
+                            count: S32
                         }
 
                         @readonly
@@ -158,7 +160,7 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter {
-                            var count: S32
+                            count: S32
                         }
 
                         @writable
@@ -243,7 +245,7 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                            var count: Integer
+                            count: Integer
 
                         @readonly
                         routine Counter.increment()
@@ -259,7 +261,7 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                            var count: Integer
+                            count: Integer
 
                         @writable
                         routine Counter.increment()
@@ -311,11 +313,11 @@ public class MutabilityTests
         // You cannot hijack a child of an already-hijacked object
         string source = """
                         entity Child {
-                            var value: S32
+                            value: S32
                         }
 
                         entity Parent {
-                            var child: Child
+                            child: Child
                         }
 
                         routine test() {

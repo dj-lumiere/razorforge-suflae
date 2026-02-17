@@ -391,6 +391,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
     OperatorWithoutProtocol = 411,
 
+    /// <summary>Record field has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
+    RecordContainsNonValueType = 412,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

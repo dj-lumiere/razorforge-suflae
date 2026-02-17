@@ -372,6 +372,38 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
+    /// Updates an entity type with its resolved fields.
+    /// </summary>
+    /// <param name="entityName">The name of the entity to update.</param>
+    /// <param name="fields">The resolved fields.</param>
+    public void UpdateEntityFields(string entityName, IReadOnlyList<FieldInfo> fields)
+    {
+        if (!_types.TryGetValue(key: entityName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not EntityTypeInfo entity)
+        {
+            return;
+        }
+
+        var updatedEntity = new EntityTypeInfo(name: entity.Name)
+        {
+            Fields = fields,
+            ImplementedProtocols = entity.ImplementedProtocols,
+            GenericParameters = entity.GenericParameters,
+            GenericConstraints = entity.GenericConstraints,
+            TypeArguments = entity.TypeArguments,
+            Visibility = entity.Visibility,
+            Location = entity.Location,
+            Module = entity.Module
+        };
+
+        _types[key: entityName] = updatedEntity;
+    }
+
+    /// <summary>
     /// Updates an entity type's implemented protocols.
     /// </summary>
     /// <param name="entityName">The name of the entity to update.</param>
@@ -401,6 +433,39 @@ public sealed class TypeRegistry
         };
 
         _types[key: entityName] = updatedEntity;
+    }
+
+    /// <summary>
+    /// Updates a resident type with its resolved fields.
+    /// </summary>
+    /// <param name="residentName">The name of the resident to update.</param>
+    /// <param name="fields">The resolved fields.</param>
+    public void UpdateResidentFields(string residentName, IReadOnlyList<FieldInfo> fields)
+    {
+        if (!_types.TryGetValue(key: residentName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not ResidentTypeInfo resident)
+        {
+            return;
+        }
+
+        var updatedResident = new ResidentTypeInfo(name: resident.Name)
+        {
+            Fields = fields,
+            ImplementedProtocols = resident.ImplementedProtocols,
+            FixedSize = resident.FixedSize,
+            GenericParameters = resident.GenericParameters,
+            GenericConstraints = resident.GenericConstraints,
+            TypeArguments = resident.TypeArguments,
+            Visibility = resident.Visibility,
+            Location = resident.Location,
+            Module = resident.Module
+        };
+
+        _types[key: residentName] = updatedResident;
     }
 
     /// <summary>

@@ -118,8 +118,8 @@ public class ProtocolImplementationTests
                         }
 
                         entity Point follows Displayable {
-                            var x: F32
-                            var y: F32
+                            x: F32
+                            y: F32
                         }
 
                         @writable
@@ -209,12 +209,12 @@ public class ProtocolImplementationTests
                             routine Me.count() -> uaddr
                         }
 
-                        entity List<T> follows Container {
-                            var items: [T]
+                        entity MyList<T> follows Container {
+                            items: List<T>
                         }
 
                         @readonly
-                        routine List<T>.count() -> uaddr {
+                        routine MyList<T>.count() -> uaddr {
                             return 0
                         }
                         """;
@@ -287,7 +287,7 @@ public class ProtocolImplementationTests
                         }
 
                         entity Counter follows Countable {
-                            var value: S32
+                            value: S32
                         }
 
                         @readonly
@@ -311,7 +311,7 @@ public class ProtocolImplementationTests
                             @readonly
                             routine Me.display() -> Integer
 
-                        record Point follows Displayable
+                        entity Point follows Displayable
                             x: Integer
                             y: Integer
 
@@ -422,7 +422,7 @@ public class ProtocolImplementationTests
                         }
 
                         entity Settings follows Configurable {
-                            var value: S32
+                            value: S32
                         }
 
                         @writable

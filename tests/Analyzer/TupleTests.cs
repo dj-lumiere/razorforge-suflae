@@ -33,8 +33,8 @@ public class TupleTests
         // Entity is a reference type, so this should be Tuple
         string source = """
                         entity Point {
-                            var x: S32
-                            var y: S32
+                            x: S32
+                            y: S32
                         }
 
                         routine test() {
@@ -114,7 +114,7 @@ public class TupleTests
     {
         string source = """
                         entity User {
-                            var id: S32
+                            id: S32
                         }
 
                         routine test() {
