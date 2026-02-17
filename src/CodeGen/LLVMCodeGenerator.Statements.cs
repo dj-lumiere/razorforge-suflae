@@ -72,6 +72,12 @@ public partial class LLVMCodeGenerator
                 EmitWhen(sb, whenStmt);
                 return false;
 
+            case DiscardStatement discard:
+                // Discard: evaluate the call expression and ignore the result
+                // TODO: Maybe NOT evaluating if it is constructor?
+                EmitExpression(sb, discard.Expression);
+                return false;
+
             default:
                 throw new NotImplementedException($"Statement type not implemented: {stmt.GetType().Name}");
         }

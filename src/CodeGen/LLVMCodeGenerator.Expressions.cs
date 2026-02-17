@@ -340,8 +340,10 @@ public partial class LLVMCodeGenerator
             NativeCallExpression native => EmitNativeCall(sb, native),
             ConditionalExpression cond => EmitConditional(sb, cond),
             IndexExpression index => EmitIndexAccess(sb, index),
+            SliceExpression slice => EmitSliceAccess(sb, slice),
             RangeExpression range => EmitRange(sb, range),
             StealExpression steal => EmitSteal(sb, steal),
+            TupleLiteralExpression tuple => EmitTupleLiteral(sb, tuple),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
     }
@@ -1212,6 +1214,22 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Generates code for a slice expression: obj[start to end] → __getslice__(start, end)
+    /// </summary>
+    private string EmitSliceAccess(StringBuilder sb, SliceExpression slice)
+    {
+        string target = EmitExpression(sb, slice.Object);
+        string start = EmitExpression(sb, slice.Start);
+        string end = EmitExpression(sb, slice.End);
+
+        // TODO: Emit call to __getslice__ method on target type
+        // For now, return the target as placeholder
+        _ = start;
+        _ = end;
+        return target;
+    }
+
+    /// <summary>
     /// Generates code for a range expression.
     /// </summary>
     private string EmitRange(StringBuilder sb, RangeExpression range)
@@ -1249,6 +1267,37 @@ public partial class LLVMCodeGenerator
         // 1. The operand is a stealable type
         // 2. The source will be marked as deadref after this point
         return EmitExpression(sb, steal.Operand);
+    }
+
+    /// <summary>
+    /// Generates code for a tuple literal expression.
+    /// Creates a ValueTuple (for pure value types) or Tuple (for mixed/reference types).
+    /// </summary>
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="tuple">The tuple literal expression.</param>
+    /// <returns>The temporary variable holding the tuple pointer.</returns>
+    /// <remarks>
+    /// Tuple layout:
+    /// - ValueTuple: stack-allocated struct with fields item0, item1, ...
+    /// - Tuple: heap-allocated entity with fields item0, item1, ...
+    ///
+    /// The semantic analyzer determines which type to use based on element types.
+    /// </remarks>
+    private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
+    {
+        // TODO: Full implementation needs to:
+        // 1. Check ResolvedType to determine if ValueTuple or Tuple
+        // 2. For ValueTuple: allocate on stack, initialize fields
+        // 3. For Tuple: allocate on heap via rf_alloc, initialize fields
+        // 4. Return pointer to the tuple
+
+        // For now, evaluate all elements and return a placeholder
+        foreach (var element in tuple.Elements)
+        {
+            EmitExpression(sb, element);
+        }
+
+        throw new NotImplementedException("Tuple literal code generation not yet implemented");
     }
 
     #endregion
