@@ -86,8 +86,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         entity User
-                            var name: Text
-                            var age: U32
+                            name: Text
+                            age: U32
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -98,22 +98,18 @@ public class SuflaeTypeDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_Entity_MixedMutability()
+    public void ParseSuflae_Entity_MixedMutability_Rejected()
     {
+        // var/let keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var/let keywords
         string source = """
                         entity Document
                             let id: U64
                             var content: Text
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
-        EntityDeclaration entity = GetDeclaration<EntityDeclaration>(program: program);
-
-        var fields = entity.Members
-                           .OfType<VariableDeclaration>()
-                           .ToList();
-        Assert.False(condition: fields[index: 0].IsMutable);
-        Assert.True(condition: fields[index: 1].IsMutable);
+        (_, var parser) = ParseSuflaeWithErrors(source: source);
+        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var/let in entity body");
     }
 
     [Fact]
@@ -121,7 +117,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         entity Stack<T>
-                            var items: List<T>
+                            items: List<T>
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -330,7 +326,7 @@ public class SuflaeTypeDeclarationTests
         // Resident is RazorForge-only, Suflae should not support it
         string source = """
                         resident SystemLogger
-                            var log_count: U32
+                            log_count: U32
                         """;
 
         // Depending on parser behavior - may throw or parse but semantic rejects

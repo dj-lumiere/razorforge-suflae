@@ -327,13 +327,14 @@ public partial class SuflaeParser
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
         {
-            // In strict record bodies, var/let/preset are not allowed
-            if (_parsingStrictRecordBody)
+            // In type bodies (record, entity, resident), var/let/preset are not allowed
+            // Fields use 'name: Type' syntax without var/let keywords
+            if (_parsingTypeBody)
             {
                 throw new SuflaeGrammarException(
                     SuflaeDiagnosticCode.InvalidDeclarationInBody,
-                    "Record fields cannot use 'var', 'let', or 'preset'. " +
-                    "Records are immutable with all-public fields. Use 'field: Type' syntax instead",
+                    "Type fields cannot use 'var', 'let', or 'preset'. " +
+                    "Use 'name: Type' syntax instead",
                     fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseVariableDeclaration(visibility: visibility, storage: storage);

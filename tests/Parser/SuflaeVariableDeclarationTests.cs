@@ -385,39 +385,32 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_EntityVarFields()
+    public void ParseSuflae_EntityVarFields_Rejected()
     {
+        // var/let keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var/let keywords
         string source = """
                         entity Counter
                             var count: Integer
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
-        EntityDeclaration entity = GetDeclaration<EntityDeclaration>(program: program);
-        var fields = entity.Members
-                           .OfType<VariableDeclaration>()
-                           .ToList();
-        Assert.Single(collection: fields);
-        Assert.True(condition: fields[index: 0].IsMutable);
+        (_, var parser) = ParseSuflaeWithErrors(source: source);
+        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var in entity body");
     }
 
     [Fact]
-    public void ParseSuflae_EntityLetFields()
+    public void ParseSuflae_EntityLetFields_Rejected()
     {
+        // var/let keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var/let keywords
         string source = """
                         entity User
                             let id: U64
                             var name: Text
                         """;
 
-        Program program = AssertParsesSuflae(source: source);
-        EntityDeclaration entity = GetDeclaration<EntityDeclaration>(program: program);
-        var fields = entity.Members
-                           .OfType<VariableDeclaration>()
-                           .ToList();
-        Assert.Equal(expected: 2, actual: fields.Count);
-        Assert.False(condition: fields[index: 0].IsMutable);
-        Assert.True(condition: fields[index: 1].IsMutable);
+        (_, var parser) = ParseSuflaeWithErrors(source: source);
+        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for let/var in entity body");
     }
 
     #endregion

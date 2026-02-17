@@ -184,8 +184,8 @@ public class SuflaeAttributeTests
         string source = """
                         @serializable
                         entity User
-                            var name: Text
-                            var age: U32
+                            name: Text
+                            age: U32
                         """;
 
         AssertParsesSuflae(source: source);
@@ -229,10 +229,10 @@ public class SuflaeAttributeTests
         string source = """
                         entity User
                             @readonly
-                            let id: U64
+                            id: U64
 
                             @indexed
-                            var email: Text
+                            email: Text
                         """;
 
         AssertParsesSuflae(source: source);

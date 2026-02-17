@@ -63,17 +63,29 @@ public class ParserErrorTests
     #region Entity Errors
 
     [Fact]
-    public void Parse_Entity_FieldWithoutVarOrLet_ThrowsOrRecovers()
+    public void Parse_Entity_FieldWithoutVarOrLet_IsValid()
     {
-        // Entity fields require var or let keyword
+        // Entity fields use 'name: Type' syntax without var/let keywords
         string source = """
                         entity User {
                             name: Text
                         }
                         """;
 
-        Record.Exception(testCode: () => Parse(source: source));
-        // Should either throw or produce warning/error
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_Entity_VarInBody_Rejected()
+    {
+        // var/let keywords are no longer allowed in entity bodies
+        string source = """
+                        entity User {
+                            var name: Text
+                        }
+                        """;
+
+        AssertParseError(source: source);
     }
 
     [Fact]
@@ -81,7 +93,7 @@ public class ParserErrorTests
     {
         string source = """
                         entity {
-                            var name: Text
+                            name: Text
                         }
                         """;
 

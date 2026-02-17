@@ -109,8 +109,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         entity User {
-                            var name: Text
-                            var age: U32
+                            name: Text
+                            age: U32
                         }
                         """;
 
@@ -126,7 +126,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         entity Stack<T> {
-                            var items: List<T>
+                            items: List<T>
                         }
                         """;
 
@@ -146,7 +146,7 @@ public class TypeDeclarationTests
                         requires K follows Comparable
                         requires K follows Hashable
                         requires V is entity {
-                            var entries: Dict<K, V>
+                            entries: Dict<K, V>
                         }
                         """;
 
@@ -168,7 +168,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         resident SystemLogger {
-                            var log_count: U32
+                            log_count: U32
                         }
                         """;
 
@@ -184,7 +184,7 @@ public class TypeDeclarationTests
         string source = """
                         resident FixedBuffer<T, N>
                         requires N is uaddr {
-                            var data: T
+                            data: T
                         }
                         """;
 
@@ -396,7 +396,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         internal entity CacheEntry {
-                            var data: Text
+                            data: Text
                         }
                         """;
 

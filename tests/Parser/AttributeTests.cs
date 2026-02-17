@@ -221,8 +221,8 @@ public class AttributeTests
         string source = """
                         @serializable
                         entity User {
-                            var name: Text
-                            var age: U32
+                            name: Text
+                            age: U32
                         }
                         """;
 
@@ -249,7 +249,7 @@ public class AttributeTests
         string source = """
                         @singleton
                         resident GlobalConfig {
-                            var settings: Dict<Text, Text>
+                            settings: Dict<Text, Text>
                         }
                         """;
 
@@ -282,10 +282,10 @@ public class AttributeTests
         string source = """
                         entity User {
                             @readonly
-                            let id: U64
+                            id: U64
 
                             @indexed
-                            var email: Text
+                            email: Text
                         }
                         """;
 

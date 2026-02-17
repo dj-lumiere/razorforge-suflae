@@ -264,13 +264,14 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
         {
-            // In strict record bodies, var/let/preset are not allowed
-            if (_parsingStrictRecordBody)
+            // In type bodies (record, entity, resident), var/let/preset are not allowed
+            // Fields use 'name: Type' syntax without var/let keywords
+            if (_parsingTypeBody)
             {
                 throw new RazorForgeGrammarException(
                     RazorForgeDiagnosticCode.InvalidDeclarationInBody,
-                    "Record fields cannot use 'var', 'let', or 'preset'. " +
-                    "Records are immutable with all-public fields. Use 'field: Type' syntax instead.",
+                    "Type fields cannot use 'var', 'let', or 'preset'. " +
+                    "Use 'name: Type' syntax instead.",
                     _fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseVariableDeclaration(visibility: visibility, storage: storage);

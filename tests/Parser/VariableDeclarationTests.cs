@@ -455,26 +455,24 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_EntityVarFields()
+    public void Parse_EntityVarFields_Rejected()
     {
+        // var/let keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var/let keywords
         string source = """
                         entity Counter {
                             var count: S32
                         }
                         """;
 
-        Program program = AssertParses(source: source);
-        EntityDeclaration entity = GetDeclaration<EntityDeclaration>(program: program);
-        var fields = entity.Members
-                           .OfType<VariableDeclaration>()
-                           .ToList();
-        Assert.Single(collection: fields);
-        Assert.True(condition: fields[index: 0].IsMutable);
+        AssertParseError(source: source);
     }
 
     [Fact]
-    public void Parse_EntityLetFields()
+    public void Parse_EntityLetFields_Rejected()
     {
+        // var/let keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var/let keywords
         string source = """
                         entity User {
                             let id: U64
@@ -482,14 +480,7 @@ public class VariableDeclarationTests
                         }
                         """;
 
-        Program program = AssertParses(source: source);
-        EntityDeclaration entity = GetDeclaration<EntityDeclaration>(program: program);
-        var fields = entity.Members
-                           .OfType<VariableDeclaration>()
-                           .ToList();
-        Assert.Equal(expected: 2, actual: fields.Count);
-        Assert.False(condition: fields[index: 0].IsMutable);
-        Assert.True(condition: fields[index: 1].IsMutable);
+        AssertParseError(source: source);
     }
 
     [Fact]
@@ -497,7 +488,7 @@ public class VariableDeclarationTests
     {
         string source = """
                         resident GlobalState {
-                            var counter: S32
+                            counter: S32
                         }
                         """;
 
