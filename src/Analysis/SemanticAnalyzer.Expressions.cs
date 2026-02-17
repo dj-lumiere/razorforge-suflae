@@ -986,6 +986,17 @@ public sealed partial class SemanticAnalyzer
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
             ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: location);
+
+            // Check if we're in a @readonly method trying to mutate 'me'
+            if (_currentRoutine is { IsReadOnly: true } &&
+                member.Object is IdentifierExpression { Name: "me" })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MutationInReadonlyMethod,
+                    $"Cannot mutate field '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow mutations.",
+                    location);
+            }
         }
 
         // Check mutability for index assignments (let vs var)
@@ -1115,6 +1126,7 @@ public sealed partial class SemanticAnalyzer
         if (call.Callee is MemberExpression member)
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
             RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
             if (method != null)
             {

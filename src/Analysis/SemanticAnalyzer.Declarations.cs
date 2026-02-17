@@ -328,6 +328,12 @@ public sealed partial class SemanticAnalyzer
 
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
+        MutationCategory declaredMutation = routine.Attributes.Contains(item: "readonly")
+            ? MutationCategory.Readonly
+            : routine.Attributes.Contains(item: "writable")
+                ? MutationCategory.Writable
+                : MutationCategory.Migratable;
+
         var routineInfo = new RoutineInfo(name: routineName)
         {
             Kind = kind,
@@ -337,7 +343,10 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = routine.GenericConstraints,
             Visibility = routine.Visibility,
             Location = routine.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentNamespace(),
+            Attributes = routine.Attributes,
+            DeclaredMutation = declaredMutation,
+            MutationCategory = declaredMutation
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
