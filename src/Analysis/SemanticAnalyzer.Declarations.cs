@@ -1271,6 +1271,20 @@ public sealed partial class SemanticAnalyzer
             ? ResolveType(typeExpr: routine.ReturnType)
             : null;
 
+        // Validate that Maybe<T>/Result<T>/Lookup<T> are not used as return types
+        // These are compiler-generated wrapper types for failable routines (!)
+        if (returnType is ErrorHandlingTypeInfo errorHandlingReturn &&
+            errorHandlingReturn.Kind is ErrorHandlingKind.Maybe or ErrorHandlingKind.Result or ErrorHandlingKind.Lookup &&
+            !IsStdlibFile(_currentFilePath))
+        {
+            ReportError(
+                SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType,
+                $"Routine cannot return '{errorHandlingReturn.Kind}<T>'. " +
+                "These types are compiler-generated for failable routines. " +
+                "Use a failable routine (!) with 'throw'/'absent' instead.",
+                routine.ReturnType?.Location ?? routine.Location);
+        }
+
         // Merge implicit generics with explicit generics
         List<string> allGenericParams = routineInfo.GenericParameters?.ToList() ?? [];
         allGenericParams.AddRange(collection: implicitGenerics);

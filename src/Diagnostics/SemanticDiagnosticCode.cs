@@ -624,6 +624,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Data? / Maybe&lt;Data&gt; is not allowed — Data already holds None natively.</summary>
     NullableDataProhibited = 806,
 
+    /// <summary>Routine cannot directly return Maybe&lt;T&gt;/Result&lt;T&gt;/Lookup&lt;T&gt; — use failable routines (!) instead.</summary>
+    ErrorHandlingTypeAsReturnType = 807,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // INTRINSIC AND NATIVE CALL ERRORS (RF-S850 - RF-S899)
     // ═══════════════════════════════════════════════════════════════════════════
