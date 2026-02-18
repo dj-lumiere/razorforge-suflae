@@ -1176,6 +1176,18 @@ public sealed partial class SemanticAnalyzer
                 // Validate method access
                 ValidateRoutineAccess(routine: method, accessLocation: call.Location);
 
+                // @readonly enforcement: cannot call mutating methods on 'me'
+                if (_currentRoutine is { IsReadOnly: true } &&
+                    member.Object is IdentifierExpression { Name: "me" } &&
+                    !method.IsReadOnly)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.MutationInReadonlyMethod,
+                        $"Cannot call non-readonly method '{method.Name}' on 'me' in a @readonly method. " +
+                        "Mark the called method @readonly or use @writable/@migratable.",
+                        call.Location);
+                }
+
                 AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
 
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
