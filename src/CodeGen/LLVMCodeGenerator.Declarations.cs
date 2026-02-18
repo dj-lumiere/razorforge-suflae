@@ -196,8 +196,8 @@ public partial class LLVMCodeGenerator
         }
         _generatedTypes.Add(typeName);
 
-        // Choice is just an i32 (tag value)
-        EmitLine(_typeDeclarations, $"{typeName} = type {{ i32 }}");
+        // Choice is just an i64 (tag value)
+        EmitLine(_typeDeclarations, $"{typeName} = type {{ i64 }}");
 
         // Add case values as comments
         var sb = new StringBuilder();

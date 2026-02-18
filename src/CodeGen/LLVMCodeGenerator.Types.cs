@@ -34,8 +34,8 @@ public partial class LLVMCodeGenerator
             // Residents → pointer to LLVM struct (same as entity at IR level)
             ResidentTypeInfo => "ptr",
 
-            // Choices → underlying integer type (s32 by default)
-            ChoiceTypeInfo => "i32",
+            // Choices → underlying integer type (S64)
+            ChoiceTypeInfo => "i64",
 
             // Variants → struct { tag, payload }
             VariantTypeInfo variant => GetVariantTypeName(variant),
@@ -194,7 +194,7 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo record => CalculateRecordSize(record),
             EntityTypeInfo entity => CalculateEntitySize(entity),
             ResidentTypeInfo resident => CalculateResidentSize(resident),
-            ChoiceTypeInfo => 4, // i32 tag
+            ChoiceTypeInfo => 8, // i64 tag
             VariantTypeInfo variant => CalculateVariantSize(variant),
             _ => 8 // Default to pointer size
         };
