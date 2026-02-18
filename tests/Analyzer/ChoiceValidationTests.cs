@@ -132,4 +132,109 @@ public class ChoiceValidationTests
     }
 
     #endregion
+
+    #region Operator Prohibition (choices only support == and !=)
+
+    [Fact]
+    public void Analyze_ChoiceAddition_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                        }
+
+                        routine test() {
+                            var d = NORTH
+                            var x = d + SOUTH
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceCompoundAssignment_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                        }
+
+                        routine test() {
+                            var d = NORTH
+                            d += SOUTH
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceBitwise_ReportsError()
+    {
+        string source = """
+                        choice Flags {
+                            A
+                            B
+                        }
+
+                        routine test() {
+                            var f = A
+                            var x = f & B
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceComparison_ReportsError()
+    {
+        string source = """
+                        choice Priority {
+                            LOW
+                            HIGH
+                        }
+
+                        routine test() {
+                            var p = LOW
+                            var x = p < HIGH
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    [Fact]
+    public void Analyze_ChoiceEquality_NoError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                        }
+
+                        routine test() {
+                            var d = NORTH
+                            var same = d == SOUTH
+                            var diff = d != SOUTH
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
+    }
+
+    #endregion
 }
