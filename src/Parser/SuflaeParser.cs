@@ -371,6 +371,16 @@ public partial class SuflaeParser
                 fileName, CurrentToken.Line, CurrentToken.Column);
         }
 
+        // Validate: storage class modifiers are not valid for type declarations
+        if (storage != StorageClass.None && Check(TokenType.Entity, TokenType.Record,
+                TokenType.Choice, TokenType.Variant, TokenType.Protocol))
+        {
+            throw new SuflaeGrammarException(
+                SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations",
+                fileName, CurrentToken.Line, CurrentToken.Column);
+        }
+
         // Entity/Record/Choice declarations
         if (Match(type: TokenType.Entity))
         {

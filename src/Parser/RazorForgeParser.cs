@@ -342,6 +342,16 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                 _fileName, CurrentToken.Line, CurrentToken.Column);
         }
 
+        // Validate: storage class modifiers are not valid for type declarations
+        if (storage != StorageClass.None && Check(TokenType.Entity, TokenType.Record,
+                TokenType.Resident, TokenType.Choice, TokenType.Variant, TokenType.Protocol))
+        {
+            throw new RazorForgeGrammarException(
+                RazorForgeDiagnosticCode.InvalidDeclarationInBody,
+                $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations.",
+                _fileName, CurrentToken.Line, CurrentToken.Column);
+        }
+
         // Entity declarations (heap-allocated reference types)
         if (Match(type: TokenType.Entity))
         {
