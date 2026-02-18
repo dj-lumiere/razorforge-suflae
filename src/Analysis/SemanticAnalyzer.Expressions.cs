@@ -2157,13 +2157,23 @@ public sealed partial class SemanticAnalyzer
             _registry.ExitScope();
         }
 
-        // Warn if no else clause (expression may not cover all cases)
+        // Check exhaustiveness — when expressions MUST produce a value for all inputs
         if (!hasElse)
         {
-            ReportWarning(
-                SemanticWarningCode.NonExhaustiveWhen,
-                "When expression may not cover all cases - consider adding an 'else' clause.",
-                when.Location);
+            ExhaustivenessResult exhaustiveness = CheckExhaustiveness(
+                clauses: when.Clauses,
+                matchedType: matchedType);
+
+            if (!exhaustiveness.IsExhaustive)
+            {
+                string missing = exhaustiveness.MissingCases.Count > 0
+                    ? $" Missing cases: {string.Join(separator: ", ", values: exhaustiveness.MissingCases)}."
+                    : "";
+                ReportError(
+                    SemanticDiagnosticCode.NonExhaustiveMatch,
+                    $"When expression is not exhaustive — all possible values must be handled.{missing}",
+                    when.Location);
+            }
         }
 
         return resultType ?? ErrorTypeInfo.Instance;

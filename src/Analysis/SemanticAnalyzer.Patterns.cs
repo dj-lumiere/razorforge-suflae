@@ -4,6 +4,7 @@ using Enums;
 using Scopes;
 using Types;
 using Shared.AST;
+using Shared.Lexer;
 using global::RazorForge.Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
@@ -415,6 +416,240 @@ public sealed partial class SemanticAnalyzer
 
         // Provably incompatible
         return false;
+    }
+
+    #endregion
+
+    #region Exhaustiveness Checking
+
+    /// <summary>
+    /// Result of exhaustiveness analysis.
+    /// </summary>
+    private readonly record struct ExhaustivenessResult(bool IsExhaustive, List<string> MissingCases);
+
+    /// <summary>
+    /// Checks whether the given when clauses exhaustively cover all cases of the matched type.
+    /// </summary>
+    private ExhaustivenessResult CheckExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        TypeSymbol matchedType)
+    {
+        // If any clause is a catch-all pattern, it's always exhaustive
+        foreach (WhenClause clause in clauses)
+        {
+            if (clause.Pattern is WildcardPattern or ElsePattern or IdentifierPattern)
+            {
+                return new ExhaustivenessResult(IsExhaustive: true, MissingCases: []);
+            }
+        }
+
+        return matchedType switch
+        {
+            ChoiceTypeInfo choice => CheckChoiceExhaustiveness(clauses: clauses, choice: choice),
+            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses, cases: variant.Cases,
+                typeName: variant.Name),
+            MutantTypeInfo mutant => CheckVariantExhaustiveness(clauses: clauses, cases: mutant.Cases,
+                typeName: mutant.Name),
+            ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses, ehType: eh),
+            _ when matchedType.Name == "Bool" => CheckBoolExhaustiveness(clauses: clauses),
+            _ => new ExhaustivenessResult(IsExhaustive: false, MissingCases: [])
+        };
+    }
+
+    /// <summary>
+    /// Checks whether all cases of a choice type are covered by == ComparisonPatterns.
+    /// </summary>
+    private static ExhaustivenessResult CheckChoiceExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        ChoiceTypeInfo choice)
+    {
+        var coveredCases = new HashSet<string>();
+
+        foreach (WhenClause clause in clauses)
+        {
+            string? caseName = ExtractChoiceCaseName(pattern: clause.Pattern);
+            if (caseName != null)
+            {
+                coveredCases.Add(item: caseName);
+            }
+        }
+
+        var missingCases = choice.Cases
+            .Where(predicate: c => !coveredCases.Contains(c.Name))
+            .Select(selector: c => c.Name)
+            .ToList();
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missingCases.Count == 0,
+            MissingCases: missingCases);
+    }
+
+    /// <summary>
+    /// Extracts the choice case name from a ComparisonPattern with == operator.
+    /// Returns null if the pattern is not a choice case comparison.
+    /// </summary>
+    private static string? ExtractChoiceCaseName(Pattern pattern)
+    {
+        if (pattern is not ComparisonPattern { Operator: TokenType.Equal } cmp)
+        {
+            return null;
+        }
+
+        return cmp.Value switch
+        {
+            // Status.ACTIVE → PropertyName is the case name
+            MemberExpression member => member.PropertyName,
+            // ACTIVE (shorthand) → Name is the case name
+            IdentifierExpression id => id.Name,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Checks whether all cases of a variant/mutant type are covered.
+    /// The parser creates TypePattern for variant case matching (is Shape.CIRCLE or is CIRCLE),
+    /// not VariantPattern (which is defined in the AST but never instantiated by the parser).
+    /// </summary>
+    private static ExhaustivenessResult CheckVariantExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        IReadOnlyList<VariantCaseInfo> cases,
+        string typeName)
+    {
+        var coveredCases = new HashSet<string>();
+
+        foreach (WhenClause clause in clauses)
+        {
+            string? caseName = ExtractVariantCaseName(pattern: clause.Pattern, typeName: typeName);
+            if (caseName != null)
+            {
+                coveredCases.Add(item: caseName);
+            }
+        }
+
+        var missingCases = cases
+            .Where(predicate: c => !coveredCases.Contains(c.Name))
+            .Select(selector: c => c.Name)
+            .ToList();
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missingCases.Count == 0,
+            MissingCases: missingCases);
+    }
+
+    /// <summary>
+    /// Extracts the variant case name from a pattern.
+    /// Handles TypePattern with dotted names (is Shape.CIRCLE) or bare names (is CIRCLE),
+    /// as well as VariantPattern (if ever instantiated).
+    /// </summary>
+    private static string? ExtractVariantCaseName(Pattern pattern, string typeName)
+    {
+        switch (pattern)
+        {
+            case TypePattern typePat:
+            {
+                string name = typePat.Type.Name;
+
+                // Dotted form: "Shape.CIRCLE" → extract "CIRCLE"
+                if (name.StartsWith(value: typeName + ".", comparisonType: StringComparison.Ordinal))
+                {
+                    return name[(typeName.Length + 1)..];
+                }
+
+                // Bare form: "CIRCLE" — matches if it's a known case name
+                // (caller will validate against the case list)
+                if (!name.Contains(value: '.'))
+                {
+                    return name;
+                }
+
+                return null;
+            }
+            case VariantPattern variant:
+                return variant.CaseName;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether Maybe/Result/Lookup error handling types are exhaustively matched.
+    /// </summary>
+    private ExhaustivenessResult CheckErrorHandlingExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        ErrorHandlingTypeInfo ehType)
+    {
+        bool hasNone = false;
+        bool hasCrashable = false;
+        bool hasValue = false;
+
+        foreach (WhenClause clause in clauses)
+        {
+            if (IsNonePattern(pattern: clause.Pattern))
+            {
+                hasNone = true;
+            }
+            else if (IsCrashablePattern(pattern: clause.Pattern))
+            {
+                hasCrashable = true;
+            }
+            else if (clause.Pattern is not (NonePattern or CrashablePattern))
+            {
+                // Any other pattern (type check, literal, etc.) counts as value arm
+                hasValue = true;
+            }
+        }
+
+        var missing = new List<string>();
+
+        switch (ehType.Kind)
+        {
+            case ErrorHandlingKind.Maybe:
+                if (!hasNone) missing.Add(item: "None");
+                if (!hasValue) missing.Add(item: "value");
+                break;
+            case ErrorHandlingKind.Result:
+                if (!hasCrashable) missing.Add(item: "Crashable");
+                if (!hasValue) missing.Add(item: "value");
+                break;
+            case ErrorHandlingKind.Lookup:
+                if (!hasNone) missing.Add(item: "None");
+                if (!hasCrashable) missing.Add(item: "Crashable");
+                if (!hasValue) missing.Add(item: "value");
+                break;
+        }
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missing.Count == 0,
+            MissingCases: missing);
+    }
+
+    /// <summary>
+    /// Checks whether both true and false are covered by literal patterns.
+    /// </summary>
+    private static ExhaustivenessResult CheckBoolExhaustiveness(IReadOnlyList<WhenClause> clauses)
+    {
+        bool hasTrue = false;
+        bool hasFalse = false;
+
+        foreach (WhenClause clause in clauses)
+        {
+            if (clause.Pattern is LiteralPattern { LiteralType: TokenType.True })
+            {
+                hasTrue = true;
+            }
+            else if (clause.Pattern is LiteralPattern { LiteralType: TokenType.False })
+            {
+                hasFalse = true;
+            }
+        }
+
+        var missing = new List<string>();
+        if (!hasTrue) missing.Add(item: "true");
+        if (!hasFalse) missing.Add(item: "false");
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missing.Count == 0,
+            MissingCases: missing);
     }
 
     #endregion

@@ -563,6 +563,31 @@ public sealed partial class SemanticAnalyzer
 
             _registry.ExitScope();
         }
+
+        // Check exhaustiveness for enumerable types (choice, variant, mutant, error-handling)
+        if (matchedType is ChoiceTypeInfo or VariantTypeInfo or MutantTypeInfo or ErrorHandlingTypeInfo)
+        {
+            bool hasCatchAll = whenStmt.Clauses.Any(predicate: c =>
+                c.Pattern is WildcardPattern or ElsePattern or IdentifierPattern);
+
+            if (!hasCatchAll)
+            {
+                ExhaustivenessResult exhaustiveness = CheckExhaustiveness(
+                    clauses: whenStmt.Clauses,
+                    matchedType: matchedType);
+
+                if (!exhaustiveness.IsExhaustive)
+                {
+                    string missing = exhaustiveness.MissingCases.Count > 0
+                        ? $" Missing cases: {string.Join(separator: ", ", values: exhaustiveness.MissingCases)}."
+                        : "";
+                    ReportWarning(
+                        SemanticWarningCode.NonExhaustiveWhen,
+                        $"When statement may not cover all cases of '{matchedType.Name}'.{missing}",
+                        whenStmt.Location);
+                }
+            }
+        }
     }
 
     private void AnalyzeReturnStatement(ReturnStatement ret)
