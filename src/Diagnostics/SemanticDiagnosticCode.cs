@@ -421,6 +421,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Discard target must be a routine call, not an arbitrary expression.</summary>
     InvalidDiscardTarget = 421,
 
+    /// <summary>Variant type cannot be copied from one variable to another.</summary>
+    VariantCopyNotAllowed = 422,
+
+    /// <summary>Variant type cannot be reassigned to a variable.</summary>
+    VariantReassignmentNotAllowed = 423,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

@@ -283,6 +283,18 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
+        // Variant copy prohibition: `let box2 = box1` is not allowed
+        // Variants must be dismantled immediately with pattern matching
+        // Binding from routine calls (`let result = make_shape()`) is allowed
+        if (varDecl.Initializer is IdentifierExpression && varType is VariantTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantCopyNotAllowed,
+                $"Variant type '{varType.Name}' cannot be copied to variable '{varDecl.Name}'. " +
+                "Variants must be dismantled immediately with pattern matching.",
+                varDecl.Location);
+        }
+
         // Register variable in current scope
         bool declared = _registry.DeclareVariable(
             name: varDecl.Name,

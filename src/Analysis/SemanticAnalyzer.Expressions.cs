@@ -1040,6 +1040,17 @@ public sealed partial class SemanticAnalyzer
                 location);
         }
 
+        // Variant reassignment prohibition: variants cannot be reassigned
+        // Variants must be dismantled immediately with pattern matching
+        if (valueType is VariantTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantReassignmentNotAllowed,
+                $"Variant type '{valueType.Name}' cannot be reassigned. " +
+                "Variants must be dismantled immediately with pattern matching.",
+                location);
+        }
+
         // Assignment expression returns the target type
         return targetType;
     }
