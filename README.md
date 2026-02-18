@@ -237,7 +237,6 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) — Unsafe operations and raw memory access
 - [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) — FFI and C interop
 - [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
-- [Reality Bender](https://razorforge.lumi-dev.xyz/Reality-Bender) — Advanced low-level manipulation
 - [Lock Policies](https://razorforge.lumi-dev.xyz/Lock-Policies) — Mutex, MultiReadLock, RejectEdit
 - [Code Style](https://razorforge.lumi-dev.xyz/Code-Style) — Coding conventions
 - [Core](https://razorforge.lumi-dev.xyz/Core) — Auto-imported types and primitives
@@ -303,8 +302,6 @@ Start with Suflae for productivity, gradually learn RazorForge for control:
 3. [RazorForge Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Understanding explicit control
 4. [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types
 5. [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
-6. [Reality Bender](https://razorforge.lumi-dev.xyz/Reality-Bender) — Advanced techniques
-
 ---
 
 ## Examples
@@ -576,8 +573,6 @@ See [Build System](https://razorforge.lumi-dev.xyz/Build-System) for detailed bu
 - Package manager (`forge` CLI tool)
 - Language server protocol (LSP)
 - VSCode extensions
-- Reflection system
-
 ### Future
 
 - Self-hosting compiler (compiler written in RazorForge)
@@ -585,7 +580,6 @@ See [Build System](https://razorforge.lumi-dev.xyz/Build-System) for detailed bu
 - WASM backend
 - Formal verification tools
 - Advanced SIMD support
-- Reality Bender toolkit (ObjectHacker, Mutant, Metamorph)
 
 ---
 
