@@ -412,6 +412,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Arithmetic operators cannot be used on choice types.</summary>
     ArithmeticOnChoiceType = 418,
 
+    /// <summary>Choice case value exceeds S64 range.</summary>
+    ChoiceCaseValueOverflow = 419,
+
+    /// <summary>Duplicate choice case value.</summary>
+    ChoiceDuplicateValue = 420,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

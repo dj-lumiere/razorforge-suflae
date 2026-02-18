@@ -980,29 +980,52 @@ public sealed partial class SemanticAnalyzer
         }
 
         var cases = new List<ChoiceCaseInfo>();
-        int autoValue = 0;
+        long autoValue = 0;
 
         foreach (ChoiceCase caseDecl in choice.Cases)
         {
-            int? explicitValue = null;
+            long? explicitValue = null;
 
             // Evaluate explicit value if provided
             if (caseDecl.Value != null)
             {
-                if (caseDecl.Value is LiteralExpression literal && literal.Value is int intVal)
+                explicitValue = TryEvaluateChoiceCaseValue(expression: caseDecl.Value, choice: choice, caseName: caseDecl.Name, location: caseDecl.Location);
+                if (explicitValue.HasValue)
                 {
-                    explicitValue = intVal;
-                    autoValue = intVal + 1;
+                    autoValue = explicitValue.Value;
+                    // Check auto-increment overflow
+                    if (autoValue == long.MaxValue)
+                    {
+                        // Next auto-increment would overflow; only report if there are more cases after this
+                        // The overflow will be caught when the next case tries to use autoValue + 1
+                    }
+                    else
+                    {
+                        autoValue += 1;
+                    }
                 }
-                else if (caseDecl.Value is LiteralExpression litExpr && litExpr.Value is long longVal)
-                {
-                    explicitValue = (int)longVal;
-                    autoValue = explicitValue.Value + 1;
-                }
-                // TODO: Handle other literal types
             }
 
-            int computedValue = explicitValue ?? autoValue++;
+            long computedValue;
+            if (explicitValue.HasValue)
+            {
+                computedValue = explicitValue.Value;
+            }
+            else
+            {
+                computedValue = autoValue;
+                if (autoValue == long.MaxValue)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ChoiceCaseValueOverflow,
+                        $"Choice '{choice.Name}' case '{caseDecl.Name}': auto-assigned value would overflow S64 range.",
+                        caseDecl.Location);
+                }
+                else
+                {
+                    autoValue += 1;
+                }
+            }
 
             cases.Add(new ChoiceCaseInfo(name: caseDecl.Name)
             {
@@ -1023,8 +1046,84 @@ public sealed partial class SemanticAnalyzer
                 choice.Location);
         }
 
+        // Validate no duplicate computed values
+        var seenValues = new Dictionary<long, string>();
+        foreach (ChoiceCaseInfo caseInfo in cases)
+        {
+            if (seenValues.TryGetValue(key: caseInfo.ComputedValue, value: out string? existingCase))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ChoiceDuplicateValue,
+                    $"Choice '{choice.Name}' case '{caseInfo.Name}' has the same value ({caseInfo.ComputedValue}) as case '{existingCase}'.",
+                    caseInfo.Location ?? choice.Location);
+            }
+            else
+            {
+                seenValues[caseInfo.ComputedValue] = caseInfo.Name;
+            }
+        }
+
         // Update the choice with resolved cases
         _registry.UpdateChoiceCases(choiceName: choiceInfo.FullName, cases: cases);
+    }
+
+    /// <summary>
+    /// Evaluates a choice case value expression to a long integer.
+    /// Handles positive literals, negative unary expressions, and reports errors for invalid values.
+    /// </summary>
+    private long? TryEvaluateChoiceCaseValue(Expression expression, ChoiceDeclaration choice, string caseName, SourceLocation location)
+    {
+        // Positive integer literal
+        if (expression is LiteralExpression literal)
+        {
+            return TryConvertLiteralToLong(value: literal.Value, choice: choice, caseName: caseName, location: location);
+        }
+
+        // Negative integer literal: -N
+        if (expression is UnaryExpression { Operator: UnaryOperator.Minus, Operand: LiteralExpression negLiteral })
+        {
+            long? positiveValue = TryConvertLiteralToLong(value: negLiteral.Value, choice: choice, caseName: caseName, location: location);
+            if (positiveValue.HasValue)
+            {
+                // Handle long.MinValue edge case: -(-9223372036854775808) can't be represented
+                // But negating a positive value is fine for all values 0..long.MaxValue
+                return -positiveValue.Value;
+            }
+            return null;
+        }
+
+        ReportError(
+            SemanticDiagnosticCode.ChoiceCaseValueOverflow,
+            $"Choice '{choice.Name}' case '{caseName}': value must be an integer literal.",
+            location);
+        return null;
+    }
+
+    /// <summary>
+    /// Converts a literal object value to a long for choice case storage.
+    /// The parser stores numeric literals as strings, so we parse them here.
+    /// </summary>
+    private long? TryConvertLiteralToLong(object value, ChoiceDeclaration choice, string caseName, SourceLocation location)
+    {
+        if (value is string strVal)
+        {
+            string cleaned = CleanNumericLiteral(strVal);
+            if (TryParseSignedInteger(cleaned, out long result))
+            {
+                return result;
+            }
+        }
+
+        return ReportChoiceValueError(choice: choice, caseName: caseName, location: location);
+    }
+
+    private long? ReportChoiceValueError(ChoiceDeclaration choice, string caseName, SourceLocation location)
+    {
+        ReportError(
+            SemanticDiagnosticCode.ChoiceCaseValueOverflow,
+            $"Choice '{choice.Name}' case '{caseName}': value must be an integer literal within S64 range.",
+            location);
+        return null;
     }
 
     #endregion
