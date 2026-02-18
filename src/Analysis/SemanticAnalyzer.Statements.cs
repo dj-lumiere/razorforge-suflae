@@ -676,6 +676,16 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void AnalyzeDiscardStatement(DiscardStatement discard)
     {
+        // discard must target a routine call, not an arbitrary expression like a literal or variable
+        if (discard.Expression is not CallExpression)
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidDiscardTarget,
+                "'discard' can only be used with routine calls. " +
+                "Use 'discard some_routine()' to explicitly ignore a return value.",
+                discard.Location);
+        }
+
         // Analyze the expression - this validates the expression and checks for errors
         // The result is intentionally discarded
         AnalyzeExpression(expression: discard.Expression);

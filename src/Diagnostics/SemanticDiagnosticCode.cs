@@ -418,6 +418,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Duplicate choice case value.</summary>
     ChoiceDuplicateValue = 420,
 
+    /// <summary>Discard target must be a routine call, not an arbitrary expression.</summary>
+    InvalidDiscardTarget = 421,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════
