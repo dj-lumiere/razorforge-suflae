@@ -137,6 +137,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the identifier expression</returns>
     T VisitIdentifierExpression(IdentifierExpression node);
 
+    /// <summary>Visits a compound assignment expression node (operations like a += b)</summary>
+    /// <param name="node">The compound assignment expression to visit</param>
+    /// <returns>Result of visiting the compound assignment expression</returns>
+    T VisitCompoundAssignmentExpression(CompoundAssignmentExpression node);
+
     /// <summary>Visits a binary expression node (operations like a + b, x == y)</summary>
     /// <param name="node">The binary expression to visit</param>
     /// <returns>Result of visiting the binary expression</returns>

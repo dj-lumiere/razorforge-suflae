@@ -335,5 +335,39 @@ public static class BinaryOperatorExtensions
                 _ => null
             };
         }
+
+        /// <summary>
+        /// Gets the in-place dunder method name for compound assignment dispatch.
+        /// Returns null if the operator has no in-place variant (overflow, comparison, etc.).
+        /// In-place methods mutate the receiver and return Blank.
+        /// </summary>
+        public string? GetInPlaceMethodName()
+        {
+            return op switch
+            {
+                // Arithmetic
+                BinaryOperator.Add => "__iadd__",
+                BinaryOperator.Subtract => "__isub__",
+                BinaryOperator.Multiply => "__imul__",
+                BinaryOperator.TrueDivide => "__itruediv__",
+                BinaryOperator.FloorDivide => "__ifloordiv__",
+                BinaryOperator.Modulo => "__imod__",
+                BinaryOperator.Power => "__ipow__",
+
+                // Bitwise
+                BinaryOperator.BitwiseAnd => "__iand__",
+                BinaryOperator.BitwiseOr => "__ior__",
+                BinaryOperator.BitwiseXor => "__ixor__",
+
+                // Shift
+                BinaryOperator.ArithmeticLeftShift => "__iashl__",
+                BinaryOperator.ArithmeticRightShift => "__iashr__",
+                BinaryOperator.LogicalLeftShift => "__ilshl__",
+                BinaryOperator.LogicalRightShift => "__ilshr__",
+
+                // Overflow variants and other operators have no in-place form
+                _ => null
+            };
+        }
     }
 }

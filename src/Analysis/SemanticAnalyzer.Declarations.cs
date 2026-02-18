@@ -436,7 +436,12 @@ public sealed partial class SemanticAnalyzer
         "__enter__", "__exit__",
 
         // Destructor/cleanup
-        "__destroy__"
+        "__destroy__",
+
+        // In-place compound assignment operators
+        "__iadd__", "__isub__", "__imul__", "__itruediv__", "__ifloordiv__", "__imod__", "__ipow__",
+        "__iand__", "__ior__", "__ixor__",
+        "__iashl__", "__iashr__", "__ilshl__", "__ilshr__"
     ];
 
     /// <summary>
@@ -524,7 +529,23 @@ public sealed partial class SemanticAnalyzer
 
         // Sequence operators
         ["__seq__"] = "Sequential",
-        ["__try_next__"] = "SequenceGenerator"
+        ["__try_next__"] = "SequenceGenerator",
+
+        // In-place compound assignment operators
+        ["__iadd__"] = "InPlaceAddable",
+        ["__isub__"] = "InPlaceSubtractable",
+        ["__imul__"] = "InPlaceMultiplicable",
+        ["__itruediv__"] = "InPlaceDivisible",
+        ["__ifloordiv__"] = "InPlaceFloorDivisible",
+        ["__imod__"] = "InPlaceFloorDivisible",
+        ["__ipow__"] = "InPlaceExponentiable",
+        ["__iand__"] = "InPlaceBitwiseable",
+        ["__ior__"] = "InPlaceBitwiseable",
+        ["__ixor__"] = "InPlaceBitwiseable",
+        ["__iashl__"] = "InPlaceShiftable",
+        ["__iashr__"] = "InPlaceShiftable",
+        ["__ilshl__"] = "InPlaceShiftable",
+        ["__ilshr__"] = "InPlaceShiftable"
     };
 
     /// <summary>

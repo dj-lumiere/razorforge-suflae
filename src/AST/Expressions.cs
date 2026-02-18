@@ -182,6 +182,29 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 #region Operator Expressions
 
 /// <summary>
+/// Expression representing a compound assignment operation (e.g., a += b).
+/// The semantic analyzer dispatches this to either an in-place dunder method (__iadd__, etc.)
+/// or falls back to create-and-assign (a = a.__add__(b)) for records/primitives.
+/// Entities require the in-place dunder (no fallback, since bare entity assignment is prohibited).
+/// </summary>
+/// <param name="Target">The assignment target (must be a mutable variable, field, or index)</param>
+/// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>
+/// <param name="Value">The right-hand operand expression</param>
+/// <param name="Location">Source location information</param>
+public sealed record CompoundAssignmentExpression(
+    Expression Target,
+    BinaryOperator Operator,
+    Expression Value,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitCompoundAssignmentExpression(node: this);
+    }
+}
+
+/// <summary>
 /// Expression that combines two operands with a binary operator.
 /// Supports arithmetic, comparison, logical, and bitwise operations.
 /// </summary>

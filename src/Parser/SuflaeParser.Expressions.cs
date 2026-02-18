@@ -24,7 +24,8 @@ public partial class SuflaeParser
     /// Parses assignment expressions including compound assignments (lowest precedence).
     /// Syntax: <c>target = value</c>, <c>target += value</c>, etc.
     /// Right-associative to support chained assignments.
-    /// Compound assignments are desugared: <c>a += b</c> becomes <c>a = a + b</c>.
+    /// Base compound assignments (+=, -=, etc.) emit CompoundAssignmentExpression for in-place dispatch.
+    /// Overflow variants (+%=, +^=, etc.) and ??= are desugared: <c>a +%= b</c> becomes <c>a = a.__add_wrap__(b)</c>.
     /// </summary>
     /// <returns>The parsed expression, possibly an assignment.</returns>
     private Expression ParseAssignment()
@@ -49,7 +50,18 @@ public partial class SuflaeParser
         }
 
         value = ParseAssignment();
-        // Desugar: a += b becomes a = a.__add__(b)
+
+        // Base operators with in-place dunder support → CompoundAssignmentExpression
+        if (compoundOp.Value.GetInPlaceMethodName() != null)
+        {
+            return new CompoundAssignmentExpression(
+                Target: expr,
+                Operator: compoundOp.Value,
+                Value: value,
+                Location: expr.Location);
+        }
+
+        // Overflow variants and ??= → desugar to a = a.__op__(b)
         Expression binaryExpr = CreateBinaryExpression(
             left: expr,
             op: compoundOp.Value,

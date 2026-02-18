@@ -24,7 +24,8 @@ public partial class RazorForgeParser
     /// Parses assignment expressions including compound assignments.
     /// Syntax: <c>target = value</c>, <c>target += value</c>, etc.
     /// Assignment is right-associative.
-    /// Compound assignments are desugared: <c>a += b</c> becomes <c>a = a + b</c>.
+    /// Base compound assignments (+=, -=, etc.) emit CompoundAssignmentExpression for in-place dispatch.
+    /// Overflow variants (+%=, +^=, etc.) and ??= are desugared: <c>a +%= b</c> becomes <c>a = a.__add_wrap__(b)</c>.
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParseAssignment()
@@ -50,7 +51,18 @@ public partial class RazorForgeParser
 
         {
             Expression value = ParseAssignment();
-            // Desugar: a += b becomes a = a.__add__(b) (the inner binary op is desugared to method call)
+
+            // Base operators with in-place dunder support → CompoundAssignmentExpression
+            if (compoundOp.Value.GetInPlaceMethodName() != null)
+            {
+                return new CompoundAssignmentExpression(
+                    Target: expr,
+                    Operator: compoundOp.Value,
+                    Value: value,
+                    Location: expr.Location);
+            }
+
+            // Overflow variants and ??= → desugar to a = a.__op__(b)
             Expression binaryExpr = CreateBinaryExpression(left: expr,
                 op: compoundOp.Value,
                 right: value,

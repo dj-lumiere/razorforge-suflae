@@ -30,6 +30,7 @@ public sealed partial class SemanticAnalyzer
         {
             LiteralExpression literal => AnalyzeLiteralExpression(literal: literal, expectedType: expectedType),
             IdentifierExpression id => AnalyzeIdentifierExpression(id: id),
+            CompoundAssignmentExpression compound => AnalyzeCompoundAssignment(compound: compound),
             BinaryExpression binary => AnalyzeBinaryExpression(binary: binary),
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
             CallExpression call => AnalyzeCallExpression(call: call),
@@ -1054,6 +1055,144 @@ public sealed partial class SemanticAnalyzer
         // Assignment expression returns the target type
         return targetType;
     }
+
+    /// <summary>
+    /// Analyzes a compound assignment expression (e.g., a += b).
+    /// Dispatch order: (0) verify target is var, (1) try in-place dunder (__iadd__) → Blank,
+    /// (2) fallback to create-and-assign (__add__) for non-entity types, (3) error if neither.
+    /// </summary>
+    private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound)
+    {
+        TypeSymbol targetType = AnalyzeExpression(expression: compound.Target);
+        TypeSymbol valueType = AnalyzeExpression(expression: compound.Value);
+
+        // Step 0: Verify target is assignable and mutable
+        if (!IsAssignableTarget(target: compound.Target))
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidAssignmentTarget,
+                "Invalid compound assignment target.",
+                compound.Target.Location);
+            return targetType;
+        }
+
+        if (compound.Target is IdentifierExpression id)
+        {
+            VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+            if (varInfo is { IsMutable: false })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.AssignmentToImmutable,
+                    $"Cannot assign to immutable variable '{id.Name}'.",
+                    compound.Location);
+            }
+        }
+
+        if (compound.Target is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+            ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: compound.Location);
+
+            if (_currentRoutine is { IsReadOnly: true } &&
+                member.Object is IdentifierExpression { Name: "me" })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MutationInReadonlyMethod,
+                    $"Cannot mutate field '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow mutations.",
+                    compound.Location);
+            }
+        }
+
+        if (compound.Target is IndexExpression index)
+        {
+            if (index.Object is IdentifierExpression indexedVar)
+            {
+                VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);
+                if (varInfo is { IsMutable: false })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.AssignmentToImmutable,
+                        $"Cannot assign to index of immutable variable '{indexedVar.Name}'.",
+                        compound.Location);
+                }
+            }
+        }
+
+        // Don't try dispatch on error types (prevent cascade)
+        if (targetType.Category == TypeCategory.Error)
+        {
+            return targetType;
+        }
+
+        // Choice types cannot use compound assignment (only == and != are allowed)
+        if (targetType is ChoiceTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with choice type '{targetType.Name}'. " +
+                "Choices only support '==' and '!=' operators.",
+                compound.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        string? inPlaceMethod = compound.Operator.GetInPlaceMethodName();
+        string? regularMethod = compound.Operator.GetMethodName();
+        bool isEntity = targetType is EntityTypeInfo;
+
+        // Step 1: Try in-place dunder (__iadd__, etc.)
+        if (inPlaceMethod != null)
+        {
+            RoutineInfo? inPlaceRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
+            if (inPlaceRoutine != null)
+            {
+                // In-place method found — returns Blank (mutates in-place)
+                return _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
+        }
+
+        // Step 2: Fallback to create-and-assign (NOT for entities — bare assignment prohibited)
+        if (!isEntity && regularMethod != null)
+        {
+            RoutineInfo? regularRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{regularMethod}");
+            if (regularRoutine != null)
+            {
+                // Create-and-assign: a = a.__add__(b) — returns target type
+                TypeSymbol returnType = regularRoutine.ReturnType ?? targetType;
+                if (!IsAssignableTo(source: returnType, target: targetType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.AssignmentTypeMismatch,
+                        $"Compound assignment: return type '{returnType.Name}' of '{regularMethod}' " +
+                        $"is not assignable to target type '{targetType.Name}'.",
+                        compound.Location);
+                }
+                return targetType;
+            }
+        }
+
+        // Step 3: Error — neither in-place nor fallback available
+        string opSymbol = compound.Operator.ToStringRepresentation();
+        if (isEntity)
+        {
+            ReportError(
+                SemanticDiagnosticCode.CompoundAssignmentNotSupported,
+                $"Entity type '{targetType.Name}' requires in-place operator '{inPlaceMethod}' for " +
+                $"compound assignment '{opSymbol}='. Define '{inPlaceMethod}' or use explicit method calls.",
+                compound.Location);
+        }
+        else
+        {
+            ReportError(
+                SemanticDiagnosticCode.CompoundAssignmentNotSupported,
+                $"Type '{targetType.Name}' does not support compound assignment '{opSymbol}='. " +
+                $"Define '{inPlaceMethod}' or '{regularMethod}' to enable this operation.",
+                compound.Location);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
     private TypeSymbol AnalyzeUnaryExpression(UnaryExpression unary)
     {
         TypeSymbol operandType = AnalyzeExpression(expression: unary.Operand);
@@ -1503,6 +1642,11 @@ public sealed partial class SemanticAnalyzer
         {
             case IdentifierExpression id:
                 identifiers.Add(item: id);
+                break;
+
+            case CompoundAssignmentExpression compound:
+                CollectIdentifiersRecursive(expression: compound.Target, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: compound.Value, identifiers: identifiers);
                 break;
 
             case BinaryExpression binary:
