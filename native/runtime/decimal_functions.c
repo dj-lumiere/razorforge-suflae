@@ -54,12 +54,12 @@ uint32_t d32_neg(uint32_t a)
     return bid32_negate(a);
 }
 
-uint32_t d32_from_string(const char* str)
+uint32_t rf_D32_from_string(const char* str)
 {
     return bid32_from_string((char*)str);
 }
 
-char* d32_to_string(uint32_t val)
+char* rf_D32_to_string(uint32_t val)
 {
     char* buf = (char*)malloc(64);
     bid32_to_string(buf, val);
@@ -132,12 +132,12 @@ uint64_t d64_neg(uint64_t a)
     return bid64_negate(a);
 }
 
-uint64_t d64_from_string(const char* str)
+uint64_t rf_D64_from_string(const char* str)
 {
     return bid64_from_string((char*)str);
 }
 
-char* d64_to_string(uint64_t val)
+char* rf_D64_to_string(uint64_t val)
 {
     char* buf = (char*)malloc(64);
     bid64_to_string(buf, val);
@@ -229,12 +229,12 @@ d128_t d128_neg(d128_t a)
     return from_bid128(bid128_negate(to_bid128(a)));
 }
 
-d128_t d128_from_string(const char* str)
+d128_t rf_D128_from_string(const char* str)
 {
     return from_bid128(bid128_from_string((char*)str));
 }
 
-char* d128_to_string(d128_t val)
+char* rf_D128_to_string(d128_t val)
 {
     char* buf = (char*)malloc(128);
     bid128_to_string(buf, to_bid128(val));

@@ -24,17 +24,17 @@ void rf_runtime_init()
 // ============================================================================
 
 // Get length of cstr
-rf_uaddr rf_strlen(const char* cstr)
+rf_UAddr rf_strlen(const char* cstr)
 {
-    return (rf_uaddr)strlen(cstr);
+    return (rf_UAddr)strlen(cstr);
 }
-rf_uaddr rf_strcpy(char* dest, const char* src)
+rf_UAddr rf_strcpy(char* dest, const char* src)
 {
-    return (rf_uaddr)strcpy(dest, src);
+    return (rf_UAddr)strcpy(dest, src);
 }
-rf_s32 rf_strcmp(const char* s1, const char* s2)
+rf_S32 rf_strcmp(const char* s1, const char* s2)
 {
-    return (rf_s32)strcmp(s1, s2);
+    return (rf_S32)strcmp(s1, s2);
 }
 
 // ============================================================================
@@ -42,12 +42,12 @@ rf_s32 rf_strcmp(const char* s1, const char* s2)
 // ============================================================================
 
 // Count-based print to stdout (preferred - no null-termination required)
-void rf_console_print(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stdout); }
-void rf_console_print_line(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stdout); putchar('\n'); }
+void rf_console_print(const char* ptr, rf_UAddr count) { fwrite(ptr, 1, count, stdout); }
+void rf_console_print_line(const char* ptr, rf_UAddr count) { fwrite(ptr, 1, count, stdout); putchar('\n'); }
 
 // Count-based print to stderr (preferred - no null-termination required)
-void rf_console_alert(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stderr); }
-void rf_console_alert_line(const char* ptr, rf_uaddr count) { fwrite(ptr, 1, count, stderr); fputc('\n', stderr); }
+void rf_console_alert(const char* ptr, rf_UAddr count) { fwrite(ptr, 1, count, stderr); }
+void rf_console_alert_line(const char* ptr, rf_UAddr count) { fwrite(ptr, 1, count, stderr); fputc('\n', stderr); }
 
 // Print empty line
 void rf_console_print_newline() { putchar('\n'); }
@@ -156,7 +156,7 @@ char* rf_console_get_word()
 }
 
 // Input operations - get exactly n characters
-char* rf_console_get_letters(rf_uaddr count)
+char* rf_console_get_letters(rf_UAddr count)
 {
     fflush(stdout);
     char* buffer = malloc(count + 1);
@@ -237,7 +237,7 @@ typedef struct
     pthread_mutex_t mutex;
     pthread_rwlock_t rwlock;
 #endif
-    rf_u32 ref_count; // Reference count (atomic in real impl)
+    rf_U32 ref_count; // Reference count (atomic in real impl)
 } rf_Shared;
 
 // Mutex lock - acquire exclusive access

@@ -13,8 +13,8 @@
 
 // Moment record layout: { S64 seconds, U32 nanoseconds }
 typedef struct rf_Moment {
-    rf_s64 seconds;
-    rf_u32 nanoseconds;
+    rf_S64 seconds;
+    rf_U32 nanoseconds;
 } rf_Moment;
 
 // Get current time as seconds since Unix epoch + nanoseconds
@@ -37,14 +37,14 @@ rf_Moment rf_moment_now()
     uint64_t ticks = uli.QuadPart - EPOCH_OFFSET;
 
     // Split into seconds and nanoseconds
-    result.seconds = (rf_s64)(ticks / 10000000ULL);
-    result.nanoseconds = (rf_u32)((ticks % 10000000ULL) * 100ULL);
+    result.seconds = (rf_S64)(ticks / 10000000ULL);
+    result.nanoseconds = (rf_U32)((ticks % 10000000ULL) * 100ULL);
 #else
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
 
-    result.seconds = (rf_s64)ts.tv_sec;
-    result.nanoseconds = (rf_u32)ts.tv_nsec;
+    result.seconds = (rf_S64)ts.tv_sec;
+    result.nanoseconds = (rf_U32)ts.tv_nsec;
 #endif
 
     return result;

@@ -13,17 +13,17 @@
 // Type Definitions
 // ============================================================================
 
-typedef uint32_t rf_u32;
-typedef uintptr_t rf_uaddr;
+typedef uint32_t rf_U32;
+typedef uintptr_t rf_UAddr;
 
 // StackFrame record - matches RazorForge layout (5 x u32 = 20 bytes)
 typedef struct
 {
-    rf_u32 file_id;
-    rf_u32 routine_id;
-    rf_u32 type_id;
-    rf_u32 line_no;
-    rf_u32 column_no;
+    rf_U32 file_id;
+    rf_U32 routine_id;
+    rf_U32 type_id;
+    rf_U32 line_no;
+    rf_U32 column_no;
 } rf_StackFrame;
 
 // StackTrace record - 10 frames + depth (10 x 20 + 4 = 204 bytes)
@@ -32,13 +32,13 @@ typedef struct
 typedef struct
 {
     rf_StackFrame frames[RF_STACK_TRACE_MAX_FRAMES];
-    rf_u32 depth;
+    rf_U32 depth;
 } rf_StackTrace;
 
 // MessageHandle record - 1 x uaddr = 8 bytes on 64-bit
 typedef struct
 {
-    rf_uaddr ptr;
+    rf_UAddr ptr;
 } rf_MessageHandle;
 
 // Error record - matches RazorForge layout
@@ -46,10 +46,10 @@ typedef struct
 {
     rf_MessageHandle message_handle;
     rf_StackTrace stack_trace;
-    rf_u32 file_id;
-    rf_u32 routine_id;
-    rf_u32 line_no;
-    rf_u32 column_no;
+    rf_U32 file_id;
+    rf_U32 routine_id;
+    rf_U32 line_no;
+    rf_U32 column_no;
 } rf_Error;
 
 // ============================================================================
@@ -67,7 +67,7 @@ typedef struct
 #endif
 
 static RF_THREAD_LOCAL rf_StackFrame rf_runtime_stack[RF_RUNTIME_STACK_MAX];
-static RF_THREAD_LOCAL rf_u32 rf_runtime_stack_depth = 0;
+static RF_THREAD_LOCAL rf_U32 rf_runtime_stack_depth = 0;
 
 // ============================================================================
 // Symbol Tables (set by compiler-generated code)
@@ -75,19 +75,19 @@ static RF_THREAD_LOCAL rf_u32 rf_runtime_stack_depth = 0;
 
 // Pointers to compiler-generated symbol tables
 static const char** rf_file_table = NULL;
-static rf_u32 rf_file_table_count = 0;
+static rf_U32 rf_file_table_count = 0;
 
 static const char** rf_routine_table = NULL;
-static rf_u32 rf_routine_table_count = 0;
+static rf_U32 rf_routine_table_count = 0;
 
 static const char** rf_type_table = NULL;
-static rf_u32 rf_type_table_count = 0;
+static rf_U32 rf_type_table_count = 0;
 
 // Initialize symbol tables (called by compiler-generated code at startup)
 void __rf_init_symbol_tables(
-    const char** file_table, rf_u32 file_count,
-    const char** routine_table, rf_u32 routine_count,
-    const char** type_table, rf_u32 type_count)
+    const char** file_table, rf_U32 file_count,
+    const char** routine_table, rf_U32 routine_count,
+    const char** type_table, rf_U32 type_count)
 {
     rf_file_table = file_table;
     rf_file_table_count = file_count;
@@ -102,7 +102,7 @@ void __rf_init_symbol_tables(
 // ============================================================================
 
 // Push a stack frame at routine entry
-void __rf_stack_push(rf_u32 file_id, rf_u32 routine_id, rf_u32 type_id, rf_u32 line_no, rf_u32 column_no)
+void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id, rf_U32 line_no, rf_U32 column_no)
 {
     if (rf_runtime_stack_depth >= RF_RUNTIME_STACK_MAX)
     {
@@ -141,21 +141,21 @@ void __rf_stack_capture(rf_StackTrace* out_trace)
     if (!out_trace) return;
 
     // Copy up to RF_STACK_TRACE_MAX_FRAMES frames from the runtime stack
-    rf_u32 frames_to_copy = rf_runtime_stack_depth;
+    rf_U32 frames_to_copy = rf_runtime_stack_depth;
     if (frames_to_copy > RF_STACK_TRACE_MAX_FRAMES)
     {
         frames_to_copy = RF_STACK_TRACE_MAX_FRAMES;
     }
 
     // Copy frames in reverse order (most recent first)
-    for (rf_u32 i = 0; i < frames_to_copy; i++)
+    for (rf_U32 i = 0; i < frames_to_copy; i++)
     {
-        rf_u32 src_idx = rf_runtime_stack_depth - 1 - i;
+        rf_U32 src_idx = rf_runtime_stack_depth - 1 - i;
         out_trace->frames[i] = rf_runtime_stack[src_idx];
     }
 
     // Zero out remaining frames
-    for (rf_u32 i = frames_to_copy; i < RF_STACK_TRACE_MAX_FRAMES; i++)
+    for (rf_U32 i = frames_to_copy; i < RF_STACK_TRACE_MAX_FRAMES; i++)
     {
         memset(&out_trace->frames[i], 0, sizeof(rf_StackFrame));
     }
@@ -167,7 +167,7 @@ void __rf_stack_capture(rf_StackTrace* out_trace)
 // Symbol Lookup
 // ============================================================================
 
-static const char* get_file_name(rf_u32 file_id)
+static const char* get_file_name(rf_U32 file_id)
 {
     if (rf_file_table && file_id < rf_file_table_count)
     {
@@ -176,7 +176,7 @@ static const char* get_file_name(rf_u32 file_id)
     return "<unknown file>";
 }
 
-static const char* get_routine_name(rf_u32 routine_id)
+static const char* get_routine_name(rf_U32 routine_id)
 {
     if (rf_routine_table && routine_id < rf_routine_table_count)
     {
@@ -185,7 +185,7 @@ static const char* get_routine_name(rf_u32 routine_id)
     return "<unknown routine>";
 }
 
-static const char* get_type_name(rf_u32 type_id)
+static const char* get_type_name(rf_U32 type_id)
 {
     if (type_id == 0)
     {
@@ -231,7 +231,7 @@ void __rf_print_stack_trace(const rf_StackTrace* trace)
     }
 
     fprintf(stderr, "Stack trace:\n");
-    for (rf_u32 i = 0; i < trace->depth; i++)
+    for (rf_U32 i = 0; i < trace->depth; i++)
     {
         print_stack_frame(&trace->frames[i], i);
     }
@@ -247,9 +247,9 @@ void __rf_print_current_stack(void)
     }
 
     fprintf(stderr, "Current stack (depth=%u):\n", rf_runtime_stack_depth);
-    for (rf_u32 i = 0; i < rf_runtime_stack_depth; i++)
+    for (rf_U32 i = 0; i < rf_runtime_stack_depth; i++)
     {
-        rf_u32 idx = rf_runtime_stack_depth - 1 - i;
+        rf_U32 idx = rf_runtime_stack_depth - 1 - i;
         print_stack_frame(&rf_runtime_stack[idx], i);
     }
 }
@@ -281,7 +281,7 @@ void __rf_throw_division_by_zero(void)
 }
 
 // Throw IndexOutOfBoundsError
-void __rf_throw_index_out_of_bounds(rf_u32 index, rf_u32 count)
+void __rf_throw_index_out_of_bounds(rf_U32 index, rf_U32 count)
 {
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "Index %u is out of bounds for collection with %u elements", index, count);
@@ -316,14 +316,14 @@ void __rf_throw_element_not_found(void)
 void __rf_create_error(
     rf_Error* out_error,
     const char* message,
-    rf_u32 file_id,
-    rf_u32 routine_id,
-    rf_u32 line_no,
-    rf_u32 column_no)
+    rf_U32 file_id,
+    rf_U32 routine_id,
+    rf_U32 line_no,
+    rf_U32 column_no)
 {
     if (!out_error) return;
 
-    out_error->message_handle.ptr = (rf_uaddr)message;
+    out_error->message_handle.ptr = (rf_UAddr)message;
     __rf_stack_capture(&out_error->stack_trace);
     out_error->file_id = file_id;
     out_error->routine_id = routine_id;
