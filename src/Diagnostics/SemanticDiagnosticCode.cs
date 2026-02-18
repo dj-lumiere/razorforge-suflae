@@ -615,12 +615,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Danger blocks cannot be nested.</summary>
     NestedDangerBlock = 801,
 
-    /// <summary>Mutant case must have an associated type.</summary>
-    MutantCaseRequiresType = 802,
-
-    /// <summary>Mutant case types must be unique.</summary>
-    MutantCaseTypeDuplicate = 803,
-
     /// <summary>Feature only available in RazorForge.</summary>
     FeatureOnlyInRazorForge = 804,
 
