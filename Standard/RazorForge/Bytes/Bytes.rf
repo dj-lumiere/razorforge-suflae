@@ -331,7 +331,7 @@ routine Text.from_utf16(utf16: List<U16>) -> Text {
         if w1 < 0xD800u32 or w1 > 0xDFFFu32 {
             result.add_last(Letter(codepoint: w1))
             i += 1u64
-        } else if 0xD800u32 <= w1 <= 0xDBFFu32 and i + 1u64 < len {
+        } elseif 0xD800u32 <= w1 <= 0xDBFFu32 and i + 1u64 < len {
             let w2 = U32(utf16[i + 1u64])
             if 0xDC00u32 <= w2 <= 0xDFFFu32 {
                 let codepoint = ((w1 - 0xD800u32) << 10u32) + (w2 - 0xDC00u32) + 0x10000u32

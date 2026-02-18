@@ -47,9 +47,9 @@ routine CStr.__create__(from_ptr: UAddr) -> CStr {
 
 # Create CStr from Bytes (allocates NEW memory with null terminator)
 # The caller is responsible for freeing this memory when done
-routine CStr.__create__(from_text: Bytes) -> CStr {
+routine CStr.__create__(from: Bytes) -> CStr {
     danger! {
-        let len = from_text.count()
+        let len = from.count()
         let buffer = Snatched<U8>(address: @native.rf_alloc(len + 1u64))
 
         var i: U64 = 0u64
@@ -57,12 +57,65 @@ routine CStr.__create__(from_text: Bytes) -> CStr {
             if i >= len {
                 break
             }
-            Snatched<U8>(address: buffer.address + i).write(from_text[i].codepoint())
+            Snatched<U8>(address: buffer.address + i).write(from[i].byte_value())
             i = i + 1u64
         }
         # Null terminator
         Snatched<U8>(address: buffer.address + len).write(0u8)
 
+        return CStr(ptr: buffer.address)
+    }
+}
+
+# Create CStr from Text (encodes UTF-32 codepoints to UTF-8 with null terminator)
+# The caller is responsible for freeing this memory when done
+routine CStr.__create__(from: Text) -> CStr {
+    danger! {
+        let len = from.count()
+        if len == 0u64 {
+            let buffer = Snatched<U8>(address: @native.rf_alloc(1u64))
+            Snatched<U8>(address: buffer.address).write(0u8)
+            return CStr(ptr: buffer.address)
+        }
+
+        # Worst case: each codepoint needs 4 bytes + null terminator
+        let max_bytes = len * 4u64 + 1u64
+        let buffer = Snatched<U8>(address: @native.rf_alloc(max_bytes))
+        var write_pos: U64 = 0u64
+        var i: U64 = 0u64
+
+        while i < len {
+            let cp = from[i].codepoint()
+
+            if cp <= 0x7Fu32 {
+                # 1-byte ASCII
+                Snatched<U8>(address: buffer.address + write_pos).write(U8(cp))
+                write_pos = write_pos + 1u64
+            } elseif cp <= 0x7FFu32 {
+                # 2-byte sequence
+                Snatched<U8>(address: buffer.address + write_pos).write(U8(0xC0u32 | (cp >> 6u32)))
+                Snatched<U8>(address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+                write_pos = write_pos + 2u64
+            } elseif cp <= 0xFFFFu32 {
+                # 3-byte sequence
+                Snatched<U8>(address: buffer.address + write_pos).write(U8(0xE0u32 | (cp >> 12u32)))
+                Snatched<U8>(address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
+                Snatched<U8>(address: buffer.address + write_pos + 2u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+                write_pos = write_pos + 3u64
+            } else {
+                # 4-byte sequence
+                Snatched<U8>(address: buffer.address + write_pos).write(U8(0xF0u32 | (cp >> 18u32)))
+                Snatched<U8>(address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32)))
+                Snatched<U8>(address: buffer.address + write_pos + 2u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
+                Snatched<U8>(address: buffer.address + write_pos + 3u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+                write_pos = write_pos + 4u64
+            }
+
+            i = i + 1u64
+        }
+
+        # Null terminator
+        Snatched<U8>(address: buffer.address + write_pos).write(0u8)
         return CStr(ptr: buffer.address)
     }
 }
@@ -73,7 +126,7 @@ routine CStr.__create__(from_text: Bytes) -> CStr {
 
 # Get length of C string (excluding null terminator)
 # O(n) - must scan for null terminator
-routine CStr.length() -> UAddr {
+routine CStr.count() -> UAddr {
     danger! {
         return @native.rf_strlen(me.ptr)
     }

@@ -38,6 +38,106 @@ routine Text.__create__(from_letter: Letter) -> Text {
     return Text(letters: list)
 }
 
+routine Text.__create__(from: CStr) -> Text {
+    if from.is_null() {
+        return Text()
+    }
+    danger! {
+        let len = from.count()
+        if len == 0uaddr {
+            return Text()
+        }
+
+        let list = List<Letter>()
+        var i: UAddr = 0uaddr
+        loop {
+            if i >= len {
+                break
+            }
+            let b0 = from[i]
+
+            if b0 <= 0x7Fu8 {
+                # ASCII: single byte
+                list.add_last(Letter(codepoint: U32(b0)))
+                i = i + 1uaddr
+            } elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1uaddr < len {
+                # 2-byte sequence
+                let b1 = from[i + 1uaddr]
+                let cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
+                list.add_last(Letter(codepoint: cp))
+                i = i + 2uaddr
+            } elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2uaddr < len {
+                # 3-byte sequence
+                let b1 = from[i + 1uaddr]
+                let b2 = from[i + 2uaddr]
+                let cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
+                list.add_last(Letter(codepoint: cp))
+                i = i + 3uaddr
+            } elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3uaddr < len {
+                # 4-byte sequence
+                let b1 = from[i + 1uaddr]
+                let b2 = from[i + 2uaddr]
+                let b3 = from[i + 3uaddr]
+                let cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
+                list.add_last(Letter(codepoint: cp))
+                i = i + 4uaddr
+            } else {
+                # Invalid byte — replacement character
+                list.add_last(Letter(codepoint: 0xFFFDu32))
+                i = i + 1uaddr
+            }
+        }
+        return Text(from_list: list)
+    }
+}
+
+# Convert CWStr to Text (decodes UTF-16 surrogate pairs to codepoints)
+# Handles surrogate pairs correctly for supplementary characters
+routine Text.__create__(from: CWStr) -> Text {
+    danger! {
+        let len = from.count()
+        if len == 0uaddr {
+            return Text()
+        }
+
+        let list = List<Letter>()
+        var i: UAddr = 0uaddr
+        loop {
+            if i >= len {
+                break
+            }
+            let high = read_as!<U16>(from.ptr + (i * 2uaddr))
+
+            # Check for high surrogate (U+D800 to U+DBFF)
+            if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1uaddr < len {
+                let low = read_as!<U16>(from.ptr + ((i + 1uaddr) * 2uaddr))
+                # Check for low surrogate (U+DC00 to U+DFFF)
+                if low >= 0xDC00u16 and low <= 0xDFFFu16 {
+                    # Valid surrogate pair - decode to codepoint
+                    let high_bits = (U32(high) - 0xD800u32) << 10u32
+                    let low_bits = U32(low) - 0xDC00u32
+                    let codepoint = high_bits | low_bits + 0x10000u32
+                    list.add_last(Letter(codepoint: codepoint))
+                    i = i + 2uaddr
+                } else {
+                    # Invalid low surrogate - use replacement character
+                    list.add_last(Letter(codepoint: 0xFFFDu32))
+                    i = i + 1uaddr
+                }
+            } elseif high >= 0xDC00u16 and high <= 0xDFFFu16 {
+                # Orphan low surrogate - use replacement character
+                list.add_last(Letter(codepoint: 0xFFFDu32))
+                i = i + 1uaddr
+            } else {
+                # BMP character (not a surrogate)
+                list.add_last(Letter(codepoint: U32(high)))
+                i = i + 1uaddr
+            }
+        }
+        return Text(from_list: list)
+    }
+}
+
 # Core operations
 
 routine Text.count() -> U64 {
