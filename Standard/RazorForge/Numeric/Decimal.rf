@@ -140,7 +140,7 @@ routine Decimal.__cmp__(you: Decimal) -> ComparisonSign {
         let value = @native.rf_bigdec_cmp(me.handle, other.handle)
         if value < 0 {
             return ME_SMALL
-        } else if value > 0 {
+        } elseif value > 0 {
             return ME_LARGE
         }
         return EQUAL

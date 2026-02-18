@@ -26,6 +26,10 @@ preset BYTE_TAB: Byte = Byte(value: 0x09)
 # Comparison operations
 # ============================================================================
 
+routine Letter.byte_value() -> U8 {
+    return me.value
+}
+
 routine Byte.__eq__(other: Byte) -> Bool {
     return me.value == other.value
 }

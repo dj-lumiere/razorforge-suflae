@@ -34,7 +34,7 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment {
     if ns >= NS_PER_SECOND {
         s = s + ns // NS_PER_SECOND
         ns = ns % NS_PER_SECOND
-    } else if ns < 0_s64 {
+    } elseif ns < 0_s64 {
         let borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
         s = s - borrow
         ns = ns + borrow *% NS_PER_SECOND
