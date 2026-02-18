@@ -5,6 +5,9 @@ module Text
 # These X.__create__!(from_text:) routines parse text into Core types.
 # They were moved here from Core module files to eliminate the
 # Core → Text dependency during stdlib loading.
+#
+# Text (UTF-32) is encoded to CStr (UTF-8, null-terminated) before
+# passing to native C parse functions.
 
 # ============================================================================
 # Signed Integers
@@ -12,37 +15,43 @@ module Text
 
 routine S8.__create__!(from_text: Text) -> S8 {
     danger! {
-        return @native.rf_parse_s8(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_S8(cstr_val)
     }
 }
 
 routine S16.__create__!(from_text: Text) -> S16 {
     danger! {
-        return @native.rf_parse_s16(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_S16(cstr_val)
     }
 }
 
 routine S32.__create__!(from_text: Text) -> S32 {
     danger! {
-        return @native.rf_parse_s32(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_S32(cstr_val)
     }
 }
 
 routine S64.__create__!(from_text: Text) -> S64 {
     danger! {
-        return @native.rf_parse_s64(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_S64(cstr_val)
     }
 }
 
 routine S128.__create__!(from_text: Text) -> S128 {
     danger! {
-        return @native.rf_parse_s128(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_S128(cstr_val)
     }
 }
 
 routine SAddr.__create__!(from_text: Text) -> SAddr {
     danger! {
-        return @native.rf_parse_saddr(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_SAddr(cstr_val)
     }
 }
 
@@ -52,37 +61,43 @@ routine SAddr.__create__!(from_text: Text) -> SAddr {
 
 routine U8.__create__!(from_text: Text) -> U8 {
     danger! {
-        return @native.parse_u8(from_text.CStr().address)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_U8(cstr_val)
     }
 }
 
 routine U16.__create__!(from_text: Text) -> U16 {
     danger! {
-        return @native.rf_parse_u16(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_U16(cstr_val)
     }
 }
 
 routine U32.__create__!(from_text: Text) -> U32 {
     danger! {
-        return @native.rf_parse_u32(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_U32(cstr_val)
     }
 }
 
 routine U64.__create__!(from_text: Text) -> U64 {
     danger! {
-        return @native.rf_parse_u64(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_U64(cstr_val)
     }
 }
 
 routine U128.__create__!(from_text: Text) -> U128 {
     danger! {
-        return @native.rf_parse_u128(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_U128(cstr_val)
     }
 }
 
 routine UAddr.__create__!(from_text: Text) -> UAddr {
     danger! {
-        return @native.rf_parse_uaddr(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_UAddr(cstr_val)
     }
 }
 
@@ -92,25 +107,29 @@ routine UAddr.__create__!(from_text: Text) -> UAddr {
 
 routine F16.__create__!(from_text: Text) -> F16 {
     danger! {
-        return @native.rf_parse_f16(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_F16(cstr_val)
     }
 }
 
 routine F32.__create__!(from_text: Text) -> F32 {
     danger! {
-        return @native.rf_parse_f32(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_F32(cstr_val)
     }
 }
 
 routine F64.__create__!(from_text: Text) -> F64 {
     danger! {
-        return @native.rf_parse_f64(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_F64(cstr_val)
     }
 }
 
 routine F128.__create__!(from_text: Text) -> F128 {
     danger! {
-        return @native.rf_parse_f128(from_text)
+        let cstr_val = from_text.CStr()
+        return @native.rf_parse_F128(cstr_val)
     }
 }
 
@@ -120,23 +139,23 @@ routine F128.__create__!(from_text: Text) -> F128 {
 
 routine D32.__create__!(from_text: Text) -> D32 {
     danger! {
-        let cstr_val = from_text.to_cstr()
-        let bits = @native.rf_d32_from_string(cstr_val)
+        let cstr_val = from_text.CStr()
+        let bits = @native.rf_D32_from_string(cstr_val)
         return @intrinsic_routine.bitcast<U32, D32>(bits)
     }
 }
 
 routine D64.__create__!(from_text: Text) -> D64 {
     danger! {
-        let cstr_val = from_text.to_cstr()
-        let bits = @native.rf_d64_from_string(cstr_val)
+        let cstr_val = from_text.CStr()
+        let bits = @native.rf_D64_from_string(cstr_val)
         return @intrinsic_routine.bitcast<U64, D64>(bits)
     }
 }
 
 routine D128.__create__!(from_text: Text) -> D128 {
     danger! {
-        let cstr_val = from_text.to_cstr()
-        return @native.rf_d128_from_string(cstr_val)
+        let cstr_val = from_text.CStr()
+        return @native.rf_D128_from_string(cstr_val)
     }
 }
