@@ -417,4 +417,80 @@ public class MutabilityTests
     }
 
     #endregion
+
+    #region Readonly Method Call Enforcement
+
+    [Fact]
+    public void Analyze_ReadonlyMethodCallsWritable_ReportsError()
+    {
+        string source = """
+                        entity Counter {
+                            count: S32
+                        }
+
+                        @writable
+                        routine Counter.increment() {
+                            me.count += 1
+                        }
+
+                        @readonly
+                        routine Counter.try_increment() {
+                            me.increment()
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+    }
+
+    [Fact]
+    public void Analyze_ReadonlyMethodCallsReadonly_NoError()
+    {
+        string source = """
+                        entity Counter {
+                            count: S32
+                        }
+
+                        @readonly
+                        routine Counter.get_count() -> S32 {
+                            return me.count
+                        }
+
+                        @readonly
+                        routine Counter.display() -> S32 {
+                            return me.get_count()
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+    }
+
+    [Fact]
+    public void Analyze_ReadonlyMethodCallsOnOther_NoError()
+    {
+        string source = """
+                        entity Counter {
+                            count: S32
+                        }
+
+                        @writable
+                        routine Counter.increment() {
+                            me.count += 1
+                        }
+
+                        @readonly
+                        routine Counter.compare(other: Counter) {
+                            other.increment()
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        // Calling a mutating method on 'other' (not 'me') is allowed in @readonly
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod
+                 && e.Message.Contains("increment"));
+    }
+
+    #endregion
 }

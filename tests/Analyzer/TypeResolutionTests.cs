@@ -553,6 +553,94 @@ public class TypeResolutionTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
     }
 
+    [Fact]
+    public void Analyze_VariantOperatorDefinition_ReportsError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        @readonly
+                        routine Shape.__eq__(you: Shape) -> Bool {
+                            return false
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_VariantCopy_ReportsError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        routine make_shape() -> Shape {
+                            pass
+                        }
+
+                        routine test() {
+                            let box1 = make_shape()
+                            let box2 = box1
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_VariantReassignment_ReportsError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        routine make_shape() -> Shape {
+                            pass
+                        }
+
+                        routine test() {
+                            var box = make_shape()
+                            box = make_shape()
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_VariantBindFromCall_NoCopyError()
+    {
+        string source = """
+                        variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+
+                        routine make_shape() -> Shape {
+                            pass
+                        }
+
+                        routine test() {
+                            let result = make_shape()
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
+    }
+
     #endregion
 
     #region Choice Restrictions
@@ -639,6 +727,81 @@ public class TypeResolutionTests
 
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
+    }
+
+    #endregion
+
+    #region Error Handling Return Type Restrictions
+
+    [Fact]
+    public void Analyze_RoutineReturnsMaybe_ReportsError()
+    {
+        string source = """
+                        routine foo() -> Maybe<S32> {
+                            pass
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
+    }
+
+    [Fact]
+    public void Analyze_RoutineReturnsResult_ReportsError()
+    {
+        string source = """
+                        routine foo() -> Result<S32> {
+                            return 42
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
+    }
+
+    [Fact]
+    public void Analyze_RoutineReturnsLookup_ReportsError()
+    {
+        string source = """
+                        routine foo() -> Lookup<S32> {
+                            return 42
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
+    }
+
+    [Fact]
+    public void Analyze_FailableRoutine_NoErrorHandlingReturnTypeError()
+    {
+        string source = """
+                        routine get_value!() -> S32 {
+                            return 42
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
+    }
+
+    [Fact]
+    public void Analyze_MethodReturnsMaybe_ReportsError()
+    {
+        string source = """
+                        record Point {
+                            x: F32
+                            y: F32
+                        }
+
+                        @readonly
+                        routine Point.foo() -> Maybe<F32> {
+                            pass
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
 
     #endregion

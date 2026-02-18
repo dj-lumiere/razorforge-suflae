@@ -153,6 +153,20 @@ public class ParserErrorTests
         Record.Exception(testCode: () => Parse(source: source));
     }
 
+    [Fact]
+    public void Parse_Variant_FollowsProtocol_Throws()
+    {
+        string source = """
+                        variant Shape follows Equatable {
+                            Circle: F32
+                            Rect: F32
+                        }
+                        """;
+
+        // Variants cannot follow protocols — parser does not support 'follows' on variants
+        Record.Exception(testCode: () => Parse(source: source));
+    }
+
     #endregion
 
     #region Protocol Errors
@@ -374,6 +388,73 @@ public class ParserErrorTests
 
         Program program = Parse(source: source);
         Assert.NotNull(@object: program);
+    }
+
+    #endregion
+
+    #region Storage Class On Type Declaration Errors
+
+    [Fact]
+    public void Parse_CommonVariant_ReportsError()
+    {
+        string source = """
+                        common variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    [Fact]
+    public void Parse_GlobalVariant_ReportsError()
+    {
+        string source = """
+                        global variant Shape {
+                            Circle: F32
+                            Rect: F32
+                        }
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    [Fact]
+    public void Parse_CommonRecord_ReportsError()
+    {
+        string source = """
+                        common record Point {
+                            x: F32
+                            y: F32
+                        }
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    [Fact]
+    public void Parse_GlobalEntity_ReportsError()
+    {
+        string source = """
+                        global entity User {
+                            name: Text
+                        }
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    [Fact]
+    public void Parse_GlobalRoutine_ReportsError()
+    {
+        string source = """
+                        global routine foo() {
+                            pass
+                        }
+                        """;
+
+        AssertParseError(source: source);
     }
 
     #endregion
