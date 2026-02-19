@@ -609,6 +609,24 @@ public record TypePattern(TypeExpression Type, string? VariableName, List<Destru
     : Pattern(Location: Location);
 
 /// <summary>
+/// Pattern that matches when a value is NOT a specific type.
+/// Used for negated type checking in when clauses: when value { isnot Text => ... }
+/// </summary>
+/// <param name="Type">The type to check against (negated — matches if NOT this type)</param>
+/// <param name="Location">Source location information</param>
+public record NegatedTypePattern(TypeExpression Type, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern that matches exact flag combinations using isonly.
+/// Used for flags matching in when clauses: when perms { isonly READ and WRITE => ... }
+/// </summary>
+/// <param name="FlagNames">List of flag member names that must match exactly</param>
+/// <param name="Location">Source location information</param>
+public record FlagsPattern(List<string> FlagNames, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
 /// Pattern that matches any value without binding it to a variable.
 /// Used as a catch-all pattern, typically in the final clause of pattern matching.
 /// </summary>
