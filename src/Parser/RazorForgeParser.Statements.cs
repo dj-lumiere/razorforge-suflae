@@ -115,7 +115,14 @@ public partial class RazorForgeParser
         Expression condition = ParseExpression();
         Statement body = ParseStatement();
 
-        return new WhileStatement(Condition: condition, Body: body, ElseBranch: null, Location: location);
+        // Optional else clause: runs if loop completes without break
+        Statement? elseBranch = null;
+        if (Match(type: TokenType.Else))
+        {
+            elseBranch = ParseStatement();
+        }
+
+        return new WhileStatement(Condition: condition, Body: body, ElseBranch: elseBranch, Location: location);
     }
 
     /// <summary>
@@ -161,11 +168,18 @@ public partial class RazorForgeParser
         Expression iterable = ParseExpression();
         Statement body = ParseStatement();
 
+        // Optional else clause: runs if loop completes without break
+        Statement? elseBranch = null;
+        if (Match(type: TokenType.Else))
+        {
+            elseBranch = ParseStatement();
+        }
+
         return new ForStatement(Variable: variable,
             VariablePattern: variablePattern,
             Iterable: iterable,
             Body: body,
-            ElseBranch: null,
+            ElseBranch: elseBranch,
             Location: location);
     }
 
