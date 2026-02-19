@@ -304,6 +304,37 @@ public partial class SuflaeParser
                 }
                 _inWhenPatternContext = false;
             }
+            // 'isnot' keyword - negated type pattern (no variable binding)
+            else if (Match(type: TokenType.IsNot))
+            {
+                _inWhenPatternContext = true;
+                if (Check(type: TokenType.TypeIdentifier) ||
+                    Check(type: TokenType.None) ||
+                    Check(type: TokenType.Identifier))
+                {
+                    TypeExpression type = ParseType();
+                    pattern = new NegatedTypePattern(Type: type, Location: clauseLocation);
+                }
+                else
+                {
+                    throw ThrowParseError("'isnot' must be followed by a type name.");
+                }
+                _inWhenPatternContext = false;
+            }
+            // 'isonly' keyword - exact flags pattern
+            // Forms: isonly FLAG_A, isonly FLAG_A and FLAG_B
+            else if (Match(type: TokenType.IsOnly))
+            {
+                _inWhenPatternContext = true;
+                var flagNames = new List<string>();
+                flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
+                while (Match(type: TokenType.And))
+                {
+                    flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                }
+                pattern = new FlagsPattern(FlagNames: flagNames, Location: clauseLocation);
+                _inWhenPatternContext = false;
+            }
             // Handle 'else' keyword for default case: else => body or else varName => body
             else if (Match(type: TokenType.Else))
             {
