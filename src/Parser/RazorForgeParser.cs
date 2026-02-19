@@ -312,9 +312,14 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         }
 
         // Routine declaration (access modifiers: private, family, internal, public)
-        // Supports: threaded routine foo() for OS-level threading
+        // Supports: suspended routine foo() for async (green threads)
+        //           threaded routine foo() for OS-level threading
         AsyncStatus asyncStatus = AsyncStatus.None;
-        if (Match(type: TokenType.Threaded))
+        if (Match(type: TokenType.Suspended))
+        {
+            asyncStatus = AsyncStatus.Suspended;
+        }
+        else if (Match(type: TokenType.Threaded))
         {
             asyncStatus = AsyncStatus.Threaded;
         }
@@ -333,12 +338,13 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus);
         }
 
-        // If we consumed 'threaded' but no 'routine' follows, it's an error
+        // If we consumed 'suspended'/'threaded' but no 'routine' follows, it's an error
         if (asyncStatus != AsyncStatus.None)
         {
+            string modifier = asyncStatus == AsyncStatus.Suspended ? "suspended" : "threaded";
             throw new RazorForgeGrammarException(
                 RazorForgeDiagnosticCode.UnexpectedToken,
-                "'threaded' must be followed by 'routine'",
+                $"'{modifier}' must be followed by 'routine'",
                 _fileName, CurrentToken.Line, CurrentToken.Column);
         }
 
