@@ -120,6 +120,7 @@ public partial class SuflaeTokenizer
         [key: "entity"] = TokenType.Entity,
         [key: "record"] = TokenType.Record,
         [key: "choice"] = TokenType.Choice,
+        [key: "flags"] = TokenType.Flags,
         [key: "variant"] = TokenType.Variant,
         [key: "protocol"] = TokenType.Protocol,
 
@@ -133,7 +134,6 @@ public partial class SuflaeTokenizer
         [key: "internal"] = TokenType.Internal,
         [key: "published"] = TokenType.Published,
         [key: "public"] = TokenType.Public,
-        [key: "imported"] = TokenType.Imported,
         [key: "global"] = TokenType.Global,
         [key: "common"] = TokenType.Common,
 
@@ -186,6 +186,8 @@ public partial class SuflaeTokenizer
         [key: "and"] = TokenType.And,
         [key: "or"] = TokenType.Or,
         [key: "not"] = TokenType.Not,
+        [key: "exactly"] = TokenType.Exactly,
+        [key: "but"] = TokenType.But,
 
         // Literals
         [key: "true"] = TokenType.True,
@@ -243,11 +245,11 @@ public partial class SuflaeTokenizer
         [key: "d128"] = TokenType.D128Literal,
 
         // Imaginary (for complex numbers)
-        [key: "j"] = TokenType.J64Literal,    // Default to 64-bit
+        [key: "j"] = TokenType.JnLiteral, // Default to 64-bit
         [key: "j32"] = TokenType.J32Literal,
         [key: "j64"] = TokenType.J64Literal,
         [key: "j128"] = TokenType.J128Literal,
-        [key: "jn"] = TokenType.JnLiteral     // Arbitrary precision
+        [key: "jn"] = TokenType.JnLiteral // Arbitrary precision
     };
 
     /// <summary>

@@ -141,6 +141,7 @@ public partial class RazorForgeTokenizer
         [key: "entity"] = TokenType.Entity,
         [key: "record"] = TokenType.Record,
         [key: "choice"] = TokenType.Choice,
+        [key: "flags"] = TokenType.Flags,
         [key: "variant"] = TokenType.Variant,
         [key: "resident"] = TokenType.Resident,
         [key: "protocol"] = TokenType.Protocol,
@@ -194,7 +195,7 @@ public partial class RazorForgeTokenizer
         [key: "as"] = TokenType.As,
         [key: "define"] = TokenType.Define,
         [key: "pass"] = TokenType.Pass,
-        [key: "danger"] = TokenType.Danger,
+        [key: "danger!"] = TokenType.Danger,
         [key: "with"] = TokenType.With,
         [key: "given"] = TokenType.Given,
         [key: "steal"] = TokenType.Steal,
@@ -210,6 +211,8 @@ public partial class RazorForgeTokenizer
         [key: "and"] = TokenType.And,
         [key: "or"] = TokenType.Or,
         [key: "not"] = TokenType.Not,
+        [key: "exactly"] = TokenType.Exactly,
+        [key: "but"] = TokenType.But,
 
         // Literals
         [key: "true"] = TokenType.True,
@@ -269,11 +272,11 @@ public partial class RazorForgeTokenizer
         [key: "d128"] = TokenType.D128Literal,
 
         // Imaginary (for complex numbers)
-        [key: "j"] = TokenType.J64Literal,    // Default to 64-bit
+        [key: "j"] = TokenType.J64Literal, // Default to 64-bit
         [key: "j32"] = TokenType.J32Literal,
         [key: "j64"] = TokenType.J64Literal,
         [key: "j128"] = TokenType.J128Literal,
-        [key: "jn"] = TokenType.JnLiteral     // Arbitrary precision
+        [key: "jn"] = TokenType.JnLiteral // Arbitrary precision
     };
 
     /// <summary>

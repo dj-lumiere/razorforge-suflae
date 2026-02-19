@@ -243,6 +243,13 @@ public enum TokenType
     Choice,
 
     /// <summary>
+    /// Flags declaration keyword.
+    /// Bitwise flag set type - each member represents a power-of-two bit flag.
+    /// Supports bitwise combination and pattern matching on flag combinations.
+    /// </summary>
+    Flags,
+
+    /// <summary>
     /// Variant declaration keyword.
     /// Tagged union - each case can hold different data types.
     /// Requires pattern matching to unpack. Cases are immediately disposed after unpacking.
@@ -466,6 +473,22 @@ public enum TokenType
 
     /// <summary>Logical NOT operator keyword</summary>
     Not,
+
+    /// <summary>
+    /// Flags exact match modifier keyword.
+    /// Used with 'is' to test that only the specified flags are set — no more, no less.
+    /// 'is exactly A and B' compiles to equality check (value == mask) vs
+    /// 'is A and B' which is a superset check ((value &amp; mask) == mask).
+    /// </summary>
+    Exactly,
+
+    /// <summary>
+    /// Flags removal / exclusion keyword.
+    /// Removes flags from a value (perms but WRITE = bitwise AND NOT), or
+    /// excludes flags in 'is' tests (perms is READ and WRITE but EXECUTE =
+    /// READ and WRITE are set AND EXECUTE is NOT set).
+    /// </summary>
+    But,
 
     #endregion
 
