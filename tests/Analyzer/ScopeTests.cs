@@ -310,7 +310,7 @@ public class ScopeTests
                         }
 
                         routine test(data: Data) {
-                            viewing data as d {
+                            using data.view() as d {
                                 show(d.value)
                             }
                             show(d.value)

@@ -412,7 +412,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return flags & mask
+                            return bits & mask
                         """;
 
         AssertParsesSuflae(source: source);
@@ -423,7 +423,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return flags | mask
+                            return bits | mask
                         """;
 
         AssertParsesSuflae(source: source);
@@ -434,7 +434,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return flags ^ mask
+                            return bits ^ mask
                         """;
 
         AssertParsesSuflae(source: source);
@@ -445,7 +445,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return ~flags
+                            return ~bits
                         """;
 
         AssertParsesSuflae(source: source);
@@ -593,8 +593,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var flags: U32 = 0xFF
-                            flags &= 0x0F
+                            var bits: U32 = 0xFF
+                            bits &= 0x0F
                         """;
 
         AssertParsesSuflae(source: source);
@@ -605,8 +605,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var flags: U32 = 0x00
-                            flags |= 0x0F
+                            var bits: U32 = 0x00
+                            bits |= 0x0F
                         """;
 
         AssertParsesSuflae(source: source);
@@ -733,7 +733,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return (flags & mask) != 0
+                            return (bits & mask) != 0
                         """;
 
         AssertParsesSuflae(source: source);

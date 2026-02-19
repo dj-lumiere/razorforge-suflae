@@ -6,7 +6,8 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing scoped access blocks in RazorForge:
-/// viewing/hijacking (single-threaded), inspecting/seizing (multi-threaded), using (resources).
+/// using x.view()/x.hijack() (single-threaded), using x.inspect!()/x.seize!() (multi-threaded),
+/// using (resources).
 /// </summary>
 public class AccessBlockTests
 {
@@ -18,7 +19,7 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let data = SomeEntity()
-                            viewing data as v {
+                            using data.view() as v {
                                 show(v.value)
                             }
                         }
@@ -33,7 +34,7 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let node = Node(42)
-                            viewing node as v {
+                            using node.view() as v {
                                 let x = v.value
                                 let y = v.name
                                 process(x, y)
@@ -51,8 +52,8 @@ public class AccessBlockTests
                         routine test() {
                             let a = EntityA()
                             let b = EntityB()
-                            viewing a as va {
-                                viewing b as vb {
+                            using a.view() as va {
+                                using b.view() as vb {
                                     compare(va, vb)
                                 }
                             }
@@ -68,7 +69,7 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let user = User()
-                            viewing user as v {
+                            using user.view() as v {
                                 show(v.name)
                                 show(v.age)
                                 show(v.get_full_name())
@@ -89,7 +90,7 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let data = SomeEntity()
-                            hijacking data as h {
+                            using data.hijack() as h {
                                 h.value = 42
                             }
                         }
@@ -104,7 +105,7 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let node = Node(42)
-                            hijacking node as h {
+                            using node.hijack() as h {
                                 h.value = 42
                                 h.name = "foo"
                                 process(h)
@@ -121,7 +122,7 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let counter = Counter()
-                            hijacking counter as c {
+                            using counter.hijack() as c {
                                 if c.value < 100 {
                                     c.value += 1
                                 } else {
@@ -145,9 +146,9 @@ public class AccessBlockTests
     public void Parse_SimpleInspecting()
     {
         string source = """
-                        routine test() {
+                        routine test!() {
                             let shared = data.share<MultiReadLock>()
-                            inspecting shared as r {
+                            using shared.inspect!() as r {
                                 show(r.value)
                             }
                         }
@@ -160,10 +161,10 @@ public class AccessBlockTests
     public void Parse_InspectingMultipleReaders()
     {
         string source = """
-                        routine test() {
+                        routine test!() {
                             let shared = data.share<MultiReadLock>()
-                            inspecting shared as r1 {
-                                inspecting shared as r2 {
+                            using shared.inspect!() as r1 {
+                                using shared.inspect!() as r2 {
                                     compare(r1, r2)
                                 }
                             }
@@ -181,9 +182,9 @@ public class AccessBlockTests
     public void Parse_SimpleSeizing()
     {
         string source = """
-                        routine test() {
+                        routine test!() {
                             let shared = data.share<Mutex>()
-                            seizing shared as w {
+                            using shared.seize!() as w {
                                 w.value = 42
                             }
                         }
@@ -196,9 +197,9 @@ public class AccessBlockTests
     public void Parse_SeizingWithMultipleMutations()
     {
         string source = """
-                        routine test() {
+                        routine test!() {
                             let shared = counter.share<Mutex>()
-                            seizing shared as s {
+                            using shared.seize!() as s {
                                 s.count += 1
                                 s.last_updated = now()
                                 s.notify_listeners()
@@ -213,11 +214,11 @@ public class AccessBlockTests
     public void Parse_SeizingDowngradeToViewing()
     {
         string source = """
-                        routine test() {
+                        routine test!() {
                             let shared = data.share<MultiReadLock>()
-                            seizing shared as w {
+                            using shared.seize!() as w {
                                 w.value = 42
-                                viewing w as v {
+                                using w.view() as v {
                                     show(v.value)
                                 }
                             }
@@ -325,12 +326,12 @@ public class AccessBlockTests
         string source = """
                         routine test() {
                             let data = SomeEntity()
-                            viewing data as v {
+                            using data.view() as v {
                                 if v.needs_update() {
                                     pass
                                 }
                             }
-                            hijacking data as h {
+                            using data.hijack() as h {
                                 h.update()
                             }
                         }
@@ -347,7 +348,7 @@ public class AccessBlockTests
                             let cache = Cache()
                             using open!("config.json") as file {
                                 let config = parse_json(file.read_all())
-                                viewing cache as c {
+                                using cache.view() as c {
                                     apply_config(c, config)
                                 }
                             }
@@ -365,15 +366,15 @@ public class AccessBlockTests
                             let local = LocalData()
                             let shared = remote.share<MultiReadLock>()
 
-                            viewing local as l {
-                                seizing shared as s {
+                            using local.view() as l {
+                                using shared.seize!() as s {
                                     for item in l.items {
                                         s.add(item.clone())
                                     }
                                 }
                             }
 
-                            inspecting shared as r {
+                            using shared.inspect!() as r {
                                 verify!(r.count() > 0, "Sync failed")
                             }
                         }
