@@ -290,8 +290,14 @@ public partial class SuflaeParser
             if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
+                // Check if this is a flags pattern: identifier followed by and/or/but
+                if (Check(type: TokenType.Identifier) &&
+                    PeekToken(offset: 1).Type is TokenType.And or TokenType.Or or TokenType.But)
+                {
+                    pattern = ParseFlagsIsWhenPattern();
+                }
                 // 'is' must be followed by a type/variant name - semantic analysis validates
-                if (Check(type: TokenType.TypeIdentifier) ||
+                else if (Check(type: TokenType.TypeIdentifier) ||
                     Check(type: TokenType.None) ||
                     Check(type: TokenType.Identifier))
                 {
@@ -332,7 +338,8 @@ public partial class SuflaeParser
                 {
                     flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
                 }
-                pattern = new FlagsPattern(FlagNames: flagNames, Location: clauseLocation);
+                pattern = new FlagsPattern(FlagNames: flagNames, Connective: FlagsTestConnective.And,
+                    ExcludedFlags: null, IsExact: true, Location: clauseLocation);
                 _inWhenPatternContext = false;
             }
             // Handle 'else' keyword for default case: else => body or else varName => body
@@ -403,6 +410,53 @@ public partial class SuflaeParser
         }
 
         return new WhenStatement(Expression: expression, Clauses: clauses, Location: location);
+    }
+
+    /// <summary>
+    /// Parses a flags pattern in a when clause after 'is' when the next tokens
+    /// indicate a flags chain (identifier followed by and/or/but).
+    /// Examples: is READ and WRITE => ..., is READ or WRITE => ...
+    /// </summary>
+    private FlagsPattern ParseFlagsIsWhenPattern()
+    {
+        SourceLocation loc = GetLocation();
+        var flags = new List<string>();
+        flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'is'"));
+
+        FlagsTestConnective connective = FlagsTestConnective.And;
+        List<string>? excluded = null;
+
+        if (Check(type: TokenType.And))
+        {
+            while (Match(type: TokenType.And))
+                flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            if (Match(type: TokenType.But))
+            {
+                excluded = new List<string>();
+                excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+                while (Match(type: TokenType.And))
+                    excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            }
+        }
+        else if (Check(type: TokenType.Or))
+        {
+            connective = FlagsTestConnective.Or;
+            while (Match(type: TokenType.Or))
+                flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'or'"));
+        }
+        else if (Check(type: TokenType.But))
+        {
+            if (Match(type: TokenType.But))
+            {
+                excluded = new List<string>();
+                excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+                while (Match(type: TokenType.And))
+                    excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            }
+        }
+
+        return new FlagsPattern(FlagNames: flags, Connective: connective,
+            ExcludedFlags: excluded, IsExact: false, Location: loc);
     }
 
     /// <summary>

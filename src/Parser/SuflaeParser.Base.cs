@@ -460,6 +460,7 @@ public partial class SuflaeParser
             TokenType.ThreeWayComparison => BinaryOperator.ThreeWayComparator,
             TokenType.And => BinaryOperator.And,
             TokenType.Or => BinaryOperator.Or,
+            TokenType.But => BinaryOperator.But,
             TokenType.Ampersand => BinaryOperator.BitwiseAnd,
             TokenType.Pipe => BinaryOperator.BitwiseOr,
             TokenType.Caret => BinaryOperator.BitwiseXor,

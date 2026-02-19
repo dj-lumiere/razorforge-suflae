@@ -151,6 +151,9 @@ public enum BinaryOperator
     /// <summary>Short-circuiting logical OR operator (or)</summary>
     Or,
 
+    /// <summary>Flags removal operator (but) — removes flags from a value</summary>
+    But,
+
     #endregion
 
     #region Bitwise - low-level bit manipulation
@@ -254,6 +257,7 @@ public static class BinaryOperatorExtensions
 
                 BinaryOperator.And => "and",
                 BinaryOperator.Or => "or",
+                BinaryOperator.But => "but",
 
                 BinaryOperator.BitwiseAnd => "&",
                 BinaryOperator.BitwiseOr => "|",

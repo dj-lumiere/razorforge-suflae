@@ -251,7 +251,7 @@ public partial class RazorForgeParser
     {
         Expression expr = ParseRange();
 
-        while (Match(type: TokenType.Or))
+        while (Match(TokenType.Or, TokenType.But))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseRange();
@@ -447,9 +447,9 @@ public partial class RazorForgeParser
     {
         Expression expr = ParseBitwiseOr();
 
-        // Handle is/isnot/in/notin/follows/notfollows expressions when not in when pattern/clause context
+        // Handle is/isnot/isonly/in/notin/follows/notfollows expressions when not in when pattern/clause context
         while (!_inWhenPatternContext && !_inWhenClauseBody && Match(TokenType.Is,
-                   TokenType.IsNot,
+                   TokenType.IsNot, TokenType.IsOnly,
                    TokenType.In,
                    TokenType.NotIn,
                    TokenType.Follows,
@@ -457,6 +457,19 @@ public partial class RazorForgeParser
         {
             Token op = PeekToken(offset: -1);
             SourceLocation location = GetLocation(token: op);
+
+            // Handle 'isonly' — always a flags test (exact match)
+            if (op.Type == TokenType.IsOnly)
+            {
+                string firstFlag = ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'");
+                var flags = new List<string> { firstFlag };
+                while (Match(type: TokenType.And))
+                    flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                expr = new FlagsTestExpression(Subject: expr, Kind: FlagsTestKind.IsOnly,
+                    TestFlags: flags, Connective: FlagsTestConnective.And,
+                    ExcludedFlags: null, Location: location);
+                continue;
+            }
 
             if (op.Type is TokenType.Is or TokenType.IsNot)
             {
@@ -471,6 +484,15 @@ public partial class RazorForgeParser
                 else
                 {
                     type = ParseType();
+                }
+
+                // Check if this is a flags test chain: identifier followed by and/or/but
+                if (Check(TokenType.And) || Check(TokenType.Or) || Check(TokenType.But))
+                {
+                    string firstFlag = type.Name;
+                    expr = ParseFlagsTestChain(subject: expr, firstFlag: firstFlag,
+                        isNegated: isNegated, location: location);
+                    continue;
                 }
 
                 // Check for destructuring pattern: is Type (...)
@@ -517,6 +539,68 @@ public partial class RazorForgeParser
         }
 
         return expr;
+    }
+
+    /// <summary>
+    /// Parses a flags test chain after the first flag name has been consumed.
+    /// Called when 'and', 'or', or 'but' follows an identifier after 'is'/'isnot'.
+    /// Examples: is READ and WRITE, is READ or WRITE, is READ and WRITE but EXECUTE
+    /// </summary>
+    private FlagsTestExpression ParseFlagsTestChain(
+        Expression subject, string firstFlag, bool isNegated, SourceLocation location)
+    {
+        var flags = new List<string> { firstFlag };
+        List<string>? excluded = null;
+        FlagsTestKind kind = isNegated ? FlagsTestKind.IsNot : FlagsTestKind.Is;
+
+        if (Match(type: TokenType.And))
+        {
+            // 'and' chain: READ and WRITE and ...
+            flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            while (Match(type: TokenType.And))
+                flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+
+            // Optional 'but' exclusion
+            if (Match(type: TokenType.But))
+            {
+                excluded = new List<string>();
+                excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+                while (Match(type: TokenType.And))
+                    excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            }
+
+            return new FlagsTestExpression(Subject: subject, Kind: kind,
+                TestFlags: flags, Connective: FlagsTestConnective.And,
+                ExcludedFlags: excluded, Location: location);
+        }
+
+        if (Match(type: TokenType.Or))
+        {
+            flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'or'"));
+            while (Match(type: TokenType.Or))
+                flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'or'"));
+
+            return new FlagsTestExpression(Subject: subject, Kind: kind,
+                TestFlags: flags, Connective: FlagsTestConnective.Or,
+                ExcludedFlags: null, Location: location);
+        }
+
+        if (Match(type: TokenType.But))
+        {
+            // Single flag with but exclusion: is READ but WRITE
+            excluded = new List<string>();
+            excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+            while (Match(type: TokenType.And))
+                excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+
+            return new FlagsTestExpression(Subject: subject, Kind: kind,
+                TestFlags: flags, Connective: FlagsTestConnective.And,
+                ExcludedFlags: excluded, Location: location);
+        }
+
+        // Should not reach here (caller checked for and/or/but)
+        throw ThrowParseError(RazorForgeDiagnosticCode.UnexpectedToken,
+            "Expected 'and', 'or', or 'but' in flags test");
     }
 
     /// <summary>

@@ -986,6 +986,35 @@ public record IsPatternExpression(
     }
 }
 
+/// <summary>Flags test kind: is (has flags), isnot (does not have flags), isonly (exact match)</summary>
+public enum FlagsTestKind { Is, IsNot, IsOnly }
+
+/// <summary>Connective for combining flag names in a flags test</summary>
+public enum FlagsTestConnective { And, Or }
+
+/// <summary>
+/// Expression that tests whether a flags value has, lacks, or exactly matches specific flags.
+/// </summary>
+/// <param name="Subject">The expression being tested (must be a flags type)</param>
+/// <param name="Kind">The kind of test: is, isnot, or isonly</param>
+/// <param name="TestFlags">The flag names being tested for</param>
+/// <param name="Connective">How the flags are combined: and (all required) or or (any required)</param>
+/// <param name="ExcludedFlags">Optional flags to exclude with 'but' (only valid with And connective)</param>
+/// <param name="Location">Source location information</param>
+public record FlagsTestExpression(
+    Expression Subject,
+    FlagsTestKind Kind,
+    List<string> TestFlags,
+    FlagsTestConnective Connective,
+    List<string>? ExcludedFlags,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitFlagsTestExpression(node: this);
+    }
+}
+
 /// <summary>
 /// Pattern matching expression that evaluates to a value based on pattern matching.
 /// Similar to Rust's match expression or Kotlin's when expression.

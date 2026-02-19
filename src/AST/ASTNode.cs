@@ -247,6 +247,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the is-pattern expression</returns>
     T VisitIsPatternExpression(IsPatternExpression node);
 
+    /// <summary>Visits a flags test expression node (flags testing like 'perms is READ and WRITE')</summary>
+    /// <param name="node">The flags test expression to visit</param>
+    /// <returns>Result of visiting the flags test expression</returns>
+    T VisitFlagsTestExpression(FlagsTestExpression node);
+
     /// <summary>Visits a when expression node (pattern matching expression like 'when x { 0 => "zero", else => "many" }')</summary>
     /// <param name="node">The when expression to visit</param>
     /// <returns>Result of visiting the when expression</returns>
