@@ -742,8 +742,7 @@ public partial class RazorForgeParser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // Expect 'danger!'
-        Consume(type: TokenType.Bang, errorMessage: "Expected '!' after 'danger'");
+        // 'danger!' is tokenized as a single Danger token (including the '!')
 
         BlockStatement body = ParseBlockStatement();
 

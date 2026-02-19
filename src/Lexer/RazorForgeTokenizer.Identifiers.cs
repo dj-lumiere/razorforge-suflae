@@ -60,6 +60,14 @@ public partial class RazorForgeTokenizer
 
         string text = _source.Substring(startIndex: _tokenStart, length: _position - _tokenStart);
 
+        // Check if identifier + '!' forms a keyword (e.g., "danger!")
+        if (Peek() == '!' && _keywords.TryGetValue(key: text + "!", value: out TokenType bangType))
+        {
+            Advance(); // consume the '!'
+            AddToken(type: bangType, text: text + "!");
+            return;
+        }
+
         // Check if it's a keyword
         if (_keywords.TryGetValue(key: text, value: out TokenType type))
         {
