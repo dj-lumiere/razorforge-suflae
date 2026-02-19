@@ -305,6 +305,27 @@ public record DiscardStatement(Expression Expression, SourceLocation Location)
     }
 }
 
+/// <summary>
+/// Generate statement that yields a value from a generator routine.
+/// Analogous to Python's yield or Rust's yield — produces the next value in an iterator.
+/// </summary>
+/// <example>
+/// <code>
+/// generate value
+/// </code>
+/// </example>
+/// <param name="Expression">The expression whose value is yielded</param>
+/// <param name="Location">Source location information</param>
+public record GenerateStatement(Expression Expression, SourceLocation Location)
+    : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitGenerateStatement(node: this);
+    }
+}
+
 #endregion
 
 #region Control Flow Statements

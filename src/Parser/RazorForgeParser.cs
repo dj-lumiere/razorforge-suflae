@@ -536,6 +536,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseDiscardStatement();
         }
 
+        if (Match(type: TokenType.Generate))
+        {
+            return ParseGenerateStatement();
+        }
+
         // ═══════════════════════════════════════════════════════════════════════════
         // MEMORY/SCOPE BLOCKS
         // ═══════════════════════════════════════════════════════════════════════════

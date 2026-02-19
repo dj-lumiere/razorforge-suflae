@@ -614,6 +614,20 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
+    /// Parses a generate statement (generator yield).
+    /// Syntax: <c>generate expression</c>
+    /// Yields a value from a generator routine.
+    /// </summary>
+    /// <returns>A <see cref="GenerateStatement"/> AST node.</returns>
+    private GenerateStatement ParseGenerateStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+        Expression expression = ParseExpression();
+        ConsumeStatementTerminator();
+        return new GenerateStatement(Expression: expression, Location: location);
+    }
+
+    /// <summary>
     /// Parses a block statement (sequence of statements in braces).
     /// Syntax: <c>{ statement1\nstatement2\n... }</c>
     /// Handles variable declarations with var/let keywords.

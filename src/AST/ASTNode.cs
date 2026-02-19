@@ -367,6 +367,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the discard statement</returns>
     T VisitDiscardStatement(DiscardStatement node);
 
+    /// <summary>Visits a generate statement node (generator yield)</summary>
+    /// <param name="node">The generate statement to visit</param>
+    /// <returns>Result of visiting the generate statement</returns>
+    T VisitGenerateStatement(GenerateStatement node);
+
     // Declaration visitor methods - handle all declaration node types
 
     /// <summary>Visits a variable declaration node (var/let declarations)</summary>

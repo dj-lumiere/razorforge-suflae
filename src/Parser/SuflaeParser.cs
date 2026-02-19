@@ -567,6 +567,11 @@ public partial class SuflaeParser
             return ParseDiscardStatement();
         }
 
+        if (Match(type: TokenType.Generate))
+        {
+            return ParseGenerateStatement();
+        }
+
         // ═══════════════════════════════════════════════════════════════════════════
         // DECLARATIONS IN STATEMENT CONTEXT
         // ═══════════════════════════════════════════════════════════════════════════

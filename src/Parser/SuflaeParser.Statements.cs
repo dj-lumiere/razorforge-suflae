@@ -666,6 +666,20 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Parses a generate statement (generator yield).
+    /// Syntax: <c>generate expression</c>
+    /// Yields a value from a generator routine.
+    /// </summary>
+    /// <returns>A <see cref="GenerateStatement"/> AST node.</returns>
+    private GenerateStatement ParseGenerateStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+        Expression expression = ParseExpression();
+        ConsumeStatementTerminator();
+        return new GenerateStatement(Expression: expression, Location: location);
+    }
+
+    /// <summary>
     /// Parses an indented block of statements.
     /// Expects INDENT token, parses statements until DEDENT.
     /// This is core to Suflae's Python-like indentation syntax.
