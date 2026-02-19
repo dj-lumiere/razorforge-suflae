@@ -211,7 +211,7 @@ public partial class RazorForgeTokenizer
         [key: "and"] = TokenType.And,
         [key: "or"] = TokenType.Or,
         [key: "not"] = TokenType.Not,
-        [key: "exactly"] = TokenType.Exactly,
+        [key: "isonly"] = TokenType.IsOnly,
         [key: "but"] = TokenType.But,
 
         // Literals

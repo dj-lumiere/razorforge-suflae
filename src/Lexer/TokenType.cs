@@ -475,12 +475,12 @@ public enum TokenType
     Not,
 
     /// <summary>
-    /// Flags exact match modifier keyword.
-    /// Used with 'is' to test that only the specified flags are set — no more, no less.
-    /// 'is exactly A and B' compiles to equality check (value == mask) vs
+    /// Flags exact match keyword.
+    /// Tests that only the specified flags are set — no more, no less.
+    /// 'isonly A and B' compiles to equality check (value == mask) vs
     /// 'is A and B' which is a superset check ((value &amp; mask) == mask).
     /// </summary>
-    Exactly,
+    IsOnly,
 
     /// <summary>
     /// Flags removal / exclusion keyword.
