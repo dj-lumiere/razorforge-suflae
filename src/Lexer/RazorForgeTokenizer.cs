@@ -225,15 +225,7 @@ public partial class RazorForgeTokenizer
         [key: "waitfor"] = TokenType.Waitfor,
         [key: "until"] = TokenType.Until,
         [key: "after"] = TokenType.After,
-        [key: "threaded"] = TokenType.Threaded,
-
-        // Scoped access (single-threaded)
-        [key: "viewing"] = TokenType.Viewing,
-        [key: "hijacking"] = TokenType.Hijacking,
-
-        // Scoped access (multi-threaded)
-        [key: "seizing"] = TokenType.Seizing,
-        [key: "inspecting"] = TokenType.Inspecting
+        [key: "threaded"] = TokenType.Threaded
     };
 
     #endregion

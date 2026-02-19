@@ -845,42 +845,6 @@ public enum TokenType
 
     #endregion
 
-    #region Scoped Access Keywords (Single-Threaded)
-
-    /// <summary>
-    /// Scoped read-only access keyword (viewing entity as v { }).
-    /// Creates a Viewed&lt;T&gt; token for read-only access.
-    /// Multiple viewers allowed; source preserved after scope.
-    /// </summary>
-    Viewing,
-
-    /// <summary>
-    /// Scoped exclusive access keyword (hijacking entity as h { }).
-    /// Creates a Hijacked&lt;T&gt; token for exclusive write access.
-    /// Single accessor only; source preserved after scope.
-    /// </summary>
-    Hijacking,
-
-    #endregion
-
-    #region Scoped Access Keywords (Multi-Threaded)
-
-    /// <summary>
-    /// Thread-safe exclusive lock keyword (seizing shared as s { }).
-    /// Acquires mutex/write-lock on Shared&lt;T, Policy&gt;.
-    /// Creates a Seized&lt;T&gt; token; lock auto-releases at scope end.
-    /// </summary>
-    Seizing,
-
-    /// <summary>
-    /// Thread-safe shared read lock keyword (inspecting shared as i { }).
-    /// Acquires read-lock on Shared&lt;T, MultiReadLock&gt;.
-    /// Creates an Inspected&lt;T&gt; token; multiple concurrent readers allowed.
-    /// </summary>
-    Inspecting,
-
-    #endregion
-
     #region Terminal Tokens
 
     /// <summary>End of file marker token</summary>

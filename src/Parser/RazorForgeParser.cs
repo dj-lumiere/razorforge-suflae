@@ -534,30 +534,6 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseDangerStatement();
         }
 
-        // Viewing block (scoped read-only access)
-        if (Match(type: TokenType.Viewing))
-        {
-            return ParseViewingStatement();
-        }
-
-        // Hijacking block (scoped exclusive access)
-        if (Match(type: TokenType.Hijacking))
-        {
-            return ParseHijackingStatement();
-        }
-
-        // Inspecting block (thread-safe scoped read access)
-        if (Match(type: TokenType.Inspecting))
-        {
-            return ParseInspectingStatement();
-        }
-
-        // Seizing block (thread-safe scoped exclusive access)
-        if (Match(type: TokenType.Seizing))
-        {
-            return ParseSeizingStatement();
-        }
-
         // Using declaration
         if (Match(type: TokenType.Using))
         {

@@ -357,26 +357,6 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the danger statement</returns>
     T VisitDangerStatement(DangerStatement node);
 
-    /// <summary>Visits a viewing statement node (scoped read-only access)</summary>
-    /// <param name="node">The viewing statement to visit</param>
-    /// <returns>Result of visiting the viewing statement</returns>
-    T VisitViewingStatement(ViewingStatement node);
-
-    /// <summary>Visits a hijacking statement node (scoped exclusive access)</summary>
-    /// <param name="node">The hijacking statement to visit</param>
-    /// <returns>Result of visiting the hijacking statement</returns>
-    T VisitHijackingStatement(HijackingStatement node);
-
-    /// <summary>Visits an inspecting statement node (thread-safe scoped read access)</summary>
-    /// <param name="node">The inspecting statement to visit</param>
-    /// <returns>Result of visiting the inspecting statement</returns>
-    T VisitInspectingStatement(InspectingStatement node);
-
-    /// <summary>Visits a seizing statement node (thread-safe scoped exclusive access)</summary>
-    /// <param name="node">The seizing statement to visit</param>
-    /// <returns>Result of visiting the seizing statement</returns>
-    T VisitSeizingStatement(SeizingStatement node);
-
     /// <summary>Visits a using statement node (resource management)</summary>
     /// <param name="node">The using statement to visit</param>
     /// <returns>Result of visiting the using statement</returns>
