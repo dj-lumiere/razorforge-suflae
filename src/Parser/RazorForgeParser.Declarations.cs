@@ -1186,6 +1186,50 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
+    /// Parses a flags declaration (combinable bitflag set).
+    /// Grammar: "flags" IDENTIFIER "{" FlagsMember { FlagsMember } "}"
+    /// FlagsMember = UPPER_IDENTIFIER
+    /// </summary>
+    /// <param name="visibility">Access modifier for this flags type.</param>
+    /// <returns>A <see cref="FlagsDeclaration"/> AST node.</returns>
+    private FlagsDeclaration ParseFlagsDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        string name = ConsumeIdentifier(errorMessage: "Expected flags name");
+
+        // Register this type name
+        _knownTypeNames.Add(item: name);
+
+        Consume(type: TokenType.LeftBrace, errorMessage: "Expected '{' after flags name");
+
+        var members = new List<string>();
+
+        while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
+        {
+            if (Match(type: TokenType.Newline))
+            {
+                continue;
+            }
+
+            string memberName = ConsumeIdentifier(errorMessage: "Expected flags member name");
+            members.Add(item: memberName);
+
+            if (!Match(type: TokenType.Comma))
+            {
+                Match(type: TokenType.Newline);
+            }
+        }
+
+        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after flags body");
+
+        return new FlagsDeclaration(Name: name,
+            Members: members,
+            Visibility: visibility,
+            Location: location);
+    }
+
+    /// <summary>
     /// Parses a variant declaration (tagged union with associated data).
     /// Syntax: <c>variant Name&lt;T&gt; { Case1, Case2: Type }</c>
     /// </summary>

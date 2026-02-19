@@ -399,6 +399,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the menu declaration</returns>
     T VisitChoiceDeclaration(ChoiceDeclaration node);
 
+    /// <summary>Visits a flags declaration node (combinable bitflag set definitions)</summary>
+    /// <param name="node">The flags declaration to visit</param>
+    /// <returns>Result of visiting the flags declaration</returns>
+    T VisitFlagsDeclaration(FlagsDeclaration node);
+
     /// <summary>Visits a variant declaration node (tagged union/algebraic data type definitions)</summary>
     /// <param name="node">The variant declaration to visit</param>
     /// <returns>Result of visiting the variant declaration</returns>

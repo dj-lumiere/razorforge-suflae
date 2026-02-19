@@ -338,6 +338,7 @@ public partial class SuflaeParser
                 case TokenType.Entity:
                 case TokenType.Record:
                 case TokenType.Choice:
+                case TokenType.Flags:
                 case TokenType.Variant:
                 case TokenType.Protocol:
                 case TokenType.Routine:

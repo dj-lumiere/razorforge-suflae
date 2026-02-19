@@ -369,6 +369,13 @@ public partial class RazorForgeParser
                         ConstraintTypes: null,
                         Location: location));
                 }
+                else if (Match(type: TokenType.Flags))
+                {
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        ConstraintType: ConstraintKind.FlagsType,
+                        ConstraintTypes: null,
+                        Location: location));
+                }
                 else if (Match(type: TokenType.Variant))
                 {
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -389,7 +396,7 @@ public partial class RazorForgeParser
                 else
                 {
                     throw ThrowParseError(RazorForgeDiagnosticCode.InvalidConstraintKind,
-                        "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'variant', 'mutant', or type after 'is' in inline constraint");
+                        "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'flags', 'variant', 'mutant', or type after 'is' in inline constraint");
                 }
             }
             // ─────────────────────────────────────────────────────────────────────
@@ -525,6 +532,13 @@ public partial class RazorForgeParser
                             ConstraintTypes: null,
                             Location: location));
                     }
+                    else if (Match(type: TokenType.Flags))
+                    {
+                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                            ConstraintType: ConstraintKind.FlagsType,
+                            ConstraintTypes: null,
+                            Location: location));
+                    }
                     else if (Match(type: TokenType.Variant))
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -545,7 +559,7 @@ public partial class RazorForgeParser
                     else
                     {
                         throw ThrowParseError(RazorForgeDiagnosticCode.InvalidConstraintKind,
-                            "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'variant', 'mutant', or type after 'is' in constraint");
+                            "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'flags', 'variant', 'mutant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))

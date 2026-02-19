@@ -21,6 +21,9 @@ public enum ConstraintKind
     /// <summary>Choice type constraint (where T is choice)</summary>
     ChoiceType,
 
+    /// <summary>Flags type constraint (where T is flags)</summary>
+    FlagsType,
+
     /// <summary>Variant type constraint (where T is variant)</summary>
     VariantType,
 

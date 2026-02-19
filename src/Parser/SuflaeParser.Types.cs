@@ -322,6 +322,13 @@ public partial class SuflaeParser
                         ConstraintTypes: null,
                         Location: location));
                 }
+                else if (Match(type: TokenType.Flags))
+                {
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        ConstraintType: ConstraintKind.FlagsType,
+                        ConstraintTypes: null,
+                        Location: location));
+                }
                 else if (Match(type: TokenType.Variant))
                 {
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -341,7 +348,7 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'variant', or type after 'is' in inline constraint");
+                    throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
                 }
             }
             else if (Match(type: TokenType.In))
@@ -449,6 +456,13 @@ public partial class SuflaeParser
                             ConstraintTypes: null,
                             Location: location));
                     }
+                    else if (Match(type: TokenType.Flags))
+                    {
+                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                            ConstraintType: ConstraintKind.FlagsType,
+                            ConstraintTypes: null,
+                            Location: location));
+                    }
                     else if (Match(type: TokenType.Variant))
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -468,7 +482,7 @@ public partial class SuflaeParser
                     }
                     else
                     {
-                        throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'variant', or type after 'is' in constraint");
+                        throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))

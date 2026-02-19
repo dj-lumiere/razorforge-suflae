@@ -291,6 +291,36 @@ public record ChoiceDeclaration(
 }
 
 /// <summary>
+/// Flags declaration that defines combinable bitflag sets.
+/// Each member represents a power-of-two bit flag backed by U64.
+/// </summary>
+/// <param name="Name">Flags type identifier name</param>
+/// <param name="Members">List of UPPER_IDENTIFIER member names (compiler assigns bit positions)</param>
+/// <param name="Visibility">Access control modifier</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Flags declarations support:
+/// <list type="bullet">
+/// <item>Combining: perms = READ or WRITE</item>
+/// <item>Testing: perms is READ</item>
+/// <item>Exact match: perms isonly READ and WRITE</item>
+/// <item>Removal: perms but WRITE</item>
+/// <item>Max 64 members (U64 backing)</item>
+/// </list>
+/// </remarks>
+public record FlagsDeclaration(
+    string Name,
+    List<string> Members,
+    VisibilityModifier Visibility,
+    SourceLocation Location) : Declaration(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitFlagsDeclaration(node: this);
+    }
+}
+
+/// <summary>
 /// Variant declaration that defines tagged unions with multiple possible value types.
 /// Represents algebraic data types with multiple cases and associated data.
 /// All fields must be records or memory handles - safe, no danger! needed.

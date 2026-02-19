@@ -344,7 +344,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
 
         // Validate: storage class modifiers are not valid for type declarations
         if (storage != StorageClass.None && Check(TokenType.Entity, TokenType.Record,
-                TokenType.Resident, TokenType.Choice, TokenType.Variant, TokenType.Protocol))
+                TokenType.Resident, TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol))
         {
             throw new RazorForgeGrammarException(
                 RazorForgeDiagnosticCode.InvalidDeclarationInBody,
@@ -374,6 +374,12 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         if (Match(type: TokenType.Choice))
         {
             return ParseChoiceDeclaration(visibility: visibility);
+        }
+
+        // Flags declarations (combinable bitflag sets)
+        if (Match(type: TokenType.Flags))
+        {
+            return ParseFlagsDeclaration(visibility: visibility);
         }
 
         // Variant declarations (tagged unions/sum types)

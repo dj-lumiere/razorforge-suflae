@@ -373,7 +373,7 @@ public partial class SuflaeParser
 
         // Validate: storage class modifiers are not valid for type declarations
         if (storage != StorageClass.None && Check(TokenType.Entity, TokenType.Record,
-                TokenType.Choice, TokenType.Variant, TokenType.Protocol))
+                TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol))
         {
             throw new SuflaeGrammarException(
                 SuflaeDiagnosticCode.InvalidDeclarationInBody,
@@ -395,6 +395,11 @@ public partial class SuflaeParser
         if (Match(type: TokenType.Choice))
         {
             return ParseChoiceDeclaration(visibility: visibility);
+        }
+
+        if (Match(type: TokenType.Flags))
+        {
+            return ParseFlagsDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Variant))

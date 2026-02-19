@@ -771,6 +771,64 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Parses a flags declaration (combinable bitflag set).
+    /// Grammar: "flags" IDENTIFIER NEWLINE INDENT FlagsMember { FlagsMember } DEDENT
+    /// FlagsMember = UPPER_IDENTIFIER NEWLINE
+    /// </summary>
+    /// <param name="visibility">Access modifier for this flags type.</param>
+    /// <returns>A <see cref="FlagsDeclaration"/> AST node.</returns>
+    private FlagsDeclaration ParseFlagsDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        string name = ConsumeIdentifier(errorMessage: "Expected flags name");
+
+        // Register this type name for generic disambiguation
+        _knownTypeNames.Add(item: name);
+
+        var members = new List<string>();
+
+        // Parse flags body as indented block
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after flags header");
+
+        if (!Check(type: TokenType.Indent))
+        {
+            return new FlagsDeclaration(Name: name,
+                Members: members,
+                Visibility: visibility,
+                Location: location);
+        }
+
+        ProcessIndentToken();
+
+        while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+        {
+            if (Match(type: TokenType.Newline))
+            {
+                continue;
+            }
+
+            string memberName = ConsumeIdentifier(errorMessage: "Expected flags member name");
+            members.Add(item: memberName);
+            Match(type: TokenType.Newline);
+        }
+
+        if (Check(type: TokenType.Dedent))
+        {
+            ProcessDedentTokens();
+        }
+        else if (!IsAtEnd)
+        {
+            throw ThrowParseError("Expected dedent after flags body");
+        }
+
+        return new FlagsDeclaration(Name: name,
+            Members: members,
+            Visibility: visibility,
+            Location: location);
+    }
+
+    /// <summary>
     /// Parses a variant (tagged union) declaration.
     /// Syntax: <c>variant Name:</c> followed by indented cases with optional associated types.
     /// Variants are sum types where each case can carry different data.
