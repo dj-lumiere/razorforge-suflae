@@ -138,9 +138,24 @@ public partial class RazorForgeParser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Dot marks specific type: Collections.List → module "Collections", type "List"
-                string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
-                modulePath += "." + typeName;
+                if (Match(type: TokenType.LeftBracket))
+                {
+                    // Selective imports: Module.[A, B, C]
+                    specificImports = new List<string>();
+                    do
+                    {
+                        string name = ConsumeIdentifier(errorMessage: "Expected type name in selective import");
+                        specificImports.Add(item: name);
+                        _knownTypeNames.Add(item: name);
+                    } while (Match(type: TokenType.Comma));
+                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after selective imports");
+                }
+                else
+                {
+                    // Single type: Collections.List → module "Collections", type "List"
+                    string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
+                    modulePath += "." + typeName;
+                }
                 break;
             }
             else
