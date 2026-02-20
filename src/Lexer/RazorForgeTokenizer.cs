@@ -126,10 +126,10 @@ public partial class RazorForgeTokenizer
     /// <list type="bullet">
     ///   <item><description>Declaration keywords: routine, entity, record, choice, variant, protocol</description></item>
     ///   <item><description>Variable keywords: let, var, preset</description></item>
-    ///   <item><description>Access modifiers: private, internal, public, global</description></item>
+    ///   <item><description>Access modifiers: secret, posted, open, external</description></item>
     ///   <item><description>Control flow: if, elseif, else, when, for, loop, while, break, continue, return</description></item>
     ///   <item><description>Type operations: is, isnot, from, notfrom, follows, notfollows, in, notin</description></item>
-    ///   <item><description>Memory management: viewing, hijacking, seizing, inspecting</description></item>
+    ///   <item><description>Resource management: using, danger!</description></item>
     ///   <item><description>Literals: true, false, none, absent</description></item>
     /// </list>
     /// </para>

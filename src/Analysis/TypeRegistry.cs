@@ -952,7 +952,8 @@ public sealed class TypeRegistry
             Module = routine.Module,
             Attributes = routine.Attributes,
             CallingConvention = routine.CallingConvention,
-            IsVariadic = routine.IsVariadic
+            IsVariadic = routine.IsVariadic,
+            IsDangerous = routine.IsDangerous
         };
 
         _routines[key: key] = updatedRoutine;

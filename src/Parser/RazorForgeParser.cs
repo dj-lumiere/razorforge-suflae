@@ -236,8 +236,12 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseDefineDeclaration();
         }
 
+        // Check for dangerous modifier: dangerous routine foo(), dangerous external("C") routine bar()
+        bool isDangerous = Match(type: TokenType.Dangerous);
+
         // External declaration with optional calling convention
         // Supports: external routine foo() or external("C") routine foo()
+        //           external("C") { routine ... routine ... } (block form)
         if (visibility == VisibilityModifier.External)
         {
             string? callingConvention = null;
@@ -255,9 +259,29 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after calling convention");
             }
 
+            // Block form: external("C") { routine ... routine ... }
+            if (Match(type: TokenType.LeftBrace))
+            {
+                SourceLocation blockLocation = GetLocation(token: PeekToken(offset: -1));
+                var declarations = new List<Declaration>();
+                while (!Check(type: TokenType.RightBrace) && !IsAtEnd)
+                {
+                    // Per-routine dangerous modifier inside the block
+                    bool routineDangerous = isDangerous || Match(type: TokenType.Dangerous);
+                    Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' inside external block");
+                    declarations.Add(item: ParseExternalDeclaration(
+                        callingConvention: callingConvention, attributes: null, isDangerous: routineDangerous));
+                }
+                Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after external block");
+                return new ExternalBlockDeclaration(
+                    Declarations: declarations, Location: blockLocation);
+            }
+
+            // Single form: external("C") routine foo()
             if (Match(type: TokenType.Routine))
             {
-                return ParseExternalDeclaration(callingConvention: callingConvention, attributes: attributes);
+                return ParseExternalDeclaration(
+                    callingConvention: callingConvention, attributes: attributes, isDangerous: isDangerous);
             }
         }
 
@@ -335,7 +359,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
                     "'global' can only be used for file-scope static variables.",
                     _fileName, CurrentToken.Line, CurrentToken.Column);
             }
-            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus);
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus, isDangerous: isDangerous);
         }
 
         // If we consumed 'suspended'/'threaded' but no 'routine' follows, it's an error

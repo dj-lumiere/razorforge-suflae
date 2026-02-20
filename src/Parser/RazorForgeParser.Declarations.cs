@@ -477,7 +477,8 @@ public partial class RazorForgeParser
         List<string>? attributes = null,
         bool allowNoBody = false,
         StorageClass storage = StorageClass.None,
-        AsyncStatus asyncStatus = AsyncStatus.None)
+        AsyncStatus asyncStatus = AsyncStatus.None,
+        bool isDangerous = false)
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // VALIDATION: Reject nested routine declarations
@@ -782,7 +783,8 @@ public partial class RazorForgeParser
             GenericConstraints: constraints,
             IsFailable: isFailable,
             Storage: storage,
-            Async: asyncStatus);
+            Async: asyncStatus,
+            IsDangerous: isDangerous);
     }
 
     /// <summary>
@@ -1529,7 +1531,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="callingConvention">The calling convention (e.g., "C"). Defaults to "C" if null.</param>
     /// <returns>An <see cref="ExternalDeclaration"/> AST node.</returns>
-    private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null, List<string>? attributes = null)
+    private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null, List<string>? attributes = null, bool isDangerous = false)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we consumed 'external' and 'routine'
 
@@ -1611,6 +1613,7 @@ public partial class RazorForgeParser
             CallingConvention: effectiveCallingConvention,
             IsVariadic: isVariadic,
             Attributes: attributes,
+            IsDangerous: isDangerous,
             Location: location);
     }
 }

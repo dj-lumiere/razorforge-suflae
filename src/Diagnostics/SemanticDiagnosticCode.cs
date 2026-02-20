@@ -575,6 +575,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Nested hijacking is not allowed - cannot hijack a member of an already-hijacked object.</summary>
     NestedHijackingNotAllowed = 608,
 
+    /// <summary>Dangerous routine called outside a danger! block.</summary>
+    DangerousCallOutsideDangerBlock = 609,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════

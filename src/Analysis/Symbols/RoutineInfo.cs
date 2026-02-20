@@ -94,6 +94,9 @@ public sealed class RoutineInfo
     /// <summary>For external routines, whether it's variadic.</summary>
     public bool IsVariadic { get; init; }
 
+    /// <summary>Whether this routine is marked dangerous (requires danger! block to call).</summary>
+    public bool IsDangerous { get; init; }
+
     /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>
     public bool IsSynthesized { get; init; }
 
@@ -167,6 +170,7 @@ public sealed class RoutineInfo
             Attributes = Attributes,
             CallingConvention = CallingConvention,
             IsVariadic = IsVariadic,
+            IsDangerous = IsDangerous,
             IsSynthesized = IsSynthesized
         };
     }

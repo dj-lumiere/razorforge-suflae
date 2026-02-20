@@ -444,6 +444,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the external declaration</returns>
     T VisitExternalDeclaration(ExternalDeclaration node);
 
+    /// <summary>Visits an external block declaration (groups multiple external routines)</summary>
+    /// <param name="node">The external block declaration to visit</param>
+    /// <returns>Result of visiting the external block declaration</returns>
+    T VisitExternalBlockDeclaration(ExternalBlockDeclaration node);
+
     /// <summary>Visits a preset declaration node (compile-time constants)</summary>
     /// <param name="node">The preset declaration to visit</param>
     /// <returns>Result of visiting the preset declaration</returns>

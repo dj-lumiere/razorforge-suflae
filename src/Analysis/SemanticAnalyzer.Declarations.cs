@@ -72,6 +72,11 @@ public sealed partial class SemanticAnalyzer
                 CollectExternalDeclaration(external: externalDecl);
                 break;
 
+            case ExternalBlockDeclaration block:
+                foreach (Declaration decl in block.Declarations)
+                    CollectDeclaration(node: decl);
+                break;
+
             case VariableDeclaration variable:
                 CollectFieldDeclaration(field: variable);
                 break;
@@ -402,7 +407,8 @@ public sealed partial class SemanticAnalyzer
             Module = GetCurrentModuleName(),
             Attributes = routine.Attributes,
             DeclaredMutation = declaredMutation,
-            MutationCategory = declaredMutation
+            MutationCategory = declaredMutation,
+            IsDangerous = routine.IsDangerous
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
@@ -592,7 +598,8 @@ public sealed partial class SemanticAnalyzer
             Visibility = VisibilityModifier.Open, // External declarations are always open
             Location = external.Location,
             Module = GetCurrentModuleName(),
-            Attributes = external.Attributes ?? []
+            Attributes = external.Attributes ?? [],
+            IsDangerous = external.IsDangerous
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
@@ -1266,6 +1273,11 @@ public sealed partial class SemanticAnalyzer
 
             case ExternalDeclaration externalDecl:
                 ResolveExternalParameters(externalDecl);
+                break;
+
+            case ExternalBlockDeclaration block:
+                foreach (Declaration decl in block.Declarations)
+                    ResolveRoutineSignature(node: decl);
                 break;
         }
     }

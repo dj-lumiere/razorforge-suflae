@@ -1168,6 +1168,15 @@ public sealed partial class SemanticAnalyzer
             memberName: routine.Name,
             ownerType: routine.OwnerType,
             accessLocation: accessLocation);
+
+        // Dangerous routines can only be called inside danger! blocks
+        if (routine.IsDangerous && !InDangerBlock)
+        {
+            ReportError(
+                SemanticDiagnosticCode.DangerousCallOutsideDangerBlock,
+                $"Dangerous routine '{routine.Name}' can only be called inside a 'danger!' block.",
+                accessLocation);
+        }
     }
 
     /// <summary>

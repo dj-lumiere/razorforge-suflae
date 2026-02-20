@@ -139,7 +139,8 @@ public record RoutineDeclaration(
     List<GenericConstraintDeclaration>? GenericConstraints = null,
     bool IsFailable = false,
     StorageClass Storage = StorageClass.None,
-    AsyncStatus Async = AsyncStatus.None)
+    AsyncStatus Async = AsyncStatus.None,
+    bool IsDangerous = false)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -621,11 +622,26 @@ public record ExternalDeclaration(
     string? CallingConvention,
     bool IsVariadic,
     List<string>? Attributes,
+    bool IsDangerous,
     SourceLocation Location) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitExternalDeclaration(node: this);
+    }
+}
+
+/// <summary>
+/// Block form of external declarations grouping multiple routines under one calling convention.
+/// <code>external("C") { routine foo() routine bar() }</code>
+/// </summary>
+public record ExternalBlockDeclaration(
+    List<Declaration> Declarations,
+    SourceLocation Location) : Declaration(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitExternalBlockDeclaration(node: this);
     }
 }
 
