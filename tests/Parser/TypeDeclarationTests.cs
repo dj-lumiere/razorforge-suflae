@@ -377,10 +377,10 @@ public class TypeDeclarationTests
     #region Visibility Tests
 
     [Fact]
-    public void Parse_PrivateRecord()
+    public void Parse_SecretRecord()
     {
         string source = """
-                        private record InternalData {
+                        secret record InternalData {
                             value: S32
                         }
                         """;
@@ -388,14 +388,14 @@ public class TypeDeclarationTests
         Program program = AssertParses(source: source);
         RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
 
-        Assert.Equal(expected: VisibilityModifier.Private, actual: record.Visibility);
+        Assert.Equal(expected: VisibilityModifier.Secret, actual: record.Visibility);
     }
 
     [Fact]
-    public void Parse_InternalEntity()
+    public void Parse_SecretEntity()
     {
         string source = """
-                        internal entity CacheEntry {
+                        secret entity CacheEntry {
                             data: Text
                         }
                         """;
@@ -403,7 +403,7 @@ public class TypeDeclarationTests
         Program program = AssertParses(source: source);
         EntityDeclaration entity = GetDeclaration<EntityDeclaration>(program: program);
 
-        Assert.Equal(expected: VisibilityModifier.Internal, actual: entity.Visibility);
+        Assert.Equal(expected: VisibilityModifier.Secret, actual: entity.Visibility);
     }
 
     #endregion
@@ -444,14 +444,14 @@ public class TypeDeclarationTests
 
     #endregion
 
-    #region Published Record Field Tests
+    #region Posted Record Field Tests
 
     [Fact]
-    public void Parse_RecordWithPublishedField()
+    public void Parse_RecordWithPostedField()
     {
         string source = """
                         record Percentage {
-                            published value: F64
+                            posted value: F64
                         }
                         """;
 
@@ -467,8 +467,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Config {
-                            published name: Text
-                            private secret: Text
+                            posted name: Text
+                            secret hidden: Text
                             value: S32
                         }
                         """;

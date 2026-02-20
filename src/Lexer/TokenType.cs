@@ -290,17 +290,14 @@ public enum TokenType
 
     #region Access Modifiers
 
-    /// <summary>Private access modifier - visible only within the declaring type</summary>
-    Private,
+    /// <summary>Secret access modifier - visible only within the declaring module</summary>
+    Secret,
 
-    /// <summary>Internal access modifier - visible within the same module</summary>
-    Internal,
+    /// <summary>Posted access modifier - open read, secret write</summary>
+    Posted,
 
-    /// <summary>Published access modifier - public get, private set</summary>
-    Published,
-
-    /// <summary>Public access modifier - visible everywhere</summary>
-    Public,
+    /// <summary>Open access modifier - visible everywhere</summary>
+    Open,
 
     /// <summary>Imported linkage modifier - marks externally-linked declarations (FFI)</summary>
     Imported,

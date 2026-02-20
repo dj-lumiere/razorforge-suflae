@@ -18,7 +18,7 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         routine test()
-                            using open("file.txt") as file
+                            using open_file("file.txt") as file
                                 let content = file.read_all()
                                 process(content)
                         """;
@@ -31,7 +31,7 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         routine test()
-                            using open("input.txt") as input, open("output.txt", mode: Write) as output
+                            using open_file("input.txt") as input, open_file("output.txt", mode: Write) as output
                                 let data = input.read_all()
                                 output.write(transform(data))
                         """;
@@ -57,7 +57,7 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         routine test()
-                            using open("data.txt") as file
+                            using open_file("data.txt") as file
                                 for line in file.lines()
                                     if line.starts_with("#")
                                         continue
@@ -72,7 +72,7 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         suspended routine process_file(path: Text)
-                            using waitfor async_open(path) as file
+                            using waitfor async_open_file(path) as file
                                 let content = waitfor file.read_all()
                                 process(content)
                         """;
@@ -85,7 +85,7 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         routine test()
-                            using open("config.json") as file
+                            using open_file("config.json") as file
                                 let config = parse_json(file.read_all())
                                 when config
                                     is Configuration c => apply(c)
@@ -146,9 +146,9 @@ public class SuflaeAccessBlockTests
     {
         string source = """
                         routine merge_files(input_paths: List<Text>, output_path: Text)
-                            using open(output_path, mode: Write) as output
+                            using open_file(output_path, mode: Write) as output
                                 for path in input_paths
-                                    using open(path) as input
+                                    using open_file(path) as input
                                         output.write(input.read_all())
                                         output.write("\n")
                         """;
@@ -162,7 +162,7 @@ public class SuflaeAccessBlockTests
         string source = """
                         suspended routine fetch_and_save(url: Text, path: Text)
                             using waitfor http.get(url) as response
-                                using open(path, mode: Write) as file
+                                using open_file(path, mode: Write) as file
                                     file.write(response.body)
                         """;
 

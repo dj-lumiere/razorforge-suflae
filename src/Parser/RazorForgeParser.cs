@@ -401,7 +401,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         }
 
         // If we parsed a visibility modifier but no declaration follows, it's an error
-        if (visibility != VisibilityModifier.Public)
+        if (visibility != VisibilityModifier.Open)
         {
             throw ThrowParseError(RazorForgeDiagnosticCode.VisibilityWithoutDeclaration,
                 $"Visibility modifier '{visibility}' must be followed by a declaration "

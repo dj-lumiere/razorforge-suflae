@@ -1088,30 +1088,27 @@ public sealed partial class SemanticAnalyzer
     {
         return visibility switch
         {
-            VisibilityModifier.Private => 0,
-            VisibilityModifier.Internal => 1,
-            VisibilityModifier.Published => 2, // Published has public read access
-            VisibilityModifier.Public => 2,
-            VisibilityModifier.Imported => 2,
-            _ => 2
+            VisibilityModifier.Secret => 0,
+            VisibilityModifier.Posted => 1, // Posted has open read access
+            VisibilityModifier.Open => 1,
+            VisibilityModifier.Imported => 1,
+            _ => 1
         };
     }
 
     /// <summary>
     /// Validates that a field's setter visibility is equal to or more restrictive than its getter visibility.
-    /// The 4 valid combinations are:
-    /// 1. public (getter: public, setter: public)
-    /// 2. published (getter: public, setter: private)
-    /// 3. internal (getter: internal, setter: internal)
-    /// 4. private (read/write private)
+    /// The 3 valid combinations are:
+    /// 1. open (getter: open, setter: open)
+    /// 2. posted (getter: open, setter: secret)
+    /// 3. secret (read/write secret)
     /// </summary>
     /// <remarks>
-    /// With the simplified four-level visibility system, no validation is needed.
+    /// With the simplified three-level visibility system, no validation is needed.
     /// The visibility level directly determines both read and write access:
-    /// - public: read/write from anywhere
-    /// - published: public read, private write
-    /// - internal: read/write within module
-    /// - private: read/write within file
+    /// - open: read/write from anywhere
+    /// - posted: open read, secret write
+    /// - secret: read/write within module
     /// </remarks>
 
     #endregion
@@ -1120,15 +1117,15 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Gets the effective visibility for field write access.
-    /// For published fields, write access is private (only owner can write).
+    /// For posted fields, write access is secret (only owner can write).
     /// </summary>
     /// <param name="field">The field to check.</param>
     /// <returns>The effective visibility for write access.</returns>
     private static VisibilityModifier GetEffectiveWriteVisibility(FieldInfo field)
     {
-        // Published fields have public read but private write
-        return field.Visibility == VisibilityModifier.Published
-            ? VisibilityModifier.Private
+        // Posted fields have open read but secret write
+        return field.Visibility == VisibilityModifier.Posted
+            ? VisibilityModifier.Secret
             : field.Visibility;
     }
 
@@ -1194,34 +1191,22 @@ public sealed partial class SemanticAnalyzer
     {
         switch (visibility)
         {
-            case VisibilityModifier.Private:
-                // Private members are accessible within the same file
+            case VisibilityModifier.Secret:
+                // Secret members are accessible within the same file
                 if (!IsAccessingFromSameFile(memberLocation: memberLocation, accessLocation: accessLocation))
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(
                         SemanticDiagnosticCode.PrivateMemberAccess,
-                        $"Cannot access private {memberKind} '{memberName}' of '{typeName}' from outside its defining file.",
+                        $"Cannot access secret {memberKind} '{memberName}' of '{typeName}' from outside its defining file.",
                         accessLocation);
                 }
                 break;
 
-            case VisibilityModifier.Internal:
-                // Internal members are accessible within the same module
-                if (!IsAccessingFromSameNamespace(memberNamespace: ownerType?.Module))
-                {
-                    string typeName = ownerType?.Name ?? "type";
-                    ReportError(
-                        SemanticDiagnosticCode.InternalMemberAccess,
-                        $"Cannot access internal {memberKind} '{memberName}' of '{typeName}' from outside the module.",
-                        accessLocation);
-                }
-                break;
-
-            case VisibilityModifier.Published:
-            case VisibilityModifier.Public:
+            case VisibilityModifier.Posted:
+            case VisibilityModifier.Open:
             case VisibilityModifier.Imported:
-                // Public/Published/Imported members are accessible from anywhere for reading
+                // Open/Posted/Imported members are accessible from anywhere for reading
                 break;
         }
     }

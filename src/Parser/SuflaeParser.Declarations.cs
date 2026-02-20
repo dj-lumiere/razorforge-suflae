@@ -193,7 +193,7 @@ public partial class SuflaeParser
     /// <param name="storage">Storage class modifier (default: None).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
     private VariableDeclaration ParseVariableDeclaration(
-        VisibilityModifier visibility = VisibilityModifier.Public,
+        VisibilityModifier visibility = VisibilityModifier.Open,
         StorageClass storage = StorageClass.None)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
@@ -232,7 +232,7 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier (public, published, internal, private).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
-    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation();
 
@@ -287,7 +287,7 @@ public partial class SuflaeParser
     /// <param name="storage">Storage class modifier (default: None, can be Common for type-level static).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     private RoutineDeclaration ParseRoutineDeclaration(
-        VisibilityModifier visibility = VisibilityModifier.Public,
+        VisibilityModifier visibility = VisibilityModifier.Open,
         List<string>? attributes = null,
         StorageClass storage = StorageClass.None,
         AsyncStatus asyncStatus = AsyncStatus.None)
@@ -463,7 +463,7 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for the entity.</param>
     /// <returns>An <see cref="EntityDeclaration"/> AST node.</returns>
-    private EntityDeclaration ParseEntityDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private EntityDeclaration ParseEntityDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -580,7 +580,7 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for the record.</param>
     /// <returns>A <see cref="RecordDeclaration"/> AST node.</returns>
-    private RecordDeclaration ParseRecordDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private RecordDeclaration ParseRecordDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -696,7 +696,7 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for the choice.</param>
     /// <returns>A <see cref="ChoiceDeclaration"/> AST node.</returns>
-    private ChoiceDeclaration ParseChoiceDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private ChoiceDeclaration ParseChoiceDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -777,7 +777,7 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for this flags type.</param>
     /// <returns>A <see cref="FlagsDeclaration"/> AST node.</returns>
-    private FlagsDeclaration ParseFlagsDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private FlagsDeclaration ParseFlagsDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -934,7 +934,7 @@ public partial class SuflaeParser
     /// </summary>
     /// <param name="visibility">Access modifier for the protocol.</param>
     /// <returns>A <see cref="ProtocolDeclaration"/> AST node.</returns>
-    private ProtocolDeclaration ParseProtocolDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private ProtocolDeclaration ParseProtocolDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1283,7 +1283,7 @@ public partial class SuflaeParser
     /// <returns>A tuple of (visibility, storage) modifiers.</returns>
     private (VisibilityModifier Visibility, StorageClass Storage) ParseModifiers()
     {
-        var visibility = VisibilityModifier.Public; // Default
+        var visibility = VisibilityModifier.Open; // Default
         var storage = StorageClass.None; // Default
         bool hasVisibility = false;
         bool hasStorage = false;
@@ -1292,24 +1292,19 @@ public partial class SuflaeParser
         while (true)
         {
             // Visibility modifiers
-            if (!hasVisibility && Match(type: TokenType.Public))
+            if (!hasVisibility && Match(type: TokenType.Open))
             {
-                visibility = VisibilityModifier.Public;
+                visibility = VisibilityModifier.Open;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.Published))
+            else if (!hasVisibility && Match(type: TokenType.Posted))
             {
-                visibility = VisibilityModifier.Published;
+                visibility = VisibilityModifier.Posted;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.Internal))
+            else if (!hasVisibility && Match(type: TokenType.Secret))
             {
-                visibility = VisibilityModifier.Internal;
-                hasVisibility = true;
-            }
-            else if (!hasVisibility && Match(type: TokenType.Private))
-            {
-                visibility = VisibilityModifier.Private;
+                visibility = VisibilityModifier.Secret;
                 hasVisibility = true;
             }
             else if (!hasVisibility && Match(type: TokenType.Imported))

@@ -285,7 +285,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @readonly
-                        public routine Point.distance() -> Decimal
+                        open routine Point.distance() -> Decimal
                             return 0.0
                         """;
 
@@ -297,7 +297,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @inline
-                        private routine helper(x: Integer) -> Integer
+                        secret routine helper(x: Integer) -> Integer
                             return x * 2
                         """;
 
@@ -309,7 +309,7 @@ public class SuflaeAttributeTests
     {
         string source = """
                         @serializable
-                        internal record InternalData
+                        secret record InternalData
                             value: Integer
                         """;
 

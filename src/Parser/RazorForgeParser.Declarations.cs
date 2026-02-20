@@ -17,7 +17,7 @@ public partial class RazorForgeParser
     /// <param name="storage">The storage class modifier (default: None).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
     private VariableDeclaration ParseVariableDeclaration(
-        VisibilityModifier visibility = VisibilityModifier.Public,
+        VisibilityModifier visibility = VisibilityModifier.Open,
         StorageClass storage = StorageClass.None)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
@@ -54,7 +54,7 @@ public partial class RazorForgeParser
     /// Fields are declared without var/let keywords.
     /// </summary>
     /// <param name="visibility">The visibility modifier (public, published, internal, private).</param>
-    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation();
 
@@ -242,7 +242,7 @@ public partial class RazorForgeParser
     /// <returns>A tuple of (visibility, storage) modifiers.</returns>
     private (VisibilityModifier Visibility, StorageClass Storage) ParseModifiers()
     {
-        var visibility = VisibilityModifier.Public; // Default
+        var visibility = VisibilityModifier.Open; // Default
         var storage = StorageClass.None; // Default
         bool hasVisibility = false;
         bool hasStorage = false;
@@ -251,24 +251,19 @@ public partial class RazorForgeParser
         while (true)
         {
             // Visibility modifiers
-            if (!hasVisibility && Match(type: TokenType.Public))
+            if (!hasVisibility && Match(type: TokenType.Open))
             {
-                visibility = VisibilityModifier.Public;
+                visibility = VisibilityModifier.Open;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.Published))
+            else if (!hasVisibility && Match(type: TokenType.Posted))
             {
-                visibility = VisibilityModifier.Published;
+                visibility = VisibilityModifier.Posted;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.Internal))
+            else if (!hasVisibility && Match(type: TokenType.Secret))
             {
-                visibility = VisibilityModifier.Internal;
-                hasVisibility = true;
-            }
-            else if (!hasVisibility && Match(type: TokenType.Private))
-            {
-                visibility = VisibilityModifier.Private;
+                visibility = VisibilityModifier.Secret;
                 hasVisibility = true;
             }
             else if (!hasVisibility && Match(type: TokenType.Imported))
@@ -490,7 +485,7 @@ public partial class RazorForgeParser
     /// 7. BODY - "{...}" or signature-only for protocols/intrinsics
     /// </remarks>
     private RoutineDeclaration ParseRoutineDeclaration(
-        VisibilityModifier visibility = VisibilityModifier.Public,
+        VisibilityModifier visibility = VisibilityModifier.Open,
         List<string>? attributes = null,
         bool allowNoBody = false,
         StorageClass storage = StorageClass.None,
@@ -816,7 +811,7 @@ public partial class RazorForgeParser
     /// 4. PROTOCOLS - Optional "follows Protocol1, Protocol2" clause
     /// 5. BODY - "{...}" containing member declarations
     /// </remarks>
-    private EntityDeclaration ParseEntityDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private EntityDeclaration ParseEntityDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -949,7 +944,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">The visibility modifier for the record.</param>
     /// <returns>A <see cref="RecordDeclaration"/> AST node.</returns>
-    private RecordDeclaration ParseRecordDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private RecordDeclaration ParseRecordDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1051,7 +1046,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">The visibility modifier for the resident.</param>
     /// <returns>A <see cref="ResidentDeclaration"/> AST node.</returns>
-    private ResidentDeclaration ParseResidentDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private ResidentDeclaration ParseResidentDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1153,7 +1148,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">The visibility modifier for the choice.</param>
     /// <returns>A <see cref="ChoiceDeclaration"/> AST node.</returns>
-    private ChoiceDeclaration ParseChoiceDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private ChoiceDeclaration ParseChoiceDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1207,7 +1202,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">Access modifier for this flags type.</param>
     /// <returns>A <see cref="FlagsDeclaration"/> AST node.</returns>
-    private FlagsDeclaration ParseFlagsDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private FlagsDeclaration ParseFlagsDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -1344,7 +1339,7 @@ public partial class RazorForgeParser
     ///   c. Parameters
     ///   d. Return type
     /// </remarks>
-    private ProtocolDeclaration ParseProtocolDeclaration(VisibilityModifier visibility = VisibilityModifier.Public)
+    private ProtocolDeclaration ParseProtocolDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 

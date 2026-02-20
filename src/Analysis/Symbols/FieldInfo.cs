@@ -27,10 +27,10 @@ public sealed class FieldInfo
     public bool IsMutable { get; init; }
 
     /// <summary>
-    /// Visibility for the field (public, published, internal, private).
-    /// For published fields, read is public but write is private.
+    /// Visibility for the field (open, posted, secret).
+    /// For posted fields, read is open but write is secret.
     /// </summary>
-    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Public;
+    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 
     /// <summary>The index of this field within the containing type.</summary>
     public int Index { get; init; }

@@ -152,10 +152,9 @@ public partial class RazorForgeTokenizer
         [key: "preset"] = TokenType.Preset,
 
         // Access modifiers
-        [key: "private"] = TokenType.Private,
-        [key: "internal"] = TokenType.Internal,
-        [key: "published"] = TokenType.Published,
-        [key: "public"] = TokenType.Public,
+        [key: "secret"] = TokenType.Secret,
+        [key: "posted"] = TokenType.Posted,
+        [key: "open"] = TokenType.Open,
         [key: "imported"] = TokenType.Imported,
         [key: "global"] = TokenType.Global,
         [key: "common"] = TokenType.Common,

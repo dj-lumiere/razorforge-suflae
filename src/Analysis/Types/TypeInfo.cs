@@ -33,7 +33,7 @@ public abstract class TypeInfo
     public bool IsBlank => Name == "Blank";
 
     /// <summary>The visibility of this type.</summary>
-    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Public;
+    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 
     /// <summary>Source location where this type is defined.</summary>
     public SourceLocation? Location { get; init; }

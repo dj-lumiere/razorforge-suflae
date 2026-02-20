@@ -363,14 +363,14 @@ public class SuflaeTypeDeclarationTests
 
     #endregion
 
-    #region Published Record Field Tests
+    #region Posted Record Field Tests
 
     [Fact]
-    public void ParseSuflae_RecordWithPublishedField()
+    public void ParseSuflae_RecordWithPostedField()
     {
         string source = """
                         record Percentage
-                            published value: F64
+                            posted value: F64
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -385,8 +385,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         record Config
-                            published name: Text
-                            private secret: Text
+                            posted name: Text
+                            secret hidden: Text
                             value: S32
                         """;
 

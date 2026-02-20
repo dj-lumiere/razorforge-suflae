@@ -74,7 +74,7 @@ public sealed class RoutineInfo
     public IReadOnlyList<TypeSymbol>? TypeArguments { get; init; }
 
     /// <summary>Visibility modifier.</summary>
-    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Public;
+    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 
     /// <summary>Source location where this routine is defined.</summary>
     public SourceLocation? Location { get; init; }

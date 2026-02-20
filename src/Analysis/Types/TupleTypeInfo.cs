@@ -81,7 +81,7 @@ public sealed class TupleTypeInfo : TypeInfo
             fields.Add(item: new FieldInfo(name: $"item{i}", type: elementTypes[i])
             {
                 IsMutable = false, // Tuple fields are immutable
-                Visibility = VisibilityModifier.Public,
+                Visibility = VisibilityModifier.Open,
                 Index = i
             });
         }

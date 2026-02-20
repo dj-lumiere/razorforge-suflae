@@ -383,7 +383,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            using open("file.txt") as file
+                            using open_file("file.txt") as file
                                 let content = file.read_all()
                                 process(content)
                         """;
@@ -396,7 +396,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            using open("input.txt") as input, open("output.txt") as output
+                            using open_file("input.txt") as input, open_file("output.txt") as output
                                 let data = input.read_all()
                                 output.write(transform(data))
                         """;

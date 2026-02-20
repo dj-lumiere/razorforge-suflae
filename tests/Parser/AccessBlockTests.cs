@@ -237,7 +237,7 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!() {
-                            using open!("file.txt", mode: FileIO.Read) as file {
+                            using open_file!("file.txt", mode: FileIO.Read) as file {
                                 let content = file.read_all()
                                 process(content)
                             }
@@ -252,7 +252,7 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!() {
-                            using open!("input.txt") as input, open!("output.txt", mode: FileIO.Write) as output {
+                            using open_file!("input.txt") as input, open_file!("output.txt", mode: FileIO.Write) as output {
                                 let data = input.read_all()
                                 output.write(transform(data))
                             }
@@ -283,7 +283,7 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!() {
-                            using open!("data.txt") as file {
+                            using open_file!("data.txt") as file {
                                 for line in file.lines() {
                                     if line.starts_with("#") {
                                         continue
@@ -303,7 +303,7 @@ public class AccessBlockTests
         string source = """
                         routine process_files!(paths: List<Text>) {
                             for path in paths {
-                                using open!(path) as file {
+                                using open_file!(path) as file {
                                     let content = file.read_all()
                                     unless content.is_empty() {
                                         process(content)
@@ -346,7 +346,7 @@ public class AccessBlockTests
         string source = """
                         routine test!() {
                             let cache = Cache()
-                            using open!("config.json") as file {
+                            using open_file!("config.json") as file {
                                 let config = parse_json(file.read_all())
                                 using cache.view() as c {
                                     apply_config(c, config)

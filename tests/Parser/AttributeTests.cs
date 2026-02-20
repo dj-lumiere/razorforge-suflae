@@ -343,7 +343,7 @@ public class AttributeTests
     {
         string source = """
                         @readonly
-                        public routine Point.distance() -> F32 {
+                        open routine Point.distance() -> F32 {
                             return 0.0_f32
                         }
                         """;
@@ -356,7 +356,7 @@ public class AttributeTests
     {
         string source = """
                         @inline
-                        private routine helper(x: S32) -> S32 {
+                        secret routine helper(x: S32) -> S32 {
                             return x * 2
                         }
                         """;
@@ -369,7 +369,7 @@ public class AttributeTests
     {
         string source = """
                         @serializable
-                        internal record InternalData {
+                        secret record InternalData {
                             value: S32
                         }
                         """;
