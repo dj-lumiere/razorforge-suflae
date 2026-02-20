@@ -74,7 +74,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
 
     /// <summary>
     /// Indicates whether we're parsing inside a record body (actual record, not entity/resident).
-    /// When true, only private/internal/public modifiers are allowed (not published/imported).
+    /// When true, only secret/posted/open modifiers are allowed (not external).
     /// Also var/let/preset keywords are disallowed (use 'field: Type' syntax).
     /// </summary>
     private bool _parsingStrictRecordBody;
@@ -159,11 +159,11 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
     ///
     /// MODIFIERS (optional, parsed before declaration):
     ///   attributes   - @crash_only, @inline, @config, etc.
-    ///   visibility   - private, family, internal, public, published, imported
+    ///   visibility   - secret, posted, open, external
     ///   storage      - global (for file-scope variables)
     ///
     /// TYPE/VALUE DECLARATIONS:
-    ///   imported     - FFI routine declaration (with optional calling convention)
+    ///   external     - FFI routine declaration (with optional calling convention)
     ///   var/let      - Variable declarations
     ///   pass         - Empty placeholder
     ///   field: Type  - Field declaration (inside type bodies)
@@ -236,13 +236,13 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
             return ParseDefineDeclaration();
         }
 
-        // Imported declaration with optional calling convention
-        // Supports: imported routine foo() or imported("C") routine foo()
-        if (visibility == VisibilityModifier.Imported)
+        // External declaration with optional calling convention
+        // Supports: external routine foo() or external("C") routine foo()
+        if (visibility == VisibilityModifier.External)
         {
             string? callingConvention = null;
 
-            // Check for calling convention: imported("C")
+            // Check for calling convention: external("C")
             if (Match(type: TokenType.LeftParen))
             {
                 if (Check(TokenType.TextLiteral, TokenType.BytesLiteral))
@@ -257,7 +257,7 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
 
             if (Match(type: TokenType.Routine))
             {
-                return ParseImportedDeclaration(callingConvention: callingConvention);
+                return ParseExternalDeclaration(callingConvention: callingConvention, attributes: attributes);
             }
         }
 
@@ -299,13 +299,13 @@ public partial class RazorForgeParser(List<Token> tokens, string? fileName = nul
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
-            // In record bodies, imported is not allowed
-            if (_parsingStrictRecordBody && visibility is VisibilityModifier.Imported)
+            // In record bodies, external is not allowed
+            if (_parsingStrictRecordBody && visibility is VisibilityModifier.External)
             {
                 throw new RazorForgeGrammarException(
                     RazorForgeDiagnosticCode.InvalidDeclarationInBody,
                     $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
-                    "Record fields can use 'private', 'internal', 'published', or 'public'.",
+                    "Record fields can use 'secret', 'posted', or 'open'.",
                     _fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseFieldDeclaration(visibility: visibility);

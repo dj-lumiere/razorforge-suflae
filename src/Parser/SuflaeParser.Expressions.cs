@@ -1544,18 +1544,6 @@ public partial class SuflaeParser
             return new WaitforExpression(Operand: operand, Timeout: timeout, Location: location);
         }
 
-        // Intrinsic routine call: @intrinsic_routine.operation<T>(args)
-        if (Match(type: TokenType.IntrinsicRoutine))
-        {
-            return ParseIntrinsicRoutineCall(location: location);
-        }
-
-        // Native function call: @native.function_name(args)
-        if (Match(type: TokenType.Native))
-        {
-            return ParseNativeCall(location: location);
-        }
-
         // List literal: [expr, expr, ...]
         if (Match(type: TokenType.LeftBracket))
         {

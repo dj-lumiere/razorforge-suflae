@@ -64,64 +64,60 @@ routine CWStr.__create__(from_ptr: UAddr) -> CWStr {
 # For Windows compatibility - encodes supplementary characters as surrogate pairs
 # The caller is responsible for freeing this memory when done
 routine CWStr.__create__(from_codepoints: Text) -> CWStr {
-    danger! {
-        let len = from_codepoints.count()
-        # Worst case: each codepoint needs 2 code units (surrogate pair)
-        let max_units = len * 2u64
-        let byte_len = (max_units + 1u64) * 2u64
-        let buffer = Snatched<U8>(address: @native.rf_alloc(byte_len))
+    let len = from_codepoints.count()
+    # Worst case: each codepoint needs 2 code units (surrogate pair)
+    let max_units = len * 2u64
+    let byte_len = (max_units + 1u64) * 2u64
+    let buffer = Snatched<U8>(address: rf_alloc(byte_len))
 
-        var write_pos: U64 = 0u64
-        var i: U64 = 0u64
-        while i < len {
-            let codepoint = from_codepoints[i].codepoint()
+    var write_pos: U64 = 0u64
+    var i: U64 = 0u64
+    while i < len {
+        let codepoint = from_codepoints[i].codepoint()
 
-            if codepoint <= 0xFFFFu32 {
-                # BMP character - single code unit
-                Snatched<U16>(address: buffer.address + write_pos * 2u64).write(U16!(codepoint))
-                write_pos = write_pos + 1u64
-            } elseif codepoint <= 0x10FFFFu32 {
-                # Supplementary character - surrogate pair
-                let adjusted = codepoint - 0x10000u32
-                let high = U16!((adjusted >> 10u32) + 0xD800u32)
-                let low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
-                Snatched<U16>(address: buffer.address + write_pos * 2u64).write(high)
-                Snatched<U16>(address: buffer.address + (write_pos + 1u64) * 2u64).write(low)
-                write_pos = write_pos + 2u64
-            } else {
-                # Invalid codepoint - use replacement character
-                Snatched<U16>(address: buffer.address + write_pos * 2u64).write(0xFFFDu16)
-                write_pos = write_pos + 1u64
-            }
-
-            i = i + 1u64
+        if codepoint <= 0xFFFFu32 {
+            # BMP character - single code unit
+            Snatched<U16>(address: buffer.address + write_pos * 2u64).write(U16!(codepoint))
+            write_pos = write_pos + 1u64
+        } elseif codepoint <= 0x10FFFFu32 {
+            # Supplementary character - surrogate pair
+            let adjusted = codepoint - 0x10000u32
+            let high = U16!((adjusted >> 10u32) + 0xD800u32)
+            let low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
+            Snatched<U16>(address: buffer.address + write_pos * 2u64).write(high)
+            Snatched<U16>(address: buffer.address + (write_pos + 1u64) * 2u64).write(low)
+            write_pos = write_pos + 2u64
+        } else {
+            # Invalid codepoint - use replacement character
+            Snatched<U16>(address: buffer.address + write_pos * 2u64).write(0xFFFDu16)
+            write_pos = write_pos + 1u64
         }
-        # Null terminator (2 bytes)
-        Snatched<U16>(address: buffer.address + write_pos * 2u64).write(0u16)
 
-        return CWStr(ptr: buffer.address)
+        i = i + 1u64
     }
+    # Null terminator (2 bytes)
+    Snatched<U16>(address: buffer.address + write_pos * 2u64).write(0u16)
+
+    return CWStr(ptr: buffer.address)
 }
 
 # Create CWStr from List<U16> (allocates NEW memory with null terminator)
 # Treats the list as raw UTF-16 code units
 # The caller is responsible for freeing this memory when done
 routine CWStr.__create__(from_units: List<U16>) -> CWStr {
-    danger! {
-        let len = from_units.count()
-        let byte_len = (len + 1u64) * 2u64
-        let buffer = Snatched<U8>(address: @native.rf_alloc(byte_len))
+    let len = from_units.count()
+    let byte_len = (len + 1u64) * 2u64
+    let buffer = Snatched<U8>(address: rf_alloc(byte_len))
 
-        var i: U64 = 0u64
-        while i < len {
-            Snatched<U16>(address: buffer.address + i * 2u64).write(from_units[i])
-            i = i + 1u64
-        }
-        # Null terminator
-        Snatched<U16>(address: buffer.address + len * 2u64).write(0u16)
-
-        return CWStr(ptr: buffer.address)
+    var i: U64 = 0u64
+    while i < len {
+        Snatched<U16>(address: buffer.address + i * 2u64).write(from_units[i])
+        i = i + 1u64
     }
+    # Null terminator
+    Snatched<U16>(address: buffer.address + len * 2u64).write(0u16)
+
+    return CWStr(ptr: buffer.address)
 }
 
 # ============================================================================
@@ -131,9 +127,7 @@ routine CWStr.__create__(from_units: List<U16>) -> CWStr {
 # Get length of wide C string in characters (excluding null terminator)
 # O(n) - must scan for null terminator
 routine CWStr.count() -> UAddr {
-    danger! {
-        return @native.rf_wcslen(me.ptr)
-    }
+    return rf_wcslen(me.ptr)
 }
 
 # Check if wide C string pointer is null
@@ -155,9 +149,7 @@ routine CWStr.__getitem__!(index: UAddr) -> U16 {
     if index >= me.count() {
         throw IndexOutOfBoundsError()
     }
-    danger! {
-        return read_as!<U16>(me.ptr + (index * 2uaddr))
-    }
+    return read_as!<U16>(me.ptr + (index * 2uaddr))
 }
 
 # ============================================================================
@@ -165,22 +157,18 @@ routine CWStr.__getitem__!(index: UAddr) -> U16 {
 # ============================================================================
 
 routine CWStr.__eq__(other: CWStr) -> Bool {
-    danger! {
-        return @native.rf_wcscmp(me.ptr, other.ptr) == 0s32
-    }
+    return rf_wcscmp(me.ptr, other.ptr) == 0s32
 }
 
 routine CWStr.__cmp__(other: CWStr) -> ComparisonSign {
-    danger! {
-        let cmp = @native.rf_wcscmp(me.ptr, other.ptr)
-        if cmp < 0s32 {
-            return ME_SMALL
-        }
-        if cmp > 0s32 {
-            return ME_LARGE
-        }
-        return EQUAL
+    let cmp = rf_wcscmp(me.ptr, other.ptr)
+    if cmp < 0s32 {
+        return ME_SMALL
     }
+    if cmp > 0s32 {
+        return ME_LARGE
+    }
+    return EQUAL
 }
 
 # ============================================================================
@@ -190,13 +178,11 @@ routine CWStr.__cmp__(other: CWStr) -> ComparisonSign {
 # Copy wide C string to new allocated memory
 # The caller is responsible for freeing the returned memory
 routine CWStr.copy() -> CWStr {
-    danger! {
-        let len = me.count()
-        let byte_len = (len + 1uaddr) * 2uaddr  # Assuming 16-bit wchar_t
-        let buffer = Snatched<U8>(address: @native.rf_alloc(byte_len))
-        @native.rf_wcscpy(buffer.address, me.ptr)
-        return CWStr(ptr: buffer.address)
-    }
+    let len = me.count()
+    let byte_len = (len + 1uaddr) * 2uaddr  # Assuming 16-bit wchar_t
+    let buffer = Snatched<U8>(address: rf_alloc(byte_len))
+    rf_wcscpy(buffer.address, me.ptr)
+    return CWStr(ptr: buffer.address)
 }
 
 # ============================================================================
@@ -206,20 +192,18 @@ routine CWStr.copy() -> CWStr {
 # Convert CWStr to List<U16> (copies raw code units)
 # Useful for binary manipulation or passing to APIs expecting raw data
 routine CWStr.to_units() -> List<U16> {
-    danger! {
-        let len = me.count()
-        let list = List<U16>(len)
-        var i: UAddr = 0uaddr
-        loop {
-            if i >= len {
-                break
-            }
-            let code_unit = read_as!<U16>(me.ptr + (i * 2uaddr))
-            list.add_last(code_unit)
-            i = i + 1uaddr
+    let len = me.count()
+    let list = List<U16>(len)
+    var i: UAddr = 0uaddr
+    loop {
+        if i >= len {
+            break
         }
-        return list
+        let code_unit = read_as!<U16>(me.ptr + (i * 2uaddr))
+        list.add_last(code_unit)
+        i = i + 1uaddr
     }
+    return list
 }
 
 # ============================================================================

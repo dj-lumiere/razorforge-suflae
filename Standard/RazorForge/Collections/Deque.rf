@@ -34,7 +34,7 @@ routine Deque<T>.__create__() -> Deque<T> {
 routine Deque<T>.__create__(capacity: UAddr) -> Deque<T> {
     let byte_size = capacity * data_size<T>()
     return Deque<T>(
-        data: Snatched<U8>(address: @native.rf_alloc(byte_size)),
+        data: Snatched<U8>(address: rf_alloc(byte_size)),
         start: 0uaddr,
         count: 0uaddr,
         capacity: capacity
@@ -167,7 +167,7 @@ routine Deque<T>.reserve(new_capacity: UAddr) {
     }
 
     let new_byte_size = new_capacity * data_size<T>()
-    let new_data = Snatched<U8>(address: @native.rf_alloc(new_byte_size))
+    let new_data = Snatched<U8>(address: rf_alloc(new_byte_size))
 
     # Copy elements in logical order (unwrap the ring)
     var i = 0uaddr

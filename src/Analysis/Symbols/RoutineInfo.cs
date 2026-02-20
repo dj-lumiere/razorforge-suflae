@@ -88,10 +88,10 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
     public bool IsReadOnly => Attributes.Contains(value: "readonly");
 
-    /// <summary>For imported routines, the calling convention.</summary>
+    /// <summary>For external routines, the calling convention.</summary>
     public string? CallingConvention { get; init; }
 
-    /// <summary>For imported routines, whether it's variadic.</summary>
+    /// <summary>For external routines, whether it's variadic.</summary>
     public bool IsVariadic { get; init; }
 
     /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>

@@ -17,8 +17,8 @@ public enum RoutineKind
     /// <summary>Constructor (__create__).</summary>
     Constructor,
 
-    /// <summary>Imported/external FFI function.</summary>
-    Imported,
+    /// <summary>External FFI function.</summary>
+    External,
 
     /// <summary>Operator overload (__add__, __sub__, etc.).</summary>
     Operator

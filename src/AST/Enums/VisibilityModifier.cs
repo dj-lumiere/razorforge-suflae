@@ -10,7 +10,7 @@
 /// <item>secret - Only the declaring module can access</item>
 /// <item>posted - Open read, secret write (for fields)</item>
 /// <item>open - Any code can access</item>
-/// <item>imported - External/FFI linkage</item>
+/// <item>external - External/FFI linkage</item>
 /// </list>
 ///
 /// Visibility can combine with StorageClass (common/global):
@@ -33,5 +33,5 @@ public enum VisibilityModifier
     Open,
 
     /// <summary>External/FFI linkage</summary>
-    Imported
+    External
 }

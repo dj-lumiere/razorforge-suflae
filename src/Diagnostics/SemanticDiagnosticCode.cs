@@ -359,7 +359,7 @@ public enum SemanticDiagnosticCode
     DuplicateTypeDefinition = 400,
 
     /// <summary>Module 'Core' is reserved for standard library.</summary>
-    ReservedNamespaceCore = 401,
+    ReservedModuleCore = 401,
 
     /// <summary>Invalid getter/setter visibility combination.</summary>
     InvalidVisibilityCombination = 402,

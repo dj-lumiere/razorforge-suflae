@@ -28,7 +28,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Try each imported module
-        foreach (string ns in _importedNamespaces)
+        foreach (string ns in _importedModules)
         {
             result = _registry.LookupType(name: $"{ns}.{name}");
             if (result != null)
@@ -58,7 +58,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Try each imported module
-        foreach (string ns in _importedNamespaces)
+        foreach (string ns in _importedModules)
         {
             Symbols.RoutineInfo? result = _registry.LookupRoutine(fullName: $"{ns}.{name}");
             if (result != null)

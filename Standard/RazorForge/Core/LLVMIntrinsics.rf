@@ -1,0 +1,196 @@
+# LLVM intrinsic routine declarations for all primitive types
+# These are shared across all Core module type implementations
+#
+# @llvm_ir("name") is used when the RF routine name differs from the LLVM
+# instruction name (keyword conflicts, dot notation converted to underscores)
+module Core
+
+dangerous external("llvm") routine store<T>(address: @intrinsic.ptr, value: T)
+@llvm_ir("store.volatile")
+dangerous external("llvm") routine store_volatile<T>(address: @intrinsic.ptr, value: T)
+
+# ============================================================================
+# Type Conversion Intrinsics
+# ============================================================================
+
+external("llvm") routine sext<From, To>(value: From) -> To
+external("llvm") routine zext<From, To>(value: From) -> To
+external("llvm") routine trunc<From, To>(value: From) -> To
+external("llvm") routine bitcast<From, To>(value: From) -> To
+external("llvm") routine sitofp<From, To>(value: From) -> To
+external("llvm") routine uitofp<From, To>(value: From) -> To
+external("llvm") routine fptosi<From, To>(value: From) -> To
+external("llvm") routine fptoui<From, To>(value: From) -> To
+external("llvm") routine fpext<From, To>(value: From) -> To
+external("llvm") routine fptrunc<From, To>(value: From) -> To
+
+# ============================================================================
+# Binary Arithmetic Intrinsics
+# ============================================================================
+
+external("llvm") routine add<T>(a: T, b: T) -> T
+external("llvm") routine sub<T>(a: T, b: T) -> T
+external("llvm") routine mul<T>(a: T, b: T) -> T
+external("llvm") routine sdiv<T>(a: T, b: T) -> T
+external("llvm") routine udiv<T>(a: T, b: T) -> T
+external("llvm") routine srem<T>(a: T, b: T) -> T
+external("llvm") routine urem<T>(a: T, b: T) -> T
+
+# ============================================================================
+# Wrapping Arithmetic Intrinsics
+# ============================================================================
+
+@llvm_ir("add.wrapping")
+external("llvm") routine add_wrapping<T>(a: T, b: T) -> T
+@llvm_ir("sub.wrapping")
+external("llvm") routine sub_wrapping<T>(a: T, b: T) -> T
+@llvm_ir("mul.wrapping")
+external("llvm") routine mul_wrapping<T>(a: T, b: T) -> T
+@llvm_ir("div.wrapping")
+external("llvm") routine div_wrapping<T>(a: T, b: T) -> T
+@llvm_ir("rem.wrapping")
+external("llvm") routine rem_wrapping<T>(a: T, b: T) -> T
+
+# ============================================================================
+# Saturating Arithmetic Intrinsics
+# ============================================================================
+
+@llvm_ir("add.saturate")
+external("llvm") routine add_saturate<T>(a: T, b: T) -> T
+@llvm_ir("sub.saturate")
+external("llvm") routine sub_saturate<T>(a: T, b: T) -> T
+@llvm_ir("mul.saturate")
+external("llvm") routine mul_saturate<T>(a: T, b: T) -> T
+
+# ============================================================================
+# Overflow Checking Intrinsics
+# ============================================================================
+
+@llvm_ir("add.overflow")
+external("llvm") routine add_overflow<T>(a: T, b: T) -> (T, Bool)
+@llvm_ir("sub.overflow")
+external("llvm") routine sub_overflow<T>(a: T, b: T) -> (T, Bool)
+@llvm_ir("mul.overflow")
+external("llvm") routine mul_overflow<T>(a: T, b: T) -> (T, Bool)
+
+# ============================================================================
+# Unary Arithmetic Intrinsics
+# ============================================================================
+
+external("llvm") routine neg<T>(value: T) -> T
+external("llvm") routine abs<T>(value: T) -> T
+
+# ============================================================================
+# Bitwise Intrinsics (and/or/not renamed to avoid keyword conflicts)
+# ============================================================================
+
+@llvm_ir("and")
+external("llvm") routine bit_and<T>(a: T, b: T) -> T
+@llvm_ir("or")
+external("llvm") routine bit_or<T>(a: T, b: T) -> T
+external("llvm") routine xor<T>(a: T, b: T) -> T
+@llvm_ir("not")
+external("llvm") routine bit_not<T>(value: T) -> T
+
+# ============================================================================
+# Shift Intrinsics
+# ============================================================================
+
+external("llvm") routine shl<T>(value: T, bits: T) -> T
+external("llvm") routine ashr<T>(value: T, bits: T) -> T
+external("llvm") routine lshr<T>(value: T, bits: T) -> T
+
+# ============================================================================
+# Integer Comparison Intrinsics
+# ============================================================================
+
+@llvm_ir("icmp.eq")
+external("llvm") routine icmp_eq<T>(a: T, b: T) -> Bool
+@llvm_ir("icmp.ne")
+external("llvm") routine icmp_ne<T>(a: T, b: T) -> Bool
+@llvm_ir("icmp.slt")
+external("llvm") routine icmp_slt<T>(a: T, b: T) -> Bool
+@llvm_ir("icmp.sgt")
+external("llvm") routine icmp_sgt<T>(a: T, b: T) -> Bool
+@llvm_ir("icmp.ult")
+external("llvm") routine icmp_ult<T>(a: T, b: T) -> Bool
+@llvm_ir("icmp.ugt")
+external("llvm") routine icmp_ugt<T>(a: T, b: T) -> Bool
+
+# ============================================================================
+# Float Comparison Intrinsics
+# ============================================================================
+
+@llvm_ir("fcmp.oeq")
+external("llvm") routine fcmp_oeq<T>(a: T, b: T) -> Bool
+@llvm_ir("fcmp.olt")
+external("llvm") routine fcmp_olt<T>(a: T, b: T) -> Bool
+@llvm_ir("fcmp.ogt")
+external("llvm") routine fcmp_ogt<T>(a: T, b: T) -> Bool
+
+# ============================================================================
+# Bit Manipulation Intrinsics
+# ============================================================================
+
+external("llvm") routine ctpop<T>(value: T) -> T
+external("llvm") routine ctlz<T>(value: T) -> T
+external("llvm") routine cttz<T>(value: T) -> T
+external("llvm") routine bitreverse<T>(value: T) -> T
+external("llvm") routine bswap<T>(value: T) -> T
+
+# ============================================================================
+# Float Math Intrinsics
+# ============================================================================
+
+external("llvm") routine sqrt<T>(value: T) -> T
+external("llvm") routine fabs<T>(value: T) -> T
+external("llvm") routine floor<T>(value: T) -> T
+external("llvm") routine ceil<T>(value: T) -> T
+external("llvm") routine round<T>(value: T) -> T
+@llvm_ir("trunc.float")
+external("llvm") routine trunc_float<T>(value: T) -> T
+external("llvm") routine sin<T>(value: T) -> T
+external("llvm") routine cos<T>(value: T) -> T
+external("llvm") routine exp<T>(value: T) -> T
+external("llvm") routine log<T>(value: T) -> T
+external("llvm") routine log10<T>(value: T) -> T
+external("llvm") routine pow<T>(base: T, exp: T) -> T
+external("llvm") routine copysign<T>(value: T, sign: T) -> T
+
+# ============================================================================
+# Platform Query Intrinsics
+# ============================================================================
+
+external("llvm") routine bitwidth<T>() -> U32
+@llvm_ir("min.value")
+external("llvm") routine min_value<T>() -> T
+
+# ============================================================================
+# Atomic Intrinsics
+# ============================================================================
+
+@llvm_ir("atomic.load")
+external("llvm") routine atomic_load<T>(ptr: @intrinsic.ptr) -> T
+@llvm_ir("atomic.store")
+external("llvm") routine atomic_store<T>(ptr: @intrinsic.ptr, value: T)
+@llvm_ir("atomic.add")
+external("llvm") routine atomic_add<T>(ptr: @intrinsic.ptr, value: T) -> T
+@llvm_ir("atomic.sub")
+external("llvm") routine atomic_sub<T>(ptr: @intrinsic.ptr, value: T) -> T
+@llvm_ir("atomic.and")
+external("llvm") routine atomic_and<T>(ptr: @intrinsic.ptr, value: T) -> T
+@llvm_ir("atomic.or")
+external("llvm") routine atomic_or<T>(ptr: @intrinsic.ptr, value: T) -> T
+@llvm_ir("atomic.xor")
+external("llvm") routine atomic_xor<T>(ptr: @intrinsic.ptr, value: T) -> T
+@llvm_ir("atomic.xchg")
+external("llvm") routine atomic_xchg<T>(ptr: @intrinsic.ptr, value: T) -> T
+@llvm_ir("atomic.cmpxchg")
+external("llvm") routine atomic_cmpxchg<T>(ptr: @intrinsic.ptr, expected: T, desired: T) -> (T, Bool)
+
+# ============================================================================
+# Text Intrinsics
+# ============================================================================
+
+@llvm_ir("ptr.to.text")
+external("llvm") routine ptr_to_text(ptr: @intrinsic.ptr) -> Text

@@ -68,8 +68,8 @@ public sealed partial class SemanticAnalyzer
                 CollectFunctionDeclaration(routine: func);
                 break;
 
-            case ImportedDeclaration imported:
-                CollectImportedDeclaration(imported: imported);
+            case ExternalDeclaration externalDecl:
+                CollectExternalDeclaration(external: externalDecl);
                 break;
 
             case VariableDeclaration variable:
@@ -77,7 +77,7 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case ModuleDeclaration ns:
-                ValidateNamespaceDeclaration(ns: ns);
+                ValidateModuleDeclaration(ns: ns);
                 break;
 
             case ImportDeclaration import:
@@ -94,13 +94,13 @@ public sealed partial class SemanticAnalyzer
     /// Validates a module declaration.
     /// Rejects "module Core" as it's reserved for stdlib (user code cannot declare it).
     /// </summary>
-    private void ValidateNamespaceDeclaration(ModuleDeclaration ns)
+    private void ValidateModuleDeclaration(ModuleDeclaration ns)
     {
         // Module "Core" is reserved for stdlib only
         if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase) && !IsStdlibFile(_currentFilePath))
         {
             ReportError(
-                SemanticDiagnosticCode.ReservedNamespaceCore,
+                SemanticDiagnosticCode.ReservedModuleCore,
                 "Module 'Core' is reserved for the standard library and cannot be used in user code.",
                 ns.Location);
         }
@@ -118,7 +118,7 @@ public sealed partial class SemanticAnalyzer
             importPath: import.ModulePath,
             currentFile: _currentFilePath,
             location: import.Location,
-            out string? effectiveNamespace);
+            out string? effectiveModule);
 
         if (!success)
         {
@@ -130,9 +130,9 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Track the imported module for per-file type resolution
-        if (effectiveNamespace != null)
+        if (effectiveModule != null)
         {
-            _importedNamespaces.Add(effectiveNamespace);
+            _importedModules.Add(effectiveModule);
         }
     }
 
@@ -205,7 +205,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = record.GenericConstraints,
             Visibility = record.Visibility,
             Location = record.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: record.Location);
@@ -219,7 +219,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = entity.GenericConstraints,
             Visibility = entity.Visibility,
             Location = entity.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: entity.Location);
@@ -242,7 +242,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = resident.GenericConstraints,
             Visibility = resident.Visibility,
             Location = resident.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: resident.Location);
@@ -254,7 +254,7 @@ public sealed partial class SemanticAnalyzer
         {
             Visibility = choice.Visibility,
             Location = choice.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: choice.Location);
@@ -266,7 +266,7 @@ public sealed partial class SemanticAnalyzer
         {
             Visibility = flags.Visibility,
             Location = flags.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: flags.Location);
@@ -279,7 +279,7 @@ public sealed partial class SemanticAnalyzer
             GenericParameters = variant.GenericParameters,
             GenericConstraints = variant.GenericConstraints,
             Location = variant.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: variant.Location);
@@ -293,7 +293,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = protocol.GenericConstraints,
             Visibility = protocol.Visibility,
             Location = protocol.Location,
-            Module = GetCurrentNamespace()
+            Module = GetCurrentModuleName()
         };
 
         TryRegisterType(type: typeInfo, location: protocol.Location);
@@ -399,7 +399,7 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = routine.GenericConstraints,
             Visibility = routine.Visibility,
             Location = routine.Location,
-            Module = GetCurrentNamespace(),
+            Module = GetCurrentModuleName(),
             Attributes = routine.Attributes,
             DeclaredMutation = declaredMutation,
             MutationCategory = declaredMutation
@@ -582,16 +582,17 @@ public sealed partial class SemanticAnalyzer
         return DunderToProtocol.GetValueOrDefault(key: dunderName);
     }
 
-    private void CollectImportedDeclaration(ImportedDeclaration imported)
+    private void CollectExternalDeclaration(ExternalDeclaration external)
     {
-        var routineInfo = new RoutineInfo(name: imported.Name)
+        var routineInfo = new RoutineInfo(name: external.Name)
         {
-            Kind = RoutineKind.Imported,
-            CallingConvention = imported.CallingConvention,
-            IsVariadic = imported.IsVariadic,
-            Visibility = VisibilityModifier.Public, // Imported declarations are always public
-            Location = imported.Location,
-            Module = GetCurrentNamespace()
+            Kind = RoutineKind.External,
+            CallingConvention = external.CallingConvention,
+            IsVariadic = external.IsVariadic,
+            Visibility = VisibilityModifier.Open, // External declarations are always open
+            Location = external.Location,
+            Module = GetCurrentModuleName(),
+            Attributes = external.Attributes ?? []
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
@@ -1263,8 +1264,8 @@ public sealed partial class SemanticAnalyzer
                 }
                 break;
 
-            case ImportedDeclaration imported:
-                ResolveImportedParameters(imported: imported);
+            case ExternalDeclaration externalDecl:
+                ResolveExternalParameters(externalDecl);
                 break;
         }
     }
@@ -1634,11 +1635,11 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Resolves parameters for an imported declaration.
+    /// Resolves parameters for an external declaration.
     /// </summary>
-    private void ResolveImportedParameters(ImportedDeclaration imported)
+    private void ResolveExternalParameters(ExternalDeclaration externalDecl)
     {
-        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: imported.Name);
+        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: externalDecl.Name);
         if (routineInfo == null)
         {
             return;
@@ -1646,7 +1647,7 @@ public sealed partial class SemanticAnalyzer
 
         var parameters = new List<ParameterInfo>();
 
-        foreach (Parameter param in imported.Parameters)
+        foreach (Parameter param in externalDecl.Parameters)
         {
             TypeSymbol paramType = param.Type != null
                 ? ResolveType(typeExpr: param.Type)
@@ -1659,8 +1660,8 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Resolve return type
-        TypeSymbol? returnType = imported.ReturnType != null
-            ? ResolveType(typeExpr: imported.ReturnType)
+        TypeSymbol? returnType = externalDecl.ReturnType != null
+            ? ResolveType(typeExpr: externalDecl.ReturnType)
             : null;
 
         // Update the routine info with resolved parameters

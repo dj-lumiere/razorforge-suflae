@@ -39,7 +39,7 @@
         {
           "comment": "Access modifiers",
           "name": "keyword.modifier.razorforge",
-          "match": "\\b(private|internal|public|global|imported)\\b"
+          "match": "\\b(secret|posted|open|global|external|dangerous)\\b"
         },
         {
           "comment": "Control flow",
@@ -199,9 +199,9 @@
     "operators": {
       "patterns": [
         {
-          "comment": "Intrinsic/Native calls",
+          "comment": "Intrinsic type attribute",
           "name": "keyword.other.razorforge",
-          "match": "@(intrinsic|native)\\b"
+          "match": "@intrinsic\\b"
         },
         {
           "comment": "Annotation",

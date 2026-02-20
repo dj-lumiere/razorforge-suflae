@@ -3,7 +3,7 @@
 module Core
 # Core U8 type definition - maps to LLVM i8
 record U8 follows UnsignedIntegral, Ordered {
-    secret value: @intrinsic_type.i8
+    secret value: @intrinsic.i8
 }
 
 # Constants for U8 limits
@@ -21,9 +21,7 @@ routine U8.__create__!(from: S8) -> U8 {
     if from < 0_s8 {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.bitcast<i8, i8>(from)
-    }
+    return bitcast<S8, U8>(from)
 }
 
 # From S16 - crashes if value out of U8 range
@@ -31,9 +29,7 @@ routine U8.__create__!(from: S16) -> U8 {
     if not (0_s16 <= from <= 255_s16) {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i16, i8>(from)
-    }
+    return trunc<S16, U8>(from)
 }
 
 # From S32 - crashes if value out of U8 range
@@ -41,9 +37,7 @@ routine U8.__create__!(from: S32) -> U8 {
     if not (0_s32 <= from <= 255_s32) {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i32, i8>(from)
-    }
+    return trunc<S32, U8>(from)
 }
 
 # From S64 - crashes if value out of U8 range
@@ -51,9 +45,7 @@ routine U8.__create__!(from: S64) -> U8 {
     if not (0_s64 <= from <= 255_s64) {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i64, i8>(from)
-    }
+    return trunc<S64, U8>(from)
 }
 
 # From S128 - crashes if value out of U8 range
@@ -61,9 +53,7 @@ routine U8.__create__!(from: S128) -> U8 {
     if not (0_s128 <= from <= 255_s128) {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i128, i8>(from)
-    }
+    return trunc<S128, U8>(from)
 }
 
 routine U8.__create__(from: U8) -> U8 {
@@ -75,9 +65,7 @@ routine U8.__create__!(from: U16) -> U8 {
     if from > 255_u16 {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i16, i8>(from)
-    }
+    return trunc<U16, U8>(from)
 }
 
 # From U32 - crashes if value > U8_MAX
@@ -85,9 +73,7 @@ routine U8.__create__!(from: U32) -> U8 {
     if from > 255_u32 {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i32, i8>(from)
-    }
+    return trunc<U32, U8>(from)
 }
 
 # From U64 - crashes if value > U8_MAX
@@ -95,9 +81,7 @@ routine U8.__create__!(from: U64) -> U8 {
     if from > 255_u64 {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i64, i8>(from)
-    }
+    return trunc<U64, U8>(from)
 }
 
 # From U128 - crashes if value > U8_MAX
@@ -105,9 +89,7 @@ routine U8.__create__!(from: U128) -> U8 {
     if from > 255_u128 {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<i128, i8>(from)
-    }
+    return trunc<U128, U8>(from)
 }
 
 # From floating point - truncates fractional part and crashes if overflow
@@ -146,9 +128,7 @@ routine U8.__create__!(from: SAddr) -> U8 {
     if not (0_s64 <= val_s64 <= 255_s64) {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<iptr, i8>(from)
-    }
+    return trunc<SAddr, U8>(from)
 }
 
 # From UAddr - crashes if value out of U8 range
@@ -157,9 +137,7 @@ routine U8.__create__!(from: UAddr) -> U8 {
     if val_u64 > 255_u64 {
         throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
     }
-    danger! {
-        return @intrinsic_routine.trunc<uptr, i8>(from)
-    }
+    return trunc<UAddr, U8>(from)
 }
 
 # ============================================================================
@@ -168,23 +146,17 @@ routine U8.__create__!(from: UAddr) -> U8 {
 
 @crash_only
 routine U8.__add__!(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.add<i8>(me, you)
-    }
+    return add<U8>(me, you)
 }
 
 @crash_only
 routine U8.__sub__!(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.sub<i8>(me, you)
-    }
+    return sub<U8>(me, you)
 }
 
 @crash_only
 routine U8.__mul__!(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.mul<i8>(me, you)
-    }
+    return mul<U8>(me, you)
 }
 
 @crash_only
@@ -192,16 +164,12 @@ routine U8.__floordiv__!(you: U8) -> U8 {
     if you == 0 {
         throw DivisionByZeroError()
     }
-    danger! {
-        return @intrinsic_routine.udiv<i8>(me, you)
-    }
+    return udiv<U8>(me, you)
 }
 
 @crash_only
 routine U8.__mod__!(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.urem<i8>(me, you)
-    }
+    return urem<U8>(me, you)
 }
 
 # ============================================================================
@@ -209,21 +177,15 @@ routine U8.__mod__!(you: U8) -> U8 {
 # ============================================================================
 
 routine U8.__add_wrap__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.add.wrapping<i8>(me, you)
-    }
+    return add_wrapping<U8>(me, you)
 }
 
 routine U8.__sub_wrap__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.sub.wrapping<i8>(me, you)
-    }
+    return sub_wrapping<U8>(me, you)
 }
 
 routine U8.__mul_wrap__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.mul.wrapping<i8>(me, you)
-    }
+    return mul_wrapping<U8>(me, you)
 }
 
 # ============================================================================
@@ -231,21 +193,15 @@ routine U8.__mul_wrap__(you: U8) -> U8 {
 # ============================================================================
 
 routine U8.__add_sat__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.add.saturate<i8>(me, you)
-    }
+    return add_saturate<U8>(me, you)
 }
 
 routine U8.__sub_sat__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.sub.saturate<i8>(me, you)
-    }
+    return sub_saturate<U8>(me, you)
 }
 
 routine U8.__mul_sat__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.mul.saturate<i8>(me, you)
-    }
+    return mul_saturate<U8>(me, you)
 }
 
 # ============================================================================
@@ -253,24 +209,18 @@ routine U8.__mul_sat__(you: U8) -> U8 {
 # ============================================================================
 
 routine U8.__add_checked__(you: U8) -> Maybe<U8> {
-    danger! {
-        let (result, overflow) = @intrinsic_routine.add.overflow<i8>(me, you)
-        return if overflow then None else result
-    }
+    let (result, overflow) = add_overflow<U8>(me, you)
+    return if overflow then None else result
 }
 
 routine U8.__sub_checked__(you: U8) -> Maybe<U8> {
-    danger! {
-        let (result, overflow) = @intrinsic_routine.sub.overflow<i8>(me, you)
-        return if overflow then None else result
-    }
+    let (result, overflow) = sub_overflow<U8>(me, you)
+    return if overflow then None else result
 }
 
 routine U8.__mul_checked__(you: U8) -> Maybe<U8> {
-    danger! {
-        let (result, overflow) = @intrinsic_routine.mul.overflow<i8>(me, you)
-        return if overflow then None else result
-    }
+    let (result, overflow) = mul_overflow<U8>(me, you)
+    return if overflow then None else result
 }
 
 # ============================================================================
@@ -280,92 +230,84 @@ routine U8.__mul_checked__(you: U8) -> Maybe<U8> {
 # Power operator (**) - can overflow
 @crash_only
 routine U8.__pow__!(exp: U8) -> U8 {
-    danger! {
-        var result: U8 = 1
-        var base: U8 = me
-        var e: U32 = exp
-        if me == 0 and exp == 0 {
-            throw IndeterminateResultError()
-        }
-        while e > 0 {
-            if (e & 1) == 1 {
-                result = @intrinsic_routine.mul<i8>(result, base)
-            }
-            base = @intrinsic_routine.mul<i8>(base, base)
-            e = e >> 1
-        }
-        return result
+    var result: U8 = 1
+    var base: U8 = me
+    var e: U32 = exp
+    if me == 0 and exp == 0 {
+        throw IndeterminateResultError()
     }
+    while e > 0 {
+        if (e & 1) == 1 {
+            result = mul<U8>(result, base)
+        }
+        base = mul<U8>(base, base)
+        e = e >> 1
+    }
+    return result
 }
 
 # Wrapping power (**%)
 @crash_only
 routine U8.__pow_wrap__!(exp: U8) -> U8 {
-    danger! {
-        var result: U8 = 1
-        var base: U8 = me
-        var e: U32 = exp
-        if me == 0 and exp == 0 {
-            throw IndeterminateResultError()
-        }
-        while e > 0 {
-            if (e & 1) == 1 {
-                result = @intrinsic_routine.mul.wrapping<i8>(result, base)
-            }
-            base = @intrinsic_routine.mul.wrapping<i8>(base, base)
-            e = e >> 1
-        }
-        return result
+    var result: U8 = 1
+    var base: U8 = me
+    var e: U32 = exp
+    if me == 0 and exp == 0 {
+        throw IndeterminateResultError()
     }
+    while e > 0 {
+        if (e & 1) == 1 {
+            result = mul_wrapping<U8>(result, base)
+        }
+        base = mul_wrapping<U8>(base, base)
+        e = e >> 1
+    }
+    return result
 }
 
 # Saturating power (**^)
 @crash_only
 routine U8.__pow_sat__!(exp: U8) -> U8 {
-    danger! {
-        var result: U8 = 1
-        var base: U8 = me
-        var e: U32 = exp
-        if me == 0 and exp == 0 {
-            throw IndeterminateResultError()
-        }
-        while e > 0 {
-            if (e & 1) == 1 {
-                result = @intrinsic_routine.mul.saturate<i8>(result, base)
-            }
-            base = @intrinsic_routine.mul.saturate<i8>(base, base)
-            e = e >> 1
-        }
-        return result
+    var result: U8 = 1
+    var base: U8 = me
+    var e: U32 = exp
+    if me == 0 and exp == 0 {
+        throw IndeterminateResultError()
     }
+    while e > 0 {
+        if (e & 1) == 1 {
+            result = mul_saturate<U8>(result, base)
+        }
+        base = mul_saturate<U8>(base, base)
+        e = e >> 1
+    }
+    return result
 }
 
 # Checked power (**?) - returns Maybe<U8>
 routine U8.__pow_checked__(exp: U8) -> Maybe<U8> {
-    danger! {
-        var result: U8 = 1
-        var base: U8 = me
-        var e: U32 = exp
-        if me == 0 {
-            return None
-        }
-        while e > 0 {
-            if (e & 1) == 1 {
-                let (new_result, overflow) = @intrinsic_routine.mul.overflow<i8>(result, base)
-                if overflow {
-                    return None
-                }
-                result = new_result
-            }
-            let (new_base, overflow) = @intrinsic_routine.mul.overflow<i8>(base, base)
-            if overflow and e > 1 {
+    var result: U8 = 1
+    var base: U8 = me
+    var e: U32 = exp
+    if me == 0 {
+        return None
+    }
+    while e > 0 {
+        if (e & 1) == 1 {
+            let (new_result, overflow) = mul_overflow<U8>(result, base)
+            if overflow {
                 return None
             }
-            base = new_base
-            e = e >> 1
+            result = new_result
         }
-        return result
+        let (new_base, overflow) = mul_overflow<U8>(base, base)
+        if overflow and e > 1 {
+            return None
+        }
+        base = new_base
+        e = e >> 1
     }
+    return result
 }
 
 # ============================================================================
@@ -373,27 +315,19 @@ routine U8.__pow_checked__(exp: U8) -> Maybe<U8> {
 # ============================================================================
 
 routine U8.__and__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.and<i8>(me, you)
-    }
+    return bit_and<U8>(me, you)
 }
 
 routine U8.__or__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.or<i8>(me, you)
-    }
+    return bit_or<U8>(me, you)
 }
 
 routine U8.__xor__(you: U8) -> U8 {
-    danger! {
-        return @intrinsic_routine.xor<i8>(me, you)
-    }
+    return xor<U8>(me, you)
 }
 
 routine U8.__not__() -> U8 {
-    danger! {
-        return @intrinsic_routine.not<i8>(me)
-    }
+    return bit_not<U8>(me)
 }
 
 # ============================================================================
@@ -403,46 +337,36 @@ routine U8.__not__() -> U8 {
 
 # Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
 routine U8.__ashl__(bits: U32) -> U8 {
-    danger! {
-        return @intrinsic_routine.shl<i8>(me, bits)
-    }
+    return shl<U8>(me, bits)
 }
 
 # Checked arithmetic left shift (<<?) - returns Maybe<U8>
 routine U8.__ashl_checked__(bits: U32) -> Maybe<U8> {
-    danger! {
-        if bits >= 8 {
-            return None
-        }
-        let result = @intrinsic_routine.shl<i8>(me, bits)
-        # Check if we can recover the original value
-        let recovered = @intrinsic_routine.lshr<i8>(result, bits)
-        if recovered != me {
-            return None
-        }
-        return result
+    if bits >= 8 {
+        return None
     }
+    let result = shl<U8>(me, bits)
+    # Check if we can recover the original value
+    let recovered = lshr<U8>(result, bits)
+    if recovered != me {
+        return None
+    }
+    return result
 }
 
 # Arithmetic right shift (>>) - for unsigned, same as logical
 routine U8.__ashr__(bits: U32) -> U8 {
-    danger! {
-        return @intrinsic_routine.lshr<i8>(me, bits)
-    }
+    return lshr<U8>(me, bits)
 }
 
 # Logical left shift (<<<) - same as <<
 routine U8.__lshl__(bits: U32) -> U8 {
-    danger! {
-        return @intrinsic_routine.shl<i8>(me, bits)
-    }
+    return shl<U8>(me, bits)
 }
 
 # Logical right shift (>>>) - fills with zeros
 routine U8.__lshr__(bits: U32) -> U8 {
-    danger! {
-        return @intrinsic_routine.lshr<i8>(me, bits)
-    }
+    return lshr<U8>(me, bits)
 }
 
 # ============================================================================
@@ -450,21 +374,17 @@ routine U8.__lshr__(bits: U32) -> U8 {
 # ============================================================================
 
 routine U8.__eq__(you: U8) -> Bool {
-    danger! {
-        return @intrinsic_routine.icmp.eq<i8>(me, you)
-    }
+    return icmp_eq<U8>(me, you)
 }
 
 routine U8.__cmp__(you: U8) -> ComparisonSign {
-    danger! {
-        if @intrinsic_routine.icmp.ult<i8>(me, you) {
-            return ME_SMALL
-        }
-        if @intrinsic_routine.icmp.ugt<i8>(me, you) {
-            return ME_LARGE
-        }
-        return EQUAL
+    if icmp_ult<U8>(me, you) {
+        return ME_SMALL
     }
+    if icmp_ugt<U8>(me, you) {
+        return ME_LARGE
+    }
+    return EQUAL
 }
 
 # ============================================================================
@@ -488,9 +408,7 @@ routine U8.clamp(min_val: U8, max_val: U8) -> U8 {
 # ============================================================================
 
 routine U8.count_ones() -> U8 {
-    danger! {
-        return @intrinsic_routine.ctpop<i8>(me)
-    }
+    return ctpop<U8>(me)
 }
 
 routine U8.count_zeros() -> U8 {
@@ -498,15 +416,11 @@ routine U8.count_zeros() -> U8 {
 }
 
 routine U8.leading_zeros() -> U8 {
-    danger! {
-        return @intrinsic_routine.ctlz<i8>(me)
-    }
+    return ctlz<U8>(me)
 }
 
 routine U8.trailing_zeros() -> U8 {
-    danger! {
-        return @intrinsic_routine.cttz<i8>(me)
-    }
+    return cttz<U8>(me)
 }
 
 routine U8.leading_ones() -> U8 {
@@ -518,9 +432,7 @@ routine U8.trailing_ones() -> U8 {
 }
 
 routine U8.reverse_bits() -> U8 {
-    danger! {
-        return @intrinsic_routine.bitreverse<i8>(me)
-    }
+    return bitreverse<U8>(me)
 }
 
 routine U8.is_power_of_two() -> Bool {
@@ -533,54 +445,38 @@ routine U8.is_power_of_two() -> Bool {
 
 # Bitcast to signed
 routine S8(from: U8) -> S8 {
-    danger! {
-        return @intrinsic_routine.bitcast<i8, i8>(from)
-    }
+    return bitcast<U8, S8>(from)
 }
 
 # Zero-extend to larger types
 routine U16(from: U8) -> U16 {
-    danger! {
-        return @intrinsic_routine.zext<i8, i16>(from)
-    }
+    return zext<U8, U16>(from)
 }
 
 routine U32(from: U8) -> U32 {
-    danger! {
-        return @intrinsic_routine.zext<i8, i32>(from)
-    }
+    return zext<U8, U32>(from)
 }
 
 routine U64(from: U8) -> U64 {
-    danger! {
-        return @intrinsic_routine.zext<i8, i64>(from)
-    }
+    return zext<U8, U64>(from)
 }
 
 routine U128(from: U8) -> U128 {
-    danger! {
-        return @intrinsic_routine.zext<i8, i128>(from)
-    }
+    return zext<U8, U128>(from)
 }
 
 # Convert to floating point
 routine F32(from: U8) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<i8, float>(from)
-    }
+    return uitofp<U8, F32>(from)
 }
 
 routine F64(from: U8) -> F64 {
-    danger! {
-        return @intrinsic_routine.uitofp<i8, double>(from)
-    }
+    return uitofp<U8, F64>(from)
 }
 
 # Convert to boolean
 routine Bool(from: U8) -> Bool {
-    danger! {
-        return @intrinsic_routine.icmp.ne<i8>(from, 0_u8)
-    }
+    return icmp_ne<U8>(from, 0_u8)
 }
 
 # ============================================================================
@@ -592,13 +488,10 @@ routine U8.is_zero() -> Bool {
 }
 
 routine U8.is_even() -> Bool {
-    danger! {
-        let result = @intrinsic_routine.and<i8>(me, 1_u8)
-        return @intrinsic_routine.icmp.eq<i8>(result, 0_u8)
-    }
+    let result = bit_and<U8>(me, 1_u8)
+    return icmp_eq<U8>(result, 0_u8)
 }
 
 routine U8.is_odd() -> Bool {
     return not me.is_even()
 }
-

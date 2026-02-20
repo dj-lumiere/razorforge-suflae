@@ -18,27 +18,19 @@ import Text.Text
 # show for Text
 routine Console.show(value: Text, end: Text = "\n") {
     let bytes_value: Bytes = value.to_utf8_bytes()
-    danger! {
-        @native.rf_console_print(bytes_value.ptr, bytes_value.count())
-    }
+    rf_console_print(bytes_value.ptr, bytes_value.count())
     if end.count() > 0u64 {
         let end_bytes = end.to_utf8_bytes()
-        danger! {
-            @native.rf_console_print(end_bytes.ptr, end_bytes.count())
-        }
+        rf_console_print(end_bytes.ptr, end_bytes.count())
     }
 }
 
 # show for Bytes (writes raw bytes directly)
 routine Console.show(value: Bytes, end: Text = "\n") {
-    danger! {
-        @native.rf_console_print(value.ptr, value.count())
-    }
+    rf_console_print(value.ptr, value.count())
     if end.count() > 0u64 {
         let end_bytes = end.to_utf8_bytes()
-        danger! {
-            @native.rf_console_print(end_bytes.ptr, end_bytes.count())
-        }
+        rf_console_print(end_bytes.ptr, end_bytes.count())
     }
 }
 
@@ -57,27 +49,19 @@ requires T follows Representable {
 # alert for Text
 routine Console.alert(value: Text, end: Text = "\n") {
     let bytes_value: Bytes = value.to_utf8_bytes()
-    danger! {
-        @native.rf_console_alert(bytes_value.ptr, bytes_value.count())
-    }
+    rf_console_alert(bytes_value.ptr, bytes_value.count())
     if end.count() > 0u64 {
         let end_bytes = end.to_utf8_bytes()
-        danger! {
-            @native.rf_console_alert(end_bytes.ptr, end_bytes.count())
-        }
+        rf_console_alert(end_bytes.ptr, end_bytes.count())
     }
 }
 
 # alert for Bytes (writes raw bytes directly)
 routine Console.alert(value: Bytes, end: Text = "\n") {
-    danger! {
-        @native.rf_console_alert(value.ptr, value.count())
-    }
+    rf_console_alert(value.ptr, value.count())
     if end.count() > 0u64 {
         let end_bytes = end.to_utf8_bytes()
-        danger! {
-            @native.rf_console_alert(end_bytes.ptr, end_bytes.count())
-        }
+        rf_console_alert(end_bytes.ptr, end_bytes.count())
     }
 }
 
@@ -94,38 +78,30 @@ requires T follows Representable {
 
 # Read text until newline (single line)
 routine Console.get_line() -> Text {
-    danger! {
-        let ptr = @native.rf_console_get_line()
-        let bytes = Bytes(ptr: ptr)
-        return bytes.to_text()
-    }
+    let ptr = rf_console_get_line()
+    let bytes = Bytes(ptr: ptr)
+    return bytes.to_text()
 }
 
 # Read text until whitespace (single word)
 routine Console.get_word() -> Text {
-    danger! {
-        let ptr = @native.rf_console_get_word()
-        let bytes = Bytes(ptr: ptr)
-        return bytes.to_text()
-    }
+    let ptr = rf_console_get_word()
+    let bytes = Bytes(ptr: ptr)
+    return bytes.to_text()
 }
 
 # Read all text until EOF
 routine Console.get_all() -> Text {
-    danger! {
-        let ptr = @native.rf_console_get_all()
-        let bytes = Bytes(ptr: ptr)
-        return bytes.to_text()
-    }
+    let ptr = rf_console_get_all()
+    let bytes = Bytes(ptr: ptr)
+    return bytes.to_text()
 }
 
 # Read exactly n codepoints from input
 routine Console.get_letters(count: UAddr) -> Text {
-    danger! {
-        let ptr = @native.rf_console_get_letters(count)
-        let bytes = Bytes(ptr: ptr)
-        return bytes.to_text()
-    }
+    let ptr = rf_console_get_letters(count)
+    let bytes = Bytes(ptr: ptr)
+    return bytes.to_text()
 }
 
 # Read all lines separated by newline
@@ -148,18 +124,14 @@ routine Console.get_words() -> List<Text> {
 
 # Read all remaining input as raw bytes
 routine Console.get_raw() -> Bytes {
-    danger! {
-        let ptr = @native.rf_console_get_all()
-        return Bytes(ptr: ptr)
-    }
+    let ptr = rf_console_get_all()
+    return Bytes(ptr: ptr)
 }
 
 # Read up to n bytes
 routine Console.get_bytes(count: UAddr) -> Bytes {
-    danger! {
-        let ptr = @native.rf_console_get_bytes(count)
-        return Bytes(ptr: ptr)
-    }
+    let ptr = rf_console_get_bytes(count)
+    return Bytes(ptr: ptr)
 }
 
 # ============================================================================
@@ -167,13 +139,9 @@ routine Console.get_bytes(count: UAddr) -> Bytes {
 # ============================================================================
 
 routine Console.flush() {
-    danger! {
-        @native.rf_console_flush()
-    }
+    rf_console_flush()
 }
 
 routine Console.clear() {
-    danger! {
-        @native.rf_console_clear()
-    }
+    rf_console_clear()
 }

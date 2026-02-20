@@ -2,8 +2,9 @@
 # Maps directly to LLVM float type using compiler intrinsics
 module Core
 # Core F32 type definition - maps to LLVM float
+
 record F32 follows Numeric, Ordered {
-    secret value: @intrinsic_type.float
+    secret value: @intrinsic.float
 }
 
 # IEEE 754 single precision constants
@@ -22,69 +23,47 @@ preset F32_LN_2: F32 = 0.6931472_f32
 preset F32_LN_10: F32 = 2.3025851_f32
 
 routine F32.__create__(from: S8) -> F32 {
-    danger! {
-        return @intrinsic_routine.sitofp<i8, float>(from)
-    }
+    return sitofp<S8, F32>(from)
 }
 
 routine F32.__create__(from: S16) -> F32 {
-    danger! {
-        return @intrinsic_routine.sitofp<i16, float>(from)
-    }
+    return sitofp<S16, F32>(from)
 }
 
 routine F32.__create__(from: S32) -> F32 {
-    danger! {
-        return @intrinsic_routine.sitofp<i32, float>(from)
-    }
+    return sitofp<S32, F32>(from)
 }
 
 routine F32.__create__(from: S64) -> F32 {
-    danger! {
-        return @intrinsic_routine.sitofp<i64, float>(from)
-    }
+    return sitofp<S64, F32>(from)
 }
 
 routine F32.__create__(from: S128) -> F32 {
-    danger! {
-        return @intrinsic_routine.sitofp<i128, float>(from)
-    }
+    return sitofp<S128, F32>(from)
 }
 
 routine F32.__create__(from: U8) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<i8, float>(from)
-    }
+    return uitofp<U8, F32>(from)
 }
 
 routine F32.__create__(from: U16) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<i16, float>(from)
-    }
+    return uitofp<U16, F32>(from)
 }
 
 routine F32.__create__(from: U32) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<i32, float>(from)
-    }
+    return uitofp<U32, F32>(from)
 }
 
 routine F32.__create__(from: U64) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<i64, float>(from)
-    }
+    return uitofp<U64, F32>(from)
 }
 
 routine F32.__create__(from: U128) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<i128, float>(from)
-    }
+    return uitofp<U128, F32>(from)
 }
 
 routine F32.__create__(from: F16) -> F32 {
-    danger! {
-        return @intrinsic_routine.fpext<half, float>(from)
-    }
+    return fpext<F16, F32>(from)
 }
 
 routine F32.__create__(from: F32) -> F32 {
@@ -92,49 +71,35 @@ routine F32.__create__(from: F32) -> F32 {
 }
 
 routine F32.__create__(from: F64) -> F32 {
-    danger! {
-        return @intrinsic_routine.fptrunc<double, float>(from)
-    }
+    return fptrunc<F64, F32>(from)
 }
 
 routine F32.__create__(from: F128) -> F32 {
-    danger! {
-        return @intrinsic_routine.fptrunc<fp128, float>(from)
-    }
+    return fptrunc<F128, F32>(from)
 }
 
 routine F32.__create__(from: D32) -> F32 {
-    danger! {
-        let bits = @intrinsic_routine.bitcast<D32, U32>(from)
-        return @native.rf_d32_to_f32(bits)
-    }
+    let bits = bitcast<D32, U32>(from)
+    return rf_d32_to_f32(bits)
 }
 
 routine F32.__create__(from: D64) -> F32 {
-    danger! {
-        let bits = @intrinsic_routine.bitcast<D64, U64>(from)
-        return @native.rf_d64_to_f32(bits)
-    }
+    let bits = bitcast<D64, U64>(from)
+    return rf_d64_to_f32(bits)
 }
 
 routine F32.__create__(from: D128) -> F32 {
-    danger! {
-        return @native.rf_d128_to_f32(from.low_bits(), from.high_bits())
-    }
+    return rf_d128_to_f32(from.low_bits(), from.high_bits())
 }
 
 # From SAddr - convert to float (may lose precision)
 routine F32.__create__(from: SAddr) -> F32 {
-    danger! {
-        return @intrinsic_routine.sitofp<iptr, float>(from)
-    }
+    return sitofp<SAddr, F32>(from)
 }
 
 # From UAddr - convert to float (may lose precision)
 routine F32.__create__(from: UAddr) -> F32 {
-    danger! {
-        return @intrinsic_routine.uitofp<uptr, float>(from)
-    }
+    return uitofp<UAddr, F32>(from)
 }
 
 # ============================================================================
@@ -142,33 +107,23 @@ routine F32.__create__(from: UAddr) -> F32 {
 # ============================================================================
 
 routine F32.__add__(you: F32) -> F32 {
-    danger! {
-        return @intrinsic_routine.add.wrapping<float>(me, you)
-    }
+    return add_wrapping<F32>(me, you)
 }
 
 routine F32.__sub__(you: F32) -> F32 {
-    danger! {
-        return @intrinsic_routine.sub.wrapping<float>(me, you)
-    }
+    return sub_wrapping<F32>(me, you)
 }
 
 routine F32.__mul__(you: F32) -> F32 {
-    danger! {
-        return @intrinsic_routine.mul.wrapping<float>(me, you)
-    }
+    return mul_wrapping<F32>(me, you)
 }
 
 routine F32.__truediv__(you: F32) -> F32 {
-    danger! {
-        return @intrinsic_routine.div.wrapping<float>(me, you)
-    }
+    return div_wrapping<F32>(me, you)
 }
 
 routine F32.__neg__() -> F32 {
-    danger! {
-        return @intrinsic_routine.sub.wrapping<float>(0.0_f32, me)
-    }
+    return sub_wrapping<F32>(0.0_f32, me)
 }
 
 # ============================================================================
@@ -176,21 +131,17 @@ routine F32.__neg__() -> F32 {
 # ============================================================================
 
 routine F32.__eq__(you: F32) -> Bool {
-    danger! {
-        return @intrinsic_routine.fcmp.oeq<float>(me, you)
-    }
+    return fcmp_oeq<F32>(me, you)
 }
 
 routine F32.__cmp__(you: F32) -> ComparisonSign {
-    danger! {
-        if @intrinsic_routine.fcmp.olt<float>(me, you) {
-            return ME_SMALL
-        }
-        if @intrinsic_routine.fcmp.ogt<float>(me, you) {
-            return ME_LARGE
-        }
-        return EQUAL
+    if fcmp_olt<F32>(me, you) {
+        return ME_SMALL
     }
+    if fcmp_ogt<F32>(me, you) {
+        return ME_LARGE
+    }
+    return EQUAL
 }
 
 # ============================================================================
@@ -198,83 +149,57 @@ routine F32.__cmp__(you: F32) -> ComparisonSign {
 # ============================================================================
 
 routine F32.sqrt() -> F32 {
-    danger! {
-        return @intrinsic_routine.sqrt<float>(me)
-    }
+    return sqrt<F32>(me)
 }
 
 routine F32.abs() -> F32 {
-    danger! {
-        return @intrinsic_routine.fabs<float>(me)
-    }
+    return fabs<F32>(me)
 }
 
 routine F32.floor() -> F32 {
-    danger! {
-        return @intrinsic_routine.floor<float>(me)
-    }
+    return floor<F32>(me)
 }
 
 routine F32.ceil() -> F32 {
-    danger! {
-        return @intrinsic_routine.ceil<float>(me)
-    }
+    return ceil<F32>(me)
 }
 
 routine F32.round() -> F32 {
-    danger! {
-        return @intrinsic_routine.round<float>(me)
-    }
+    return round<F32>(me)
 }
 
 routine F32.trunc() -> F32 {
-    danger! {
-        return @intrinsic_routine.trunc_float<float>(me)
-    }
+    return trunc_float<F32>(me)
 }
 
 # Trigonometric functions
 routine F32.sin() -> F32 {
-    danger! {
-        return @intrinsic_routine.sin<float>(me)
-    }
+    return sin<F32>(me)
 }
 
 routine F32.cos() -> F32 {
-    danger! {
-        return @intrinsic_routine.cos<float>(me)
-    }
+    return cos<F32>(me)
 }
 
 # Exponential and logarithmic
 routine F32.exp() -> F32 {
-    danger! {
-        return @intrinsic_routine.exp<float>(me)
-    }
+    return exp<F32>(me)
 }
 
 routine F32.log() -> F32 {
-    danger! {
-        return @intrinsic_routine.log<float>(me)
-    }
+    return log<F32>(me)
 }
 
 routine F32.log10() -> F32 {
-    danger! {
-        return @intrinsic_routine.log10<float>(me)
-    }
+    return log10<F32>(me)
 }
 
 routine F32.pow(exp: F32) -> F32 {
-    danger! {
-        return @intrinsic_routine.pow<float>(me, exp)
-    }
+    return pow<F32>(me, exp)
 }
 
 routine F32.copysign(sign: F32) -> F32 {
-    danger! {
-        return @intrinsic_routine.copysign<float>(me, sign)
-    }
+    return copysign<F32>(me, sign)
 }
 
 # ============================================================================
@@ -319,15 +244,10 @@ routine F32.signum() -> F32 {
 
 # Reinterpret bits as U32 (type punning)
 routine F32.to_bits() -> U32 {
-    danger! {
-        return @intrinsic_routine.bitcast<float, i32>(me)
-    }
+    return bitcast<F32, U32>(me)
 }
 
 # Create F32 from U32 bits (type punning)
 routine F32.from_bits(bits: U32) -> F32 {
-    danger! {
-        return @intrinsic_routine.bitcast<i32, float>(bits)
-    }
+    return bitcast<U32, F32>(bits)
 }
-

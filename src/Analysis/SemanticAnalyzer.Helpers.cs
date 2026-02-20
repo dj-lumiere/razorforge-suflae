@@ -1091,7 +1091,7 @@ public sealed partial class SemanticAnalyzer
             VisibilityModifier.Secret => 0,
             VisibilityModifier.Posted => 1, // Posted has open read access
             VisibilityModifier.Open => 1,
-            VisibilityModifier.Imported => 1,
+            VisibilityModifier.External => 1,
             _ => 1
         };
     }
@@ -1147,7 +1147,6 @@ public sealed partial class SemanticAnalyzer
             memberKind: "field",
             memberName: field.Name,
             ownerType: field.Owner,
-            memberLocation: field.Location,
             accessLocation: accessLocation);
     }
 
@@ -1168,7 +1167,6 @@ public sealed partial class SemanticAnalyzer
             },
             memberName: routine.Name,
             ownerType: routine.OwnerType,
-            memberLocation: routine.Location,
             accessLocation: accessLocation);
     }
 
@@ -1179,76 +1177,58 @@ public sealed partial class SemanticAnalyzer
     /// <param name="memberKind">The kind of member (field, method, etc.) for error messages.</param>
     /// <param name="memberName">The name of the member.</param>
     /// <param name="ownerType">The type that owns this member, if any.</param>
-    /// <param name="memberLocation">Source location where the member is defined.</param>
     /// <param name="accessLocation">Source location of the access site.</param>
     private void ValidateMemberAccess(
         VisibilityModifier visibility,
         string memberKind,
         string memberName,
         TypeSymbol? ownerType,
-        SourceLocation? memberLocation,
         SourceLocation accessLocation)
     {
         switch (visibility)
         {
             case VisibilityModifier.Secret:
-                // Secret members are accessible within the same file
-                if (!IsAccessingFromSameFile(memberLocation: memberLocation, accessLocation: accessLocation))
+                // Secret members are accessible within the same module
+                if (!IsAccessingFromSameModule(memberModule: ownerType?.Module))
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(
                         SemanticDiagnosticCode.PrivateMemberAccess,
-                        $"Cannot access secret {memberKind} '{memberName}' of '{typeName}' from outside its defining file.",
+                        $"Cannot access secret {memberKind} '{memberName}' of '{typeName}' from outside its module.",
                         accessLocation);
                 }
                 break;
 
             case VisibilityModifier.Posted:
             case VisibilityModifier.Open:
-            case VisibilityModifier.Imported:
-                // Open/Posted/Imported members are accessible from anywhere for reading
+            case VisibilityModifier.External:
+                // Open/Posted/External members are accessible from anywhere for reading
                 break;
         }
-    }
-
-    /// <summary>
-    /// Checks if the access site is in the same file as where the member is defined.
-    /// </summary>
-    private static bool IsAccessingFromSameFile(SourceLocation? memberLocation, SourceLocation accessLocation)
-    {
-        if (memberLocation == null)
-        {
-            return true; // Unknown location, allow access
-        }
-
-        return string.Equals(
-            a: memberLocation.FileName,
-            b: accessLocation.FileName,
-            comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
     /// Checks if the current access context is within the same module as the member.
     /// Module comparison is exact (sub-modules are different modules).
     /// </summary>
-    private bool IsAccessingFromSameNamespace(string? memberNamespace)
+    private bool IsAccessingFromSameModule(string? memberModule)
     {
-        string? currentNamespace = GetCurrentNamespace();
+        string? currentModuleName = GetCurrentModuleName();
 
         // If both are in no module, they're in the same module
-        if (string.IsNullOrEmpty(value: memberNamespace) && string.IsNullOrEmpty(value: currentNamespace))
+        if (string.IsNullOrEmpty(value: memberModule) && string.IsNullOrEmpty(value: currentModuleName))
         {
             return true;
         }
 
         // If either is null/empty but not both, they're not in the same module
-        if (string.IsNullOrEmpty(value: memberNamespace) || string.IsNullOrEmpty(value: currentNamespace))
+        if (string.IsNullOrEmpty(value: memberModule) || string.IsNullOrEmpty(value: currentModuleName))
         {
             return false;
         }
 
         // Module comparison is exact - sub-modules are different modules
-        return currentNamespace == memberNamespace;
+        return currentModuleName == memberModule;
     }
 
     /// <summary>

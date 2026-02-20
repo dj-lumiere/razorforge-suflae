@@ -79,7 +79,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Indicates whether we're parsing inside a record body (actual record, not entity).
-    /// When true, only private/internal/public modifiers are allowed (not published/imported).
+    /// When true, only secret/posted/open modifiers are allowed (not external).
     /// Also var/let/preset keywords are disallowed (use 'field: Type' syntax).
     /// </summary>
     private bool _parsingStrictRecordBody = false;
@@ -218,7 +218,7 @@ public partial class SuflaeParser
     ///
     /// MODIFIERS (optional, parsed before declaration):
     ///   attributes   - @crash_only, @inline, @intrinsic, etc.
-    ///   visibility   - private, internal, public, published, imported
+    ///   visibility   - secret, posted, open, external
     ///   storage      - common, global
     ///
     /// TYPE/VALUE DECLARATIONS:
@@ -312,13 +312,13 @@ public partial class SuflaeParser
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
-            // In record bodies, imported is not allowed
-            if (_parsingStrictRecordBody && visibility is VisibilityModifier.Imported)
+            // In record bodies, external is not allowed
+            if (_parsingStrictRecordBody && visibility is VisibilityModifier.External)
             {
                 throw new SuflaeGrammarException(
                     SuflaeDiagnosticCode.InvalidDeclarationInBody,
                     $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
-                    "Record fields can use 'private', 'internal', 'published', or 'public'",
+                    "Record fields can use 'secret', 'posted', or 'open'",
                     fileName, CurrentToken.Line, CurrentToken.Column);
             }
             return ParseFieldDeclaration(visibility: visibility);

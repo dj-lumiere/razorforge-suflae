@@ -235,7 +235,7 @@ public partial class RazorForgeParser
 
     /// <summary>
     /// Parses visibility and storage class modifiers.
-    /// Visibility: public, published, internal, private, imported
+    /// Visibility: open, posted, secret, external
     /// Storage: common, global
     /// These are orthogonal and can be combined: public common, private common, etc.
     /// </summary>
@@ -266,9 +266,9 @@ public partial class RazorForgeParser
                 visibility = VisibilityModifier.Secret;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.Imported))
+            else if (!hasVisibility && Match(type: TokenType.External))
             {
-                visibility = VisibilityModifier.Imported;
+                visibility = VisibilityModifier.External;
                 hasVisibility = true;
             }
             // Storage class modifiers
@@ -300,27 +300,15 @@ public partial class RazorForgeParser
     {
         var attributes = new List<string>();
 
-        // Handle both @attribute, @[...] compound, and special tokens (@intrinsic_type, @intrinsic_routine, @native)
-        while (Check(TokenType.At, TokenType.IntrinsicType, TokenType.IntrinsicRoutine, TokenType.Native))
+        // Handle @attribute, @[...] compound, and @intrinsic special token
+        while (Check(TokenType.At, TokenType.Intrinsic))
         {
             string attrName;
 
-            if (Match(type: TokenType.IntrinsicType))
+            if (Match(type: TokenType.Intrinsic))
             {
-                // @intrinsic_type was tokenized as a single IntrinsicType token
-                attrName = "intrinsic_type";
-                attributes.Add(item: attrName);
-            }
-            else if (Match(type: TokenType.IntrinsicRoutine))
-            {
-                // @intrinsic_routine was tokenized as a single IntrinsicRoutine token
-                attrName = "intrinsic_routine";
-                attributes.Add(item: attrName);
-            }
-            else if (Match(type: TokenType.Native))
-            {
-                // @native was tokenized as a single Native token
-                attrName = "native";
+                // @intrinsic was tokenized as a single Intrinsic token
+                attrName = "intrinsic";
                 attributes.Add(item: attrName);
             }
             else if (Match(type: TokenType.At))
@@ -471,7 +459,7 @@ public partial class RazorForgeParser
     /// </summary>
     /// <param name="visibility">The visibility modifier for the function.</param>
     /// <param name="attributes">List of attributes applied to the function (e.g., @intrinsic).</param>
-    /// <param name="allowNoBody">If true, allows signature-only declarations (for protocols/intrinsics/imported).</param>
+    /// <param name="allowNoBody">If true, allows signature-only declarations (for protocols/intrinsics/external).</param>
     /// <param name="storage">The storage class modifier (default: None, can be Common for type-level static).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     /// <remarks>
@@ -1535,15 +1523,15 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parses an imported (external/FFI) function declaration.
-    /// Syntax: <c>imported("C") routine name(param: Type, ...) -&gt; ReturnType</c>
+    /// Parses an external (FFI) function declaration.
+    /// Syntax: <c>external("C") routine name(param: Type, ...) -&gt; ReturnType</c>
     /// Supports variadic functions and calling convention specification.
     /// </summary>
     /// <param name="callingConvention">The calling convention (e.g., "C"). Defaults to "C" if null.</param>
-    /// <returns>An <see cref="ImportedDeclaration"/> AST node.</returns>
-    private ImportedDeclaration ParseImportedDeclaration(string? callingConvention = null)
+    /// <returns>An <see cref="ExternalDeclaration"/> AST node.</returns>
+    private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null, List<string>? attributes = null)
     {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we consumed 'imported' and 'routine'
+        SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we consumed 'external' and 'routine'
 
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
@@ -1615,13 +1603,14 @@ public partial class RazorForgeParser
         // Default to "C" calling convention if not specified
         string effectiveCallingConvention = callingConvention ?? "C";
 
-        return new ImportedDeclaration(Name: name,
+        return new ExternalDeclaration(Name: name,
             GenericParameters: genericParams,
             GenericConstraints: constraints,
             Parameters: parameters,
             ReturnType: returnType,
             CallingConvention: effectiveCallingConvention,
             IsVariadic: isVariadic,
+            Attributes: attributes,
             Location: location);
     }
 }

@@ -30,45 +30,33 @@ routine Text.__create__(from: Blank) -> Text {
 # ============================================================================
 
 routine Text.__create__(from: S8) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_S8(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_S8(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: S16) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_S16(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_S16(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: S32) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_S32(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_S32(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: S64) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_S64(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_S64(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: S128) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_S128(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_S128(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: SAddr) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_SAddr(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_SAddr(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 # ============================================================================
@@ -76,45 +64,33 @@ routine Text.__create__(from: SAddr) -> Text {
 # ============================================================================
 
 routine Text.__create__(from: U8) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_U8(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_U8(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: U16) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_U16(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_U16(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: U32) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_U32(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_U32(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: U64) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_U64(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_U64(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: U128) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_U128(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_U128(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: UAddr) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_UAddr(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_UAddr(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 # ============================================================================
@@ -122,31 +98,23 @@ routine Text.__create__(from: UAddr) -> Text {
 # ============================================================================
 
 routine Text.__create__(from: F16) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_F16(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_F16(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: F32) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_F32(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_F32(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: F64) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_F64(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_F64(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: F128) -> Text {
-    danger! {
-        let cstr_result = @native.rf_format_F128(from)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_format_F128(from)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 # ============================================================================
@@ -154,24 +122,18 @@ routine Text.__create__(from: F128) -> Text {
 # ============================================================================
 
 routine Text.__create__(from: D32) -> Text {
-    danger! {
-        let bits = @intrinsic_routine.bitcast<D32, U32>(from)
-        let cstr_result = @native.rf_D32_to_string(bits)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let bits = bitcast<D32, U32>(from)
+    let cstr_result = rf_D32_to_string(bits)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: D64) -> Text {
-    danger! {
-        let bits = @intrinsic_routine.bitcast<D64, U64>(from)
-        let cstr_result = @native.rf_D64_to_string(bits)
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let bits = bitcast<D64, U64>(from)
+    let cstr_result = rf_D64_to_string(bits)
+    return Text(from: CStr(from_ptr: cstr_result))
 }
 
 routine Text.__create__(from: D128) -> Text {
-    danger! {
-        let cstr_result = @native.rf_D128_to_string(from.low_bits(), from.high_bits())
-        return Text(from: CStr(from_ptr: cstr_result))
-    }
+    let cstr_result = rf_D128_to_string(from.low_bits(), from.high_bits())
+    return Text(from: CStr(from_ptr: cstr_result))
 }

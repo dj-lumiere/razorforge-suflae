@@ -18,27 +18,15 @@ public partial class SuflaeParser
     {
         var attributes = new List<string>();
 
-        // Handle both @attribute, @[...] compound, and special tokens (@intrinsic_type, @intrinsic_routine, @native)
-        while (Check(TokenType.At, TokenType.IntrinsicType, TokenType.IntrinsicRoutine, TokenType.Native))
+        // Handle @attribute, @[...] compound, and @intrinsic special token
+        while (Check(TokenType.At, TokenType.Intrinsic))
         {
             string attrName;
 
-            if (Match(type: TokenType.IntrinsicType))
+            if (Match(type: TokenType.Intrinsic))
             {
-                // @intrinsic_type was tokenized as a single IntrinsicType token
-                attrName = "intrinsic_type";
-                attributes.Add(item: attrName);
-            }
-            else if (Match(type: TokenType.IntrinsicRoutine))
-            {
-                // @intrinsic_routine was tokenized as a single IntrinsicRoutine token
-                attrName = "intrinsic_routine";
-                attributes.Add(item: attrName);
-            }
-            else if (Match(type: TokenType.Native))
-            {
-                // @native was tokenized as a single Native token
-                attrName = "native";
+                // @intrinsic was tokenized as a single Intrinsic token
+                attrName = "intrinsic";
                 attributes.Add(item: attrName);
             }
             else if (Match(type: TokenType.At))
@@ -1276,7 +1264,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses visibility and storage class modifiers.
-    /// Visibility: public, published, internal, private, imported
+    /// Visibility: open, posted, secret, external
     /// Storage: common, global
     /// These are orthogonal and can be combined: public common, private common, etc.
     /// </summary>
@@ -1307,9 +1295,9 @@ public partial class SuflaeParser
                 visibility = VisibilityModifier.Secret;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.Imported))
+            else if (!hasVisibility && Match(type: TokenType.External))
             {
-                visibility = VisibilityModifier.Imported;
+                visibility = VisibilityModifier.External;
                 hasVisibility = true;
             }
             // Storage class modifiers

@@ -299,8 +299,11 @@ public enum TokenType
     /// <summary>Open access modifier - visible everywhere</summary>
     Open,
 
-    /// <summary>Imported linkage modifier - marks externally-linked declarations (FFI)</summary>
-    Imported,
+    /// <summary>External linkage modifier - marks externally-linked declarations (FFI)</summary>
+    External,
+
+    /// <summary>Dangerous modifier - marks unsafe/dangerous routines or blocks</summary>
+    Dangerous,
 
     /// <summary>Global scope modifier - declares module-level global variable</summary>
     Global,
@@ -725,14 +728,8 @@ public enum TokenType
     /// <summary>Attribute operator (@)</summary>
     At,
 
-    /// <summary>Intrinsic type (@intrinsic_type) - LLVM IR primitive types like i8, i32, f64, ptr</summary>
-    IntrinsicType,
-
-    /// <summary>Intrinsic routine (@intrinsic_routine) - LLVM IR operations like sitofp, fpext, trunc</summary>
-    IntrinsicRoutine,
-
-    /// <summary>Native function call (@native) - FFI routines without type definitions</summary>
-    Native,
+    /// <summary>Intrinsic type (@intrinsic) - LLVM IR primitive types like i8, i32, f64, ptr</summary>
+    Intrinsic,
 
     /// <summary>Comment operator (#)</summary>
     Hash,

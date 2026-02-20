@@ -442,7 +442,7 @@ public interface IAstVisitor<T>
     /// <summary>Visits an external declaration node (native function declarations)</summary>
     /// <param name="node">The external declaration to visit</param>
     /// <returns>Result of visiting the external declaration</returns>
-    T VisitImportedDeclaration(ImportedDeclaration node);
+    T VisitExternalDeclaration(ExternalDeclaration node);
 
     /// <summary>Visits a preset declaration node (compile-time constants)</summary>
     /// <param name="node">The preset declaration to visit</param>

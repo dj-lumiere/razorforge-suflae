@@ -133,9 +133,7 @@ routine Moment.from_timestamp(seconds: S64) -> Moment {
 
 routine Moment.now() -> Moment {
     # Implemented by compiler intrinsic / native runtime
-    danger! {
-        return @native.rf_moment_now()
-    }
+    return rf_moment_now()
 }
 
 # ============================================================================

@@ -63,7 +63,7 @@ public sealed partial class SemanticAnalyzer
     private string _currentFilePath = string.Empty;
 
     /// <summary>Modules imported by the current file. Used for type resolution of non-Core types.</summary>
-    private readonly HashSet<string> _importedNamespaces = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _importedModules = new(StringComparer.OrdinalIgnoreCase);
 
     #endregion
 
@@ -93,7 +93,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Store file path for import resolution
         _currentFilePath = filePath ?? program.Location.FileName;
-        _importedNamespaces.Clear();
+        _importedModules.Clear();
 
         // Phase 1: Collect all type and routine declarations (forward declarations)
         CollectDeclarations(program: program);
@@ -135,21 +135,21 @@ public sealed partial class SemanticAnalyzer
     public IReadOnlyList<SemanticError> ValidateStdlibBodies()
     {
         string previousFilePath = _currentFilePath;
-        var previousImports = new HashSet<string>(_importedNamespaces, StringComparer.OrdinalIgnoreCase);
+        var previousImports = new HashSet<string>(_importedModules, StringComparer.OrdinalIgnoreCase);
         int errorsBefore = _errors.Count;
 
         foreach (var (program, filePath, module) in _registry.StdlibPrograms)
         {
             _currentFilePath = filePath;
-            _importedNamespaces.Clear();
+            _importedModules.Clear();
 
             // Core module types are auto-imported
-            _importedNamespaces.Add("Core");
+            _importedModules.Add("Core");
 
             // Add the file's own module so sibling types resolve
             if (!string.IsNullOrEmpty(module))
             {
-                _importedNamespaces.Add(module);
+                _importedModules.Add(module);
             }
 
             // Process import declarations for this stdlib file
@@ -161,9 +161,9 @@ public sealed partial class SemanticAnalyzer
                     int dotIdx = importModule.IndexOf('.');
                     if (dotIdx > 0)
                     {
-                        _importedNamespaces.Add(importModule[..dotIdx]);
+                        _importedModules.Add(importModule[..dotIdx]);
                     }
-                    _importedNamespaces.Add(importModule);
+                    _importedModules.Add(importModule);
                 }
             }
 
@@ -179,10 +179,10 @@ public sealed partial class SemanticAnalyzer
 
         // Restore previous state
         _currentFilePath = previousFilePath;
-        _importedNamespaces.Clear();
+        _importedModules.Clear();
         foreach (string ns in previousImports)
         {
-            _importedNamespaces.Add(ns);
+            _importedModules.Add(ns);
         }
 
         return stdlibErrors;
@@ -233,14 +233,14 @@ public sealed partial class SemanticAnalyzer
 
     #region Helper Methods
 
-    private string? GetCurrentNamespace()
+    private string? GetCurrentModuleName()
     {
         Scope? current = _registry.CurrentScope;
         var namespaces = new List<string>();
 
         while (current != null)
         {
-            if (current is { Kind: ScopeKind.Namespace, Name: not null })
+            if (current is { Kind: ScopeKind.Module, Name: not null })
             {
                 namespaces.Insert(index: 0, item: current.Name);
             }

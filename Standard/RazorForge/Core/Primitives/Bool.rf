@@ -1,11 +1,9 @@
 module Core
 
 record Bool follows Equatable {
-    secret value: @intrinsic_type.i1
+    secret value: @intrinsic.i1
 }
 
 routine Bool.__eq__(you: Bool) -> Bool {
-    danger! {
-        return @intrinsic_routine.icmp.eq<i1>(me.value, you.value)
-    }
+    return icmp_eq<Bool>(me.value, you.value)
 }

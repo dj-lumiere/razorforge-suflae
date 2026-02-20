@@ -14,45 +14,33 @@ module Text
 # ============================================================================
 
 routine S8.__create__!(from_text: Text) -> S8 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_S8(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_S8(cstr_val)
 }
 
 routine S16.__create__!(from_text: Text) -> S16 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_S16(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_S16(cstr_val)
 }
 
 routine S32.__create__!(from_text: Text) -> S32 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_S32(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_S32(cstr_val)
 }
 
 routine S64.__create__!(from_text: Text) -> S64 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_S64(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_S64(cstr_val)
 }
 
 routine S128.__create__!(from_text: Text) -> S128 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_S128(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_S128(cstr_val)
 }
 
 routine SAddr.__create__!(from_text: Text) -> SAddr {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_SAddr(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_SAddr(cstr_val)
 }
 
 # ============================================================================
@@ -60,45 +48,33 @@ routine SAddr.__create__!(from_text: Text) -> SAddr {
 # ============================================================================
 
 routine U8.__create__!(from_text: Text) -> U8 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_U8(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_U8(cstr_val)
 }
 
 routine U16.__create__!(from_text: Text) -> U16 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_U16(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_U16(cstr_val)
 }
 
 routine U32.__create__!(from_text: Text) -> U32 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_U32(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_U32(cstr_val)
 }
 
 routine U64.__create__!(from_text: Text) -> U64 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_U64(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_U64(cstr_val)
 }
 
 routine U128.__create__!(from_text: Text) -> U128 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_U128(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_U128(cstr_val)
 }
 
 routine UAddr.__create__!(from_text: Text) -> UAddr {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_UAddr(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_UAddr(cstr_val)
 }
 
 # ============================================================================
@@ -106,31 +82,23 @@ routine UAddr.__create__!(from_text: Text) -> UAddr {
 # ============================================================================
 
 routine F16.__create__!(from_text: Text) -> F16 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_F16(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_F16(cstr_val)
 }
 
 routine F32.__create__!(from_text: Text) -> F32 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_F32(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_F32(cstr_val)
 }
 
 routine F64.__create__!(from_text: Text) -> F64 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_F64(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_F64(cstr_val)
 }
 
 routine F128.__create__!(from_text: Text) -> F128 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_parse_F128(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_parse_F128(cstr_val)
 }
 
 # ============================================================================
@@ -138,24 +106,18 @@ routine F128.__create__!(from_text: Text) -> F128 {
 # ============================================================================
 
 routine D32.__create__!(from_text: Text) -> D32 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        let bits = @native.rf_D32_from_string(cstr_val)
-        return @intrinsic_routine.bitcast<U32, D32>(bits)
-    }
+    let cstr_val = from_text.CStr()
+    let bits = rf_D32_from_string(cstr_val)
+    return bitcast<U32, D32>(bits)
 }
 
 routine D64.__create__!(from_text: Text) -> D64 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        let bits = @native.rf_D64_from_string(cstr_val)
-        return @intrinsic_routine.bitcast<U64, D64>(bits)
-    }
+    let cstr_val = from_text.CStr()
+    let bits = rf_D64_from_string(cstr_val)
+    return bitcast<U64, D64>(bits)
 }
 
 routine D128.__create__!(from_text: Text) -> D128 {
-    danger! {
-        let cstr_val = from_text.CStr()
-        return @native.rf_D128_from_string(cstr_val)
-    }
+    let cstr_val = from_text.CStr()
+    return rf_D128_from_string(cstr_val)
 }

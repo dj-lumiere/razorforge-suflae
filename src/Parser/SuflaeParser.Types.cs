@@ -42,7 +42,7 @@ public partial class SuflaeParser
     /// 3. Name&lt;T, U&gt;       - Generic named type
     /// 4. Name             - Simple named type
     ///
-    /// Note: Suflae does not have @intrinsic types (those are RazorForge-only).
+    /// Note: Suflae does not have @intrinsic types (those are RazorForge-only for stdlib).
     /// </remarks>
     private TypeExpression ParseBaseType()
     {

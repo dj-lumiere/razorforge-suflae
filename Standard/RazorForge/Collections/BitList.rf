@@ -36,7 +36,7 @@ routine BitList.__create__(capacity: U64) -> BitList {
     # Create bit list with pre-allocated capacity (in bits)
     let byte_size = (capacity + 7u64) // 8u64  # Round up to nearest byte
     return BitList(
-        data: Snatched<Byte>(address: @native.rf_alloc(byte_size)),
+        data: Snatched<Byte>(address: rf_alloc(byte_size)),
         count: 0u64,
         capacity: capacity
     )
@@ -124,13 +124,13 @@ routine BitList.reserve(new_capacity: U64) {
     # Ensure capacity is at least new_capacity (in bits)
     if new_capacity > me.capacity {
         let new_byte_size = (new_capacity + 7u64) / 8u64
-        let new_data = Snatched<Byte>(address: @native.rf_alloc(new_byte_size))
-        @native.rf_memset(new_data.address, 0u8, new_byte_size)  # Initialize all bits to 0
+        let new_data = Snatched<Byte>(address: rf_alloc(new_byte_size))
+        rf_memset(new_data.address, 0u8, new_byte_size)  # Initialize all bits to 0
 
         # Copy existing bytes
         if me.count > 0u64 {
             let copy_bytes = (me.count + 7u64) / 8u64
-            @native.rf_memcpy(new_data.address, me.data.address, copy_bytes)
+            rf_memcpy(new_data.address, me.data.address, copy_bytes)
         }
 
         me.data = new_data

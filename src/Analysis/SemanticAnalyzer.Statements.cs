@@ -166,6 +166,10 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeDiscardStatement(discard: discard);
                 break;
 
+            case GenerateStatement:
+                // TODO: AnalyzeGenerateStatement — validate inside generator routine
+                break;
+
             case DangerStatement danger:
                 AnalyzeDangerStatement(danger: danger);
                 break;

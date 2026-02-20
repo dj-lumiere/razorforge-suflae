@@ -424,6 +424,9 @@ public sealed class StdlibLoader
                 case ChoiceDeclaration choice:
                     RegisterChoiceType(registry, choice, moduleName);
                     break;
+                case FlagsDeclaration flags:
+                    RegisterFlagsType(registry, flags, moduleName);
+                    break;
                 case VariantDeclaration variant:
                     RegisterVariantType(registry, variant, moduleName);
                     break;
@@ -710,6 +713,31 @@ public sealed class StdlibLoader
         var typeInfo = new Types.ChoiceTypeInfo(choice.Name)
         {
             Module = moduleName, Visibility = choice.Visibility, Cases = cases
+        };
+
+        registry.RegisterType(typeInfo);
+    }
+
+    /// <summary>
+    /// Registers a flags type from stdlib.
+    /// </summary>
+    private static void RegisterFlagsType(TypeRegistry registry, FlagsDeclaration flags,
+        string moduleName)
+    {
+        if (registry.LookupType(flags.Name) != null)
+        {
+            return;
+        }
+
+        var members = new List<Types.FlagsMemberInfo>();
+        for (int i = 0; i < flags.Members.Count; i++)
+        {
+            members.Add(new Types.FlagsMemberInfo(flags.Members[i], i));
+        }
+
+        var typeInfo = new Types.FlagsTypeInfo(flags.Name)
+        {
+            Module = moduleName, Visibility = flags.Visibility, Members = members
         };
 
         registry.RegisterType(typeInfo);

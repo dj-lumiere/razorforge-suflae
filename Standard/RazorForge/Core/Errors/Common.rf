@@ -10,7 +10,7 @@ record AbsentValueError follows Crashable {
 }
 
 routine AbsentValueError.crash_message() -> Text {
-    return @intrinsic_routine.ptr_to_text(me.message_handle.ptr)
+    return ptr_to_text(me.message_handle.ptr)
 }
 
 # UserTerminationError - thrown by stop!()
@@ -18,7 +18,7 @@ record UserTerminationError follows Crashable {
 }
 
 routine UserTerminationError.crash_message() -> Text {
-    return @intrinsic_routine.ptr_to_text(me.message_handle.ptr)
+    return ptr_to_text(me.message_handle.ptr)
 }
 
 # VerificationFailedError - thrown by verify!()
@@ -26,7 +26,7 @@ record VerificationFailedError follows Crashable {
 }
 
 routine VerificationFailedError.crash_message() -> Text {
-    return @intrinsic_routine.ptr_to_text(me.message_handle.ptr)
+    return ptr_to_text(me.message_handle.ptr)
 }
 
 # LogicBreachedError - thrown by breach!()
@@ -34,5 +34,5 @@ record LogicBreachedError follows Crashable {
 }
 
 routine LogicBreachedError.crash_message() -> Text {
-    return @intrinsic_routine.ptr_to_text(me.message_handle.ptr)
+    return ptr_to_text(me.message_handle.ptr)
 }

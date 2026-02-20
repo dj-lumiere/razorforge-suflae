@@ -592,7 +592,7 @@ public record PresetDeclaration(
 }
 
 /// <summary>
-/// Imported function declaration that links to native runtime functions.
+/// External function declaration that links to native runtime functions.
 /// Used for declaring functions implemented in C or other native languages.
 /// </summary>
 /// <param name="Name">Name of the external function</param>
@@ -603,16 +603,16 @@ public record PresetDeclaration(
 /// <param name="IsVariadic">Whether the function accepts variable arguments (like C's printf with "...")</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Imported declarations link RazorForge to native runtime:
+/// External declarations link RazorForge to native runtime:
 /// <list type="bullet">
-/// <item>imported("C") routine malloc(size: uaddr) -> cptr&lt;cvoid&gt;</item>
-/// <item>imported("C") routine free(ptr: cptr&lt;cvoid&gt;)</item>
-/// <item>imported routine heap_alloc!(bytes: uaddr) -> uaddr (default C convention)</item>
+/// <item>external("C") routine malloc(size: uaddr) -> cptr&lt;cvoid&gt;</item>
+/// <item>external("C") routine free(ptr: cptr&lt;cvoid&gt;)</item>
+/// <item>external routine heap_alloc!(bytes: uaddr) -> uaddr (default C convention)</item>
 /// <item>No function body - implementation provided by native runtime</item>
 /// <item>Links to C functions at compile time</item>
 /// </list>
 /// </remarks>
-public record ImportedDeclaration(
+public record ExternalDeclaration(
     string Name,
     List<string>? GenericParameters,
     List<GenericConstraintDeclaration>? GenericConstraints,
@@ -620,11 +620,12 @@ public record ImportedDeclaration(
     TypeExpression? ReturnType,
     string? CallingConvention,
     bool IsVariadic,
+    List<string>? Attributes,
     SourceLocation Location) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
-        return visitor.VisitImportedDeclaration(node: this);
+        return visitor.VisitExternalDeclaration(node: this);
     }
 }
 

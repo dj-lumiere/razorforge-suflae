@@ -155,7 +155,8 @@ public partial class RazorForgeTokenizer
         [key: "secret"] = TokenType.Secret,
         [key: "posted"] = TokenType.Posted,
         [key: "open"] = TokenType.Open,
-        [key: "imported"] = TokenType.Imported,
+        [key: "external"] = TokenType.External,
+        [key: "dangerous"] = TokenType.Dangerous,
         [key: "global"] = TokenType.Global,
         [key: "common"] = TokenType.Common,
 

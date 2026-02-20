@@ -1,4 +1,4 @@
-﻿module Bytes
+module Bytes
 
 # ============================================================================
 # Bytes - UTF-8 immutable text
@@ -25,46 +25,42 @@ routine Bytes.__create__(from_byte: Byte) -> Bytes {
 }
 
 routine Bytes.__create__(ptr: Snatched<Byte>) -> Bytes {
-    danger! {
-        var len: U64 = 0u64
-        loop {
-            if ptr.offset(len).read() == BYTE_NULL {
-                break
-            }
-            len += 1u64
+    var len: U64 = 0u64
+    loop {
+        if ptr.offset(len).read() == BYTE_NULL {
+            break
         }
-        let list = List<Byte>(len)
-        var i: U64 = 0u64
-        loop {
-            if i >= len {
-                break
-            }
-            list.add_last(ptr.offset(i).read())
-            i += 1u64
-        }
-        return Bytes(letters: list)
+        len += 1u64
     }
+    let list = List<Byte>(len)
+    var i: U64 = 0u64
+    loop {
+        if i >= len {
+            break
+        }
+        list.add_last(ptr.offset(i).read())
+        i += 1u64
+    }
+    return Bytes(letters: list)
 }
 
 routine Bytes.__create__(ptr: CStr) -> Bytes {
-    danger! {
-        let len = @native.rf_cstr_len(ptr)
-        if len == 0uaddr {
-            return Bytes()
-        }
-        let list = List<Byte>(len)
-        var i: UAddr = 0uaddr
-        loop {
-            if i >= len {
-                break
-            }
-            let byte_ptr = ptr + i
-            let byte_val = read_as!<Byte>(byte_ptr)
-            list.add_last(byte_val)
-            i += 1uaddr
-        }
-        return Bytes(from_list: list)
+    let len = rf_cstr_len(ptr)
+    if len == 0uaddr {
+        return Bytes()
     }
+    let list = List<Byte>(len)
+    var i: UAddr = 0uaddr
+    loop {
+        if i >= len {
+            break
+        }
+        let byte_ptr = ptr + i
+        let byte_val = read_as!<Byte>(byte_ptr)
+        list.add_last(byte_val)
+        i += 1uaddr
+    }
+    return Bytes(from_list: list)
 }
 
 # Core operations
@@ -273,7 +269,7 @@ routine Bytes.to_text() -> Text {
 # Bytes -> null-terminated C string (UTF-8)
 routine Bytes.to_cstr() -> UAddr {
     let len = me.count()
-    let buffer = Snatched<Byte>(address: @native.rf_alloc(len + 1u64))
+    let buffer = Snatched<Byte>(address: rf_alloc(len + 1u64))
     var i: U64 = 0u64
     loop {
         if i >= len {

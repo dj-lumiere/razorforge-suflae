@@ -89,23 +89,22 @@ public partial class RazorForgeParser
         // ═══════════════════════════════════════════════════════════════════════════
         // CASE 3: Intrinsic type - direct LLVM IR types
         // ═══════════════════════════════════════════════════════════════════════════
-        // Forms: @intrinsic_type.i1, @intrinsic_type.i32, @intrinsic_type.f64, @intrinsic_type.ptr
-        // Note: @intrinsic_routine (with type args) is parsed as an expression, not a type
-        if (Match(type: TokenType.IntrinsicType))
+        // Forms: @intrinsic.i1, @intrinsic.i32, @intrinsic.f64, @intrinsic.ptr
+        if (Match(type: TokenType.Intrinsic))
         {
-            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic_type'");
+            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
 
             // Allow any identifier as intrinsic type name (i1, i8, i16, i32, i64, i128, f16, f32, f64, f128, ptr, etc.)
             if (!Match(TokenType.Identifier, TokenType.TypeIdentifier))
             {
                 throw new RazorForgeGrammarException(
                     RazorForgeDiagnosticCode.ExpectedTypeIdentifier,
-                    $"Expected intrinsic type name after '@intrinsic_type.', got {CurrentToken.Type}",
+                    $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}",
                     _fileName, CurrentToken.Line, CurrentToken.Column);
             }
 
             string intrinsicName = PeekToken(offset: -1).Text;
-            return new TypeExpression(Name: $"@intrinsic_type.{intrinsicName}", GenericArguments: null, Location: location);
+            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}", GenericArguments: null, Location: location);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════

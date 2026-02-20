@@ -29,7 +29,7 @@ public sealed class TypeRegistry
     private readonly Dictionary<string, TypeInfo> _instantiations = new();
 
     /// <summary>Whether Core module has been loaded from stdlib.</summary>
-    private bool _coreNamespaceLoaded;
+    private bool _coreModuleLoaded;
 
     /// <summary>The stdlib loader instance.</summary>
     private StdlibLoader? _stdlibLoader;
@@ -44,7 +44,7 @@ public sealed class TypeRegistry
     private readonly HashSet<string> _loadedModules = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Maps module IDs to their effective module names (for import tracking).</summary>
-    private readonly Dictionary<string, string> _moduleNamespaces = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _moduleNames = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The module resolver for finding module files.</summary>
     private ModuleResolver? _moduleResolver;
@@ -97,7 +97,7 @@ public sealed class TypeRegistry
         RegisterIntrinsics();
 
         // Load Core module eagerly - Core types are fundamental to every program
-        LoadCoreNamespace();
+        LoadCoreModule();
 
         // Register well-known error handling types
         RegisterErrorHandlingTypes();
@@ -137,14 +137,14 @@ public sealed class TypeRegistry
     /// Loads the Core module from stdlib files.
     /// Called on-demand when Core types are first used or when import Core is encountered.
     /// </summary>
-    public void LoadCoreNamespace()
+    public void LoadCoreModule()
     {
-        if (_coreNamespaceLoaded)
+        if (_coreModuleLoaded)
         {
             return;
         }
 
-        _coreNamespaceLoaded = true;
+        _coreModuleLoaded = true;
 
         if (_stdlibPath != null && Directory.Exists(_stdlibPath))
         {
@@ -163,7 +163,7 @@ public sealed class TypeRegistry
     /// <summary>
     /// Checks if the Core module has been loaded.
     /// </summary>
-    public bool IsCoreNamespaceLoaded => _coreNamespaceLoaded;
+    public bool IsCoreModuleLoaded => _coreModuleLoaded;
 
     /// <summary>
     /// Gets the parsed stdlib programs (for code generation).
@@ -179,10 +179,10 @@ public sealed class TypeRegistry
     /// <param name="importPath">The import path (e.g., "Collections/List", "ErrorHandling/Maybe").</param>
     /// <param name="currentFile">The file containing the import statement (for relative import resolution).</param>
     /// <param name="location">Source location for error reporting.</param>
-    /// <param name="effectiveNamespace">The effective module name of the loaded module, or null on failure.</param>
+    /// <param name="effectiveModule">The effective module name of the loaded module, or null on failure.</param>
     /// <returns>True if the module was loaded successfully or was already loaded, false on error.</returns>
     public bool LoadModule(string importPath, string currentFile, SourceLocation location,
-        out string? effectiveNamespace)
+        out string? effectiveModule)
     {
         // Normalize the import path to a module identifier (e.g., "Collections/List" -> "Collections.List")
         string moduleId = importPath.Replace('/', '.').Replace('\\', '.');
@@ -190,7 +190,7 @@ public sealed class TypeRegistry
         // Check if already loaded
         if (_loadedModules.Contains(moduleId))
         {
-            _moduleNamespaces.TryGetValue(moduleId, out effectiveNamespace);
+            _moduleNames.TryGetValue(moduleId, out effectiveModule);
             return true;
         }
 
@@ -198,17 +198,17 @@ public sealed class TypeRegistry
         if (moduleId.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
             moduleId.StartsWith("Core.", StringComparison.OrdinalIgnoreCase))
         {
-            LoadCoreNamespace();
+            LoadCoreModule();
             _loadedModules.Add(moduleId);
-            effectiveNamespace = "Core";
-            _moduleNamespaces[moduleId] = "Core";
+            effectiveModule = "Core";
+            _moduleNames[moduleId] = "Core";
             return true;
         }
 
         // Ensure stdlib path is available
         if (_stdlibPath == null || !Directory.Exists(_stdlibPath))
         {
-            effectiveNamespace = null;
+            effectiveModule = null;
             return false;
         }
 
@@ -221,7 +221,7 @@ public sealed class TypeRegistry
         string? resolvedPath = _moduleResolver.ResolveImport(importPath, currentFile, location);
         if (resolvedPath == null)
         {
-            effectiveNamespace = null;
+            effectiveModule = null;
             return false;
         }
 
@@ -230,14 +230,14 @@ public sealed class TypeRegistry
 
         // Load the module using StdlibLoader
         _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
-        effectiveNamespace = _stdlibLoader.LoadModule(this, resolvedPath, moduleId);
+        effectiveModule = _stdlibLoader.LoadModule(this, resolvedPath, moduleId);
 
-        if (effectiveNamespace != null)
+        if (effectiveModule != null)
         {
-            _moduleNamespaces[moduleId] = effectiveNamespace;
+            _moduleNames[moduleId] = effectiveModule;
         }
 
-        return effectiveNamespace != null;
+        return effectiveModule != null;
     }
 
     /// <summary>
