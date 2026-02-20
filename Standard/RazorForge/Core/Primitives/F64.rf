@@ -3,7 +3,7 @@
 module Core
 # Core F64 type definition - maps to LLVM double
 record F64 follows Numeric, Ordered {
-    private value: @intrinsic_type.double
+    secret value: @intrinsic_type.double
 }
 
 # IEEE 754 double precision constants

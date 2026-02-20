@@ -19,7 +19,7 @@ import Collections.List
 # ============================================================================
 
 entity Text {
-    private letters: List<Letter>
+    secret letters: List<Letter>
 }
 
 # Constructors

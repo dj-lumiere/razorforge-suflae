@@ -17,8 +17,8 @@ module Core
 
 # C character wrapper (single `char`)
 # Wrapper record for type safety at FFI boundaries
-public record CChar {
-    public value: U8
+open record CChar {
+    open value: U8
 }
 
 # ============================================================================
@@ -26,12 +26,12 @@ public record CChar {
 # ============================================================================
 
 # Create CChar from U8
-public routine CChar.__create__(value: U8) -> CChar {
+open routine CChar.__create__(value: U8) -> CChar {
     return CChar(value: value)
 }
 
 # Create CChar from S32 (for character literals)
-public routine CChar.__create__!(codepoint: S32) -> CChar {
+open routine CChar.__create__!(codepoint: S32) -> CChar {
     if codepoint < 0s32 or codepoint > 255s32 {
         throw IntegerOverflowError()
     }
@@ -42,10 +42,10 @@ public routine CChar.__create__!(codepoint: S32) -> CChar {
 # Comparison
 # ============================================================================
 
-public routine CChar.__eq__(you: CChar) -> Bool {
+open routine CChar.__eq__(you: CChar) -> Bool {
     return me.value == you.value
 }
 
-public routine CChar.__cmp__(you: CChar) -> ComparisonSign {
+open routine CChar.__cmp__(you: CChar) -> ComparisonSign {
     return me.value.__cmp__(you.value)
 }

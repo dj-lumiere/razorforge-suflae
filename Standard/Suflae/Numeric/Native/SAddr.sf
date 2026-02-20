@@ -6,7 +6,7 @@ module Numerics
 import RazorForge/Core.SAddr
 
 record SAddr
-    private value: RazorForge/Core.SAddr
+    secret value: RazorForge/Core.SAddr
 
 # Wrapping arithmetic (required for address types)
 routine SAddr.__add_wrap__(you: SAddr) -> SAddr

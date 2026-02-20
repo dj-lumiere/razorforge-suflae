@@ -4,8 +4,8 @@ module Core
 # Atomic reference counting mechanism for multi-threaded Shared<T, Policy> memory management
 
 entity MultiShareController {
-    private strong_count: Atomic<S32>
-    private weak_count: Atomic<S32>
+    secret strong_count: Atomic<S32>
+    secret weak_count: Atomic<S32>
 }
 
 # Create new reference count controller with initial counts of 0

@@ -5,4 +5,4 @@ module Core
 import RazorForge/Numeric.Fraction
 
 entity Fraction
-    private value: RazorForge/Numeric.Fraction
+    secret value: RazorForge/Numeric.Fraction

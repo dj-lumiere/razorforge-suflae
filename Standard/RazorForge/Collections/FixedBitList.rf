@@ -79,7 +79,7 @@ routine FixedBitList<N>.clear() {
 # Internal bit access
 # ============================================================================
 
-private routine FixedBitList<N>.get_bit(index: UAddr) -> Bool {
+secret routine FixedBitList<N>.get_bit(index: UAddr) -> Bool {
     # Direct bit access (internal, no bounds check)
     let byte_idx = index / 8uaddr
     let bit_idx = index % 8uaddr
@@ -87,7 +87,7 @@ private routine FixedBitList<N>.get_bit(index: UAddr) -> Bool {
     return (byte_val >> bit_idx) & 1u8 == 1u8
 }
 
-private routine FixedBitList<N>.set_bit(index: UAddr, value: Bool) {
+secret routine FixedBitList<N>.set_bit(index: UAddr, value: Bool) {
     # Direct bit set (internal, no bounds check)
     let byte_idx = index / 8uaddr
     let bit_idx = index % 8uaddr

@@ -1,6 +1,6 @@
 module Numerics
 
 entity Fraction follows Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered {
-    private numerator: Integer
-    private denominator: Integer
+    secret numerator: Integer
+    secret denominator: Integer
 }

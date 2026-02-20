@@ -21,7 +21,7 @@
 
 module Core
 record Viewed<T> {
-    private ptr: Snatched<T>
+    secret ptr: Snatched<T>
 }
 
 routine T.view!() -> Viewed<T> {

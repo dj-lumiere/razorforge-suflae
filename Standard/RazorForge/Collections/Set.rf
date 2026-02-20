@@ -22,8 +22,8 @@ preset SET_LOAD_FACTOR: UAddr = 75uaddr
 
 entity Set<T>
 requires T follows Hashable, Comparable {
-    private buckets: List<SortedSet<T>>
-    private count: UAddr
+    secret buckets: List<SortedSet<T>>
+    secret count: UAddr
 }
 
 # ============================================================================

@@ -5,7 +5,7 @@ module Core
 import RazorForge/Core.Byte
 
 record Byte
-    private value: RazorForge/Text.Byte
+    secret value: RazorForge/Text.Byte
 
 # Comparison operations
 routine Byte.__eq__(other: Byte) -> Bool

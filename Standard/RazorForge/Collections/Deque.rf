@@ -12,10 +12,10 @@
 module Collections
 
 entity Deque<T> {
-    private data: Snatched<U8>    # Circular buffer (raw storage for T elements)
-    private start: UAddr          # Index of first element
-    private count: UAddr          # Number of elements
-    private capacity: UAddr       # Total allocated slots
+    secret data: Snatched<U8>    # Circular buffer (raw storage for T elements)
+    secret start: UAddr          # Index of first element
+    secret count: UAddr          # Number of elements
+    secret capacity: UAddr       # Total allocated slots
 }
 
 # ============================================================================

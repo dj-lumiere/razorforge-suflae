@@ -5,7 +5,7 @@ module Core
 import RazorForge/Core.Bool
 
 record Bool
-    private value: RazorForge/Core.Bool
+    secret value: RazorForge/Core.Bool
 
 # Comparison
 routine Bool.__eq__(you: Bool) -> Bool

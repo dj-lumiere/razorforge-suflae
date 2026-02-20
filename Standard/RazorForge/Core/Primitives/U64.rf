@@ -3,7 +3,7 @@
 module Core
 # Core U64 type definition - maps to LLVM i64
 record U64 follows UnsignedIntegral, Ordered {
-    public value: @intrinsic_type.i64
+    open value: @intrinsic_type.i64
 }
 
 # Constants for U64 limits

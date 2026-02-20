@@ -24,8 +24,8 @@ preset FDICT_SLOT_TOMBSTONE: U8 = 2u8
 resident FixedDict<K, V, N>
 requires K follows Hashable
 requires N is UAddr {
-    private count: UAddr           # Current number of entries
-    private tombstones: UAddr      # Number of tombstones
+    secret count: UAddr           # Current number of entries
+    secret tombstones: UAddr      # Number of tombstones
     # N slots of (K key, V value, U8 state, UAddr probe_distance) stored inline
 }
 

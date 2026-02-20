@@ -5,7 +5,7 @@ module Numerics
 import RazorForge/Core.D128
 
 record D128
-    private value: RazorForge/Core.D128
+    secret value: RazorForge/Core.D128
 
 # Arithmetic operators
 routine D128.__add__(you: D128) -> D128

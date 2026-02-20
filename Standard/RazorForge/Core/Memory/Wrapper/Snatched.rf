@@ -22,7 +22,7 @@
 module Core
 
 record Snatched<T> {
-    public address: UAddr  # Public direct address access
+    open address: UAddr  # Public direct address access
 }
 
 routine T.get_address() -> UAddr {

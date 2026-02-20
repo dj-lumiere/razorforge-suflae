@@ -30,8 +30,8 @@
 module Core
 
 record Seized<T> {
-    private ptr: Snatched<T>    # Generic type - use Snatched<T>
-    private lock_guard: UAddr   # Fixed type - use UAddr
+    secret ptr: Snatched<T>    # Generic type - use Snatched<T>
+    secret lock_guard: UAddr   # Fixed type - use UAddr
 }
 
 # NOTE: No constructors, no manual methods - all operations handled by compiler

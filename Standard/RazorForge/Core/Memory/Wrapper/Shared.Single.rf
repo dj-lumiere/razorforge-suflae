@@ -3,8 +3,8 @@
 module Core
 
 record Shared<T> {
-    private controller: Snatched<SingleShareController>
-    private data: Snatched<T>
+    secret controller: Snatched<SingleShareController>
+    secret data: Snatched<T>
 }
 
 # Create shared reference from owned value

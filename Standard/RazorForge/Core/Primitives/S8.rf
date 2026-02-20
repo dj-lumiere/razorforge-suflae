@@ -3,7 +3,7 @@
 module Core
 # Core S8 type definition - maps to LLVM i8
 record S8 follows SignedIntegral, Ordered {
-    private value: @intrinsic_type.i8
+    secret value: @intrinsic_type.i8
 }
 
 # Constants for S8 limits

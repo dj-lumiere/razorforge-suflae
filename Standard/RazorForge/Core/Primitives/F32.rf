@@ -3,7 +3,7 @@
 module Core
 # Core F32 type definition - maps to LLVM float
 record F32 follows Numeric, Ordered {
-    private value: @intrinsic_type.float
+    secret value: @intrinsic_type.float
 }
 
 # IEEE 754 single precision constants

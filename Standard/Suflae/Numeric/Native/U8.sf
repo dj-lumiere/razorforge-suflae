@@ -5,7 +5,7 @@ module Numerics
 import RazorForge/Core.U8
 
 record U8
-    private value: RazorForge/Core.U8
+    secret value: RazorForge/Core.U8
 
 # Arithmetic operators
 routine U8.__add__!(you: U8) -> U8

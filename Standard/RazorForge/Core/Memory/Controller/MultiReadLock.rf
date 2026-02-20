@@ -5,8 +5,8 @@
 module Core
 
 record MultiReadLock follows LockPolicy {
-    private readers: Atomic<S32>  # Number of active readers
-    private writer: Atomic<Bool>  # Is a writer active?
+    secret readers: Atomic<S32>  # Number of active readers
+    secret writer: Atomic<Bool>  # Is a writer active?
 }
 
 routine MultiReadLock.__create__() -> MultiReadLock {

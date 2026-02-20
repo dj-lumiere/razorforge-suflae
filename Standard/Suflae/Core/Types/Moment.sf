@@ -5,7 +5,7 @@ module Core
 import RazorForge/Core.Moment
 
 record Moment
-    private value: RazorForge/Core.Moment
+    secret value: RazorForge/Core.Moment
 
 # ============================================================================
 # Constructors

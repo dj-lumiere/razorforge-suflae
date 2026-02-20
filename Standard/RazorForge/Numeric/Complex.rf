@@ -2,6 +2,6 @@
 module Numerics
 
 entity Complex follows Numeric, Equatable {
-    private real: Decimal
-    private imag: Decimal
+    secret real: Decimal
+    secret imag: Decimal
 }

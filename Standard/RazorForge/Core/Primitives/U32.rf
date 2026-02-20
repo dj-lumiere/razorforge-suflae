@@ -3,7 +3,7 @@
 module Core
 # Core U32 type definition - maps to LLVM i32
 record U32 follows UnsignedIntegral, Ordered {
-    public value: @intrinsic_type.i32
+    open value: @intrinsic_type.i32
 }
 
 # Constants for U32 limits

@@ -1,6 +1,6 @@
 module Core
 
 record Result<T> {
-    private state: DataState
-    private handle: Snatched<T>
+    secret state: DataState
+    secret handle: Snatched<T>
 }

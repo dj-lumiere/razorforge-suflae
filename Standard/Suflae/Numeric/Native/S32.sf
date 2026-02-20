@@ -5,7 +5,7 @@ module Numerics
 import RazorForge/Core.S32
 
 record S32
-    private value: RazorForge/Core.S32
+    secret value: RazorForge/Core.S32
 
 # Arithmetic operators
 routine S32.__add__!(you: S32) -> S32

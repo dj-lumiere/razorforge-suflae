@@ -5,7 +5,7 @@ module Core
 import RazorForge/Bytes.Bytes
 
 entity Bytes
-    private value: RazorForge/Text.Bytes
+    secret value: RazorForge/Text.Bytes
 
 # Core operations
 routine Bytes.count() -> Integer

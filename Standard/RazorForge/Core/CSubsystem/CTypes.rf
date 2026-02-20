@@ -15,12 +15,12 @@ module Core
 
 # Marker type for void*
 # Use Snatched<CVoid> for void* pointers
-public record CVoid {
+open record CVoid {
     pass
 }
 
 # Null pointer constant
-public preset C_NULLPTR: UAddr = 0uaddr
+open preset C_NULLPTR: UAddr = 0uaddr
 
 # ============================================================================
 # Character Type Aliases

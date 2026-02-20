@@ -24,8 +24,8 @@ preset SLOT_TOMBSTONE: U8 = 2u8
 resident FixedSet<T, N>
 requires T follows Hashable
 requires N is UAddr {
-    private count: UAddr           # Current number of elements
-    private tombstones: UAddr      # Number of tombstones (for load factor)
+    secret count: UAddr           # Current number of elements
+    secret tombstones: UAddr      # Number of tombstones (for load factor)
     # N slots of (T, U8 state, UAddr probe_distance) stored inline by compiler
 }
 

@@ -6,7 +6,7 @@ module Numerics
 import RazorForge/Core.UAddr
 
 record UAddr
-    private value: RazorForge/Core.UAddr
+    secret value: RazorForge/Core.UAddr
 
 # Wrapping arithmetic (required for address types)
 routine UAddr.__add_wrap__(you: UAddr) -> UAddr

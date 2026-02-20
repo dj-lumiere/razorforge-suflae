@@ -22,7 +22,7 @@ requires TPriority follows Comparable {
 
 entity PriorityQueue<TElement, TPriority>
 requires TPriority follows Comparable {
-    private heap: List<PQEntry<TElement, TPriority>>
+    secret heap: List<PQEntry<TElement, TPriority>>
 }
 
 # ============================================================================

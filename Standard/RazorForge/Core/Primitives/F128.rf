@@ -3,7 +3,7 @@
 module Core
 # Core F128 type definition - maps to LLVM fp128
 record F128 follows Numeric, Ordered {
-    private value: @intrinsic_type.fp128
+    secret value: @intrinsic_type.fp128
 }
 
 # IEEE 754 quadruple precision constants

@@ -5,7 +5,7 @@ module Core
 import RazorForge/Collections.Deque
 
 entity Deque<T>
-    private value: RazorForge/Collections.Deque<T>
+    secret value: RazorForge/Collections.Deque<T>
 
 # Core operations
 routine Deque<T>.count() -> Integer

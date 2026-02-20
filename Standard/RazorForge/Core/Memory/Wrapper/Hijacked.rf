@@ -19,7 +19,7 @@
 module Core
 
 record Hijacked<T> {
-    private ptr: Snatched<T>
+    secret ptr: Snatched<T>
 }
 
 routine T.hijack!() -> Hijacked<T> {

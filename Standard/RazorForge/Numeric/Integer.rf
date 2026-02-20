@@ -9,7 +9,7 @@ import Text.Text
 # Opaque handle to LibTomMath mp_int structure
 # The actual memory is managed by the native runtime
 entity Integer follows Integral, Divisible, Negatable, Ordered {
-    private handle: UAddr
+    secret handle: UAddr
 }
 
 # ============================================================================

@@ -5,7 +5,7 @@ module Core
 
 # Core S64 type definition - maps to LLVM i64
 record S64 follows SignedIntegral, Ordered {
-    private value: @intrinsic_type.i64
+    secret value: @intrinsic_type.i64
 }
 
 # Constants for S64 limits

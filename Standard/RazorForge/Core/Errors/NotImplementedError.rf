@@ -4,7 +4,7 @@ module Core
 # Used as a placeholder for methods/routines that are not yet implemented
 
 record NotImplementedError follows Crashable {
-    public feature: Text
+    open feature: Text
 }
 
 routine NotImplementedError.crash_message() -> Text {

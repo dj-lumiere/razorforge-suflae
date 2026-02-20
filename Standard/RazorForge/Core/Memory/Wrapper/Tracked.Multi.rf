@@ -4,9 +4,9 @@ module Core
 
 record Tracked<T, P>
 requires P follows LockPolicy {
-    private controller: Snatched<MultiShareController>
-    private data: Snatched<T>
-    private lock: Snatched<P>
+    secret controller: Snatched<MultiShareController>
+    secret data: Snatched<T>
+    secret lock: Snatched<P>
 }
 
 # Create weak reference from Shared<T, P>

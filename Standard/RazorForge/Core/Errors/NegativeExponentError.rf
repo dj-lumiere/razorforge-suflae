@@ -1,7 +1,7 @@
 module Core
 
 record NegativeExponentError follows Crashable {
-    private exp: S128
+    secret exp: S128
 }
 
 routine NegativeExponentError.crash_message() -> Text {

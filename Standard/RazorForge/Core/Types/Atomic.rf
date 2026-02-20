@@ -14,7 +14,7 @@ module Core
 ###   counter.fetch_add(1)
 ###   let value = counter.load()
 record Atomic<T> {
-    private value: T
+    secret value: T
 }
 
 ### Create a new atomic with an initial value

@@ -5,7 +5,7 @@
 module Core
 
 record Mutex follows LockPolicy {
-    private locked: Atomic<Bool>
+    secret locked: Atomic<Bool>
 }
 
 # Acquire exclusive lock (blocking)

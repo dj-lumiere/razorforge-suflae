@@ -6,8 +6,8 @@ module Core
 import Text.Text
 
 record IndexOutOfBoundsError follows Crashable {
-    public index: U64
-    public count: U64
+    open index: U64
+    open count: U64
 }
 
 routine IndexOutOfBoundsError.crash_message() -> Text {
@@ -15,7 +15,7 @@ routine IndexOutOfBoundsError.crash_message() -> Text {
 }
 
 record EmptyCollectionError follows Crashable {
-    public operation: Text
+    open operation: Text
 }
 
 routine EmptyCollectionError.crash_message() -> Text {

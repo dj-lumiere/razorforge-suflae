@@ -3,7 +3,7 @@
 module Core
 # Core S32 type definition - maps to LLVM i32
 record S32 follows SignedIntegral, Ordered {
-    private value: @intrinsic_type.i32
+    secret value: @intrinsic_type.i32
 }
 
 # Constants for S32 limits

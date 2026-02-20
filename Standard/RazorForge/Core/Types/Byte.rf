@@ -13,7 +13,7 @@
 module Core
 
 record Byte {
-    private value: U8
+    secret value: U8
 }
 
 # Common byte constants

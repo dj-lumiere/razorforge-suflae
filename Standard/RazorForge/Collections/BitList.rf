@@ -14,9 +14,9 @@
 module Collections
 
 entity BitList {
-    private data: Snatched<Byte>    # Heap-allocated byte array (8 bits per Byte)
-    private count: U64              # Current number of bits
-    private capacity: U64           # Total bit capacity (in bits, not bytes)
+    secret data: Snatched<Byte>    # Heap-allocated byte array (8 bits per Byte)
+    secret count: U64              # Current number of bits
+    secret capacity: U64           # Total bit capacity (in bits, not bytes)
 }
 
 # ============================================================================

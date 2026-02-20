@@ -13,7 +13,7 @@
 module Core
 
 record Letter {
-    private value: U32
+    secret value: U32
 }
 
 # Unicode constants

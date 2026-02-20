@@ -5,7 +5,7 @@ module Numerics
 import RazorForge/Core.D64
 
 record D64
-    private value: RazorForge/Core.D64
+    secret value: RazorForge/Core.D64
 
 # Arithmetic operators
 routine D64.__add__(you: D64) -> D64

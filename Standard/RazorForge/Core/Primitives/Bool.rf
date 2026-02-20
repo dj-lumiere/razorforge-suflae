@@ -1,7 +1,7 @@
 module Core
 
 record Bool follows Equatable {
-    private value: @intrinsic_type.i1
+    secret value: @intrinsic_type.i1
 }
 
 routine Bool.__eq__(you: Bool) -> Bool {

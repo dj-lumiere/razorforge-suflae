@@ -5,9 +5,9 @@
 module Collections
 
 entity List<T> {
-    private data: Snatched<T>       # Pointer to heap-allocated array
-    private count: U64              # Current number of elements
-    private capacity: U64           # Total allocated capacity
+    secret data: Snatched<T>       # Pointer to heap-allocated array
+    secret count: U64              # Current number of elements
+    secret capacity: U64           # Total allocated capacity
 }
 
 # Constructors

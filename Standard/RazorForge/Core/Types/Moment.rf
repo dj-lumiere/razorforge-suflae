@@ -19,8 +19,8 @@ module Core
 # ============================================================================
 
 record Moment follows Ordered {
-    private seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
-    private nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
+    secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
+    secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 }
 
 # ============================================================================

@@ -37,8 +37,8 @@ requires K follows Comparable {
 
 entity SortedDict<K, V>
 requires K follows Comparable {
-    private root: BTreeDictNode<K, V>?
-    private count: UAddr
+    secret root: BTreeDictNode<K, V>?
+    secret count: UAddr
 }
 
 # ============================================================================

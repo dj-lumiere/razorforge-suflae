@@ -4,8 +4,8 @@ module Core
 # Core reference counting mechanism for single-threaded Shared<T> memory management
 
 entity SingleShareController {
-    private strong_count: S32
-    private weak_count: S32
+    secret strong_count: S32
+    secret weak_count: S32
 }
 
 # Create new reference count controller with initial counts of 0

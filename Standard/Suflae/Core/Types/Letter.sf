@@ -5,7 +5,7 @@ module Core
 import RazorForge/Text.Letter
 
 record Letter
-    private value: RazorForge/Text.Letter
+    secret value: RazorForge/Text.Letter
 
 # Codepoint access
 routine Letter.codepoint() -> U32

@@ -1,6 +1,6 @@
 module Core
 
 record C32 follows Numeric, Equatable {
-    public real: F32
-    public imag: F32
+    open real: F32
+    open imag: F32
 }

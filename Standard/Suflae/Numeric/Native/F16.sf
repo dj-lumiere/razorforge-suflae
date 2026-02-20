@@ -5,7 +5,7 @@ module Numerics
 import RazorForge/Core.F16
 
 record F16
-    private value: RazorForge/Core.F16
+    secret value: RazorForge/Core.F16
 
 # Arithmetic operators
 routine F16.__add__(you: F16) -> F16

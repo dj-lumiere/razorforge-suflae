@@ -5,7 +5,7 @@ module Core
 import RazorForge/Collections.SortedSet
 
 entity SortedSet<T>
-    private value: RazorForge/Collections.SortedSet<T>
+    secret value: RazorForge/Collections.SortedSet<T>
 
 # Core operations
 routine SortedSet<T>.count() -> Integer

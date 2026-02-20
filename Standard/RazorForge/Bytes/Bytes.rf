@@ -5,7 +5,7 @@
 # ============================================================================
 
 entity Bytes {
-    private letters: List<Byte>
+    secret letters: List<Byte>
 }
 
 # Constructors

@@ -33,8 +33,8 @@ preset SECONDS_PER_WEEK: S64 = 604_800_s64
 # ============================================================================
 
 record Duration follows Ordered, Addable, Subtractable, FloorDivisible, Negatable {
-    private seconds: S64      # Whole seconds (negative for negative durations)
-    private nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
+    secret seconds: S64      # Whole seconds (negative for negative durations)
+    secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 }
 
 # ============================================================================

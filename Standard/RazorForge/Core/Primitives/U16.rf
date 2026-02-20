@@ -3,7 +3,7 @@
 module Core
 # Core U16 type definition - maps to LLVM i16
 record U16 follows UnsignedIntegral, Ordered {
-    public value: @intrinsic_type.i16
+    open value: @intrinsic_type.i16
 }
 
 # Constants for U16 limits

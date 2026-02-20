@@ -34,7 +34,7 @@ preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
 # ============================================================================
 
 record ByteSize follows Ordered, Addable, Subtractable, FloorDivisible {
-    private value: U64
+    secret value: U64
 }
 
 # ============================================================================

@@ -4,9 +4,9 @@ module Core
 
 record Shared<T, P>
 requires P follows LockPolicy {
-    private controller: Snatched<MultiShareController>
-    private data: Snatched<T>
-    private lock: Snatched<P>
+    secret controller: Snatched<MultiShareController>
+    secret data: Snatched<T>
+    secret lock: Snatched<P>
 }
 
 # Generic factory method - create Shared with any lock policy

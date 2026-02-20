@@ -1,6 +1,6 @@
 module Core
 
 record C128 follows Numeric, Equatable {
-    public real: F128
-    public imag: F128
+    open real: F128
+    open imag: F128
 }

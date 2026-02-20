@@ -3,7 +3,7 @@
 module Core
 # Core F16 type definition - maps to LLVM half
 record F16 follows Numeric, Ordered {
-    private value: @intrinsic_type.half
+    secret value: @intrinsic_type.half
 }
 
 # IEEE 754 half precision constants

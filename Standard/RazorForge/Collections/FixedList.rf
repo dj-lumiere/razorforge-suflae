@@ -16,7 +16,7 @@ module Collections
 # N elements of T stored inline, count tracks active elements
 resident FixedList<T, N>
 requires N is UAddr {
-    private count: UAddr    # Current number of elements (0 to N)
+    secret count: UAddr    # Current number of elements (0 to N)
     # N elements of T stored inline by compiler
 }
 

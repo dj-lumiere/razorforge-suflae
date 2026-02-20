@@ -32,8 +32,8 @@ requires T follows Comparable {
 
 entity SortedSet<T>
 requires T follows Comparable {
-    private root: BTreeSetNode<T>?
-    private count: UAddr
+    secret root: BTreeSetNode<T>?
+    secret count: UAddr
 }
 
 # ============================================================================

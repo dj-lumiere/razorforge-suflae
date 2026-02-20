@@ -28,8 +28,8 @@ requires T follows Comparable {
 
 entity SortedList<T>
 requires T follows Comparable {
-    private root: BTreeListNode<T>
-    private count: UAddr
+    secret root: BTreeListNode<T>
+    secret count: UAddr
 }
 
 # ============================================================================

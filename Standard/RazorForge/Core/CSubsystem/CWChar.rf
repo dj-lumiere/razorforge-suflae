@@ -18,14 +18,14 @@ module Core
 
 # Windows: wchar_t is 16-bit (UTF-16 code unit)
 @config(target: "windows")
-public record CWChar {
-    public value: U16
+open record CWChar {
+    open value: U16
 }
 
 # Unix/Linux: wchar_t is 32-bit (UTF-32 codepoint)
 @config(target: "unix")
-public record CWChar {
-    public value: U32
+open record CWChar {
+    open value: U32
 }
 
 # ============================================================================
@@ -33,12 +33,12 @@ public record CWChar {
 # ============================================================================
 
 @config(target: "windows")
-public routine CWChar.__create__(value: U16) -> CWChar {
+open routine CWChar.__create__(value: U16) -> CWChar {
     return CWChar(value: value)
 }
 
 @config(target: "windows")
-public routine CWChar.__create__!(codepoint: U32) -> CWChar {
+open routine CWChar.__create__!(codepoint: U32) -> CWChar {
     if codepoint > 0xFFFFu32 {
         throw IntegerOverflowError()
     }
@@ -50,7 +50,7 @@ public routine CWChar.__create__!(codepoint: U32) -> CWChar {
 # ============================================================================
 
 @config(target: "unix")
-public routine CWChar.__create__(value: U32) -> CWChar {
+open routine CWChar.__create__(value: U32) -> CWChar {
     return CWChar(value: value)
 }
 
@@ -59,12 +59,12 @@ public routine CWChar.__create__(value: U32) -> CWChar {
 # ============================================================================
 
 @config(target: "windows")
-public routine CWChar.__eq__(you: CWChar) -> Bool {
+open routine CWChar.__eq__(you: CWChar) -> Bool {
     return me.value == you.value
 }
 
 @config(target: "windows")
-public routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
+open routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
     return me.value.__cmp__(you.value)
 }
 
@@ -73,11 +73,11 @@ public routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
 # ============================================================================
 
 @config(target: "unix")
-public routine CWChar.__eq__(you: CWChar) -> Bool {
+open routine CWChar.__eq__(you: CWChar) -> Bool {
     return me.value == you.value
 }
 
 @config(target: "unix")
-public routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
+open routine CWChar.__cmp__(you: CWChar) -> ComparisonSign {
     return me.value.__cmp__(you.value)
 }

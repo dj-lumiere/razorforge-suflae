@@ -1,6 +1,6 @@
 module Core
 
 record C64 follows Numeric, Equatable {
-    public real: F64
-    public imag: F64
+    open real: F64
+    open imag: F64
 }

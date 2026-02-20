@@ -5,7 +5,7 @@ module Numerics
 import RazorForge/Core.D32
 
 record D32
-    private value: RazorForge/Core.D32
+    secret value: RazorForge/Core.D32
 
 # Arithmetic operators
 routine D32.__add__(you: D32) -> D32

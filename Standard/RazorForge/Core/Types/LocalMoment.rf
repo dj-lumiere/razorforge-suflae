@@ -17,8 +17,8 @@ module Core
 # ============================================================================
 
 record LocalMoment follows Ordered {
-    private moment: Moment       # The UTC moment
-    private offset: Duration     # UTC offset (positive = east of UTC)
+    secret moment: Moment       # The UTC moment
+    secret offset: Duration     # UTC offset (positive = east of UTC)
 }
 
 # ============================================================================
