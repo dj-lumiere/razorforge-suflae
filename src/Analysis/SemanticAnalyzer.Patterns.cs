@@ -71,6 +71,76 @@ public sealed partial class SemanticAnalyzer
                     break;
                 }
 
+                // Choice case pattern: 'is NORTH' or 'is Direction.NORTH'
+                // When the matched type is a choice, check if the identifier is a case name
+                // before attempting type resolution (which would fail for case names).
+                if (matchedType is ChoiceTypeInfo choiceForIs)
+                {
+                    string? choiceCaseName = ExtractChoiceCaseFromTypePattern(
+                        typePat: typePat, choice: choiceForIs);
+                    if (choiceCaseName != null)
+                    {
+                        // Valid choice case match via 'is' — no type resolution needed
+                        if (typePat.VariableName != null)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Choice case patterns cannot bind variables.",
+                                typePat.Location);
+                        }
+
+                        if (typePat.Bindings is { Count: > 0 })
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Choice case patterns cannot destructure.",
+                                typePat.Location);
+                        }
+
+                        break;
+                    }
+
+                    // Not a valid case name — report specific error
+                    ReportError(
+                        SemanticDiagnosticCode.ChoiceCaseNotFound,
+                        $"Choice type '{choiceForIs.Name}' does not have a case named '{typePat.Type.Name}'.",
+                        typePat.Location);
+                    break;
+                }
+
+                // Flags member pattern: 'is READ' when matched type is a flags type.
+                // Single-flag tests are parsed as TypePattern by the parser.
+                if (matchedType is FlagsTypeInfo flagsForIs)
+                {
+                    string flagName = typePat.Type.Name;
+                    if (flagsForIs.Members.Any(m => m.Name == flagName))
+                    {
+                        if (typePat.VariableName != null)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Flags member patterns cannot bind variables.",
+                                typePat.Location);
+                        }
+
+                        if (typePat.Bindings is { Count: > 0 })
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Flags member patterns cannot destructure.",
+                                typePat.Location);
+                        }
+
+                        break;
+                    }
+
+                    ReportError(
+                        SemanticDiagnosticCode.FlagsMemberNotFound,
+                        $"Flags type '{flagsForIs.Name}' does not have a member named '{flagName}'.",
+                        typePat.Location);
+                    break;
+                }
+
                 TypeSymbol patternType = ResolveType(typeExpr: typePat.Type);
 
                 // Check type compatibility between matched type and pattern type
@@ -173,6 +243,76 @@ public sealed partial class SemanticAnalyzer
                         exprPat.Location);
                 }
 
+                break;
+
+            case FlagsPattern flagsPat:
+                if (matchedType is not FlagsTypeInfo flagsTypeForPat)
+                {
+                    if (matchedType.Category != TypeCategory.Error)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsTypeMismatch,
+                            $"Flags pattern requires a flags type, but got '{matchedType.Name}'.",
+                            flagsPat.Location);
+                    }
+                    break;
+                }
+
+                // Validate each flag name exists
+                foreach (string flagName in flagsPat.FlagNames)
+                {
+                    if (flagsTypeForPat.Members.All(m => m.Name != flagName))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsMemberNotFound,
+                            $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
+                            flagsPat.Location);
+                    }
+                }
+
+                // Validate excluded flags
+                if (flagsPat.ExcludedFlags != null)
+                {
+                    foreach (string flagName in flagsPat.ExcludedFlags)
+                    {
+                        if (flagsTypeForPat.Members.All(m => m.Name != flagName))
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.FlagsMemberNotFound,
+                                $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
+                                flagsPat.Location);
+                        }
+                    }
+                }
+
+                // #133: isonly rejects 'or' and 'but'
+                if (flagsPat.IsExact)
+                {
+                    if (flagsPat.Connective == FlagsTestConnective.Or)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                            "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
+                            flagsPat.Location);
+                    }
+
+                    if (flagsPat.ExcludedFlags is { Count: > 0 })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                            "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
+                            flagsPat.Location);
+                    }
+                }
+
+                break;
+
+            case ComparisonPattern cmp when matchedType is ChoiceTypeInfo:
+                // Choice types must use 'is CASE_NAME', not '== CASE_NAME'
+                ReportError(
+                    SemanticDiagnosticCode.PatternTypeMismatch,
+                    "Use 'is' instead of comparison operators for choice case matching.",
+                    cmp.Location);
                 break;
         }
     }
@@ -451,13 +591,15 @@ public sealed partial class SemanticAnalyzer
             MutantTypeInfo mutant => CheckVariantExhaustiveness(clauses: clauses, cases: mutant.Cases,
                 typeName: mutant.Name),
             ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses, ehType: eh),
+            // #129: Flags when always requires else — too many combinations to exhaustively check
+            FlagsTypeInfo => new ExhaustivenessResult(IsExhaustive: false, MissingCases: ["else"]),
             _ when matchedType.Name == "Bool" => CheckBoolExhaustiveness(clauses: clauses),
             _ => new ExhaustivenessResult(IsExhaustive: false, MissingCases: [])
         };
     }
 
     /// <summary>
-    /// Checks whether all cases of a choice type are covered by == ComparisonPatterns.
+    /// Checks whether all cases of a choice type are covered by 'is' TypePatterns.
     /// </summary>
     private static ExhaustivenessResult CheckChoiceExhaustiveness(
         IReadOnlyList<WhenClause> clauses,
@@ -485,25 +627,63 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Extracts the choice case name from a ComparisonPattern with == operator.
-    /// Returns null if the pattern is not a choice case comparison.
+    /// Extracts the choice case name from a TypePattern ('is' keyword).
+    /// Returns null if the pattern is not a choice case match.
+    /// Choice matching only supports the 'is' syntax — '==' is not valid for choices.
     /// </summary>
     private static string? ExtractChoiceCaseName(Pattern pattern)
     {
-        if (pattern is not ComparisonPattern { Operator: TokenType.Equal } cmp)
+        // TypePattern: is ACTIVE or is Status.ACTIVE
+        if (pattern is TypePattern typePat)
         {
+            string name = typePat.Type.Name;
+
+            // Qualified: Direction.NORTH → extract "NORTH"
+            if (name.Contains(value: '.'))
+            {
+                return name[(name.LastIndexOf(value: '.') + 1)..];
+            }
+
+            // Shorthand: NORTH — caller validates against case list
+            return name;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts the choice case name from a TypePattern when the matched type is a choice.
+    /// Handles both shorthand (NORTH) and qualified (Direction.NORTH) forms.
+    /// Returns null if the pattern doesn't match any case.
+    /// </summary>
+    private static string? ExtractChoiceCaseFromTypePattern(TypePattern typePat, ChoiceTypeInfo choice)
+    {
+        string name = typePat.Type.Name;
+
+        // Qualified form: Direction.NORTH → extract "NORTH" if prefix matches choice name
+        if (name.Contains(value: '.'))
+        {
+            int dotIndex = name.LastIndexOf(value: '.');
+            string prefix = name[..dotIndex];
+            string casePart = name[(dotIndex + 1)..];
+
+            if (prefix == choice.Name && choice.Cases.Any(predicate: c => c.Name == casePart))
+            {
+                return casePart;
+            }
+
             return null;
         }
 
-        return cmp.Value switch
+        // Shorthand form: NORTH → match directly against choice cases
+        if (choice.Cases.Any(predicate: c => c.Name == name))
         {
-            // Status.ACTIVE → PropertyName is the case name
-            MemberExpression member => member.PropertyName,
-            // ACTIVE (shorthand) → Name is the case name
-            IdentifierExpression id => id.Name,
-            _ => null
-        };
+            return name;
+        }
+
+        return null;
     }
+
 
     /// <summary>
     /// Checks whether all cases of a variant/mutant type are covered.

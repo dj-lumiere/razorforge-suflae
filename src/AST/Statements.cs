@@ -668,8 +668,8 @@ public record ExpressionPattern(Expression Expression, SourceLocation Location)
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>== ACTIVE => ... (value equality for choices)</item>
-/// <item>!= CANCELLED => ... (value inequality)</item>
+/// <item>== 42 => ... (value equality for literals)</item>
+/// <item>!= 0 => ... (value inequality)</item>
 /// <item>&lt; 0 => ... (numeric comparison)</item>
 /// <item>&gt;= 65 => ... (numeric comparison)</item>
 /// <item>=== current_user => ... (reference equality)</item>

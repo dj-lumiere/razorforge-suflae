@@ -565,6 +565,29 @@ public sealed class TypeRegistry
         _types[key: choiceName] = updatedChoice;
     }
 
+    public void UpdateFlagsMembers(string flagsName, IReadOnlyList<Types.FlagsMemberInfo> members)
+    {
+        if (!_types.TryGetValue(key: flagsName, value: out TypeInfo? type))
+        {
+            return;
+        }
+
+        if (type is not Types.FlagsTypeInfo flags)
+        {
+            return;
+        }
+
+        var updated = new Types.FlagsTypeInfo(name: flags.Name)
+        {
+            Members = members,
+            Visibility = flags.Visibility,
+            Location = flags.Location,
+            Module = flags.Module
+        };
+
+        _types[key: flagsName] = updated;
+    }
+
     /// <summary>
     /// Looks up a choice case by name across all choice types.
     /// </summary>

@@ -55,6 +55,7 @@ public sealed partial class SemanticAnalyzer
             IntrinsicCallExpression intrinsic => AnalyzeIntrinsicCallExpression(intrinsic: intrinsic),
             NativeCallExpression native => AnalyzeNativeCallExpression(native: native),
             IsPatternExpression isPat => AnalyzeIsPatternExpression(isPat: isPat),
+            FlagsTestExpression flagsTest => AnalyzeFlagsTestExpression(flagsTest: flagsTest),
             StealExpression steal => AnalyzeStealExpression(steal: steal),
             BackIndexExpression back => AnalyzeBackIndexExpression(back: back),
             TypeExpression typeExpr => ResolveType(typeExpr: typeExpr),
@@ -911,6 +912,50 @@ public sealed partial class SemanticAnalyzer
             return AnalyzeAssignmentExpression(target: binary.Left, value: binary.Right, targetType: leftType, valueType: rightType, location: binary.Location);
         }
 
+        // Handle flags removal operator (but) — removes flags from a value
+        if (binary.Operator == BinaryOperator.But)
+        {
+            if (leftType is not FlagsTypeInfo)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsTypeMismatch,
+                    $"'but' operator requires a flags type on the left side, but got '{leftType.Name}'.",
+                    binary.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            if (rightType is not FlagsTypeInfo)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsTypeMismatch,
+                    $"'but' operator requires a flags type on the right side, but got '{rightType.Name}'.",
+                    binary.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            if (leftType.Name != rightType.Name)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsTypeMismatch,
+                    $"'but' operator requires both operands to be the same flags type, but got '{leftType.Name}' and '{rightType.Name}'.",
+                    binary.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            return leftType;
+        }
+
+        // #128: 'or' cannot be used to combine flags outside of is/isnot/isonly tests
+        if (binary.Operator == BinaryOperator.Or && (leftType is FlagsTypeInfo || rightType is FlagsTypeInfo))
+        {
+            ReportError(
+                SemanticDiagnosticCode.FlagsOrInAssignment,
+                "Cannot use 'or' to combine flags values. Use 'is FLAG_A or FLAG_B' for testing, " +
+                "or separate flag assignments.",
+                binary.Location);
+            return leftType;
+        }
+
         // Handle logical operators (and, or) — require bool operands, return bool
         // These are not desugared because they need short-circuit evaluation
         if (IsLogicalOperator(op: binary.Operator))
@@ -1125,13 +1170,24 @@ public sealed partial class SemanticAnalyzer
             return targetType;
         }
 
-        // Choice types cannot use compound assignment (only == and != are allowed)
+        // Choice types cannot use compound assignment — choices do not support operators
         if (targetType is ChoiceTypeInfo)
         {
             ReportError(
                 SemanticDiagnosticCode.ArithmeticOnChoiceType,
                 $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with choice type '{targetType.Name}'. " +
-                "Choices only support '==' and '!=' operators.",
+                "Choice types do not support operators. Use 'is' for case matching.",
+                compound.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // #134: Flags types cannot use arithmetic or compound assignment operators
+        if (targetType is FlagsTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with flags type '{targetType.Name}'. " +
+                "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
                 compound.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -1292,13 +1348,24 @@ public sealed partial class SemanticAnalyzer
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-            // Choice types cannot use custom operator dunders (only compiler-generated __eq__/__ne__)
+            // Choice types cannot use any operator dunders
             if (objectType is ChoiceTypeInfo && IsOperatorDunder(name: member.PropertyName))
             {
                 ReportError(
                     SemanticDiagnosticCode.ArithmeticOnChoiceType,
                     $"Operator '{member.PropertyName}' cannot be used with choice type '{objectType.Name}'. " +
-                    "Choices only support '==' and '!=' operators. Use regular methods for additional behavior.",
+                    "Choice types do not support operators. Use 'is' for case matching and regular methods for additional behavior.",
+                    call.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            // #134/#135: Flags types cannot use any operator dunders
+            if (objectType is FlagsTypeInfo && IsOperatorDunder(name: member.PropertyName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                    $"Operator '{member.PropertyName}' cannot be used with flags type '{objectType.Name}'. " +
+                    "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
                     call.Location);
                 return ErrorTypeInfo.Instance;
             }
@@ -2425,6 +2492,74 @@ public sealed partial class SemanticAnalyzer
         AnalyzePattern(pattern: isPat.Pattern, matchedType: exprType);
 
         // 'is' expressions always return bool
+        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeFlagsTestExpression(FlagsTestExpression flagsTest)
+    {
+        TypeSymbol subjectType = AnalyzeExpression(expression: flagsTest.Subject);
+
+        if (subjectType.Category == TypeCategory.Error)
+        {
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        if (subjectType is not FlagsTypeInfo flagsType)
+        {
+            ReportError(
+                SemanticDiagnosticCode.FlagsTypeMismatch,
+                $"Flags test operators (is/isnot/isonly) require a flags type, but got '{subjectType.Name}'.",
+                flagsTest.Location);
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // #133: isonly rejects 'or' and 'but'
+        if (flagsTest.Kind == FlagsTestKind.IsOnly)
+        {
+            if (flagsTest.Connective == FlagsTestConnective.Or)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                    "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
+                    flagsTest.Location);
+            }
+
+            if (flagsTest.ExcludedFlags is { Count: > 0 })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                    "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
+                    flagsTest.Location);
+            }
+        }
+
+        // Validate each flag name exists in the type
+        foreach (string flagName in flagsTest.TestFlags)
+        {
+            if (flagsType.Members.All(m => m.Name != flagName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsMemberNotFound,
+                    $"Flags type '{flagsType.Name}' does not have a member named '{flagName}'.",
+                    flagsTest.Location);
+            }
+        }
+
+        // Validate excluded flags too
+        if (flagsTest.ExcludedFlags != null)
+        {
+            foreach (string flagName in flagsTest.ExcludedFlags)
+            {
+                if (flagsType.Members.All(m => m.Name != flagName))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.FlagsMemberNotFound,
+                        $"Flags type '{flagsType.Name}' does not have a member named '{flagName}'.",
+                        flagsTest.Location);
+                }
+            }
+        }
+
         return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
     }
 

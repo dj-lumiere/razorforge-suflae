@@ -427,6 +427,30 @@ public enum SemanticDiagnosticCode
     /// <summary>Variant type cannot be reassigned to a variable.</summary>
     VariantReassignmentNotAllowed = 423,
 
+    /// <summary>Flags type has more than 64 members (U64 bitmask limit).</summary>
+    FlagsTooManyMembers = 424,
+
+    /// <summary>Flags member name is duplicated.</summary>
+    FlagsDuplicateMember = 425,
+
+    /// <summary>Arithmetic operators cannot be used on flags types.</summary>
+    ArithmeticOnFlagsType = 426,
+
+    /// <summary>Custom operator overloading is not allowed on flags types.</summary>
+    FlagsCustomOperatorNotAllowed = 427,
+
+    /// <summary>'or' connective on flags is only valid in test context (is ... or), not in assignment.</summary>
+    FlagsOrInAssignment = 428,
+
+    /// <summary>'isonly' rejects 'or' and 'but' connectives — only 'and' is valid.</summary>
+    FlagsIsOnlyRejectsOrBut = 429,
+
+    /// <summary>Flags member not found in the flags type.</summary>
+    FlagsMemberNotFound = 430,
+
+    /// <summary>Operand is not a flags type for a flags operator.</summary>
+    FlagsTypeMismatch = 431,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

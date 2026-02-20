@@ -52,6 +52,10 @@ public sealed partial class SemanticAnalyzer
                 CollectChoiceDeclaration(choice: choice);
                 break;
 
+            case FlagsDeclaration flags:
+                CollectFlagsDeclaration(flags: flags);
+                break;
+
             case VariantDeclaration variant:
                 CollectVariantDeclaration(variant: variant);
                 break;
@@ -256,6 +260,18 @@ public sealed partial class SemanticAnalyzer
         TryRegisterType(type: typeInfo, location: choice.Location);
     }
 
+    private void CollectFlagsDeclaration(FlagsDeclaration flags)
+    {
+        var typeInfo = new FlagsTypeInfo(name: flags.Name)
+        {
+            Visibility = flags.Visibility,
+            Location = flags.Location,
+            Module = GetCurrentNamespace()
+        };
+
+        TryRegisterType(type: typeInfo, location: flags.Location);
+    }
+
     private void CollectVariantDeclaration(VariantDeclaration variant)
     {
         var typeInfo = new VariantTypeInfo(name: variant.Name)
@@ -322,13 +338,23 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // Validate that choice types cannot define operator dunders (only compiler-generated __eq__/__ne__)
+        // Validate that choice types cannot define any operator dunders
         if (ownerType is ChoiceTypeInfo && kind == RoutineKind.Method && IsOperatorDunder(name: routineName))
         {
             ReportError(
                 SemanticDiagnosticCode.ArithmeticOnChoiceType,
                 $"Choice type '{ownerType.Name}' cannot define operator '{routineName}'. " +
-                "Choices only support compiler-generated '==' and '!=' operators. Use regular methods for additional behavior.",
+                "Choice types do not support operators. Use 'is' for case matching and regular methods for additional behavior.",
+                routine.Location);
+        }
+
+        // #135: Flags types cannot define any operator dunders
+        if (ownerType is FlagsTypeInfo && kind == RoutineKind.Method && IsOperatorDunder(name: routineName))
+        {
+            ReportError(
+                SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
+                $"Flags type '{ownerType.Name}' cannot define operator '{routineName}'. " +
+                "Flags only support built-in operators: 'is', 'isnot', 'isonly', and 'but'.",
                 routine.Location);
         }
 
@@ -628,6 +654,10 @@ public sealed partial class SemanticAnalyzer
 
             case ChoiceDeclaration choice:
                 ResolveChoiceBody(choice: choice);
+                break;
+
+            case FlagsDeclaration flags:
+                ResolveFlagsBody(flags: flags);
                 break;
         }
     }
@@ -1086,6 +1116,46 @@ public sealed partial class SemanticAnalyzer
 
         // Update the choice with resolved cases
         _registry.UpdateChoiceCases(choiceName: choiceInfo.FullName, cases: cases);
+    }
+
+    private void ResolveFlagsBody(FlagsDeclaration flags)
+    {
+        TypeSymbol? flagsType = _registry.LookupType(name: flags.Name);
+        if (flagsType is not FlagsTypeInfo flagsInfo)
+        {
+            return;
+        }
+
+        // #127: Max 64 members (U64 backing)
+        if (flags.Members.Count > 64)
+        {
+            ReportError(
+                SemanticDiagnosticCode.FlagsTooManyMembers,
+                $"Flags type '{flags.Name}' has {flags.Members.Count} members, but the maximum is 64.",
+                flags.Location);
+        }
+
+        var members = new List<FlagsMemberInfo>();
+        var seenNames = new HashSet<string>();
+
+        for (int i = 0; i < flags.Members.Count; i++)
+        {
+            string memberName = flags.Members[i];
+
+            // Validate no duplicate member names
+            if (!seenNames.Add(memberName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsDuplicateMember,
+                    $"Flags type '{flags.Name}' has duplicate member '{memberName}'.",
+                    flags.Location);
+                continue;
+            }
+
+            members.Add(new FlagsMemberInfo(Name: memberName, BitPosition: i));
+        }
+
+        _registry.UpdateFlagsMembers(flagsName: flagsInfo.FullName, members: members);
     }
 
     /// <summary>

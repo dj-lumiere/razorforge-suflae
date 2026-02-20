@@ -46,6 +46,9 @@ public enum TypeCategory
     /// <summary>Simple enumeration with optional integer values, CAN have methods.</summary>
     Choice,
 
+    /// <summary>Bitmask type with named members, compiler-generated operators only.</summary>
+    Flags,
+
     /// <summary>Tagged union, local-only, immutable, NO methods.</summary>
     Variant,
 

@@ -233,7 +233,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Operator dunder methods that choices are NOT allowed to define or call.
-    /// Choices only support compiler-generated __eq__/__ne__ and regular (non-dunder) methods.
+    /// Choices do not support any operators — use 'is' for case matching.
     /// </summary>
     private static readonly HashSet<string> OperatorDunders =
     [
@@ -246,8 +246,8 @@ public sealed partial class SemanticAnalyzer
         // Checked arithmetic
         "__add_checked__", "__sub_checked__", "__mul_checked__",
         "__floordiv_checked__", "__mod_checked__", "__pow_checked__",
-        // Comparison (user-defined — compiler auto-generates __eq__/__ne__)
-        "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
+        // Comparison
+        "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
         // Bitwise
         "__and__", "__or__", "__xor__",
         "__ashl__", "__ashl_checked__", "__ashr__", "__lshl__", "__lshr__",
