@@ -175,6 +175,40 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
 
+    [Fact]
+    public void Parse_WhenChoiceIsPattern()
+    {
+        string source = """
+                        routine handle(status: Status) {
+                            when status {
+                                is PENDING => show("Waiting...")
+                                is ACTIVE => show("In progress")
+                                is COMPLETED => show("Done!")
+                                is CANCELLED => show("Cancelled")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_WhenChoiceIsPatternQualified()
+    {
+        string source = """
+                        routine handle(status: Status) {
+                            when status {
+                                is Status.PENDING => show("Waiting...")
+                                is Status.ACTIVE => show("In progress")
+                                is Status.COMPLETED => show("Done!")
+                                is Status.CANCELLED => show("Cancelled")
+                            }
+                        }
+                        """;
+
+        AssertParses(source: source);
+    }
+
     #endregion
 
     #region Variant Pattern Tests

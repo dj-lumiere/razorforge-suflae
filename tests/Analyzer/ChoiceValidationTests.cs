@@ -133,7 +133,7 @@ public class ChoiceValidationTests
 
     #endregion
 
-    #region Operator Prohibition (choices only support == and !=)
+    #region Operator Prohibition (choices do not support any operators)
 
     [Fact]
     public void Analyze_ChoiceAddition_ReportsError()
@@ -216,7 +216,7 @@ public class ChoiceValidationTests
     }
 
     [Fact]
-    public void Analyze_ChoiceEquality_NoError()
+    public void Analyze_ChoiceEquality_ReportsError()
     {
         string source = """
                         choice Direction {
@@ -227,12 +227,11 @@ public class ChoiceValidationTests
                         routine test() {
                             var d = NORTH
                             var same = d == SOUTH
-                            var diff = d != SOUTH
                         }
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
 

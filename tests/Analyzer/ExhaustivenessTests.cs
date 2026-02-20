@@ -32,10 +32,10 @@ public class ExhaustivenessTests
                         }
                         routine test(d: Direction) -> S32 {
                             return when d {
-                                == Direction.NORTH => 1
-                                == Direction.SOUTH => 2
-                                == Direction.EAST => 3
-                                == Direction.WEST => 4
+                                is Direction.NORTH => 1
+                                is Direction.SOUTH => 2
+                                is Direction.EAST => 3
+                                is Direction.WEST => 4
                             }
                         }
                         """;
@@ -57,9 +57,9 @@ public class ExhaustivenessTests
                         }
                         routine test(d: Direction) -> S32 {
                             return when d {
-                                == Direction.NORTH => 1
-                                == Direction.SOUTH => 2
-                                == Direction.EAST => 3
+                                is Direction.NORTH => 1
+                                is Direction.SOUTH => 2
+                                is Direction.EAST => 3
                             }
                         }
                         """;
@@ -81,7 +81,7 @@ public class ExhaustivenessTests
                         }
                         routine test(d: Direction) -> S32 {
                             return when d {
-                                == Direction.NORTH => 1
+                                is Direction.NORTH => 1
                                 else => 0
                             }
                         }
@@ -103,9 +103,9 @@ public class ExhaustivenessTests
                         }
                         routine test(c: Color) -> S32 {
                             return when c {
-                                == RED => 1
-                                == GREEN => 2
-                                == BLUE => 3
+                                is RED => 1
+                                is GREEN => 2
+                                is BLUE => 3
                             }
                         }
                         """;
@@ -113,6 +113,29 @@ public class ExhaustivenessTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_EqualsOperator_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                == Direction.NORTH => 1
+                                else => 0
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
 
     #endregion
@@ -131,8 +154,8 @@ public class ExhaustivenessTests
                         }
                         routine test(d: Direction) {
                             when d {
-                                == Direction.NORTH => show("N")
-                                == Direction.SOUTH => show("S")
+                                is Direction.NORTH => show("N")
+                                is Direction.SOUTH => show("S")
                             }
                         }
                         """;
@@ -153,9 +176,9 @@ public class ExhaustivenessTests
                         }
                         routine test(c: Color) {
                             when c {
-                                == Color.RED => show("red")
-                                == Color.GREEN => show("green")
-                                == Color.BLUE => show("blue")
+                                is Color.RED => show("red")
+                                is Color.GREEN => show("green")
+                                is Color.BLUE => show("blue")
                             }
                         }
                         """;
@@ -177,7 +200,7 @@ public class ExhaustivenessTests
                         }
                         routine test(d: Direction) {
                             when d {
-                                == Direction.NORTH => show("N")
+                                is Direction.NORTH => show("N")
                                 else => show("other")
                             }
                         }
@@ -333,8 +356,8 @@ public class ExhaustivenessTests
                         }
                         routine test(s: Status) -> S32 {
                             return when s {
-                                == Status.ACTIVE => 1
-                                == Status.INACTIVE => 2
+                                is Status.ACTIVE => 1
+                                is Status.INACTIVE => 2
                             }
                         }
                         """;
@@ -374,7 +397,7 @@ public class ExhaustivenessTests
                         }
                         routine test(d: Direction) {
                             when d {
-                                == Direction.NORTH => show("N")
+                                is Direction.NORTH => show("N")
                             }
                         }
                         """;
@@ -386,6 +409,203 @@ public class ExhaustivenessTests
         Assert.Contains(expectedSubstring: "SOUTH", actualString: warning.Message);
         Assert.Contains(expectedSubstring: "EAST", actualString: warning.Message);
         Assert.Contains(expectedSubstring: "WEST", actualString: warning.Message);
+    }
+
+    #endregion
+
+    #region Choice — Unified 'is' Pattern (Phase 12)
+
+    [Fact]
+    public void WhenExpression_Choice_IsPattern_AllCases_NoError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is NORTH => 1
+                                is SOUTH => 2
+                                is EAST => 3
+                                is WEST => 4
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_IsPattern_QualifiedName_NoError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is Direction.NORTH => 1
+                                is Direction.SOUTH => 2
+                                is Direction.EAST => 3
+                                is Direction.WEST => 4
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_IsPattern_MissingCase_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is NORTH => 1
+                                is SOUTH => 2
+                                is EAST => 3
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_IsPattern_WithElse_NoError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is NORTH => 1
+                                else => 0
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    [Fact]
+    public void WhenStatement_Choice_IsPattern_MissingCase_ReportsWarning()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) {
+                            when d {
+                                is NORTH => show("N")
+                                is SOUTH => show("S")
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_MixedIsAndEquals_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is NORTH => 1
+                                == Direction.SOUTH => 2
+                                is EAST => 3
+                                is WEST => 4
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_IsPattern_InvalidCase_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is NORTH => 1
+                                is SOUTH => 2
+                                is EAST => 3
+                                is INVALID => 4
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseNotFound);
+    }
+
+    [Fact]
+    public void WhenExpression_Choice_IsPattern_VariableBinding_ReportsError()
+    {
+        string source = """
+                        choice Direction {
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
+                        }
+                        routine test(d: Direction) -> S32 {
+                            return when d {
+                                is NORTH n => 1
+                                else => 0
+                            }
+                        }
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
 
     #endregion
