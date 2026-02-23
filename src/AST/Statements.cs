@@ -866,30 +866,51 @@ public record DangerStatement(BlockStatement Body, SourceLocation Location)
 #endregion
 
 /// <summary>
-/// Represents a resource management statement (using ... as ...: body).
-/// Similar to Python's 'with' statement or C#'s 'using' statement.
-/// The resource is acquired when entering the block and automatically released when exiting.
+/// Represents a resource management declaration (using name = resource_expr).
+/// Resource lifetime is tied to the enclosing scope; cleanup occurs at return/release.
 /// </summary>
 /// <remarks>
-/// <para>Syntax: <c>using resource_expr as name: body</c></para>
+/// <para>Syntax: <c>using conn = db.open()</c></para>
 /// <para>The resource expression must return an object that implements a disposable/closeable protocol.</para>
 /// <para>Example:</para>
 /// <code>
-/// using open("file.txt") as file:
-///     let content = file.read_all()
-///     process(content)
-/// # file is automatically closed here
+/// using file = open("file.txt")
+/// let content = file.read_all()
+/// process(content)
+/// # file is automatically closed at return/release
 /// </code>
 /// </remarks>
 public record UsingStatement(
     Expression Resource,
     string Name,
-    Statement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitUsingStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Represents a premature resource cleanup statement (release name).
+/// Forces cleanup of a using-bound resource before the enclosing scope exits.
+/// </summary>
+/// <remarks>
+/// <para>Syntax: <c>release conn</c></para>
+/// <para>Example:</para>
+/// <code>
+/// using conn = db.open()
+/// let data = conn.query("SELECT ...")
+/// release conn  # done with connection early
+/// process(data)  # conn no longer usable
+/// </code>
+/// </remarks>
+public record ReleaseStatement(string Name, SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitReleaseStatement(node: this);
     }
 }

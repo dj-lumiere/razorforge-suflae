@@ -1,7 +1,0 @@
-# CheckedShiftable - Protocol for types that support checked left shift (<<?)
-module Core
-
-protocol CheckedShiftable {
-    @readonly
-    routine Me.__ashl_checked__(amount: Integral) -> Maybe<Me>
-}

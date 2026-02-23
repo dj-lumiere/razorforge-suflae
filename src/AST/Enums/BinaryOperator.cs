@@ -72,27 +72,6 @@ public enum BinaryOperator
 
     #endregion
 
-    #region Arithmetic with overflow handling variants - Checked (throw on overflow)
-
-    /// <summary>Addition that throws or traps on overflow (+?)</summary>
-    AddChecked,
-
-    /// <summary>Subtraction that throws or traps on overflow (-?)</summary>
-    SubtractChecked,
-
-    /// <summary>Multiplication that throws or traps on overflow (*?)</summary>
-    MultiplyChecked,
-
-    /// <summary>Floor division that throws or traps on overflow (//?)</summary>
-    FloorDivideChecked,
-
-    /// <summary>Modulo that throws or traps on overflow (%?)</summary>
-    ModuloChecked,
-
-    /// <summary>Exponentiation that throws or traps on overflow (**?)</summary>
-    PowerChecked,
-
-    #endregion
 
     #region Comparison - equality, relational, and membership
 
@@ -170,9 +149,6 @@ public enum BinaryOperator
     /// <summary>Arithmetic left shift operator (&lt;&lt;)</summary>
     ArithmeticLeftShift,
 
-    /// <summary>Checked arithmetic left shift operator (&lt;&lt;?)</summary>
-    ArithmeticLeftShiftChecked,
-
     /// <summary>Arithmetic right shift operator (&gt;&gt;)</summary>
     ArithmeticRightShift,
 
@@ -231,13 +207,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.MultiplySaturate => "*^",
                 BinaryOperator.PowerSaturate => "**^",
 
-                BinaryOperator.AddChecked => "+?",
-                BinaryOperator.SubtractChecked => "-?",
-                BinaryOperator.MultiplyChecked => "*?",
-                BinaryOperator.FloorDivideChecked => "//?",
-                BinaryOperator.ModuloChecked => "%?",
-                BinaryOperator.PowerChecked => "**?",
-
                 BinaryOperator.Equal => "==",
                 BinaryOperator.NotEqual => "!=",
                 BinaryOperator.Identical => "===",
@@ -263,7 +232,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.BitwiseOr => "|",
                 BinaryOperator.BitwiseXor => "^",
                 BinaryOperator.ArithmeticLeftShift => "<<",
-                BinaryOperator.ArithmeticLeftShiftChecked => "<<?",
                 BinaryOperator.ArithmeticRightShift => ">>",
                 BinaryOperator.LogicalLeftShift => "<<<",
                 BinaryOperator.LogicalRightShift => ">>>",
@@ -302,14 +270,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.MultiplySaturate => "__mul_sat__",
                 BinaryOperator.PowerSaturate => "__pow_sat__",
 
-                // Checked arithmetic
-                BinaryOperator.AddChecked => "__add_checked__",
-                BinaryOperator.SubtractChecked => "__sub_checked__",
-                BinaryOperator.MultiplyChecked => "__mul_checked__",
-                BinaryOperator.FloorDivideChecked => "__floordiv_checked__",
-                BinaryOperator.ModuloChecked => "__mod_checked__",
-                BinaryOperator.PowerChecked => "__pow_checked__",
-
                 // Ordering (overloadable)
                 BinaryOperator.Equal => "__eq__",
                 BinaryOperator.NotEqual => "__ne__",
@@ -324,7 +284,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.BitwiseOr => "__or__",
                 BinaryOperator.BitwiseXor => "__xor__",
                 BinaryOperator.ArithmeticLeftShift => "__ashl__",
-                BinaryOperator.ArithmeticLeftShiftChecked => "__ashl_checked__",
                 BinaryOperator.ArithmeticRightShift => "__ashr__",
                 BinaryOperator.LogicalLeftShift => "__lshl__",
                 BinaryOperator.LogicalRightShift => "__lshr__",

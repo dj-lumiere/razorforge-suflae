@@ -296,9 +296,6 @@ public enum TokenType
     /// <summary>Posted access modifier - open read, secret write</summary>
     Posted,
 
-    /// <summary>Open access modifier - visible everywhere</summary>
-    Open,
-
     /// <summary>External linkage modifier - marks externally-linked declarations (FFI)</summary>
     External,
 
@@ -409,8 +406,11 @@ public enum TokenType
 
     #region Keywords - Special
 
-    /// <summary>Using statement keyword for resource management (using obj as o { })</summary>
+    /// <summary>Using statement keyword for resource management (using conn = db.open())</summary>
     Using,
+
+    /// <summary>Release statement keyword for premature resource cleanup (release conn)</summary>
+    Release,
 
     /// <summary>Type alias as keyword (type Foo as Bar, or 'as' in scoped access blocks)</summary>
     As,
@@ -539,32 +539,17 @@ public enum TokenType
     /// <summary>Saturating addition operator (+^)</summary>
     PlusSaturate,
 
-    /// <summary>Checked addition operator (+?)</summary>
-    PlusChecked,
-
     /// <summary>Wrapping subtraction operator (-%)</summary>
     MinusWrap,
 
     /// <summary>Saturating subtraction operator (-^)</summary>
     MinusSaturate,
 
-    /// <summary>Checked subtraction operator (-?)</summary>
-    MinusChecked,
-
     /// <summary>Wrapping multiplication operator (*%)</summary>
     MultiplyWrap,
 
     /// <summary>Saturating multiplication operator (*^)</summary>
     MultiplySaturate,
-
-    /// <summary>Checked multiplication operator (*?)</summary>
-    MultiplyChecked,
-
-    /// <summary>Checked integer division operator (//?)</summary>
-    DivideChecked,
-
-    /// <summary>Checked modulo operator (%?)</summary>
-    ModuloChecked,
 
     /// <summary>Exponentiation operator (**)</summary>
     Power,
@@ -574,9 +559,6 @@ public enum TokenType
 
     /// <summary>Saturating exponentiation operator (**^)</summary>
     PowerSaturate,
-
-    /// <summary>Checked exponentiation operator (**?)</summary>
-    PowerChecked,
 
     #endregion
 
@@ -627,9 +609,6 @@ public enum TokenType
 
     /// <summary>Left bit shift operator (&lt;&lt;)</summary>
     LeftShift,
-
-    /// <summary>Checked left bit shift operator (&lt;&lt;?)</summary>
-    LeftShiftChecked,
 
     /// <summary>Right bit shift operator (>>)</summary>
     RightShift,
@@ -826,6 +805,12 @@ public enum TokenType
     /// Similar to 'yield' in Python/C#.
     /// </summary>
     Generate,
+
+    /// <summary>
+    /// Emitting routine modifier keyword.
+    /// Marks a routine as a generator that produces values via 'emit'.
+    /// </summary>
+    Emitting,
 
     /// <summary>
     /// Async function declaration keyword.

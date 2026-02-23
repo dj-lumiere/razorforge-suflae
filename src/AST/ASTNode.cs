@@ -367,6 +367,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the using statement</returns>
     T VisitUsingStatement(UsingStatement node);
 
+    /// <summary>Visits a release statement node (premature resource cleanup)</summary>
+    /// <param name="node">The release statement to visit</param>
+    /// <returns>Result of visiting the release statement</returns>
+    T VisitReleaseStatement(ReleaseStatement node);
+
     /// <summary>Visits a discard statement node (explicit return value discard)</summary>
     /// <param name="node">The discard statement to visit</param>
     /// <returns>Result of visiting the discard statement</returns>

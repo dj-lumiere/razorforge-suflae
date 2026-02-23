@@ -30,7 +30,7 @@
         {
           "comment": "Type declarations",
           "name": "storage.type.sf",
-          "match": "\\b(routine|entity|record|variant|choice|protocol)\\b"
+          "match": "\\b(routine|entity|record|variant|choice|protocol|flags)\\b"
         },
         {
           "comment": "Variable declarations",
@@ -38,39 +38,39 @@
           "match": "\\b(let|var|preset|common|define)\\b"
         },
         {
-          "comment": "Access modifiers",
+          "comment": "Access and routine modifiers",
           "name": "keyword.modifier.sf",
-          "match": "\\b(secret|posted|open|global|external|dangerous)\\b"
+          "match": "\\b(secret|posted|global|suspended|emitting)\\b"
         },
         {
           "comment": "Control flow",
           "name": "keyword.control.sf",
-          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent)\\b"
+          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|release|emit)\\b"
         },
         {
-          "comment": "Type operations",
+          "comment": "Type and pattern operations",
           "name": "keyword.operator.sf",
-          "match": "\\b(is|isnot|follows|notfollows|in|notin)\\b"
+          "match": "\\b(is|isnot|isonly|obeys|disobeys|in|notin|but)\\b"
         },
         {
           "comment": "Module system",
           "name": "keyword.control.import.sf",
-          "match": "\\b(import|namespace)\\b"
+          "match": "\\b(import|module)\\b"
         },
         {
-          "comment": "Memory access scope",
+          "comment": "Resource management",
           "name": "keyword.control.sf",
           "match": "\\b(using)\\b"
         },
         {
-          "comment": "Async/generator",
+          "comment": "Async",
           "name": "keyword.control.sf",
-          "match": "\\b(generate|suspended|waitfor)\\b"
+          "match": "\\b(waitfor)\\b"
         },
         {
-          "comment": "Compile-time checking",
+          "comment": "Generic constraints",
           "name": "keyword.other.sf",
-          "match": "\\b(requires)\\b"
+          "match": "\\b(needs)\\b"
         },
         {
           "comment": "Logical operators",
@@ -230,7 +230,7 @@
         {
           "comment": "Shift operators",
           "name": "keyword.operator.sf",
-          "match": "(<<<|>>>|<<\\?|<<|>>)"
+          "match": "(<<<|>>>|<<|>>)"
         },
         {
           "comment": "Comparison",
@@ -240,22 +240,22 @@
         {
           "comment": "Power operators",
           "name": "keyword.operator.sf",
-          "match": "(\\*\\*[%^?]?=?)"
+          "match": "(\\*\\*[%^]?=?)"
         },
         {
           "comment": "Integer division",
           "name": "keyword.operator.sf",
-          "match": "//[?=]?"
+          "match": "//=?"
         },
         {
           "comment": "Overflow arithmetic",
           "name": "keyword.operator.sf",
-          "match": "[+\\-*][%^?]=?"
+          "match": "[+\\-*][%^]=?"
         },
         {
-          "comment": "None coalesce",
+          "comment": "Optional/coalesce operators",
           "name": "keyword.operator.sf",
-          "match": "(\\?\\?=?|\\?)"
+          "match": "(\\?\\?=?|\\?\\.?|!!)"
         },
         {
           "comment": "Assignment",
@@ -268,7 +268,7 @@
           "match": "[+\\-*/%&|^~!]"
         },
         {
-          "comment": "Colon for block start",
+          "comment": "Colon for type annotations",
           "name": "punctuation.separator.sf",
           "match": ":"
         }

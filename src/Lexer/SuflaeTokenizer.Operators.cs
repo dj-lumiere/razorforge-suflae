@@ -40,10 +40,6 @@ public partial class SuflaeTokenizer
                     ? TokenType.PlusSaturateAssign
                     : TokenType.PlusSaturate);
                 break;
-            case '?':
-                Advance();
-                AddToken(type: TokenType.PlusChecked);
-                break;
             case '=':
                 Advance();
                 AddToken(type: TokenType.PlusAssign);
@@ -75,10 +71,6 @@ public partial class SuflaeTokenizer
                 AddToken(type: Match(expected: '=')
                     ? TokenType.MinusSaturateAssign
                     : TokenType.MinusSaturate);
-                break;
-            case '?':
-                Advance();
-                AddToken(type: TokenType.MinusChecked);
                 break;
             case '=':
                 Advance();
@@ -133,12 +125,6 @@ public partial class SuflaeTokenizer
                 }
 
                 break;
-            case '?':
-                Advance();
-                AddToken(type: isPow
-                    ? TokenType.PowerChecked
-                    : TokenType.MultiplyChecked);
-                break;
             case '=':
                 Advance();
                 // *= or **=
@@ -178,10 +164,6 @@ public partial class SuflaeTokenizer
             {
                 AddToken(type: TokenType.DivideAssign); // //=
             }
-            else if (Match(expected: '?'))
-            {
-                AddToken(type: TokenType.DivideChecked); // //?
-            }
             else
             {
                 AddToken(type: TokenType.Divide); // //
@@ -194,12 +176,7 @@ public partial class SuflaeTokenizer
     /// </summary>
     private void ScanPercentOperator()
     {
-        if (Peek() == '?')
-        {
-            Advance();
-            AddToken(type: TokenType.ModuloChecked);
-        }
-        else if (Peek() == '=')
+        if (Peek() == '=')
         {
             Advance();
             AddToken(type: TokenType.PercentAssign);
