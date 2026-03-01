@@ -1,4 +1,4 @@
-﻿using Compilers.Analysis.Results;
+using SemanticAnalysis.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -17,10 +17,10 @@ public class ScopeTests
     public void Analyze_VariableInScope_Resolves()
     {
         string source = """
-                        routine test() {
-                            let x = 42
-                            show(x)
-                        }
+                        routine test()
+                          var x = 42
+                          show(x)
+                          return
                         """;
 
         Analyze(source: source);
@@ -31,9 +31,9 @@ public class ScopeTests
     public void Analyze_UndefinedVariable_ReportsError()
     {
         string source = """
-                        routine test() {
-                            show(undefined_var)
-                        }
+                        routine test()
+                          show(undefined_var)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -52,10 +52,10 @@ public class ScopeTests
     public void Analyze_VariableUsedBeforeDeclaration_ReportsError()
     {
         string source = """
-                        routine test() {
-                            show(x)
-                            let x = 42
-                        }
+                        routine test()
+                          show(x)
+                          var x = 42
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -70,12 +70,11 @@ public class ScopeTests
     public void Analyze_VariableInBlockScope_NoError()
     {
         string source = """
-                        routine test() {
-                            if true {
-                                let x = 42
-                                show(x)
-                            }
-                        }
+                        routine test()
+                          if true
+                            var x = 42
+                            show(x)
+                          return
                         """;
 
         Analyze(source: source);
@@ -85,12 +84,11 @@ public class ScopeTests
     public void Analyze_VariableOutOfBlockScope_ReportsError()
     {
         string source = """
-                        routine test() {
-                            if true {
-                                let x = 42
-                            }
-                            show(x)
-                        }
+                        routine test()
+                          if true
+                            var x = 42
+                          show(x)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -101,16 +99,14 @@ public class ScopeTests
     public void Analyze_NestedBlockScopes_Resolves()
     {
         string source = """
-                        routine test() {
-                            let x = 10
-                            if true {
-                                let y = 20
-                                if true {
-                                    let z = 30
-                                    show(x + y + z)
-                                }
-                            }
-                        }
+                        routine test()
+                          var x = 10
+                          if true
+                            var y = 20
+                            if true
+                              var z = 30
+                              show(x + y + z)
+                          return
                         """;
 
         Analyze(source: source);
@@ -124,11 +120,10 @@ public class ScopeTests
     public void Analyze_ForLoopVariable_InScope()
     {
         string source = """
-                        routine test() {
-                            for i in 0 to 10 {
-                                show(i)
-                            }
-                        }
+                        routine test()
+                          for i in 0 til 10
+                            show(i)
+                          return
                         """;
 
         Analyze(source: source);
@@ -138,12 +133,11 @@ public class ScopeTests
     public void Analyze_ForLoopVariable_OutOfScope()
     {
         string source = """
-                        routine test() {
-                            for i in 0 to 10 {
-                                show(i)
-                            }
+                        routine test()
+                          for i in 0 til 10
                             show(i)
-                        }
+                          show(i)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -154,13 +148,12 @@ public class ScopeTests
     public void Analyze_WhileLoopVariable_InScope()
     {
         string source = """
-                        routine test() {
-                            var i = 0
-                            while i < 10 {
-                                show(i)
-                                i += 1
-                            }
-                        }
+                        routine test()
+                          var i = 0
+                          while i < 10
+                            show(i)
+                            i += 1
+                          return
                         """;
 
         Analyze(source: source);
@@ -174,9 +167,9 @@ public class ScopeTests
     public void Analyze_ParameterInScope_Resolves()
     {
         string source = """
-                        routine greet(name: Text) {
-                            show(name)
-                        }
+                        routine greet(name: Text)
+                          show(name)
+                          return
                         """;
 
         Analyze(source: source);
@@ -186,11 +179,11 @@ public class ScopeTests
     public void Analyze_ParameterShadowsOuter_NoError()
     {
         string source = """
-                        let name = "global"
+                        var name = "global"
 
-                        routine greet(name: Text) {
-                            show(name)
-                        }
+                        routine greet(name: Text)
+                          show(name)
+                          return
                         """;
 
         Analyze(source: source);
@@ -205,14 +198,13 @@ public class ScopeTests
     public void Analyze_ShadowingInNestedBlock_Allowed()
     {
         string source = """
-                        routine test() {
-                            let x = 10
-                            if true {
-                                let x = 20
-                                show(x)
-                            }
+                        routine test()
+                          var x = 10
+                          if true
+                            var x = 20
                             show(x)
-                        }
+                          show(x)
+                          return
                         """;
 
         Analyze(source: source);
@@ -223,10 +215,10 @@ public class ScopeTests
     public void Analyze_ShadowingInSameScope_ReportsError()
     {
         string source = """
-                        routine test() {
-                            let x = 10
-                            let x = 20
-                        }
+                        routine test()
+                          var x = 10
+                          var x = 20
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -241,17 +233,15 @@ public class ScopeTests
     public void Analyze_PatternBindingInWhen_InScope()
     {
         string source = """
-                        variant Result {
-                            SUCCESS: S32
-                            ERROR: Text
-                        }
+                        variant Result
+                          SUCCESS: S32
+                          ERROR: Text
 
-                        routine handle(r: Result) {
-                            when r {
-                                is SUCCESS value => show(value)
-                                is ERROR msg => show(msg)
-                            }
-                        }
+                        routine handle(r: Result)
+                          when r
+                            is SUCCESS value => show(value)
+                            is ERROR msg => show(msg)
+                          return
                         """;
 
         Analyze(source: source);
@@ -261,18 +251,16 @@ public class ScopeTests
     public void Analyze_PatternBindingOutOfWhen_OutOfScope()
     {
         string source = """
-                        variant Result {
-                            SUCCESS: S32
-                            ERROR: Text
-                        }
+                        variant Result
+                          SUCCESS: S32
+                          ERROR: Text
 
-                        routine handle(r: Result) {
-                            when r {
-                                is SUCCESS value => show(value)
-                                is ERROR msg => pass
-                            }
-                            show(value)
-                        }
+                        routine handle(r: Result)
+                          when r
+                            is SUCCESS value => show(value)
+                            is ERROR msg => pass
+                          show(value)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -287,15 +275,13 @@ public class ScopeTests
     public void Analyze_ViewingBlockVariable_InScope()
     {
         string source = """
-                        entity Data {
-                            value: S32
-                        }
+                        entity Data
+                          value: S32
 
-                        routine test(data: Data) {
-                            viewing data as d {
-                                show(d.value)
-                            }
-                        }
+                        routine test(data: Data)
+                          viewing data as d
+                            show(d.value)
+                          return
                         """;
 
         Analyze(source: source);
@@ -305,16 +291,14 @@ public class ScopeTests
     public void Analyze_ViewingBlockVariable_OutOfScope()
     {
         string source = """
-                        entity Data {
-                            value: S32
-                        }
+                        entity Data
+                          value: S32
 
-                        routine test(data: Data) {
-                            using data.view() as d {
-                                show(d.value)
-                            }
+                        routine test(data: Data)
+                          using data.view() as d
                             show(d.value)
-                        }
+                          show(d.value)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -330,8 +314,8 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                            let x = 42
-                            show(x)
+                          var x = 42
+                          show(x)
                         """;
 
         AnalyzeSuflae(source: source);
@@ -342,7 +326,7 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                            show(undefined_var)
+                          show(undefined_var)
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -354,8 +338,8 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                            for i in 0 to 10
-                                show(i)
+                          for i in 0 til 10
+                            show(i)
                         """;
 
         AnalyzeSuflae(source: source);
@@ -366,9 +350,9 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                            for i in 0 to 10
-                                show(i)
+                          for i in 0 til 10
                             show(i)
+                          show(i)
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -383,11 +367,11 @@ public class ScopeTests
     public void Analyze_LambdaCapturesOuter_NoError()
     {
         string source = """
-                        routine test() {
-                            let multiplier = 10
-                            let scale = x => x * multiplier
-                            show(scale(5))
-                        }
+                        routine test()
+                          var multiplier = 10
+                          var scale = x => x * multiplier
+                          show(scale(5))
+                          return
                         """;
 
         Analyze(source: source);
@@ -398,9 +382,9 @@ public class ScopeTests
     {
         // Captured variable 'z' is not defined in scope
         string source = """
-                        routine test() {
-                            let f = (x, y) given z => x + y + z
-                        }
+                        routine test()
+                          var f = (x, y) given z => x + y + z
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -417,10 +401,10 @@ public class ScopeTests
     {
         // Captured variable 'z' exists in outer scope
         string source = """
-                        routine test() {
-                            let z = 100
-                            let f = (x, y) given z => x + y + z
-                        }
+                        routine test()
+                          var z = 100
+                          var f = (x, y) given z => x + y + z
+                          return
                         """;
 
         Analyze(source: source);

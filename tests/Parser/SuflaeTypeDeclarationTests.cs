@@ -1,8 +1,8 @@
-﻿using Xunit;
+using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
@@ -18,8 +18,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         record Point
-                            x: F32
-                            y: F32
+                          x: F32
+                          y: F32
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -33,8 +33,8 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_GenericRecord()
     {
         string source = """
-                        record Container<T>
-                            value: T
+                        record Container[T]
+                          value: T
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -50,9 +50,9 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Record_WithConstraint()
     {
         string source = """
-                        record Wrapper<T>
-                        requires T follows Comparable
-                            value: T
+                        record Wrapper[T]
+                        needs T obeys Comparable
+                          value: T
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -66,9 +66,9 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Record_FollowsProtocol()
     {
         string source = """
-                        record Version follows Comparable
-                            major: S32
-                            minor: S32
+                        record Version obeys Comparable
+                          major: S32
+                          minor: S32
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -86,8 +86,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         entity User
-                            name: Text
-                            age: U32
+                          name: Text
+                          age: U32
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -100,24 +100,24 @@ public class SuflaeTypeDeclarationTests
     [Fact]
     public void ParseSuflae_Entity_MixedMutability_Rejected()
     {
-        // var/let keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var/let keywords
+        // var keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var keywords
         string source = """
                         entity Document
-                            let id: U64
-                            var content: Text
+                          var id: U64
+                          var content: Text
                         """;
 
         (_, var parser) = ParseSuflaeWithErrors(source: source);
-        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var/let in entity body");
+        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var in entity body");
     }
 
     [Fact]
     public void ParseSuflae_GenericEntity()
     {
         string source = """
-                        entity Stack<T>
-                            items: List<T>
+                        entity Stack[T]
+                          items: List[T]
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -136,10 +136,10 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         choice Direction
-                            NORTH
-                            SOUTH
-                            EAST
-                            WEST
+                          NORTH
+                          SOUTH
+                          EAST
+                          WEST
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -154,9 +154,9 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         choice HttpStatus
-                            OK: 200
-                            NOT_FOUND: 404
-                            ERROR: 500
+                          OK: 200
+                          NOT_FOUND: 404
+                          ERROR: 500
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -175,8 +175,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         variant NetworkEvent
-                            Connect
-                            Disconnect
+                          Connect
+                          Disconnect
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -191,8 +191,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         variant ParseResult
-                            Success: S32
-                            Error: Text
+                          Success: S32
+                          Error: Text
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -212,7 +212,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         protocol Displayable
-                            routine display() -> Text
+                          routine display() -> Text
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -226,8 +226,8 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_GenericProtocol()
     {
         string source = """
-                        protocol Iterable<T>
-                            routine iterate() -> Iterator<T>
+                        protocol Iterable[T]
+                          routine iterate() -> Iterator[T]
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -241,8 +241,8 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Protocol_Inheritance()
     {
         string source = """
-                        protocol Ordered follows Comparable
-                            routine __cmp__(other: Me) -> ComparisonSign
+                        protocol Ordered obeys Comparable
+                          routine __cmp__(other: Me) -> ComparisonSign
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -260,7 +260,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         routine greet(name: Text) -> Text
-                            return name
+                          return name
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -275,7 +275,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         routine get_value!() -> S32
-                            return 42
+                          return 42
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -289,9 +289,9 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         routine validate!(x: S32) -> S32
-                            if x < 0
-                                throw ValidationError("negative")
-                            return x
+                          if x < 0
+                            throw ValidationError("negative")
+                          return x
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -305,9 +305,9 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         routine find!(id: U64) -> User
-                            unless has_user(id)
-                                absent
-                            return get_user(id)
+                          unless has_user(id)
+                            absent
+                          return get_user(id)
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -326,7 +326,7 @@ public class SuflaeTypeDeclarationTests
         // Resident is RazorForge-only, Suflae should not support it
         string source = """
                         resident SystemLogger
-                            log_count: U32
+                          log_count: U32
                         """;
 
         // Depending on parser behavior - may throw or parse but semantic rejects
@@ -339,11 +339,11 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         routine handle(value: User?)
-                            when value
-                                is None
-                                    show("not found")
-                                else u
-                                    show(u.name)
+                          when value
+                            is None =>
+                              show("not found")
+                            else u =>
+                              show(u.name)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -354,8 +354,8 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         routine count()
-                            for i in 0 to 10
-                                show(i)
+                          for i in 0 til 10
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -370,7 +370,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         record Percentage
-                            posted value: F64
+                          posted value: F64
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -385,9 +385,9 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         record Config
-                            posted name: Text
-                            secret hidden: Text
-                            value: S32
+                          posted name: Text
+                          secret hidden: Text
+                          value: S32
                         """;
 
         Program program = AssertParsesSuflae(source: source);

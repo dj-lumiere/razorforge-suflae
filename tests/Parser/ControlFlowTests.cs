@@ -2,7 +2,7 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
@@ -17,11 +17,10 @@ public class ControlFlowTests
     public void Parse_SimpleIf()
     {
         string source = """
-                        routine test() {
-                            if x > 0 {
-                                show("positive")
-                            }
-                        }
+                        routine test()
+                          if x > 0
+                            show("positive")
+                          return
                         """;
 
         Program program = AssertParses(source: source);
@@ -39,13 +38,12 @@ public class ControlFlowTests
     public void Parse_IfElse()
     {
         string source = """
-                        routine test() {
-                            if x > 0 {
-                                show("positive")
-                            } else {
-                                show("non-positive")
-                            }
-                        }
+                        routine test()
+                          if x > 0
+                            show("positive")
+                          else
+                            show("non-positive")
+                          return
                         """;
 
         Program program = AssertParses(source: source);
@@ -63,15 +61,14 @@ public class ControlFlowTests
     public void Parse_IfElseIfElse()
     {
         string source = """
-                        routine test() {
-                            if x > 0 {
-                                show("positive")
-                            } elseif x < 0 {
-                                show("negative")
-                            } else {
-                                show("zero")
-                            }
-                        }
+                        routine test()
+                          if x > 0
+                            show("positive")
+                          elseif x < 0
+                            show("negative")
+                          else
+                            show("zero")
+                          return
                         """;
 
         Program program = AssertParses(source: source);
@@ -90,17 +87,15 @@ public class ControlFlowTests
     public void Parse_MultipleElseIf()
     {
         string source = """
-                        routine test(n: S32) -> Text {
-                            if n == 1 {
-                                return "one"
-                            } elseif n == 2 {
-                                return "two"
-                            } elseif n == 3 {
-                                return "three"
-                            } else {
-                                return "other"
-                            }
-                        }
+                        routine test(n: S32) -> Text
+                          if n == 1
+                            return "one"
+                          elseif n == 2
+                            return "two"
+                          elseif n == 3
+                            return "three"
+                          else
+                            return "other"
                         """;
 
         AssertParses(source: source);
@@ -110,13 +105,11 @@ public class ControlFlowTests
     public void Parse_NestedIf()
     {
         string source = """
-                        routine test() {
-                            if x > 0 {
-                                if y > 0 {
-                                    show("both positive")
-                                }
-                            }
-                        }
+                        routine test()
+                          if x > 0
+                            if y > 0
+                              show("both positive")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -130,11 +123,9 @@ public class ControlFlowTests
     public void Parse_SimpleUnless()
     {
         string source = """
-                        routine test() {
-                            unless x.is_valid() {
-                                return
-                            }
-                        }
+                        routine test()
+                          unless x.is_valid()
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -152,13 +143,12 @@ public class ControlFlowTests
     public void Parse_UnlessWithElse()
     {
         string source = """
-                        routine test() {
-                            unless condition {
-                                show("condition is false")
-                            } else {
-                                show("condition is true")
-                            }
-                        }
+                        routine test()
+                          unless condition
+                            show("condition is false")
+                          else
+                            show("condition is true")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -168,12 +158,11 @@ public class ControlFlowTests
     public void Parse_UnlessGuardClause()
     {
         string source = """
-                        routine process!(data: Text) {
-                            unless data.length() > 0 {
-                                absent
-                            }
-                            show(data)
-                        }
+                        routine process!(data: Text)
+                          unless data.length() > 0
+                            absent
+                          show(data)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -187,9 +176,8 @@ public class ControlFlowTests
     public void Parse_InlineIfThenElse()
     {
         string source = """
-                        routine min(a: S32, b: S32) -> S32 {
-                            return if a < b then a else b
-                        }
+                        routine min(a: S32, b: S32) -> S32
+                          return if a < b then a else b
                         """;
 
         Program program = AssertParses(source: source);
@@ -201,9 +189,9 @@ public class ControlFlowTests
     public void Parse_InlineIfThenElse_InAssignment()
     {
         string source = """
-                        routine test() {
-                            let sign = if x >= 0 then 1 else -1
-                        }
+                        routine test()
+                          var sign = if x >= 0 then 1 else -1
+                          return
                         """;
 
         AssertParses(source: source);
@@ -220,14 +208,12 @@ public class ControlFlowTests
     public void Parse_InfiniteLoop()
     {
         string source = """
-                        routine run() {
-                            loop {
-                                process()
-                                if should_stop() {
-                                    break
-                                }
-                            }
-                        }
+                        routine run()
+                          loop
+                            process()
+                            if should_stop()
+                              break
+                          return
                         """;
 
         Program program = AssertParses(source: source);
@@ -245,11 +231,10 @@ public class ControlFlowTests
     public void Parse_LoopWithBreak()
     {
         string source = """
-                        routine test() {
-                            loop {
-                                break
-                            }
-                        }
+                        routine test()
+                          loop
+                            break
+                          return
                         """;
 
         AssertParses(source: source);
@@ -259,14 +244,12 @@ public class ControlFlowTests
     public void Parse_LoopWithContinue()
     {
         string source = """
-                        routine test() {
-                            loop {
-                                if skip_this() {
-                                    continue
-                                }
-                                process()
-                            }
-                        }
+                        routine test()
+                          loop
+                            if skip_this()
+                              continue
+                            process()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -280,11 +263,10 @@ public class ControlFlowTests
     public void Parse_SimpleWhile()
     {
         string source = """
-                        routine test() {
-                            while condition {
-                                process()
-                            }
-                        }
+                        routine test()
+                          while condition
+                            process()
+                          return
                         """;
 
         Program program = AssertParses(source: source);
@@ -301,13 +283,12 @@ public class ControlFlowTests
     public void Parse_WhileWithCounter()
     {
         string source = """
-                        routine count_up() {
-                            var count = 0
-                            while count < 10 {
-                                show(count)
-                                count += 1
-                            }
-                        }
+                        routine count_up()
+                          var count = 0
+                          while count < 10
+                            show(count)
+                            count += 1
+                          return
                         """;
 
         AssertParses(source: source);
@@ -317,14 +298,12 @@ public class ControlFlowTests
     public void Parse_WhileWithBreak()
     {
         string source = """
-                        routine search() {
-                            while has_more() {
-                                if found_target() {
-                                    break
-                                }
-                                advance()
-                            }
-                        }
+                        routine search()
+                          while has_more()
+                            if found_target()
+                              break
+                            advance()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -334,15 +313,13 @@ public class ControlFlowTests
     public void Parse_WhileWithContinue()
     {
         string source = """
-                        routine process_items() {
-                            while has_items() {
-                                let item = next_item()
-                                if item.skip() {
-                                    continue
-                                }
-                                process(item)
-                            }
-                        }
+                        routine process_items()
+                          while has_items()
+                            var item = next_item()
+                            if item.skip()
+                              continue
+                            process(item)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -356,11 +333,10 @@ public class ControlFlowTests
     public void Parse_ForRangeInclusive()
     {
         string source = """
-                        routine test() {
-                            for i in 0 to 10 {
-                                show(i)
-                            }
-                        }
+                        routine test()
+                          for i in 0 til 10
+                            show(i)
+                          return
                         """;
 
         Program program = AssertParses(source: source);
@@ -377,11 +353,10 @@ public class ControlFlowTests
     public void Parse_ForRangeWithStep()
     {
         string source = """
-                        routine test() {
-                            for i in 0 to 100 by 5 {
-                                show(i)
-                            }
-                        }
+                        routine test()
+                          for i in 0 til 100 by 5
+                            show(i)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -391,12 +366,11 @@ public class ControlFlowTests
     public void Parse_ForInCollection()
     {
         string source = """
-                        routine test() {
-                            let items = [1, 2, 3, 4, 5]
-                            for item in items {
-                                show(item)
-                            }
-                        }
+                        routine test()
+                          var items = [1, 2, 3, 4, 5]
+                          for item in items
+                            show(item)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -406,12 +380,11 @@ public class ControlFlowTests
     public void Parse_ForWithEnumerate()
     {
         string source = """
-                        routine test() {
-                            let items = ["a", "b", "c"]
-                            for (index, item) in items.enumerate() {
-                                show(f"{index}: {item}")
-                            }
-                        }
+                        routine test()
+                          var items = ["a", "b", "c"]
+                          for (index, item) in items.enumerate()
+                            show(f"{index}: {item}")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -421,14 +394,12 @@ public class ControlFlowTests
     public void Parse_ForWithBreak()
     {
         string source = """
-                        routine find_first(items: List<S32>, target: S32) {
-                            for item in items {
-                                if item == target {
-                                    show("Found!")
-                                    break
-                                }
-                            }
-                        }
+                        routine find_first(items: List[S32], target: S32)
+                          for item in items
+                            if item == target
+                              show("Found!")
+                              break
+                          return
                         """;
 
         AssertParses(source: source);
@@ -438,14 +409,12 @@ public class ControlFlowTests
     public void Parse_ForWithContinue()
     {
         string source = """
-                        routine process_valid(items: List<S32>) {
-                            for item in items {
-                                if item < 0 {
-                                    continue
-                                }
-                                process(item)
-                            }
-                        }
+                        routine process_valid(items: List[S32])
+                          for item in items
+                            if item < 0
+                              continue
+                            process(item)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -455,13 +424,11 @@ public class ControlFlowTests
     public void Parse_NestedFor()
     {
         string source = """
-                        routine matrix() {
-                            for i in 0 to 10 {
-                                for j in 0 to 10 {
-                                    show(f"{i},{j}")
-                                }
-                            }
-                        }
+                        routine matrix()
+                          for i in 0 til 10
+                            for j in 0 til 10
+                              show(f"{i},{j}")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -475,9 +442,8 @@ public class ControlFlowTests
     public void Parse_ReturnWithValue()
     {
         string source = """
-                        routine add(a: S32, b: S32) -> S32 {
-                            return a + b
-                        }
+                        routine add(a: S32, b: S32) -> S32
+                          return a + b
                         """;
 
         Program program = AssertParses(source: source);
@@ -495,10 +461,9 @@ public class ControlFlowTests
     public void Parse_ReturnWithoutValue()
     {
         string source = """
-                        routine log(msg: Text) {
-                            show(msg)
-                            return
-                        }
+                        routine log(msg: Text)
+                          show(msg)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -508,12 +473,10 @@ public class ControlFlowTests
     public void Parse_EarlyReturn()
     {
         string source = """
-                        routine process(x: S32) -> S32 {
-                            if x < 0 {
-                                return 0
-                            }
-                            return x * 2
-                        }
+                        routine process(x: S32) -> S32
+                          if x < 0
+                            return 0
+                          return x * 2
                         """;
 
         AssertParses(source: source);
@@ -527,9 +490,9 @@ public class ControlFlowTests
     public void Parse_PassStatement()
     {
         string source = """
-                        routine empty() {
-                            pass
-                        }
+                        routine empty()
+                          pass
+                          return
                         """;
 
         AssertParses(source: source);
@@ -539,13 +502,12 @@ public class ControlFlowTests
     public void Parse_PassInIfBranch()
     {
         string source = """
-                        routine test() {
-                            if condition {
-                                pass
-                            } else {
-                                do_something()
-                            }
-                        }
+                        routine test()
+                          if condition
+                            pass
+                          else
+                            do_something()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -559,12 +521,10 @@ public class ControlFlowTests
     public void Parse_StopWithMessage()
     {
         string source = """
-                        routine divide!(a: S32, b: S32) -> S32 {
-                            if b == 0 {
-                                stop!("Division by zero")
-                            }
-                            return a // b
-                        }
+                        routine divide!(a: S32, b: S32) -> S32
+                          if b == 0
+                            stop!("Division by zero")
+                          return a // b
                         """;
 
         AssertParses(source: source);
@@ -574,10 +534,10 @@ public class ControlFlowTests
     public void Parse_VerifyWithCondition()
     {
         string source = """
-                        routine process(data: List<S32>) {
-                            verify!(data.length() > 0, "Data cannot be empty")
-                            do_process(data)
-                        }
+                        routine process(data: List[S32])
+                          verify!(data.length() > 0, "Data cannot be empty")
+                          do_process(data)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -587,10 +547,10 @@ public class ControlFlowTests
     public void Parse_VerifyWithoutMessage()
     {
         string source = """
-                        routine test(x: S32) {
-                            verify!(x >= 0)
-                            process(x)
-                        }
+                        routine test(x: S32)
+                          verify!(x >= 0)
+                          process(x)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -600,9 +560,9 @@ public class ControlFlowTests
     public void Parse_Breach()
     {
         string source = """
-                        routine unreachable() {
-                            breach!("Should never reach here")
-                        }
+                        routine unreachable()
+                          breach!("Should never reach here")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -612,9 +572,9 @@ public class ControlFlowTests
     public void Parse_BreachWithoutMessage()
     {
         string source = """
-                        routine test() {
-                            breach!()
-                        }
+                        routine test()
+                          breach!()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -628,21 +588,16 @@ public class ControlFlowTests
     public void Parse_ComplexNestedControlFlow()
     {
         string source = """
-                        routine process_matrix(matrix: List<List<S32>>) {
-                            for row in matrix {
-                                for cell in row {
-                                    if cell < 0 {
-                                        continue
-                                    }
-                                    if cell > 100 {
-                                        break
-                                    }
-                                    while cell > 0 {
-                                        cell -= 1
-                                    }
-                                }
-                            }
-                        }
+                        routine process_matrix(matrix: List[List[S32]])
+                          for row in matrix
+                            for cell in row
+                              if cell < 0
+                                continue
+                              if cell > 100
+                                break
+                              while cell > 0
+                                cell -= 1
+                          return
                         """;
 
         AssertParses(source: source);
@@ -652,14 +607,12 @@ public class ControlFlowTests
     public void Parse_ControlFlowWithErrorHandling()
     {
         string source = """
-                        routine search!(items: List<S32>, target: S32) -> S32 {
-                            for (index, item) in items.enumerate() {
-                                if item == target {
-                                    return index
-                                }
-                            }
-                            absent
-                        }
+                        routine search!(items: List[S32], target: S32) -> S32
+                          for (index, item) in items.enumerate()
+                            if item == target
+                              return index
+                          absent
+                          return
                         """;
 
         AssertParses(source: source);

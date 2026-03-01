@@ -16,9 +16,9 @@ public class ExpressionTests
     public void Parse_SimpleMethodCall()
     {
         string source = """
-                        routine test() {
-                            show("hello")
-                        }
+                        routine test()
+                          show("hello")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -28,9 +28,9 @@ public class ExpressionTests
     public void Parse_MethodCallWithMultipleArgs()
     {
         string source = """
-                        routine test() {
-                            compute(1, 2, 3)
-                        }
+                        routine test()
+                          compute(1, 2, 3)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -40,9 +40,9 @@ public class ExpressionTests
     public void Parse_MethodCallWithNamedArgs()
     {
         string source = """
-                        routine test() {
-                            create_user(name: "Alice", age: 30)
-                        }
+                        routine test()
+                          create_user(name: "Alice", age: 30)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -52,9 +52,9 @@ public class ExpressionTests
     public void Parse_MethodCallChain()
     {
         string source = """
-                        routine test() {
-                            data.where().select().to_list()
-                        }
+                        routine test()
+                          data.where().select().to_list()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -64,9 +64,9 @@ public class ExpressionTests
     public void Parse_MethodCallOnLiteral()
     {
         string source = """
-                        routine test() {
-                            let len = "hello".length()
-                        }
+                        routine test()
+                          var len = "hello".length()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -76,9 +76,9 @@ public class ExpressionTests
     public void Parse_MethodCallWithConversion()
     {
         string source = """
-                        routine test() {
-                            let result = "42".S32!()
-                        }
+                        routine test()
+                          var result = "42".S32!()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -88,9 +88,9 @@ public class ExpressionTests
     public void Parse_StaticMethodCall()
     {
         string source = """
-                        routine test() {
-                            let pi = Math.pi()
-                        }
+                        routine test()
+                          var pi = Math.pi()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -104,9 +104,9 @@ public class ExpressionTests
     public void Parse_SimpleFieldAccess()
     {
         string source = """
-                        routine test() {
-                            let x = point.x
-                        }
+                        routine test()
+                          var x = point.x
+                          return
                         """;
 
         AssertParses(source: source);
@@ -116,9 +116,9 @@ public class ExpressionTests
     public void Parse_ChainedFieldAccess()
     {
         string source = """
-                        routine test() {
-                            let city = user.address.city
-                        }
+                        routine test()
+                          var city = user.address.city
+                          return
                         """;
 
         AssertParses(source: source);
@@ -128,9 +128,9 @@ public class ExpressionTests
     public void Parse_MixedFieldAndMethodAccess()
     {
         string source = """
-                        routine test() {
-                            let result = user.name.to_upper().length()
-                        }
+                        routine test()
+                          var result = user.name.to_upper().length()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -141,9 +141,8 @@ public class ExpressionTests
     {
         string source = """
                         @readonly
-                        routine Point.get_x() -> F32 {
-                            return me.x
-                        }
+                        routine Point.get_x() -> F32
+                          return me.x
                         """;
 
         AssertParses(source: source);
@@ -157,9 +156,9 @@ public class ExpressionTests
     public void Parse_ArrayIndexing()
     {
         string source = """
-                        routine test() {
-                            let first = items[0]
-                        }
+                        routine test()
+                          var first = items[0]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -169,9 +168,9 @@ public class ExpressionTests
     public void Parse_MultiDimensionalIndexing()
     {
         string source = """
-                        routine test() {
-                            let cell = matrix[i][j]
-                        }
+                        routine test()
+                          var cell = matrix[i][j]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -181,9 +180,9 @@ public class ExpressionTests
     public void Parse_DictIndexing()
     {
         string source = """
-                        routine test() {
-                            let value = dict["key"]
-                        }
+                        routine test()
+                          var value = dict["key"]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -193,10 +192,10 @@ public class ExpressionTests
     public void Parse_IndexAssignment()
     {
         string source = """
-                        routine test() {
-                            var items = [1, 2, 3]
-                            items[0] = 42
-                        }
+                        routine test()
+                          var items = [1, 2, 3]
+                          items[0] = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -210,9 +209,9 @@ public class ExpressionTests
     public void Parse_RecordConstructor()
     {
         string source = """
-                        routine test() {
-                            let point = Point(x: 10.0, y: 20.0)
-                        }
+                        routine test()
+                          var point = Point(x: 10.0, y: 20.0)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -222,9 +221,9 @@ public class ExpressionTests
     public void Parse_EntityConstructor()
     {
         string source = """
-                        routine test() {
-                            let user = User(name: "Alice", age: 30)
-                        }
+                        routine test()
+                          var user = User(name: "Alice", age: 30)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -234,9 +233,9 @@ public class ExpressionTests
     public void Parse_NestedConstructor()
     {
         string source = """
-                        routine test() {
-                            let circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
-                        }
+                        routine test()
+                          var circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -246,9 +245,9 @@ public class ExpressionTests
     public void Parse_GenericConstructor()
     {
         string source = """
-                        routine test() {
-                            let container = Container<S32>(value: 42)
-                        }
+                        routine test()
+                          var container = Container[S32](value: 42)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -262,9 +261,9 @@ public class ExpressionTests
     public void Parse_SimpleLambda()
     {
         string source = """
-                        routine test() {
-                            let add = (a, b) => a + b
-                        }
+                        routine test()
+                          var add = (a, b) => a + b
+                          return
                         """;
 
         AssertParses(source: source);
@@ -274,9 +273,9 @@ public class ExpressionTests
     public void Parse_SingleParamLambda()
     {
         string source = """
-                        routine test() {
-                            let double = x => x * 2
-                        }
+                        routine test()
+                          var double = x => x * 2
+                          return
                         """;
 
         AssertParses(source: source);
@@ -286,9 +285,9 @@ public class ExpressionTests
     public void Parse_LambdaAsArgument()
     {
         string source = """
-                        routine test() {
-                            items.select(x => x * 2)
-                        }
+                        routine test()
+                          items.select(x => x * 2)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -299,10 +298,10 @@ public class ExpressionTests
     public void Parse_LambdaWithCapture()
     {
         string source = """
-                        routine test() {
-                            let multiplier = 10
-                            let scale = x => x * multiplier
-                        }
+                        routine test()
+                          var multiplier = 10
+                          var scale = x => x * multiplier
+                          return
                         """;
 
         AssertParses(source: source);
@@ -312,11 +311,11 @@ public class ExpressionTests
     public void Parse_LambdaWithGivenClause_SingleCapture()
     {
         string source = """
-                        routine test() {
-                            let lo = 0
-                            let hi = 100
-                            let in_range = x given lo => lo <= x
-                        }
+                        routine test()
+                          var lo = 0
+                          var hi = 100
+                          var in_range = x given lo => lo <= x
+                          return
                         """;
 
         AssertParses(source: source);
@@ -326,11 +325,11 @@ public class ExpressionTests
     public void Parse_LambdaWithGivenClause_MultipleCaptures()
     {
         string source = """
-                        routine test() {
-                            let lo = 0
-                            let hi = 100
-                            let in_range = x given (lo, hi) => lo <= x and x < hi
-                        }
+                        routine test()
+                          var lo = 0
+                          var hi = 100
+                          var in_range = x given (lo, hi) => lo <= x and x < hi
+                          return
                         """;
 
         AssertParses(source: source);
@@ -340,10 +339,10 @@ public class ExpressionTests
     public void Parse_LambdaWithGivenClause_ZeroParams()
     {
         string source = """
-                        routine test() {
-                            let value = 42
-                            let getter = () given value => value
-                        }
+                        routine test()
+                          var value = 42
+                          var getter = () given value => value
+                          return
                         """;
 
         AssertParses(source: source);
@@ -353,10 +352,10 @@ public class ExpressionTests
     public void Parse_LambdaWithGivenClause_ParenthesizedParams()
     {
         string source = """
-                        routine test() {
-                            let scale = 2
-                            let multiply = (x, y) given scale => (x + y) * scale
-                        }
+                        routine test()
+                          var scale = 2
+                          var multiply = (x, y) given scale => (x + y) * scale
+                          return
                         """;
 
         AssertParses(source: source);
@@ -367,9 +366,9 @@ public class ExpressionTests
     {
         // x, given y => x + y - invalid, comma before 'given' breaks parsing
         string source = """
-                        routine test() {
-                            let f = x, given y => x + y
-                        }
+                        routine test()
+                          var f = x, given y => x + y
+                          return
                         """;
 
         AssertParseError(source: source);
@@ -380,9 +379,9 @@ public class ExpressionTests
     {
         // x given y, => x + y - invalid, trailing comma after capture
         string source = """
-                        routine test() {
-                            let f = x given y, => x + y
-                        }
+                        routine test()
+                          var f = x given y, => x + y
+                          return
                         """;
 
         AssertParseError(source: source);
@@ -393,9 +392,9 @@ public class ExpressionTests
     {
         // x given y,z => x+y+z - invalid, multiple captures need parentheses
         string source = """
-                        routine test() {
-                            let f = x given y,z => x + y + z
-                        }
+                        routine test()
+                          var f = x given y,z => x + y + z
+                          return
                         """;
 
         AssertParseError(source: source);
@@ -406,9 +405,9 @@ public class ExpressionTests
     {
         // x, y given z => x+y+z - invalid, multiple params need parentheses
         string source = """
-                        routine test() {
-                            let f = x, y given z => x + y + z
-                        }
+                        routine test()
+                          var f = x, y given z => x + y + z
+                          return
                         """;
 
         AssertParseError(source: source);
@@ -422,9 +421,9 @@ public class ExpressionTests
     public void Parse_SimpleInterpolation()
     {
         string source = """
-                        routine test() {
-                            let msg = f"Hello, {name}!"
-                        }
+                        routine test()
+                          var msg = f"Hello, {name}!"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -434,9 +433,9 @@ public class ExpressionTests
     public void Parse_InterpolationWithExpression()
     {
         string source = """
-                        routine test() {
-                            let msg = f"Sum: {a + b}"
-                        }
+                        routine test()
+                          var msg = f"Sum: {a + b}"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -446,9 +445,9 @@ public class ExpressionTests
     public void Parse_MultipleInterpolations()
     {
         string source = """
-                        routine test() {
-                            let msg = f"{first} + {second} = {first + second}"
-                        }
+                        routine test()
+                          var msg = f"{first} + {second} = {first + second}"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -458,9 +457,9 @@ public class ExpressionTests
     public void Parse_InterpolationWithMethodCall()
     {
         string source = """
-                        routine test() {
-                            let msg = f"Name: {user.name.to_upper()}"
-                        }
+                        routine test()
+                          var msg = f"Name: {user.name.to_upper()}"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -470,9 +469,9 @@ public class ExpressionTests
     public void Parse_InterpolationWithFormatting()
     {
         string source = """
-                        routine test() {
-                            let msg = f"Value: {value:0.2f}"
-                        }
+                        routine test()
+                          var msg = f"Value: {value:0.2f}"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -486,9 +485,9 @@ public class ExpressionTests
     public void Parse_TypeConversionMethod()
     {
         string source = """
-                        routine test() {
-                            let x = value.S64!()
-                        }
+                        routine test()
+                          var x = value.S64!()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -498,9 +497,9 @@ public class ExpressionTests
     public void Parse_TypeConversionFromLiteral()
     {
         string source = """
-                        routine test() {
-                            let x = 42.F64()
-                        }
+                        routine test()
+                          var x = 42.F64()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -514,9 +513,9 @@ public class ExpressionTests
     public void Parse_ParenthesizedExpression()
     {
         string source = """
-                        routine test() {
-                            let result = (a + b) * c
-                        }
+                        routine test()
+                          var result = (a + b) * c
+                          return
                         """;
 
         AssertParses(source: source);
@@ -526,9 +525,9 @@ public class ExpressionTests
     public void Parse_NestedParentheses()
     {
         string source = """
-                        routine test() {
-                            let result = ((a + b) * (c - d)) / e
-                        }
+                        routine test()
+                          var result = ((a + b) * (c - d)) / e
+                          return
                         """;
 
         AssertParses(source: source);
@@ -542,9 +541,9 @@ public class ExpressionTests
     public void Parse_RangeExpression()
     {
         string source = """
-                        routine test() {
-                            let range = 0 to 10
-                        }
+                        routine test()
+                          var range = 0 til 10
+                          return
                         """;
 
         AssertParses(source: source);
@@ -554,9 +553,9 @@ public class ExpressionTests
     public void Parse_RangeExpressionWithStep()
     {
         string source = """
-                        routine test() {
-                            let range = 0 to 100 by 5
-                        }
+                        routine test()
+                          var range = 0 til 100 by 5
+                          return
                         """;
 
         AssertParses(source: source);
@@ -570,13 +569,13 @@ public class ExpressionTests
     public void Parse_ComplexChainedExpression()
     {
         string source = """
-                        routine test() {
-                            let result = items
-                                .where(x => x > 0)
-                                .select(x => x * 2)
-                                .take(10)
-                                .to_list()
-                        }
+                        routine test()
+                          var result = items
+                          .where(x => x > 0)
+                          .select(x => x * 2)
+                          .take(10)
+                          .to_list()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -586,9 +585,9 @@ public class ExpressionTests
     public void Parse_ConditionalExpression()
     {
         string source = """
-                        routine test() {
-                            let value = if condition then compute_a() else compute_b()
-                        }
+                        routine test()
+                          var value = if condition then compute_a() else compute_b()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -598,13 +597,12 @@ public class ExpressionTests
     public void Parse_WhenAsExpression()
     {
         string source = """
-                        routine test() {
-                            let description = when status {
-                                is PENDING => "Waiting"
-                                is ACTIVE => "Running"
-                                else => "Unknown"
-                            }
-                        }
+                        routine test()
+                          var description = when status
+                            is PENDING => "Waiting"
+                            is ACTIVE => "Running"
+                            else => "Unknown"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -614,9 +612,9 @@ public class ExpressionTests
     public void Parse_NoneCoalescingChain()
     {
         string source = """
-                        routine test() {
-                            let value = first_option() ?? second_option() ?? default_value
-                        }
+                        routine test()
+                          var value = first_option() ?? second_option() ?? default_value
+                          return
                         """;
 
         AssertParses(source: source);
@@ -630,9 +628,9 @@ public class ExpressionTests
     public void Parse_VariantConstruction()
     {
         string source = """
-                        routine test() {
-                            let msg = Message.TEXT("Hello")
-                        }
+                        routine test()
+                          var msg = Message.TEXT("Hello")
+                          return
                         """;
 
         AssertParses(source: source);
@@ -642,9 +640,9 @@ public class ExpressionTests
     public void Parse_VariantWithoutPayload()
     {
         string source = """
-                        routine test() {
-                            let msg = Message.QUIT
-                        }
+                        routine test()
+                          var msg = Message.QUIT
+                          return
                         """;
 
         AssertParses(source: source);
@@ -658,9 +656,9 @@ public class ExpressionTests
     public void Parse_ChoiceValue()
     {
         string source = """
-                        routine test() {
-                            let status = Status.ACTIVE
-                        }
+                        routine test()
+                          var status = Status.ACTIVE
+                          return
                         """;
 
         AssertParses(source: source);
@@ -672,39 +670,34 @@ public class ExpressionTests
 
     /// <summary>
     /// Verifies that binary subtraction is parsed correctly (not as unary minus).
-    /// 3 - 2 should be desugared to 3.__sub__(2), NOT "3" and "-2".
-    /// Note: Arithmetic operators are desugared to method calls for operator overloading.
+    /// 3 - 2 should be BinaryExpression(3, Subtract, 2), NOT "3" and "-2".
     /// </summary>
     [Fact]
     public void Parse_BinarySubtraction_NotUnaryMinus()
     {
         string source = """
-                        routine test() {
-                            let result = 3 - 2
-                        }
+                        routine test()
+                          var result = 3 - 2
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var varDeclTyped = (Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration;
-        var call = varDeclTyped.Initializer as Compilers.Shared.AST.CallExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var varDeclTyped = (SyntaxTree.VariableDeclaration)varDecl.Declaration;
+        var binary = varDeclTyped.Initializer as SyntaxTree.BinaryExpression;
 
-        // Arithmetic operators are desugared: 3 - 2 => 3.__sub__(2)
-        Assert.NotNull(call);
-        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
-        Assert.NotNull(memberExpr);
-        Assert.Equal("__sub__", memberExpr!.PropertyName);
+        Assert.NotNull(binary);
+        Assert.Equal(BinaryOperator.Subtract, binary!.Operator);
 
-        // Left operand (receiver) should be "3", not "-3"
-        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        // Left operand should be "3", not "-3"
+        var left = binary.Left as SyntaxTree.LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("3", left!.Value);
 
-        // Right operand (argument) should be "2", not "-2"
-        Assert.Single(call.Arguments);
-        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        // Right operand should be "2", not "-2"
+        var right = binary.Right as SyntaxTree.LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2", right!.Value);
     }
@@ -717,16 +710,16 @@ public class ExpressionTests
     public void Parse_UnaryMinus_OnLiteral()
     {
         string source = """
-                        routine test() {
-                            let result = -2
-                        }
+                        routine test()
+                          var result = -2
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var literal = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.LiteralExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var literal = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.LiteralExpression;
 
         Assert.NotNull(literal);
         Assert.Equal("-2", literal!.Value);
@@ -734,109 +727,99 @@ public class ExpressionTests
 
     /// <summary>
     /// Verifies that binary subtraction with imaginary literals is parsed correctly.
-    /// 3 - 2j should be desugared to 3.__sub__(2j), NOT "3" and "-2j".
+    /// 3 - 2j should be BinaryExpression(3, Subtract, 2j), NOT "3" and "-2j".
     /// </summary>
     [Fact]
     public void Parse_BinarySubtraction_WithImaginaryLiteral()
     {
         string source = """
-                        routine test() {
-                            let result = 3 - 2j
-                        }
+                        routine test()
+                          var result = 3 - 2j
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var call = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.CallExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var binary = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.BinaryExpression;
 
-        // Arithmetic operators are desugared: 3 - 2j => 3.__sub__(2j)
-        Assert.NotNull(call);
-        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
-        Assert.NotNull(memberExpr);
-        Assert.Equal("__sub__", memberExpr!.PropertyName);
+        Assert.NotNull(binary);
+        Assert.Equal(BinaryOperator.Subtract, binary!.Operator);
 
-        // Left operand (receiver) should be "3"
-        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        // Left operand should be "3"
+        var left = binary.Left as SyntaxTree.LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("3", left!.Value);
 
-        // Right operand (argument) should be "2j", NOT "-2j"
-        Assert.Single(call.Arguments);
-        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        // Right operand should be "2j", NOT "-2j"
+        var right = binary.Right as SyntaxTree.LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2j", right!.Value);
     }
 
     /// <summary>
     /// Verifies complex expression with both unary minus and binary subtraction.
-    /// -3 - 2 should be desugared to (-3).__sub__(2).
+    /// -3 - 2 should be BinaryExpression(-3, Subtract, 2).
     /// </summary>
     [Fact]
     public void Parse_UnaryMinusAndBinarySubtraction()
     {
         string source = """
-                        routine test() {
-                            let result = -3 - 2
-                        }
+                        routine test()
+                          var result = -3 - 2
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var call = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.CallExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var binary = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.BinaryExpression;
 
-        Assert.NotNull(call);
-        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
-        Assert.NotNull(memberExpr);
-        Assert.Equal("__sub__", memberExpr!.PropertyName);
+        Assert.NotNull(binary);
+        Assert.Equal(BinaryOperator.Subtract, binary!.Operator);
 
-        // Left operand (receiver) should be "-3" (unary minus applied to literal)
-        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        // Left operand should be "-3" (unary minus applied til literal)
+        var left = binary.Left as SyntaxTree.LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("-3", left!.Value);
 
-        // Right operand (argument) should be "2", NOT "-2"
-        Assert.Single(call.Arguments);
-        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        // Right operand should be "2", NOT "-2"
+        var right = binary.Right as SyntaxTree.LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2", right!.Value);
     }
 
     /// <summary>
     /// Verifies binary addition is not affected by unary minus handling.
-    /// 3 + 2 should be desugared to 3.__add__(2).
+    /// 3 + 2 should be BinaryExpression(3, Add, 2).
     /// </summary>
     [Fact]
     public void Parse_BinaryAddition_NotAffectedByUnaryHandling()
     {
         string source = """
-                        routine test() {
-                            let result = 3 + 2
-                        }
+                        routine test()
+                          var result = 3 + 2
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var call = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer as Compilers.Shared.AST.CallExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var binary = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.BinaryExpression;
 
-        Assert.NotNull(call);
-        var memberExpr = call!.Callee as Compilers.Shared.AST.MemberExpression;
-        Assert.NotNull(memberExpr);
-        Assert.Equal("__add__", memberExpr!.PropertyName);
+        Assert.NotNull(binary);
+        Assert.Equal(BinaryOperator.Add, binary!.Operator);
 
         // Left operand should be "3"
-        var left = memberExpr.Object as Compilers.Shared.AST.LiteralExpression;
+        var left = binary.Left as SyntaxTree.LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("3", left!.Value);
 
         // Right operand should be "2"
-        Assert.Single(call.Arguments);
-        var right = call.Arguments[0] as Compilers.Shared.AST.LiteralExpression;
+        var right = binary.Right as SyntaxTree.LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2", right!.Value);
     }
@@ -849,9 +832,9 @@ public class ExpressionTests
     public void Parse_ByteStringLiteral()
     {
         string source = """
-                        routine test() {
-                            let data = b"hello"
-                        }
+                        routine test()
+                          var data = b"hello"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -861,9 +844,9 @@ public class ExpressionTests
     public void Parse_ByteCharLiteral()
     {
         string source = """
-                        routine test() {
-                            let ch = b'A'
-                        }
+                        routine test()
+                          var ch = b'A'
+                          return
                         """;
 
         AssertParses(source: source);
@@ -873,9 +856,9 @@ public class ExpressionTests
     public void Parse_ByteStringHexEscape()
     {
         string source = """
-                        routine test() {
-                            let data = b"\x48\x65\x6C\x6C\x6F"
-                        }
+                        routine test()
+                          var data = b"\x48\x65\x6C\x6C\x6F"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -885,9 +868,9 @@ public class ExpressionTests
     public void Parse_ByteRawStringLiteral()
     {
         string source = """
-                        routine test() {
-                            let data = br"no escapes here \n"
-                        }
+                        routine test()
+                          var data = br"no escapes here \n"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -897,9 +880,9 @@ public class ExpressionTests
     public void Tokenize_ByteStringLiteral_CorrectTokenType()
     {
         string source = """b"hello" """;
-        List<Compilers.Shared.Lexer.Token> tokens = Tokenize(source: source);
+        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
 
-        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.BytesLiteral,
+        Assert.Equal(expected: Compiler.Lexer.TokenType.BytesLiteral,
             actual: tokens[index: 0].Type);
     }
 
@@ -907,9 +890,9 @@ public class ExpressionTests
     public void Tokenize_ByteCharLiteral_CorrectTokenType()
     {
         string source = """b'A' """;
-        List<Compilers.Shared.Lexer.Token> tokens = Tokenize(source: source);
+        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
 
-        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.ByteLetterLiteral,
+        Assert.Equal(expected: Compiler.Lexer.TokenType.ByteLetterLiteral,
             actual: tokens[index: 0].Type);
     }
 
@@ -943,8 +926,8 @@ public class ExpressionTests
         // \u00004E is exactly 6 hex digits — valid
         string source = "\"\\u00004E\"";
 
-        List<Compilers.Shared.Lexer.Token> tokens = Tokenize(source: source);
-        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.TextLiteral,
+        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
+        Assert.Equal(expected: Compiler.Lexer.TokenType.TextLiteral,
             actual: tokens[index: 0].Type);
     }
 
@@ -974,9 +957,9 @@ public class ExpressionTests
     public void Parse_WithFieldUpdate()
     {
         string source = """
-                        routine test() {
-                            let p2 = p1 with .x = 5.0
-                        }
+                        routine test()
+                          var p2 = p1 with .x = 5.0
+                          return
                         """;
 
         AssertParses(source: source);
@@ -986,9 +969,9 @@ public class ExpressionTests
     public void Parse_WithMultipleFields()
     {
         string source = """
-                        routine test() {
-                            let p2 = p1 with .x = 5.0, .y = 3.0
-                        }
+                        routine test()
+                          var p2 = p1 with .x = 5.0, .y = 3.0
+                          return
                         """;
 
         AssertParses(source: source);
@@ -998,9 +981,9 @@ public class ExpressionTests
     public void Parse_WithIndexUpdate()
     {
         string source = """
-                        routine test() {
-                            let c2 = coords with [0] = 5.0
-                        }
+                        routine test()
+                          var c2 = coords with [0] = 5.0
+                          return
                         """;
 
         AssertParses(source: source);
@@ -1010,9 +993,9 @@ public class ExpressionTests
     public void Parse_WithNestedField()
     {
         string source = """
-                        routine test() {
-                            let p2 = person with .address.city = "Shelbyville"
-                        }
+                        routine test()
+                          var p2 = person with .address.city = "Shelbyville"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -1022,9 +1005,9 @@ public class ExpressionTests
     public void Parse_WithMixedUpdates()
     {
         string source = """
-                        routine test() {
-                            let p2 = data with .name = "test", [0] = 42
-                        }
+                        routine test()
+                          var p2 = data with .name = "test", [0] = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -1034,17 +1017,17 @@ public class ExpressionTests
     public void Parse_WithExpression_ASTStructure()
     {
         string source = """
-                        routine test() {
-                            let p2 = p1 with .x = 5.0, .y = 3.0
-                        }
+                        routine test()
+                          var p2 = p1 with .x = 5.0, .y = 3.0
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
-            as Compilers.Shared.AST.WithExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
+            as SyntaxTree.WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
@@ -1058,17 +1041,17 @@ public class ExpressionTests
     public void Parse_WithExpression_NestedFieldPath_ASTStructure()
     {
         string source = """
-                        routine test() {
-                            let p2 = person with .address.city = "NYC"
-                        }
+                        routine test()
+                          var p2 = person with .address.city = "NYC"
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
-            as Compilers.Shared.AST.WithExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
+            as SyntaxTree.WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
@@ -1081,17 +1064,17 @@ public class ExpressionTests
     public void Parse_WithExpression_IndexUpdate_ASTStructure()
     {
         string source = """
-                        routine test() {
-                            let c2 = coords with [0] = 5.0
-                        }
+                        routine test()
+                          var c2 = coords with [0] = 5.0
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
-            as Compilers.Shared.AST.WithExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
+            as SyntaxTree.WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
@@ -1107,9 +1090,9 @@ public class ExpressionTests
     public void Parse_SliceExpression()
     {
         string source = """
-                        routine test() {
-                            let sub = list[0 to 5]
-                        }
+                        routine test()
+                          var sub = list[0 til 5]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -1119,9 +1102,9 @@ public class ExpressionTests
     public void Parse_SliceExpressionWithBackIndex()
     {
         string source = """
-                        routine test() {
-                            let sub = list[1 to ^1]
-                        }
+                        routine test()
+                          var sub = list[1 til ^1]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -1131,43 +1114,44 @@ public class ExpressionTests
     public void Parse_SliceExpression_ASTStructure()
     {
         string source = """
-                        routine test() {
-                            let sub = list[0 to 5]
-                        }
+                        routine test()
+                          var sub = list[0 til 5]
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var initializer = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var initializer = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer;
 
-        Assert.IsType<Compilers.Shared.AST.SliceExpression>(initializer);
-        var slice = (Compilers.Shared.AST.SliceExpression)initializer!;
-        Assert.IsType<Compilers.Shared.AST.IdentifierExpression>(slice.Object);
-        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.Start);
-        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.End);
+        Assert.IsType<SyntaxTree.SliceExpression>(initializer);
+        var slice = (SyntaxTree.SliceExpression)initializer!;
+        Assert.IsType<SyntaxTree.IdentifierExpression>(slice.Object);
+        Assert.IsType<SyntaxTree.LiteralExpression>(slice.Start);
+        Assert.IsType<SyntaxTree.LiteralExpression>(slice.End);
     }
 
     [Fact]
-    public void Parse_SliceExpression_RejectsDownto()
+    public void Parse_SliceExpression_TilRange()
     {
+        // til is supported in slices (exclusive end)
         string source = """
-                        routine test() {
-                            let sub = list[5 downto 0]
-                        }
+                        routine test()
+                          var sub = list[5 til 0]
+                          return
                         """;
 
-        AssertParseError(source: source);
+        AssertParses(source: source);
     }
 
     [Fact]
     public void Parse_SliceExpression_RejectsStep()
     {
         string source = """
-                        routine test() {
-                            let sub = list[0 to 10 by 2]
-                        }
+                        routine test()
+                          var sub = list[0 til 10 by 2]
+                          return
                         """;
 
         AssertParseError(source: source);
@@ -1177,18 +1161,18 @@ public class ExpressionTests
     public void Parse_RegularIndexExpression_StillWorks()
     {
         string source = """
-                        routine test() {
-                            let item = list[5]
-                        }
+                        routine test()
+                          var item = list[5]
+                          return
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var initializer = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var initializer = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer;
 
-        Assert.IsType<Compilers.Shared.AST.IndexExpression>(initializer);
+        Assert.IsType<SyntaxTree.IndexExpression>(initializer);
     }
 
     #endregion

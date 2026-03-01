@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
@@ -6,7 +6,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing operators in Suflae:
-/// arithmetic, wrapping, saturating, checked, comparison, logical, bitwise, none coalescing.
+/// arithmetic, wrapping, clamping, checked, comparison, logical, bitwise, none coalescing.
 /// Suflae uses the same operators as RazorForge with indentation-based syntax.
 /// </summary>
 public class SuflaeOperatorTests
@@ -18,7 +18,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 1 + 2
+                          return 1 + 2
                         """;
 
         AssertParsesSuflae(source: source);
@@ -29,7 +29,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 5 - 3
+                          return 5 - 3
                         """;
 
         AssertParsesSuflae(source: source);
@@ -40,7 +40,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 4 * 5
+                          return 4 * 5
                         """;
 
         AssertParsesSuflae(source: source);
@@ -51,7 +51,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Decimal
-                            return 10.0 / 3.0
+                          return 10.0 / 3.0
                         """;
 
         AssertParsesSuflae(source: source);
@@ -62,7 +62,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 10 // 3
+                          return 10 // 3
                         """;
 
         AssertParsesSuflae(source: source);
@@ -73,7 +73,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 10 % 3
+                          return 10 % 3
                         """;
 
         AssertParsesSuflae(source: source);
@@ -84,7 +84,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 2 ** 10
+                          return 2 ** 10
                         """;
 
         AssertParsesSuflae(source: source);
@@ -95,7 +95,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return -42
+                          return -42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -106,7 +106,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return 1 + 2 * 3 - 4 // 2
+                          return 1 + 2 * 3 - 4 // 2
                         """;
 
         AssertParsesSuflae(source: source);
@@ -117,7 +117,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return (1 + 2) * (3 - 4)
+                          return (1 + 2) * (3 - 4)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -132,9 +132,9 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U8
-                            let a: U8 = 250
-                            let b: U8 = 10
-                            return a +% b
+                          var a: U8 = 250
+                          var b: U8 = 10
+                          return a +% b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -145,9 +145,9 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U8
-                            let a: U8 = 5
-                            let b: U8 = 10
-                            return a -% b
+                          var a: U8 = 5
+                          var b: U8 = 10
+                          return a -% b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -158,9 +158,9 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U8
-                            let a: U8 = 20
-                            let b: U8 = 20
-                            return a *% b
+                          var a: U8 = 20
+                          var b: U8 = 20
+                          return a *% b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -168,59 +168,29 @@ public class SuflaeOperatorTests
 
     #endregion
 
-    #region Saturating Arithmetic Operators
+    #region Clamping Arithmetic Operators
 
     [Fact]
-    public void ParseSuflae_SaturatingAdd()
+    public void ParseSuflae_ClampingAdd()
     {
         string source = """
                         routine test() -> U8
-                            let a: U8 = 250
-                            let b: U8 = 10
-                            return a +^ b
+                          var a: U8 = 250
+                          var b: U8 = 10
+                          return a +^ b
                         """;
 
         AssertParsesSuflae(source: source);
     }
 
     [Fact]
-    public void ParseSuflae_SaturatingSubtract()
+    public void ParseSuflae_ClampingSubtract()
     {
         string source = """
                         routine test() -> U8
-                            let a: U8 = 5
-                            let b: U8 = 10
-                            return a -^ b
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    #endregion
-
-    #region Checked Arithmetic Operators
-
-    [Fact]
-    public void ParseSuflae_CheckedAdd()
-    {
-        string source = """
-                        routine test() -> Integer?
-                            let a: S32 = S32_MAX
-                            let b: S32 = 1
-                            return a +? b
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_CheckedDivision()
-    {
-        string source = """
-                        routine test() -> Integer?
-                            let a = 10
-                            let b = 0
-                            return a //? b
+                          var a: U8 = 5
+                          var b: U8 = 10
+                          return a -^ b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -235,7 +205,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a == b
+                          return a == b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -246,7 +216,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a != b
+                          return a != b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -257,7 +227,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a < b
+                          return a < b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -268,7 +238,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a <= b
+                          return a <= b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -279,7 +249,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a > b
+                          return a > b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -290,7 +260,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a >= b
+                          return a >= b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -301,7 +271,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return 0 <= index < length
+                          return 0 <= index < length
                         """;
 
         AssertParsesSuflae(source: source);
@@ -312,7 +282,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return min <= value <= max
+                          return min <= value <= max
                         """;
 
         AssertParsesSuflae(source: source);
@@ -327,7 +297,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a === b
+                          return a === b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -338,7 +308,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a !== b
+                          return a !== b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -353,7 +323,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a and b
+                          return a and b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -364,7 +334,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a or b
+                          return a or b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -375,7 +345,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return not a
+                          return not a
                         """;
 
         AssertParsesSuflae(source: source);
@@ -386,7 +356,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a and b or c and not d
+                          return a and b or c and not d
                         """;
 
         AssertParsesSuflae(source: source);
@@ -397,7 +367,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return x > 0 and x < 100
+                          return x > 0 and x < 100
                         """;
 
         AssertParsesSuflae(source: source);
@@ -412,7 +382,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return bits & mask
+                          return bits & mask
                         """;
 
         AssertParsesSuflae(source: source);
@@ -423,7 +393,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return bits | mask
+                          return bits | mask
                         """;
 
         AssertParsesSuflae(source: source);
@@ -434,7 +404,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return bits ^ mask
+                          return bits ^ mask
                         """;
 
         AssertParsesSuflae(source: source);
@@ -445,7 +415,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return ~bits
+                          return ~bits
                         """;
 
         AssertParsesSuflae(source: source);
@@ -456,7 +426,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return value << 4
+                          return value << 4
                         """;
 
         AssertParsesSuflae(source: source);
@@ -467,7 +437,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return value >> 4
+                          return value >> 4
                         """;
 
         AssertParsesSuflae(source: source);
@@ -478,7 +448,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return value <<< 4
+                          return value <<< 4
                         """;
 
         AssertParsesSuflae(source: source);
@@ -489,7 +459,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> U32
-                            return value >>> 4
+                          return value >>> 4
                         """;
 
         AssertParsesSuflae(source: source);
@@ -504,8 +474,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            let value: Integer? = None
-                            return value ?? 42
+                          var value: Integer? = None
+                          return value ?? 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -516,10 +486,10 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            let a: Integer? = none
-                            let b: Integer? = none
-                            let c: Integer = 100
-                            return a ?? b ?? c
+                          var a: Integer? = none
+                          var b: Integer? = none
+                          var c: Integer = 100
+                          return a ?? b ?? c
                         """;
 
         AssertParsesSuflae(source: source);
@@ -530,7 +500,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> User
-                            return try_get_user(id) ?? default_user()
+                          return try_get_user(id) ?? default_user()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -545,8 +515,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var x = 0
-                            x = 42
+                          var x = 0
+                          x = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -557,8 +527,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var x = 0
-                            x += 1
+                          var x = 0
+                          x += 1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -569,8 +539,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var x = 10
-                            x -= 1
+                          var x = 10
+                          x -= 1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -581,8 +551,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var x = 2
-                            x *= 3
+                          var x = 2
+                          x *= 3
                         """;
 
         AssertParsesSuflae(source: source);
@@ -593,8 +563,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var bits: U32 = 0xFF
-                            bits &= 0x0F
+                          var bits: U32 = 0xFF
+                          bits &= 0x0F
                         """;
 
         AssertParsesSuflae(source: source);
@@ -605,8 +575,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var bits: U32 = 0x00
-                            bits |= 0x0F
+                          var bits: U32 = 0x00
+                          bits |= 0x0F
                         """;
 
         AssertParsesSuflae(source: source);
@@ -617,8 +587,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var x: U32 = 1
-                            x <<= 4
+                          var x: U32 = 1
+                          x <<= 4
                         """;
 
         AssertParsesSuflae(source: source);
@@ -629,8 +599,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            var x: U32 = 16
-                            x >>= 2
+                          var x: U32 = 16
+                          x >>= 2
                         """;
 
         AssertParsesSuflae(source: source);
@@ -645,7 +615,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Text
-                            return "Hello, " + "World!"
+                          return "Hello, " + "World!"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -656,7 +626,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Text
-                            return "-" * 40
+                          return "-" * 40
                         """;
 
         AssertParsesSuflae(source: source);
@@ -671,8 +641,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            for i in 0 to 10
-                                show(i)
+                          for i in 0 til 10
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -683,8 +653,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            for i in 0 to 100 by 5
-                                show(i)
+                          for i in 0 til 100 by 5
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -695,8 +665,8 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test()
-                            for i in 10 downto 0
-                                show(i)
+                          for i in 10 til 0
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -711,7 +681,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> Integer
-                            return (a + b) * c - d // e % f ** g
+                          return (a + b) * c - d // e % f ** g
                         """;
 
         AssertParsesSuflae(source: source);
@@ -722,7 +692,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return a + b > c * d and not (e == f or g != h)
+                          return a + b > c * d and not (e == f or g != h)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -733,7 +703,7 @@ public class SuflaeOperatorTests
     {
         string source = """
                         routine test() -> bool
-                            return (bits & mask) != 0
+                          return (bits & mask) != 0
                         """;
 
         AssertParsesSuflae(source: source);

@@ -1,5 +1,5 @@
-using Compilers.Analysis.Results;
-using RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -18,13 +18,12 @@ public class PatternValidationTests
     public void Analyze_TypePattern_ShadowsOuterVariable_ReportsError()
     {
         string source = """
-                        routine test() {
-                            let x: S32 = 5
-                            when x {
-                                is S32 x => show(x)
-                                else => pass
-                            }
-                        }
+                        routine test()
+                          var x: S32 = 5
+                          when x
+                            is S32 x => show(x)
+                            else => pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -36,13 +35,12 @@ public class PatternValidationTests
     public void Analyze_ElsePattern_ShadowsOuterVariable_ReportsError()
     {
         string source = """
-                        routine test() {
-                            let value: S32 = 5
-                            when value {
-                                is S32 n => show(n)
-                                else value => show(value)
-                            }
-                        }
+                        routine test()
+                          var value: S32 = 5
+                          when value
+                            is S32 n => show(n)
+                            else value => show(value)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -54,13 +52,12 @@ public class PatternValidationTests
     public void Analyze_TypePattern_UniqueVariableName_NoShadowingError()
     {
         string source = """
-                        routine test() {
-                            let x: S32 = 5
-                            when x {
-                                is S32 n => show(n)
-                                else => pass
-                            }
-                        }
+                        routine test()
+                          var x: S32 = 5
+                          when x
+                            is S32 n => show(n)
+                            else => pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -72,13 +69,12 @@ public class PatternValidationTests
     public void Analyze_TypePattern_SameNameDifferentClauses_NoShadowingError()
     {
         string source = """
-                        routine test() {
-                            let x: S32 = 5
-                            when x {
-                                is S32 n => show(n)
-                                else n => show(n)
-                            }
-                        }
+                        routine test()
+                          var x: S32 = 5
+                          when x
+                            is S32 n => show(n)
+                            else n => show(n)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -94,14 +90,12 @@ public class PatternValidationTests
     public void Analyze_WhenExpression_ClauseScopesIsolated()
     {
         string source = """
-                        routine test() -> S32 {
-                            let x: S32 = 5
-                            let result: S32 = when x {
-                                is S32 n => n
-                                else => 0
-                            }
-                            return result
-                        }
+                        routine test() -> S32
+                          var x: S32 = 5
+                          var result: S32 = when x
+                            is S32 n => n
+                            else => 0
+                          return result
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -118,13 +112,12 @@ public class PatternValidationTests
     public void Analyze_TypePattern_CompatibleType_NoError()
     {
         string source = """
-                        routine test() {
-                            let x: S32 = 5
-                            when x {
-                                is S32 n => show(n)
-                                else => pass
-                            }
-                        }
+                        routine test()
+                          var x: S32 = 5
+                          when x
+                            is S32 n => show(n)
+                            else => pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -136,19 +129,16 @@ public class PatternValidationTests
     public void Analyze_TypePattern_IncompatibleType_ReportsError()
     {
         string source = """
-                        record Foo {
-                            x: S32
-                        }
-                        record Bar {
-                            y: S32
-                        }
-                        routine test() {
-                            let f = Foo(x: 1)
-                            when f {
-                                is Bar b => pass
-                                else => pass
-                            }
-                        }
+                        record Foo
+                          x: S32
+                        record Bar
+                          y: S32
+                        routine test()
+                          var f = Foo(x: 1)
+                          when f
+                            is Bar b => pass
+                            else => pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);

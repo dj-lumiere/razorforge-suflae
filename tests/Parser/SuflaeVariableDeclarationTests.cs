@@ -1,13 +1,13 @@
-﻿using Xunit;
+using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing variable declarations in Suflae:
-/// let/var, type annotations, initializers, mutability.
+/// var, type annotations, initializers, mutability.
 /// Suflae uses indentation-based syntax.
 /// </summary>
 public class SuflaeVariableDeclarationTests
@@ -19,7 +19,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let x: Integer = 42
+                          var x: Integer = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -30,7 +30,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let x = 42
+                          var x = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -41,7 +41,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let items: List<Integer> = [1, 2, 3]
+                          var items: List[Integer] = [1, 2, 3]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -52,7 +52,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let map: Dict<Text, Integer> = Dict()
+                          var map: Dict[Text, Integer] = Dict()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -63,7 +63,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let value: Integer? = none
+                          var value: Integer? = none
                         """;
 
         AssertParsesSuflae(source: source);
@@ -74,7 +74,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let result = compute(10, 20)
+                          var result = compute(10, 20)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -85,7 +85,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let sum = a + b * c
+                          var sum = a + b * c
                         """;
 
         AssertParsesSuflae(source: source);
@@ -100,7 +100,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            var x: Integer = 42
+                          var x: Integer = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -111,7 +111,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            var x = 42
+                          var x = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -122,9 +122,9 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            var count = 0
-                            count = 1
-                            count += 1
+                          var count = 0
+                          count = 1
+                          count += 1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -135,8 +135,8 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            var x: Integer
-                            x = 42
+                          var x: Integer
+                          x = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -151,9 +151,9 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let a = 1
-                            let b = 2
-                            let c = 3
+                          var a = 1
+                          var b = 2
+                          var c = 3
                         """;
 
         AssertParsesSuflae(source: source);
@@ -164,9 +164,9 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let constant = 100
-                            var mutable = 0
-                            let another_constant = 200
+                          var constant = 100
+                          var mutable = 0
+                          var another_constant = 200
                         """;
 
         AssertParsesSuflae(source: source);
@@ -181,7 +181,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let (x, y) = get_point()
+                          var (x, y) = get_point()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -192,7 +192,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let (name, age) = Person(name: "Alice", age: 30)
+                          var (name, age) = Person(name: "Alice", age: 30)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -203,7 +203,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
+                          var ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -214,7 +214,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let (center: c, radius: r) = circle
+                          var (center: c, radius: r) = circle
                         """;
 
         AssertParsesSuflae(source: source);
@@ -225,7 +225,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let (_, y) = get_point()
+                          var (_, y) = get_point()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -240,16 +240,16 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let a: S8 = 1
-                            let b: S16 = 2
-                            let c: S32 = 3
-                            let d: S64 = 4
-                            let e: U8 = 5
-                            let f: U16 = 6
-                            let g: U32 = 7
-                            let h: U64 = 8
-                            let i: Decimal = 9.0
-                            let j: bool = true
+                          var a: S8 = 1
+                          var b: S16 = 2
+                          var c: S32 = 3
+                          var d: S64 = 4
+                          var e: U8 = 5
+                          var f: U16 = 6
+                          var g: U32 = 7
+                          var h: U64 = 8
+                          var i: Decimal = 9.0
+                          var j: bool = true
                         """;
 
         AssertParsesSuflae(source: source);
@@ -260,7 +260,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let name: Text = "Alice"
+                          var name: Text = "Alice"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -271,7 +271,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let nested: Dict<Text, List<Integer>> = Dict()
+                          var nested: Dict[Text, List[Integer]] = Dict()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -286,10 +286,10 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let dec = 42
-                            let hex = 0xFF
-                            let bin = 0b1010
-                            let oct = 0o77
+                          var dec = 42
+                          var hex = 0xFF
+                          var bin = 0b1010
+                          var oct = 0o77
                         """;
 
         AssertParsesSuflae(source: source);
@@ -300,9 +300,9 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let a = 3.14
-                            let b = 1.0e10
-                            let c = 2.5e-3
+                          var a = 3.14
+                          var b = 1.0e10
+                          var c = 2.5e-3
                         """;
 
         AssertParsesSuflae(source: source);
@@ -313,9 +313,9 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let simple = "hello"
-                            let escaped = "line1\nline2"
-                            let formatted = f"value = {x}"
+                          var simple = "hello"
+                          var escaped = "line1\nline2"
+                          var formatted = f"value = {x}"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -326,8 +326,8 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let t = true
-                            let f = false
+                          var t = true
+                          var f = false
                         """;
 
         AssertParsesSuflae(source: source);
@@ -338,7 +338,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let x: Integer? = None
+                          var x: Integer? = None
                         """;
 
         AssertParsesSuflae(source: source);
@@ -349,7 +349,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let items = [1, 2, 3, 4, 5]
+                          var items = [1, 2, 3, 4, 5]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -360,7 +360,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let empty: List<Integer> = []
+                          var empty: List[Integer] = []
                         """;
 
         AssertParsesSuflae(source: source);
@@ -375,8 +375,8 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         record Point
-                            x: F32
-                            y: F32
+                          x: F32
+                          y: F32
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -387,11 +387,11 @@ public class SuflaeVariableDeclarationTests
     [Fact]
     public void ParseSuflae_EntityVarFields_Rejected()
     {
-        // var/let keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var/let keywords
+        // var keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var keywords
         string source = """
                         entity Counter
-                            var count: Integer
+                          var count: Integer
                         """;
 
         (_, var parser) = ParseSuflaeWithErrors(source: source);
@@ -401,16 +401,16 @@ public class SuflaeVariableDeclarationTests
     [Fact]
     public void ParseSuflae_EntityLetFields_Rejected()
     {
-        // var/let keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var/let keywords
+        // var keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var keywords
         string source = """
                         entity User
-                            let id: U64
-                            var name: Text
+                          var id: U64
+                          var name: Text
                         """;
 
         (_, var parser) = ParseSuflaeWithErrors(source: source);
-        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for let/var in entity body");
+        Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var in entity body");
     }
 
     #endregion
@@ -422,7 +422,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let point = Point(x: 10.0, y: 20.0)
+                          var point = Point(x: 10.0, y: 20.0)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -433,7 +433,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let result = data.filter().map().collect()
+                          var result = data.filter().map().collect()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -444,7 +444,7 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let value = if condition then 1 else 0
+                          var value = if condition then 1 else 0
                         """;
 
         AssertParsesSuflae(source: source);
@@ -455,9 +455,9 @@ public class SuflaeVariableDeclarationTests
     {
         string source = """
                         routine test()
-                            let description = when status
-                                is ACTIVE => "running"
-                                else => "stopped"
+                          var description = when status
+                            is ACTIVE => "running"
+                            else => "stopped"
                         """;
 
         AssertParsesSuflae(source: source);

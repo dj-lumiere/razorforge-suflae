@@ -1,12 +1,12 @@
-﻿using Compilers.Analysis.Results;
-using Compilers.Analysis.Symbols;
-using Compilers.Analysis.Types;
-using RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Symbols;
+using SemanticAnalysis.Types;
+using SemanticAnalysis.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
-using Compilers.Analysis.Enums;
+using SemanticAnalysis.Enums;
 using static TestHelpers;
 
 /// <summary>
@@ -20,10 +20,9 @@ public class TypeResolutionTests
     public void Analyze_Record_RegistersInTypeRegistry()
     {
         string source = """
-                        record Point {
-                            x: F32
-                            y: F32
-                        }
+                        record Point
+                          x: F32
+                          y: F32
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -37,9 +36,8 @@ public class TypeResolutionTests
     public void Analyze_Entity_RegistersInTypeRegistry()
     {
         string source = """
-                        entity User {
-                            name: Text
-                        }
+                        entity User
+                          name: Text
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -53,12 +51,11 @@ public class TypeResolutionTests
     public void Analyze_Choice_RegistersInTypeRegistry()
     {
         string source = """
-                        choice Direction {
-                            NORTH
-                            SOUTH
-                            EAST
-                            WEST
-                        }
+                        choice Direction
+                          NORTH
+                          SOUTH
+                          EAST
+                          WEST
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -73,10 +70,9 @@ public class TypeResolutionTests
     {
         // Note: Don't use "Result" as it's a well-known error handling type
         string source = """
-                        variant MyVariant {
-                            SUCCESS: S32
-                            ERROR: Text
-                        }
+                        variant MyVariant
+                          SUCCESS: S32
+                          ERROR: Text
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -90,10 +86,9 @@ public class TypeResolutionTests
     public void Analyze_Protocol_RegistersInTypeRegistry()
     {
         string source = """
-                        protocol Displayable {
-                            @readonly
-                            routine Me.display() -> Text
-                        }
+                        protocol Displayable
+                          @readonly
+                          routine Me.display() -> Text
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -111,9 +106,8 @@ public class TypeResolutionTests
     public void Analyze_GenericRecord_RegistersWithTypeParameters()
     {
         string source = """
-                        record Container<T> {
-                            value: T
-                        }
+                        record Container[T]
+                          value: T
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -127,10 +121,9 @@ public class TypeResolutionTests
     public void Analyze_GenericEntity_MultipleTypeParameters()
     {
         string source = """
-                        entity Pair<K, V> {
-                            key: K
-                            value: V
-                        }
+                        entity Pair[K, V]
+                          key: K
+                          value: V
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -148,9 +141,8 @@ public class TypeResolutionTests
     public void Analyze_GlobalRoutine_RegistersInRegistry()
     {
         string source = """
-                        routine greet(name: Text) -> Text {
-                            return name
-                        }
+                        routine greet(name: Text) -> Text
+                          return name
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -164,31 +156,28 @@ public class TypeResolutionTests
     public void Analyze_Method_RegistersWithOwnerType()
     {
         string source = """
-                        record Point {
-                            x: F32
-                            y: F32
-                        }
+                        record Point
+                          x: F32
+                          y: F32
 
                         @readonly
-                        routine Point.distance() -> F32 {
-                            return 0.0_f32
-                        }
+                        routine Point.distance() -> F32
+                          return 0.0_f32
                         """;
 
         AnalysisResult result = Analyze(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "Point.distance");
 
         Assert.NotNull(@object: routine);
-        Assert.Equal(expected: RoutineKind.Method, actual: routine.Kind);
+        Assert.Equal(expected: RoutineKind.MemberRoutine, actual: routine.Kind);
     }
 
     [Fact]
     public void Analyze_FailableRoutine_RegistersAsFailable()
     {
         string source = """
-                        routine get_value!() -> S32 {
-                            return 42
-                        }
+                        routine get_value!() -> S32
+                          return 42
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -206,11 +195,10 @@ public class TypeResolutionTests
     public void Analyze_RecordFields_ResolveTypes()
     {
         string source = """
-                        record Color {
-                            r: U8
-                            g: U8
-                            b: U8
-                        }
+                        record Color
+                          r: U8
+                          g: U8
+                          b: U8
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -224,10 +212,9 @@ public class TypeResolutionTests
     public void Analyze_EntityFields_ResolveTypes()
     {
         string source = """
-                        entity Document {
-                            title: Text
-                            page_count: U32
-                        }
+                        entity Document
+                          title: Text
+                          page_count: U32
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -244,9 +231,8 @@ public class TypeResolutionTests
     public void Analyze_UndefinedType_ReportsError()
     {
         string source = """
-                        record Container {
-                            value: UnknownType
-                        }
+                        record Container
+                          value: UnknownType
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -260,13 +246,11 @@ public class TypeResolutionTests
     public void Analyze_DuplicateTypeName_ReportsError()
     {
         string source = """
-                        record Point {
-                            x: F32
-                        }
+                        record Point
+                          x: F32
 
-                        record Point {
-                            y: F32
-                        }
+                        record Point
+                          y: F32
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -277,10 +261,9 @@ public class TypeResolutionTests
     public void Analyze_DuplicateFieldName_ReportsError()
     {
         string source = """
-                        record Point {
-                            x: F32
-                            x: F32
-                        }
+                        record Point
+                          x: F32
+                          x: F32
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -291,9 +274,9 @@ public class TypeResolutionTests
     public void Analyze_ReservedFunctionPrefix_ReportsError()
     {
         string source = """
-                        routine try_something() {
-                            pass
-                        }
+                        routine try_something()
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -307,9 +290,9 @@ public class TypeResolutionTests
     public void Analyze_ReservedFunctionPrefix_Check_ReportsError()
     {
         string source = """
-                        routine check_value() {
-                            pass
-                        }
+                        routine check_value()
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -320,9 +303,9 @@ public class TypeResolutionTests
     public void Analyze_ReservedFunctionPrefix_Lookup_ReportsError()
     {
         string source = """
-                        routine lookup_item() {
-                            pass
-                        }
+                        routine lookup_item()
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -337,15 +320,13 @@ public class TypeResolutionTests
     public void Analyze_ValidConstraint_NoError()
     {
         string source = """
-                        protocol Comparable {
-                            @readonly
-                            routine Me.__cmp__(other: Me) -> S32
-                        }
+                        protocol Comparable
+                          @readonly
+                          routine Me.__cmp__(other: Me) -> S32
 
-                        record Wrapper<T>
-                        requires T follows Comparable {
-                            value: T
-                        }
+                        record Wrapper[T]
+                        needs T obeys Comparable
+                          value: T
                         """;
 
         Analyze(source: source);
@@ -356,10 +337,9 @@ public class TypeResolutionTests
     public void Analyze_UnknownTypeParameter_ReportsError()
     {
         string source = """
-                        record Container<T>
-                        requires X follows Comparable {
-                            value: T
-                        }
+                        record Container[T]
+                        needs X obeys Comparable
+                          value: T
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -378,20 +358,17 @@ public class TypeResolutionTests
     public void Analyze_RecordFollowsProtocol_NoError()
     {
         string source = """
-                        protocol Displayable {
-                            @readonly
-                            routine Me.display() -> Text
-                        }
+                        protocol Displayable
+                          @readonly
+                          routine Me.display() -> Text
 
-                        record Point follows Displayable {
-                            x: F32
-                            y: F32
-                        }
+                        record Point obeys Displayable
+                          x: F32
+                          y: F32
 
                         @readonly
-                        routine Point.display() -> Text {
-                            return "point"
-                        }
+                        routine Point.display() -> Text
+                          return "point"
                         """;
 
         Analyze(source: source);
@@ -406,9 +383,8 @@ public class TypeResolutionTests
     public void Analyze_ReturnIntegerLiteral_InfersFromReturnType()
     {
         string source = """
-                        routine get_value() -> S32 {
-                            return 0
-                        }
+                        routine get_value() -> S32
+                          return 0
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -419,9 +395,8 @@ public class TypeResolutionTests
     public void Analyze_ReturnIntegerLiteral_InfersU32()
     {
         string source = """
-                        routine get_count() -> U32 {
-                            return 42
-                        }
+                        routine get_count() -> U32
+                          return 42
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -432,9 +407,8 @@ public class TypeResolutionTests
     public void Analyze_ReturnIntegerLiteral_InfersS64()
     {
         string source = """
-                        routine get_big() -> S64 {
-                            return 123456789
-                        }
+                        routine get_big() -> S64
+                          return 123456789
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -445,14 +419,12 @@ public class TypeResolutionTests
     public void Analyze_ReturnIntegerLiteral_InMethodWithReturnType()
     {
         string source = """
-                        record Counter {
-                            value: S32
-                        }
+                        record Counter
+                          value: S32
 
                         @readonly
-                        routine Counter.get_zero() -> S32 {
-                            return 0
-                        }
+                        routine Counter.get_zero() -> S32
+                          return 0
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -467,14 +439,12 @@ public class TypeResolutionTests
     public void Analyze_VariantInField_ReportsError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
-                        entity Canvas {
-                            current: Shape
-                        }
+                        entity Canvas
+                          current: Shape
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -485,14 +455,13 @@ public class TypeResolutionTests
     public void Analyze_VariantAsParameter_ReportsError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
-                        routine process(shape: Shape) {
-                            pass
-                        }
+                        routine process(shape: Shape)
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -503,15 +472,13 @@ public class TypeResolutionTests
     public void Analyze_VariantMethodDefinition_ReportsError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
                         @readonly
-                        routine Shape.area() -> F64 {
-                            return 0.0
-                        }
+                        routine Shape.area() -> F64
+                          return 0.0
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -522,14 +489,12 @@ public class TypeResolutionTests
     public void Analyze_VariantReturnType_NoError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
-                        routine make_shape() -> Shape {
-                            return CIRCLE(1.0)
-                        }
+                        routine make_shape() -> Shape
+                          return CIRCLE(1.0)
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -542,11 +507,11 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                            Circle: F32
-                            Rect: F32
+                          Circle: F32
+                          Rect: F32
 
                         entity Canvas
-                            current: Shape
+                          current: Shape
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -557,15 +522,13 @@ public class TypeResolutionTests
     public void Analyze_VariantOperatorDefinition_ReportsError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
                         @readonly
-                        routine Shape.__eq__(you: Shape) -> Bool {
-                            return false
-                        }
+                        routine Shape.__eq__(you: Shape) -> Bool
+                          return false
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -576,19 +539,18 @@ public class TypeResolutionTests
     public void Analyze_VariantCopy_ReportsError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
-                        routine make_shape() -> Shape {
-                            pass
-                        }
+                        routine make_shape() -> Shape
+                          pass
+                          return
 
-                        routine test() {
-                            let box1 = make_shape()
-                            let box2 = box1
-                        }
+                        routine test()
+                          var box1 = make_shape()
+                          var box2 = box1
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -599,19 +561,18 @@ public class TypeResolutionTests
     public void Analyze_VariantReassignment_ReportsError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
-                        routine make_shape() -> Shape {
-                            pass
-                        }
+                        routine make_shape() -> Shape
+                          pass
+                          return
 
-                        routine test() {
-                            var box = make_shape()
-                            box = make_shape()
-                        }
+                        routine test()
+                          var box = make_shape()
+                          box = make_shape()
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -622,18 +583,17 @@ public class TypeResolutionTests
     public void Analyze_VariantBindFromCall_NoCopyError()
     {
         string source = """
-                        variant Shape {
-                            Circle: F32
-                            Rect: F32
-                        }
+                        variant Shape
+                          Circle: F32
+                          Rect: F32
 
-                        routine make_shape() -> Shape {
-                            pass
-                        }
+                        routine make_shape() -> Shape
+                          pass
+                          return
 
-                        routine test() {
-                            let result = make_shape()
-                        }
+                        routine test()
+                          var result = make_shape()
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -649,15 +609,13 @@ public class TypeResolutionTests
     public void Analyze_ChoiceOperatorDefinition_ReportsError()
     {
         string source = """
-                        choice HttpStatus {
-                            OK
-                            NOT_FOUND
-                        }
+                        choice HttpStatus
+                          OK
+                          NOT_FOUND
 
                         @readonly
-                        routine HttpStatus.__add__(you: HttpStatus) -> HttpStatus {
-                            return OK
-                        }
+                        routine HttpStatus.__add__(you: HttpStatus) -> HttpStatus
+                          return OK
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -668,16 +626,14 @@ public class TypeResolutionTests
     public void Analyze_ChoiceRegularMethod_NoError()
     {
         string source = """
-                        choice Color {
-                            RED
-                            GREEN
-                            BLUE
-                        }
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
 
                         @readonly
-                        routine Color.is_warm() -> Bool {
-                            return false
-                        }
+                        routine Color.is_warm() -> Bool
+                          return false
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -688,11 +644,10 @@ public class TypeResolutionTests
     public void Analyze_ChoiceMixedValues_ReportsError()
     {
         string source = """
-                        choice HttpStatus {
-                            OK: 200
-                            NOT_FOUND
-                            INTERNAL_ERROR: 500
-                        }
+                        choice HttpStatus
+                          OK: 200
+                          NOT_FOUND
+                          INTERNAL_ERROR: 500
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -703,11 +658,10 @@ public class TypeResolutionTests
     public void Analyze_ChoiceAllExplicitValues_NoError()
     {
         string source = """
-                        choice HttpStatus {
-                            OK: 200
-                            NOT_FOUND: 404
-                            INTERNAL_ERROR: 500
-                        }
+                        choice HttpStatus
+                          OK: 200
+                          NOT_FOUND: 404
+                          INTERNAL_ERROR: 500
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -718,11 +672,10 @@ public class TypeResolutionTests
     public void Analyze_ChoiceAllImplicitValues_NoError()
     {
         string source = """
-                        choice Color {
-                            RED
-                            GREEN
-                            BLUE
-                        }
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -737,9 +690,9 @@ public class TypeResolutionTests
     public void Analyze_RoutineReturnsMaybe_ReportsError()
     {
         string source = """
-                        routine foo() -> Maybe<S32> {
-                            pass
-                        }
+                        routine foo() -> Maybe[S32]
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -750,9 +703,8 @@ public class TypeResolutionTests
     public void Analyze_RoutineReturnsResult_ReportsError()
     {
         string source = """
-                        routine foo() -> Result<S32> {
-                            return 42
-                        }
+                        routine foo() -> Result[S32]
+                          return 42
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -763,9 +715,8 @@ public class TypeResolutionTests
     public void Analyze_RoutineReturnsLookup_ReportsError()
     {
         string source = """
-                        routine foo() -> Lookup<S32> {
-                            return 42
-                        }
+                        routine foo() -> Lookup[S32]
+                          return 42
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -776,9 +727,8 @@ public class TypeResolutionTests
     public void Analyze_FailableRoutine_NoErrorHandlingReturnTypeError()
     {
         string source = """
-                        routine get_value!() -> S32 {
-                            return 42
-                        }
+                        routine get_value!() -> S32
+                          return 42
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -789,15 +739,14 @@ public class TypeResolutionTests
     public void Analyze_MethodReturnsMaybe_ReportsError()
     {
         string source = """
-                        record Point {
-                            x: F32
-                            y: F32
-                        }
+                        record Point
+                          x: F32
+                          y: F32
 
                         @readonly
-                        routine Point.foo() -> Maybe<F32> {
-                            pass
-                        }
+                        routine Point.foo() -> Maybe[F32]
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);

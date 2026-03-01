@@ -1,5 +1,5 @@
-using Compilers.Analysis.Results;
-using Compilers.Analysis.Types;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Types;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -18,9 +18,9 @@ public class TupleTests
     {
         // All elements are value types (S32 is a record/value type)
         string source = """
-                        routine test() {
-                            let tuple = (1_s32, 2_s32, 3_s32)
-                        }
+                        routine test()
+                          var tuple = (1_s32, 2_s32, 3_s32)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -32,15 +32,14 @@ public class TupleTests
     {
         // Entity is a reference type, so this should be Tuple
         string source = """
-                        entity Point {
-                            x: S32
-                            y: S32
-                        }
+                        entity Point
+                          x: S32
+                          y: S32
 
-                        routine test() {
-                            let p = Point(x: 1, y: 2)
-                            let tuple = (1, p)
-                        }
+                        routine test()
+                          var p = Point(x: 1, y: 2)
+                          var tuple = (1, p)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -51,9 +50,9 @@ public class TupleTests
     public void Analyze_NestedTuples_InfersCorrectly()
     {
         string source = """
-                        routine test() {
-                            let nested = (1, (2, 3))
-                        }
+                        routine test()
+                          var nested = (1, (2, 3))
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -64,9 +63,9 @@ public class TupleTests
     public void Analyze_SingleElementTuple_WithTrailingComma()
     {
         string source = """
-                        routine test() {
-                            let single = (42,)
-                        }
+                        routine test()
+                          var single = (42,)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -83,9 +82,9 @@ public class TupleTests
         // Tuple types are created in the instantiations cache
         // This test verifies tuple analysis succeeds without errors
         string source = """
-                        routine test() {
-                            let tuple = (1s32, 2s32)
-                        }
+                        routine test()
+                          var tuple = (1s32, 2s32)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -100,9 +99,9 @@ public class TupleTests
     public void Analyze_MixedNumericTypes_Works()
     {
         string source = """
-                        routine test() {
-                            let mixed = (1_s32, 2.5f64, true)
-                        }
+                        routine test()
+                          var mixed = (1_s32, 2.5f64, true)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -113,14 +112,13 @@ public class TupleTests
     public void Analyze_TupleWithEntity_InfersTuple()
     {
         string source = """
-                        entity User {
-                            id: S32
-                        }
+                        entity User
+                          id: S32
 
-                        routine test() {
-                            let user = User(id: 42)
-                            let tuple = (1, user)
-                        }
+                        routine test()
+                          var user = User(id: 42)
+                          var tuple = (1, user)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -136,7 +134,7 @@ public class TupleTests
     {
         string source = """
                         routine test():
-                            let tuple = (1, 2, 3)
+                          var tuple = (1, 2, 3)
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -148,7 +146,7 @@ public class TupleTests
     {
         string source = """
                         routine test():
-                            let nested = ((1, 2), (3, 4))
+                          var nested = ((1, 2), (3, 4))
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);

@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
@@ -18,7 +18,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            show("hello")
+                          show("hello")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -29,7 +29,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            compute(1, 2, 3)
+                          compute(1, 2, 3)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -40,7 +40,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            create_user(name: "Alice", age: 30)
+                          create_user(name: "Alice", age: 30)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -51,7 +51,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            data.where().select().List()
+                          data.where().select().List()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -62,7 +62,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let len = "hello".count()
+                          var len = "hello".count()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -73,7 +73,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = "42".S32!()
+                          var result = "42".S32!()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -84,7 +84,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let pi = Math.pi()
+                          var pi = Math.pi()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -99,7 +99,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let x = point.x
+                          var x = point.x
                         """;
 
         AssertParsesSuflae(source: source);
@@ -110,7 +110,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let city = user.address.city
+                          var city = user.address.city
                         """;
 
         AssertParsesSuflae(source: source);
@@ -121,7 +121,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = user.name.to_upper().length()
+                          var result = user.name.to_upper().length()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -133,7 +133,7 @@ public class SuflaeExpressionTests
         string source = """
                         @readonly
                         routine Point.get_x() -> F32
-                            return me.x
+                          return me.x
                         """;
 
         AssertParsesSuflae(source: source);
@@ -148,7 +148,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let first = items[0]
+                          var first = items[0]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -159,7 +159,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let cell = matrix[i][j]
+                          var cell = matrix[i][j]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -170,7 +170,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let value = dict["key"]
+                          var value = dict["key"]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -181,8 +181,8 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            var items = [1, 2, 3]
-                            items[0] = 42
+                          var items = [1, 2, 3]
+                          items[0] = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -197,7 +197,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let point = Point(x: 10.0, y: 20.0)
+                          var point = Point(x: 10.0, y: 20.0)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -208,7 +208,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let user = User(name: "Alice", age: 30)
+                          var user = User(name: "Alice", age: 30)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -219,7 +219,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
+                          var circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -230,7 +230,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let container = Container<Integer>(value: 42)
+                          var container = Container[Integer](value: 42)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -245,7 +245,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let add = (a, b) => a + b
+                          var add = (a, b) => a + b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -256,7 +256,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let double = x => x * 2
+                          var double = x => x * 2
                         """;
 
         AssertParsesSuflae(source: source);
@@ -267,7 +267,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            items.select(x => x * 2)
+                          items.select(x => x * 2)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -278,8 +278,8 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let multiplier = 10
-                            let scale = x => x * multiplier
+                          var multiplier = 10
+                          var scale = x => x * multiplier
                         """;
 
         AssertParsesSuflae(source: source);
@@ -290,7 +290,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let get_value = () => 42
+                          var get_value = () => 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -305,7 +305,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let msg = f"Hello, {name}!"
+                          var msg = f"Hello, {name}!"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -316,7 +316,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let msg = f"Sum: {a + b}"
+                          var msg = f"Sum: {a + b}"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -327,7 +327,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let msg = f"{first} + {second} = {first + second}"
+                          var msg = f"{first} + {second} = {first + second}"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -338,7 +338,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let msg = f"Name: {user.name.to_upper()}"
+                          var msg = f"Name: {user.name.to_upper()}"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -353,7 +353,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let x = value.S64!()
+                          var x = value.S64!()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -364,7 +364,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let x = 42.F64()
+                          var x = 42.F64()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -375,7 +375,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = "42".S32!().F64!()
+                          var result = "42".S32!().F64!()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -390,7 +390,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = (a + b) * c
+                          var result = (a + b) * c
                         """;
 
         AssertParsesSuflae(source: source);
@@ -401,7 +401,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = ((a + b) * (c - d)) / e
+                          var result = ((a + b) * (c - d)) / e
                         """;
 
         AssertParsesSuflae(source: source);
@@ -416,7 +416,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let range = 0 to 10
+                          var range = 0 til 10
                         """;
 
         AssertParsesSuflae(source: source);
@@ -427,7 +427,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let range = 0 to 100 by 5
+                          var range = 0 til 100 by 5
                         """;
 
         AssertParsesSuflae(source: source);
@@ -442,7 +442,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = items.where(x => x > 0).select(x => x * 2).take(10).to_list()
+                          var result = items.where(x => x > 0).select(x => x * 2).take(10).to_list()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -453,7 +453,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let value = if condition then compute_a() else compute_b()
+                          var value = if condition then compute_a() else compute_b()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -464,10 +464,10 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let description = when status
-                                is PENDING => "Waiting"
-                                is ACTIVE => "Running"
-                                else => "Unknown"
+                          var description = when status
+                            is PENDING => "Waiting"
+                            is ACTIVE => "Running"
+                            else => "Unknown"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -478,7 +478,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let value = first_option() ?? second_option() ?? default_value
+                          var value = first_option() ?? second_option() ?? default_value
                         """;
 
         AssertParsesSuflae(source: source);
@@ -493,7 +493,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let msg = Message.TEXT("Hello")
+                          var msg = Message.TEXT("Hello")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -504,7 +504,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let msg = Message.QUIT
+                          var msg = Message.QUIT
                         """;
 
         AssertParsesSuflae(source: source);
@@ -515,12 +515,12 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let result = parse_number("123")
-                            when result
-                                is SUCCESS value
-                                    show(f"Got: {value}")
-                                is ERROR msg
-                                    show(f"Error: {msg}")
+                          var result = parse_number("123")
+                          when result
+                            is SUCCESS value =>
+                              show(f"Got: {value}")
+                            is ERROR msg =>
+                              show(f"Error: {msg}")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -535,7 +535,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let status = AppStatus.ACTIVE
+                          var status = AppStatus.ACTIVE
                         """;
 
         AssertParsesSuflae(source: source);
@@ -546,8 +546,8 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let dir = Direction.NORTH
-                            let opposite = dir.opposite()
+                          var dir = Direction.NORTH
+                          var opposite = dir.opposite()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -558,9 +558,9 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let status = FileAccess.READ
-                            if status == READ
-                                show("Read access")
+                          var status = FileAccess.READ
+                          if status == READ
+                            show("Read access")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -575,7 +575,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let add: Routine<S32, S32, S32> = (a, b) => a + b
+                          var add: Routine[S32, S32, S32] = (a, b) => a + b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -586,7 +586,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let get_value: Routine<S32> = () => 42
+                          var get_value: Routine[S32] = () => 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -601,7 +601,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let data = b"hello"
+                          var data = b"hello"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -612,7 +612,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let ch = b'A'
+                          var ch = b'A'
                         """;
 
         AssertParsesSuflae(source: source);
@@ -623,7 +623,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let data = b"\x48\x65\x6C\x6C\x6F"
+                          var data = b"\x48\x65\x6C\x6C\x6F"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -633,9 +633,9 @@ public class SuflaeExpressionTests
     public void Tokenize_SuflaeByteStringLiteral_CorrectTokenType()
     {
         string source = """b"hello" """;
-        List<Compilers.Shared.Lexer.Token> tokens = TokenizeSuflae(source: source);
+        List<Compiler.Lexer.Token> tokens = TokenizeSuflae(source: source);
 
-        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.BytesLiteral,
+        Assert.Equal(expected: Compiler.Lexer.TokenType.BytesLiteral,
             actual: tokens[index: 0].Type);
     }
 
@@ -643,9 +643,9 @@ public class SuflaeExpressionTests
     public void Tokenize_SuflaeByteCharLiteral_CorrectTokenType()
     {
         string source = """b'A' """;
-        List<Compilers.Shared.Lexer.Token> tokens = TokenizeSuflae(source: source);
+        List<Compiler.Lexer.Token> tokens = TokenizeSuflae(source: source);
 
-        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.ByteLetterLiteral,
+        Assert.Equal(expected: Compiler.Lexer.TokenType.ByteLetterLiteral,
             actual: tokens[index: 0].Type);
     }
 
@@ -679,8 +679,8 @@ public class SuflaeExpressionTests
         // \u00004E is exactly 6 hex digits — valid
         string source = "\"\\u00004E\"";
 
-        List<Compilers.Shared.Lexer.Token> tokens = TokenizeSuflae(source: source);
-        Assert.Equal(expected: Compilers.Shared.Lexer.TokenType.TextLiteral,
+        List<Compiler.Lexer.Token> tokens = TokenizeSuflae(source: source);
+        Assert.Equal(expected: Compiler.Lexer.TokenType.TextLiteral,
             actual: tokens[index: 0].Type);
     }
 
@@ -711,7 +711,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let p2 = p1 with .x = 5.0
+                          var p2 = p1 with .x = 5.0
                         """;
 
         AssertParsesSuflae(source: source);
@@ -722,7 +722,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let p2 = p1 with .x = 5.0, .y = 3.0
+                          var p2 = p1 with .x = 5.0, .y = 3.0
                         """;
 
         AssertParsesSuflae(source: source);
@@ -733,7 +733,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let c2 = coords with [0] = 5.0
+                          var c2 = coords with [0] = 5.0
                         """;
 
         AssertParsesSuflae(source: source);
@@ -744,7 +744,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let p2 = person with .address.city = "Shelbyville"
+                          var p2 = person with .address.city = "Shelbyville"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -755,7 +755,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let p2 = data with .name = "test", [0] = 42
+                          var p2 = data with .name = "test", [0] = 42
                         """;
 
         AssertParsesSuflae(source: source);
@@ -766,15 +766,15 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let p2 = p1 with .x = 5.0, .y = 3.0
+                          var p2 = p1 with .x = 5.0, .y = 3.0
                         """;
 
         var ast = ParseSuflae(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
-            as Compilers.Shared.AST.WithExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
+            as SyntaxTree.WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
@@ -787,15 +787,15 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let p2 = person with .address.city = "NYC"
+                          var p2 = person with .address.city = "NYC"
                         """;
 
         var ast = ParseSuflae(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var withExpr = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer
-            as Compilers.Shared.AST.WithExpression;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
+            as SyntaxTree.WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
@@ -813,7 +813,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let sub = list[0 to 5]
+                          var sub = list[0 til 5]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -824,7 +824,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let sub = list[1 to ^1]
+                          var sub = list[1 til ^1]
                         """;
 
         AssertParsesSuflae(source: source);
@@ -835,32 +835,31 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let sub = list[0 to 5]
+                          var sub = list[0 til 5]
                         """;
 
         var ast = ParseSuflae(source: source);
-        var routine = ast.Declarations.OfType<Compilers.Shared.AST.RoutineDeclaration>().First();
-        var block = (Compilers.Shared.AST.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<Compilers.Shared.AST.DeclarationStatement>().First();
-        var initializer = ((Compilers.Shared.AST.VariableDeclaration)varDecl.Declaration).Initializer;
+        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
+        var block = (SyntaxTree.BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
+        var initializer = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer;
 
-        Assert.IsType<Compilers.Shared.AST.SliceExpression>(initializer);
-        var slice = (Compilers.Shared.AST.SliceExpression)initializer!;
-        Assert.IsType<Compilers.Shared.AST.IdentifierExpression>(slice.Object);
-        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.Start);
-        Assert.IsType<Compilers.Shared.AST.LiteralExpression>(slice.End);
+        Assert.IsType<SyntaxTree.SliceExpression>(initializer);
+        var slice = (SyntaxTree.SliceExpression)initializer!;
+        Assert.IsType<SyntaxTree.IdentifierExpression>(slice.Object);
+        Assert.IsType<SyntaxTree.LiteralExpression>(slice.Start);
+        Assert.IsType<SyntaxTree.LiteralExpression>(slice.End);
     }
 
     [Fact]
-    public void ParseSuflae_SliceExpression_RejectsDownto()
+    public void ParseSuflae_SliceExpression_TilRange()
     {
         string source = """
                         routine test()
-                            let sub = list[5 downto 0]
+                          var sub = list[5 til 0]
                         """;
 
-        (_, var parser1) = ParseSuflaeWithErrors(source: source);
-        Assert.True(condition: parser1.HasErrors, userMessage: "Expected parse errors for 'downto' in slice syntax");
+        AssertParsesSuflae(source: source);
     }
 
     [Fact]
@@ -868,7 +867,7 @@ public class SuflaeExpressionTests
     {
         string source = """
                         routine test()
-                            let sub = list[0 to 10 by 2]
+                          var sub = list[0 til 10 by 2]
                         """;
 
         (_, var parser) = ParseSuflaeWithErrors(source: source);

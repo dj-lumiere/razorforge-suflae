@@ -1,8 +1,8 @@
-﻿using Xunit;
+using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
@@ -20,7 +20,7 @@ public class SuflaeAttributeTests
         string source = """
                         @readonly
                         routine Point.distance() -> Decimal
-                            return 0.0
+                          return 0.0
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -35,7 +35,7 @@ public class SuflaeAttributeTests
         string source = """
                         @writable
                         routine Counter.increment()
-                            me.count += 1
+                          me.count += 1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -47,9 +47,9 @@ public class SuflaeAttributeTests
         string source = """
                         @crash_only
                         routine internal_divide!(a: Integer, b: Integer) -> Integer
-                            if b == 0
-                                throw DivisionByZeroError()
-                            return a // b
+                          if b == 0
+                            throw DivisionByZeroError()
+                          return a // b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -61,7 +61,7 @@ public class SuflaeAttributeTests
         string source = """
                         @prelude
                         routine show(msg: Text)
-                            pass
+                          pass
                         """;
 
         AssertParsesSuflae(source: source);
@@ -73,7 +73,7 @@ public class SuflaeAttributeTests
         string source = """
                         @static
                         routine Math.pi() -> Decimal
-                            return 3.14159265359
+                          return 3.14159265359
                         """;
 
         AssertParsesSuflae(source: source);
@@ -85,7 +85,7 @@ public class SuflaeAttributeTests
         string source = """
                         @inline
                         routine add(a: Integer, b: Integer) -> Integer
-                            return a + b
+                          return a + b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -101,7 +101,7 @@ public class SuflaeAttributeTests
         string source = """
                         @config(target_os: "windows")
                         routine get_config_path() -> Text
-                            return "C:\\config.toml"
+                          return "C:\\config.toml"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -113,7 +113,7 @@ public class SuflaeAttributeTests
         string source = """
                         @config(feature: "debug")
                         routine debug_log(msg: Text)
-                            show(f"[DEBUG] {msg}")
+                          show(f"[DEBUG] {msg}")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -125,7 +125,7 @@ public class SuflaeAttributeTests
         string source = """
                         @deprecated(message: "Use new_function instead")
                         routine old_function()
-                            pass
+                          pass
                         """;
 
         AssertParsesSuflae(source: source);
@@ -141,9 +141,9 @@ public class SuflaeAttributeTests
         string source = """
                         @[readonly, crash_only]
                         routine validate!(value: Integer) -> Integer
-                            if value < 0
-                                throw ValidationError()
-                            return value
+                          if value < 0
+                            throw ValidationError()
+                          return value
                         """;
 
         AssertParsesSuflae(source: source);
@@ -155,7 +155,7 @@ public class SuflaeAttributeTests
         string source = """
                         @[inline, readonly, prelude]
                         routine identity(x: Integer) -> Integer
-                            return x
+                          return x
                         """;
 
         AssertParsesSuflae(source: source);
@@ -171,8 +171,8 @@ public class SuflaeAttributeTests
         string source = """
                         @derive(Debug, Clone)
                         record Point
-                            x: F32
-                            y: F32
+                          x: F32
+                          y: F32
                         """;
 
         AssertParsesSuflae(source: source);
@@ -184,8 +184,8 @@ public class SuflaeAttributeTests
         string source = """
                         @serializable
                         entity User
-                            name: Text
-                            age: U32
+                          name: Text
+                          age: U32
                         """;
 
         AssertParsesSuflae(source: source);
@@ -197,8 +197,8 @@ public class SuflaeAttributeTests
         string source = """
                         @prelude
                         protocol Displayable
-                            @readonly
-                            routine display() -> Text
+                          @readonly
+                          routine display() -> Text
                         """;
 
         AssertParsesSuflae(source: source);
@@ -213,11 +213,11 @@ public class SuflaeAttributeTests
     {
         string source = """
                         record Config
-                            @optional
-                            name: Text
+                          @optional
+                          name: Text
 
-                            @default(42)
-                            value: Integer
+                          @default(42)
+                          value: Integer
                         """;
 
         AssertParsesSuflae(source: source);
@@ -228,11 +228,11 @@ public class SuflaeAttributeTests
     {
         string source = """
                         entity User
-                            @readonly
-                            id: U64
+                          @readonly
+                          id: U64
 
-                            @indexed
-                            email: Text
+                          @indexed
+                          email: Text
                         """;
 
         AssertParsesSuflae(source: source);
@@ -250,7 +250,7 @@ public class SuflaeAttributeTests
                         @inline
                         @config(feature: "optimized")
                         routine fast_compute(x: Integer) -> Integer
-                            return x * 2
+                          return x * 2
                         """;
 
         AssertParsesSuflae(source: source);
@@ -262,15 +262,15 @@ public class SuflaeAttributeTests
         string source = """
                         @derive(Debug)
                         record Calculator
-                            value: Integer
+                          value: Integer
 
                         @readonly
                         routine Calculator.get() -> Integer
-                            return me.value
+                          return me.value
 
                         @writable
                         routine Calculator.set(v: Integer)
-                            me.value = v
+                          me.value = v
                         """;
 
         AssertParsesSuflae(source: source);
@@ -283,10 +283,11 @@ public class SuflaeAttributeTests
     [Fact]
     public void ParseSuflae_VisibilityAndAttribute()
     {
+        // open is the default visibility (not a keyword), so just use @readonly + routine
         string source = """
                         @readonly
-                        open routine Point.distance() -> Decimal
-                            return 0.0
+                        routine Point.distance() -> Decimal
+                          return 0.0
                         """;
 
         AssertParsesSuflae(source: source);
@@ -298,7 +299,7 @@ public class SuflaeAttributeTests
         string source = """
                         @inline
                         secret routine helper(x: Integer) -> Integer
-                            return x * 2
+                          return x * 2
                         """;
 
         AssertParsesSuflae(source: source);
@@ -310,7 +311,7 @@ public class SuflaeAttributeTests
         string source = """
                         @serializable
                         secret record InternalData
-                            value: Integer
+                          value: Integer
                         """;
 
         AssertParsesSuflae(source: source);
@@ -325,14 +326,14 @@ public class SuflaeAttributeTests
     {
         string source = """
                         protocol Container
-                            @readonly
-                            routine count() -> uaddr
+                          @readonly
+                          routine count() -> uaddr
 
-                            @readonly
-                            routine is_empty() -> bool
+                          @readonly
+                          routine is_empty() -> bool
 
-                            @writable
-                            routine clear()
+                          @writable
+                          routine clear()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -348,8 +349,8 @@ public class SuflaeAttributeTests
         string source = """
                         @timeout(5000)
                         suspended routine fetch_data(url: Text) -> Text
-                            let response = waitfor http.get(url)
-                            return response.body
+                          var response = waitfor http.get(url)
+                          return response.body
                         """;
 
         AssertParsesSuflae(source: source);
@@ -365,7 +366,7 @@ public class SuflaeAttributeTests
         string source = """
                         @test
                         routine test_addition()
-                            verify!(1 + 1 == 2)
+                          verify!(1 + 1 == 2)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -377,8 +378,8 @@ public class SuflaeAttributeTests
         string source = """
                         @bench
                         routine bench_sort()
-                            let items = generate_random_list(1000)
-                            sort(items)
+                          var items = generate_random_list(1000)
+                          sort(items)
                         """;
 
         AssertParsesSuflae(source: source);

@@ -2,7 +2,7 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
@@ -16,10 +16,9 @@ public class TypeDeclarationTests
     public void Parse_SimpleRecord_WithFields()
     {
         string source = """
-                        record Point {
-                            x: F32
-                            y: F32
-                        }
+                        record Point
+                          x: F32
+                          y: F32
                         """;
 
         Program program = AssertParses(source: source);
@@ -33,9 +32,8 @@ public class TypeDeclarationTests
     public void Parse_GenericRecord()
     {
         string source = """
-                        record Container<T> {
-                            value: T
-                        }
+                        record Container[T]
+                          value: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -51,10 +49,9 @@ public class TypeDeclarationTests
     public void Parse_Record_WithConstraint()
     {
         string source = """
-                        record Wrapper<T>
-                        requires T follows Comparable {
-                            value: T
-                        }
+                        record Wrapper[T]
+                        needs T obeys Comparable
+                          value: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -69,10 +66,9 @@ public class TypeDeclarationTests
     public void Parse_Record_FollowsProtocol()
     {
         string source = """
-                        record Version follows Comparable {
-                            major: S32
-                            minor: S32
-                        }
+                        record Version obeys Comparable
+                          major: S32
+                          minor: S32
                         """;
 
         Program program = AssertParses(source: source);
@@ -85,10 +81,9 @@ public class TypeDeclarationTests
     public void Parse_Record_MultipleTypeParameters()
     {
         string source = """
-                        record Pair<K, V> {
-                            key: K
-                            value: V
-                        }
+                        record Pair[K, V]
+                          key: K
+                          value: V
                         """;
 
         Program program = AssertParses(source: source);
@@ -108,10 +103,9 @@ public class TypeDeclarationTests
     public void Parse_SimpleEntity()
     {
         string source = """
-                        entity User {
-                            name: Text
-                            age: U32
-                        }
+                        entity User
+                          name: Text
+                          age: U32
                         """;
 
         Program program = AssertParses(source: source);
@@ -125,9 +119,8 @@ public class TypeDeclarationTests
     public void Parse_GenericEntity()
     {
         string source = """
-                        entity Stack<T> {
-                            items: List<T>
-                        }
+                        entity Stack[T]
+                          items: List[T]
                         """;
 
         Program program = AssertParses(source: source);
@@ -142,12 +135,11 @@ public class TypeDeclarationTests
     public void Parse_Entity_MultipleConstraints()
     {
         string source = """
-                        entity SortedCache<K, V>
-                        requires K follows Comparable
-                        requires K follows Hashable
-                        requires V is entity {
-                            entries: Dict<K, V>
-                        }
+                        entity SortedCache[K, V]
+                        needs K obeys Comparable
+                        needs K obeys Hashable
+                        needs V is entity
+                          entries: Dict[K, V]
                         """;
 
         Program program = AssertParses(source: source);
@@ -167,9 +159,8 @@ public class TypeDeclarationTests
     public void Parse_SimpleResident()
     {
         string source = """
-                        resident SystemLogger {
-                            log_count: U32
-                        }
+                        resident SystemLogger
+                          log_count: U32
                         """;
 
         Program program = AssertParses(source: source);
@@ -182,10 +173,9 @@ public class TypeDeclarationTests
     public void Parse_GenericResident_WithConstGeneric()
     {
         string source = """
-                        resident FixedBuffer<T, N>
-                        requires N is uaddr {
-                            data: T
-                        }
+                        resident FixedBuffer[T, N]
+                        needs N is uaddr
+                          data: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -203,12 +193,11 @@ public class TypeDeclarationTests
     public void Parse_SimpleChoice()
     {
         string source = """
-                        choice Direction {
-                            NORTH
-                            SOUTH
-                            EAST
-                            WEST
-                        }
+                        choice Direction
+                          NORTH
+                          SOUTH
+                          EAST
+                          WEST
                         """;
 
         Program program = AssertParses(source: source);
@@ -223,11 +212,10 @@ public class TypeDeclarationTests
     public void Parse_Choice_WithValues()
     {
         string source = """
-                        choice HttpStatus {
-                            OK: 200
-                            NOT_FOUND: 404
-                            ERROR: 500
-                        }
+                        choice HttpStatus
+                          OK: 200
+                          NOT_FOUND: 404
+                          ERROR: 500
                         """;
 
         Program program = AssertParses(source: source);
@@ -245,10 +233,9 @@ public class TypeDeclarationTests
     public void Parse_SimpleVariant()
     {
         string source = """
-                        variant NetworkEvent {
-                            Connect
-                            Disconnect
-                        }
+                        variant NetworkEvent
+                          Connect
+                          Disconnect
                         """;
 
         Program program = AssertParses(source: source);
@@ -262,10 +249,9 @@ public class TypeDeclarationTests
     public void Parse_Variant_WithPayloads()
     {
         string source = """
-                        variant ParseResult {
-                            Success: S32
-                            Error: Text
-                        }
+                        variant ParseResult
+                          Success: S32
+                          Error: Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -280,12 +266,11 @@ public class TypeDeclarationTests
     public void Parse_Variant_MixedPayloads()
     {
         string source = """
-                        variant Event {
-                            Connect
-                            Data: Text
-                            Error: U32
-                            Nothing
-                        }
+                        variant Event
+                          Connect
+                          Data: Text
+                          Error: U32
+                          Nothing
                         """;
 
         Program program = AssertParses(source: source);
@@ -306,10 +291,9 @@ public class TypeDeclarationTests
     public void Parse_SimpleProtocol()
     {
         string source = """
-                        protocol Displayable {
-                            @readonly
-                            routine Me.display() -> Text
-                        }
+                        protocol Displayable
+                          @readonly
+                          routine Me.display() -> Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -323,13 +307,12 @@ public class TypeDeclarationTests
     public void Parse_Protocol_MultipleMethods()
     {
         string source = """
-                        protocol Container {
-                            @readonly
-                            routine Me.count() -> uaddr
+                        protocol Container
+                          @readonly
+                          routine Me.count() -> uaddr
 
-                            @readonly
-                            routine Me.is_empty() -> bool
-                        }
+                          @readonly
+                          routine Me.is_empty() -> bool
                         """;
 
         Program program = AssertParses(source: source);
@@ -342,10 +325,9 @@ public class TypeDeclarationTests
     public void Parse_GenericProtocol()
     {
         string source = """
-                        protocol Iterable<T> {
-                            @readonly
-                            routine Me.iterate() -> Iterator<T>
-                        }
+                        protocol Iterable[T]
+                          @readonly
+                          routine Me.iterate() -> Iterator[T]
                         """;
 
         Program program = AssertParses(source: source);
@@ -360,10 +342,9 @@ public class TypeDeclarationTests
     public void Parse_Protocol_Inheritance()
     {
         string source = """
-                        protocol Ordered follows Comparable {
-                            @readonly
-                            routine Me.__cmp__(other: Me) -> ComparisonSign
-                        }
+                        protocol Ordered obeys Comparable
+                          @readonly
+                          routine Me.__cmp__(other: Me) -> ComparisonSign
                         """;
 
         Program program = AssertParses(source: source);
@@ -380,9 +361,8 @@ public class TypeDeclarationTests
     public void Parse_SecretRecord()
     {
         string source = """
-                        secret record InternalData {
-                            value: S32
-                        }
+                        secret record InternalData
+                          value: S32
                         """;
 
         Program program = AssertParses(source: source);
@@ -395,9 +375,8 @@ public class TypeDeclarationTests
     public void Parse_SecretEntity()
     {
         string source = """
-                        secret entity CacheEntry {
-                            data: Text
-                        }
+                        secret entity CacheEntry
+                          data: Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -414,9 +393,8 @@ public class TypeDeclarationTests
     public void Parse_SimpleRoutine()
     {
         string source = """
-                        routine greet(name: Text) -> Text {
-                            return name
-                        }
+                        routine greet(name: Text) -> Text
+                          return name
                         """;
 
         Program program = AssertParses(source: source);
@@ -430,9 +408,8 @@ public class TypeDeclarationTests
     public void Parse_FailableRoutine()
     {
         string source = """
-                        routine get_value!() -> S32 {
-                            return 42
-                        }
+                        routine get_value!() -> S32
+                          return 42
                         """;
 
         Program program = AssertParses(source: source);
@@ -450,9 +427,8 @@ public class TypeDeclarationTests
     public void Parse_RecordWithPostedField()
     {
         string source = """
-                        record Percentage {
-                            posted value: F64
-                        }
+                        record Percentage
+                          posted value: F64
                         """;
 
         Program program = AssertParses(source: source);
@@ -466,11 +442,10 @@ public class TypeDeclarationTests
     public void Parse_RecordWithMixedVisibilityFields()
     {
         string source = """
-                        record Config {
-                            posted name: Text
-                            secret hidden: Text
-                            value: S32
-                        }
+                        record Config
+                          posted name: Text
+                          secret hidden: Text
+                          value: S32
                         """;
 
         Program program = AssertParses(source: source);

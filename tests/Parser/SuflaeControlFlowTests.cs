@@ -1,8 +1,8 @@
-﻿using Xunit;
+using Xunit;
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
@@ -19,8 +19,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            if x > 0
-                                show("positive")
+                          if x > 0
+                            show("positive")
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -39,10 +39,10 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            if x > 0
-                                show("positive")
-                            else
-                                show("non-positive")
+                          if x > 0
+                            show("positive")
+                          else
+                            show("non-positive")
                         """;
 
         Program program = AssertParsesSuflae(source: source);
@@ -61,12 +61,12 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            if x > 0
-                                show("positive")
-                            elseif x < 0
-                                show("negative")
-                            else
-                                show("zero")
+                          if x > 0
+                            show("positive")
+                          elseif x < 0
+                            show("negative")
+                          else
+                            show("zero")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -77,14 +77,14 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test(n: Integer) -> Text
-                            if n == 1
-                                return "one"
-                            elseif n == 2
-                                return "two"
-                            elseif n == 3
-                                return "three"
-                            else
-                                return "other"
+                          if n == 1
+                            return "one"
+                          elseif n == 2
+                            return "two"
+                          elseif n == 3
+                            return "three"
+                          else
+                            return "other"
                         """;
 
         AssertParsesSuflae(source: source);
@@ -95,9 +95,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            if x > 0
-                                if y > 0
-                                    show("both positive")
+                          if x > 0
+                            if y > 0
+                              show("both positive")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -112,8 +112,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            unless x.is_valid()
-                                return
+                          unless x.is_valid()
+                            return
                         """;
 
         AssertParsesSuflae(source: source);
@@ -124,10 +124,10 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            unless condition
-                                show("condition is false")
-                            else
-                                show("condition is true")
+                          unless condition
+                            show("condition is false")
+                          else
+                            show("condition is true")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -138,9 +138,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine process!(data: Text)
-                            unless data.length() > 0
-                                absent
-                            show(data)
+                          unless data.length() > 0
+                            absent
+                          show(data)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -155,7 +155,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine min(a: Integer, b: Integer) -> Integer
-                            return if a < b then a else b
+                          return if a < b then a else b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -166,7 +166,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            let sign = if x >= 0 then 1 else -1
+                          var sign = if x >= 0 then 1 else -1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -181,10 +181,10 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine run()
-                            loop
-                                process()
-                                if should_stop()
-                                    break
+                          loop
+                            process()
+                            if should_stop()
+                              break
                         """;
 
         AssertParsesSuflae(source: source);
@@ -195,8 +195,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            loop
-                                break
+                          loop
+                            break
                         """;
 
         AssertParsesSuflae(source: source);
@@ -207,10 +207,10 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            loop
-                                if skip_this()
-                                    continue
-                                process()
+                          loop
+                            if skip_this()
+                              continue
+                            process()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -225,8 +225,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            while condition
-                                process()
+                          while condition
+                            process()
                         """;
 
         AssertParsesSuflae(source: source);
@@ -237,10 +237,10 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine count_up()
-                            var count = 0
-                            while count < 10
-                                show(count)
-                                count += 1
+                          var count = 0
+                          while count < 10
+                            show(count)
+                            count += 1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -251,12 +251,12 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine search()
-                            while has_more()
-                                if found_target()
-                                    break
-                                advance()
-                            else
-                                show("Loop completed without finding it")
+                          while has_more()
+                            if found_target()
+                              break
+                            advance()
+                          else
+                            show("Loop completed without finding it")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -271,8 +271,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            for i in 0 to 10
-                                show(i)
+                          for i in 0 til 10
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -283,8 +283,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            for i in 0 to 100 by 5
-                                show(i)
+                          for i in 0 til 100 by 5
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -295,8 +295,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            for i in 10 downto 0
-                                show(i)
+                          for i in 10 til 0
+                            show(i)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -307,9 +307,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            let items = [1, 2, 3, 4, 5]
-                            for item in items
-                                show(item)
+                          var items = [1, 2, 3, 4, 5]
+                          for item in items
+                            show(item)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -320,9 +320,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            let items = ["a", "b", "c"]
-                            for (index, item) in items.enumerate()
-                                show(f"{index}: {item}")
+                          var items = ["a", "b", "c"]
+                          for (index, item) in items.enumerate()
+                            show(f"{index}: {item}")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -332,13 +332,13 @@ public class SuflaeControlFlowTests
     public void ParseSuflae_ForWithElse()
     {
         string source = """
-                        routine find_item(items: List<Integer>, target: Integer)
-                            for item in items
-                                if item == target
-                                    show("Found!")
-                                    break
-                            else
-                                show("No match found")
+                        routine find_item(items: List[Integer], target: Integer)
+                          for item in items
+                            if item == target
+                              show("Found!")
+                              break
+                          else
+                            show("No match found")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -349,9 +349,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine matrix()
-                            for i in 0 to 10
-                                for j in 0 to 10
-                                    show(f"{i},{j}")
+                          for i in 0 til 10
+                            for j in 0 til 10
+                              show(f"{i},{j}")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -366,9 +366,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine validate(value: Integer) -> Integer
-                            if value < 0
-                                throw ValueError("Value must be non-negative")
-                            return value
+                          if value < 0
+                            throw ValueError("Value must be non-negative")
+                          return value
                         """;
 
         AssertParsesSuflae(source: source);
@@ -383,9 +383,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            using open_file("file.txt") as file
-                                let content = file.read_all()
-                                process(content)
+                          using open_file("file.txt") as file
+                            var content = file.read_all()
+                            process(content)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -396,9 +396,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            using open_file("input.txt") as input, open_file("output.txt") as output
-                                let data = input.read_all()
-                                output.write(transform(data))
+                          using open_file("input.txt") as input, open_file("output.txt") as output
+                            var data = input.read_all()
+                            output.write(transform(data))
                         """;
 
         AssertParsesSuflae(source: source);
@@ -409,9 +409,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine test()
-                            using acquire_lock() as lock
-                                using open_connection() as conn
-                                    process(conn)
+                          using acquire_lock() as lock
+                            using open_connection() as conn
+                              process(conn)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -426,7 +426,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine add(a: Integer, b: Integer) -> Integer
-                            return a + b
+                          return a + b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -437,8 +437,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine log(msg: Text)
-                            show(msg)
-                            return
+                          show(msg)
+                          return
                         """;
 
         AssertParsesSuflae(source: source);
@@ -449,7 +449,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine empty()
-                            pass
+                          pass
                         """;
 
         AssertParsesSuflae(source: source);
@@ -464,8 +464,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         suspended routine fetch_data(url: Text) -> Text
-                            let response = waitfor http.get(url)
-                            return response.body
+                          var response = waitfor http.get(url)
+                          return response.body
                         """;
 
         AssertParsesSuflae(source: source);
@@ -476,8 +476,8 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         suspended routine start()
-                            let data = waitfor fetch_data("https://api.example.com")
-                            show(data)
+                          var data = waitfor fetch_data("https://api.example.com")
+                          show(data)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -492,9 +492,9 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine divide(a: Integer, b: Integer) -> Integer
-                            if b == 0
-                                stop!("Division by zero")
-                            return a // b
+                          if b == 0
+                            stop!("Division by zero")
+                          return a // b
                         """;
 
         AssertParsesSuflae(source: source);
@@ -504,9 +504,9 @@ public class SuflaeControlFlowTests
     public void ParseSuflae_VerifyWithCondition()
     {
         string source = """
-                        routine process(data: List<Integer>)
-                            verify!(data.length() > 0, "Data cannot be empty")
-                            do_process(data)
+                        routine process(data: List[Integer])
+                          verify!(data.length() > 0, "Data cannot be empty")
+                          do_process(data)
                         """;
 
         AssertParsesSuflae(source: source);
@@ -517,7 +517,7 @@ public class SuflaeControlFlowTests
     {
         string source = """
                         routine unreachable()
-                            breach!("Should never reach here")
+                          breach!("Should never reach here")
                         """;
 
         AssertParsesSuflae(source: source);
@@ -531,15 +531,15 @@ public class SuflaeControlFlowTests
     public void ParseSuflae_ComplexNestedControlFlow()
     {
         string source = """
-                        routine process_matrix(matrix: List<List<Integer>>)
-                            for row in matrix
-                                for cell in row
-                                    if cell < 0
-                                        continue
-                                    if cell > 100
-                                        break
-                                    while cell > 0
-                                        cell -= 1
+                        routine process_matrix(matrix: List[List[Integer]])
+                          for row in matrix
+                            for cell in row
+                              if cell < 0
+                                continue
+                              if cell > 100
+                                break
+                              while cell > 0
+                                cell -= 1
                         """;
 
         AssertParsesSuflae(source: source);
@@ -549,11 +549,11 @@ public class SuflaeControlFlowTests
     public void ParseSuflae_ControlFlowWithErrorHandling()
     {
         string source = """
-                        routine search!(items: List<Integer>, target: Integer) -> Integer
-                            for (index, item) in items.enumerate()
-                                if item == target
-                                    return index
-                            absent
+                        routine search!(items: List[Integer], target: Integer) -> Integer
+                          for (index, item) in items.enumerate()
+                            if item == target
+                              return index
+                          absent
                         """;
 
         AssertParsesSuflae(source: source);

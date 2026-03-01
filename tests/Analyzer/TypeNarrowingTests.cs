@@ -1,5 +1,5 @@
-using Compilers.Analysis.Results;
-using RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -20,14 +20,12 @@ public class TypeNarrowingTests
     {
         // unless desugars to: if Not(value is None) { body }
         // The body runs when value is NOT None, so value
-        // is narrowed from Maybe<S32> to S32 inside the block
+        // is narrowed from Maybe[S32] to S32 inside the block
         string source = """
-                        routine process(value: S32?) -> S32 {
-                            unless value is None {
-                                return value
-                            }
-                            return 0
-                        }
+                        routine process(value: S32?) -> S32
+                          unless value is None
+                            return value
+                          return 0
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -38,14 +36,12 @@ public class TypeNarrowingTests
     public void Analyze_IfIsNoneReturn_NarrowsMaybeToValue()
     {
         // if value is None { return 0 }
-        // After the if (guard clause), value narrows to S32
+        // After the if (guard clause), value narrows til S32
         string source = """
-                        routine process(value: S32?) -> S32 {
-                            if value is None {
-                                return 0
-                            }
-                            return value
-                        }
+                        routine process(value: S32?) -> S32
+                          if value is None
+                            return 0
+                          return value
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -58,12 +54,10 @@ public class TypeNarrowingTests
         // if value isnot None { return value }
         // The then branch narrows value to S32
         string source = """
-                        routine process(value: S32?) -> S32 {
-                            if value isnot None {
-                                return value
-                            }
-                            return 0
-                        }
+                        routine process(value: S32?) -> S32
+                          if value isnot None
+                            return value
+                          return 0
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -74,15 +68,13 @@ public class TypeNarrowingTests
     public void Analyze_IfIsNoneWithElse_NarrowsInElseBranch()
     {
         // if value is None { ... } else { return value }
-        // The else branch narrows value to S32
+        // The else branch narrows value til S32
         string source = """
-                        routine process(value: S32?) -> S32 {
-                            if value is None {
-                                return 0
-                            } else {
-                                return value
-                            }
-                        }
+                        routine process(value: S32?) -> S32
+                          if value is None
+                            return 0
+                          else
+                            return value
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -99,12 +91,11 @@ public class TypeNarrowingTests
         // when value { is None => ... | else v => ... }
         // After handling None, else v should be S32
         string source = """
-                        routine process(value: S32?) -> S32 {
-                            when value {
-                                is None => return 0
-                                else v => return v
-                            }
-                        }
+                        routine process(value: S32?) -> S32
+                          when value
+                            is None => return 0
+                            else v => return v
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -120,12 +111,10 @@ public class TypeNarrowingTests
     {
         // Ensure narrowing logic doesn't break for non-error-handling types
         string source = """
-                        routine process(value: S32) -> S32 {
-                            if value isnot None {
-                                return value
-                            }
-                            return 0
-                        }
+                        routine process(value: S32) -> S32
+                          if value isnot None
+                            return value
+                          return 0
                         """;
 
         // Should not crash — the is/isnot check may produce warnings

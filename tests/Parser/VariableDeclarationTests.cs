@@ -2,12 +2,12 @@
 
 namespace RazorForge.Tests.Parser;
 
-using Compilers.Shared.AST;
+using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing variable declarations in RazorForge:
-/// let/var, type annotations, initializers, mutability.
+/// var, type annotations, initializers, mutability.
 /// </summary>
 public class VariableDeclarationTests
 {
@@ -17,9 +17,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithTypeAndInitializer()
     {
         string source = """
-                        routine test() {
-                            let x: S32 = 42
-                        }
+                        routine test()
+                          var x: S32 = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -29,9 +29,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithInferredType()
     {
         string source = """
-                        routine test() {
-                            let x = 42
-                        }
+                        routine test()
+                          var x = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -41,9 +41,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithComplexType()
     {
         string source = """
-                        routine test() {
-                            let items: List<S32> = [1, 2, 3]
-                        }
+                        routine test()
+                          var items: List[S32] = [1, 2, 3]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -53,9 +53,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithGenericType()
     {
         string source = """
-                        routine test() {
-                            let map: Dict<Text, S32> = Dict()
-                        }
+                        routine test()
+                          var map: Dict[Text, S32] = Dict()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -65,9 +65,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithMaybeType()
     {
         string source = """
-                        routine test() {
-                            let value: S32? = None
-                        }
+                        routine test()
+                          var value: S32? = None
+                          return
                         """;
 
         AssertParses(source: source);
@@ -77,9 +77,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithFunctionCall()
     {
         string source = """
-                        routine test() {
-                            let result = compute(10, 20)
-                        }
+                        routine test()
+                          var result = compute(10, 20)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -89,9 +89,9 @@ public class VariableDeclarationTests
     public void Parse_LetWithExpression()
     {
         string source = """
-                        routine test() {
-                            let sum = a + b * c
-                        }
+                        routine test()
+                          var sum = a + b * c
+                          return
                         """;
 
         AssertParses(source: source);
@@ -105,9 +105,9 @@ public class VariableDeclarationTests
     public void Parse_VarWithTypeAndInitializer()
     {
         string source = """
-                        routine test() {
-                            var x: S32 = 42
-                        }
+                        routine test()
+                          var x: S32 = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -117,9 +117,9 @@ public class VariableDeclarationTests
     public void Parse_VarWithInferredType()
     {
         string source = """
-                        routine test() {
-                            var x = 42
-                        }
+                        routine test()
+                          var x = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -129,11 +129,11 @@ public class VariableDeclarationTests
     public void Parse_VarWithMutation()
     {
         string source = """
-                        routine test() {
-                            var count = 0
-                            count = 1
-                            count += 1
-                        }
+                        routine test()
+                          var count = 0
+                          count = 1
+                          count += 1
+                          return
                         """;
 
         AssertParses(source: source);
@@ -143,10 +143,10 @@ public class VariableDeclarationTests
     public void Parse_VarWithoutInitializer()
     {
         string source = """
-                        routine test() {
-                            var x: S32
-                            x = 42
-                        }
+                        routine test()
+                          var x: S32
+                          x = 42
+                          return
                         """;
 
         AssertParses(source: source);
@@ -160,11 +160,11 @@ public class VariableDeclarationTests
     public void Parse_MultipleLetDeclarations()
     {
         string source = """
-                        routine test() {
-                            let a = 1
-                            let b = 2
-                            let c = 3
-                        }
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          var c = 3
+                          return
                         """;
 
         AssertParses(source: source);
@@ -174,11 +174,11 @@ public class VariableDeclarationTests
     public void Parse_MixedDeclarations()
     {
         string source = """
-                        routine test() {
-                            let constant = 100
-                            var mutable = 0
-                            let another_constant = 200
-                        }
+                        routine test()
+                          var constant = 100
+                          var mutable = 0
+                          var another_constant = 200
+                          return
                         """;
 
         AssertParses(source: source);
@@ -192,9 +192,9 @@ public class VariableDeclarationTests
     public void Parse_LetDestructuringTuple()
     {
         string source = """
-                        routine test() {
-                            let (x, y) = get_point()
-                        }
+                        routine test()
+                          var (x, y) = get_point()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -204,9 +204,9 @@ public class VariableDeclarationTests
     public void Parse_LetDestructuringRecord()
     {
         string source = """
-                        routine test() {
-                            let (name, age) = Person(name: "Alice", age: 30)
-                        }
+                        routine test()
+                          var (name, age) = Person(name: "Alice", age: 30)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -216,9 +216,9 @@ public class VariableDeclarationTests
     public void Parse_LetNestedDestructuring()
     {
         string source = """
-                        routine test() {
-                            let ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
-                        }
+                        routine test()
+                          var ((x, y), radius) = Circle(center: Point(5, 6), radius: 7)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -228,9 +228,9 @@ public class VariableDeclarationTests
     public void Parse_LetDestructuringWithAlias()
     {
         string source = """
-                        routine test() {
-                            let (center: c, radius: r) = circle
-                        }
+                        routine test()
+                          var (center: c, radius: r) = circle
+                          return
                         """;
 
         AssertParses(source: source);
@@ -240,9 +240,9 @@ public class VariableDeclarationTests
     public void Parse_LetDestructuringWithWildcard()
     {
         string source = """
-                        routine test() {
-                            let (_, y) = get_point()
-                        }
+                        routine test()
+                          var (_, y) = get_point()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -256,19 +256,19 @@ public class VariableDeclarationTests
     public void Parse_PrimitiveTypes()
     {
         string source = """
-                        routine test() {
-                            let a: S8 = 1
-                            let b: S16 = 2
-                            let c: S32 = 3
-                            let d: S64 = 4
-                            let e: U8 = 5
-                            let f: U16 = 6
-                            let g: U32 = 7
-                            let h: U64 = 8
-                            let i: F32 = 9.0_f32
-                            let j: F64 = 10.0_f64
-                            let k: bool = true
-                        }
+                        routine test()
+                          var a: S8 = 1
+                          var b: S16 = 2
+                          var c: S32 = 3
+                          var d: S64 = 4
+                          var e: U8 = 5
+                          var f: U16 = 6
+                          var g: U32 = 7
+                          var h: U64 = 8
+                          var i: F32 = 9.0_f32
+                          var j: F64 = 10.0_f64
+                          var k: bool = true
+                          return
                         """;
 
         AssertParses(source: source);
@@ -278,9 +278,9 @@ public class VariableDeclarationTests
     public void Parse_TextType()
     {
         string source = """
-                        routine test() {
-                            let name: Text = "Alice"
-                        }
+                        routine test()
+                          var name: Text = "Alice"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -290,9 +290,9 @@ public class VariableDeclarationTests
     public void Parse_ConstGenericType()
     {
         string source = """
-                        routine test() {
-                            let data: FixedBytes<4> = bytes
-                        }
+                        routine test()
+                          var data: FixedBytes[4] = bytes
+                          return
                         """;
 
         AssertParses(source: source);
@@ -303,9 +303,9 @@ public class VariableDeclarationTests
     public void Parse_NestedGenericType()
     {
         string source = """
-                        routine test() {
-                            let nested: Dict<Text, List<S32>> = Dict()
-                        }
+                        routine test()
+                          var nested: Dict[Text, List[S32]] = Dict()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -319,12 +319,12 @@ public class VariableDeclarationTests
     public void Parse_IntegerLiterals()
     {
         string source = """
-                        routine test() {
-                            let dec = 42
-                            let hex = 0xFF
-                            let bin = 0b1010
-                            let oct = 0o77
-                        }
+                        routine test()
+                          var dec = 42
+                          var hex = 0xFF
+                          var bin = 0b1010
+                          var oct = 0o77
+                          return
                         """;
 
         AssertParses(source: source);
@@ -334,11 +334,11 @@ public class VariableDeclarationTests
     public void Parse_FloatLiterals()
     {
         string source = """
-                        routine test() {
-                            let a = 3.14
-                            let b = 1.0e10
-                            let c = 2.5e-3
-                        }
+                        routine test()
+                          var a = 3.14
+                          var b = 1.0e10
+                          var c = 2.5e-3
+                          return
                         """;
 
         AssertParses(source: source);
@@ -348,12 +348,12 @@ public class VariableDeclarationTests
     public void Parse_TypedNumericLiterals()
     {
         string source = """
-                        routine test() {
-                            let a = 42_s32
-                            let b = 100_u64
-                            let c = 3.14_f32
-                            let d = 2.718_f64
-                        }
+                        routine test()
+                          var a = 42_s32
+                          var b = 100_u64
+                          var c = 3.14_f32
+                          var d = 2.718_f64
+                          return
                         """;
 
         AssertParses(source: source);
@@ -363,11 +363,11 @@ public class VariableDeclarationTests
     public void Parse_StringLiterals()
     {
         string source = """
-                        routine test() {
-                            let simple = "hello"
-                            let escaped = "line1\nline2"
-                            let formatted = f"value = {x}"
-                        }
+                        routine test()
+                          var simple = "hello"
+                          var escaped = "line1\nline2"
+                          var formatted = f"value = {x}"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -377,10 +377,10 @@ public class VariableDeclarationTests
     public void Parse_BooleanLiterals()
     {
         string source = """
-                        routine test() {
-                            let t = true
-                            let f = false
-                        }
+                        routine test()
+                          var t = true
+                          var f = false
+                          return
                         """;
 
         AssertParses(source: source);
@@ -390,9 +390,9 @@ public class VariableDeclarationTests
     public void Parse_NoneLiteral()
     {
         string source = """
-                        routine test() {
-                            let x: S32? = none
-                        }
+                        routine test()
+                          var x: S32? = none
+                          return
                         """;
 
         AssertParses(source: source);
@@ -402,9 +402,9 @@ public class VariableDeclarationTests
     public void Parse_ListLiteral()
     {
         string source = """
-                        routine test() {
-                            let items = [1, 2, 3, 4, 5]
-                        }
+                        routine test()
+                          var items = [1, 2, 3, 4, 5]
+                          return
                         """;
 
         AssertParses(source: source);
@@ -414,9 +414,9 @@ public class VariableDeclarationTests
     public void Parse_EmptyListLiteral()
     {
         string source = """
-                        routine test() {
-                            let empty: List<S32> = []
-                        }
+                        routine test()
+                          var empty: List[S32] = []
+                          return
                         """;
 
         AssertParses(source: source);
@@ -426,10 +426,10 @@ public class VariableDeclarationTests
     public void Parse_LongTextEscapeLiteral()
     {
         string source = """
-                        routine test() {
-                           let a = "asdfasdfgasdfasdfasdfasdfsjhdygfckiujsdhfokiulsdjfjhoiwsedhfweolfwefgolijwserdgvoiwe\
-                           asdfljhwe4foitrujwergopijwergfolijuwerifopwejgfoiweujiogfwehrjfgoiwehjfoij"
-                        }
+                        routine test()
+                          var a = "asdfasdfgasdfasdfasdfasdfsjhdygfckiujsdhfokiulsdjfjhoiwsedhfweolfwefgolijwserdgvoiwe\
+                          asdfljhwe4foitrujwergopijwergfolijuwerifopwejgfoiweujiogfwehrjfgoiwehjfoij"
+                          return
                         """;
 
         AssertParses(source: source);
@@ -443,10 +443,9 @@ public class VariableDeclarationTests
     public void Parse_RecordFields()
     {
         string source = """
-                        record Point {
-                            x: F32
-                            y: F32
-                        }
+                        record Point
+                          x: F32
+                          y: F32
                         """;
 
         Program program = AssertParses(source: source);
@@ -457,12 +456,11 @@ public class VariableDeclarationTests
     [Fact]
     public void Parse_EntityVarFields_Rejected()
     {
-        // var/let keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var/let keywords
+        // var keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var keywords
         string source = """
-                        entity Counter {
-                            var count: S32
-                        }
+                        entity Counter
+                          var count: S32
                         """;
 
         AssertParseError(source: source);
@@ -471,13 +469,12 @@ public class VariableDeclarationTests
     [Fact]
     public void Parse_EntityLetFields_Rejected()
     {
-        // var/let keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var/let keywords
+        // var keywords are no longer allowed in entity bodies
+        // Fields use 'name: Type' syntax without var keywords
         string source = """
-                        entity User {
-                            let id: U64
-                            var name: Text
-                        }
+                        entity User
+                          var id: U64
+                          var name: Text
                         """;
 
         AssertParseError(source: source);
@@ -487,9 +484,8 @@ public class VariableDeclarationTests
     public void Parse_ResidentFields()
     {
         string source = """
-                        resident GlobalState {
-                            counter: S32
-                        }
+                        resident GlobalState
+                          counter: S32
                         """;
 
         AssertParses(source: source);
@@ -503,9 +499,9 @@ public class VariableDeclarationTests
     public void Parse_ConstructorCall()
     {
         string source = """
-                        routine test() {
-                            let point = Point(x: 10.0, y: 20.0)
-                        }
+                        routine test()
+                          var point = Point(x: 10.0, y: 20.0)
+                          return
                         """;
 
         AssertParses(source: source);
@@ -515,9 +511,9 @@ public class VariableDeclarationTests
     public void Parse_MethodCallChain()
     {
         string source = """
-                        routine test() {
-                            let result = data.where().select().to_list()
-                        }
+                        routine test()
+                          var result = data.where().select().to_list()
+                          return
                         """;
 
         AssertParses(source: source);
@@ -527,9 +523,9 @@ public class VariableDeclarationTests
     public void Parse_ConditionalInitializer()
     {
         string source = """
-                        routine test() {
-                            let value = if condition then 1 else 0
-                        }
+                        routine test()
+                          var value = if condition then 1 else 0
+                          return
                         """;
 
         AssertParses(source: source);
@@ -539,12 +535,11 @@ public class VariableDeclarationTests
     public void Parse_WhenExpressionInitializer()
     {
         string source = """
-                        routine test() {
-                            let description = when status {
-                                is ACTIVE => "running"
-                                else => "stopped"
-                            }
-                        }
+                        routine test()
+                          var description = when status
+                            is ACTIVE => "running"
+                            else => "stopped"
+                          return
                         """;
 
         AssertParses(source: source);

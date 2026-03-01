@@ -1,5 +1,5 @@
-using Compilers.Analysis.Results;
-using RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -19,12 +19,11 @@ public class ChoiceValidationTests
     public void Analyze_SimpleChoice_NoErrors()
     {
         string source = """
-                        choice Direction {
-                            NORTH
-                            SOUTH
-                            EAST
-                            WEST
-                        }
+                        choice Direction
+                          NORTH
+                          SOUTH
+                          EAST
+                          WEST
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -38,11 +37,10 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceWithExplicitValues_NoErrors()
     {
         string source = """
-                        choice HttpStatus {
-                            OK: 200
-                            NOT_FOUND: 404
-                            ERROR: 500
-                        }
+                        choice HttpStatus
+                          OK: 200
+                          NOT_FOUND: 404
+                          ERROR: 500
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -56,11 +54,10 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceWithNegativeValues_NoErrors()
     {
         string source = """
-                        choice ComparisonSign {
-                            ME_SMALL: -1
-                            SAME: 0
-                            ME_LARGE: 1
-                        }
+                        choice ComparisonSign
+                          ME_SMALL: -1
+                          SAME: 0
+                          ME_LARGE: 1
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -77,11 +74,10 @@ public class ChoiceValidationTests
     {
         // Values exceeding S32 range but within S64
         string source = """
-                        choice BigValues {
-                            SMALL: 0
-                            LARGE: 3000000000
-                            HUGE: 9000000000000000000
-                        }
+                        choice BigValues
+                          SMALL: 0
+                          LARGE: 3000000000
+                          HUGE: 9000000000000000000
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -99,11 +95,10 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceMixedValues_ReportsError()
     {
         string source = """
-                        choice Bad {
-                            FIRST: 1
-                            SECOND
-                            THIRD: 3
-                        }
+                        choice Bad
+                          FIRST: 1
+                          SECOND
+                          THIRD: 3
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -119,11 +114,10 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceDuplicateExplicitValues_ReportsError()
     {
         string source = """
-                        choice Duplicated {
-                            FIRST: 1
-                            SECOND: 2
-                            THIRD: 1
-                        }
+                        choice Duplicated
+                          FIRST: 1
+                          SECOND: 2
+                          THIRD: 1
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -139,15 +133,14 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceAddition_ReportsError()
     {
         string source = """
-                        choice Direction {
-                            NORTH
-                            SOUTH
-                        }
+                        choice Direction
+                          NORTH
+                          SOUTH
 
-                        routine test() {
-                            var d = NORTH
-                            var x = d + SOUTH
-                        }
+                        routine test()
+                          var d = NORTH
+                          var x = d + SOUTH
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -159,15 +152,14 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceCompoundAssignment_ReportsError()
     {
         string source = """
-                        choice Direction {
-                            NORTH
-                            SOUTH
-                        }
+                        choice Direction
+                          NORTH
+                          SOUTH
 
-                        routine test() {
-                            var d = NORTH
-                            d += SOUTH
-                        }
+                        routine test()
+                          var d = NORTH
+                          d += SOUTH
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -179,15 +171,14 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceBitwise_ReportsError()
     {
         string source = """
-                        choice Flags {
-                            A
-                            B
-                        }
+                        choice Flags
+                          A
+                          B
 
-                        routine test() {
-                            var f = A
-                            var x = f & B
-                        }
+                        routine test()
+                          var f = A
+                          var x = f & B
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -199,15 +190,14 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceComparison_ReportsError()
     {
         string source = """
-                        choice Priority {
-                            LOW
-                            HIGH
-                        }
+                        choice Priority
+                          LOW
+                          HIGH
 
-                        routine test() {
-                            var p = LOW
-                            var x = p < HIGH
-                        }
+                        routine test()
+                          var p = LOW
+                          var x = p < HIGH
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -219,15 +209,14 @@ public class ChoiceValidationTests
     public void Analyze_ChoiceEquality_ReportsError()
     {
         string source = """
-                        choice Direction {
-                            NORTH
-                            SOUTH
-                        }
+                        choice Direction
+                          NORTH
+                          SOUTH
 
-                        routine test() {
-                            var d = NORTH
-                            var same = d == SOUTH
-                        }
+                        routine test()
+                          var d = NORTH
+                          var same = d == SOUTH
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);

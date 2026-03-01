@@ -3,17 +3,13 @@ using Xunit;
 
 namespace RazorForge.Tests;
 
-using Compilers.Analysis;
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Results;
-using Compilers.Analysis.Symbols;
-using Compilers.RazorForge.Lexer;
-using Compilers.RazorForge.Parser;
-using Compilers.Suflae.Lexer;
-using Compilers.Suflae.Parser;
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using TypeInfo = Compilers.Analysis.Types.TypeInfo;
+using SemanticAnalysis;
+using SemanticAnalysis.Enums;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Symbols;
+using Compiler.Lexer;
+using SyntaxTree;
+using TypeInfo = SemanticAnalysis.Types.TypeInfo;
 
 /// <summary>
 /// Helper methods for parsing and analyzing test code.
@@ -27,7 +23,7 @@ public static class TestHelpers
     /// </summary>
     public static List<Token> Tokenize(string source, [CallerMemberName] string? fileName = null)
     {
-        var tokenizer = new RazorForgeTokenizer(source: source, fileName: fileName ?? "test");
+        var tokenizer = new Tokenizer(source: source, fileName: fileName ?? "test", language: Language.RazorForge);
         return tokenizer.Tokenize();
     }
 
@@ -37,17 +33,17 @@ public static class TestHelpers
     public static Program Parse(string source, [CallerMemberName] string? fileName = null)
     {
         List<Token> tokens = Tokenize(source: source, fileName: fileName);
-        var parser = new RazorForgeParser(tokens: tokens, fileName: fileName);
+        var parser = new Compiler.Parser.Parser(tokens: tokens, language: Language.RazorForge, fileName: fileName);
         return parser.Parse();
     }
 
     /// <summary>
     /// Parses RazorForge source and returns the parser for error checking.
     /// </summary>
-    public static (Program Program, RazorForgeParser Parser) ParseWithErrors(string source, [CallerMemberName] string? fileName = null)
+    public static (Program Program, Compiler.Parser.Parser Parser) ParseWithErrors(string source, [CallerMemberName] string? fileName = null)
     {
         List<Token> tokens = Tokenize(source: source, fileName: fileName);
-        var parser = new RazorForgeParser(tokens: tokens, fileName: fileName);
+        var parser = new Compiler.Parser.Parser(tokens: tokens, language: Language.RazorForge, fileName: fileName);
         Program program = parser.Parse();
         return (program, parser);
     }
@@ -57,7 +53,7 @@ public static class TestHelpers
     /// </summary>
     public static void AssertParseError(string source, [CallerMemberName] string? fileName = null)
     {
-        (Program _, RazorForgeParser parser) = ParseWithErrors(source: source, fileName: fileName);
+        (Program _, Compiler.Parser.Parser parser) = ParseWithErrors(source: source, fileName: fileName);
         Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors but none were found");
     }
 
@@ -76,7 +72,7 @@ public static class TestHelpers
     /// </summary>
     public static Program AssertParses(string source, [CallerMemberName] string? fileName = null)
     {
-        (Program program, RazorForgeParser parser) = ParseWithErrors(source: source, fileName: fileName);
+        (Program program, Compiler.Parser.Parser parser) = ParseWithErrors(source: source, fileName: fileName);
 
         if (parser.HasErrors)
         {
@@ -132,7 +128,7 @@ public static class TestHelpers
     /// </summary>
     public static List<Token> TokenizeSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        var tokenizer = new SuflaeTokenizer(source: source, fileName: fileName ?? "test");
+        var tokenizer = new Tokenizer(source: source, fileName: fileName ?? "test", language: Language.Suflae);
         return tokenizer.Tokenize();
     }
 
@@ -142,17 +138,17 @@ public static class TestHelpers
     public static Program ParseSuflae(string source, [CallerMemberName] string? fileName = null)
     {
         List<Token> tokens = TokenizeSuflae(source: source, fileName: fileName);
-        var parser = new SuflaeParser(tokens: tokens, fileName: fileName);
+        var parser = new Compiler.Parser.Parser(tokens: tokens, language: Language.Suflae, fileName: fileName);
         return parser.Parse();
     }
 
     /// <summary>
     /// Parses Suflae source and returns the parser for error checking.
     /// </summary>
-    public static (Program Program, SuflaeParser Parser) ParseSuflaeWithErrors(string source, [CallerMemberName] string? fileName = null)
+    public static (Program Program, Compiler.Parser.Parser Parser) ParseSuflaeWithErrors(string source, [CallerMemberName] string? fileName = null)
     {
         List<Token> tokens = TokenizeSuflae(source: source, fileName: fileName);
-        var parser = new SuflaeParser(tokens: tokens, fileName: fileName);
+        var parser = new Compiler.Parser.Parser(tokens: tokens, language: Language.Suflae, fileName: fileName);
         Program program = parser.Parse();
         return (program, parser);
     }
@@ -172,7 +168,7 @@ public static class TestHelpers
     /// </summary>
     public static Program AssertParsesSuflae(string source, [CallerMemberName] string? fileName = null)
     {
-        (Program program, SuflaeParser parser) = ParseSuflaeWithErrors(source: source, fileName: fileName);
+        (Program program, Compiler.Parser.Parser parser) = ParseSuflaeWithErrors(source: source, fileName: fileName);
 
         if (parser.HasErrors)
         {

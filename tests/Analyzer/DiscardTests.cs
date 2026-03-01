@@ -1,4 +1,4 @@
-using Compilers.Analysis.Results;
+using SemanticAnalysis.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -20,13 +20,12 @@ public class DiscardTests
     public void Analyze_DiscardCall_NoWarning()
     {
         string source = """
-                        routine get_value() -> S32 {
-                            return 42
-                        }
+                        routine get_value() -> S32
+                          return 42
 
-                        routine test() {
-                            discard get_value()
-                        }
+                        routine test()
+                          discard get_value()
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -38,13 +37,12 @@ public class DiscardTests
     public void Analyze_CallWithoutDiscard_NonBlankReturn_Warning()
     {
         string source = """
-                        routine get_value() -> S32 {
-                            return 42
-                        }
+                        routine get_value() -> S32
+                          return 42
 
-                        routine test() {
-                            get_value()
-                        }
+                        routine test()
+                          get_value()
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -62,13 +60,13 @@ public class DiscardTests
     public void Analyze_CallWithoutDiscard_BlankReturn_NoWarning()
     {
         string source = """
-                        routine do_something() {
-                            pass
-                        }
+                        routine do_something()
+                          pass
+                          return
 
-                        routine test() {
-                            do_something()
-                        }
+                        routine test()
+                          do_something()
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -80,13 +78,12 @@ public class DiscardTests
     public void Analyze_AssignedCall_NoWarning()
     {
         string source = """
-                        routine get_value() -> S32 {
-                            return 42
-                        }
+                        routine get_value() -> S32
+                          return 42
 
-                        routine test() {
-                            let x = get_value()
-                        }
+                        routine test()
+                          var x = get_value()
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -105,10 +102,10 @@ public class DiscardTests
     public void Parse_DiscardVariable_ReportsError()
     {
         string source = """
-                        routine test() {
-                            let x = 42
-                            discard x
-                        }
+                        routine test()
+                          var x = 42
+                          discard x
+                          return
                         """;
 
         // discard must be followed by a call expression - parser uses error recovery
@@ -119,9 +116,9 @@ public class DiscardTests
     public void Parse_DiscardLiteral_ReportsError()
     {
         string source = """
-                        routine test() {
-                            discard 42
-                        }
+                        routine test()
+                          discard 42
+                          return
                         """;
 
         // discard must be followed by a call expression
@@ -132,9 +129,9 @@ public class DiscardTests
     public void Parse_DiscardStringLiteral_ReportsError()
     {
         string source = """
-                        routine test() {
-                            discard "hello"
-                        }
+                        routine test()
+                          discard "hello"
+                          return
                         """;
 
         // discard must be followed by a call expression
@@ -150,10 +147,10 @@ public class DiscardTests
     {
         string source = """
                         routine get_value() -> Integer
-                            return 42
+                          return 42
 
                         routine test()
-                            discard get_value()
+                          discard get_value()
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -166,10 +163,10 @@ public class DiscardTests
     {
         string source = """
                         routine get_value() -> Integer
-                            return 42
+                          return 42
 
                         routine test()
-                            get_value()
+                          get_value()
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -188,10 +185,10 @@ public class DiscardTests
     {
         string source = """
                         routine do_something()
-                            pass
+                          pass
 
                         routine test()
-                            do_something()
+                          do_something()
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -204,10 +201,10 @@ public class DiscardTests
     {
         string source = """
                         routine get_value() -> Integer
-                            return 42
+                          return 42
 
                         routine test()
-                            let x = get_value()
+                          var x = get_value()
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
@@ -227,8 +224,8 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                            let x = 42
-                            discard x
+                          var x = 42
+                          discard x
                         """;
 
         // discard must be followed by a call expression - uses error recovery
@@ -241,7 +238,7 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                            discard 42
+                          discard 42
                         """;
 
         // discard must be followed by a call expression
@@ -254,7 +251,7 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                            discard "hello"
+                          discard "hello"
                         """;
 
         // discard must be followed by a call expression

@@ -1,5 +1,5 @@
-using Compilers.Analysis.Results;
-using RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -9,7 +9,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for prohibited type constructions.
 /// Blank cannot be used as a generic type argument anywhere.
-/// Data? / Maybe&lt;Data&gt; is not allowed (Data already supports None).
+/// Data? / Maybe[Data] is not allowed (Data already supports None).
 /// </summary>
 public class TypeProhibitionTests
 {
@@ -20,9 +20,9 @@ public class TypeProhibitionTests
     {
         // Blank? desugars to Maybe<Blank>, which is prohibited
         string source = """
-                        routine foo(x: Blank?) {
-                            pass
-                        }
+                        routine foo(x: Blank?)
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -34,9 +34,9 @@ public class TypeProhibitionTests
     public void Analyze_ExplicitMaybeBlank_ReportsError()
     {
         string source = """
-                        routine bar() -> Maybe<Blank> {
-                            absent
-                        }
+                        routine bar() -> Maybe[Blank]
+                          absent
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -52,9 +52,9 @@ public class TypeProhibitionTests
     public void Analyze_NormalNullable_NoErrors()
     {
         string source = """
-                        routine foo(x: S32?) {
-                            pass
-                        }
+                        routine foo(x: S32?)
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -67,9 +67,9 @@ public class TypeProhibitionTests
     {
         // Blank as a direct type (not wrapped in a generic) is fine
         string source = """
-                        routine foo() -> Blank {
-                            pass
-                        }
+                        routine foo() -> Blank
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -82,9 +82,9 @@ public class TypeProhibitionTests
     {
         // Result<Blank> is allowed for failable void routines
         string source = """
-                        routine foo(x: Result<Blank>) {
-                            pass
-                        }
+                        routine foo(x: Result[Blank])
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -97,9 +97,9 @@ public class TypeProhibitionTests
     {
         // Lookup<Blank> is allowed for failable void routines
         string source = """
-                        routine foo(x: Lookup<Blank>) {
-                            pass
-                        }
+                        routine foo(x: Lookup[Blank])
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);

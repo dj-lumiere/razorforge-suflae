@@ -1,5 +1,5 @@
-﻿using Compilers.Analysis.Results;
-using Compilers.Analysis.Symbols;
+﻿using SemanticAnalysis.Results;
+using SemanticAnalysis.Symbols;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -20,24 +20,19 @@ public class ErrorVariantGenerationTests
         // Routine with 'absent' only generates:
         // - try_get() -> T?
         string source = """
-                        routine get!(id: U64) -> User {
-                            unless has_user(id) {
-                                absent
-                            }
-                            return fetch_user(id)
-                        }
+                        routine get!(id: U64) -> User
+                          unless has_user(id)
+                            absent
+                          return fetch_user(id)
 
-                        entity User {
-                            name: Text
-                        }
+                        entity User
+                          name: Text
 
-                        routine has_user(id: U64) -> bool {
-                            return true
-                        }
+                        routine has_user(id: U64) -> bool
+                          return true
 
-                        routine fetch_user(id: U64) -> User {
-                            return User(name: "test")
-                        }
+                        routine fetch_user(id: U64) -> User
+                          return User(name: "test")
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -45,7 +40,7 @@ public class ErrorVariantGenerationTests
         // Should generate try_get variant
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
         Assert.NotNull(@object: tryVariant);
-        // Return type should be Maybe<User> / User?
+        // Return type should be Maybe[User] / User?
     }
 
     #endregion
@@ -56,29 +51,24 @@ public class ErrorVariantGenerationTests
     public void Analyze_FailableWithThrowOnly_GeneratesCheckAndTryVariants()
     {
         // Routine with 'throw' only generates:
-        // - check_validate() -> Result<T>
+        // - check_validate() -> Result[T]
         // - try_validate() -> T?
         string source = """
-                        entity ValidationError follows Crashable {
-                            message: Text
-                        }
+                        entity ValidationError obeys Crashable
+                          message: Text
 
                         @readonly
-                        routine ValidationError.crash_message() -> Text {
-                            return me.message
-                        }
+                        routine ValidationError.crash_message() -> Text
+                          return me.message
 
-                        protocol Crashable {
-                            @readonly
-                            routine Me.crash_message() -> Text
-                        }
+                        protocol Crashable
+                          @readonly
+                          routine Me.crash_message() -> Text
 
-                        routine validate!(value: S32) -> S32 {
-                            if value < 0 {
-                                throw ValidationError(message: "negative")
-                            }
-                            return value
-                        }
+                        routine validate!(value: S32) -> S32
+                          if value < 0
+                            throw ValidationError(message: "negative")
+                          return value
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -100,44 +90,35 @@ public class ErrorVariantGenerationTests
     public void Analyze_FailableWithBothThrowAndAbsent_GeneratesLookupAndTryVariants()
     {
         // Routine with both 'throw' and 'absent' generates:
-        // - lookup_get_user() -> Lookup<T>
+        // - lookup_get_user() -> Lookup[T]
         // - try_get_user() -> T?
         string source = """
-                        entity DatabaseError follows Crashable {
-                            code: S32
-                        }
+                        entity DatabaseError obeys Crashable
+                          code: S32
 
                         @readonly
-                        routine DatabaseError.crash_message() -> Text {
-                            return "db error"
-                        }
+                        routine DatabaseError.crash_message() -> Text
+                          return "db error"
 
-                        protocol Crashable {
-                            @readonly
-                            routine Me.crash_message() -> Text
-                        }
+                        protocol Crashable
+                          @readonly
+                          routine Me.crash_message() -> Text
 
-                        entity User {
-                            name: Text
-                        }
+                        entity User
+                          name: Text
 
-                        routine get_user!(id: U64) -> User {
-                            if id == 0 {
-                                throw DatabaseError(code: 1)
-                            }
-                            unless user_exists(id) {
-                                absent
-                            }
-                            return fetch_user(id)
-                        }
+                        routine get_user!(id: U64) -> User
+                          if id == 0
+                            throw DatabaseError(code: 1)
+                          unless user_exists(id)
+                            absent
+                          return fetch_user(id)
 
-                        routine user_exists(id: U64) -> bool {
-                            return true
-                        }
+                        routine user_exists(id: U64) -> bool
+                          return true
 
-                        routine fetch_user(id: U64) -> User {
-                            return User(name: "test")
-                        }
+                        routine fetch_user(id: U64) -> User
+                          return User(name: "test")
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -159,16 +140,13 @@ public class ErrorVariantGenerationTests
     public void Analyze_FailableMethod_GeneratesVariants()
     {
         string source = """
-                        entity Cache {
-                            data: Dict<Text, S32>
-                        }
+                        entity Cache
+                          data: Dict[Text, S32]
 
-                        routine Cache.get!(key: Text) -> S32 {
-                            unless me.data.has(key) {
-                                absent
-                            }
-                            return me.data.get(key)
-                        }
+                        routine Cache.get!(key: Text) -> S32
+                          unless me.data.has(key)
+                            absent
+                          return me.data.get(key)
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -186,9 +164,8 @@ public class ErrorVariantGenerationTests
     public void Analyze_NonFailableRoutine_NoVariantsGenerated()
     {
         string source = """
-                        routine add(a: S32, b: S32) -> S32 {
-                            return a + b
-                        }
+                        routine add(a: S32, b: S32) -> S32
+                          return a + b
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -204,9 +181,8 @@ public class ErrorVariantGenerationTests
     {
         // Failable routine that never throws or returns absent
         string source = """
-                        routine get_value!() -> S32 {
-                            return 42
-                        }
+                        routine get_value!() -> S32
+                          return 42
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -223,23 +199,20 @@ public class ErrorVariantGenerationTests
     public void Analyze_ThrowInNonFailableRoutine_ReportsError()
     {
         string source = """
-                        entity SomeError follows Crashable {
-                            msg: Text
-                        }
+                        entity SomeError obeys Crashable
+                          msg: Text
 
                         @readonly
-                        routine SomeError.crash_message() -> Text {
-                            return me.msg
-                        }
+                        routine SomeError.crash_message() -> Text
+                          return me.msg
 
-                        protocol Crashable {
-                            @readonly
-                            routine Me.crash_message() -> Text
-                        }
+                        protocol Crashable
+                          @readonly
+                          routine Me.crash_message() -> Text
 
-                        routine will_fail() -> S32 {
-                            throw SomeError(msg: "error")
-                        }
+                        routine will_fail() -> S32
+                          throw SomeError(msg: "error")
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -256,9 +229,9 @@ public class ErrorVariantGenerationTests
     public void Analyze_AbsentInNonFailableRoutine_ReportsError()
     {
         string source = """
-                        routine might_fail() -> S32 {
-                            absent
-                        }
+                        routine might_fail() -> S32
+                          absent
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -275,18 +248,16 @@ public class ErrorVariantGenerationTests
     public void Analyze_ThrowNonCrashable_ReportsError()
     {
         string source = """
-                        protocol Crashable {
-                            @readonly
-                            routine Me.crash_message() -> Text
-                        }
+                        protocol Crashable
+                          @readonly
+                          routine Me.crash_message() -> Text
 
-                        record NotAnError {
-                            value: S32
-                        }
+                        record NotAnError
+                          value: S32
 
-                        routine fail!() -> S32 {
-                            throw NotAnError(value: 42)
-                        }
+                        routine fail!() -> S32
+                          throw NotAnError(value: 42)
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -304,23 +275,20 @@ public class ErrorVariantGenerationTests
     public void Analyze_VariantNames_FollowConvention()
     {
         string source = """
-                        entity SomeError follows Crashable {
-                            msg: Text
-                        }
+                        entity SomeError obeys Crashable
+                          msg: Text
 
                         @readonly
-                        routine SomeError.crash_message() -> Text {
-                            return me.msg
-                        }
+                        routine SomeError.crash_message() -> Text
+                          return me.msg
 
-                        protocol Crashable {
-                            @readonly
-                            routine Me.crash_message() -> Text
-                        }
+                        protocol Crashable
+                          @readonly
+                          routine Me.crash_message() -> Text
 
-                        routine parse_number!(text: Text) -> S32 {
-                            throw SomeError(msg: "parse failed")
-                        }
+                        routine parse_number!(text: Text) -> S32
+                          throw SomeError(msg: "parse failed")
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -340,16 +308,15 @@ public class ErrorVariantGenerationTests
     [Fact]
     public void Analyze_ResultAsParameter_ReportsError()
     {
-        // Result<T> should not be passable as a function argument
+        // Result[T] should not be passable as a function argument
         // It is an internal type for error handling flow, not a first-class type
         string source = """
-                        entity User {
-                            name: Text
-                        }
+                        entity User
+                          name: Text
 
-                        routine handle_result(result: Result<User>) {
-                            pass
-                        }
+                        routine handle_result(result: Result[User])
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -365,16 +332,15 @@ public class ErrorVariantGenerationTests
     [Fact]
     public void Analyze_LookupAsParameter_ReportsError()
     {
-        // Lookup<T> should not be passable as a function argument
+        // Lookup[T] should not be passable as a function argument
         // It is an internal type for error handling flow, not a first-class type
         string source = """
-                        entity User {
-                            name: Text
-                        }
+                        entity User
+                          name: Text
 
-                        routine handle_lookup(result: Lookup<User>) {
-                            pass
-                        }
+                        routine handle_lookup(result: Lookup[User])
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
