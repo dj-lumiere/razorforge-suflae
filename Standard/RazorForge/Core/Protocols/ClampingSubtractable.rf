@@ -1,0 +1,6 @@
+# ClampingSubtractable - Protocol for types that support clamping subtraction (-^)
+module Core
+
+protocol ClampingSubtractable
+  @readonly
+  routine Me.__sub_clamp__(you: Me) -> Me

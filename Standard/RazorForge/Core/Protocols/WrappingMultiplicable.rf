@@ -1,0 +1,6 @@
+# WrappingMultiplicable - Protocol for types that support wrapping multiplication (*%)
+module Core
+
+protocol WrappingMultiplicable
+  @readonly
+  routine Me.__mul_wrap__(you: Me) -> Me

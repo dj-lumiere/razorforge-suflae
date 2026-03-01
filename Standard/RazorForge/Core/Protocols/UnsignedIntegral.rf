@@ -2,6 +2,5 @@
 # Same as FixedIntegral but without Negatable
 module Core
 
-protocol UnsignedIntegral follows FixedIntegral {
-    pass
-}
+protocol UnsignedIntegral obeys FixedIntegral
+  pass

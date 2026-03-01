@@ -9,11 +9,11 @@ module Core
 # Literal support: 100ns, 50us, 200ms, 30s, 5m, 2h, 3d, 1w
 #
 # Usage:
-#   let timeout = 5s
-#   let delay = 2h + 30m + 45s
-#   let scaled = timeout * 3
-#   let intervals = 10s // 3s    # 3
-#   let remainder = 10s % 3s     # 1s
+#   var timeout = 5s
+#   var delay = 2h + 30m + 45s
+#   var scaled = timeout * 3
+#   var intervals = 10s // 3s    # 3
+#   var remainder = 10s % 3s     # 1s
 
 # ============================================================================
 # Constants
@@ -32,306 +32,250 @@ preset SECONDS_PER_WEEK: S64 = 604_800_s64
 # Record definition
 # ============================================================================
 
-record Duration follows Ordered, Addable, Subtractable, FloorDivisible, Negatable {
-    secret seconds: S64      # Whole seconds (negative for negative durations)
-    secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
-}
+record Duration obeys Ordered, Addable, Subtractable, FloorDivisible, Negatable
+  secret seconds: S64      # Whole seconds (negative for negative durations)
+  secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
 # ============================================================================
 # Normalization helper
 # ============================================================================
 
 # Normalize nanoseconds into [0, 1_000_000_000) range, carrying overflow into seconds
-routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration {
-    var s = seconds
-    var ns = nanoseconds
+routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
+  var s = seconds
+  var ns = nanoseconds
 
-    if ns >= NS_PER_SECOND {
-        s = s + ns // NS_PER_SECOND
-        ns = ns % NS_PER_SECOND
-    } elseif ns < 0_s64 {
-        # For negative nanoseconds, borrow from seconds to keep nanoseconds non-negative
-        let borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
-        s = s - borrow
-        ns = ns + borrow *% NS_PER_SECOND
-    }
+  if ns >= NS_PER_SECOND
+    s = s + ns // NS_PER_SECOND
+    ns = ns % NS_PER_SECOND
+  elseif ns < 0_s64
+    # For negative nanoseconds, borrow from seconds to keep nanoseconds non-negative
+    var borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
+    s = s - borrow
+    ns = ns + borrow *% NS_PER_SECOND
 
-    return Duration(seconds: s, nanoseconds: U32(ns))
-}
+  return Duration(seconds: s, nanoseconds: U32(ns))
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
-routine Duration.__create__(seconds: S64, nanoseconds: U32) -> Duration {
-    return normalize_duration(seconds, S64(nanoseconds))
-}
+routine Duration.__create__(seconds: S64, nanoseconds: U32) -> Duration
+  return normalize_duration(seconds, S64(nanoseconds))
 
 # Zero duration
-routine Duration.zero() -> Duration {
-    return Duration(seconds: 0_s64, nanoseconds: 0_u32)
-}
+routine Duration.zero() -> Duration
+  return Duration(seconds: 0_s64, nanoseconds: 0_u32)
 
 # Create from individual units
-routine Duration.from_nanoseconds(ns: S64) -> Duration {
-    return normalize_duration(0_s64, ns)
-}
+routine Duration.from_nanoseconds(ns: S64) -> Duration
+  return normalize_duration(0_s64, ns)
 
-routine Duration.from_microseconds(us: S64) -> Duration {
-    let s = us // 1_000_000_s64
-    let ns = (us % 1_000_000_s64) *% NS_PER_MICROSECOND
-    return normalize_duration(s, ns)
-}
+routine Duration.from_microseconds(us: S64) -> Duration
+  var s = us // 1_000_000_s64
+  var ns = (us % 1_000_000_s64) *% NS_PER_MICROSECOND
+  return normalize_duration(s, ns)
 
-routine Duration.from_milliseconds(ms: S64) -> Duration {
-    let s = ms // 1_000_s64
-    let ns = (ms % 1_000_s64) *% NS_PER_MILLISECOND
-    return normalize_duration(s, ns)
-}
+routine Duration.from_milliseconds(ms: S64) -> Duration
+  var s = ms // 1_000_s64
+  var ns = (ms % 1_000_s64) *% NS_PER_MILLISECOND
+  return normalize_duration(s, ns)
 
-routine Duration.from_seconds(s: S64) -> Duration {
-    return Duration(seconds: s, nanoseconds: 0_u32)
-}
+routine Duration.from_seconds(s: S64) -> Duration
+  return Duration(seconds: s, nanoseconds: 0_u32)
 
-routine Duration.from_minutes(m: S64) -> Duration {
-    return Duration(seconds: m *% SECONDS_PER_MINUTE, nanoseconds: 0_u32)
-}
+routine Duration.from_minutes(m: S64) -> Duration
+  return Duration(seconds: m *% SECONDS_PER_MINUTE, nanoseconds: 0_u32)
 
-routine Duration.from_hours(h: S64) -> Duration {
-    return Duration(seconds: h *% SECONDS_PER_HOUR, nanoseconds: 0_u32)
-}
+routine Duration.from_hours(h: S64) -> Duration
+  return Duration(seconds: h *% SECONDS_PER_HOUR, nanoseconds: 0_u32)
 
-routine Duration.from_days(d: S64) -> Duration {
-    return Duration(seconds: d *% SECONDS_PER_DAY, nanoseconds: 0_u32)
-}
+routine Duration.from_days(d: S64) -> Duration
+  return Duration(seconds: d *% SECONDS_PER_DAY, nanoseconds: 0_u32)
 
-routine Duration.from_weeks(w: S64) -> Duration {
-    return Duration(seconds: w *% SECONDS_PER_WEEK, nanoseconds: 0_u32)
-}
+routine Duration.from_weeks(w: S64) -> Duration
+  return Duration(seconds: w *% SECONDS_PER_WEEK, nanoseconds: 0_u32)
 
 # ============================================================================
 # Total unit accessors (convert entire duration to a single unit)
 # ============================================================================
 
 @readonly
-routine Duration.total_nanoseconds() -> S64 {
-    return me.seconds *% NS_PER_SECOND + S64(me.nanoseconds)
-}
+routine Duration.total_nanoseconds() -> S64
+  return me.seconds *% NS_PER_SECOND + S64(me.nanoseconds)
 
 @readonly
-routine Duration.total_microseconds() -> S64 {
-    return me.seconds *% 1_000_000_s64 + S64(me.nanoseconds) // NS_PER_MICROSECOND
-}
+routine Duration.total_microseconds() -> S64
+  return me.seconds *% 1_000_000_s64 + S64(me.nanoseconds) // NS_PER_MICROSECOND
 
 @readonly
-routine Duration.total_milliseconds() -> S64 {
-    return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
-}
+routine Duration.total_milliseconds() -> S64
+  return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
 
 @readonly
-routine Duration.total_seconds() -> S64 {
-    return me.seconds
-}
+routine Duration.total_seconds() -> S64
+  return me.seconds
 
 @readonly
-routine Duration.total_minutes() -> S64 {
-    return me.seconds // SECONDS_PER_MINUTE
-}
+routine Duration.total_minutes() -> S64
+  return me.seconds // SECONDS_PER_MINUTE
 
 @readonly
-routine Duration.total_hours() -> S64 {
-    return me.seconds // SECONDS_PER_HOUR
-}
+routine Duration.total_hours() -> S64
+  return me.seconds // SECONDS_PER_HOUR
 
 @readonly
-routine Duration.total_days() -> S64 {
-    return me.seconds // SECONDS_PER_DAY
-}
+routine Duration.total_days() -> S64
+  return me.seconds // SECONDS_PER_DAY
 
 # ============================================================================
 # Component accessors (extract individual components of the duration)
 # ============================================================================
 
 @readonly
-routine Duration.get_days() -> S64 {
-    return me.seconds // SECONDS_PER_DAY
-}
+routine Duration.get_days() -> S64
+  return me.seconds // SECONDS_PER_DAY
 
 @readonly
-routine Duration.get_hours() -> S64 {
-    return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
-}
+routine Duration.get_hours() -> S64
+  return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
 
 @readonly
-routine Duration.get_minutes() -> S64 {
-    return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
-}
+routine Duration.get_minutes() -> S64
+  return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
 
 @readonly
-routine Duration.get_seconds() -> S64 {
-    return me.seconds % SECONDS_PER_MINUTE
-}
+routine Duration.get_seconds() -> S64
+  return me.seconds % SECONDS_PER_MINUTE
 
 @readonly
-routine Duration.get_milliseconds() -> S64 {
-    return S64(me.nanoseconds) // NS_PER_MILLISECOND
-}
+routine Duration.get_milliseconds() -> S64
+  return S64(me.nanoseconds) // NS_PER_MILLISECOND
 
 @readonly
-routine Duration.get_microseconds() -> S64 {
-    return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
-}
+routine Duration.get_microseconds() -> S64
+  return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
 
 @readonly
-routine Duration.get_nanoseconds() -> S64 {
-    return S64(me.nanoseconds) % NS_PER_MICROSECOND
-}
+routine Duration.get_nanoseconds() -> S64
+  return S64(me.nanoseconds) % NS_PER_MICROSECOND
 
 # Raw sub-second nanoseconds accessor
 @readonly
-routine Duration.subsec_nanoseconds() -> U32 {
-    return me.nanoseconds
-}
+routine Duration.subsec_nanoseconds() -> U32
+  return me.nanoseconds
 
 # ============================================================================
 # Utility
 # ============================================================================
 
 @readonly
-routine Duration.is_zero() -> Bool {
-    return me.seconds == 0_s64 and me.nanoseconds == 0_u32
-}
+routine Duration.is_zero() -> Bool
+  return me.seconds == 0_s64 and me.nanoseconds == 0_u32
 
 @readonly
-routine Duration.is_negative() -> Bool {
-    return me.seconds < 0_s64
-}
+routine Duration.is_negative() -> Bool
+  return me.seconds < 0_s64
 
 @readonly
-routine Duration.abs() -> Duration {
-    if me.seconds >= 0_s64 {
-        return me
-    }
-    return me.__neg__()
-}
+routine Duration.abs() -> Duration
+  if me.seconds >= 0_s64
+    return me
+  return me.__neg__()
 
 # ============================================================================
 # Arithmetic operators
 # ============================================================================
 
 @readonly
-routine Duration.__add__!(you: Duration) -> Duration {
-    return normalize_duration(me.seconds + you.seconds, S64(me.nanoseconds) + S64(you.nanoseconds))
-}
+routine Duration.__add__!(you: Duration) -> Duration
+  return normalize_duration(me.seconds + you.seconds, S64(me.nanoseconds) + S64(you.nanoseconds))
 
 @readonly
-routine Duration.__sub__(you: Duration) -> Duration {
-    return normalize_duration(me.seconds - you.seconds, S64(me.nanoseconds) - S64(you.nanoseconds))
-}
+routine Duration.__sub__(you: Duration) -> Duration
+  return normalize_duration(me.seconds - you.seconds, S64(me.nanoseconds) - S64(you.nanoseconds))
 
 @readonly
-routine Duration.__neg__() -> Duration {
-    if me.nanoseconds == 0_u32 {
-        return Duration(seconds: 0_s64 - me.seconds, nanoseconds: 0_u32)
-    }
-    # -(s, ns) = (-s - 1, 1_000_000_000 - ns)
-    return Duration(seconds: 0_s64 - me.seconds - 1_s64, nanoseconds: 1_000_000_000_u32 - me.nanoseconds)
-}
+routine Duration.__neg__() -> Duration
+  if me.nanoseconds == 0_u32
+    return Duration(seconds: 0_s64 - me.seconds, nanoseconds: 0_u32)
+  # -(s, ns) = (-s - 1, 1_000_000_000 - ns)
+  return Duration(seconds: 0_s64 - me.seconds - 1_s64, nanoseconds: 1_000_000_000_u32 - me.nanoseconds)
 
 # Scale by integer
 @readonly
-routine Duration.scale(factor: S64) -> Duration {
-    let total_ns = S64(me.nanoseconds) *% factor
-    let total_s = me.seconds *% factor
-    return normalize_duration(total_s, total_ns)
-}
+routine Duration.scale(factor: S64) -> Duration
+  var total_ns = S64(me.nanoseconds) *% factor
+  var total_s = me.seconds *% factor
+  return normalize_duration(total_s, total_ns)
 
 # Floor division: how many durations fit
 @readonly
-routine Duration.__floordiv__(you: Duration) -> Duration {
-    let me_ns = me.total_nanoseconds()
-    let you_ns = you.total_nanoseconds()
-    return Duration.from_nanoseconds(me_ns // you_ns)
-}
+routine Duration.__floordiv__(you: Duration) -> Duration
+  var me_ns = me.total_nanoseconds()
+  var you_ns = you.total_nanoseconds()
+  return Duration.from_nanoseconds(me_ns // you_ns)
 
 # Remainder after floor division
 @readonly
-routine Duration.__mod__(you: Duration) -> Duration {
-    let me_ns = me.total_nanoseconds()
-    let you_ns = you.total_nanoseconds()
-    return Duration.from_nanoseconds(me_ns % you_ns)
-}
+routine Duration.__mod__(you: Duration) -> Duration
+  var me_ns = me.total_nanoseconds()
+  var you_ns = you.total_nanoseconds()
+  return Duration.from_nanoseconds(me_ns % you_ns)
 
 # Divide duration evenly by integer
 @readonly
-routine Duration.div_by(divisor: S64) -> Duration {
-    let total_ns = me.total_nanoseconds()
-    return Duration.from_nanoseconds(total_ns // divisor)
-}
+routine Duration.div_by(divisor: S64) -> Duration
+  var total_ns = me.total_nanoseconds()
+  return Duration.from_nanoseconds(total_ns // divisor)
 
 # ============================================================================
 # Comparison operators
 # ============================================================================
 
 @readonly
-routine Duration.__eq__(you: Duration) -> Bool {
-    return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
-}
+routine Duration.__eq__(you: Duration) -> Bool
+  return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
 @readonly
-routine Duration.__cmp__(you: Duration) -> ComparisonSign {
-    if me.seconds < you.seconds {
-        return ME_SMALL
-    }
-    if me.seconds > you.seconds {
-        return ME_LARGE
-    }
-    if me.nanoseconds < you.nanoseconds {
-        return ME_SMALL
-    }
-    if me.nanoseconds > you.nanoseconds {
-        return ME_LARGE
-    }
-    return SAME
-}
+routine Duration.__cmp__(you: Duration) -> ComparisonSign
+  if me.seconds < you.seconds
+    return ME_SMALL
+  if me.seconds > you.seconds
+    return ME_LARGE
+  if me.nanoseconds < you.nanoseconds
+    return ME_SMALL
+  if me.nanoseconds > you.nanoseconds
+    return ME_LARGE
+  return SAME
 
 # ============================================================================
 # Display
 # ============================================================================
 
-routine Text.__create__(from: Duration) -> Text {
-    if from.is_zero() {
-        return "0s"
-    }
+routine Text.__create__(from: Duration) -> Text
+  if from.is_zero()
+    return "0s"
 
-    let d = from.abs()
-    var parts = ""
+  var d = from.abs()
+  var parts = ""
 
-    if from.is_negative() {
-        parts = "-"
-    }
+  if from.is_negative()
+    parts = "-"
 
-    if d.get_days() != 0_s64 {
-        parts = f"{parts}{d.get_days()}d"
-    }
-    if d.get_hours() != 0_s64 {
-        parts = f"{parts}{d.get_hours()}h"
-    }
-    if d.get_minutes() != 0_s64 {
-        parts = f"{parts}{d.get_minutes()}m"
-    }
-    if d.get_seconds() != 0_s64 {
-        parts = f"{parts}{d.get_seconds()}s"
-    }
-    if d.get_milliseconds() != 0_s64 {
-        parts = f"{parts}{d.get_milliseconds()}ms"
-    }
-    if d.get_microseconds() != 0_s64 {
-        parts = f"{parts}{d.get_microseconds()}us"
-    }
-    if d.get_nanoseconds() != 0_s64 {
-        parts = f"{parts}{d.get_nanoseconds()}ns"
-    }
+  if d.get_days() != 0_s64
+    parts = f"{parts}{d.get_days()}d"
+  if d.get_hours() != 0_s64
+    parts = f"{parts}{d.get_hours()}h"
+  if d.get_minutes() != 0_s64
+    parts = f"{parts}{d.get_minutes()}m"
+  if d.get_seconds() != 0_s64
+    parts = f"{parts}{d.get_seconds()}s"
+  if d.get_milliseconds() != 0_s64
+    parts = f"{parts}{d.get_milliseconds()}ms"
+  if d.get_microseconds() != 0_s64
+    parts = f"{parts}{d.get_microseconds()}us"
+  if d.get_nanoseconds() != 0_s64
+    parts = f"{parts}{d.get_nanoseconds()}ns"
 
-    return parts
-}
+  return parts

@@ -1,30 +1,24 @@
 module Core
 
 # IndexOutOfBoundsError - Error for invalid index access in collections
-# Used by List<T> and other indexed collections
+# Used by List[T] and other indexed collections
 
 import Text.Text
 
-record IndexOutOfBoundsError follows Crashable {
-    open index: U64
-    open count: U64
-}
+record IndexOutOfBoundsError obeys Crashable
+  index: U64
+  count: U64
 
-routine IndexOutOfBoundsError.crash_message() -> Text {
-    return f"Index {me.index} is out of bounds for collection with {me.count} elements"
-}
+routine IndexOutOfBoundsError.crash_message() -> Text
+  return f"Index {me.index} is out of bounds for collection with {me.count} elements"
 
-record EmptyCollectionError follows Crashable {
-    open operation: Text
-}
+record EmptyCollectionError obeys Crashable
+  operation: Text
 
-routine EmptyCollectionError.crash_message() -> Text {
-    return f"Cannot {me.operation} on empty collection"
-}
+routine EmptyCollectionError.crash_message() -> Text
+  return f"Cannot {me.operation} on empty collection"
 
-record ElementNotFoundError follows Crashable {
-}
+record ElementNotFoundError obeys Crashable
 
-routine ElementNotFoundError.crash_message() -> Text {
-    return "No matching element found"
-}
+routine ElementNotFoundError.crash_message() -> Text
+  return "No matching element found"

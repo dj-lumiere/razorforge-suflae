@@ -1,6 +1,5 @@
 module Text
 
-resident FixedText<N>
-requires N is UAddr {
-    secret letters: FixedList<Letter, N>
-}
+resident FixedText[N]
+needs N is UAddr
+  secret letters: FixedList[Letter, N]

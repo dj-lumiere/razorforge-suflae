@@ -13,111 +13,92 @@ module Text
 # Signed Integers
 # ============================================================================
 
-routine S8.__create__!(from_text: Text) -> S8 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_S8(cstr_val)
-}
+routine S8.__create__!(from_text: Text) -> S8
+  var cstr_val = from_text.CStr()
+  return rf_parse_S8(cstr_val)
 
-routine S16.__create__!(from_text: Text) -> S16 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_S16(cstr_val)
-}
+routine S16.__create__!(from_text: Text) -> S16
+  var cstr_val = from_text.CStr()
+  return rf_parse_S16(cstr_val)
 
-routine S32.__create__!(from_text: Text) -> S32 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_S32(cstr_val)
-}
+routine S32.__create__!(from_text: Text) -> S32
+  var cstr_val = from_text.CStr()
+  return rf_parse_S32(cstr_val)
 
-routine S64.__create__!(from_text: Text) -> S64 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_S64(cstr_val)
-}
+routine S64.__create__!(from_text: Text) -> S64
+  var cstr_val = from_text.CStr()
+  return rf_parse_S64(cstr_val)
 
-routine S128.__create__!(from_text: Text) -> S128 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_S128(cstr_val)
-}
+routine S128.__create__!(from_text: Text) -> S128
+  var cstr_val = from_text.CStr()
+  return rf_parse_S128(cstr_val)
 
-routine SAddr.__create__!(from_text: Text) -> SAddr {
-    let cstr_val = from_text.CStr()
-    return rf_parse_SAddr(cstr_val)
-}
+routine SAddr.__create__!(from_text: Text) -> SAddr
+  var cstr_val = from_text.CStr()
+  return rf_parse_SAddr(cstr_val)
 
 # ============================================================================
 # Unsigned Integers
 # ============================================================================
 
-routine U8.__create__!(from_text: Text) -> U8 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_U8(cstr_val)
-}
+routine U8.__create__!(from_text: Text) -> U8
+  var cstr_val = from_text.CStr()
+  return rf_parse_U8(cstr_val)
 
-routine U16.__create__!(from_text: Text) -> U16 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_U16(cstr_val)
-}
+routine U16.__create__!(from_text: Text) -> U16
+  var cstr_val = from_text.CStr()
+  return rf_parse_U16(cstr_val)
 
-routine U32.__create__!(from_text: Text) -> U32 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_U32(cstr_val)
-}
+routine U32.__create__!(from_text: Text) -> U32
+  var cstr_val = from_text.CStr()
+  return rf_parse_U32(cstr_val)
 
-routine U64.__create__!(from_text: Text) -> U64 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_U64(cstr_val)
-}
+routine U64.__create__!(from_text: Text) -> U64
+  var cstr_val = from_text.CStr()
+  return rf_parse_U64(cstr_val)
 
-routine U128.__create__!(from_text: Text) -> U128 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_U128(cstr_val)
-}
+routine U128.__create__!(from_text: Text) -> U128
+  var cstr_val = from_text.CStr()
+  return rf_parse_U128(cstr_val)
 
-routine UAddr.__create__!(from_text: Text) -> UAddr {
-    let cstr_val = from_text.CStr()
-    return rf_parse_UAddr(cstr_val)
-}
+routine UAddr.__create__!(from_text: Text) -> UAddr
+  var cstr_val = from_text.CStr()
+  return rf_parse_UAddr(cstr_val)
 
 # ============================================================================
 # Binary Floating Point
 # ============================================================================
 
-routine F16.__create__!(from_text: Text) -> F16 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_F16(cstr_val)
-}
+routine F16.__create__!(from_text: Text) -> F16
+  var cstr_val = from_text.CStr()
+  return rf_parse_F16(cstr_val)
 
-routine F32.__create__!(from_text: Text) -> F32 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_F32(cstr_val)
-}
+routine F32.__create__!(from_text: Text) -> F32
+  var cstr_val = from_text.CStr()
+  return rf_parse_F32(cstr_val)
 
-routine F64.__create__!(from_text: Text) -> F64 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_F64(cstr_val)
-}
+routine F64.__create__!(from_text: Text) -> F64
+  var cstr_val = from_text.CStr()
+  return rf_parse_F64(cstr_val)
 
-routine F128.__create__!(from_text: Text) -> F128 {
-    let cstr_val = from_text.CStr()
-    return rf_parse_F128(cstr_val)
-}
+routine F128.__create__!(from_text: Text) -> F128
+  var cstr_val = from_text.CStr()
+  return rf_parse_F128(cstr_val)
 
 # ============================================================================
 # Decimal Floating Point
 # ============================================================================
 
-routine D32.__create__!(from_text: Text) -> D32 {
-    let cstr_val = from_text.CStr()
-    let bits = rf_D32_from_string(cstr_val)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__!(from_text: Text) -> D32
+  var cstr_val = from_text.CStr()
+  var bits = rf_D32_from_string(cstr_val)
+  return bitcast[U32, D32](bits)
 
-routine D64.__create__!(from_text: Text) -> D64 {
-    let cstr_val = from_text.CStr()
-    let bits = rf_D64_from_string(cstr_val)
-    return bitcast<U64, D64>(bits)
-}
+routine D64.__create__!(from_text: Text) -> D64
+  var cstr_val = from_text.CStr()
+  var bits = rf_D64_from_string(cstr_val)
+  return bitcast[U64, D64](bits)
 
-routine D128.__create__!(from_text: Text) -> D128 {
-    let cstr_val = from_text.CStr()
-    return rf_D128_from_string(cstr_val)
-}
+routine D128.__create__!(from_text: Text) -> D128
+  var cstr_val = from_text.CStr()
+  return rf_D128_from_string(cstr_val)

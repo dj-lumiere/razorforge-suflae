@@ -1,33 +1,31 @@
-# RazorForge Viewed<T> - Scoped read-only access token
+# RazorForge Viewed[T] - Scoped read-only access token
 #
-# Viewed<T> is created ONLY by the `viewing` syntax, NOT by constructors.
+# Viewed[T] is created ONLY by the `viewing` syntax, NOT by creators.
 # It provides read-only access to entities/residents within a scoped block.
 #
 # Syntax:
-#   viewing <entity_or_resident> as v {
+#   viewing <entity_or_resident> as v
 #       show(v.field)  # Read-only access
-#       let copy = v   # OK - Viewed can be copied
+#       var copy = v   # OK - Viewed can be copied
 #   } # v destroyed here, cannot escape scope
 #
 # Properties:
 # - Created by compiler via `viewing` syntax
 # - Scope-bound: cannot be stored, returned, or escape
-# - Copyable: multiple Viewed<T> handles can coexist
-# - Read-only: cannot mutate through this handle
+# - Copyable: multiple Viewed[T] handles can coexist
+# - Read-only: cannot modify through this handle
 # - Temporary: source is invalidated during scope, restored on exit
-# - Single-threaded: for multi-threaded use, see Inspected<T>
+# - Single-threaded: for multi-threaded use, see Inspected[T]
 #
 # This type is a marker for the type system - the compiler handles all operations.
 
 module Core
-record Viewed<T> {
-    secret ptr: Snatched<T>
-}
+record Viewed[T]
+  secret ptr: Snatched[T]
 
-routine T.view!() -> Viewed<T> {
-    return Viewed<T>(T.snatch())
-}
+routine T.view!() -> Viewed[T]
+  return Viewed[T](T.snatch())
 
-# NOTE: No constructors, no methods - all operations handled by compiler
+# NOTE: No creators, no methods - all operations handled by compiler
 # The address field is managed internally by the viewing syntax implementation
-# Users should NEVER create Viewed<T> values directly
+# Users should NEVER create Viewed[T] values directly

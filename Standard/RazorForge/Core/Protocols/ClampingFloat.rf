@@ -1,0 +1,5 @@
+# ClampingFloat - Bundle protocol for clamping arithmetic + clamping division
+module Core
+
+protocol ClampingFloat obeys ClampingArithmetic, ClampingDivisible
+  pass

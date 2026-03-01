@@ -2,9 +2,8 @@
 # Maps directly to LLVM i16 type using compiler intrinsics
 module Core
 # Core U16 type definition - maps to LLVM i16
-record U16 follows UnsignedIntegral, Ordered {
-    open value: @intrinsic.i16
-}
+record U16 obeys UnsignedIntegral, Ordered
+  value: @intrinsic.i16
 
 # Constants for U16 limits
 preset U16_MIN: U16 = 0_u16
@@ -13,319 +12,209 @@ preset U16_ZERO: U16 = 0_u16
 preset U16_ONE: U16 = 1_u16
 
 # ============================================================================
-#Constructors
+# Creators
 # ============================================================================
 
 # From S8 - crashes if value is negative
-routine U16.__create__!(from: S8) -> U16 {
-    if from < 0_s8 {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return sext<S8, U16>(from)
-}
+routine U16.__create__!(from: S8) -> U16
+  if from < 0_s8
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return sext[S8, U16](from)
 
 # From S16 - crashes if value is negative
-routine U16.__create__!(from: S16) -> U16 {
-    if from < 0_s16 {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return bitcast<S16, U16>(from)
-}
+routine U16.__create__!(from: S16) -> U16
+  if from < 0_s16
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return bitcast[S16, U16](from)
 
 # From S32 - crashes if value out of U16 range
-routine U16.__create__!(from: S32) -> U16 {
-    if not (0_s32 <= from <= 65535_s32) {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<S32, U16>(from)
-}
+routine U16.__create__!(from: S32) -> U16
+  if not (0_s32 <= from <= 65535_s32)
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[S32, U16](from)
 
 # From S64 - crashes if value out of U16 range
-routine U16.__create__!(from: S64) -> U16 {
-    if not (0_s64 <= from <= 65535_s64) {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<S64, U16>(from)
-}
+routine U16.__create__!(from: S64) -> U16
+  if not (0_s64 <= from <= 65535_s64)
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[S64, U16](from)
 
 # From S128 - crashes if value out of U16 range
-routine U16.__create__!(from: S128) -> U16 {
-    if not (0_s128 <= from <= 65535_s128) {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<S128, U16>(from)
-}
+routine U16.__create__!(from: S128) -> U16
+  if not (0_s128 <= from <= 65535_s128)
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[S128, U16](from)
 
 # From U8 - always fits, no check needed
-routine U16.__create__!(from: U8) -> U16 {
-    return zext<U8, U16>(from)
-}
+routine U16.__create__!(from: U8) -> U16
+  return zext[U8, U16](from)
 
-routine U16.__create__(from: U16) -> U16 {
-    return from
-}
+routine U16.__create__(from: U16) -> U16
+  return from
 
 # From U32 - crashes if value > U16_MAX
-routine U16.__create__!(from: U32) -> U16 {
-    if from > 65535_u32 {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<U32, U16>(from)
-}
+routine U16.__create__!(from: U32) -> U16
+  if from > 65535_u32
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[U32, U16](from)
 
 # From U64 - crashes if value > U16_MAX
-routine U16.__create__!(from: U64) -> U16 {
-    if from > 65535_u64 {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<U64, U16>(from)
-}
+routine U16.__create__!(from: U64) -> U16
+  if from > 65535_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[U64, U16](from)
 
 # From U128 - crashes if value > U16_MAX
-routine U16.__create__!(from: U128) -> U16 {
-    if from > 65535_u128 {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<U128, U16>(from)
-}
+routine U16.__create__!(from: U128) -> U16
+  if from > 65535_u128
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[U128, U16](from)
 
 # From floating point - truncates fractional part and crashes if overflow
-routine U16.__create__!(from: F16) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: F16) -> U16
+  return from.U32!().U16!()
 
-routine U16.__create__!(from: F32) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: F32) -> U16
+  return from.U32!().U16!()
 
-routine U16.__create__!(from: F64) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: F64) -> U16
+  return from.U32!().U16!()
 
-routine U16.__create__!(from: F128) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: F128) -> U16
+  return from.U32!().U16!()
 
 # From decimal - truncates fractional part and crashes if overflow
-routine U16.__create__!(from: D32) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: D32) -> U16
+  return from.U32!().U16!()
 
-routine U16.__create__!(from: D64) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: D64) -> U16
+  return from.U32!().U16!()
 
-routine U16.__create__!(from: D128) -> U16 {
-    return from.U32!().U16!()
-}
+routine U16.__create__!(from: D128) -> U16
+  return from.U32!().U16!()
 
 # From SAddr - crashes if value negative or out of U16 range
-routine U16.__create__!(from: SAddr) -> U16 {
-    let val_s64 = from.S64!()
-    if not (0_s64 <= val_s64 <= 65535_s64) {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<SAddr, U16>(from)
-}
+routine U16.__create__!(from: SAddr) -> U16
+  var val_s64 = from.S64!()
+  if not (0_s64 <= val_s64 <= 65535_s64)
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[SAddr, U16](from)
 
 # From UAddr - crashes if value out of U16 range
-routine U16.__create__!(from: UAddr) -> U16 {
-    let val_u64 = from.U64!()
-    if val_u64 > 65535_u64 {
-        throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
-    }
-    return trunc<UAddr, U16>(from)
-}
+routine U16.__create__!(from: UAddr) -> U16
+  var val_u64 = from.U64!()
+  if val_u64 > 65535_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to U16: value out of range [{U16_MIN}, {U16_MAX}]")
+  return trunc[UAddr, U16](from)
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
-@crash_only
-routine U16.__add__!(you: U16) -> U16 {
-    return add<U16>(me, you)
-}
+routine U16.__add__!(you: U16) -> U16
+  return add[U16](me, you)
 
-@crash_only
-routine U16.__sub__!(you: U16) -> U16 {
-    return sub<U16>(me, you)
-}
+routine U16.__sub__!(you: U16) -> U16
+  return sub[U16](me, you)
 
-@crash_only
-routine U16.__mul__!(you: U16) -> U16 {
-    return mul<U16>(me, you)
-}
+routine U16.__mul__!(you: U16) -> U16
+  return mul[U16](me, you)
 
-@crash_only
-routine U16.__floordiv__!(you: U16) -> U16 {
-    if you == 0 {
-        throw DivisionByZeroError()
-    }
-    return udiv<U16>(me, you)
-}
+routine U16.__floordiv__!(you: U16) -> U16
+  if you == 0
+    throw DivisionByZeroError()
+  return udiv[U16](me, you)
 
-@crash_only
-routine U16.__mod__!(you: U16) -> U16 {
-    return urem<U16>(me, you)
-}
+routine U16.__mod__!(you: U16) -> U16
+  return urem[U16](me, you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine U16.__add_wrap__(you: U16) -> U16 {
-    return add_wrapping<U16>(me, you)
-}
+routine U16.__add_wrap__(you: U16) -> U16
+  return add_wrapping[U16](me, you)
 
-routine U16.__sub_wrap__(you: U16) -> U16 {
-    return sub_wrapping<U16>(me, you)
-}
+routine U16.__sub_wrap__(you: U16) -> U16
+  return sub_wrapping[U16](me, you)
 
-routine U16.__mul_wrap__(you: U16) -> U16 {
-    return mul_wrapping<U16>(me, you)
-}
+routine U16.__mul_wrap__(you: U16) -> U16
+  return mul_wrapping[U16](me, you)
 
 # ============================================================================
-# Saturating Arithmetic (+^, -^, *^)
+# Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine U16.__add_sat__(you: U16) -> U16 {
-    return add_saturate<U16>(me, you)
-}
+routine U16.__add_clamp__(you: U16) -> U16
+  return add_clamp[U16](me, you)
 
-routine U16.__sub_sat__(you: U16) -> U16 {
-    return sub_saturate<U16>(me, you)
-}
+routine U16.__sub_clamp__(you: U16) -> U16
+  return sub_clamp[U16](me, you)
 
-routine U16.__mul_sat__(you: U16) -> U16 {
-    return mul_saturate<U16>(me, you)
-}
-
-# ============================================================================
-# Checked Arithmetic (+?, -?, *?) - returns Maybe<T>
-# ============================================================================
-
-routine U16.__add_checked__(you: U16) -> Maybe<U16> {
-    let (result, overflow) = add_overflow<U16>(me, you)
-    return if overflow then None else result
-}
-
-routine U16.__sub_checked__(you: U16) -> Maybe<U16> {
-    let (result, overflow) = sub_overflow<U16>(me, you)
-    return if overflow then None else result
-}
-
-routine U16.__mul_checked__(you: U16) -> Maybe<U16> {
-    let (result, overflow) = mul_overflow<U16>(me, you)
-    return if overflow then None else result
-}
+routine U16.__mul_clamp__(you: U16) -> U16
+  return mul_clamp[U16](me, you)
 
 # ============================================================================
 # Power Operations (**)
 # ============================================================================
 
 # Power operator (**) - can overflow
-@crash_only
-routine U16.__pow__!(exp: U16) -> U16 {
-    var result: U16 = 1
-    var base: U16 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul<U16>(result, base)
-        }
-        base = mul<U16>(base, base)
-        e = e >> 1
-    }
-    return result
-}
+routine U16.__pow__!(exp: U16) -> U16
+  var result: U16 = 1
+  var base: U16 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = mul[U16](result, base)
+    base = mul[U16](base, base)
+    e = e >> 1
+  return result
 
 # Wrapping power (**%)
-@crash_only
-routine U16.__pow_wrap__!(exp: U16) -> U16 {
-    var result: U16 = 1
-    var base: U16 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul_wrapping<U16>(result, base)
-        }
-        base = mul_wrapping<U16>(base, base)
-        e = e >> 1
-    }
-    return result
-}
+routine U16.__pow_wrap__!(exp: U16) -> U16
+  var result: U16 = 1
+  var base: U16 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = mul_wrapping[U16](result, base)
+    base = mul_wrapping[U16](base, base)
+    e = e >> 1
+  return result
 
-# Saturating power (**^)
-@crash_only
-routine U16.__pow_sat__!(exp: U16) -> U16 {
-    var result: U16 = 1
-    var base: U16 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul_saturate<U16>(result, base)
-        }
-        base = mul_saturate<U16>(base, base)
-        e = e >> 1
-    }
-    return result
-}
-
-# Checked power (**?) - returns Maybe<U16>
-routine U16.__pow_checked__(exp: U16) -> Maybe<U16> {
-    var result: U16 = 1
-    var base: U16 = me
-    var e: U32 = exp
-    if me == 0 {
-        return None
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            let (new_result, overflow) = mul_overflow<U16>(result, base)
-            if overflow {
-                return None
-            }
-            result = new_result
-        }
-        let (new_base, overflow) = mul_overflow<U16>(base, base)
-        if overflow and e > 1 {
-            return None
-        }
-        base = new_base
-        e = e >> 1
-    }
-    return result
-}
+# Clamping power (**^)
+routine U16.__pow_clamp__!(exp: U16) -> U16
+  var result: U16 = 1
+  var base: U16 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = mul_clamp[U16](result, base)
+    base = mul_clamp[U16](base, base)
+    e = e >> 1
+  return result
 
 # ============================================================================
 # Bitwise Operations
 # ============================================================================
 
-routine U16.__and__(you: U16) -> U16 {
-    return bit_and<U16>(me, you)
-}
+routine U16.__and__(you: U16) -> U16
+  return bit_and[U16](me, you)
 
-routine U16.__or__(you: U16) -> U16 {
-    return bit_or<U16>(me, you)
-}
+routine U16.__or__(you: U16) -> U16
+  return bit_or[U16](me, you)
 
-routine U16.__xor__(you: U16) -> U16 {
-    return xor<U16>(me, you)
-}
+routine U16.__xor__(you: U16) -> U16
+  return xor[U16](me, you)
 
-routine U16.__not__() -> U16 {
-    return bit_not<U16>(me)
-}
+routine U16.__not__() -> U16
+  return bit_not[U16](me)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -333,167 +222,122 @@ routine U16.__not__() -> U16 {
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
-routine U16.__ashl__(bits: U32) -> U16 {
-    return shl<U16>(me, bits)
-}
-
-# Checked arithmetic left shift (<<?) - returns Maybe<U16>
-routine U16.__ashl_checked__(bits: U32) -> Maybe<U16> {
-    if bits >= 16 {
-        return None
-    }
-    let result = shl<U16>(me, bits)
-    # Check if we can recover the original value
-    let recovered = lshr<U16>(result, bits)
-    if recovered != me {
-        return None
-    }
-    return result
-}
+routine U16.__ashl__(bits: U32) -> U16
+  return shl[U16](me, bits)
 
 # Arithmetic right shift (>>) - for unsigned, same as logical
-routine U16.__ashr__(bits: U32) -> U16 {
-    return lshr<U16>(me, bits)
-}
+routine U16.__ashr__(bits: U32) -> U16
+  return lshr[U16](me, bits)
 
 # Logical left shift (<<<) - same as <<
-routine U16.__lshl__(bits: U32) -> U16 {
-    return shl<U16>(me, bits)
-}
+routine U16.__lshl__(bits: U32) -> U16
+  return shl[U16](me, bits)
 
 # Logical right shift (>>>) - fills with zeros
-routine U16.__lshr__(bits: U32) -> U16 {
-    return lshr<U16>(me, bits)
-}
+routine U16.__lshr__(bits: U32) -> U16
+  return lshr[U16](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine U16.__eq__(you: U16) -> Bool {
-    return icmp_eq<U16>(me, you)
-}
+routine U16.__eq__(you: U16) -> Bool
+  return icmp_eq[U16](me, you)
 
-routine U16.__cmp__(you: U16) -> ComparisonSign {
-    if icmp_ult<U16>(me, you) {
-        return ME_SMALL
-    }
-    if icmp_ugt<U16>(me, you) {
-        return ME_LARGE
-    }
-    return EQUAL
-}
+routine U16.__cmp__(you: U16) -> ComparisonSign
+  if icmp_ult[U16](me, you)
+    return ME_SMALL
+  if icmp_ugt[U16](me, you)
+    return ME_LARGE
+  return EQUAL
 
 # ============================================================================
 # Math Operations
 # ============================================================================
 
-routine U16.min(you: U16) -> U16 {
-    return if me <= you then me else you
-}
+routine U16.min(you: U16) -> U16
+  return if me <= you then me else you
 
-routine U16.max(you: U16) -> U16 {
-    return if me >= you then me else you
-}
+routine U16.max(you: U16) -> U16
+  return if me >= you then me else you
 
-routine U16.clamp(min_val: U16, max_val: U16) -> U16 {
-    return me.min(max_val).max(min_val)
-}
+routine U16.clamp(min_val: U16, max_val: U16) -> U16
+  return me.min(max_val).max(min_val)
 
 # ============================================================================
 # Bit Manipulation
 # ============================================================================
 
-routine U16.count_ones() -> U16 {
-    return ctpop<U16>(me)
-}
+routine U16.count_ones() -> U16
+  return ctpop[U16](me)
 
-routine U16.count_zeros() -> U16 {
-    return 16_u16 - me.count_ones()
-}
+routine U16.count_zeros() -> U16
+  return 16_u16 - me.count_ones()
 
-routine U16.leading_zeros() -> U16 {
-    return ctlz<U16>(me)
-}
+routine U16.leading_zeros() -> U16
+  return ctlz[U16](me)
 
-routine U16.trailing_zeros() -> U16 {
-    return cttz<U16>(me)
-}
+routine U16.trailing_zeros() -> U16
+  return cttz[U16](me)
 
-routine U16.leading_ones() -> U16 {
-    return me.__not__().leading_zeros()
-}
+routine U16.leading_ones() -> U16
+  return me.__not__().leading_zeros()
 
-routine U16.trailing_ones() -> U16 {
-    return me.__not__().trailing_zeros()
-}
+routine U16.trailing_ones() -> U16
+  return me.__not__().trailing_zeros()
 
-routine U16.reverse_bits() -> U16 {
-    return bitreverse<U16>(me)
-}
+routine U16.reverse_bits() -> U16
+  return bitreverse[U16](me)
 
-routine U16.swap_bytes() -> U16 {
-    return bswap<U16>(me)
-}
+routine U16.swap_bytes() -> U16
+  return bswap[U16](me)
 
-routine U16.is_power_of_two() -> Bool {
-    return me != 0_u16 and (me & (me - 1_u16)) == 0_u16
-}
+routine U16.is_power_of_two() -> Bool
+  return me != 0_u16 and (me & (me - 1_u16)) == 0_u16
 
 # ============================================================================
-# Type Conversions (constructor syntax)
+# Type Conversions (creator syntax)
 # ============================================================================
 
 # Bitcast to signed
-routine S16(from: U16) -> S16 {
-    return bitcast<U16, S16>(from)
-}
+routine S16(from: U16) -> S16
+  return bitcast[U16, S16](from)
 
 # Zero-extend to larger types
-routine U32(from: U16) -> U32 {
-    return zext<U16, U32>(from)
-}
+routine U32(from: U16) -> U32
+  return zext[U16, U32](from)
 
-routine U64(from: U16) -> U64 {
-    return zext<U16, U64>(from)
-}
+routine U64(from: U16) -> U64
+  return zext[U16, U64](from)
 
-routine U128(from: U16) -> U128 {
-    return zext<U16, U128>(from)
-}
+routine U128(from: U16) -> U128
+  return zext[U16, U128](from)
 
 # Truncate to smaller types
-routine U8(from: U16) -> U8 {
-    return trunc<U16, U8>(from)
-}
+routine U8(from: U16) -> U8
+  return trunc[U16, U8](from)
 
 # Convert to floating point
-routine F32(from: U16) -> F32 {
-    return uitofp<U16, F32>(from)
-}
+routine F32(from: U16) -> F32
+  return uitofp[U16, F32](from)
 
-routine F64(from: U16) -> F64 {
-    return uitofp<U16, F64>(from)
-}
+routine F64(from: U16) -> F64
+  return uitofp[U16, F64](from)
 
 # Convert to boolean
-routine Bool(from: U16) -> Bool {
-    return icmp_ne<U16>(from, 0_u16)
-}
+routine Bool(from: U16) -> Bool
+  return icmp_ne[U16](from, 0_u16)
 
 # ============================================================================
 # Utility Methods
 # ============================================================================
 
-routine U16.is_zero() -> Bool {
-    return me == 0_u16
-}
+routine U16.is_zero() -> Bool
+  return me == 0_u16
 
-routine U16.is_even() -> Bool {
-    let result = bit_and<U16>(me, 1_u16)
-    return icmp_eq<U16>(result, 0_u16)
-}
+routine U16.is_even() -> Bool
+  var result = bit_and[U16](me, 1_u16)
+  return icmp_eq[U16](result, 0_u16)
 
-routine U16.is_odd() -> Bool {
-    return not me.is_even()
-}
+routine U16.is_odd() -> Bool
+  return not me.is_even()

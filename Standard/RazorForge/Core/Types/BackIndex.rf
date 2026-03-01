@@ -10,39 +10,31 @@
 module Core
 
 
-record BackIndex<I follows Integral> {
-    offset: I
-}
+record BackIndex[I obeys Integral]
+  offset: I
 
-# Constructor from any Integral type
-routine BackIndex<I follows Integral>(offset: I) -> BackIndex<I> {
-    return BackIndex<I>(offset: offset)
-}
+# Creator from any Integral type
+routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
+  return BackIndex[I](offset: offset)
 
 # Resolve BackIndex to actual index given collection length
-routine BackIndex<I follows Integral>.resolve(length: UAddr) -> UAddr {
-    let offset_uaddr = me.offset.UAddr()
-    if offset_uaddr > length {
-        stop!("BackIndex out of bounds")
-    }
-    return length - offset_uaddr
-}
+routine BackIndex[I obeys Integral].resolve(length: UAddr) -> UAddr
+  var offset_uaddr = me.offset.UAddr()
+  if offset_uaddr > length
+    stop!("BackIndex out of bounds")
+  return length - offset_uaddr
 
 # Get the offset value
-routine BackIndex<I follows Integral>.get_offset() -> I {
-    return me.offset
-}
+routine BackIndex[I obeys Integral].get_offset() -> I
+  return me.offset
 
 # Convert offset to UAddr
-routine BackIndex<I follows Integral>.offset_uaddr() -> UAddr {
-    return me.offset.UAddr()
-}
+routine BackIndex[I obeys Integral].offset_uaddr() -> UAddr
+  return me.offset.UAddr()
 
 # Comparison operations
-routine BackIndex<I follows Integral>.__eq__(other: BackIndex<I>) -> Bool {
-    return me.offset.UAddr() == other.offset.UAddr()
-}
+routine BackIndex[I obeys Integral].__eq__(other: BackIndex[I]) -> Bool
+  return me.offset.UAddr() == other.offset.UAddr()
 
-routine BackIndex<I follows Integral>.__cmp__(other: BackIndex<I>) -> ComparisonSign {
-    return -me.offset <=> -other.offset
-}
+routine BackIndex[I obeys Integral].__cmp__(other: BackIndex[I]) -> ComparisonSign
+  return -me.offset <=> -other.offset

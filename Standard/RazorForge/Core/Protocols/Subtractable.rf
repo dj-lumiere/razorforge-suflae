@@ -1,7 +1,6 @@
 # Subtractable - Protocol for types that support subtraction (-)
 module Core
 
-protocol Subtractable {
-    @readonly
-    routine Me.__sub__(you: Me) -> Me
-}
+protocol Subtractable
+  @readonly
+  routine Me.__sub__(you: Me) -> Me

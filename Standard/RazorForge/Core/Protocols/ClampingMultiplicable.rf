@@ -1,0 +1,6 @@
+# ClampingMultiplicable - Protocol for types that support clamping multiplication (*^)
+module Core
+
+protocol ClampingMultiplicable
+  @readonly
+  routine Me.__mul_clamp__(you: Me) -> Me

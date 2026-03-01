@@ -6,62 +6,62 @@ module Numerics
 import RazorForge/Core.UAddr
 
 record UAddr
-    secret value: RazorForge/Core.UAddr
+  secret value: RazorForge/Core.UAddr
 
 # Wrapping arithmetic (required for address types)
 routine UAddr.__add_wrap__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__add_wrap__(you.value))
+  return UAddr(value: me.value.__add_wrap__(you.value))
 
 routine UAddr.__sub_wrap__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__sub_wrap__(you.value))
+  return UAddr(value: me.value.__sub_wrap__(you.value))
 
 routine UAddr.__mul_wrap__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__mul_wrap__(you.value))
+  return UAddr(value: me.value.__mul_wrap__(you.value))
 
-# Saturating arithmetic
-routine UAddr.__add_sat__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__add_sat__(you.value))
+# Clamping arithmetic
+routine UAddr.__add_clamp__(you: UAddr) -> UAddr
+  return UAddr(value: me.value.__add_clamp__(you.value))
 
-routine UAddr.__sub_sat__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__sub_sat__(you.value))
+routine UAddr.__sub_clamp__(you: UAddr) -> UAddr
+  return UAddr(value: me.value.__sub_clamp__(you.value))
 
-routine UAddr.__mul_sat__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__mul_sat__(you.value))
+routine UAddr.__mul_clamp__(you: UAddr) -> UAddr
+  return UAddr(value: me.value.__mul_clamp__(you.value))
 
 # Comparison
 routine UAddr.__eq__(you: UAddr) -> Bool
-    return me.value.__eq__(you.value)
+  return me.value.__eq__(you.value)
 
 routine UAddr.__cmp__(you: UAddr) -> ComparisonSign
-    return me.value.__cmp__(you.value)
+  return me.value.__cmp__(you.value)
 
 # Bitwise operations
 routine UAddr.__and__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__and__(you.value))
+  return UAddr(value: me.value.__and__(you.value))
 
 routine UAddr.__or__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__or__(you.value))
+  return UAddr(value: me.value.__or__(you.value))
 
 routine UAddr.__xor__(you: UAddr) -> UAddr
-    return UAddr(value: me.value.__xor__(you.value))
+  return UAddr(value: me.value.__xor__(you.value))
 
 routine UAddr.__not__() -> UAddr
-    return UAddr(value: me.value.__not__())
+  return UAddr(value: me.value.__not__())
 
 # Math operations
 routine UAddr.min(you: UAddr) -> UAddr
-    return UAddr(value: me.value.min(you.value))
+  return UAddr(value: me.value.min(you.value))
 
 routine UAddr.max(you: UAddr) -> UAddr
-    return UAddr(value: me.value.max(you.value))
+  return UAddr(value: me.value.max(you.value))
 
 # Utility methods
 routine UAddr.is_zero() -> Bool
-    return me.value.is_zero()
+  return me.value.is_zero()
 
 routine UAddr.is_power_of_two() -> Bool
-    return me.value.is_power_of_two()
+  return me.value.is_power_of_two()
 
 # String conversion
 routine UAddr.to_text() -> Text
-    return me.value.to_text()
+  return me.value.to_text()

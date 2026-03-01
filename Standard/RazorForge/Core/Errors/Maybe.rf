@@ -1,34 +1,26 @@
 module Core
 
-record Maybe<T> {
-    secret state: DataState
-    secret handle: Snatched<T>
-}
+record Maybe[T]
+  secret state: DataState
+  secret handle: Snatched[T]
 
 # Query
-routine Maybe<T>.is_valid() -> Bool {
-    return me.state == VALID
-}
+routine Maybe[T].is_valid() -> Bool
+  return me.state == VALID
 
-routine Maybe<T>.is_none() -> Bool {
-    return me.state == ABSENT
-}
+routine Maybe[T].is_none() -> Bool
+  return me.state == ABSENT
 
-routine Maybe<T>.state() -> DataState {
-    return me.state
-}
+routine Maybe[T].state() -> DataState
+  return me.state
 
 # Coalescing (?? operator)
-routine Maybe<T>.__unwrap__(default: T) -> T {
-    if me.is_none() {
-        return default
-    }
-    return me.handle.unwrap()
-}
+routine Maybe[T].__unwrap__(default: T) -> T
+  if me.is_none()
+    return default
+  return me.handle.unwrap()
 
-routine Maybe<T>.__unwrap__(or_else: Routine<Me, T>) -> T {
-    if me.is_none() {
-        return or_else()
-    }
-    return me.handle.unwrap()
-}
+routine Maybe[T].__unwrap__(or_else: Routine[Me, T]) -> T
+  if me.is_none()
+    return or_else()
+  return me.handle.unwrap()

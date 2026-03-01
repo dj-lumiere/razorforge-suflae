@@ -1,6 +1,6 @@
 module Text
 
-# RazorForge Text and Bytes - Immutable text types
+# RazorForge Text and Bytes - Unmodifiable text types
 #
 # Text  - UTF-32 encoded, uses `Letter` (32-bit codepoints)
 #       - O(1) indexing, ideal for text manipulation
@@ -10,231 +10,191 @@ module Text
 #       - Compact storage, ideal for I/O
 #       - Use for file/network operations
 #
-# Both are immutable - use List<Letter>/List<Byte> for mutable building
+# Both are unmodifiable - use List[Letter]/List[Byte] for modifiable building
 
 import Collections.List
 
 # ============================================================================
-# Text - UTF-32 immutable text
+# Text - UTF-32 unmodifiable text
 # ============================================================================
 
-entity Text {
-    secret letters: List<Letter>
-}
+entity Text
+  secret letters: List[Letter]
 
-# Constructors
+# Creators
 
-routine Text.__create__() -> Text {
-    return Text(letters: List<Letter>())
-}
+routine Text.__create__() -> Text
+  return Text(letters: List[Letter]())
 
-routine Text.__create__(from_list: List<Letter>) -> Text {
-    return Text(letters: from_list)
-}
+routine Text.__create__(from_list: List[Letter]) -> Text
+  return Text(letters: from_list)
 
-routine Text.__create__(from_letter: Letter) -> Text {
-    let list = List<Letter>()
-    list.add_last(from_letter)
-    return Text(letters: list)
-}
+routine Text.__create__(from_letter: Letter) -> Text
+  var list = List[Letter]()
+  list.add_last(from_letter)
+  return Text(letters: list)
 
-routine Text.__create__(from: CStr) -> Text {
-    if from.is_null() {
-        return Text()
-    }
-    danger! {
-        let len = from.count()
-        if len == 0uaddr {
-            return Text()
-        }
+routine Text.__create__(from: CStr) -> Text
+  if from.is_null()
+    return Text()
+  danger!
+    var len = from.count()
+    if len == 0uaddr
+      return Text()
 
-        let list = List<Letter>()
-        var i: UAddr = 0uaddr
-        loop {
-            if i >= len {
-                break
-            }
-            let b0 = from[i]
+    var list = List[Letter]()
+    var i: UAddr = 0uaddr
+    loop
+      if i >= len
+        break
+      var b0 = from[i]
 
-            if b0 <= 0x7Fu8 {
-                # ASCII: single byte
-                list.add_last(Letter(codepoint: U32(b0)))
-                i = i + 1uaddr
-            } elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1uaddr < len {
-                # 2-byte sequence
-                let b1 = from[i + 1uaddr]
-                let cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
-                list.add_last(Letter(codepoint: cp))
-                i = i + 2uaddr
-            } elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2uaddr < len {
-                # 3-byte sequence
-                let b1 = from[i + 1uaddr]
-                let b2 = from[i + 2uaddr]
-                let cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
-                list.add_last(Letter(codepoint: cp))
-                i = i + 3uaddr
-            } elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3uaddr < len {
-                # 4-byte sequence
-                let b1 = from[i + 1uaddr]
-                let b2 = from[i + 2uaddr]
-                let b3 = from[i + 3uaddr]
-                let cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
-                list.add_last(Letter(codepoint: cp))
-                i = i + 4uaddr
-            } else {
-                # Invalid byte — replacement character
-                list.add_last(Letter(codepoint: 0xFFFDu32))
-                i = i + 1uaddr
-            }
-        }
-        return Text(from_list: list)
-    }
-}
+      if b0 <= 0x7Fu8
+        # ASCII: single byte
+        list.add_last(Letter(codepoint: U32(b0)))
+        i = i + 1uaddr
+      elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1uaddr < len
+        # 2-byte sequence
+        var b1 = from[i + 1uaddr]
+        var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
+        list.add_last(Letter(codepoint: cp))
+        i = i + 2uaddr
+      elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2uaddr < len
+        # 3-byte sequence
+        var b1 = from[i + 1uaddr]
+        var b2 = from[i + 2uaddr]
+        var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
+        list.add_last(Letter(codepoint: cp))
+        i = i + 3uaddr
+      elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3uaddr < len
+        # 4-byte sequence
+        var b1 = from[i + 1uaddr]
+        var b2 = from[i + 2uaddr]
+        var b3 = from[i + 3uaddr]
+        var cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
+        list.add_last(Letter(codepoint: cp))
+        i = i + 4uaddr
+      else
+        # Invalid byte — replacement character
+        list.add_last(Letter(codepoint: 0xFFFDu32))
+        i = i + 1uaddr
+    return Text(from_list: list)
 
 # Convert CWStr to Text (decodes UTF-16 surrogate pairs to codepoints)
 # Handles surrogate pairs correctly for supplementary characters
-routine Text.__create__(from: CWStr) -> Text {
-    danger! {
-        let len = from.count()
-        if len == 0uaddr {
-            return Text()
-        }
+routine Text.__create__(from: CWStr) -> Text
+  danger!
+    var len = from.count()
+    if len == 0uaddr
+      return Text()
 
-        let list = List<Letter>()
-        var i: UAddr = 0uaddr
-        loop {
-            if i >= len {
-                break
-            }
-            let high = read_as!<U16>(from.ptr + (i * 2uaddr))
+    var list = List[Letter]()
+    var i: UAddr = 0uaddr
+    loop
+      if i >= len
+        break
+      var high = read_as![U16](from.ptr + (i * 2uaddr))
 
-            # Check for high surrogate (U+D800 to U+DBFF)
-            if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1uaddr < len {
-                let low = read_as!<U16>(from.ptr + ((i + 1uaddr) * 2uaddr))
-                # Check for low surrogate (U+DC00 to U+DFFF)
-                if low >= 0xDC00u16 and low <= 0xDFFFu16 {
-                    # Valid surrogate pair - decode to codepoint
-                    let high_bits = (U32(high) - 0xD800u32) << 10u32
-                    let low_bits = U32(low) - 0xDC00u32
-                    let codepoint = high_bits | low_bits + 0x10000u32
-                    list.add_last(Letter(codepoint: codepoint))
-                    i = i + 2uaddr
-                } else {
-                    # Invalid low surrogate - use replacement character
-                    list.add_last(Letter(codepoint: 0xFFFDu32))
-                    i = i + 1uaddr
-                }
-            } elseif high >= 0xDC00u16 and high <= 0xDFFFu16 {
-                # Orphan low surrogate - use replacement character
-                list.add_last(Letter(codepoint: 0xFFFDu32))
-                i = i + 1uaddr
-            } else {
-                # BMP character (not a surrogate)
-                list.add_last(Letter(codepoint: U32(high)))
-                i = i + 1uaddr
-            }
-        }
-        return Text(from_list: list)
-    }
-}
+      # Check for high surrogate (U+D800 to U+DBFF)
+      if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1uaddr < len
+        var low = read_as![U16](from.ptr + ((i + 1uaddr) * 2uaddr))
+        # Check for low surrogate (U+DC00 to U+DFFF)
+        if low >= 0xDC00u16 and low <= 0xDFFFu16
+          # Valid surrogate pair - decode to codepoint
+          var high_bits = (U32(high) - 0xD800u32) << 10u32
+          var low_bits = U32(low) - 0xDC00u32
+          var codepoint = high_bits | low_bits + 0x10000u32
+          list.add_last(Letter(codepoint: codepoint))
+          i = i + 2uaddr
+        else
+          # Invalid low surrogate - use replacement character
+          list.add_last(Letter(codepoint: 0xFFFDu32))
+          i = i + 1uaddr
+      elseif high >= 0xDC00u16 and high <= 0xDFFFu16
+        # Orphan low surrogate - use replacement character
+        list.add_last(Letter(codepoint: 0xFFFDu32))
+        i = i + 1uaddr
+      else
+        # BMP character (not a surrogate)
+        list.add_last(Letter(codepoint: U32(high)))
+        i = i + 1uaddr
+    return Text(from_list: list)
 
 # Core operations
 
-routine Text.count() -> U64 {
-    return me.letters.count()
-}
+routine Text.count() -> U64
+  return me.letters.count()
 
-routine Text.is_empty() -> Bool {
-    return me.letters.is_empty()
-}
+routine Text.is_empty() -> Bool
+  return me.letters.is_empty()
 
 # Indexing
 
-routine Text.__getitem__!<I follows Integral>(index: I) -> Letter {
-    return me.letters[index]
-}
+routine Text.__getitem__![I obeys Integral](index: I) -> Letter
+  return me.letters[index]
 
-routine Text.__getitem__!<I follows Integral>(index: BackIndex<I>) -> Letter {
-    return me.letters[index]
-}
+routine Text.__getitem__![I obeys Integral](index: BackIndex[I]) -> Letter
+  return me.letters[index]
 
-routine Text.__getslice__!<I follows Integral>(start: I, end: I) -> Text {
-    let sliced_list = me.letters[start to end]
-    return Text(from_list: sliced_list)
-}
+routine Text.__getslice__![I obeys Integral](start: I, end: I) -> Text
+  var sliced_list = me.letters[start til end]
+  return Text(from_list: sliced_list)
 
-routine Text.__getslice__!<I follows Integral>(start: BackIndex<I>, end: BackIndex<I>) -> Text {
-    let sliced_list = me.letters[start to end]
-    return Text(from_list: sliced_list)
-}
+routine Text.__getslice__![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
+  var sliced_list = me.letters[start til end]
+  return Text(from_list: sliced_list)
 
 # String operations
 
-routine Text.concat(other: Text) -> Text {
-    let result = List<Letter>()
-    var i: U64 = 0u64
-    loop {
-        if i >= me.count() {
-            break
-        }
-        result.add_last(me[i])
-        i += 1u64
-    }
-    i = 0u64
-    loop {
-        if i >= other.count() {
-            break
-        }
-        result.add_last(other[i])
-        i += 1u64
-    }
-    return Text(from_list: result)
-}
+routine Text.concat(other: Text) -> Text
+  var result = List[Letter]()
+  var i: U64 = 0u64
+  loop
+    if i >= me.count()
+      break
+    result.add_last(me[i])
+    i += 1u64
+  i = 0u64
+  loop
+    if i >= other.count()
+      break
+    result.add_last(other[i])
+    i += 1u64
+  return Text(from_list: result)
 
-routine Text.__add__(other: Text) -> Text {
-    return me.concat(other)
-}
+routine Text.__add__(other: Text) -> Text
+  return me.concat(other)
 
-routine Text.__eq__(other: Text) -> Bool {
-    if me.count() != other.count() {
-        return false
-    }
-    var i: U64 = 0u64
-    loop {
-        if i >= me.count() {
-            break
-        }
-        if me[i] != other[i] {
-            return false
-        }
-        i += 1u64
-    }
-    return true
-}
+routine Text.__eq__(other: Text) -> Bool
+  if me.count() != other.count()
+    return false
+  var i: U64 = 0u64
+  loop
+    if i >= me.count()
+      break
+    if me[i] != other[i]
+      return false
+    i += 1u64
+  return true
 
-# Conversion to mutable list
+# Conversion to modifiable list
 
-routine List<Letter>.__create__(from: Text) {
-    return from.letters
-}
+routine List[Letter].__create__(from: Text)
+  return from.letters
 
 # Iteration
 
-entity TextIterator {
-    text: Text
-    index: U64
-}
+entity TextIterator
+  text: Text
+  index: U64
 
-routine Text.__seq__() -> TextIterator {
-    return TextIterator(text: me, index: 0u64)
-}
+routine Text.__seq__() -> TextIterator
+  return TextIterator(text: me, index: 0u64)
 
-routine TextIterator.next!() -> Letter {
-    if me.index >= me.text.count() {
-        absent
-    }
-    let value = me.text[me.index]
-    me.index = me.index + 1u64
-    return value
-}
+routine TextIterator.next!() -> Letter
+  if me.index >= me.text.count()
+    absent
+  var value = me.text[me.index]
+  me.index = me.index + 1u64
+  return value
 

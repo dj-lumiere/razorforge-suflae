@@ -11,10 +11,10 @@ dangerous external("C") routine rf_alloc(size: U64) -> UAddr
 dangerous external("C") routine rf_free(ptr: UAddr)
 dangerous external("C") routine rf_memcpy(dest: UAddr, src: UAddr, size: U64)
 dangerous external("C") routine rf_memset(dest: UAddr, value: U8, size: U64)
-dangerous external("C") routine rf_address_of<T>(me: T)
-dangerous external("C") routine rf_read_as<T>(dest: UAddr)
-dangerous external("C") routine rf_volatile_read_as<T>(dest: UAddr)
-dangerous external("C") routine rf_invalidate<T>(dest: UAddr)
+dangerous external("C") routine rf_address_of[T](target: T)
+dangerous external("C") routine rf_read_as[T](dest: UAddr)
+dangerous external("C") routine rf_volatile_read_as[T](dest: UAddr)
+dangerous external("C") routine rf_invalidate[T](dest: UAddr)
 
 # ============================================================================
 # D32 (Decimal32) - Intel DFP Library

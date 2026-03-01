@@ -5,75 +5,75 @@ module Core
 import RazorForge/Text.Text
 
 entity Text
-    secret value: RazorForge/Text.Text
+  secret value: RazorForge/Text.Text
 
 # Core operations
 routine Text.count() -> Integer
-    return Integer(value: me.value.count())
+  return Integer(value: me.value.count())
 
 routine Text.is_empty() -> Bool
-    return me.value.is_empty()
+  return me.value.is_empty()
 
 # Indexing
 routine Text.__getitem__!(index: Integer) -> Letter
-    return me.value.__getitem__!(index.value)
+  return me.value.__getitem__!(index.value)
 
 # String operations
 routine Text.__add__(other: Text) -> Text
-    return Text(value: me.value.__add__(other.value))
+  return Text(value: me.value.__add__(other.value))
 
 routine Text.concat(other: Text) -> Text
-    return Text(value: me.value.concat(other.value))
+  return Text(value: me.value.concat(other.value))
 
 # Comparison
 routine Text.__eq__(other: Text) -> Bool
-    return me.value.__eq__(other.value)
+  return me.value.__eq__(other.value)
 
 routine Text.__cmp__(other: Text) -> ComparisonSign
-    return me.value.__cmp__(other.value)
+  return me.value.__cmp__(other.value)
 
 # Search
 routine Text.contains(substr: Text) -> Bool
-    return me.value.contains(substr.value)
+  return me.value.contains(substr.value)
 
 routine Text.starts_with(prefix: Text) -> Bool
-    return me.value.starts_with(prefix.value)
+  return me.value.starts_with(prefix.value)
 
 routine Text.ends_with(suffix: Text) -> Bool
-    return me.value.ends_with(suffix.value)
+  return me.value.ends_with(suffix.value)
 
 routine Text.index_of(substr: Text) -> Integer
-    return Integer(value: me.value.index_of(substr.value))
+  return Integer(value: me.value.index_of(substr.value))
 
 # Transformation
 routine Text.to_upper() -> Text
-    return Text(value: me.value.to_upper())
+  return Text(value: me.value.to_upper())
 
 routine Text.to_lower() -> Text
-    return Text(value: me.value.to_lower())
+  return Text(value: me.value.to_lower())
 
 routine Text.trim() -> Text
-    return Text(value: me.value.trim())
+  return Text(value: me.value.trim())
 
 routine Text.trim_start() -> Text
-    return Text(value: me.value.trim_start())
+  return Text(value: me.value.trim_start())
 
 routine Text.trim_end() -> Text
-    return Text(value: me.value.trim_end())
+  return Text(value: me.value.trim_end())
 
 routine Text.replace(old: Text, new: Text) -> Text
-    return Text(value: me.value.replace(old.value, new.value))
+  return Text(value: me.value.replace(old.value, new.value))
 
 # Splitting
-routine Text.split(delimiter: Text) -> List<Text>
-    return List<Text>(value: me.value.split(delimiter.value))
+routine Text.split(delimiter: Text) -> List[Text]
+  return List[Text](value: me.value.split(delimiter.value))
 
-routine Text.lines() -> List<Text>
-    return List<Text>(value: me.value.lines())
+routine Text.lines() -> List[Text]
+  return List[Text](value: me.value.lines())
 
 # Conversion
 routine Text.to_bytes() -> Bytes
-    return Bytes(value: me.value.to_bytes())
+  return Bytes(value: me.value.to_bytes())
 
-routine Text.List() -> List<Letter>
-    return me.value.List()
+routine Text.List() -> List[Letter]
+  return me.value.List()

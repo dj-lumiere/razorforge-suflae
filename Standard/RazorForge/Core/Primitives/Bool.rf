@@ -1,9 +1,7 @@
 module Core
 
-record Bool follows Equatable {
-    secret value: @intrinsic.i1
-}
+record Bool obeys Equatable
+  secret value: @intrinsic.i1
 
-routine Bool.__eq__(you: Bool) -> Bool {
-    return icmp_eq<Bool>(me.value, you.value)
-}
+routine Bool.__eq__(you: Bool) -> Bool
+  return icmp_eq[Bool](me.value, you.value)

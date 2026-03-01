@@ -1,7 +1,6 @@
 module Core
 
-choice DataState {
-    VALID
-    ABSENT
-    ERROR
-}
+choice DataState
+  VALID
+  ABSENT
+  ERROR

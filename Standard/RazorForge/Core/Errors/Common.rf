@@ -6,33 +6,25 @@ module Core
 # All error types follow the Crashable protocol.
 
 # AbsentValueError - thrown when accessing an absent value
-record AbsentValueError follows Crashable {
-}
+record AbsentValueError obeys Crashable
 
-routine AbsentValueError.crash_message() -> Text {
-    return ptr_to_text(me.message_handle.ptr)
-}
+routine AbsentValueError.crash_message() -> Text
+  return ptr_to_text(me.message_handle.ptr)
 
 # UserTerminationError - thrown by stop!()
-record UserTerminationError follows Crashable {
-}
+record UserTerminationError obeys Crashable
 
-routine UserTerminationError.crash_message() -> Text {
-    return ptr_to_text(me.message_handle.ptr)
-}
+routine UserTerminationError.crash_message() -> Text
+  return ptr_to_text(me.message_handle.ptr)
 
 # VerificationFailedError - thrown by verify!()
-record VerificationFailedError follows Crashable {
-}
+record VerificationFailedError obeys Crashable
 
-routine VerificationFailedError.crash_message() -> Text {
-    return ptr_to_text(me.message_handle.ptr)
-}
+routine VerificationFailedError.crash_message() -> Text
+  return ptr_to_text(me.message_handle.ptr)
 
 # LogicBreachedError - thrown by breach!()
-record LogicBreachedError follows Crashable {
-}
+record LogicBreachedError obeys Crashable
 
-routine LogicBreachedError.crash_message() -> Text {
-    return ptr_to_text(me.message_handle.ptr)
-}
+routine LogicBreachedError.crash_message() -> Text
+  return ptr_to_text(me.message_handle.ptr)

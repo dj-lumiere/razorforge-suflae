@@ -1,6 +1,5 @@
 module Numerics
 
-entity Fraction follows Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered {
-    secret numerator: Integer
-    secret denominator: Integer
-}
+entity Fraction obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered
+  secret numerator: Integer
+  secret denominator: Integer

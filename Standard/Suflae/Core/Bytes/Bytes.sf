@@ -5,33 +5,33 @@ module Core
 import RazorForge/Bytes.Bytes
 
 entity Bytes
-    secret value: RazorForge/Text.Bytes
+  secret value: RazorForge/Bytes.Bytes
 
 # Core operations
 routine Bytes.count() -> Integer
-    return Integer(value: me.value.count())
+  return Integer(value: me.value.count())
 
 routine Bytes.is_empty() -> Bool
-    return me.value.is_empty()
+  return me.value.is_empty()
 
 # Indexing
 routine Bytes.__getitem__!(index: Integer) -> Byte
-    return Byte(value: me.value.__getitem__(index.value))
+  return Byte(value: me.value.__getitem__(index.value))
 
 # String operations
 routine Bytes.__add__(other: Bytes) -> Bytes
-    return Bytes(value: me.value.__add__(other.value))
+  return Bytes(value: me.value.__add__(other.value))
 
 routine Bytes.concat(other: Bytes) -> Bytes
-    return Bytes(value: me.value.concat(other.value))
+  return Bytes(value: me.value.concat(other.value))
 
 # Comparison
 routine Bytes.__eq__(other: Bytes) -> Bool
-    return me.value.__eq__(other.value)
+  return me.value.__eq__(other.value)
 
 # Conversion
 routine Bytes.to_text() -> Text
-    return Text(value: me.value.to_text())
+  return Text(value: me.value.to_text())
 
-routine List<Byte>.__create__(from: Bytes) -> List<Byte>
-    return from.List()
+routine List[Byte].__create__(from: Bytes) -> List[Byte]
+  return from.List()

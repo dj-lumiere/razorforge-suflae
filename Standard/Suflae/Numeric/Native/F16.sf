@@ -5,72 +5,72 @@ module Numerics
 import RazorForge/Core.F16
 
 record F16
-    secret value: RazorForge/Core.F16
+  secret value: RazorForge/Core.F16
 
 # Arithmetic operators
 routine F16.__add__(you: F16) -> F16
-    return F16(value: me.value.__add__(you.value))
+  return F16(value: me.value.__add__(you.value))
 
 routine F16.__sub__(you: F16) -> F16
-    return F16(value: me.value.__sub__(you.value))
+  return F16(value: me.value.__sub__(you.value))
 
 routine F16.__mul__(you: F16) -> F16
-    return F16(value: me.value.__mul__(you.value))
+  return F16(value: me.value.__mul__(you.value))
 
 routine F16.__truediv__(you: F16) -> F16
-    return F16(value: me.value.__truediv__(you.value))
+  return F16(value: me.value.__truediv__(you.value))
 
 routine F16.__neg__() -> F16
-    return F16(value: me.value.__neg__())
+  return F16(value: me.value.__neg__())
 
 # Comparison
 routine F16.__eq__(you: F16) -> Bool
-    return me.value.__eq__(you.value)
+  return me.value.__eq__(you.value)
 
 routine F16.__cmp__(you: F16) -> ComparisonSign
-    return me.value.__cmp__(you.value)
+  return me.value.__cmp__(you.value)
 
 # Math operations
 routine F16.sqrt() -> F16
-    return F16(value: me.value.sqrt())
+  return F16(value: me.value.sqrt())
 
 routine F16.abs() -> F16
-    return F16(value: me.value.abs())
+  return F16(value: me.value.abs())
 
 routine F16.floor() -> F16
-    return F16(value: me.value.floor())
+  return F16(value: me.value.floor())
 
 routine F16.ceil() -> F16
-    return F16(value: me.value.ceil())
+  return F16(value: me.value.ceil())
 
 routine F16.round() -> F16
-    return F16(value: me.value.round())
+  return F16(value: me.value.round())
 
 routine F16.trunc() -> F16
-    return F16(value: me.value.trunc())
+  return F16(value: me.value.trunc())
 
 # Utility methods
 routine F16.min(you: F16) -> F16
-    return F16(value: me.value.min(you.value))
+  return F16(value: me.value.min(you.value))
 
 routine F16.max(you: F16) -> F16
-    return F16(value: me.value.max(you.value))
+  return F16(value: me.value.max(you.value))
 
 routine F16.clamp(min_val: F16, max_val: F16) -> F16
-    return F16(value: me.value.clamp(min_val.value, max_val.value))
+  return F16(value: me.value.clamp(min_val.value, max_val.value))
 
 routine F16.is_positive() -> Bool
-    return me.value.is_positive()
+  return me.value.is_positive()
 
 routine F16.is_negative() -> Bool
-    return me.value.is_negative()
+  return me.value.is_negative()
 
 routine F16.is_zero() -> Bool
-    return me.value.is_zero()
+  return me.value.is_zero()
 
 routine F16.signum() -> F16
-    return F16(value: me.value.signum())
+  return F16(value: me.value.signum())
 
 # String conversion
 routine F16.to_text() -> Text
-    return me.value.to_text()
+  return me.value.to_text()

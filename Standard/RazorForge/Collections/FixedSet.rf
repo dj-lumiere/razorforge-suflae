@@ -1,10 +1,10 @@
-# RazorForge FixedSet<T, N> - Fixed-capacity hash set with robin hood hashing
+# RazorForge FixedSet[T, N] - Fixed-capacity hash set with robin hood hashing
 # Resident type with fixed capacity N at compile time
 # O(1) average insert, delete, contains
 # No heap allocation - uses open addressing with robin hood probing
 #
 # Usage:
-#   let ids: FixedSet<S32, 64> = FixedSet()
+#   var ids: FixedSet[S32, 64] = FixedSet()
 #   ids.add!(42)
 #   ids.add!(13)
 #   if ids.contains(42) { }
@@ -21,307 +21,255 @@ preset SLOT_TOMBSTONE: U8 = 2u8
 
 # Fixed-capacity hash set with reference semantics
 # Uses robin hood open addressing for cache-friendly probing
-resident FixedSet<T, N>
-requires T follows Hashable
-requires N is UAddr {
-    secret count: UAddr           # Current number of elements
-    secret tombstones: UAddr      # Number of tombstones (for load factor)
-    # N slots of (T, U8 state, UAddr probe_distance) stored inline by compiler
-}
+resident FixedSet[T, N]
+needs T obeys Hashable
+needs N is UAddr
+  secret count: UAddr           # Current number of elements
+  secret tombstones: UAddr      # Number of tombstones (for load factor)
+  # N slots of (T, U8 state, UAddr probe_distance) stored inline by compiler
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
-routine FixedSet<T, N>.__create__() -> FixedSet<T, N> {
-    let set = FixedSet<T, N>(count: 0uaddr, tombstones: 0uaddr)
-    # Initialize all slots as empty
-    var i = 0uaddr
-    while i < N {
-        set.set_state(i, SLOT_EMPTY)
-        i = i + 1uaddr
-    }
-    return set
-}
+routine FixedSet[T, N].__create__() -> FixedSet[T, N]
+  var set = FixedSet[T, N](count: 0uaddr, tombstones: 0uaddr)
+  # Initialize all slots as empty
+  var i = 0uaddr
+  while i < N
+    set.set_state(i, SLOT_EMPTY)
+    i = i + 1uaddr
+  return set
 
 # ============================================================================
 # Internal Slot Access
 # ============================================================================
 
-routine FixedSet<T, N>.get_value(slot: UAddr) -> T {
-    # Access slot value (internal)
-    return me[slot * 3uaddr]
-}
+routine FixedSet[T, N].get_value(slot: UAddr) -> T
+  # Access slot value (internal)
+  return me[slot * 3uaddr]
 
-routine FixedSet<T, N>.set_value(slot: UAddr, value: T) {
-    me[slot * 3uaddr] = value
-}
+routine FixedSet[T, N].set_value(slot: UAddr, value: T)
+  me[slot * 3uaddr] = value
+  return
 
-routine FixedSet<T, N>.get_state(slot: UAddr) -> U8 {
-    return me[slot * 3uaddr + 1uaddr]
-}
+routine FixedSet[T, N].get_state(slot: UAddr) -> U8
+  return me[slot * 3uaddr + 1uaddr]
 
-routine FixedSet<T, N>.set_state(slot: UAddr, state: U8) {
-    me[slot * 3uaddr + 1uaddr] = state
-}
+routine FixedSet[T, N].set_state(slot: UAddr, state: U8)
+  me[slot * 3uaddr + 1uaddr] = state
+  return
 
-routine FixedSet<T, N>.get_probe_dist(slot: UAddr) -> UAddr {
-    return me[slot * 3uaddr + 2uaddr]
-}
+routine FixedSet[T, N].get_probe_dist(slot: UAddr) -> UAddr
+  return me[slot * 3uaddr + 2uaddr]
 
-routine FixedSet<T, N>.set_probe_dist(slot: UAddr, dist: UAddr) {
-    me[slot * 3uaddr + 2uaddr] = dist
-}
+routine FixedSet[T, N].set_probe_dist(slot: UAddr, dist: UAddr)
+  me[slot * 3uaddr + 2uaddr] = dist
+  return
 
-routine FixedSet<T, N>.hash_index(value: T) -> UAddr {
-    let hash = value.__hash__()
-    return hash % N
-}
+routine FixedSet[T, N].hash_index(value: T) -> UAddr
+  var hash = value.__hash__()
+  return hash % N
 
-routine FixedSet<T, N>.next_slot(slot: UAddr) -> UAddr {
-    return (slot + 1uaddr) % N
-}
+routine FixedSet[T, N].next_slot(slot: UAddr) -> UAddr
+  return (slot + 1uaddr) % N
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine FixedSet<T, N>.count() -> UAddr {
-    return me.count
-}
+routine FixedSet[T, N].count() -> UAddr
+  return me.count
 
-routine FixedSet<T, N>.capacity() -> UAddr {
-    return N
-}
+routine FixedSet[T, N].capacity() -> UAddr
+  return N
 
-routine FixedSet<T, N>.is_empty() -> Bool {
-    return me.count == 0uaddr
-}
+routine FixedSet[T, N].is_empty() -> Bool
+  return me.count == 0uaddr
 
-routine FixedSet<T, N>.is_full() -> Bool {
-    return me.count == N
-}
+routine FixedSet[T, N].is_full() -> Bool
+  return me.count == N
 
-routine FixedSet<T, N>.remaining() -> UAddr {
-    return N - me.count
-}
+routine FixedSet[T, N].remaining() -> UAddr
+  return N - me.count
 
-routine FixedSet<T, N>.clear() {
-    var i = 0uaddr
-    while i < N {
-        me.set_state(i, SLOT_EMPTY)
-        i = i + 1uaddr
-    }
-    me.count = 0uaddr
-    me.tombstones = 0uaddr
-}
+routine FixedSet[T, N].clear()
+  var i = 0uaddr
+  while i < N
+    me.set_state(i, SLOT_EMPTY)
+    i = i + 1uaddr
+  me.count = 0uaddr
+  me.tombstones = 0uaddr
+  return
 
-routine FixedSet<T, N>.contains(value: T) -> Bool {
-    var slot = me.hash_index(value)
-    var probe_dist = 0uaddr
+routine FixedSet[T, N].contains(value: T) -> Bool
+  var slot = me.hash_index(value)
+  var probe_dist = 0uaddr
 
-    loop {
-        let state = me.get_state(slot)
+  loop
+    var state = me.get_state(slot)
 
-        if state == SLOT_EMPTY {
-            return false
-        }
+    if state == SLOT_EMPTY
+      return false
 
-        if state == SLOT_OCCUPIED {
-            # Robin hood: if our probe distance exceeds slot's, value isn't here
-            if probe_dist > me.get_probe_dist(slot) {
-                return false
-            }
+    if state == SLOT_OCCUPIED
+      # Robin hood: if our probe distance exceeds slot's, value isn't here
+      if probe_dist > me.get_probe_dist(slot)
+        return false
 
-            if me.get_value(slot) == value {
-                return true
-            }
-        }
+      if me.get_value(slot) == value
+        return true
 
-        slot = FixedSet<T, N>.next_slot(slot)
-        probe_dist = probe_dist + 1uaddr
+    slot = FixedSet[T, N].next_slot(slot)
+    probe_dist = probe_dist + 1uaddr
 
-        # Safety: prevent infinite loop
-        if probe_dist >= N {
-            return false
-        }
-    }
-}
+    # Safety: prevent infinite loop
+    if probe_dist >= N
+      return false
 
-routine FixedSet<T, N>.insert!(value: T) -> Bool {
-    # Returns true if inserted, false if already exists
-    # Throws if full
-    if me.count >= N {
-        throw IndexOutOfBoundsError(index: me.count, count: N)
-    }
+routine FixedSet[T, N].insert!(value: T) -> Bool
+  # Returns true if inserted, false if already exists
+  # Throws if full
+  if me.count >= N
+    throw IndexOutOfBoundsError(index: me.count, count: N)
 
-    var slot = me.hash_index(value)
-    var probe_dist = 0uaddr
-    var inserting_value = value
-    var inserting_dist = probe_dist
+  var slot = me.hash_index(value)
+  var probe_dist = 0uaddr
+  var inserting_value = value
+  var inserting_dist = probe_dist
 
-    loop {
-        let state = me.get_state(slot)
+  loop
+    var state = me.get_state(slot)
 
-        if state == SLOT_EMPTY or state == SLOT_TOMBSTONE {
-            # Found empty slot, insert here
-            me.set_value(slot, inserting_value)
-            me.set_state(slot, SLOT_OCCUPIED)
-            me.set_probe_dist(slot, inserting_dist)
-            me.count = me.count + 1uaddr
-            if state == SLOT_TOMBSTONE {
-                me.tombstones = me.tombstones - 1uaddr
-            }
-            return true
-        }
+    if state == SLOT_EMPTY or state == SLOT_TOMBSTONE
+      # Found empty slot, insert here
+      me.set_value(slot, inserting_value)
+      me.set_state(slot, SLOT_OCCUPIED)
+      me.set_probe_dist(slot, inserting_dist)
+      me.count = me.count + 1uaddr
+      if state == SLOT_TOMBSTONE
+        me.tombstones = me.tombstones - 1uaddr
+      return true
 
-        if state == SLOT_OCCUPIED {
-            # Check if already exists
-            if me.get_value(slot) == inserting_value {
-                return false
-            }
+    if state == SLOT_OCCUPIED
+      # Check if already exists
+      if me.get_value(slot) == inserting_value
+        return false
 
-            # Robin hood: steal from rich (lower probe distance)
-            let existing_dist = me.get_probe_dist(slot)
-            if inserting_dist > existing_dist {
-                # Swap with existing element
-                let temp_value = me.get_value(slot)
-                let temp_dist = existing_dist
+      # Robin hood: steal from rich (lower probe distance)
+      var existing_dist = me.get_probe_dist(slot)
+      if inserting_dist > existing_dist
+        # Swap with existing element
+        var temp_value = me.get_value(slot)
+        var temp_dist = existing_dist
 
-                me.set_value(slot, inserting_value)
-                me.set_probe_dist(slot, inserting_dist)
+        me.set_value(slot, inserting_value)
+        me.set_probe_dist(slot, inserting_dist)
 
-                inserting_value = temp_value
-                inserting_dist = temp_dist
-            }
-        }
+        inserting_value = temp_value
+        inserting_dist = temp_dist
 
-        slot = FixedSet<T, N>.next_slot(slot)
-        inserting_dist = inserting_dist + 1uaddr
+    slot = FixedSet[T, N].next_slot(slot)
+    inserting_dist = inserting_dist + 1uaddr
 
-        # Safety: prevent infinite loop
-        if inserting_dist >= N {
-            throw IndexOutOfBoundsError(index: me.count, count: N)
-        }
-    }
-}
+    # Safety: prevent infinite loop
+    if inserting_dist >= N
+      throw IndexOutOfBoundsError(index: me.count, count: N)
 
-routine FixedSet<T, N>.remove(value: T) -> Bool {
-    # Returns true if removed, false if not found
-    var slot = me.hash_index(value)
-    var probe_dist = 0uaddr
+routine FixedSet[T, N].remove(value: T) -> Bool
+  # Returns true if removed, false if not found
+  var slot = me.hash_index(value)
+  var probe_dist = 0uaddr
 
-    loop {
-        let state = me.get_state(slot)
+  loop
+    var state = me.get_state(slot)
 
-        if state == SLOT_EMPTY {
-            return false
-        }
+    if state == SLOT_EMPTY
+      return false
 
-        if state == SLOT_OCCUPIED {
-            if probe_dist > me.get_probe_dist(slot) {
-                return false
-            }
+    if state == SLOT_OCCUPIED
+      if probe_dist > me.get_probe_dist(slot)
+        return false
 
-            if me.get_value(slot) == value {
-                # Found it - use backward shift deletion
-                me.backward_shift_delete(slot)
-                me.count = me.count - 1uaddr
-                return true
-            }
-        }
+      if me.get_value(slot) == value
+        # Found it - use backward shift deletion
+        me.backward_shift_delete(slot)
+        me.count = me.count - 1uaddr
+        return true
 
-        slot = FixedSet<T, N>.next_slot(slot)
-        probe_dist = probe_dist + 1uaddr
+    slot = FixedSet[T, N].next_slot(slot)
+    probe_dist = probe_dist + 1uaddr
 
-        if probe_dist >= N {
-            return false
-        }
-    }
-}
+    if probe_dist >= N
+      return false
 
-routine FixedSet<T, N>.backward_shift_delete(slot: UAddr) {
-    # Shift elements backward to maintain robin hood invariant
-    var current = slot
-    var next = FixedSet<T, N>.next_slot(current)
+routine FixedSet[T, N].backward_shift_delete(slot: UAddr)
+  # Shift elements backward to maintain robin hood invariant
+  var current = slot
+  var next = FixedSet[T, N].next_slot(current)
 
-    loop {
-        let state = me.get_state(next)
+  loop
+    var state = me.get_state(next)
 
-        # Stop if empty or element at home position
-        if state != SLOT_OCCUPIED or me.get_probe_dist(next) == 0uaddr {
-            me.set_state(current, SLOT_EMPTY)
-            return
-        }
+    # Stop if empty or element at home position
+    if state != SLOT_OCCUPIED or me.get_probe_dist(next) == 0uaddr
+      me.set_state(current, SLOT_EMPTY)
+      return
 
-        # Shift element backward
-        me.set_value(current, me.get_value(next))
-        me.set_state(current, SLOT_OCCUPIED)
-        me.set_probe_dist(current, me.get_probe_dist(next) - 1uaddr)
+    # Shift element backward
+    me.set_value(current, me.get_value(next))
+    me.set_state(current, SLOT_OCCUPIED)
+    me.set_probe_dist(current, me.get_probe_dist(next) - 1uaddr)
 
-        current = next
-        next = FixedSet<T, N>.next_slot(next)
-    }
-}
+    current = next
+    next = FixedSet[T, N].next_slot(next)
+  return
 
 # ============================================================================
 # Conversion
 # ============================================================================
 
-routine FixedSet<T, N>.to_list() -> List<T> {
-    let result = List<T>(me.count)
-    var i = 0uaddr
-    while i < N {
-        if me.get_state(i) == SLOT_OCCUPIED {
-            result.add_last(me.get_value(i))
-        }
-        i = i + 1uaddr
-    }
-    return result
-}
+routine FixedSet[T, N].to_list() -> List[T]
+  var result = List[T](me.count)
+  var i = 0uaddr
+  while i < N
+    if me.get_state(i) == SLOT_OCCUPIED
+      result.add_last(me.get_value(i))
+    i = i + 1uaddr
+  return result
 
 # ============================================================================
 # Iteration
 # ============================================================================
 
-routine FixedSet<T, N>.iter() -> FixedSetIterator<T, N> {
-    return FixedSetIterator<T, N>(set: me, slot: 0uaddr)
-}
+routine FixedSet[T, N].iter() -> FixedSetIterator[T, N]
+  return FixedSetIterator[T, N](set: me, slot: 0uaddr)
 
-record FixedSetIterator<T, N> {
-    set: FixedSet<T, N>
-    slot: UAddr
-}
+record FixedSetIterator[T, N]
+  set: FixedSet[T, N]
+  slot: UAddr
 
-routine FixedSetIterator<T, N>.next!() -> T {
-    while me.slot < N {
-        if me.set.get_state(me.slot) == SLOT_OCCUPIED {
-            let value = me.set.get_value(me.slot)
-            me.slot = me.slot + 1uaddr
-            return value
-        }
-        me.slot = me.slot + 1uaddr
-    }
-    absent
-}
+routine FixedSetIterator[T, N].next!() -> T
+  while me.slot < N
+    if me.set.get_state(me.slot) == SLOT_OCCUPIED
+      var value = me.set.get_value(me.slot)
+      me.slot = me.slot + 1uaddr
+      return value
+    me.slot = me.slot + 1uaddr
+  absent
 
 # ============================================================================
 # Comparison
 # ============================================================================
 
-routine FixedSet<T, N>.__eq__(other: FixedSet<T, N>) -> Bool {
-    if me.count != other.count {
-        return false
-    }
+routine FixedSet[T, N].__eq__(other: FixedSet[T, N]) -> Bool
+  if me.count != other.count
+    return false
 
-    var i = 0uaddr
-    while i < N {
-        if me.get_state(i) == SLOT_OCCUPIED {
-            if not other.contains(me.get_value(i)) {
-                return false
-            }
-        }
-        i = i + 1uaddr
-    }
-    return true
-}
+  var i = 0uaddr
+  while i < N
+    if me.get_state(i) == SLOT_OCCUPIED
+      if not other.contains(me.get_value(i))
+        return false
+    i = i + 1uaddr
+  return true

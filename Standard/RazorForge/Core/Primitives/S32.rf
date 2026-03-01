@@ -2,9 +2,8 @@
 # Maps directly to LLVM i32 type and native machine integers
 module Core
 # Core S32 type definition - maps to LLVM i32
-record S32 follows SignedIntegral, Ordered {
-    secret value: @intrinsic.i32
-}
+record S32 obeys SignedIntegral, Ordered
+  secret value: @intrinsic.i32
 
 # Constants for S32 limits
 preset S32_MIN: S32 = -2147483648_s32
@@ -13,477 +12,322 @@ preset S32_ZERO: S32 = 0_s32
 preset S32_ONE: S32 = 1_s32
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
 # From S8 - always fits, no check needed
-routine S32.__create__(from: S8) -> S32 {
-    return sext<S8, S32>(from)
-}
+routine S32.__create__(from: S8) -> S32
+  return sext[S8, S32](from)
 
 # From S16 - always fits, no check needed
-routine S32.__create__(from: S16) -> S32 {
-    return sext<S16, S32>(from)
-}
+routine S32.__create__(from: S16) -> S32
+  return sext[S16, S32](from)
 
-routine S32.__create__(from: S32) -> S32 {
-    return from
-}
+routine S32.__create__(from: S32) -> S32
+  return from
 
 # From S64 - crashes if value out of S32 range
-routine S32.__create__!(from: S64) -> S32 {
-    unless S64(S32_MIN) <= from <= S64(S32_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return trunc<S64, S32>(from)
-}
+routine S32.__create__!(from: S64) -> S32
+  unless S64(S32_MIN) <= from <= S64(S32_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return trunc[S64, S32](from)
 
 # From S128 - crashes if value out of S32 range
-routine S32.__create__!(from: S128) -> S32 {
-    unless S128(S32_MIN) <= from <= S128(S32_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return trunc<S128, S32>(from)
-}
+routine S32.__create__!(from: S128) -> S32
+  unless S128(S32_MIN) <= from <= S128(S32_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return trunc[S128, S32](from)
 
 # From U8 - always fits, no check needed
-routine S32.__create__(from: U8) -> S32 {
-    return zext<U8, S32>(from)
-}
+routine S32.__create__(from: U8) -> S32
+  return zext[U8, S32](from)
 
 # From U16 - always fits, no check needed
-routine S32.__create__(from: U16) -> S32 {
-    return zext<U16, S32>(from)
-}
+routine S32.__create__(from: U16) -> S32
+  return zext[U16, S32](from)
 
 # From U32 - crashes if value > S32_MAX (bit 31 set)
-routine S32.__create__!(from: U32) -> S32 {
-    unless from <= U32(S32_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return bitcast<U32, S32>(from)
-}
+routine S32.__create__!(from: U32) -> S32
+  unless from <= U32(S32_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return bitcast[U32, S32](from)
 
 # From U64 - crashes if value > S32_MAX
-routine S32.__create__!(from: U64) -> S32 {
-    unless from <= U64(S32_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return trunc<U64, S32>(from)
-}
+routine S32.__create__!(from: U64) -> S32
+  unless from <= U64(S32_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return trunc[U64, S32](from)
 
 # From U128 - crashes if value > S32_MAX
-routine S32.__create__!(from: U128) -> S32 {
-    unless from <= U128(S32_MAX) {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return trunc<U128, S32>(from)
-}
+routine S32.__create__!(from: U128) -> S32
+  unless from <= U128(S32_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return trunc[U128, S32](from)
 
 # From floating point - truncates
-routine S32.__create__!(from: F16) -> S32 {
-    return from.F32().S32!()
-}
+routine S32.__create__!(from: F16) -> S32
+  return from.F32().S32!()
 
-routine S32.__create__!(from: F32) -> S32 {
-    return fptosi<F32, S32>(from)
-}
+routine S32.__create__!(from: F32) -> S32
+  return fptosi[F32, S32](from)
 
-routine S32.__create__!(from: F64) -> S32 {
-    return fptosi<F64, S32>(from)
-}
+routine S32.__create__!(from: F64) -> S32
+  return fptosi[F64, S32](from)
 
-routine S32.__create__!(from: F128) -> S32 {
-    return from.F64!().S32!()
-}
+routine S32.__create__!(from: F128) -> S32
+  return from.F64!().S32!()
 
 # From decimal - truncates fractional part and can overflow
-routine S32.__create__!(from: D32) -> S32 {
-    let bits = bitcast<D32, U32>(from)
-    return d32_to_s32(bits)
-}
+routine S32.__create__!(from: D32) -> S32
+  var bits = bitcast[D32, U32](from)
+  return d32_to_s32(bits)
 
-routine S32.__create__!(from: D64) -> S32 {
-    let bits = bitcast<D64, U64>(from)
-    return d64_to_s32(bits)
-}
+routine S32.__create__!(from: D64) -> S32
+  var bits = bitcast[D64, U64](from)
+  return d64_to_s32(bits)
 
-routine S32.__create__!(from: D128) -> S32 {
-    return d128_to_s32(from.low, from.high)
-}
+routine S32.__create__!(from: D128) -> S32
+  return d128_to_s32(from.low, from.high)
 
 # From SAddr - crashes if value out of S32 range (on 64-bit platforms)
-routine S32.__create__!(from: SAddr) -> S32 {
-    let val_s64 = from.S64!()
-    if not (-2147483648_s64 <= val_s64 <= 2147483647_s64) {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return trunc<SAddr, S32>(from)
-}
+routine S32.__create__!(from: SAddr) -> S32
+  var val_s64 = from.S64!()
+  if not (-2147483648_s64 <= val_s64 <= 2147483647_s64)
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return trunc[SAddr, S32](from)
 
 # From UAddr - crashes if value out of S32 range
-routine S32.__create__!(from: UAddr) -> S32 {
-    let val_u64 = from.U64!()
-    if val_u64 > 2147483647_u64 {
-        throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-    }
-    return trunc<UAddr, S32>(from)
-}
+routine S32.__create__!(from: UAddr) -> S32
+  var val_u64 = from.U64!()
+  if val_u64 > 2147483647_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+  return trunc[UAddr, S32](from)
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-@crash_only
-routine S32.__add__!(you: S32) -> S32 {
-    return add<S32>(me, you)
-}
+routine S32.__add__!(you: S32) -> S32
+  return add[S32](me, you)
 
-@crash_only
-routine S32.__sub__!(you: S32) -> S32 {
-    return sub<S32>(me, you)
-}
+routine S32.__sub__!(you: S32) -> S32
+  return sub[S32](me, you)
 
-@crash_only
-routine S32.__mul__!(you: S32) -> S32 {
-    return mul<S32>(me, you)
-}
+routine S32.__mul__!(you: S32) -> S32
+  return mul[S32](me, you)
 
-@crash_only
-routine S32.__floordiv__!(you: S32) -> S32 {
-    if you == 0 {
-        throw DivisionByZeroError()
-    }
-    return sdiv<S32>(me, you)
-}
+routine S32.__floordiv__!(you: S32) -> S32
+  if you == 0
+    throw DivisionByZeroError()
+  return sdiv[S32](me, you)
 
-@crash_only
-routine S32.__mod__!(you: S32) -> S32 {
-    return srem<S32>(me, you)
-}
+routine S32.__mod__!(you: S32) -> S32
+  return srem[S32](me, you)
 
-@crash_only
-routine S32.__neg__!() -> S32 {
-    return neg<S32>(me)
-}
+routine S32.__neg__!() -> S32
+  return neg[S32](me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine S32.__add_wrap__(you: S32) -> S32 {
-    return add_wrapping<S32>(me, you)
-}
+routine S32.__add_wrap__(you: S32) -> S32
+  return add_wrapping[S32](me, you)
 
-routine S32.__sub_wrap__(you: S32) -> S32 {
-    return sub_wrapping<S32>(me, you)
-}
+routine S32.__sub_wrap__(you: S32) -> S32
+  return sub_wrapping[S32](me, you)
 
-routine S32.__mul_wrap__(you: S32) -> S32 {
-    return mul_wrapping<S32>(me, you)
-}
+routine S32.__mul_wrap__(you: S32) -> S32
+  return mul_wrapping[S32](me, you)
 
 # ============================================================================
-# Saturating Arithmetic (+^, -^, *^)
+# Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine S32.__add_sat__(you: S32) -> S32 {
-    return add_saturate<S32>(me, you)
-}
+routine S32.__add_clamp__(you: S32) -> S32
+  return add_clamp[S32](me, you)
 
-routine S32.__sub_sat__(you: S32) -> S32 {
-    return sub_saturate<S32>(me, you)
-}
+routine S32.__sub_clamp__(you: S32) -> S32
+  return sub_clamp[S32](me, you)
 
-routine S32.__mul_sat__(you: S32) -> S32 {
-    return mul_saturate<S32>(me, you)
-}
-
-# ============================================================================
-# Checked Arithmetic (+?, -?, *?) - returns Maybe<T>
-# ============================================================================
-
-routine S32.__add_checked__(you: S32) -> Maybe<S32> {
-    let (result, overflow) = add_overflow<S32>(me, you)
-    return if overflow then None else result
-}
-
-routine S32.__sub_checked__(you: S32) -> Maybe<S32> {
-    let (result, overflow) = sub_overflow<S32>(me, you)
-    return if overflow then None else result
-}
-
-routine S32.__mul_checked__(you: S32) -> Maybe<S32> {
-    let (result, overflow) = mul_overflow<S32>(me, you)
-    return if overflow then None else result
-}
+routine S32.__mul_clamp__(you: S32) -> S32
+  return mul_clamp[S32](me, you)
 
 # ============================================================================
 # Power Operations (**)
 # ============================================================================
 
 # Power operator (**) - can overflow
-@crash_only
-routine S32.__pow__!(exp: S32) -> S32 {
-    var result: S32 = 1
-    var base: S32 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    if exp < 0 {
-        return NegativeExponentError(exp)
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul<S32>(result, base)
-        }
-        base = mul<S32>(base, base)
-        e = e >> 1
-    }
-    return result
-}
+routine S32.__pow__!(exp: S32) -> S32
+  var result: S32 = 1
+  var base: S32 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul[S32](result, base)
+    base = mul[S32](base, base)
+    e = e >> 1
+  return result
 
 # Wrapping power (**%)
-routine S32.__pow_wrap__!(exp: S32) -> S32 {
-    var result: S32 = 1
-    var base: S32 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    if exp < 0 {
-        return NegativeExponentError(exp)
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul_wrapping<S32>(result, base)
-        }
-        base = mul_wrapping<S32>(base, base)
-        e = e >> 1
-    }
-    return result
-}
+routine S32.__pow_wrap__!(exp: S32) -> S32
+  var result: S32 = 1
+  var base: S32 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul_wrapping[S32](result, base)
+    base = mul_wrapping[S32](base, base)
+    e = e >> 1
+  return result
 
-# Saturating power (**^)
-routine S32.__pow_sat__!(exp: S32) -> S32 {
-    var result: S32 = 1
-    var base: S32 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    if exp < 0 {
-        return NegativeExponentError(exp)
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul_saturate<S32>(result, base)
-        }
-        base = mul_saturate<S32>(base, base)
-        e = e >> 1
-    }
-    return result
-}
-
-# Checked power (**?) - returns Maybe<S32>
-routine S32.__pow_checked__(exp: S32) -> Maybe<S32> {
-    var result: S32 = 1
-    var base: S32 = me
-    var e: U32 = exp
-    if exp < 0 {
-        return None
-    }
-    if me == 0 {
-        return None
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            let (new_result, overflow) = mul_overflow<S32>(result, base)
-            if overflow {
-                return None
-            }
-            result = new_result
-        }
-        let (new_base, overflow) = mul_overflow<S32>(base, base)
-        if overflow and e > 1 {
-            return None
-        }
-        base = new_base
-        e = e >> 1
-    }
-    return result
-}
+# Clamping power (**^)
+routine S32.__pow_clamp__!(exp: S32) -> S32
+  var result: S32 = 1
+  var base: S32 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul_clamp[S32](result, base)
+    base = mul_clamp[S32](base, base)
+    e = e >> 1
+  return result
 
 # ============================================================================
 # Bitwise Operations
 # ============================================================================
 
-routine S32.__and__(you: S32) -> S32 {
-    return bit_and<S32>(me, you)
-}
+routine S32.__and__(you: S32) -> S32
+  return bit_and[S32](me, you)
 
-routine S32.__or__(you: S32) -> S32 {
-    return bit_or<S32>(me, you)
-}
+routine S32.__or__(you: S32) -> S32
+  return bit_or[S32](me, you)
 
-routine S32.__xor__(you: S32) -> S32 {
-    return xor<S32>(me, you)
-}
+routine S32.__xor__(you: S32) -> S32
+  return xor[S32](me, you)
 
-routine S32.__not__() -> S32 {
-    return bit_not<S32>(me)
-}
+routine S32.__not__() -> S32
+  return bit_not[S32](me)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving
-routine S32.__ashl__(bits: U32) -> S32 {
-    return shl<S32>(me, bits)
-}
-
-# Checked arithmetic left shift (<<?) - returns Maybe<S32>
-routine S32.__ashl_checked__(bits: U32) -> Maybe<S32> {
-    if bits >= 32 {
-        return None
-    }
-    let result = shl<S32>(me, bits)
-    # Check if we can recover the original value
-    let recovered = ashr<S32>(result, bits)
-    if recovered != me {
-        return None
-    }
-    return result
-}
+routine S32.__ashl__(bits: U32) -> S32
+  return shl[S32](me, bits)
 
 # Arithmetic right shift (>>) - preserves sign, always safe
-routine S32.__ashr__(bits: U32) -> S32 {
-    return ashr<S32>(me, bits)
-}
+routine S32.__ashr__(bits: U32) -> S32
+  return ashr[S32](me, bits)
 
 # Logical left shift (<<<) - removes sign
-routine S32.__lshl__(bits: U32) -> S32 {
-    return shl<S32>(me, bits)
-}
+routine S32.__lshl__(bits: U32) -> S32
+  return shl[S32](me, bits)
 
 # Logical right shift (>>>) - fills with zeros, ignores sign
-routine S32.__lshr__(bits: U32) -> S32 {
-    return lshr<S32>(me, bits)
-}
+routine S32.__lshr__(bits: U32) -> S32
+  return lshr[S32](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine S32.__eq__(you: S32) -> Bool {
-    return icmp_eq<S32>(me, you)
-}
+routine S32.__eq__(you: S32) -> Bool
+  return icmp_eq[S32](me, you)
 
-routine S32.__cmp__(you: S32) -> ComparisonSign {
-    if icmp_slt<S32>(me, you) {
-        return ME_SMALL
-    }
-    if icmp_sgt<S32>(me, you) {
-        return ME_LARGE
-    }
-    return EQUAL
-}
+routine S32.__cmp__(you: S32) -> ComparisonSign
+  if icmp_slt[S32](me, you)
+    return ME_SMALL
+  if icmp_sgt[S32](me, you)
+    return ME_LARGE
+  return EQUAL
 
 # ============================================================================
 # Math Operations
 # ============================================================================
 
-routine S32.abs() -> S32 {
-    return abs<S32>(me)
-}
+routine S32.abs() -> S32
+  return abs[S32](me)
 
-routine S32.min(you: S32) -> S32 {
-    return if me <= you then me else you
-}
+routine S32.min(you: S32) -> S32
+  return if me <= you then me else you
 
-routine S32.max(you: S32) -> S32 {
-    return if me >= you then me else you
-}
+routine S32.max(you: S32) -> S32
+  return if me >= you then me else you
 
-routine S32.clamp(min_val: S32, max_val: S32) -> S32 {
-    return me.min(max_val).max(min_val)
-}
+routine S32.clamp(min_val: S32, max_val: S32) -> S32
+  return me.min(max_val).max(min_val)
 
 # ============================================================================
 # Bit Manipulation
 # ============================================================================
 
-routine S32.count_ones() -> S32 {
-    return ctpop<S32>(me)
-}
+routine S32.count_ones() -> S32
+  return ctpop[S32](me)
 
-routine S32.count_zeros() -> S32 {
-    return 32_s32 - me.count_ones()
-}
+routine S32.count_zeros() -> S32
+  return 32_s32 - me.count_ones()
 
-routine S32.leading_zeros() -> S32 {
-    return ctlz<S32>(me)
-}
+routine S32.leading_zeros() -> S32
+  return ctlz[S32](me)
 
-routine S32.trailing_zeros() -> S32 {
-    return cttz<S32>(me)
-}
+routine S32.trailing_zeros() -> S32
+  return cttz[S32](me)
 
-routine S32.leading_ones() -> S32 {
-    return me.__not__().leading_zeros()
-}
+routine S32.leading_ones() -> S32
+  return me.__not__().leading_zeros()
 
-routine S32.trailing_ones() -> S32 {
-    return me.__not__().trailing_zeros()
-}
+routine S32.trailing_ones() -> S32
+  return me.__not__().trailing_zeros()
 
-routine S32.reverse_bits() -> S32 {
-    return bitreverse<S32>(me)
-}
+routine S32.reverse_bits() -> S32
+  return bitreverse[S32](me)
 
-routine S32.swap_bytes() -> S32 {
-    return bswap<S32>(me)
-}
+routine S32.swap_bytes() -> S32
+  return bswap[S32](me)
 
 # ============================================================================
 # Utility Methods
 # ============================================================================
 
-routine S32.is_positive() -> Bool {
-    return me > 0_s32
-}
+routine S32.is_positive() -> Bool
+  return me > 0_s32
 
-routine S32.is_negative() -> Bool {
-    return me < 0_s32
-}
+routine S32.is_negative() -> Bool
+  return me < 0_s32
 
-routine S32.is_zero() -> Bool {
-    return me == 0_s32
-}
+routine S32.is_zero() -> Bool
+  return me == 0_s32
 
-routine S32.is_even() -> Bool {
-    let result = bit_and<S32>(me, 1_s32)
-    return icmp_eq<S32>(result, 0_s32)
-}
+routine S32.is_even() -> Bool
+  var result = bit_and[S32](me, 1_s32)
+  return icmp_eq[S32](result, 0_s32)
 
-routine S32.is_odd() -> Bool {
-    return not me.is_even()
-}
+routine S32.is_odd() -> Bool
+  return not me.is_even()
 
-routine S32.signum() -> S32 {
-    when {
-        me > 0_s32 => 1_s32,
-        me < 0_s32 => -1_s32,
-        _ => 0_s32
-    }
-}
+routine S32.signum() -> S32
+  return when
+    me > 0_s32 => 1_s32
+    me < 0_s32 => -1_s32
+    else => 0_s32
 
-routine S32.is_power_of_two() -> Bool {
-    let is_pos = icmp_sgt<S32>(me, 0_s32)
-    let minus_one = sub_wrapping<S32>(me, 1_s32)
-    let anded = bit_and<S32>(me, minus_one)
-    let is_zero = icmp_eq<S32>(anded, 0_s32)
-    return is_pos and is_zero
-}
+routine S32.is_power_of_two() -> Bool
+  var is_pos = icmp_sgt[S32](me, 0_s32)
+  var minus_one = sub_wrapping[S32](me, 1_s32)
+  var anded = bit_and[S32](me, minus_one)
+  var is_zero = icmp_eq[S32](anded, 0_s32)
+  return is_pos and is_zero

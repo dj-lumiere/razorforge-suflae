@@ -1,7 +1,6 @@
 # Parsable - Protocol for types that can be constructed from Text
-# Compiler auto-generates try_create (-> Maybe<Me>) and check_create (-> Result<Me>)
+# Compiler auto-generates create! (-> Maybe[Me]) and check_create (-> Result[Me])
 module Core
 
-protocol Parsable {
-    routine Me.__create__!(from: Text) -> Me
-}
+protocol Parsable
+  routine Me.__create__!(from: Text) -> Me

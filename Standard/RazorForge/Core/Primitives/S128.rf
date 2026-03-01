@@ -2,9 +2,8 @@
 # Maps directly to LLVM i128 type using compiler intrinsics
 module Core
 # Core S128 type definition - maps to LLVM i128
-record S128 follows SignedIntegral, Ordered {
-    open value: @intrinsic.i128
-}
+record S128 obeys SignedIntegral, Ordered
+  value: @intrinsic.i128
 
 # Constants for S128 limits
 preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128
@@ -13,446 +12,299 @@ preset S128_ZERO: S128 = 0_s128
 preset S128_ONE: S128 = 1_s128
 
 # ============================================================================
-# Checked Constructors (crash on overflow)
+# Checked Creators (crash on overflow)
 # ============================================================================
 
 # From S8 - always fits, no check needed
-routine S128.__create__!(from: S8) -> S128 {
-    return sext<S8, S128>(from)
-}
+routine S128.__create__!(from: S8) -> S128
+  return sext[S8, S128](from)
 
 # From S16 - always fits, no check needed
-routine S128.__create__!(from: S16) -> S128 {
-    return sext<S16, S128>(from)
-}
+routine S128.__create__!(from: S16) -> S128
+  return sext[S16, S128](from)
 
 # From S32 - always fits, no check needed
-routine S128.__create__!(from: S32) -> S128 {
-    return sext<S32, S128>(from)
-}
+routine S128.__create__!(from: S32) -> S128
+  return sext[S32, S128](from)
 
 # From S64 - always fits, no check needed
-routine S128.__create__!(from: S64) -> S128 {
-    return sext<S64, S128>(from)
-}
+routine S128.__create__!(from: S64) -> S128
+  return sext[S64, S128](from)
 
 # From S128 - identity conversion
-routine S128.__create__!(from: S128) -> S128 {
-    return from
-}
+routine S128.__create__!(from: S128) -> S128
+  return from
 
 # From U8 - always fits, no check needed
-routine S128.__create__!(from: U8) -> S128 {
-    return zext<U8, S128>(from)
-}
+routine S128.__create__!(from: U8) -> S128
+  return zext[U8, S128](from)
 
 # From U16 - always fits, no check needed
-routine S128.__create__!(from: U16) -> S128 {
-    return zext<U16, S128>(from)
-}
+routine S128.__create__!(from: U16) -> S128
+  return zext[U16, S128](from)
 
 # From U32 - always fits, no check needed
-routine S128.__create__!(from: U32) -> S128 {
-    return zext<U32, S128>(from)
-}
+routine S128.__create__!(from: U32) -> S128
+  return zext[U32, S128](from)
 
 # From U64 - always fits, no check needed
-routine S128.__create__!(from: U64) -> S128 {
-    return zext<U64, S128>(from)
-}
+routine S128.__create__!(from: U64) -> S128
+  return zext[U64, S128](from)
 
 # From U128 - crashes if value > S128_MAX (bit 127 set)
-routine S128.__create__!(from: U128) -> S128 {
-    if from > 170141183460469231731687303715884105727_u128 {
-        throw IntegerOverflowError(f"Cannot convert {from} to S128: value out of range [{S128_MIN}, {S128_MAX}]")
-    }
-    return bitcast<U128, S128>(from)
-}
+routine S128.__create__!(from: U128) -> S128
+  if from > 170141183460469231731687303715884105727_u128
+    throw IntegerOverflowError(f"Cannot convert {from} to S128: value out of range [{S128_MIN}, {S128_MAX}]")
+  return bitcast[U128, S128](from)
 
 # From floating point - truncates fractional part and crashes if overflow
-routine S128.__create__!(from: F16) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: F16) -> S128
+  return from.S64!().S128()
 
-routine S128.__create__!(from: F32) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: F32) -> S128
+  return from.S64!().S128()
 
-routine S128.__create__!(from: F64) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: F64) -> S128
+  return from.S64!().S128()
 
-routine S128.__create__!(from: F128) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: F128) -> S128
+  return from.S64!().S128()
 
 # From decimal - truncates fractional part and crashes if overflow
-routine S128.__create__!(from: D32) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: D32) -> S128
+  return from.S64!().S128()
 
-routine S128.__create__!(from: D64) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: D64) -> S128
+  return from.S64!().S128()
 
-routine S128.__create__!(from: D128) -> S128 {
-    return from.S64!().S128()
-}
+routine S128.__create__!(from: D128) -> S128
+  return from.S64!().S128()
 
 # From SAddr - sign extend to S128
-routine S128.__create__!(from: SAddr) -> S128 {
-    return sext<SAddr, S128>(from)
-}
+routine S128.__create__!(from: SAddr) -> S128
+  return sext[SAddr, S128](from)
 
 # From UAddr - zero extend to S128
-routine S128.__create__!(from: UAddr) -> S128 {
-    return zext<UAddr, S128>(from)
-}
+routine S128.__create__!(from: UAddr) -> S128
+  return zext[UAddr, S128](from)
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
-@crash_only
-routine S128.__add__!(you: S128) -> S128 {
-    return add<S128>(me, you)
-}
+routine S128.__add__!(you: S128) -> S128
+  return add[S128](me, you)
 
-@crash_only
-routine S128.__sub__!(you: S128) -> S128 {
-    return sub<S128>(me, you)
-}
+routine S128.__sub__!(you: S128) -> S128
+  return sub[S128](me, you)
 
-@crash_only
-routine S128.__mul__!(you: S128) -> S128 {
-    return mul<S128>(me, you)
-}
+routine S128.__mul__!(you: S128) -> S128
+  return mul[S128](me, you)
 
-@crash_only
-routine S128.__floordiv__!(you: S128) -> S128 {
-    if you == 0 {
-        throw DivisionByZeroError()
-    }
-    return sdiv<S128>(me, you)
-}
+routine S128.__floordiv__!(you: S128) -> S128
+  if you == 0
+    throw DivisionByZeroError()
+  return sdiv[S128](me, you)
 
-@crash_only
-routine S128.__mod__!(you: S128) -> S128 {
-    return srem<S128>(me, you)
-}
+routine S128.__mod__!(you: S128) -> S128
+  return srem[S128](me, you)
 
-@crash_only
-routine S128.__neg__!() -> S128 {
-    return neg<S128>(me)
-}
+routine S128.__neg__!() -> S128
+  return neg[S128](me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine S128.__add_wrap__(you: S128) -> S128 {
-    return add_wrapping<S128>(me, you)
-}
+routine S128.__add_wrap__(you: S128) -> S128
+  return add_wrapping[S128](me, you)
 
-routine S128.__sub_wrap__(you: S128) -> S128 {
-    return sub_wrapping<S128>(me, you)
-}
+routine S128.__sub_wrap__(you: S128) -> S128
+  return sub_wrapping[S128](me, you)
 
-routine S128.__mul_wrap__(you: S128) -> S128 {
-    return mul_wrapping<S128>(me, you)
-}
+routine S128.__mul_wrap__(you: S128) -> S128
+  return mul_wrapping[S128](me, you)
 
 # ============================================================================
-# Saturating Arithmetic (+^, -^, *^)
+# Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine S128.__add_sat__(you: S128) -> S128 {
-    return add_saturate<S128>(me, you)
-}
+routine S128.__add_clamp__(you: S128) -> S128
+  return add_clamp[S128](me, you)
 
-routine S128.__sub_sat__(you: S128) -> S128 {
-    return sub_saturate<S128>(me, you)
-}
+routine S128.__sub_clamp__(you: S128) -> S128
+  return sub_clamp[S128](me, you)
 
-routine S128.__mul_sat__(you: S128) -> S128 {
-    return mul_saturate<S128>(me, you)
-}
-
-# ============================================================================
-# Checked Arithmetic (+?, -?, *?) - returns Maybe<T>
-# ============================================================================
-
-routine S128.__add_checked__(you: S128) -> Maybe<S128> {
-    let (result, overflow) = add_overflow<S128>(me, you)
-    return if overflow then None else result
-}
-
-routine S128.__sub_checked__(you: S128) -> Maybe<S128> {
-    let (result, overflow) = sub_overflow<S128>(me, you)
-    return if overflow then None else result
-}
-
-routine S128.__mul_checked__(you: S128) -> Maybe<S128> {
-    let (result, overflow) = mul_overflow<S128>(me, you)
-    return if overflow then None else result
-}
+routine S128.__mul_clamp__(you: S128) -> S128
+  return mul_clamp[S128](me, you)
 
 # ============================================================================
 # Power Operations (**)
 # ============================================================================
 
 # Power operator (**) - can overflow
-@crash_only
-routine S128.__pow__!(exp: S128) -> S128 {
-    var result: S128 = 1
-    var base: S128 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    if exp < 0 {
-        return NegativeExponentError(exp)
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul<S128>(result, base)
-        }
-        base = mul<S128>(base, base)
-        e = e >> 1
-    }
-    return result
-}
+routine S128.__pow__!(exp: S128) -> S128
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul[S128](result, base)
+    base = mul[S128](base, base)
+    e = e >> 1
+  return result
 
 # Wrapping power (**%)
-@crash_only
-routine S128.__pow_wrap__!(exp: S128) -> S128 {
-    var result: S128 = 1
-    var base: S128 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    if exp < 0 {
-        return NegativeExponentError(exp)
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul_wrapping<S128>(result, base)
-        }
-        base = mul_wrapping<S128>(base, base)
-        e = e >> 1
-    }
-    return result
-}
+routine S128.__pow_wrap__!(exp: S128) -> S128
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul_wrapping[S128](result, base)
+    base = mul_wrapping[S128](base, base)
+    e = e >> 1
+  return result
 
-# Saturating power (**^)
-@crash_only
-routine S128.__pow_sat__!(exp: S128) -> S128 {
-    var result: S128 = 1
-    var base: S128 = me
-    var e: U32 = exp
-    if me == 0 and exp == 0 {
-        throw IndeterminateResultError()
-    }
-    if exp < 0 {
-        return NegativeExponentError(exp)
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            result = mul_saturate<S128>(result, base)
-        }
-        base = mul_saturate<S128>(base, base)
-        e = e >> 1
-    }
-    return result
-}
-
-# Checked power (**?) - returns Maybe<S128>
-routine S128.__pow_checked__(exp: S128) -> Maybe<S128> {
-    var result: S128 = 1
-    var base: S128 = me
-    var e: U32 = exp
-    if exp < 0 or me == 0 {
-        return None
-    }
-    while e > 0 {
-        if (e & 1) == 1 {
-            let (new_result, overflow) = mul_overflow<S128>(result, base)
-            if overflow {
-                return None
-            }
-            result = new_result
-        }
-        let (new_base, overflow) = mul_overflow<S128>(base, base)
-        if overflow and e > 1 {
-            return None
-        }
-        base = new_base
-        e = e >> 1
-    }
-    return result
-}
+# Clamping power (**^)
+routine S128.__pow_clamp__!(exp: S128) -> S128
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul_clamp[S128](result, base)
+    base = mul_clamp[S128](base, base)
+    e = e >> 1
+  return result
 
 # ============================================================================
 # Bitwise Operations
 # ============================================================================
 
-routine S128.__and__(you: S128) -> S128 {
-    return bit_and<S128>(me, you)
-}
+routine S128.__and__(you: S128) -> S128
+  return bit_and[S128](me, you)
 
-routine S128.__or__(you: S128) -> S128 {
-    return bit_or<S128>(me, you)
-}
+routine S128.__or__(you: S128) -> S128
+  return bit_or[S128](me, you)
 
-routine S128.__xor__(you: S128) -> S128 {
-    return xor<S128>(me, you)
-}
+routine S128.__xor__(you: S128) -> S128
+  return xor[S128](me, you)
 
-routine S128.__not__() -> S128 {
-    return bit_not<S128>(me)
-}
+routine S128.__not__() -> S128
+  return bit_not[S128](me)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving
-routine S128.__ashl__(bits: U32) -> S128 {
-    return shl<S128>(me, bits)
-}
-
-# Checked arithmetic left shift (<<?) - returns Maybe<S128>
-routine S128.__ashl_checked__(bits: U32) -> Maybe<S128> {
-    if bits >= 128 {
-        return None
-    }
-    let result = shl<S128>(me, bits)
-    # Check if we can recover the original value
-    let recovered = ashr<S128>(result, bits)
-    if recovered != me {
-        return None
-    }
-    return result
-}
+routine S128.__ashl__(bits: U32) -> S128
+  return shl[S128](me, bits)
 
 # Arithmetic right shift (>>) - preserves sign, always safe
-routine S128.__ashr__(bits: U32) -> S128 {
-    return ashr<S128>(me, bits)
-}
+routine S128.__ashr__(bits: U32) -> S128
+  return ashr[S128](me, bits)
 
 # Logical left shift (<<<) - same as << but explicit
-routine S128.__lshl__(bits: U32) -> S128 {
-    return shl<S128>(me, bits)
-}
+routine S128.__lshl__(bits: U32) -> S128
+  return shl[S128](me, bits)
 
 # Logical right shift (>>>) - fills with zeros, ignores sign
-routine S128.__lshr__(bits: U32) -> S128 {
-    return lshr<S128>(me, bits)
-}
+routine S128.__lshr__(bits: U32) -> S128
+  return lshr[S128](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine S128.__eq__(you: S128) -> Bool {
-    return icmp_eq<S128>(me, you)
-}
+routine S128.__eq__(you: S128) -> Bool
+  return icmp_eq[S128](me, you)
 
-routine S128.__cmp__(you: S128) -> ComparisonSign {
-    if icmp_slt<S128>(me, you) {
-        return ME_SMALL
-    }
-    if icmp_sgt<S128>(me, you) {
-        return ME_LARGE
-    }
-    return EQUAL
-}
+routine S128.__cmp__(you: S128) -> ComparisonSign
+  if icmp_slt[S128](me, you)
+    return ME_SMALL
+  if icmp_sgt[S128](me, you)
+    return ME_LARGE
+  return EQUAL
 
 # ============================================================================
 # Math Operations
 # ============================================================================
 
-routine S128.abs() -> S128 {
-    return abs<S128>(me)
-}
+routine S128.abs() -> S128
+  return abs[S128](me)
 
-routine S128.min(you: S128) -> S128 {
-    return if me <= you then me else you
-}
+routine S128.min(you: S128) -> S128
+  return if me <= you then me else you
 
-routine S128.max(you: S128) -> S128 {
-    return if me >= you then me else you
-}
+routine S128.max(you: S128) -> S128
+  return if me >= you then me else you
 
-routine S128.clamp(min_val: S128, max_val: S128) -> S128 {
-    return me.min(max_val).max(min_val)
-}
+routine S128.clamp(min_val: S128, max_val: S128) -> S128
+  return me.min(max_val).max(min_val)
 
 # ============================================================================
 # Bit Manipulation
 # ============================================================================
 
-routine S128.count_ones() -> S128 {
-    return ctpop<S128>(me)
-}
+routine S128.count_ones() -> S128
+  return ctpop[S128](me)
 
-routine S128.count_zeros() -> S128 {
-    return 128_s128 - me.count_ones()
-}
+routine S128.count_zeros() -> S128
+  return 128_s128 - me.count_ones()
 
-routine S128.leading_zeros() -> S128 {
-    return ctlz<S128>(me)
-}
+routine S128.leading_zeros() -> S128
+  return ctlz[S128](me)
 
-routine S128.trailing_zeros() -> S128 {
-    return cttz<S128>(me)
-}
+routine S128.trailing_zeros() -> S128
+  return cttz[S128](me)
 
-routine S128.leading_ones() -> S128 {
-    return me.__not__().leading_zeros()
-}
+routine S128.leading_ones() -> S128
+  return me.__not__().leading_zeros()
 
-routine S128.trailing_ones() -> S128 {
-    return me.__not__().trailing_zeros()
-}
+routine S128.trailing_ones() -> S128
+  return me.__not__().trailing_zeros()
 
-routine S128.reverse_bits() -> S128 {
-    return bitreverse<S128>(me)
-}
+routine S128.reverse_bits() -> S128
+  return bitreverse[S128](me)
 
-routine S128.swap_bytes() -> S128 {
-    return bswap<S128>(me)
-}
+routine S128.swap_bytes() -> S128
+  return bswap[S128](me)
 
 # ============================================================================
 # Utility Methods
 # ============================================================================
 
-routine S128.is_positive() -> Bool {
-    return me > 0_s128
-}
+routine S128.is_positive() -> Bool
+  return me > 0_s128
 
-routine S128.is_negative() -> Bool {
-    return me < 0_s128
-}
+routine S128.is_negative() -> Bool
+  return me < 0_s128
 
-routine S128.is_zero() -> Bool {
-    return me == 0_s128
-}
+routine S128.is_zero() -> Bool
+  return me == 0_s128
 
-routine S128.is_even() -> Bool {
-    let result = bit_and<S128>(me, 1_s128)
-    return icmp_eq<S128>(result, 0_s128)
-}
+routine S128.is_even() -> Bool
+  var result = bit_and[S128](me, 1_s128)
+  return icmp_eq[S128](result, 0_s128)
 
-routine S128.is_odd() -> Bool {
-    return not me.is_even()
-}
+routine S128.is_odd() -> Bool
+  return not me.is_even()
 
-routine S128.signum() -> S128 {
-    when {
-        me > 0_s128 => 1_s128,
-        me < 0_s128 => -1_s128,
-        _ => 0_s128
-    }
-}
+routine S128.signum() -> S128
+  return when
+    me > 0_s128 => 1_s128
+    me < 0_s128 => -1_s128
+    else => 0_s128

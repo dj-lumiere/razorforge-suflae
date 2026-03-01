@@ -1,9 +1,7 @@
 module Core
 
 # DivisionByZeroError - thrown on division by zero
-record DivisionByZeroError follows Crashable {
-}
+record DivisionByZeroError obeys Crashable
 
-routine DivisionByZeroError.crash_message() -> Text {
-    return "You tried to divide by zero, which is not allowed."
-}
+routine DivisionByZeroError.crash_message() -> Text
+  return "You tried to divide by zero, which is not allowed."

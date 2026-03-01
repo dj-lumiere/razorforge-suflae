@@ -1,5 +1,4 @@
 module Core
 
-protocol LockPolicy {
-    pass
-}
+protocol LockPolicy
+  pass

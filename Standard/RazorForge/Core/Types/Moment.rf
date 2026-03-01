@@ -9,39 +9,36 @@ module Core
 # Civil date conversion algorithm based on Howard Hinnant's chrono approach.
 #
 # Usage:
-#   let now = Moment.now()
-#   let deadline = now + 5m
-#   let elapsed = deadline - now   # Duration
-#   let meeting = Moment(year: 2026, month: 2, day: 15, hour: 14, minute: 0, second: 0)
+#   var now = Moment.now()
+#   var deadline = now + 5m
+#   var elapsed = deadline - now   # Duration
+#   var meeting = Moment(year: 2026, month: 2, day: 15, hour: 14, minute: 0, second: 0)
 
 # ============================================================================
 # Record definition
 # ============================================================================
 
-record Moment follows Ordered {
-    secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
-    secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
-}
+record Moment obeys Ordered
+  secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
+  secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
 # ============================================================================
 # Normalization helper
 # ============================================================================
 
-routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment {
-    var s = seconds
-    var ns = nanoseconds
+routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
+  var s = seconds
+  var ns = nanoseconds
 
-    if ns >= NS_PER_SECOND {
-        s = s + ns // NS_PER_SECOND
-        ns = ns % NS_PER_SECOND
-    } elseif ns < 0_s64 {
-        let borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
-        s = s - borrow
-        ns = ns + borrow *% NS_PER_SECOND
-    }
+  if ns >= NS_PER_SECOND
+    s = s + ns // NS_PER_SECOND
+    ns = ns % NS_PER_SECOND
+  elseif ns < 0_s64
+    var borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
+    s = s - borrow
+    ns = ns + borrow *% NS_PER_SECOND
 
-    return Moment(seconds: s, nanoseconds: U32(ns))
-}
+  return Moment(seconds: s, nanoseconds: U32(ns))
 
 # ============================================================================
 # Civil calendar helpers (proleptic Gregorian)
@@ -49,156 +46,134 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment {
 
 # Convert civil date (year, month, day) to days since epoch.
 # Algorithm: shift March-based year so leap day falls at end of year.
-routine ymd_to_days(year: S64, month: S64, day: S64) -> S64 {
-    # Shift year so March is month 0
-    var y = year
-    var m = month
-    if m <= 2_s64 {
-        y = y - 1_s64
-    }
+routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
+  # Shift year so March is month 0
+  var y = year
+  var m = month
+  if m <= 2_s64
+    y = y - 1_s64
 
-    # Era-based calculation for proleptic Gregorian
-    let era_year = y - (y // 400_s64) *% 400_s64
-    let era = y // 400_s64
+  # Era-based calculation for proleptic Gregorian
+  var era_year = y - (y // 400_s64) *% 400_s64
+  var era = y // 400_s64
 
-    # Day of year within March-based year
-    if m > 2_s64 {
-        m = m - 3_s64
-    } else {
-        m = m + 9_s64
-    }
-    let doy = (153_s64 *% m + 2_s64) // 5_s64 + day - 1_s64
+  # Day of year within March-based year
+  if m > 2_s64
+    m = m - 3_s64
+  else
+    m = m + 9_s64
+  var doy = (153_s64 *% m + 2_s64) // 5_s64 + day - 1_s64
 
-    # Day of era
-    let doe = era_year *% 365_s64 + era_year // 4_s64 - era_year // 100_s64 + doy
+  # Day of era
+  var doe = era_year *% 365_s64 + era_year // 4_s64 - era_year // 100_s64 + doy
 
-    # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
-    return era *% 146097_s64 + doe - 719468_s64
-}
+  # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
+  return era *% 146097_s64 + doe - 719468_s64
 
 # Convert days since epoch to civil date (year, month, day).
 # Uses the same March-based algorithm in reverse.
-routine days_to_year(days_since_epoch: S64) -> S64 {
-    let z = days_since_epoch + 719468_s64
-    let era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
-    let doe = z - era *% 146097_s64
-    let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
-    let y = yoe + era *% 400_s64
-    let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
-    let mp = (5_s64 *% doy + 2_s64) // 153_s64
-    let m = mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
-    if m <= 2_s64 {
-        return y + 1_s64
-    }
-    return y
-}
+routine days_to_year(days_since_epoch: S64) -> S64
+  var z = days_since_epoch + 719468_s64
+  var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
+  var doe = z - era *% 146097_s64
+  var yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
+  var y = yoe + era *% 400_s64
+  var doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
+  var mp = (5_s64 *% doy + 2_s64) // 153_s64
+  var m = mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
+  if m <= 2_s64
+    return y + 1_s64
+  return y
 
-routine days_to_month(days_since_epoch: S64) -> S64 {
-    let z = days_since_epoch + 719468_s64
-    let era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
-    let doe = z - era *% 146097_s64
-    let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
-    let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
-    let mp = (5_s64 *% doy + 2_s64) // 153_s64
-    return mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
-}
+routine days_to_month(days_since_epoch: S64) -> S64
+  var z = days_since_epoch + 719468_s64
+  var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
+  var doe = z - era *% 146097_s64
+  var yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
+  var doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
+  var mp = (5_s64 *% doy + 2_s64) // 153_s64
+  return mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
 
-routine days_to_day(days_since_epoch: S64) -> S64 {
-    let z = days_since_epoch + 719468_s64
-    let era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
-    let doe = z - era *% 146097_s64
-    let yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
-    let doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
-    let mp = (5_s64 *% doy + 2_s64) // 153_s64
-    return doy - (153_s64 *% mp + 2_s64) // 5_s64 + 1_s64
-}
+routine days_to_day(days_since_epoch: S64) -> S64
+  var z = days_since_epoch + 719468_s64
+  var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
+  var doe = z - era *% 146097_s64
+  var yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
+  var doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
+  var mp = (5_s64 *% doy + 2_s64) // 153_s64
+  return doy - (153_s64 *% mp + 2_s64) // 5_s64 + 1_s64
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
-routine Moment.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment {
-    let d = ymd_to_days(year, month, day)
-    let s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
-    return Moment(seconds: s, nanoseconds: 0_u32)
-}
+routine Moment.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+  var d = ymd_to_days(year, month, day)
+  var s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
+  return Moment(seconds: s, nanoseconds: 0_u32)
 
-routine Moment.epoch() -> Moment {
-    return Moment(seconds: 0_s64, nanoseconds: 0_u32)
-}
+routine Moment.epoch() -> Moment
+  return Moment(seconds: 0_s64, nanoseconds: 0_u32)
 
-routine Moment.from_timestamp(seconds: S64) -> Moment {
-    return Moment(seconds: seconds, nanoseconds: 0_u32)
-}
+routine Moment.from_timestamp(seconds: S64) -> Moment
+  return Moment(seconds: seconds, nanoseconds: 0_u32)
 
-routine Moment.now() -> Moment {
-    # Implemented by compiler intrinsic / native runtime
-    return rf_moment_now()
-}
+routine Moment.now() -> Moment
+  # Implemented by compiler intrinsic / native runtime
+  return rf_moment_now()
 
 # ============================================================================
 # Date accessors (derived from seconds field)
 # ============================================================================
 
 @readonly
-routine Moment.year() -> S64 {
-    return days_to_year(me.seconds // SECONDS_PER_DAY)
-}
+routine Moment.year() -> S64
+  return days_to_year(me.seconds // SECONDS_PER_DAY)
 
 @readonly
-routine Moment.month() -> S64 {
-    return days_to_month(me.seconds // SECONDS_PER_DAY)
-}
+routine Moment.month() -> S64
+  return days_to_month(me.seconds // SECONDS_PER_DAY)
 
 @readonly
-routine Moment.day() -> S64 {
-    return days_to_day(me.seconds // SECONDS_PER_DAY)
-}
+routine Moment.day() -> S64
+  return days_to_day(me.seconds // SECONDS_PER_DAY)
 
 @readonly
-routine Moment.day_of_week() -> S64 {
-    # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
-    let days = me.seconds // SECONDS_PER_DAY
-    let dow = (days + 3_s64) % 7_s64
-    if dow < 0_s64 {
-        return dow + 7_s64
-    }
-    return dow
-}
+routine Moment.day_of_week() -> S64
+  # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
+  var days = me.seconds // SECONDS_PER_DAY
+  var dow = (days + 3_s64) % 7_s64
+  if dow < 0_s64
+    return dow + 7_s64
+  return dow
 
 # ============================================================================
 # Time accessors (derived from seconds and nanoseconds fields)
 # ============================================================================
 
 @readonly
-routine Moment.hour() -> S64 {
-    return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
-}
+routine Moment.hour() -> S64
+  return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
 
 @readonly
-routine Moment.minute() -> S64 {
-    return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
-}
+routine Moment.minute() -> S64
+  return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
 
 @readonly
-routine Moment.second() -> S64 {
-    return me.seconds % SECONDS_PER_MINUTE
-}
+routine Moment.second() -> S64
+  return me.seconds % SECONDS_PER_MINUTE
 
 @readonly
-routine Moment.millisecond() -> S64 {
-    return S64(me.nanoseconds) // NS_PER_MILLISECOND
-}
+routine Moment.millisecond() -> S64
+  return S64(me.nanoseconds) // NS_PER_MILLISECOND
 
 @readonly
-routine Moment.microsecond() -> S64 {
-    return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
-}
+routine Moment.microsecond() -> S64
+  return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
 
 @readonly
-routine Moment.nanosecond() -> S64 {
-    return S64(me.nanoseconds) % NS_PER_MICROSECOND
-}
+routine Moment.nanosecond() -> S64
+  return S64(me.nanoseconds) % NS_PER_MICROSECOND
 
 # ============================================================================
 # Conversion
@@ -206,72 +181,60 @@ routine Moment.nanosecond() -> S64 {
 
 # Unix timestamp in seconds
 @readonly
-routine Moment.timestamp() -> S64 {
-    return me.seconds
-}
+routine Moment.timestamp() -> S64
+  return me.seconds
 
 # Unix timestamp in milliseconds
 @readonly
-routine Moment.timestamp_ms() -> S64 {
-    return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
-}
+routine Moment.timestamp_ms() -> S64
+  return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
 
 # ============================================================================
 # Arithmetic with Duration
 # ============================================================================
 
 @readonly
-routine Moment.add_duration(duration: Duration) -> Moment {
-    return normalize_moment(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
-}
+routine Moment.add_duration(duration: Duration) -> Moment
+  return normalize_moment(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
 
 @readonly
-routine Moment.subtract_duration(duration: Duration) -> Moment {
-    return me.add_duration(duration.__neg__())
-}
+routine Moment.subtract_duration(duration: Duration) -> Moment
+  return me.add_duration(duration.__neg__())
 
 # Moment - Moment -> Duration
 @readonly
-routine Moment.elapsed_since(earlier: Moment) -> Duration {
-    return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
-}
+routine Moment.elapsed_since(earlier: Moment) -> Duration
+  return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
 
 # ============================================================================
 # Comparison operators
 # ============================================================================
 
 @readonly
-routine Moment.__eq__(you: Moment) -> Bool {
-    return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
-}
+routine Moment.__eq__(you: Moment) -> Bool
+  return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
 @readonly
-routine Moment.__cmp__(you: Moment) -> ComparisonSign {
-    if me.seconds < you.seconds {
-        return ME_SMALL
-    }
-    if me.seconds > you.seconds {
-        return ME_LARGE
-    }
-    if me.nanoseconds < you.nanoseconds {
-        return ME_SMALL
-    }
-    if me.nanoseconds > you.nanoseconds {
-        return ME_LARGE
-    }
-    return SAME
-}
+routine Moment.__cmp__(you: Moment) -> ComparisonSign
+  if me.seconds < you.seconds
+    return ME_SMALL
+  if me.seconds > you.seconds
+    return ME_LARGE
+  if me.nanoseconds < you.nanoseconds
+    return ME_SMALL
+  if me.nanoseconds > you.nanoseconds
+    return ME_LARGE
+  return SAME
 
 # ============================================================================
 # Text representation
 # ============================================================================
 
-routine Text.__create__(from: Moment) -> Text {
-    let y = from.year()
-    let mo = from.month()
-    let d = from.day()
-    let h = from.hour()
-    let mi = from.minute()
-    let s = from.second()
-    return f"{y}-{mo}-{d} {h}:{mi}:{s}"
-}
+routine Text.__create__(from: Moment) -> Text
+  var y = from.year()
+  var mo = from.month()
+  var d = from.day()
+  var h = from.hour()
+  var mi = from.minute()
+  var s = from.second()
+  return f"{y}-{mo}-{d} {h}:{mi}:{s}"

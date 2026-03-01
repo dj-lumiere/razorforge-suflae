@@ -1,6 +1,5 @@
 module Core
 
-record C128 follows Numeric, Equatable {
-    open real: F128
-    open imag: F128
-}
+record C128 obeys Numeric, Equatable
+  real: F128
+  imag: F128

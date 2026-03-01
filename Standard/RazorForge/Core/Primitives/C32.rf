@@ -1,6 +1,5 @@
 module Core
 
-record C32 follows Numeric, Equatable {
-    open real: F32
-    open imag: F32
-}
+record C32 obeys Numeric, Equatable
+  real: F32
+  imag: F32

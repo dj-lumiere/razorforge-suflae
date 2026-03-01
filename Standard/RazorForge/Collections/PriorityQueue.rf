@@ -1,247 +1,210 @@
-# RazorForge PriorityQueue<TElement, TPriority> - Binary min-heap
+# RazorForge PriorityQueue[TElement, TPriority] - Binary min-heap
 # Entity type with heap allocation
 # O(log n) add, O(log n) pop, O(1) peek
 # Lower priority values are extracted first (min-heap)
 #
 # Usage:
-#   let tasks = PriorityQueue<Task, S32>()
+#   var tasks = PriorityQueue[Task, S32]()
 #   tasks.add(high_priority_task, 1)    # Priority 1 (high)
 #   tasks.add(low_priority_task, 10)    # Priority 10 (low)
-#   let next = tasks.remove!()              # Gets priority 1 task first
+#   var next = tasks.remove!()              # Gets priority 1 task first
 
 import Collections.List
 
 module Collections
 
 # Element with priority
-record PQEntry<TElement, TPriority>
-requires TPriority follows Comparable {
-    element: TElement
-    priority: TPriority
-}
+record PQEntry[TElement, TPriority]
+needs TPriority obeys Comparable
+  element: TElement
+  priority: TPriority
 
-entity PriorityQueue<TElement, TPriority>
-requires TPriority follows Comparable {
-    secret heap: List<PQEntry<TElement, TPriority>>
-}
+entity PriorityQueue[TElement, TPriority]
+needs TPriority obeys Comparable
+  secret heap: List[PQEntry[TElement, TPriority]]
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
-routine PriorityQueue<TElement, TPriority>.__create__() -> PriorityQueue<TElement, TPriority> {
-    return PriorityQueue<TElement, TPriority>(
-        heap: List<PQEntry<TElement, TPriority>>()
-    )
-}
+routine PriorityQueue[TElement, TPriority].__create__() -> PriorityQueue[TElement, TPriority]
+  return PriorityQueue[TElement, TPriority](
+    heap: List[PQEntry[TElement, TPriority]]()
+  )
 
-routine PriorityQueue<TElement, TPriority>.__create__(capacity: UAddr) -> PriorityQueue<TElement, TPriority> {
-    return PriorityQueue<TElement, TPriority>(
-        heap: List<PQEntry<TElement, TPriority>>(capacity)
-    )
-}
+routine PriorityQueue[TElement, TPriority].__create__(capacity: UAddr) -> PriorityQueue[TElement, TPriority]
+  return PriorityQueue[TElement, TPriority](
+    heap: List[PQEntry[TElement, TPriority]](capacity)
+  )
 
 # ============================================================================
 # Internal Heap Operations
 # ============================================================================
 
-routine PriorityQueue<TElement, TPriority>.parent_index(index: UAddr) -> UAddr {
-    return (index - 1uaddr) // 2uaddr
-}
+routine PriorityQueue[TElement, TPriority].parent_index(index: UAddr) -> UAddr
+  return (index - 1uaddr) // 2uaddr
 
-routine PriorityQueue<TElement, TPriority>.left_child(index: UAddr) -> UAddr {
-    return 2uaddr * index + 1uaddr
-}
+routine PriorityQueue[TElement, TPriority].left_child(index: UAddr) -> UAddr
+  return 2uaddr * index + 1uaddr
 
-routine PriorityQueue<TElement, TPriority>.right_child(index: UAddr) -> UAddr {
-    return 2uaddr * index + 2uaddr
-}
+routine PriorityQueue[TElement, TPriority].right_child(index: UAddr) -> UAddr
+  return 2uaddr * index + 2uaddr
 
-routine PriorityQueue<TElement, TPriority>.swap(i: UAddr, j: UAddr) {
-    let temp = me.heap[i]
-    me.heap[i] = me.heap[j]
-    me.heap[j] = temp
-}
+routine PriorityQueue[TElement, TPriority].swap(i: UAddr, j: UAddr)
+  var temp = me.heap[i]
+  me.heap[i] = me.heap[j]
+  me.heap[j] = temp
+  return
 
-routine PriorityQueue<TElement, TPriority>.sift_up(index: UAddr) {
-    var i = index
-    while i > 0uaddr {
-        let p = me.parent_index(i)
-        if me.heap[i].priority < me.heap[p].priority {
-            me.swap(i, p)
-            i = p
-        } else {
-            break
-        }
-    }
-}
+routine PriorityQueue[TElement, TPriority].sift_up(index: UAddr)
+  var i = index
+  while i > 0uaddr
+    var p = me.parent_index(i)
+    if me.heap[i].priority < me.heap[p].priority
+      me.swap(i, p)
+      i = p
+    else
+      break
+  return
 
-routine PriorityQueue<TElement, TPriority>.sift_down(index: UAddr) {
-    var i = index
-    let size = me.heap.count()
+routine PriorityQueue[TElement, TPriority].sift_down(index: UAddr)
+  var i = index
+  var size = me.heap.count()
 
-    loop {
-        let left = me.left_child(i)
-        let right = me.right_child(i)
-        var smallest = i
+  loop
+    var left = me.left_child(i)
+    var right = me.right_child(i)
+    var smallest = i
 
-        if left < size and me.heap[left].priority < me.heap[smallest].priority {
-            smallest = left
-        }
+    if left < size and me.heap[left].priority < me.heap[smallest].priority
+      smallest = left
 
-        if right < size and me.heap[right].priority < me.heap[smallest].priority {
-            smallest = right
-        }
+    if right < size and me.heap[right].priority < me.heap[smallest].priority
+      smallest = right
 
-        if smallest == i {
-            break
-        }
+    if smallest == i
+      break
 
-        me.swap(i, smallest)
-        i = smallest
-    }
-}
+    me.swap(i, smallest)
+    i = smallest
+  return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine PriorityQueue<TElement, TPriority>.count() -> UAddr {
-    return me.heap.count()
-}
+routine PriorityQueue[TElement, TPriority].count() -> UAddr
+  return me.heap.count()
 
-routine PriorityQueue<TElement, TPriority>.is_empty() -> Bool {
-    return me.heap.is_empty()
-}
+routine PriorityQueue[TElement, TPriority].is_empty() -> Bool
+  return me.heap.is_empty()
 
-routine PriorityQueue<TElement, TPriority>.clear() {
-    me.heap.clear()
-}
+routine PriorityQueue[TElement, TPriority].clear()
+  me.heap.clear()
+  return
 
-routine PriorityQueue<TElement, TPriority>.add(element: TElement, priority: TPriority) {
-    # Add element with priority - O(log n)
-    me.heap.add_last(PQEntry<TElement, TPriority>(element: element, priority: priority))
-    me.sift_up(me.heap.count() - 1uaddr)
-}
+routine PriorityQueue[TElement, TPriority].add(element: TElement, priority: TPriority)
+  # Add element with priority - O(log n)
+  me.heap.add_last(PQEntry[TElement, TPriority](element: element, priority: priority))
+  me.sift_up(me.heap.count() - 1uaddr)
+  return
 
-routine PriorityQueue<TElement, TPriority>.remove!() -> TElement {
-    # Remove and return element with lowest priority - O(log n)
-    if me.is_empty() {
-        absent
-    }
+routine PriorityQueue[TElement, TPriority].remove!() -> TElement
+  # Remove and return element with lowest priority - O(log n)
+  if me.is_empty()
+    absent
 
-    let result = me.heap[0uaddr].element
+  var result = me.heap[0uaddr].element
 
-    # Move last element to root and sift down
-    let last_idx = me.heap.count() - 1uaddr
-    if last_idx > 0uaddr {
-        me.heap[0uaddr] = me.heap[last_idx]
-    }
-    me.heap.remove_last!()
+  # Move last element to root and sift down
+  var last_idx = me.heap.count() - 1uaddr
+  if last_idx > 0uaddr
+    me.heap[0uaddr] = me.heap[last_idx]
+  me.heap.remove_last!()
 
-    if not me.is_empty() {
-        me.sift_down(0uaddr)
-    }
+  if not me.is_empty()
+    me.sift_down(0uaddr)
 
-    return result
-}
+  return result
 
-routine PriorityQueue<TElement, TPriority>.peek!() -> TElement {
-    # View element with lowest priority without removing - O(1)
-    if me.is_empty() {
-        absent
-    }
-    return me.heap[0uaddr].element
-}
+routine PriorityQueue[TElement, TPriority].peek!() -> TElement
+  # View element with lowest priority without removing - O(1)
+  if me.is_empty()
+    absent
+  return me.heap[0uaddr].element
 
-routine PriorityQueue<TElement, TPriority>.peek_priority!() -> TPriority {
-    # View lowest priority value without removing - O(1)
-    if me.is_empty() {
-        absent
-    }
-    return me.heap[0uaddr].priority
-}
+routine PriorityQueue[TElement, TPriority].peek_priority!() -> TPriority
+  # View lowest priority value without removing - O(1)
+  if me.is_empty()
+    absent
+  return me.heap[0uaddr].priority
 
-routine PriorityQueue<TElement, TPriority>.peek_entry!() -> PQEntry<TElement, TPriority> {
-    # View element and priority without removing - O(1)
-    if me.is_empty() {
-        absent
-    }
-    return me.heap[0uaddr]
-}
+routine PriorityQueue[TElement, TPriority].peek_entry!() -> PQEntry[TElement, TPriority]
+  # View element and priority without removing - O(1)
+  if me.is_empty()
+    absent
+  return me.heap[0uaddr]
 
 # ============================================================================
 # Bulk Operations
 # ============================================================================
 
-routine PriorityQueue<TElement, TPriority>.add_all(elements: List<TElement>, priorities: List<TPriority>) {
-    # Add multiple elements with their priorities
-    var i = 0uaddr
-    let count = if elements.count() < priorities.count() then elements.count() else priorities.count()
-    while i < count {
-        me.add(elements[i], priorities[i])
-        i = i + 1uaddr
-    }
-}
+routine PriorityQueue[TElement, TPriority].add_all(elements: List[TElement], priorities: List[TPriority])
+  # Add multiple elements with their priorities
+  var i = 0uaddr
+  var count = if elements.count() < priorities.count() then elements.count() else priorities.count()
+  while i < count
+    me.add(elements[i], priorities[i])
+    i = i + 1uaddr
+  return
 
-routine PriorityQueue<TElement, TPriority>.drain() -> List<TElement> {
-    # Remove all elements in priority order
-    let result = List<TElement>(me.count())
-    while not me.is_empty() {
-        result.add_last(me.remove!())
-    }
-    return result
-}
+routine PriorityQueue[TElement, TPriority].drain() -> List[TElement]
+  # Remove all elements in priority order
+  var result = List[TElement](me.count())
+  while not me.is_empty()
+    result.add_last(me.remove!())
+  return result
 
 # ============================================================================
 # Utility Operations
 # ============================================================================
 
-routine PriorityQueue<TElement, TPriority>.contains(element: TElement) -> Bool {
-    # O(n) search - heap doesn't support efficient search
-    var i = 0uaddr
-    while i < me.heap.count() {
-        if me.heap[i].element == element {
-            return true
-        }
-        i = i + 1uaddr
-    }
-    return false
-}
+routine PriorityQueue[TElement, TPriority].contains(element: TElement) -> Bool
+  # O(n) search - heap doesn't support efficient search
+  var i = 0uaddr
+  while i < me.heap.count()
+    if me.heap[i].element == element
+      return true
+    i = i + 1uaddr
+  return false
 
-routine PriorityQueue<TElement, TPriority>.to_list() -> List<PQEntry<TElement, TPriority>> {
-    # Get all entries (not in priority order, heap order)
-    let result = List<PQEntry<TElement, TPriority>>(me.count())
-    var i = 0uaddr
-    while i < me.heap.count() {
-        result.add_last(me.heap[i])
-        i = i + 1uaddr
-    }
-    return result
-}
+routine PriorityQueue[TElement, TPriority].to_list() -> List[PQEntry[TElement, TPriority]]
+  # Get all entries (not in priority order, heap order)
+  var result = List[PQEntry[TElement, TPriority]](me.count())
+  var i = 0uaddr
+  while i < me.heap.count()
+    result.add_last(me.heap[i])
+    i = i + 1uaddr
+  return result
 
 # ============================================================================
 # Iteration (heap order, NOT priority order)
 # ============================================================================
 
-routine PriorityQueue<TElement, TPriority>.__seq__() -> PriorityQueueIterator<TElement, TPriority> {
-    return PriorityQueueIterator<TElement, TPriority>(
-        queue: me,
-        index: 0uaddr
-    )
-}
+routine PriorityQueue[TElement, TPriority].__seq__() -> PriorityQueueIterator[TElement, TPriority]
+  return PriorityQueueIterator[TElement, TPriority](
+    queue: me,
+    index: 0uaddr
+  )
 
-entity PriorityQueueIterator<TElement, TPriority> {
-    queue: PriorityQueue<TElement, TPriority>
-    index: UAddr
-}
+entity PriorityQueueIterator[TElement, TPriority]
+  queue: PriorityQueue[TElement, TPriority]
+  index: UAddr
 
-routine PriorityQueueIterator<TElement, TPriority>.next!() ->
-PQEntry<TElement, TPriority> {
-    if me.index >= me.queue.count() {
-        absent
-    }
-    let entry = me.queue.heap[me.index]
-    me.index = me.index + 1uaddr
-    return entry
-}
+routine PriorityQueueIterator[TElement, TPriority].next!() ->
+PQEntry[TElement, TPriority]
+  if me.index >= me.queue.count()
+    absent
+  var entry = me.queue.heap[me.index]
+  me.index = me.index + 1uaddr
+  return entry

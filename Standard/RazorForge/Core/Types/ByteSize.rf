@@ -8,10 +8,10 @@
 # Literal support: 100b, 64kib, 256kb, 100mib, 1mb, 1gib, 1gb
 #
 # Usage:
-#   let cache = 64kib
-#   let total = cache * 4
-#   let pages = 1gib // 4kib    # 262,144
-#   let remainder = 1024b % 300b # 124b
+#   var cache = 64kib
+#   var total = cache * 4
+#   var pages = 1gib // 4kib    # 262,144
+#   var remainder = 1024b % 300b # 124b
 
 # ============================================================================
 # Constants
@@ -33,34 +33,29 @@ preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
 # Record definition
 # ============================================================================
 
-record ByteSize follows Ordered, Addable, Subtractable, FloorDivisible {
-    secret value: U64
-}
+record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible
+  secret value: U64
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
-routine ByteSize.__create__(bytes: U64) {
-    me.value = bytes
-}
+routine ByteSize.__create__(bytes: U64)
+  me.value = bytes
+  return
 
 # Factory methods for larger sizes (no literal support)
-routine ByteSize.terabytes(n: U64) -> ByteSize {
-    return ByteSize(n *% BYTES_PER_TB)
-}
+routine ByteSize.terabytes(n: U64) -> ByteSize
+  return ByteSize(n *% BYTES_PER_TB)
 
-routine ByteSize.tebibytes(n: U64) -> ByteSize {
-    return ByteSize(n *% BYTES_PER_TIB)
-}
+routine ByteSize.tebibytes(n: U64) -> ByteSize
+  return ByteSize(n *% BYTES_PER_TIB)
 
-routine ByteSize.petabytes(n: U64) -> ByteSize {
-    return ByteSize(n *% BYTES_PER_PB)
-}
+routine ByteSize.petabytes(n: U64) -> ByteSize
+  return ByteSize(n *% BYTES_PER_PB)
 
-routine ByteSize.pebibytes(n: U64) -> ByteSize {
-    return ByteSize(n *% BYTES_PER_PIB)
-}
+routine ByteSize.pebibytes(n: U64) -> ByteSize
+  return ByteSize(n *% BYTES_PER_PIB)
 
 # ============================================================================
 # Size accessors
@@ -68,128 +63,106 @@ routine ByteSize.pebibytes(n: U64) -> ByteSize {
 
 # Gets the raw byte count
 @readonly
-routine ByteSize.byte_size() -> U64 {
-    return me.value
-}
+routine ByteSize.byte_size() -> U64
+  return me.value
 
 # Gets the size in bits
 @readonly
-routine ByteSize.bit_size() -> U64 {
-    return me.value * 8_u64
-}
+routine ByteSize.bit_size() -> U64
+  return me.value * 8_u64
 
 # ============================================================================
 # Binary unit conversions (powers of 1024)
 # ============================================================================
 
 @readonly
-routine ByteSize.kib_size() -> F64 {
-    return F64(me.value) / 1024.0
-}
+routine ByteSize.kib_size() -> F64
+  return F64(me.value) / 1024.0
 
 @readonly
-routine ByteSize.mib_size() -> F64 {
-    return F64(me.value) / 1048576.0
-}
+routine ByteSize.mib_size() -> F64
+  return F64(me.value) / 1048576.0
 
 @readonly
-routine ByteSize.gib_size() -> F64 {
-    return F64(me.value) / 1073741824.0
-}
+routine ByteSize.gib_size() -> F64
+  return F64(me.value) / 1073741824.0
 
 # ============================================================================
 # Decimal unit conversions (powers of 1000)
 # ============================================================================
 
 @readonly
-routine ByteSize.kb_size() -> F64 {
-    return F64(me.value) / 1000.0
-}
+routine ByteSize.kb_size() -> F64
+  return F64(me.value) / 1000.0
 
 @readonly
-routine ByteSize.mb_size() -> F64 {
-    return F64(me.value) / 1000000.0
-}
+routine ByteSize.mb_size() -> F64
+  return F64(me.value) / 1000000.0
 
 @readonly
-routine ByteSize.gb_size() -> F64 {
-    return F64(me.value) / 1000000000.0
-}
+routine ByteSize.gb_size() -> F64
+  return F64(me.value) / 1000000000.0
 
 # ============================================================================
 # Arithmetic operators
 # ============================================================================
 
 @readonly
-routine ByteSize.__add__(you: ByteSize) -> ByteSize {
-    return ByteSize(me.value + you.value)
-}
+routine ByteSize.__add__(you: ByteSize) -> ByteSize
+  return ByteSize(me.value + you.value)
 
 @readonly
-routine ByteSize.__sub__(you: ByteSize) -> ByteSize {
-    return ByteSize(me.value - you.value)
-}
+routine ByteSize.__sub__(you: ByteSize) -> ByteSize
+  return ByteSize(me.value - you.value)
 
 # Scale by integer
 @readonly
-routine ByteSize.__mul__(factor: U64) -> ByteSize {
-    return ByteSize(me.value *% factor)
-}
+routine ByteSize.__mul__(factor: U64) -> ByteSize
+  return ByteSize(me.value *% factor)
 
 # Floor division: how many units fit
 @readonly
-routine ByteSize.__floordiv__(you: ByteSize) -> U64 {
-    return me.value // you.value
-}
+routine ByteSize.__floordiv__(you: ByteSize) -> U64
+  return me.value // you.value
 
 # Divide size evenly by integer
 @readonly
-routine ByteSize.div_by(divisor: U64) -> ByteSize {
-    return ByteSize(me.value // divisor)
-}
+routine ByteSize.div_by(divisor: U64) -> ByteSize
+  return ByteSize(me.value // divisor)
 
 # Remainder after floor division
 @readonly
-routine ByteSize.__mod__(you: ByteSize) -> ByteSize {
-    return ByteSize(me.value % you.value)
-}
+routine ByteSize.__mod__(you: ByteSize) -> ByteSize
+  return ByteSize(me.value % you.value)
 
 # ============================================================================
 # Comparison operators
 # ============================================================================
 
 @readonly
-routine ByteSize.__eq__(you: ByteSize) -> Bool {
-    return me.value == you.value
-}
+routine ByteSize.__eq__(you: ByteSize) -> Bool
+  return me.value == you.value
 
 @readonly
-routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign {
-    if me.value < you.value {
-        return ME_SMALL
-    }
-    if me.value > you.value {
-        return ME_LARGE
-    }
-    return SAME
-}
+routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
+  if me.value < you.value
+    return ME_SMALL
+  if me.value > you.value
+    return ME_LARGE
+  return SAME
 
 # ============================================================================
 # Display
 # ============================================================================
 
-routine Text.__create__(from: ByteSize) -> Text {
-    if from.value >= BYTES_PER_GIB {
-        let gib = F64(from.value) / 1073741824.0
-        return f"{gib} GiB"
-    }
-    if from.value >= BYTES_PER_MIB {
-        let mib = F64(from.value) / 1048576.0
-        return f"{mib} MiB"
-    }
-    if from.value >= BYTES_PER_KIB {
-        let kib = F64(from.value) / 1024.0
-        return f"{kib} KiB"
-    }
-    return f"{from.value} bytes"
-}
+routine Text.__create__(from: ByteSize) -> Text
+  if from.value >= BYTES_PER_GIB
+    var gib = F64(from.value) / 1073741824.0
+    return f"{gib} GiB"
+  if from.value >= BYTES_PER_MIB
+    var mib = F64(from.value) / 1048576.0
+    return f"{mib} MiB"
+  if from.value >= BYTES_PER_KIB
+    var kib = F64(from.value) / 1024.0
+    return f"{kib} KiB"
+  return f"{from.value} bytes"

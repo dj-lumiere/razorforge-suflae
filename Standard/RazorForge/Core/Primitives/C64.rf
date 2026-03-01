@@ -1,6 +1,5 @@
 module Core
 
-record C64 follows Numeric, Equatable {
-    open real: F64
-    open imag: F64
-}
+record C64 obeys Numeric, Equatable
+  real: F64
+  imag: F64

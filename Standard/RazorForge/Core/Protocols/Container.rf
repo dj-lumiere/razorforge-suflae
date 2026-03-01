@@ -1,7 +1,6 @@
 # Container - Protocol for types that support membership testing (in, notin)
 module Core
 
-protocol Container<T> {
-    @readonly
-    routine Me.__contains__(value: T) -> Bool
-}
+protocol Container[T]
+  @readonly
+  routine Me.__contains__(value: T) -> Bool

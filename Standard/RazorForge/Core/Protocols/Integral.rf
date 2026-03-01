@@ -3,6 +3,5 @@
 # Does NOT include Negatable - unsigned integers can't negate
 module Core
 
-protocol Integral follows Addable, Subtractable, Multiplicable, FloorDivisible, Exponentiable, Bitwiseable, Shiftable {
-    pass
-}
+protocol Integral obeys Addable, Subtractable, Multiplicable, FloorDivisible, Exponentiable, Bitwiseable, Shiftable
+  pass

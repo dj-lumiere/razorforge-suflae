@@ -5,8 +5,7 @@
 
 module Core
 
-choice ComparisonSign {
-    ME_SMALL: -1
-    SAME: 0
-    ME_LARGE: 1
-}
+choice ComparisonSign
+  ME_SMALL: -1
+  SAME: 0
+  ME_LARGE: 1

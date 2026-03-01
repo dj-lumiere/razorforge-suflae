@@ -1,39 +1,38 @@
-# RazorForge Inspected<T> - Thread-safe read lock token
+# RazorForge Inspected[T] - Thread-safe read lock token
 #
-# Inspected<T> is created ONLY by the `inspecting` syntax on Shared<T, MultiReadLock>.
+# Inspected[T] is created ONLY by the `inspecting` syntax on Shared[T, MultiRead].
 # It provides thread-safe read-only access with automatic lock acquisition/release.
 #
 # Syntax:
-#   let shared = data.share(policy: MultiReadLock)
-#   inspecting shared as obs {
-#       show(obs.value)  # Read-only access, lock held
-#       let copy = obs   # OK - Inspected is copyable
-#   } # Lock automatically released
+#   var shared = data.share(policy: MultiRead)
+#   using shared.inspect!() as obs
+#     show(obs.value)  # Read-only access, lock held
+#     var copy = obs   # OK - Inspected is copyable
+#   Lock automatically released at block exit
 #
 # Properties:
-# - Created by compiler via `inspecting` syntax on Shared<T, MultiReadLock>
+# - Created by compiler via `inspecting` syntax on Shared[T, MultiRead]
 # - Scope-bound: cannot be stored, returned, or escape
-# - Copyable: multiple Inspected<T> handles can coexist within scope
-# - Read-only: cannot mutate through this handle
-# - Thread-safe: holds RwLock read lock
+# - Copyable: multiple Inspected[T] handles can coexist within scope
+# - Read-only: cannot modify through this handle
+# - Thread-safe: holds MultiRead read lock
 # - Multiple threads can hold read locks simultaneously
 # - Blocks write locks (seizing) while held
 # - Temporary: source is invalidated during scope, restored on exit
 #
 # Downgrading:
-# - Can create Inspected<T> from within seizing block (downgrade write to read)
+# - Can create Inspected[T] from within seizing block (downgrade write to read)
 #
 # This type is a marker for the type system - the compiler handles lock operations.
 module Core
 
-record Inspected<T> {
-    secret ptr: Snatched<T>    # Generic type - use Snatched<T>
-    secret lock_guard: UAddr   # Fixed type - use UAddr
-}
+record Inspected[T]
+  secret ptr: Snatched[T]    # Generic type - use Snatched[T]
+  secret lock_guard: UAddr   # Fixed type - use UAddr
 
-# NOTE: No constructors, no manual methods - all operations handled by compiler
-# The inspecting syntax acquires the RwLock read lock and creates this token
+# NOTE: No creators, no manual methods - all operations handled by compiler
+# The inspecting syntax acquires the MultiRead read lock and creates this token
 # The lock is automatically released when the scope exits
-# Multiple threads can hold read locks simultaneously (RwLock semantics)
+# Multiple threads can hold read locks simultaneously (MultiRead semantics)
 #
-# Lock acquisition can fail (e.g., poisoned lock) - use try_observing for fallible acquisition
+# Lock acquisition can fail (e.g., poisoned lock) - use observing! for fallible acquisition

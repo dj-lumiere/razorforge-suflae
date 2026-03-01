@@ -1,11 +1,11 @@
-﻿# RazorForge Snatched<T> - Unsafe raw pointer wrapper
+﻿# RazorForge Snatched[T] - Unsafe raw pointer wrapper
 #
-# Snatched<T> is created ONLY via .snatch() method inside danger! blocks.
+# Snatched[T] is created ONLY via .snatch() method inside danger! blocks.
 # It represents raw, unsafe memory access with NO safety guarantees.
 #
 # Syntax:
 #   danger! {
-#       let raw = obj.snatch()  # Snatched<T>
+#       let raw = obj.snatch()  # Snatched[T]
 #       let value = raw.read()   # Type-safe read
 #       raw.write(new_value)     # Type-safe write
 #   }
@@ -21,88 +21,88 @@
 # This is the "escape hatch" for unsafe code - use with extreme caution!
 module Core
 
-record Snatched<T> {
+record Snatched[T] {
     open address: @intrinsic.ptr  # Public direct address access
 }
 
 dangerous routine T.get_address() -> UAddr {
-    return rf_address_of<T>(me)
+    return rf_address_of[T](me)
 }
 
 # Create snatched pointer from any object (danger! only)
-dangerous routine T.snatch() -> Snatched<T> {
-    return Snatched<T>(address: me.get_address())
+dangerous routine T.snatch() -> Snatched[T] {
+    return Snatched[T](address: me.get_address())
 }
 
-# Type-safe read (uses T from Snatched<T>)
-dangerous routine Snatched<T>.read() -> T {
-    return rf_read_as<T>(me)
+# Type-safe read (uses T from Snatched[T])
+dangerous routine Snatched[T].read() -> T {
+    return rf_read_as[T](me)
 }
 
-# Type-safe write (uses T from Snatched<T>)
-dangerous routine Snatched<T>.write(value: T) {
-    store<T>(me.address, value)
+# Type-safe write (uses T from Snatched[T])
+dangerous routine Snatched[T].write(value: T) {
+    store[T](me.address, value)
 }
 
 # Volatile read (prevents compiler optimizations)
-dangerous routine Snatched<T>.volatile_read() -> T {
-    return rf_volatile_read_as<T>(me)
+dangerous routine Snatched[T].volatile_read() -> T {
+    return rf_volatile_read_as[T](me)
 }
 
 # Volatile write (prevents compiler optimizations)
-dangerous routine Snatched<T>.volatile_write(value: T) {
-    store_volatile<T>(me.address, value)
+dangerous routine Snatched[T].volatile_write(value: T) {
+    store_volatile[T](me.address, value)
 }
 
 # Type-pun read - read as different type U
-dangerous routine Snatched<T>.reveal_as<U>() -> U {
-    # Create Snatched<U> with same address, then read
-    let as_u = Snatched<U>(address: me.address)
+dangerous routine Snatched[T].reveal_as[U]() -> U {
+    # Create Snatched[U] with same address, then read
+    let as_u = Snatched[U](address: me.address)
     return as_u.read()
 }
 
 # Type-pun write - write as different type U
-dangerous routine Snatched<T>.write_as<U>(value: U) {
-    # Create Snatched<U> with same address, then write
-    let as_u = Snatched<U>(address: me.address)
+dangerous routine Snatched[T].write_as[U](value: U) {
+    # Create Snatched[U] with same address, then write
+    let as_u = Snatched[U](address: me.address)
     as_u.write(value)
 }
 
-# Cast pointer type - reinterpret Snatched<T> as Snatched<U>
-dangerous routine Snatched<T>.obtain_as<U>() -> Snatched<U> {
-    return Snatched<U>(address: me.address)
+# Cast pointer type - reinterpret Snatched[T] as Snatched[U]
+dangerous routine Snatched[T].obtain_as[U]() -> Snatched[U] {
+    return Snatched[U](address: me.address)
 }
 
 # Free memory at this address
-dangerous routine Snatched<T>.invalidate!() {
-    rf_invalidate<T>(me)
+dangerous routine Snatched[T].invalidate!() {
+    rf_invalidate[T](me)
 }
 
 # Create none snatched pointer
-routine snatched_none<T>() -> Snatched<T> {
-    return Snatched<T>(address: 0_uaddr)
+routine snatched_none[T]() -> Snatched[T] {
+    return Snatched[T](address: 0_uaddr)
 }
 
 # Check if pointer is none
-routine Snatched<T>.is_none() -> Bool {
+routine Snatched[T].is_none() -> Bool {
     return me.address == 0_uaddr
 }
 
 # Offset pointer by bytes (pointer arithmetic)
-routine Snatched<T>.offset(bytes: ByteSize) -> Snatched<T> {
-    return Snatched<T>(address: me.address + bytes)
+routine Snatched[T].offset(bytes: ByteSize) -> Snatched[T] {
+    return Snatched[T](address: me.address + bytes)
 }
 
 # Compare addresses
-routine Snatched<T>.__eq__(other: Snatched<T>) -> Bool {
+routine Snatched[T].__eq__(other: Snatched[T]) -> Bool {
     return me.address == other.address
 }
 
-# NOTE: All operations on Snatched<T> are inherently unsafe
+# NOTE: All operations on Snatched[T] are inherently unsafe
 # Undefined behavior can occur if:
 # - Pointer is dangling (object was deallocated)
 # - Pointer is misaligned
-# - Type U in reveal_as<U>() doesn't match actual data
+# - Type U in reveal_as[U]() doesn't match actual data
 # - Writing to read-only memory
 # - Data races in multi-threaded code
 #

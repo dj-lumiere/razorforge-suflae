@@ -1,204 +1,104 @@
-# RazorForge Range - Inclusive range for indexing and iteration
+# RazorForge Range - Generic range for iteration
 #
-# Created by 'to' or 'downto' infix operators, optionally with 'by' for step.
-# Both bounds are INCLUSIVE.
+# Created by 'to' (inclusive end) or 'til' (exclusive end) infix operators,
+# optionally with 'by' for step. Direction is decided at runtime based on
+# start vs end values.
 #
 # Usage:
-#   0 to 5           # Range from 0 to 5 inclusive, ascending, step 1
-#   5 downto 0       # Range from 5 to 0 inclusive, descending, step 1
-#   0 to 10 by 2     # 0, 2, 4, 6, 8, 10
-#   10 downto 0 by 3 # 10, 7, 4, 1
-#   ^3 to ^1         # Range using BackIndex
+#   0 to 10          # 0, 1, 2, ..., 10 (inclusive end, ascending)
+#   0 til 10          # 0, 1, 2, ..., 9  (exclusive end, ascending)
+#   10 to 0           # 10, 9, 8, ..., 0 (inclusive end, descending)
+#   10 til 0           # 10, 9, 8, ..., 1 (exclusive end, descending)
+#   0 til 20 by 2     # 0, 2, 4, 6, 8, 10, 12, 14, 16, 18
+#   100 til 0 by 10   # 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
 #
 # With collections:
-#   list[0 to 2]         # first 3 elements
-#   list[^3 to ^1]       # last 3 elements
-#   list[5 downto 3]     # elements 5, 4, 3 in reverse order
-#   list[0 to 8 by 2]    # every other element (0, 2, 4, 6, 8)
+#   list[0 to 2]       # first 3 elements (inclusive end)
+#   list[0 til 3]      # first 3 elements (exclusive end)
+#   list[^3 til ^0]    # last 3 elements
 module Core
 
-record Range<I>
-requires I follows Integral{
-    start: I
-    end: I
-    step: UAddr      # step size (always positive, direction determined by ascending)
-    ascending: Bool  # true for 'to', false for 'downto'
-}
+record Range[T] needs FixedNumeric
+  start: T
+  end: T
+  step: T
+  inclusive: Bool  # true for 'to', false for 'til'
 
-# Constructor for ascending range (a to b) with default step 1
-routine Range<I>(start: I, end: I) -> Range<I> {
-    return Range<I>(start: start, end: end, step: 1uaddr, ascending: true)
-}
+# Creator for inclusive range (a to b) with default step 1
+routine Range[T](start: T, end: T) -> Range[T]
+  return Range[T](start: start, end: end, step: 1, inclusive: true)
 
-# Constructor with explicit direction (a to b or a downto b) with default step 1
-routine Range<I>(start: I, end: I, ascending: Bool) -> Range<I> {
-    return Range<I>(start: start, end: end, step: 1uaddr, ascending: ascending)
-}
+# Creator for range with inclusivity flag (a to b or a til b) with default step 1
+routine Range[T](start: T, end: T, inclusive: Bool) -> Range[T]
+  return Range[T](start: start, end: end, step: 1, inclusive: inclusive)
 
-# Constructor with step (a to b by c or a downto b by c)
-routine Range<I>(start: I, end: I, step: UAddr, ascending: Bool) -> Range<I> {
-    if step == 0uaddr {
-        stop!("Range step cannot be zero")
-    }
-    return Range<I>(start: start, end: end, step: step, ascending: ascending)
-}
+# Creator with step (a to b by c or a til b by c)
+routine Range[T](start: T, end: T, step: T, inclusive: Bool) -> Range[T]
+  if step == 0
+    stop!("Range step cannot be zero")
+  return Range[T](start: start, end: end, step: step, inclusive: inclusive)
+
+# Check if range is ascending (start <= end for to, start < end for til)
+routine Range[T].is_ascending() -> Bool
+  return me.start <= me.end
 
 # Get the step size
-routine Range<I>.get_step() -> UAddr {
-    return me.step
-}
+routine Range[T].get_step() -> T
+  return me.step
 
-# ============================================================================
-# Range<Integral> - Forward index ranges
-# ============================================================================
-
-# Resolve Range<Integral> to start/end UAddr indices
-routine Range<I follows Integral>.resolve_start(length: UAddr) -> UAddr {
-    let idx = me.start.to_uaddr()
-    if idx >= length {
-        stop!("Range start out of bounds")
-    }
-    return idx
-}
-
-routine Range<I follows Integral>.resolve_end(length: UAddr) -> UAddr {
-    let idx = me.end.to_uaddr()
-    if idx >= length {
-        stop!("Range end out of bounds")
-    }
-    return idx
-}
-
-# Check if range is valid (start <= end for ascending, start >= end for descending)
-routine Range<I follows Integral>.is_valid() -> Bool {
-    let s = me.start.to_uaddr()
-    let e = me.end.to_uaddr()
-    if me.ascending {
-        return s <= e
-    } else {
-        return s >= e
-    }
-}
-
-# Get the number of elements in the range (inclusive, accounting for step)
-routine Range<I follows Integral>.count() -> UAddr {
-    let s = me.start.to_uaddr()
-    let e = me.end.to_uaddr()
-    if me.ascending {
-        if s > e {
-            return 0uaddr
-        }
-        let diff = e - s
-        return (diff / me.step) + 1uaddr
-    } else {
-        if e > s {
-            return 0uaddr
-        }
-        let diff = s - e
-        return (diff / me.step) + 1uaddr
-    }
-}
-
-# ============================================================================
-# Range<BackIndex> - Backward index ranges
-# These functions work with ranges of BackIndex values for backward slicing.
-# Since BackIndex is always parameterized by an Integral type, these functions
-# use BackIndex<UAddr> as the concrete type for simplicity.
-# ============================================================================
-
-# Resolve Range<BackIndex<UAddr>> to start/end UAddr indices
-routine resolve_backindex_range_start(range: Range<BackIndex<UAddr>>, length: UAddr) -> UAddr {
-    return range.start.resolve(length)
-}
-
-routine resolve_backindex_range_end(range: Range<BackIndex<UAddr>>, length: UAddr) -> UAddr {
-    return range.end.resolve(length)
-}
-
-# Check if range is valid for a given length
-routine is_backindex_range_valid_for(range: Range<BackIndex<UAddr>>, length: UAddr) -> Bool {
-    let s = range.start.offset_uaddr()
-    let e = range.end.offset_uaddr()
-    # Both offsets must be within bounds
-    return s <= length and e <= length
-}
-
-# Get the number of elements in the range (inclusive, accounting for step)
-routine count_backindex_range_for(range: Range<BackIndex<UAddr>>, length: UAddr) -> UAddr {
-    let s = resolve_backindex_range_start(range, length)
-    let e = resolve_backindex_range_end(range, length)
-    if range.ascending {
-        if s > e {
-            return 0uaddr
-        }
-        let diff = e - s
-        return (diff / range.step) + 1uaddr
-    } else {
-        if e > s {
-            return 0uaddr
-        }
-        let diff = s - e
-        return (diff / range.step) + 1uaddr
-    }
-}
+# Check if range is empty
+routine Range[T].is_empty() -> Bool
+  if me.inclusive
+    if me.is_ascending()
+      return me.start > me.end
+    else
+      return me.start < me.end
+  else
+    return me.start == me.end
 
 # ============================================================================
 # Range iteration support
 # ============================================================================
 
-record RangeIterator<I follows Integral> {
-    current: UAddr
-    end: UAddr
-    step: UAddr
-    ascending: Bool
-    done: Bool
-}
+record RangeIterator[T] needs FixedNumeric
+  current: T
+  end: T
+  step: T
+  ascending: Bool
+  inclusive: Bool
+  done: Bool
 
-routine Range<I>.iter<I>() -> RangeIterator<I>
-requires I follows Integral {
-    return RangeIterator<I>(
-        current: me.start.to_uaddr(),
-        end: me.end.to_uaddr(),
-        step: me.step,
-        ascending: me.ascending,
-        done: false
-    )
-}
+routine Range[T].iter() -> RangeIterator[T]
+  return RangeIterator[T](
+    current: me.start,
+    end: me.end,
+    step: me.step,
+    ascending: me.is_ascending(),
+    inclusive: me.inclusive,
+    done: me.is_empty()
+  )
 
-routine RangeIterator<I>.next!<I>() -> UAddr
-requires I follows Integral {
-    if me.done {
-        absent
-    }
+routine RangeIterator[T].next!() -> T
+  if me.done
+    absent
 
-    let value = me.current
+  var value = me.current
 
-    if me.ascending {
-        if me.current >= me.end {
-            me.done = true
-        } else {
-            me.current = me.current + me.step
-            # Check if we overshot the end
-            if me.current > me.end {
-                me.done = true
-            }
-        }
-    } else {
-        if me.current <= me.end {
-            me.done = true
-        } else {
-            # Check if step would underflow
-            if me.current < me.step {
-                me.done = true
-            } else {
-                me.current = me.current - me.step
-                # Check if we went past the end
-                if me.current < me.end {
-                    me.done = true
-                }
-            }
-        }
-    }
+  if me.ascending
+    me.current = me.current + me.step
+    if me.inclusive
+      if me.current > me.end
+        me.done = true
+    else
+      if me.current >= me.end
+        me.done = true
+  else
+    me.current = me.current - me.step
+    if me.inclusive
+      if me.current < me.end
+        me.done = true
+    else
+      if me.current <= me.end
+        me.done = true
 
-    return value
-}
+  return value

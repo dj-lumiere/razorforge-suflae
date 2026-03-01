@@ -1,16 +1,15 @@
 # Shiftable - Protocol for types that support shift operations (<<, >>, <<<, >>>)
 module Core
 
-protocol Shiftable {
-    @readonly
-    routine Me.__ashl__(amount: Integral) -> Me
+protocol Shiftable
+  @readonly
+  routine Me.__ashl__(amount: Integral) -> Me
 
-    @readonly
-    routine Me.__ashr__(amount: Integral) -> Me
+  @readonly
+  routine Me.__ashr__(amount: Integral) -> Me
 
-    @readonly
-    routine Me.__lshl__(amount: Integral) -> Me
+  @readonly
+  routine Me.__lshl__(amount: Integral) -> Me
 
-    @readonly
-    routine Me.__lshr__(amount: Integral) -> Me
-}
+  @readonly
+  routine Me.__lshr__(amount: Integral) -> Me

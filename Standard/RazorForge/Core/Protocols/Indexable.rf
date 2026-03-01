@@ -1,10 +1,9 @@
 # Indexable - Protocol for types that support indexing ([])
 module Core
 
-protocol Indexable<K, V> {
-    @readonly
-    routine Me.__getitem__!(key: K) -> V
+protocol Indexable[K, V]
+  @readonly
+  routine Me.__getitem__!(key: K) -> V
 
-    @writable
-    routine Me.__setitem__!(key: K, value: V)
-}
+  @writable
+  routine Me.__setitem__!(key: K, value: V)

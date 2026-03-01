@@ -1,9 +1,7 @@
 module Core
 
-record NegativeExponentError follows Crashable {
-    secret exp: S128
-}
+record NegativeExponentError obeys Crashable
+  secret exp: S128
 
-routine NegativeExponentError.crash_message() -> Text {
-    return f"Negative exponent {me.exp} results in a fraction, which is not supported for integer types."
-}
+routine NegativeExponentError.crash_message() -> Text
+  return f"Negative exponent {me.exp} results in a fraction, which is not supported for integer types."

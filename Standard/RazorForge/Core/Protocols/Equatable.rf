@@ -2,7 +2,6 @@
 # __ne__ is auto-generated from __eq__
 module Core
 
-protocol Equatable {
-    @readonly
-    routine Me.__eq__(you: Me) -> Bool
-}
+protocol Equatable
+  @readonly
+  routine Me.__eq__(you: Me) -> Bool

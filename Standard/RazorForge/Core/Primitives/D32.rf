@@ -4,277 +4,231 @@
 module Core
 
 # Core D32 type definition - stored as 32-bit value in BID encoding
-record D32 follows Numeric, Ordered {
-    secret value: U32
-}
+record D32 obeys Numeric, Ordered
+  secret value: U32
 
 # Constants for D32
 preset D32_ZERO: D32 = 0.0_d32
 preset D32_ONE: D32 = 1.0_d32
 
 # ============================================================================
-# Constructors
+# Creators
 # ============================================================================
 
-routine D32.__create__(from: S8) -> D32 {
-    let bits = rf_d32_from_s32(S32(from))
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: S8) -> D32
+  var bits = rf_d32_from_s32(S32(from))
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: S16) -> D32 {
-    let bits = rf_d32_from_s32(S32(from))
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: S16) -> D32
+  var bits = rf_d32_from_s32(S32(from))
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: S32) -> D32 {
-    let bits = rf_d32_from_s32(from)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: S32) -> D32
+  var bits = rf_d32_from_s32(from)
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: S64) -> D32 {
-    let bits = rf_d32_from_s64(from)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: S64) -> D32
+  var bits = rf_d32_from_s64(from)
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: S128) -> D32 {
-    # Convert through S64 - may lose precision
-    return from.S64!().D32()
-}
+routine D32.__create__(from: S128) -> D32
+  # Convert through S64 - may lose precision
+  return from.S64!().D32()
 
-routine D32.__create__(from: U8) -> D32 {
-    let bits = rf_d32_from_u32(U32(from))
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: U8) -> D32
+  var bits = rf_d32_from_u32(U32(from))
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: U16) -> D32 {
-    let bits = rf_d32_from_u32(U32(from))
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: U16) -> D32
+  var bits = rf_d32_from_u32(U32(from))
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: U32) -> D32 {
-    let bits = rf_d32_from_u32(from)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: U32) -> D32
+  var bits = rf_d32_from_u32(from)
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: U64) -> D32 {
-    let bits = rf_d32_from_u64(from)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: U64) -> D32
+  var bits = rf_d32_from_u64(from)
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: U128) -> D32 {
-    # Convert through U64 - may lose precision
-    return from.U64!().D32()
-}
+routine D32.__create__(from: U128) -> D32
+  # Convert through U64 - may lose precision
+  return from.U64!().D32()
 
-routine D32.__create__(from: F16) -> D32 {
-    return from.F32().D32()
-}
+routine D32.__create__(from: F16) -> D32
+  return from.F32().D32()
 
-routine D32.__create__(from: F32) -> D32 {
-    let bits = rf_f32_to_d32(from)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: F32) -> D32
+  var bits = rf_f32_to_d32(from)
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: F64) -> D32 {
-    let bits = rf_f64_to_d32(from)
-    return bitcast<U32, D32>(bits)
-}
+routine D32.__create__(from: F64) -> D32
+  var bits = rf_f64_to_d32(from)
+  return bitcast[U32, D32](bits)
 
-routine D32.__create__(from: F128) -> D32 {
-    return from.F64!().D32()
-}
+routine D32.__create__(from: F128) -> D32
+  return from.F64!().D32()
 
-routine D32.__create__(from: D32) -> D32 {
-    return from
-}
+routine D32.__create__(from: D32) -> D32
+  return from
 
-routine D32.__create__(from: D64) -> D32 {
-    let bits = from.to_bits()
-    let result_bits = rf_d64_to_d32(bits)
-    return bitcast<U32, D32>(result_bits)
-}
+routine D32.__create__(from: D64) -> D32
+  var bits = from.to_bits()
+  var result_bits = rf_d64_to_d32(bits)
+  return bitcast[U32, D32](result_bits)
 
-routine D32.__create__(from: D128) -> D32 {
-    let result_bits = rf_d128_to_d32(from.low_bits(), from.high_bits())
-    return bitcast<U32, D32>(result_bits)
-}
+routine D32.__create__(from: D128) -> D32
+  var result_bits = rf_d128_to_d32(from.low_bits(), from.high_bits())
+  return bitcast[U32, D32](result_bits)
 
 # From SAddr - convert through S64
-routine D32.__create__(from: SAddr) -> D32 {
-    return from.S64().D32()
-}
+routine D32.__create__(from: SAddr) -> D32
+  return from.S64().D32()
 
 # From UAddr - convert through U64
-routine D32.__create__(from: UAddr) -> D32 {
-    return from.U64().D32()
-}
+routine D32.__create__(from: UAddr) -> D32
+  return from.U64().D32()
 
 # From Bool
-routine D32.__create__(from: Bool) -> D32 {
-    return if from then 1d32 else 0d32
-}
+routine D32.__create__(from: Bool) -> D32
+  return if from then 1d32 else 0d32
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-routine D32.__add__(you: D32) -> D32 {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    let result = rf_d32_add(a_bits, b_bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.__add__(you: D32) -> D32
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  var result = rf_d32_add(a_bits, b_bits)
+  return bitcast[U32, D32](result)
 
-routine D32.__sub__(you: D32) -> D32 {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    let result = rf_d32_sub(a_bits, b_bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.__sub__(you: D32) -> D32
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  var result = rf_d32_sub(a_bits, b_bits)
+  return bitcast[U32, D32](result)
 
-routine D32.__mul__(you: D32) -> D32 {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    let result = rf_d32_mul(a_bits, b_bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.__mul__(you: D32) -> D32
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  var result = rf_d32_mul(a_bits, b_bits)
+  return bitcast[U32, D32](result)
 
-routine D32.__truediv__(you: D32) -> D32 {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    let result = rf_d32_div(a_bits, b_bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.__truediv__(you: D32) -> D32
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  var result = rf_d32_div(a_bits, b_bits)
+  return bitcast[U32, D32](result)
 
-routine D32.__neg__() -> D32 {
-    let zero_bits = bitcast<D32, U32>(D32_ZERO)
-    let me_bits = bitcast<D32, U32>(me)
-    let result = rf_d32_sub(zero_bits, me_bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.__neg__() -> D32
+  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  var me_bits = bitcast[D32, U32](me)
+  var result = rf_d32_sub(zero_bits, me_bits)
+  return bitcast[U32, D32](result)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine D32.__eq__(you: D32) -> Bool {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    return rf_d32_cmp(a_bits, b_bits) == 0
-}
+routine D32.__eq__(you: D32) -> Bool
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  return rf_d32_cmp(a_bits, b_bits) == 0
 
-routine D32.__cmp__(you: D32) -> ComparisonSign {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    let cmp = rf_d32_cmp(a_bits, b_bits)
-    if cmp < 0 {
-        return ME_SMALL
-    }
-    if cmp > 0 {
-        return ME_LARGE
-    }
-    return EQUAL
-}
+routine D32.__cmp__(you: D32) -> ComparisonSign
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  var cmp = rf_d32_cmp(a_bits, b_bits)
+  if cmp < 0
+    return ME_SMALL
+  if cmp > 0
+    return ME_LARGE
+  return EQUAL
 
 # ============================================================================
 # Math Operations
 # ============================================================================
 
-routine D32.sqrt() -> D32 {
-    let bits = bitcast<D32, U32>(me)
-    let result = rf_d32_sqrt(bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.sqrt() -> D32
+  var bits = bitcast[D32, U32](me)
+  var result = rf_d32_sqrt(bits)
+  return bitcast[U32, D32](result)
 
-routine D32.abs() -> D32 {
-    let bits = bitcast<D32, U32>(me)
-    let result = rf_d32_abs(bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.abs() -> D32
+  var bits = bitcast[D32, U32](me)
+  var result = rf_d32_abs(bits)
+  return bitcast[U32, D32](result)
 
-routine D32.ceil() -> D32 {
-    let bits = bitcast<D32, U32>(me)
-    let result = rf_d32_ceil(bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.ceil() -> D32
+  var bits = bitcast[D32, U32](me)
+  var result = rf_d32_ceil(bits)
+  return bitcast[U32, D32](result)
 
-routine D32.floor() -> D32 {
-    let bits = bitcast<D32, U32>(me)
-    let result = rf_d32_floor(bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.floor() -> D32
+  var bits = bitcast[D32, U32](me)
+  var result = rf_d32_floor(bits)
+  return bitcast[U32, D32](result)
 
-routine D32.round() -> D32 {
-    let bits = bitcast<D32, U32>(me)
-    let result = rf_d32_round(bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.round() -> D32
+  var bits = bitcast[D32, U32](me)
+  var result = rf_d32_round(bits)
+  return bitcast[U32, D32](result)
 
-routine D32.trunc() -> D32 {
-    let bits = bitcast<D32, U32>(me)
-    let result = rf_d32_trunc(bits)
-    return bitcast<U32, D32>(result)
-}
+routine D32.trunc() -> D32
+  var bits = bitcast[D32, U32](me)
+  var result = rf_d32_trunc(bits)
+  return bitcast[U32, D32](result)
 
 # ============================================================================
 # Utility Methods
 # ============================================================================
 
-routine D32.min(you: D32) -> D32 {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    return (if rf_d32_cmp(a_bits, b_bits) <= 0 then me else you)
-}
+routine D32.min(you: D32) -> D32
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  return (if rf_d32_cmp(a_bits, b_bits) <= 0 then me else you)
 
-routine D32.max(you: D32) -> D32 {
-    let a_bits = bitcast<D32, U32>(me)
-    let b_bits = bitcast<D32, U32>(you)
-    return (if rf_d32_cmp(a_bits, b_bits) >= 0 then me else you)
-}
+routine D32.max(you: D32) -> D32
+  var a_bits = bitcast[D32, U32](me)
+  var b_bits = bitcast[D32, U32](you)
+  return (if rf_d32_cmp(a_bits, b_bits) >= 0 then me else you)
 
-routine D32.clamp(min_val: D32, max_val: D32) -> D32 {
-    return me.min(max_val).max(min_val)
-}
+routine D32.clamp(min_val: D32, max_val: D32) -> D32
+  return me.min(max_val).max(min_val)
 
-routine D32.is_positive() -> Bool {
-    let me_bits = bitcast<D32, U32>(me)
-    let zero_bits = bitcast<D32, U32>(D32_ZERO)
-    return rf_d32_cmp(me_bits, zero_bits) > 0
-}
+routine D32.is_positive() -> Bool
+  var me_bits = bitcast[D32, U32](me)
+  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  return rf_d32_cmp(me_bits, zero_bits) > 0
 
-routine D32.is_negative() -> Bool {
-    let me_bits = bitcast<D32, U32>(me)
-    let zero_bits = bitcast<D32, U32>(D32_ZERO)
-    return rf_d32_cmp(me_bits, zero_bits) < 0
-}
+routine D32.is_negative() -> Bool
+  var me_bits = bitcast[D32, U32](me)
+  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  return rf_d32_cmp(me_bits, zero_bits) < 0
 
-routine D32.is_zero() -> Bool {
-    let me_bits = bitcast<D32, U32>(me)
-    let zero_bits = bitcast<D32, U32>(D32_ZERO)
-    return rf_d32_cmp(me_bits, zero_bits) == 0
-}
+routine D32.is_zero() -> Bool
+  var me_bits = bitcast[D32, U32](me)
+  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  return rf_d32_cmp(me_bits, zero_bits) == 0
 
-routine D32.signum() -> D32 {
-    let me_bits = bitcast<D32, U32>(me)
-    let zero_bits = bitcast<D32, U32>(D32_ZERO)
-    let cmp = rf_d32_cmp(me_bits, zero_bits)
-    when {
-        cmp > 0 => D32_ONE,
-        cmp < 0 => me.__neg__(),
-        _ => D32_ZERO
-    }
-}
+routine D32.signum() -> D32
+  var me_bits = bitcast[D32, U32](me)
+  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  var cmp = rf_d32_cmp(me_bits, zero_bits)
+  return when
+    cmp > 0 => D32_ONE
+    cmp < 0 => me.__neg__()
+    else => D32_ZERO
 
 # ============================================================================
 # Type Conversions
 # ============================================================================
 
 # Reinterpret bits as U32 (type punning)
-routine D32.to_bits() -> U32 {
-    return bitcast<D32, U32>(me)
-}
+routine D32.to_bits() -> U32
+  return bitcast[D32, U32](me)
 
 # Create D32 from U32 bits (type punning)
-routine D32.from_bits(bits: U32) -> D32 {
-    return bitcast<U32, D32>(bits)
-}
+routine D32.from_bits(bits: U32) -> D32
+  return bitcast[U32, D32](bits)

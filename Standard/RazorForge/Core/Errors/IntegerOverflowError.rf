@@ -3,9 +3,7 @@ module Core
 # IntegerOverflowError - Error for integer conversion overflow
 # Used when converting between integer types and the value doesn't fit
 
-record IntegerOverflowError follows Crashable {
-}
+record IntegerOverflowError obeys Crashable
 
-routine IntegerOverflowError.crash_message() -> Text {
-    return "Integer overflow: value does not fit in the target type."
-}
+routine IntegerOverflowError.crash_message() -> Text
+  return "Integer overflow: value does not fit in the target type."

@@ -1,0 +1,8 @@
+﻿routine stop!()
+  throw RuntimeError("Stopped by user")
+
+routine verify!(expr: Bool)
+  throw VerificationFailure()
+
+routine breach!()
+  throw LogicBreachError()

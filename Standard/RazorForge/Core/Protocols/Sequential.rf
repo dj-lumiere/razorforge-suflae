@@ -1,7 +1,6 @@
 # Sequential - Protocol for types that can be iterated over in for-in loops
 module Core
 
-protocol Sequential<T> {
-    @readonly
-    routine Me.__seq__() -> SequenceGenerator<T>
-}
+protocol Sequential[T]
+  @readonly
+  routine Me.__seq__() -> SequenceGenerator[T]

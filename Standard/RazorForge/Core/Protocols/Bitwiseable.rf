@@ -1,13 +1,12 @@
 # Bitwiseable - Protocol for types that support bitwise operations (&, |, ^)
 module Core
 
-protocol Bitwiseable {
-    @readonly
-    routine Me.__and__(you: Me) -> Me
+protocol Bitwiseable
+  @readonly
+  routine Me.__and__(you: Me) -> Me
 
-    @readonly
-    routine Me.__or__(you: Me) -> Me
+  @readonly
+  routine Me.__or__(you: Me) -> Me
 
-    @readonly
-    routine Me.__xor__(you: Me) -> Me
-}
+  @readonly
+  routine Me.__xor__(you: Me) -> Me

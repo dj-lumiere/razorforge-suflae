@@ -1,59 +1,59 @@
-# RazorForge Tracked<T, P> - Weak reference to Shared<T, P>
+# RazorForge Tracked[T, P] - Weak reference to Shared[T, P]
 # Multi-threaded weak references
 module Core
 
-record Tracked<T, P>
-requires P follows LockPolicy {
-    secret controller: Snatched<MultiShareController>
-    secret data: Snatched<T>
-    secret lock: Snatched<P>
-}
+record Tracked[T, P]
+needs P obeys LockPolicy
+  secret controller: Snatched[MultiShareController]
+  secret data: Snatched[T]
+  secret lock: Snatched[P]
 
-# Create weak reference from Shared<T, P>
-routine Shared<T, P>.track() -> Tracked<T, P> {
-    danger! {
-        me.controller.increase_weak_count!()
-        return me
-    }
-}
+# Create weak reference from Shared[T, P]
+routine Shared[T, P].track() -> Tracked[T, P]
+  danger!
+    me.controller.increase_weak_count!()
+    return me
 
 # Check if the tracked data is still alive
-routine Tracked<T, P>.is_alive() -> Bool {
-    danger! {
-        return me.controller.strong_count() > 0
-    }
-}
+routine Tracked[T, P].is_alive() -> Bool
+  danger!
+    return me.controller.strong_count() > 0
 
 # Clone the weak reference
-routine Tracked<T, P>.track() -> Tracked<T, P> {
-    danger! {
-        me.controller.increase_weak_count!()
-        return me
-    }
-}
+routine Tracked[T, P].track() -> Tracked[T, P]
+  danger!
+    me.controller.increase_weak_count!()
+    return me
+
+# Recover strong Shared[T, P] from weak Tracked[T, P]
+# Absent if the referenced data has been deallocated
+routine Tracked[T, P].recover!() -> Shared[T, P]
+  danger!
+    if me.controller.strong_count() == 0
+      absent
+    me.controller.increase_strong_count!()
+    return Shared[T, P](
+      controller: me.controller,
+      data: me.data,
+      lock: me.lock
+    )
 
 # Release the weak reference
-routine Tracked<T, P>.release!() {
-    danger! {
-        me.controller.decrease_weak_count!()
+routine Tracked[T, P].release!()
+  danger!
+    me.controller.decrease_weak_count!()
 
-        # If both strong and weak counts are 0, deallocate controller
-        when me.controller.strong_count() == 0 and me.controller.weak_count() == 0 {
-            true => me.controller.invalidate!()
-            false => pass
-        }
-    }
-}
+    # If both strong and weak counts are 0, deallocate controller
+    when me.controller.strong_count() == 0 and me.controller.weak_count() == 0
+      == true => me.controller.invalidate!()
+      == false => pass
+  return
 
 # Get reference counts for debugging
-routine Tracked<T, P>.strong_count() -> S32 {
-    danger! {
-        return me.controller.strong_count()
-    }
-}
+routine Tracked[T, P].strong_count() -> S32
+  danger!
+    return me.controller.strong_count()
 
-routine Tracked<T, P>.weak_count() -> S32 {
-    danger! {
-        return me.controller.weak_count()
-    }
-}
+routine Tracked[T, P].weak_count() -> S32
+  danger!
+    return me.controller.weak_count()

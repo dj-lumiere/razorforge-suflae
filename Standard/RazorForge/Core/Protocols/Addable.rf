@@ -1,7 +1,6 @@
 # Addable - Protocol for types that support addition (+)
 module Core
 
-protocol Addable {
-    @readonly
-    routine Me.__add__!(you: Me) -> Me
-}
+protocol Addable
+  @readonly
+  routine Me.__add__!(you: Me) -> Me

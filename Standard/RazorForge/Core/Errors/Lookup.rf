@@ -1,6 +1,5 @@
 module Core
 
-record Lookup<T> {
-    secret state: DataState
-    secret handle: Snatched<T>
-}
+record Lookup[T]
+  secret state: DataState
+  secret handle: Snatched[T]

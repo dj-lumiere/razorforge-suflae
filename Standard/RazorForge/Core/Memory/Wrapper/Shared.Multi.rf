@@ -1,78 +1,65 @@
-# RazorForge Shared<T, P> - Thread-safe reference counting with locking policy
-# Supports Mutex, MultiReadLock, and RejectEdit policies
+# RazorForge Shared[T, P] - Thread-safe reference counting with locking policy
+# Supports Exclusive, MultiRead, and ReadOnly policies
 module Core
 
-record Shared<T, P>
-requires P follows LockPolicy {
-    secret controller: Snatched<MultiShareController>
-    secret data: Snatched<T>
-    secret lock: Snatched<P>
-}
+record Shared[T, P]
+needs P obeys LockPolicy
+  secret controller: Snatched[MultiShareController]
+  secret data: Snatched[T]
+  secret lock: Snatched[P]
 
 # Generic factory method - create Shared with any lock policy
-routine T.share<P>() -> Shared<T, P>
-requires P follows LockPolicy {
-    danger! {
-        # Allocate control block with atomic ref counting
-        let controller = MultiShareController().snatch()
-        controller.increase_strong_count!()
+routine T.share[P]() -> Shared[T, P]
+needs P obeys LockPolicy
+  danger!
+    # Allocate control block with atomic ref counting
+    var controller = MultiShareController().snatch()
+    controller.increase_strong_count!()
 
-        # Allocate policy-specific lock
-        let lock = P().snatch()
+    # Allocate policy-specific lock
+    var lock = P().snatch()
 
-        # Create Shared record
-        return Shared<T, P>(
-            controller: controller,
-            data: me.snatch(),
-            lock: lock
-        )
-    }
-}
+    # Create Shared record
+    return Shared[T, P](
+      controller: controller,
+      data: me.snatch(),
+      lock: lock
+    )
 
 # Clone the shared reference (increment atomic ref count)
-routine Shared<T, P>.share() -> Shared<T, P> {
-    danger! {
-        me.controller.increase_strong_count!()  # Atomic increment
-    }
-    return me
-}
+routine Shared[T, P].share() -> Shared[T, P]
+  danger!
+    me.controller.increase_strong_count!()  # Atomic increment
+  return me
 
 # Release the shared reference (decrement atomic ref count)
-routine Shared<T, P>.release!() {
-    danger! {
-        me.controller.decrease_strong_count!()  # Atomic decrement
+routine Shared[T, P].release!()
+  danger!
+    me.controller.decrease_strong_count!()  # Atomic decrement
 
-        when me.controller.strong_count() == 0 {
-            == true {
-                # Deallocate the data
-                me.data.invalidate!()
+    when me.controller.strong_count() == 0
+      == true =>
+        # Deallocate the data
+        me.data.invalidate!()
 
-                # Deallocate the lock
-                me.lock.invalidate!()
+        # Deallocate the lock
+        me.lock.invalidate!()
 
-                # Check if we should also deallocate the controller
-                when me.controller.weak_count() == 0 {
-                    == true => me.controller.invalidate!(),
-                    == false => pass  # Keep controller alive for weak references
-                }
-            }
-            == false => pass  # Still has strong references
-        }
-    }
-}
+        # Check if we should also deallocate the controller
+        when me.controller.weak_count() == 0
+          == true => me.controller.invalidate!()
+          == false => pass  # Keep controller alive for weak references
+      == false => pass  # Still has strong references
+  return
 
 # Get atomic reference counts for debugging
-routine Shared<T, P>.strong_count() -> S32 {
-    danger! {
-        return me.controller.strong_count()
-    }
-}
+routine Shared[T, P].strong_count() -> S32
+  danger!
+    return me.controller.strong_count()
 
-routine Shared<T, P>.weak_count() -> S32 {
-    danger! {
-        return me.controller.weak_count()
-    }
-}
+routine Shared[T, P].weak_count() -> S32
+  danger!
+    return me.controller.weak_count()
 
 # Access to data is done through inspecting/seizing scoped blocks
 # which handle lock acquisition and release automatically

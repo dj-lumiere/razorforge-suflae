@@ -5,4 +5,4 @@ module Core
 import RazorForge/Numeric.Complex
 
 entity Complex
-    secret value: RazorForge/Numeric.Complex
+  secret value: RazorForge/Numeric.Complex
