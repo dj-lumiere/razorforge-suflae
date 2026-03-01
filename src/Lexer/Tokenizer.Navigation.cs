@@ -1,11 +1,11 @@
-namespace Compilers.Suflae.Lexer;
+namespace Compiler.Lexer;
 
-using Compilers.Shared.Lexer;
+using Lexer;
 
 /// <summary>
-/// Partial class containing character navigation and token management methods for the Suflae tokenizer.
+/// Partial class containing character navigation and token management methods for the unified tokenizer.
 /// </summary>
-public partial class SuflaeTokenizer
+public partial class Tokenizer
 {
     #region Character Navigation
 
@@ -135,6 +135,12 @@ public partial class SuflaeTokenizer
     /// <param name="text">The text content of the token.</param>
     private void AddToken(TokenType type, string text)
     {
+        // Any real (non-structural) token means the line has content
+        if (type is not TokenType.Newline and not TokenType.Indent and not TokenType.Dedent)
+        {
+            _hasTokenOnLine = true;
+        }
+
         _tokens.Add(item: new Token(Type: type,
             FileName: _fileName,
             Text: text,

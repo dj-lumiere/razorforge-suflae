@@ -1,4 +1,4 @@
-namespace Compilers.Shared.AST;
+namespace SyntaxTree;
 
 #region Base Interfaces and Types
 
@@ -40,7 +40,7 @@ public interface IAstNode
 /// <param name="Column">1-based column number within the line</param>
 /// <param name="Position">0-based absolute character position in the source text</param>
 /// <remarks>
-/// Location information is preserved throughout the compilation pipeline:
+/// Location information is preserved throughout the build pipeline:
 /// <list type="bullet">
 /// <item>Lexical analysis: attached to tokens during scanning</item>
 /// <item>Parsing: propagated to AST nodes during parse tree construction</item>
@@ -51,7 +51,7 @@ public interface IAstNode
 public record SourceLocation(string FileName, int Line, int Column, int Position);
 
 /// <summary>
-/// Abstract base implementation for all AST nodes in the compiler.
+/// Abstract base implementation for all AST nodes in the builder.
 /// Provides common functionality and enforces consistent interface implementation.
 /// </summary>
 /// <param name="Location">Source location information for this node</param>
@@ -82,7 +82,7 @@ public abstract record AstNode(SourceLocation Location) : IAstNode
 
 /// <summary>
 /// Visitor pattern interface for extensible AST operations.
-/// Enables implementation of various compiler passes, analyzers, and transformations
+/// Enables implementation of various builder passes, analyzers, and transformations
 /// without modifying the AST node classes themselves.
 /// </summary>
 /// <typeparam name="T">Return type for visitor methods, enabling flexible operation results</typeparam>
@@ -91,7 +91,7 @@ public abstract record AstNode(SourceLocation Location) : IAstNode
 /// <list type="bullet">
 /// <item>Extensibility: new operations can be added without changing AST classes</item>
 /// <item>Separation of concerns: keeps operation logic separate from data structure</item>
-/// <item>Type safety: compile-time checking ensures all node types are handled</item>
+/// <item>Type safety: build-time checking ensures all node types are handled</item>
 /// <item>Consistency: uniform interface for all AST traversal operations</item>
 /// </list>
 ///
@@ -162,10 +162,10 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the named argument expression</returns>
     T VisitNamedArgumentExpression(NamedArgumentExpression node);
 
-    /// <summary>Visits a constructor expression node (Type(field: value) syntax)</summary>
-    /// <param name="node">The constructor expression to visit</param>
-    /// <returns>Result of visiting the constructor expression</returns>
-    T VisitConstructorExpression(ConstructorExpression node);
+    /// <summary>Visits a creator expression node (Type(field: value) syntax)</summary>
+    /// <param name="node">The creator expression to visit</param>
+    /// <returns>Result of visiting the creator expression</returns>
+    T VisitCreatorExpression(CreatorExpression node);
 
     /// <summary>Visits a with expression node (functional update like value with (field: newVal))</summary>
     /// <param name="node">The with expression to visit</param>
@@ -176,6 +176,11 @@ public interface IAstVisitor<T>
     /// <param name="node">The member expression to visit</param>
     /// <returns>Result of visiting the member expression</returns>
     T VisitMemberExpression(MemberExpression node);
+
+    /// <summary>Visits an optional member expression node (safe navigation like obj?.field)</summary>
+    /// <param name="node">The optional member expression to visit</param>
+    /// <returns>Result of visiting the optional member expression</returns>
+    T VisitOptionalMemberExpression(OptionalMemberExpression node);
 
     /// <summary>Visits an index expression node (array/collection access like arr[0])</summary>
     /// <param name="node">The index expression to visit</param>
@@ -298,7 +303,7 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the assignment statement</returns>
     T VisitAssignmentStatement(AssignmentStatement node);
 
-    /// <summary>Visits a record/entity destructuring statement node (let (field, field2) = expr)</summary>
+    /// <summary>Visits a record/entity destructuring statement node (var (field, field2) = expr)</summary>
     /// <param name="node">The destructuring statement to visit</param>
     /// <returns>Result of visiting the destructuring statement</returns>
     T VisitDestructuringStatement(DestructuringStatement node);
@@ -367,24 +372,19 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the using statement</returns>
     T VisitUsingStatement(UsingStatement node);
 
-    /// <summary>Visits a release statement node (premature resource cleanup)</summary>
-    /// <param name="node">The release statement to visit</param>
-    /// <returns>Result of visiting the release statement</returns>
-    T VisitReleaseStatement(ReleaseStatement node);
-
     /// <summary>Visits a discard statement node (explicit return value discard)</summary>
     /// <param name="node">The discard statement to visit</param>
     /// <returns>Result of visiting the discard statement</returns>
     T VisitDiscardStatement(DiscardStatement node);
 
-    /// <summary>Visits a generate statement node (generator yield)</summary>
-    /// <param name="node">The generate statement to visit</param>
-    /// <returns>Result of visiting the generate statement</returns>
-    T VisitGenerateStatement(GenerateStatement node);
+    /// <summary>Visits an emit statement node (generator yield)</summary>
+    /// <param name="node">The emit statement to visit</param>
+    /// <returns>Result of visiting the emit statement</returns>
+    T VisitEmitStatement(EmitStatement node);
 
     // Declaration visitor methods - handle all declaration node types
 
-    /// <summary>Visits a variable declaration node (var/let declarations)</summary>
+    /// <summary>Visits a variable declaration node (var declarations)</summary>
     /// <param name="node">The variable declaration to visit</param>
     /// <returns>Result of visiting the variable declaration</returns>
     T VisitVariableDeclaration(VariableDeclaration node);
@@ -454,7 +454,7 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the external block declaration</returns>
     T VisitExternalBlockDeclaration(ExternalBlockDeclaration node);
 
-    /// <summary>Visits a preset declaration node (compile-time constants)</summary>
+    /// <summary>Visits a preset declaration node (build-time constants)</summary>
     /// <param name="node">The preset declaration to visit</param>
     /// <returns>Result of visiting the preset declaration</returns>
     T VisitPresetDeclaration(PresetDeclaration node);
@@ -466,7 +466,7 @@ public interface IAstVisitor<T>
 
     // Program visitor method - handle the root program node
 
-    /// <summary>Visits the root program node (compilation unit)</summary>
+    /// <summary>Visits the root program node (build unit)</summary>
     /// <param name="node">The program node to visit</param>
     /// <returns>Result of visiting the program</returns>
     T VisitProgram(Program node);
@@ -477,7 +477,7 @@ public interface IAstVisitor<T>
 #region Root Program Node
 
 /// <summary>
-/// Root node of the Abstract Syntax Tree representing a complete program or compilation unit.
+/// Root node of the Abstract Syntax Tree representing a complete program or build unit.
 /// Contains all top-level declarations and serves as the entry point for AST operations.
 /// </summary>
 /// <param name="Declarations">List of all top-level declarations in the program (functions, classes, variables, imports)</param>
@@ -486,7 +486,7 @@ public interface IAstVisitor<T>
 /// The Program node is the root of the AST hierarchy:
 /// <list type="bullet">
 /// <item>Entry point: all AST traversals begin at the Program node</item>
-/// <item>Compilation unit: represents a single source file or module</item>
+/// <item>Build unit: represents a single source file or module</item>
 /// <item>Declaration container: holds all top-level program constructs</item>
 /// <item>Global scope: establishes the outermost lexical scope</item>
 /// </list>

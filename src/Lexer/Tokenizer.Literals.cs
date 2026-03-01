@@ -1,39 +1,17 @@
-using RazorForge.Diagnostics;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Lexer;
-
-using Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
-/// Partial class containing string and character literal scanning methods for the Suflae tokenizer.
+/// Partial class containing string and character literal scanning methods for the unified tokenizer.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Suflae has a simplified literal system compared to RazorForge:
-/// </para>
-/// <list type="bullet">
-///   <item><description>Basic strings: "hello" (UTF-32/letter by default)</description></item>
-///   <item><description>Raw strings: r"no \escape"</description></item>
-///   <item><description>Formatted strings: f"value is {x}"</description></item>
-///   <item><description>Byte strings: b"bytes"</description></item>
-///   <item><description>Character literals: 'a' (letter/UTF-32, emits LetterLiteral)</description></item>
-///   <item><description>Byte character literals: b'x' (8-bit, emits ByteLetterLiteral)</description></item>
-/// </list>
-/// <para>
-/// Unlike RazorForge, Suflae does not support explicit letter prefixes (letter8'x', letter16'x', letter32'x').
-/// </para>
-/// </remarks>
-public partial class SuflaeTokenizer
+public partial class Tokenizer
 {
     #region String Literals
 
     /// <summary>
     /// Scans a basic string literal (without prefix).
     /// </summary>
-    /// <remarks>
-    /// In Suflae, unprefixed strings are letter (UTF-32) strings.
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when the string is unterminated.</exception>
     private void ScanString()
     {
         ScanStringLiteral(isRaw: false,
@@ -108,11 +86,6 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Scans a string literal with the specified properties.
     /// </summary>
-    /// <param name="isRaw">If <c>true</c>, escape sequences are not processed.</param>
-    /// <param name="isFormatted">If <c>true</c>, the string supports interpolation.</param>
-    /// <param name="tokenType">The token type to emit.</param>
-    /// <param name="bitWidth">Character bit width for Unicode escapes (8 or 32).</param>
-    /// <exception cref="LexerException">Thrown when the string is unterminated or contains invalid escapes.</exception>
     private void ScanStringLiteral(bool isRaw, bool isFormatted, TokenType tokenType,
         int bitWidth = 32)
     {
@@ -150,11 +123,11 @@ public partial class SuflaeTokenizer
                 char c = Advance();
                 if (bitWidth == 8 && c > '\x7F')
                 {
-                    throw new SuflaeGrammarException(
-                        SuflaeDiagnosticCode.InvalidEscapeSequence,
+                    throw new GrammarException(
+                        GrammarDiagnosticCode.InvalidEscapeSequence,
                         $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
                         "Byte literals only accept ASCII (0x00-0x7F). Use \"text\".encode_as(UTF8) instead.",
-                        _fileName, _line, _column);
+                        _fileName, _line, _column, _language);
                 }
                 content.Append(value: c);
             }
@@ -162,10 +135,10 @@ public partial class SuflaeTokenizer
 
         if (IsAtEnd())
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.UnterminatedString,
+            throw new GrammarException(
+                GrammarDiagnosticCode.UnterminatedString,
                 $"Unterminated text starting at line {startLine}, column {startColumn}",
-                _fileName, startLine, startColumn);
+                _fileName, startLine, startColumn, _language);
         }
 
         Advance(); // consume closing quote
@@ -179,18 +152,14 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Scans a basic character literal (single-quoted).
     /// </summary>
-    /// <remarks>
-    /// In Suflae, unprefixed character literals 'x' are letter (UTF-32) characters.
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when the character literal is unterminated.</exception>
     private void ScanLetter()
     {
         if (IsAtEnd())
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.UnterminatedString,
+            throw new GrammarException(
+                GrammarDiagnosticCode.UnterminatedString,
                 "Unterminated character literal",
-                _fileName, _line, _column);
+                _fileName, _line, _column, _language);
         }
 
         char value;
@@ -206,10 +175,10 @@ public partial class SuflaeTokenizer
 
         if (Peek() != '\'')
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.UnterminatedString,
+            throw new GrammarException(
+                GrammarDiagnosticCode.UnterminatedString,
                 "Unterminated character literal",
-                _fileName, _line, _column);
+                _fileName, _line, _column, _language);
         }
 
         Advance(); // consume closing quote
@@ -219,24 +188,11 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Attempts to parse a b'x' byte character literal.
     /// </summary>
-    /// <returns>
-    /// <c>true</c> if byte character literal found; <c>false</c> otherwise.
-    /// </returns>
-    /// <remarks>
-    /// This handles the case where 'b' starts a token - it could be:
-    /// <list type="bullet">
-    ///   <item><description>b"string" - byte string (handled by TryParseTextPrefix)</description></item>
-    ///   <item><description>b'x' - byte character literal (8-bit)</description></item>
-    ///   <item><description>identifier starting with 'b'</description></item>
-    /// </list>
-    /// This method specifically checks for b'x' syntax and emits ByteLetterLiteral.
-    /// </remarks>
     private bool TryParseByteLiteralPrefix()
     {
         // We already consumed 'b', check if followed by single quote
         if (Peek() != '\'')
         {
-            // Not a byte character literal
             return false;
         }
 
@@ -248,9 +204,6 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Scans a character literal with the specified token type and bit width.
     /// </summary>
-    /// <param name="tokenType">The token type to emit.</param>
-    /// <param name="bitWidth">The bit width for Unicode escape validation.</param>
-    /// <exception cref="LexerException">Thrown when the character literal is unterminated.</exception>
     private void ScanLetterLiteral(TokenType tokenType, int bitWidth = 32)
     {
         if (Peek() == '\\')
@@ -263,21 +216,21 @@ public partial class SuflaeTokenizer
             char c = Peek();
             if (bitWidth == 8 && c > '\x7F')
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidEscapeSequence,
                     $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
                     "Byte literals only accept ASCII (0x00-0x7F).",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
             Advance(); // consume the character
         }
 
         if (!Match(expected: '\''))
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.UnterminatedString,
+            throw new GrammarException(
+                GrammarDiagnosticCode.UnterminatedString,
                 "Unterminated character literal",
-                _fileName, _line, _column);
+                _fileName, _line, _column, _language);
         }
 
         AddToken(type: tokenType);
@@ -290,24 +243,14 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Scans and validates an escape sequence.
     /// </summary>
-    /// <param name="bitWidth">The bit width for escape validation (8 or 32).</param>
-    /// <remarks>
-    /// Supported escape sequences:
-    /// <list type="bullet">
-    ///   <item><description>\n, \t, \r, \\, \", \', \0 - common escapes</description></item>
-    ///   <item><description>\xFF - hex byte escape (2 hex digits, for Byte/Bytes)</description></item>
-    ///   <item><description>\uFFFFFFFF - Unicode escape (up to 8 hex digits, for Letter/Text)</description></item>
-    /// </list>
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when the escape sequence is invalid.</exception>
     private void ScanEscapeSequence(int bitWidth = 32)
     {
         if (IsAtEnd())
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.InvalidEscapeSequence,
+            throw new GrammarException(
+                GrammarDiagnosticCode.InvalidEscapeSequence,
                 "Unterminated escape sequence",
-                _fileName, _line, _column);
+                _fileName, _line, _column, _language);
         }
 
         char escapeChar = Peek();
@@ -323,22 +266,21 @@ public partial class SuflaeTokenizer
             case 'u':
                 if (bitWidth == 8)
                 {
-                    throw new SuflaeGrammarException(
-                        SuflaeDiagnosticCode.InvalidEscapeSequence,
+                    throw new GrammarException(
+                        GrammarDiagnosticCode.InvalidEscapeSequence,
                         "Unicode escape \\u is not valid in byte literals. Use \\x for hex byte values.",
-                        _fileName, _line, _column);
+                        _fileName, _line, _column, _language);
                 }
                 Advance(); // consume 'u'
                 ScanUnicodeEscape();
                 break;
             case '\r':
                 // Line continuation: \ followed by CRLF
-                Advance(); // consume '\r'
+                Advance();
                 if (Peek() == '\n')
                 {
-                    Advance(); // consume '\n'
+                    Advance();
                 }
-                // Skip leading whitespace on continuation line
                 while (Peek() == ' ' || Peek() == '\t')
                 {
                     Advance();
@@ -346,38 +288,33 @@ public partial class SuflaeTokenizer
                 break;
             case '\n':
                 // Line continuation: \ followed by LF
-                Advance(); // consume '\n'
-                // Skip leading whitespace on continuation line
+                Advance();
                 while (Peek() == ' ' || Peek() == '\t')
                 {
                     Advance();
                 }
                 break;
             default:
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidEscapeSequence,
                     $"Invalid escape sequence '\\{escapeChar}'",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
         }
     }
 
     /// <summary>
     /// Scans and validates a hex byte escape sequence (\xFF).
     /// </summary>
-    /// <remarks>
-    /// Requires exactly 2 hex digits for byte values (0x00-0xFF).
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when insufficient hex digits are provided.</exception>
     private void ScanHexByteEscape()
     {
         for (int i = 0; i < 2; i += 1)
         {
             if (!IsHexDigit(c: Peek()))
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidEscapeSequence,
                     "Invalid hex byte escape: expected 2 hex digits (\\xFF)",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
 
             Advance();
@@ -387,20 +324,16 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Scans and validates a Unicode escape sequence (\uXXXXXX).
     /// </summary>
-    /// <remarks>
-    /// Requires exactly 6 hex digits for Unicode codepoints (U+000000 to U+10FFFF).
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when insufficient hex digits are provided.</exception>
     private void ScanUnicodeEscape()
     {
         for (int i = 0; i < 6; i += 1)
         {
             if (!IsHexDigit(c: Peek()))
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidEscapeSequence,
                     "Invalid Unicode escape: expected 6 hex digits (\\uXXXXXX)",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
 
             Advance();
@@ -410,17 +343,12 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Parses an escape sequence and returns the actual character value.
     /// </summary>
-    /// <param name="escapeStart">Position in source where the backslash is located.</param>
-    /// <param name="bitWidth">The bit width for validation (8 for bytes, 32 for letters).</param>
-    /// <returns>The character represented by the escape sequence.</returns>
-    /// <exception cref="LexerException">Thrown when a value exceeds the valid range.</exception>
     private char ParseEscapeSequence(int escapeStart, int bitWidth = 32)
     {
-        char c = _source[index: escapeStart + 1]; // character after backslash
+        char c = _source[index: escapeStart + 1];
 
         if (c == 'x')
         {
-            // Hex byte escape: \xFF (exactly 2 hex digits)
             string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 2);
             int byteValue = Convert.ToInt32(value: hexStr, fromBase: 16);
             return (char)byteValue;
@@ -428,16 +356,15 @@ public partial class SuflaeTokenizer
 
         if (c == 'u')
         {
-            // Unicode escape: \uXXXXXX (exactly 6 hex digits)
             string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 6);
             int codePoint = Convert.ToInt32(value: hexStr, fromBase: 16);
 
             if (codePoint > 0x10FFFF)
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidEscapeSequence,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidEscapeSequence,
                     $"Unicode escape value U+{codePoint:X} exceeds valid Unicode range",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
 
             return (char)codePoint;
@@ -449,8 +376,6 @@ public partial class SuflaeTokenizer
     /// <summary>
     /// Converts a simple escape character to its actual value.
     /// </summary>
-    /// <param name="c">The character following the backslash.</param>
-    /// <returns>The actual character represented by the escape.</returns>
     private static char EscapeCharacter(char c)
     {
         return c switch

@@ -1,13 +1,15 @@
-namespace RazorForge.Diagnostics;
+using SemanticAnalysis.Enums;
+
+namespace Compiler.Diagnostics;
 
 /// <summary>
-/// Grammar diagnostic codes for Suflae (SF-G prefix).
-/// Covers lexer and parser errors, including indentation-specific errors.
+/// Unified grammar diagnostic codes for both RazorForge (RF-G) and Suflae (SF-G).
+/// Covers lexer, parser, and indentation errors.
 /// </summary>
-public enum SuflaeDiagnosticCode
+public enum GrammarDiagnosticCode
 {
     // ═══════════════════════════════════════════════════════════════════════════
-    // LEXER ERRORS (SF-G001 - SF-G099)
+    // LEXER ERRORS (001 - 049)
     // ═══════════════════════════════════════════════════════════════════════════
 
     UnterminatedString = 1,
@@ -20,7 +22,7 @@ public enum SuflaeDiagnosticCode
     InvalidDurationLiteral = 8,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // INDENTATION ERRORS (SF-G050 - SF-G079) - Suflae-specific
+    // INDENTATION ERRORS (050 - 079)
     // ═══════════════════════════════════════════════════════════════════════════
 
     ExpectedIndent = 50,
@@ -31,34 +33,33 @@ public enum SuflaeDiagnosticCode
     ExpectedIndentedBlock = 55,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // EXPECTED TOKEN ERRORS (SF-G100 - SF-G149)
+    // EXPECTED TOKEN ERRORS (100 - 149)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    ExpectedColon = 100,
-    ExpectedArrow = 101,
-    ExpectedFatArrow = 102,
-    ExpectedEquals = 103,
-    ExpectedComma = 104,
-    ExpectedDot = 105,
-    ExpectedIdentifier = 106,
-    ExpectedTypeIdentifier = 107,
-    ExpectedExpression = 108,
-    ExpectedType = 109,
-    ExpectedPattern = 110,
-    ExpectedDeclaration = 111,
-    ExpectedAttributeValue = 112,
-    ExpectedTypeArgument = 113,
-    ExpectedColonOrFatArrow = 114,
-    ExpectedClosingParen = 115,
-    ExpectedClosingBracket = 116,
-    ExpectedClosingAngle = 117,
-    ExpectedLeftParen = 118,
-    ExpectedRightParen = 119,
-    ExpectedAs = 120,
-    ExpectedWaitforAfterDependencies = 121,
+    ExpectedClosingBrace = 100,
+    ExpectedClosingParen = 101,
+    ExpectedClosingBracket = 102,
+    ExpectedColon = 104,
+    ExpectedArrow = 105,
+    ExpectedFatArrow = 106,
+    ExpectedEquals = 107,
+    ExpectedComma = 108,
+    ExpectedDot = 109,
+    ExpectedIdentifier = 110,
+    ExpectedExpression = 112,
+    ExpectedType = 113,
+    ExpectedPattern = 114,
+    ExpectedDeclaration = 115,
+    ExpectedAttributeValue = 116,
+    ExpectedTypeArgument = 117,
+    ExpectedColonOrFatArrow = 118,
+    ExpectedLeftParen = 119,
+    ExpectedRightParen = 120,
+    ExpectedAs = 121,
+    ExpectedWaitforAfterDependencies = 122,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // UNEXPECTED TOKEN ERRORS (SF-G150 - SF-G199)
+    // UNEXPECTED TOKEN ERRORS (150 - 199)
     // ═══════════════════════════════════════════════════════════════════════════
 
     UnexpectedToken = 150,
@@ -66,7 +67,7 @@ public enum SuflaeDiagnosticCode
     UnexpectedNewline = 152,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // STRUCTURE ERRORS (SF-G200 - SF-G249)
+    // STRUCTURE ERRORS (200 - 249)
     // ═══════════════════════════════════════════════════════════════════════════
 
     NestedRoutineNotAllowed = 200,
@@ -77,9 +78,11 @@ public enum SuflaeDiagnosticCode
     ExpectedDedentAfterBody = 205,
     DiscardRequiresCall = 206,
     TupleDependencyCountMismatch = 207,
+    MissingReturn = 208,
+    RFOnlyConstruct = 210,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PATTERN ERRORS (SF-G250 - SF-G299)
+    // PATTERN ERRORS (250 - 299)
     // ═══════════════════════════════════════════════════════════════════════════
 
     InvalidPattern = 250,
@@ -87,7 +90,7 @@ public enum SuflaeDiagnosticCode
     ExpectedDotInQualifiedPattern = 252,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // GENERIC CONSTRAINT ERRORS (SF-G300 - SF-G349)
+    // GENERIC CONSTRAINT ERRORS (300 - 349)
     // ═══════════════════════════════════════════════════════════════════════════
 
     UndeclaredTypeParameter = 300,
@@ -95,13 +98,14 @@ public enum SuflaeDiagnosticCode
     ExpectedConstraintType = 302,
 }
 
-public static class SuflaeDiagnosticCodeExtensions
+public static class GrammarDiagnosticCodeExtensions
 {
     /// <summary>
-    /// Formats code as SF-Gnnn (e.g., SF-G001, SF-G050)
+    /// Formats code as RF-Gnnn or SF-Gnnn depending on language.
     /// </summary>
-    public static string ToCodeString(this SuflaeDiagnosticCode code)
+    public static string ToCodeString(this GrammarDiagnosticCode code, Language language)
     {
-        return $"SF-G{(int)code:D3}";
+        string prefix = language == Language.RazorForge ? "RF" : "SF";
+        return $"{prefix}-G{(int)code:D3}";
     }
 }

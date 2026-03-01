@@ -1,13 +1,15 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using Compilers.RazorForge.Parser;
+using SyntaxTree;
+using Compiler.Lexer;
+using SemanticAnalysis.Enums;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing declaration parsing (variables, routines, entities, records, variants, etc.).
+/// Unified parser for both RazorForge and Suflae languages.
 /// </summary>
-public partial class SuflaeParser
+public partial class Parser
 {
     /// <summary>
     /// Parses attributes like @crash_only, @inline, @[readonly, inline], etc.
@@ -100,7 +102,8 @@ public partial class SuflaeParser
                     // Accept both ':' and '=' as separators
                     if (!Match(TokenType.Colon, TokenType.Assign))
                     {
-                        throw ThrowParseError("Expected ':' or '=' after argument name");
+                        throw ThrowParseError(GrammarDiagnosticCode.UnexpectedToken,
+                            "Expected ':' or '=' after argument name");
                     }
                     string argValue = ParseAttributeValue();
                     arguments.Add(item: $"{argName}={argValue}");
@@ -124,7 +127,7 @@ public partial class SuflaeParser
     /// <returns>String representation of the attribute value.</returns>
     private string ParseAttributeValue()
     {
-        // Attribute values are limited to compile-time constants:
+        // Attribute values are limited to build-time constants:
         // string, number, bool, or identifier (for enums/presets)
 
         // String literal
@@ -170,12 +173,13 @@ public partial class SuflaeParser
                .Text;
         }
 
-        throw ThrowParseError($"Expected attribute value, got {CurrentToken.Type}");
+        throw ThrowParseError(GrammarDiagnosticCode.ExpectedAttributeValue,
+            $"Expected attribute value, got {CurrentToken.Type}");
     }
 
     /// <summary>
     /// Parses a variable declaration.
-    /// Syntax: <c>var name: Type = value</c> or <c>let name: Type = value</c> or <c>preset name: Type = value</c>
+    /// Syntax: <c>var name: Type = value</c> or <c>preset name: Type = value</c>
     /// </summary>
     /// <param name="visibility">Access modifier (public, published, internal, private).</param>
     /// <param name="storage">Storage class modifier (default: None).</param>
@@ -185,8 +189,6 @@ public partial class SuflaeParser
         StorageClass storage = StorageClass.None)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
-        bool isMutable = PeekToken(offset: -1)
-           .Type == TokenType.Var;
 
         string name = ConsumeIdentifier(errorMessage: "Expected variable name");
 
@@ -208,7 +210,6 @@ public partial class SuflaeParser
             Type: type,
             Initializer: initializer,
             Visibility: visibility,
-            IsMutable: isMutable,
             Location: location,
             Storage: storage);
     }
@@ -216,7 +217,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Parses a field declaration in records.
     /// Syntax: <c>name: Type</c> or <c>public name: Type = value</c>
-    /// Fields are declared without var/let keywords.
+    /// Fields are declared without var keywords.
     /// </summary>
     /// <param name="visibility">Access modifier (public, published, internal, private).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
@@ -237,19 +238,17 @@ public partial class SuflaeParser
 
         ConsumeStatementTerminator();
 
-        // Fields are not mutable by default in record
         return new VariableDeclaration(Name: name,
             Type: type,
             Initializer: initializer,
             Visibility: visibility,
-            IsMutable: false,
             Location: location);
     }
 
     /// <summary>
     /// Parses a routine (function) declaration.
-    /// Syntax: <c>routine name(params) -&gt; ReturnType:</c> followed by indented body.
-    /// Supports ! suffix for failable routines.
+    /// Syntax: <c>routine name(params) -&gt; ReturnType</c> followed by indented body.
+    /// Supports generic parameters, module-qualified names, failable routines (!), and inline constraints.
     /// </summary>
     /// <remarks>
     /// Parsing phases:
@@ -259,77 +258,90 @@ public partial class SuflaeParser
     ///
     /// PHASE 2: NAME AND FAILABLE MARKER
     ///   - Parse routine name
+    ///   - Parse optional type-level generic parameters
+    ///   - Parse dot-separated qualified name (for methods)
     ///   - Check for ! suffix (failable routine)
     ///
     /// PHASE 3: PARAMETERS
     ///   - Parse parameter list: (name: Type, name: Type = default)
+    ///   - Handle 'me' self-reference parameter
     ///
     /// PHASE 4: RETURN TYPE
     ///   - Optional: -> ReturnType
     ///
-    /// PHASE 5: BODY
+    /// PHASE 5: GENERIC CONSTRAINTS
+    ///   - Optional: where T obeys Protocol
+    ///
+    /// PHASE 6: BODY
     ///   - Parse indented block
     /// </remarks>
     /// <param name="visibility">Access modifier for the routine.</param>
     /// <param name="attributes">List of attributes applied to the routine.</param>
     /// <param name="storage">Storage class modifier (default: None, can be Common for type-level static).</param>
+    /// <param name="asyncStatus">Async status of the routine.</param>
+    /// <param name="isDangerous">Whether the routine is marked as dangerous (RF only).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     private RoutineDeclaration ParseRoutineDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open,
         List<string>? attributes = null,
         StorageClass storage = StorageClass.None,
-        AsyncStatus asyncStatus = AsyncStatus.None)
+        AsyncStatus asyncStatus = AsyncStatus.None,
+        bool isDangerous = false)
     {
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // PHASE 1: VALIDATION
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         if (_inRoutineBody)
         {
-            throw ThrowParseError("Nested routine declarations are not allowed. Define routines at module or type level.");
+            throw ThrowParseError(GrammarDiagnosticCode.NestedRoutineNotAllowed,
+                "Nested routine declarations are not allowed. Define routines at module or type level.");
         }
 
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // PHASE 2: NAME PARSING - Base name + optional type-level generic parameters
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // Examples:
         //   "foo"          -> name="foo", no generics
-        //   "List<T>"      -> name="List", genericParams=["T"]
+        //   "List[T]"      -> name="List", genericParams=["T"]
         //   "Point.get_x"  -> name="Point.get_x"
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
         bool hasGenericParams = false;
 
-        // Check for type-level generic params BEFORE the dot (e.g., "List<T>.append")
-        if (Match(type: TokenType.Less))
+        // Check for type-level generic params BEFORE the dot (e.g., "List[T].append")
+        if (Match(type: TokenType.LeftBracket))
         {
             (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
             genericParams = result.genericParams;
             inlineConstraints = result.inlineConstraints;
             hasGenericParams = true;
 
-            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
         }
 
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // PHASE 2b: Parse dot-separated qualified name (for methods)
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // Examples:
-        //   "Point.get_x"          -> name="Point.get_x"
-        //   "List<T>.append"       -> name="List<T>.append"
-        // ═══════════════════════════════════════════════════════════════════════════
+        //   "Console.print"           -> name="Console.print"
+        //   "List[T].append"          -> name="List[T].append" (generics embedded in name)
+        //   "Dict[K, V].get[I]"       -> name="Dict[K, V].get", genericParams=["K","V","I"]
+        // ===============================================================================
         while (Match(type: TokenType.Dot))
         {
             string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
 
             // If we parsed generic params before the dot, embed them in the name
+            // This transforms: name="List", generics=["T"], part="append"
+            //             to: name="List[T].append"
             if (hasGenericParams && !name.Contains(value: '.') && genericParams != null)
             {
-                name = name + "<" + string.Join(separator: ", ", values: genericParams) + ">." + part;
+                name = name + "[" + string.Join(separator: ", ", values: genericParams) + "]." + part;
                 hasGenericParams = false; // Only add once
             }
             else
@@ -338,12 +350,9 @@ public partial class SuflaeParser
             }
 
             // Check for method-level generic params AFTER the method name
-            if (Check(type: TokenType.Less))
+            // e.g., "List[T].get[I]" - the [I] belongs to the method
+            if (Match(type: TokenType.LeftBracket))
             {
-                Token nextToken = PeekToken(offset: 1);
-                if (nextToken.Type == TokenType.Identifier || nextToken.Type == TokenType.TypeIdentifier || nextToken.Type == TokenType.Greater)
-                {
-                    Match(type: TokenType.Less);
                     (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
 
                     // Merge type-level and method-level generic parameters
@@ -356,6 +365,10 @@ public partial class SuflaeParser
                             inlineConstraints = new List<GenericConstraintDeclaration>(collection: inlineConstraints);
                             inlineConstraints.AddRange(collection: result.inlineConstraints);
                         }
+                        else if (result.inlineConstraints != null)
+                        {
+                            inlineConstraints = result.inlineConstraints;
+                        }
                     }
                     else
                     {
@@ -363,17 +376,26 @@ public partial class SuflaeParser
                         inlineConstraints = result.inlineConstraints;
                     }
 
-                    Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
-                }
+                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
             }
         }
 
+        // ===============================================================================
+        // PHASE 2c: Parse failable marker (!)
+        // ===============================================================================
         // Support ! suffix for failable functions (can appear after qualified name)
         bool isFailable = Match(type: TokenType.Bang);
 
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ConsumeMethodName may have already included '!' in the name
+        if (name.EndsWith('!'))
+        {
+            isFailable = true;
+            name = name[..^1]; // Strip the '!' from name, we track it separately
+        }
+
+        // ===============================================================================
         // PHASE 3: PARAMETERS
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after routine name");
         var parameters = new List<Parameter>();
 
@@ -381,43 +403,67 @@ public partial class SuflaeParser
         {
             do
             {
-                string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
-                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after parameter name");
-                TypeExpression paramType = ParseType();
-
-                Expression? defaultValue = null;
-                if (Match(type: TokenType.Assign))
+                // Handle 'me' parameter (self-reference for methods)
+                if (Check(type: TokenType.Me))
                 {
-                    defaultValue = ParseExpression();
-                }
+                    Token selfToken = Advance();
+                    TypeExpression? selfType = null;
+                    if (Match(type: TokenType.Colon))
+                    {
+                        selfType = ParseType();
+                    }
 
-                parameters.Add(item: new Parameter(Name: paramName,
-                    Type: paramType,
-                    DefaultValue: defaultValue,
-                    Location: GetLocation()));
+                    parameters.Add(item: new Parameter(Name: "me",
+                        Type: selfType,
+                        DefaultValue: null,
+                        Location: GetLocation(token: selfToken)));
+                }
+                else
+                {
+                    // Regular parameter: name: Type = default
+                    // allowKeywords=true lets us use 'from', 'to', etc. as param names
+                    string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name", allowKeywords: true);
+                    TypeExpression? paramType = null;
+                    Expression? defaultValue = null;
+
+                    if (Match(type: TokenType.Colon))
+                    {
+                        paramType = ParseType();
+                    }
+
+                    if (Match(type: TokenType.Assign))
+                    {
+                        defaultValue = ParseExpression();
+                    }
+
+                    parameters.Add(item: new Parameter(Name: paramName,
+                        Type: paramType,
+                        DefaultValue: defaultValue,
+                        Location: GetLocation()));
+                }
             } while (Match(type: TokenType.Comma));
         }
 
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // PHASE 3.5: GENERIC CONSTRAINTS (requires clause)
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
+        // PHASE 3.5: GENERIC CONSTRAINTS (needs clause)
+        // ===============================================================================
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(
             genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // PHASE 4: RETURN TYPE
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         TypeExpression? returnType = null;
         if (Match(type: TokenType.Arrow))
         {
             returnType = ParseType();
         }
 
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
         // PHASE 5: BODY (indented block)
-        // ═══════════════════════════════════════════════════════════════════════════
+        // ===============================================================================
 
         _inRoutineBody = true;
         Statement body;
@@ -441,12 +487,13 @@ public partial class SuflaeParser
             GenericConstraints: constraints,
             IsFailable: isFailable,
             Storage: storage,
-            Async: asyncStatus);
+            Async: asyncStatus,
+            IsDangerous: isDangerous);
     }
 
     /// <summary>
     /// Parses an entity (class/reference type) declaration.
-    /// Syntax: <c>entity Name&lt;T&gt; follows Protocol:</c> followed by indented body.
+    /// Syntax: <c>entity Name[T] obeys Protocol</c> followed by indented body.
     /// Entities are heap-allocated reference types.
     /// </summary>
     /// <param name="visibility">Access modifier for the entity.</param>
@@ -457,37 +504,31 @@ public partial class SuflaeParser
 
         string name = ConsumeIdentifier(errorMessage: "Expected entity name");
 
-        // Register this type name for generic disambiguation
-        _knownTypeNames.Add(item: name);
-
         // Generic parameters with inline constraints
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
-        if (Match(type: TokenType.Less))
+        if (Match(type: TokenType.LeftBracket))
         {
             (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
             genericParams = result.genericParams;
             inlineConstraints = result.inlineConstraints;
 
-            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // Push generic parameters into scope before parsing body
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Push(item: [..genericParams]);
-        }
 
-        // Parse interfaces/protocols the entity follows
+        // Parse interfaces/protocols the entity obeys
         var interfaces = new List<TypeExpression>();
-        if (Match(type: TokenType.Follows))
+        if (Match(type: TokenType.Obeys))
         {
             do
             {
+                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 interfaces.Add(item: ParseType());
+                // Newlines between comma-separated protocols are handled by the 'before' skip
             } while (Match(type: TokenType.Comma));
         }
 
@@ -529,7 +570,8 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw ThrowParseError($"Expected declaration inside entity body, got {node.GetType().Name}");
+                    throw ThrowParseError(GrammarDiagnosticCode.InvalidDeclarationInBody,
+                        $"Expected declaration inside entity body, got {node.GetType().Name}");
                 }
             }
 
@@ -539,18 +581,14 @@ public partial class SuflaeParser
             }
             else if (!IsAtEnd)
             {
-                throw ThrowParseError("Expected dedent after entity body");
+                throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                    "Expected dedent after entity body");
             }
         }
 
         _parsingTypeBody = wasParsingTypeBody;
         _parsingStrictRecordBody = wasParsingStrictRecordBody;
 
-        // Pop generic parameter scope
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Pop();
-        }
 
         return new EntityDeclaration(Name: name,
             GenericParameters: genericParams,
@@ -563,7 +601,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a record (struct/value type) declaration.
-    /// Syntax: <c>record Name&lt;T&gt; follows Protocol:</c> followed by indented members.
+    /// Syntax: <c>record Name[T] obeys Protocol</c> followed by indented members.
     /// Records are stack-allocated value types.
     /// </summary>
     /// <param name="visibility">Access modifier for the record.</param>
@@ -574,37 +612,31 @@ public partial class SuflaeParser
 
         string name = ConsumeIdentifier(errorMessage: "Expected record name");
 
-        // Register this type name for generic disambiguation
-        _knownTypeNames.Add(item: name);
-
         // Generic parameters with inline constraints
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
-        if (Match(type: TokenType.Less))
+        if (Match(type: TokenType.LeftBracket))
         {
             (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
             genericParams = result.genericParams;
             inlineConstraints = result.inlineConstraints;
 
-            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // Push generic parameters into scope before parsing body
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Push(item: [..genericParams]);
-        }
 
-        // Parse interfaces/protocols the record follows
+        // Parse interfaces/protocols the record obeys
         var interfaces = new List<TypeExpression>();
-        if (Match(type: TokenType.Follows))
+        if (Match(type: TokenType.Obeys))
         {
             do
             {
+                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 interfaces.Add(item: ParseType());
+                // Newlines between comma-separated protocols are handled by the 'before' skip
             } while (Match(type: TokenType.Comma));
         }
 
@@ -645,7 +677,8 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw ThrowParseError($"Expected declaration inside record body, got {node.GetType().Name}");
+                    throw ThrowParseError(GrammarDiagnosticCode.InvalidDeclarationInBody,
+                        $"Expected declaration inside record body, got {node.GetType().Name}");
                 }
             }
 
@@ -655,18 +688,14 @@ public partial class SuflaeParser
             }
             else if (!IsAtEnd)
             {
-                throw ThrowParseError("Expected dedent after record body");
+                throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                    "Expected dedent after record body");
             }
         }
 
         _parsingTypeBody = wasParsingTypeBody;
         _parsingStrictRecordBody = wasParsingStrictRecordBody;
 
-        // Pop generic parameter scope
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Pop();
-        }
 
         return new RecordDeclaration(Name: name,
             GenericParameters: genericParams,
@@ -678,8 +707,119 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Parses a resident (singleton static type) declaration.
+    /// RF-only construct. Syntax: <c>resident Name[T] obeys Protocol</c> followed by indented members.
+    /// </summary>
+    /// <param name="visibility">Access modifier for the resident.</param>
+    /// <returns>A <see cref="ResidentDeclaration"/> AST node.</returns>
+    private ResidentDeclaration ParseResidentDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
+    {
+        if (_language == Language.Suflae)
+        {
+            throw ThrowParseError(GrammarDiagnosticCode.RFOnlyConstruct,
+                "The 'resident' type declaration is only available in RazorForge.");
+        }
+
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        string name = ConsumeIdentifier(errorMessage: "Expected resident name");
+
+        // Generic parameters with inline constraints
+        List<string>? genericParams = null;
+        List<GenericConstraintDeclaration>? inlineConstraints = null;
+        if (Match(type: TokenType.LeftBracket))
+        {
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
+
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+        }
+
+        // Parse generic constraints (where clause) - merge with inline constraints
+        List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
+
+        // Parse interfaces/protocols the resident obeys
+        var interfaces = new List<TypeExpression>();
+        if (Match(type: TokenType.Obeys))
+        {
+            do
+            {
+                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
+                interfaces.Add(item: ParseType());
+                // Newlines between comma-separated protocols are handled by the 'before' skip
+            } while (Match(type: TokenType.Comma));
+        }
+
+        var members = new List<Declaration>();
+
+        // Parse resident body as indented block
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after resident header");
+
+        // Enable field declaration syntax inside resident body
+        // Residents allow modifiers on fields (like entities, unlike records)
+        bool wasParsingTypeBody = _parsingTypeBody;
+        bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
+        _parsingTypeBody = true;
+        _parsingStrictRecordBody = false;  // Residents allow modifiers
+
+        if (Check(type: TokenType.Indent))
+        {
+            ProcessIndentToken();
+
+            while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+            {
+                if (Match(type: TokenType.Newline))
+                {
+                    continue;
+                }
+
+                // Allow 'pass' to indicate empty body
+                if (Match(type: TokenType.Pass))
+                {
+                    Match(type: TokenType.Newline);
+                    continue;
+                }
+
+                IAstNode node = ParseDeclaration();
+                if (node is Declaration member)
+                {
+                    members.Add(item: member);
+                }
+                else
+                {
+                    throw ThrowParseError(GrammarDiagnosticCode.InvalidDeclarationInBody,
+                        $"Expected declaration inside resident body, got {node.GetType().Name}");
+                }
+            }
+
+            if (Check(type: TokenType.Dedent))
+            {
+                ProcessDedentTokens();
+            }
+            else if (!IsAtEnd)
+            {
+                throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                    "Expected dedent after resident body");
+            }
+        }
+
+        _parsingTypeBody = wasParsingTypeBody;
+        _parsingStrictRecordBody = wasParsingStrictRecordBody;
+
+
+        return new ResidentDeclaration(Name: name,
+            GenericParameters: genericParams,
+            GenericConstraints: constraints,
+            Protocols: interfaces,
+            Members: members,
+            Visibility: visibility,
+            Location: location);
+    }
+
+    /// <summary>
     /// Parses a choice (C-style enum) declaration.
-    /// Syntax: <c>choice Name:</c> followed by indented cases with optional values.
+    /// Syntax: <c>choice Name</c> followed by indented cases with optional values.
     /// Choices are simple enumerations with integer-backed values.
     /// </summary>
     /// <param name="visibility">Access modifier for the choice.</param>
@@ -688,16 +828,13 @@ public partial class SuflaeParser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string name = ConsumeIdentifier(errorMessage: "Expected option name");
-
-        // Register this type name for generic disambiguation
-        _knownTypeNames.Add(item: name);
+        string name = ConsumeIdentifier(errorMessage: "Expected choice name");
 
         var variants = new List<ChoiceCase>();
         var methods = new List<RoutineDeclaration>();
 
-        // Parse option body as indented block
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after option header");
+        // Parse choice body as indented block
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after choice header");
 
         if (!Check(type: TokenType.Indent))
         {
@@ -727,7 +864,7 @@ public partial class SuflaeParser
             else
             {
                 // Parse enum variant
-                string variantName = ConsumeIdentifier(errorMessage: "Expected option variant name");
+                string variantName = ConsumeIdentifier(errorMessage: "Expected choice variant name");
 
                 // CASE: value syntax for choice values (e.g., OK: 200)
                 // Store expression as-is; semantic analyzer will validate and convert
@@ -748,7 +885,8 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError("Expected dedent after option body");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                "Expected dedent after choice body");
         }
 
         return new ChoiceDeclaration(Name: name,
@@ -770,9 +908,6 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         string name = ConsumeIdentifier(errorMessage: "Expected flags name");
-
-        // Register this type name for generic disambiguation
-        _knownTypeNames.Add(item: name);
 
         var members = new List<string>();
 
@@ -807,7 +942,8 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError("Expected dedent after flags body");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                "Expected dedent after flags body");
         }
 
         return new FlagsDeclaration(Name: name,
@@ -818,7 +954,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a variant (tagged union) declaration.
-    /// Syntax: <c>variant Name:</c> followed by indented cases with optional associated types.
+    /// Syntax: <c>variant Name</c> followed by indented cases with optional associated types.
     /// Variants are sum types where each case can carry different data.
     /// </summary>
     /// <returns>A <see cref="VariantDeclaration"/> AST node.</returns>
@@ -828,29 +964,21 @@ public partial class SuflaeParser
 
         string name = ConsumeIdentifier(errorMessage: "Expected variant name");
 
-        // Register this type name for generic disambiguation
-        _knownTypeNames.Add(item: name);
-
-        // Generic parameters
+        // Generic parameters with inline constraints
         List<string>? genericParams = null;
-        if (Match(type: TokenType.Less))
+        List<GenericConstraintDeclaration>? inlineConstraints = null;
+        if (Match(type: TokenType.LeftBracket))
         {
-            genericParams = [];
-            do
-            {
-                genericParams.Add(item: ConsumeIdentifier(errorMessage: "Expected generic parameter name"));
-            } while (Match(type: TokenType.Comma));
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
 
-            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
         }
 
-        // Push generic parameters into scope before parsing body
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Push(item: [..genericParams]);
-        }
+        // Parse generic constraints (where clause) - merge with inline constraints
+        List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // Indented block follows variant header
 
         var cases = new List<VariantCase>();
 
@@ -859,14 +987,9 @@ public partial class SuflaeParser
 
         if (!Check(type: TokenType.Indent))
         {
-            // Pop generic parameter scope
-            if (genericParams is { Count: > 0 })
-            {
-                _genericParameterScopes.Pop();
-            }
-
             return new VariantDeclaration(Name: name,
                 GenericParameters: genericParams,
+                GenericConstraints: constraints,
                 Cases: cases,
                 Location: location);
         }
@@ -900,25 +1023,21 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError("Expected dedent after variant body");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                "Expected dedent after variant body");
         }
 
-        // Pop generic parameter scope
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Pop();
-        }
 
         return new VariantDeclaration(Name: name,
             GenericParameters: genericParams,
+            GenericConstraints: constraints,
             Cases: cases,
             Location: location);
     }
 
     /// <summary>
     /// Parses a protocol (trait/interface) declaration.
-    /// Called "protocol" in Suflae, but uses the same AST as protocols.
-    /// Syntax: <c>protocol Name:</c> followed by indented routine signatures.
+    /// Syntax: <c>protocol Name</c> followed by indented routine signatures.
     /// </summary>
     /// <param name="visibility">Access modifier for the protocol.</param>
     /// <returns>A <see cref="ProtocolDeclaration"/> AST node.</returns>
@@ -928,43 +1047,34 @@ public partial class SuflaeParser
 
         string name = ConsumeIdentifier(errorMessage: "Expected protocol name");
 
-        // Register this type name for generic disambiguation
-        _knownTypeNames.Add(item: name);
-
         // Generic parameters with inline constraints
         List<string>? genericParams = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
-        if (Match(type: TokenType.Less))
+        if (Match(type: TokenType.LeftBracket))
         {
             (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
             genericParams = result.genericParams;
             inlineConstraints = result.inlineConstraints;
 
-            Consume(type: TokenType.Greater, errorMessage: "Expected '>' after generic parameters");
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
-        // Push generic parameters into scope before parsing body
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Push(item: [..genericParams]);
-        }
 
-        // Parse parent protocols (protocol X follows Y, Z)
+        // Parse parent protocols (protocol X obeys Y, Z)
         var parentProtocols = new List<TypeExpression>();
-        if (Match(type: TokenType.Follows))
+        if (Match(type: TokenType.Obeys))
         {
             do
             {
                 while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
                 parentProtocols.Add(item: ParseType());
+                // Newlines between comma-separated protocols are handled by the 'before' skip
             }
             while (Match(type: TokenType.Comma));
         }
-
-        // Indented block follows protocol header
 
         var methods = new List<RoutineSignature>();
 
@@ -973,12 +1083,6 @@ public partial class SuflaeParser
 
         if (!Check(type: TokenType.Indent))
         {
-            // Pop generic parameter scope before returning
-            if (genericParams is { Count: > 0 })
-            {
-                _genericParameterScopes.Pop();
-            }
-
             return new ProtocolDeclaration(Name: name,
                 GenericParameters: genericParams,
                 ParentProtocols: parentProtocols,
@@ -1006,80 +1110,87 @@ public partial class SuflaeParser
             }
 
             // Parse routine signature
-            Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' in protocol method");
-            string methodName = ConsumeIdentifier(errorMessage: "Expected method name");
-
-            // Handle Me.methodName syntax for instance methods
-            // Protocol methods can be: "routine Me.methodName()" or "routine methodName()"
-            while (Match(type: TokenType.Dot))
+            if (Match(type: TokenType.Routine))
             {
-                string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
-                methodName = methodName + "." + part;
-            }
+                string methodName = ConsumeIdentifier(errorMessage: "Expected method name");
 
-            // Support failable methods: "method!"
-            if (Match(type: TokenType.Bang))
-            {
-                methodName += "!";
-            }
-
-            // Parameters
-            Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after method name");
-            var parameters = new List<Parameter>();
-
-            if (!Check(type: TokenType.RightParen))
-            {
-                do
+                // Handle Me.methodName syntax for instance methods
+                // Protocol methods can be: "routine Me.methodName()" or "routine methodName()"
+                while (Match(type: TokenType.Dot))
                 {
-                    // Handle 'me' parameter (self-reference, optionally typed)
-                    if (Check(type: TokenType.Me))
+                    string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
+                    methodName = methodName + "." + part;
+                }
+
+                // Support failable methods: "method!"
+                if (Match(type: TokenType.Bang))
+                {
+                    methodName += "!";
+                }
+
+                // Parameters
+                Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after method name");
+                var parameters = new List<Parameter>();
+
+                if (!Check(type: TokenType.RightParen))
+                {
+                    do
                     {
-                        Token selfToken = Advance();
-                        TypeExpression? selfType = null;
-                        if (Match(type: TokenType.Colon))
+                        // Handle 'me' parameter (self-reference, optionally typed)
+                        if (Check(type: TokenType.Me))
                         {
-                            selfType = ParseType();
+                            Token selfToken = Advance();
+                            TypeExpression? selfType = null;
+                            if (Match(type: TokenType.Colon))
+                            {
+                                selfType = ParseType();
+                            }
+
+                            parameters.Add(item: new Parameter(Name: "me",
+                                Type: selfType,
+                                DefaultValue: null,
+                                Location: GetLocation(token: selfToken)));
                         }
-
-                        parameters.Add(item: new Parameter(Name: "me",
-                            Type: selfType,
-                            DefaultValue: null,
-                            Location: GetLocation(token: selfToken)));
-                    }
-                    else
-                    {
-                        // Regular parameter
-                        string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
-
-                        TypeExpression? paramType = null;
-                        if (Match(type: TokenType.Colon))
+                        else
                         {
-                            paramType = ParseType();
-                        }
+                            // Regular parameter
+                            string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
 
-                        parameters.Add(item: new Parameter(Name: paramName,
-                            Type: paramType,
-                            DefaultValue: null,
-                            Location: GetLocation()));
-                    }
-                } while (Match(type: TokenType.Comma));
+                            TypeExpression? paramType = null;
+                            if (Match(type: TokenType.Colon))
+                            {
+                                paramType = ParseType();
+                            }
+
+                            parameters.Add(item: new Parameter(Name: paramName,
+                                Type: paramType,
+                                DefaultValue: null,
+                                Location: GetLocation()));
+                        }
+                    } while (Match(type: TokenType.Comma));
+                }
+
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
+
+                // Return type
+                TypeExpression? returnType = null;
+                if (Match(type: TokenType.Arrow))
+                {
+                    returnType = ParseType();
+                }
+
+                methods.Add(item: new RoutineSignature(Name: methodName,
+                    Parameters: parameters,
+                    ReturnType: returnType,
+                    Attributes: methodAttributes.Count > 0 ? methodAttributes : null,
+                    Location: GetLocation()));
+                Match(type: TokenType.Newline);
             }
-
-            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
-
-            // Return type
-            TypeExpression? returnType = null;
-            if (Match(type: TokenType.Arrow))
+            else
             {
-                returnType = ParseType();
+                // Unknown token in protocol body, skip it
+                Advance();
             }
-
-            methods.Add(item: new RoutineSignature(Name: methodName,
-                Parameters: parameters,
-                ReturnType: returnType,
-                Attributes: methodAttributes.Count > 0 ? methodAttributes : null,
-                Location: GetLocation()));
-            Match(type: TokenType.Newline);
         }
 
         if (Check(type: TokenType.Dedent))
@@ -1088,14 +1199,10 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError("Expected dedent after protocol body");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                "Expected dedent after protocol body");
         }
 
-        // Pop generic parameter scope
-        if (genericParams is { Count: > 0 })
-        {
-            _genericParameterScopes.Pop();
-        }
 
         return new ProtocolDeclaration(Name: name,
             GenericParameters: genericParams,
@@ -1173,13 +1280,12 @@ public partial class SuflaeParser
                     {
                         string name = ConsumeIdentifier(errorMessage: "Expected type name in selective import");
                         specificImports.Add(item: name);
-                        _knownTypeNames.Add(item: name);
                     } while (Match(type: TokenType.Comma));
                     Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after selective imports");
                 }
                 else
                 {
-                    // Single type: Core.Bool → module "Core", type "Bool"
+                    // Single type: Core.Bool -> module "Core", type "Bool"
                     string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
                     modulePath += "." + typeName;
                 }
@@ -1198,21 +1304,6 @@ public partial class SuflaeParser
         }
 
         ConsumeStatementTerminator();
-
-        // Register imported types/modules for generic disambiguation
-        // import Collections.SortedDict -> adds "SortedDict" to known types (bare name usage)
-        // import Collections -> adds "Collections" to modules (qualified name usage)
-        if (modulePath.Contains(value: '.'))
-        {
-            // Specific type import: Collections.SortedDict
-            string typeName = modulePath[(modulePath.LastIndexOf(value: '.') + 1)..];
-            _knownTypeNames.Add(item: typeName);
-        }
-        else
-        {
-            // Module import: Collections
-            _importedModules.Add(item: modulePath);
-        }
 
         return new ImportDeclaration(ModulePath: modulePath,
             Alias: alias,
@@ -1240,7 +1331,7 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses a preset (compile-time constant) declaration.
+    /// Parses a preset (build-time constant) declaration.
     /// Syntax: <c>preset name: Type = value</c>
     /// </summary>
     /// <returns>A <see cref="PresetDeclaration"/> AST node.</returns>
@@ -1263,10 +1354,167 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Parses an external (FFI) function declaration.
+    /// RF-only construct. Syntax: <c>external("C") routine name(param: Type, ...) -&gt; ReturnType</c>
+    /// Supports variadic functions and calling convention specification.
+    /// </summary>
+    /// <param name="callingConvention">The calling convention (e.g., "C"). Defaults to "C" if null.</param>
+    /// <param name="attributes">Optional attributes applied to the external declaration.</param>
+    /// <param name="isDangerous">Whether the external routine is marked as dangerous.</param>
+    /// <returns>An <see cref="ExternalDeclaration"/> AST node.</returns>
+    private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null, List<string>? attributes = null, bool isDangerous = false)
+    {
+        if (_language == Language.Suflae)
+        {
+            throw ThrowParseError(GrammarDiagnosticCode.RFOnlyConstruct,
+                "External declarations are only available in RazorForge.");
+        }
+
+        SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we consumed 'external' and 'routine'
+
+        string name = ConsumeIdentifier(errorMessage: "Expected routine name");
+
+        // Support module-qualified names like Console.print
+        while (Match(type: TokenType.Dot))
+        {
+            string part = ConsumeIdentifier(errorMessage: "Expected identifier after '.'");
+            name = name + "." + part;
+        }
+
+        // Support ! suffix for failable routines
+        if (Match(type: TokenType.Bang))
+        {
+            name += "!";
+        }
+
+        // Check for generic parameters with inline constraints
+        List<string>? genericParams = null;
+        List<GenericConstraintDeclaration>? inlineConstraints = null;
+        if (Match(type: TokenType.LeftBracket))
+        {
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
+
+            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+        }
+
+        // Parameters
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after routine name");
+        var parameters = new List<Parameter>();
+        bool isVariadic = false;
+
+        if (!Check(type: TokenType.RightParen))
+        {
+            do
+            {
+                // Check for variadic marker (...)
+                if (Match(type: TokenType.DotDotDot))
+                {
+                    isVariadic = true;
+                    break; // ... must be last
+                }
+
+                string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
+                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after parameter name");
+                TypeExpression paramType = ParseType();
+                parameters.Add(item: new Parameter(Name: paramName,
+                    Type: paramType,
+                    DefaultValue: null,
+                    Location: GetLocation()));
+            } while (Match(type: TokenType.Comma));
+        }
+
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
+
+        // Return type
+        TypeExpression? returnType = null;
+        if (Match(type: TokenType.Arrow))
+        {
+            returnType = ParseType();
+        }
+
+        // Parse generic constraints (where clause) - merge with inline constraints
+        List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
+
+        ConsumeStatementTerminator();
+
+        // Default to "C" calling convention if not specified
+        string effectiveCallingConvention = callingConvention ?? "C";
+
+        return new ExternalDeclaration(Name: name,
+            GenericParameters: genericParams,
+            GenericConstraints: constraints,
+            Parameters: parameters,
+            ReturnType: returnType,
+            CallingConvention: effectiveCallingConvention,
+            IsVariadic: isVariadic,
+            Attributes: attributes,
+            IsDangerous: isDangerous,
+            Location: location);
+    }
+
+    /// <summary>
+    /// Parses an external block declaration grouping multiple external routines under one calling convention.
+    /// RF-only construct. Syntax: <c>external("C")</c> followed by an indented block of routine declarations.
+    /// Uses INDENT/DEDENT for the block structure.
+    /// </summary>
+    /// <param name="callingConvention">The calling convention (e.g., "C").</param>
+    /// <param name="isDangerous">Whether all routines in the block are marked as dangerous.</param>
+    /// <returns>An <see cref="ExternalBlockDeclaration"/> AST node.</returns>
+    private ExternalBlockDeclaration ParseExternalBlockDeclaration(string? callingConvention, bool isDangerous)
+    {
+        if (_language == Language.Suflae)
+        {
+            throw ThrowParseError(GrammarDiagnosticCode.RFOnlyConstruct,
+                "External block declarations are only available in RazorForge.");
+        }
+
+        SourceLocation blockLocation = GetLocation();
+
+        // Expect a newline followed by an indented block
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after external block header");
+
+        var declarations = new List<Declaration>();
+
+        if (Check(type: TokenType.Indent))
+        {
+            ProcessIndentToken();
+
+            while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+            {
+                if (Match(type: TokenType.Newline))
+                {
+                    continue;
+                }
+
+                // Per-routine dangerous modifier inside the block
+                bool routineDangerous = isDangerous || Match(type: TokenType.Dangerous);
+                Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' inside external block");
+                declarations.Add(item: ParseExternalDeclaration(
+                    callingConvention: callingConvention, attributes: null, isDangerous: routineDangerous));
+            }
+
+            if (Check(type: TokenType.Dedent))
+            {
+                ProcessDedentTokens();
+            }
+            else if (!IsAtEnd)
+            {
+                throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                    "Expected dedent after external block");
+            }
+        }
+
+        return new ExternalBlockDeclaration(
+            Declarations: declarations, Location: blockLocation);
+    }
+
+    /// <summary>
     /// Parses visibility and storage class modifiers.
-    /// Visibility: open, posted, secret, external
+    /// Visibility: posted, secret, external
     /// Storage: common, global
-    /// These are orthogonal and can be combined: public common, private common, etc.
+    /// These are orthogonal and can be combined: posted common, secret common, etc.
     /// </summary>
     /// <returns>A tuple of (visibility, storage) modifiers.</returns>
     private (VisibilityModifier Visibility, StorageClass Storage) ParseModifiers()
@@ -1279,13 +1527,8 @@ public partial class SuflaeParser
         // Parse modifiers in any order (visibility and storage can appear in any order)
         while (true)
         {
-            // Visibility modifiers
-            if (!hasVisibility && Match(type: TokenType.Open))
-            {
-                visibility = VisibilityModifier.Open;
-                hasVisibility = true;
-            }
-            else if (!hasVisibility && Match(type: TokenType.Posted))
+            // Visibility modifiers (Open keyword removed - open is default, not a keyword)
+            if (!hasVisibility && Match(type: TokenType.Posted))
             {
                 visibility = VisibilityModifier.Posted;
                 hasVisibility = true;

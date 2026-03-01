@@ -1,13 +1,11 @@
-namespace Compilers.Suflae.Lexer;
-
-using Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
-/// Partial class containing identifier, keyword, and comment scanning methods for the Suflae tokenizer.
+/// Partial class containing identifier, keyword, and comment scanning methods for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Identifiers in Suflae follow the same rules as RazorForge:
+/// Identifiers follow the same rules in both RazorForge and Suflae:
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Must start with a letter or underscore</description></item>
@@ -25,7 +23,7 @@ using Compilers.Shared.Lexer;
 /// This file also handles script mode detection by tracking definition keywords.
 /// </para>
 /// </remarks>
-public partial class SuflaeTokenizer
+public partial class Tokenizer
 {
     #region Identifier Scanning
 
@@ -66,6 +64,15 @@ public partial class SuflaeTokenizer
 
         string text = _source.Substring(startIndex: _tokenStart, length: _position - _tokenStart);
 
+        // Check if text + "!" matches a keyword (for danger!)
+        if (Peek() == '!' && _keywords.TryGetValue(key: text + "!", value: out TokenType bangType))
+        {
+            Advance();
+            AddToken(type: bangType, text: text + "!");
+            _hasTokenOnLine = true;
+            return;
+        }
+
         // Check if it's a keyword
         if (_keywords.TryGetValue(key: text, value: out TokenType type))
         {
@@ -73,7 +80,7 @@ public partial class SuflaeTokenizer
 
             // Track definition keywords for script mode detection
             if (type is TokenType.Routine or TokenType.Entity or TokenType.Record
-                or TokenType.Choice or TokenType.Protocol)
+                or TokenType.Choice or TokenType.Variant or TokenType.Flags or TokenType.Protocol)
             {
                 _hasDefinitions = true;
             }
@@ -100,7 +107,7 @@ public partial class SuflaeTokenizer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Suflae uses the same comment syntax as RazorForge:
+    /// Both RazorForge and Suflae use the same comment syntax:
     /// </para>
     /// <list type="bullet">
     ///   <item><description># - Regular comment (ignored)</description></item>

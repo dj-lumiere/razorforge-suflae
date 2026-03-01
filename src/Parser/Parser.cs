@@ -1,15 +1,16 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
-using RazorForge.Diagnostics;
+using SyntaxTree;
+using Compiler.Lexer;
+using SemanticAnalysis.Enums;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
-/// Parser for Suflae language (indentation-based syntax)
-/// Handles indentation-based syntax with blocks
+/// Unified parser for both RazorForge and Suflae languages.
+/// Converts a stream of tokens into an Abstract Syntax Tree (AST).
+/// Language-specific constructs are guarded by <see cref="_language"/> checks.
 /// </summary>
-public partial class SuflaeParser
+public partial class Parser
 {
     #region Base Parser Fields
 
@@ -26,11 +27,10 @@ public partial class SuflaeParser
     /// <summary>
     /// Collection of warnings generated during parsing.
     /// </summary>
-    protected readonly List<CompileWarning> Warnings = [];
+    protected readonly List<BuildWarning> Warnings = [];
 
     /// <summary>
     /// Collection of errors accumulated during error recovery.
-    /// Errors are accumulated during error recovery.
     /// </summary>
     private readonly List<string> _errors = [];
 
@@ -49,9 +49,15 @@ public partial class SuflaeParser
     /// </summary>
     public string fileName = "";
 
+    /// <summary>
+    /// The language being parsed (RazorForge or Suflae).
+    /// Used to guard language-specific constructs.
+    /// </summary>
+    private readonly Language _language;
+
     #endregion
 
-    #region Suflae-specific Fields
+    #region Indentation Fields
 
     /// <summary>
     /// Stack tracking indentation levels for block detection.
@@ -63,6 +69,10 @@ public partial class SuflaeParser
     /// </summary>
     private int _currentIndentationLevel = 0;
 
+    #endregion
+
+    #region Shared Parser State
+
     /// <summary>
     /// Prevents nested inline conditionals (if-then-else expressions).
     /// When true, 'if' at expression level is not parsed as inline conditional.
@@ -72,15 +82,15 @@ public partial class SuflaeParser
     private bool _parsingInlineConditional;
 
     /// <summary>
-    /// Indicates whether we're currently parsing inside a type body (record, entity).
-    /// When true, allows field declarations without var/let keywords.
+    /// Indicates whether we're currently parsing inside a type body (record, entity, resident).
+    /// When true, allows field declarations without var keywords.
     /// </summary>
     private bool _parsingTypeBody = false;
 
     /// <summary>
-    /// Indicates whether we're parsing inside a record body (actual record, not entity).
+    /// Indicates whether we're parsing inside a record body (actual record, not entity/resident).
     /// When true, only secret/posted/open modifiers are allowed (not external).
-    /// Also var/let/preset keywords are disallowed (use 'field: Type' syntax).
+    /// Also var/preset keywords are disallowed (use 'field: Type' syntax).
     /// </summary>
     private bool _parsingStrictRecordBody = false;
 
@@ -102,71 +112,28 @@ public partial class SuflaeParser
     /// </summary>
     private bool _inWhenClauseBody;
 
-    /// <summary>
-    /// Set of known type names for generic disambiguation.
-    /// Contains simple names like "List", "User" that have been declared or imported.
-    /// </summary>
-    private readonly HashSet<string> _knownTypeNames = [];
-
-    /// <summary>
-    /// Set of imported module names for qualified type resolution.
-    /// Contains module names like "Collections", "core" from import statements.
-    /// </summary>
-    private readonly HashSet<string> _importedModules = [];
-
-    /// <summary>
-    /// Stack of generic parameter scopes for type name resolution.
-    /// Each scope contains parameter names like "K", "V" that are valid within that context.
-    /// Pushed when entering a generic declaration, popped when exiting.
-    /// </summary>
-    private readonly Stack<HashSet<string>> _genericParameterScopes = new();
-
     #endregion
 
     /// <summary>
-    /// Checks if an identifier is a known type name (declared, imported, or generic parameter).
-    /// Used for generic disambiguation when parsing expressions like <c>x &lt; y</c> vs <c>List&lt;T&gt;</c>.
-    /// </summary>
-    /// <param name="name">The identifier name to check.</param>
-    /// <returns>True if the name is a known type; false otherwise.</returns>
-    private bool IsKnownTypeName(string name)
-    {
-        // Check simple type names (declared locally or individually imported)
-        if (_knownTypeNames.Contains(item: name))
-        {
-            return true;
-        }
-
-        // Check generic parameter scopes (e.g., K, V within Dict<K, V>)
-        foreach (HashSet<string> scope in _genericParameterScopes)
-        {
-            if (scope.Contains(item: name))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Creates a new Suflae parser for the given token stream.
+    /// Creates a new unified parser for the given token stream and language.
     /// </summary>
     /// <param name="tokens">The tokens to parse.</param>
+    /// <param name="language">The language being parsed (RazorForge or Suflae).</param>
     /// <param name="fileName">Optional source file name for error reporting.</param>
-    public SuflaeParser(List<Token> tokens, string? fileName = null)
+    public Parser(List<Token> tokens, Language language, string? fileName = null)
     {
         Tokens = tokens;
+        _language = language;
         this.fileName = fileName ?? "unknown";
         _indentationStack.Push(item: 0); // Base indentation level
     }
 
     /// <summary>
     /// Parses the token stream into a complete program AST.
-    /// Main entry point for parsing Suflae source files.
+    /// Main entry point for parsing source files.
     /// </summary>
-    /// <returns>A <see cref="Compilers.Shared.AST.Program"/> containing all top-level declarations.</returns>
-    public Compilers.Shared.AST.Program Parse()
+    /// <returns>A <see cref="SyntaxTree.Program"/> containing all top-level declarations.</returns>
+    public Program Parse()
     {
         var declarations = new List<IAstNode>();
 
@@ -190,9 +157,10 @@ public partial class SuflaeParser
                 IAstNode decl = ParseDeclaration();
                 declarations.Add(item: decl);
             }
-            catch (SuflaeGrammarException ex)
+            catch (GrammarException ex)
             {
-                // SuflaeGrammarException.Message already contains formatted error:
+                // GrammarException.Message already contains formatted error:
+                // error[RF-G150]: filename.rf:9:14: message
                 // error[SF-G150]: filename.sf:9:14: message
                 _errors.Add(item: ex.Message);
                 Console.Error.WriteLine(value: ex.Message);
@@ -200,12 +168,13 @@ public partial class SuflaeParser
             }
         }
 
-        return new Compilers.Shared.AST.Program(Declarations: declarations, Location: GetLocation());
+        return new Program(Declarations: declarations, Location: GetLocation());
     }
 
     /// <summary>
     /// Parses a single top-level or nested declaration.
-    /// Handles: module, import, define, using, var/let, routine, entity, record, choice, variant, protocol, impl.
+    /// Handles: module, import, define, using, var, routine, entity, record, choice, variant, protocol, impl.
+    /// RazorForge-only: resident, external, dangerous modifier, threaded async status.
     /// </summary>
     /// <remarks>
     /// Declaration parsing order (checked in sequence):
@@ -214,30 +183,36 @@ public partial class SuflaeParser
     ///   module       - Module declaration
     ///   import       - Import external modules
     ///   define       - Type alias/redefinition
-    ///   preset       - Compile-time constant
+    ///   preset       - Build-time constant
     ///
     /// MODIFIERS (optional, parsed before declaration):
     ///   attributes   - @crash_only, @inline, @intrinsic, etc.
     ///   visibility   - secret, posted, open, external
     ///   storage      - common, global
     ///
+    /// RF-ONLY MODIFIERS:
+    ///   dangerous    - Marks routine as unsafe (RazorForge only)
+    ///
     /// TYPE/VALUE DECLARATIONS:
+    ///   external     - FFI routine declaration (RazorForge only)
     ///   field: Type  - Field declaration (inside type bodies)
-    ///   var/let      - Variable declarations
+    ///   var          - Variable declarations
+    ///   pass         - Empty placeholder (RazorForge only)
     ///   routine      - Function declaration
     ///   entity       - Heap-allocated reference type
     ///   record       - Stack-allocated value type
+    ///   resident     - Singleton static type (RazorForge only)
     ///   choice       - Simple enumeration
     ///   variant      - Tagged union (sum type)
     ///   protocol     - Interface/trait definition
     ///
     /// SPECIAL DECLARATION:
-    ///   using        - resource management
+    ///   using        - Resource management (declaration form, no body block)
     ///
     /// If no declaration keyword matches, falls through to ParseStatement.
     /// </remarks>
     /// <returns>The parsed declaration node.</returns>
-    /// <exception cref="ParseException">Thrown when no valid declaration or statement can be parsed.</exception>
+    /// <exception cref="GrammarException">Thrown when no valid declaration or statement can be parsed.</exception>
     private IAstNode ParseDeclaration()
     {
         // ═══════════════════════════════════════════════════════════════════════════
@@ -273,7 +248,7 @@ public partial class SuflaeParser
             return ParseDefineDeclaration();
         }
 
-        // Preset (compile-time constant)
+        // Preset (build-time constant)
         if (Match(type: TokenType.Preset))
         {
             return ParsePresetDeclaration();
@@ -306,39 +281,110 @@ public partial class SuflaeParser
             return ParseDefineDeclaration();
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // RF-ONLY: DANGEROUS MODIFIER
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        // Check for dangerous modifier: dangerous routine foo(), dangerous external("C") routine bar()
+        // (RazorForge only)
+        bool isDangerous = false;
+        if (_language == Language.RazorForge)
+        {
+            isDangerous = Match(type: TokenType.Dangerous);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // RF-ONLY: EXTERNAL DECLARATIONS
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        // External declaration with optional calling convention (RazorForge only)
+        // Supports: external routine foo() or external("C") routine foo()
+        //           external("C") { routine ... routine ... } (block form)
+        if (_language == Language.RazorForge && visibility == VisibilityModifier.External)
+        {
+            string? callingConvention = null;
+
+            // Check for calling convention: external("C")
+            if (Match(type: TokenType.LeftParen))
+            {
+                if (Check(TokenType.TextLiteral, TokenType.BytesLiteral))
+                {
+                    Token conventionToken = Advance();
+                    // Remove quotes from the text literal
+                    callingConvention = conventionToken.Text.Trim(trimChar: '"');
+                }
+
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after calling convention");
+            }
+
+            // Block form: external("C")\n  routine ... routine ...
+            // Check for block form: next meaningful token is Newline (not 'routine')
+            if (Check(type: TokenType.Newline))
+            {
+                return ParseExternalBlockDeclaration(callingConvention: callingConvention, isDangerous: isDangerous);
+            }
+
+            // Single form: external("C") routine foo()
+            if (Match(type: TokenType.Routine))
+            {
+                return ParseExternalDeclaration(
+                    callingConvention: callingConvention, attributes: attributes, isDangerous: isDangerous);
+            }
+        }
+
         // Field declaration in type bodies: name: Type
-        // Detected by identifier followed by colon (no var/let keyword needed)
-        // Only allowed inside type bodies (record, entity)
+        // Detected by identifier followed by colon (no var keyword needed)
+        // Only allowed inside type bodies (record, entity, resident)
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
             // In record bodies, external is not allowed
             if (_parsingStrictRecordBody && visibility is VisibilityModifier.External)
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidDeclarationInBody,
                     $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
                     "Record fields can use 'secret', 'posted', or 'open'",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
             return ParseFieldDeclaration(visibility: visibility);
         }
 
         // Variable declarations
-        if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
+        if (Match(TokenType.Var, TokenType.Preset))
         {
-            // In type bodies (record, entity, resident), var/let/preset are not allowed
-            // Fields use 'name: Type' syntax without var/let keywords
+            // In type bodies (record, entity, resident), var/preset are not allowed
+            // Fields use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidDeclarationInBody,
-                    "Type fields cannot use 'var', 'let', or 'preset'. " +
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    "Type fields cannot use 'var' or 'preset'. " +
                     "Use 'name: Type' syntax instead",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
             return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
+
+        // Pass statement/declaration (empty placeholder)
+        // Inside type bodies, returns PassDeclaration (a Declaration subtype)
+        // Outside type bodies, returns PassStatement (a Statement subtype)
+        if (_language == Language.RazorForge && Match(type: TokenType.Pass))
+        {
+            ConsumeStatementTerminator();
+
+            // Inside type bodies, return a PassDeclaration (extends Declaration)
+            if (_parsingTypeBody)
+            {
+                return new PassDeclaration(Location: GetLocation());
+            }
+
+            return new PassStatement(Location: GetLocation());
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // ROUTINE DECLARATION (with async status modifiers)
+        // ═══════════════════════════════════════════════════════════════════════════
 
         // Check for suspended modifier before routine
         AsyncStatus asyncStatus = AsyncStatus.None;
@@ -346,39 +392,56 @@ public partial class SuflaeParser
         {
             asyncStatus = AsyncStatus.Suspended;
         }
+        // RF-only: threaded async status
+        else if (_language == Language.RazorForge && Match(type: TokenType.Threaded))
+        {
+            asyncStatus = AsyncStatus.Threaded;
+        }
 
-        // Routine (function) declaration - using 'routine' keyword in Suflae
+        // Routine (function) declaration
         if (Match(type: TokenType.Routine))
         {
             // Validate: global storage is not allowed for routines
             if (storage == StorageClass.Global)
             {
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidDeclarationInBody,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidDeclarationInBody,
                     "'global' storage class is not valid for routines. " +
                     "'global' can only be used for file-scope static variables",
-                    fileName, CurrentToken.Line, CurrentToken.Column);
+                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
-            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus);
+            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus, isDangerous: isDangerous);
         }
 
-        // If we consumed 'suspended' but no 'routine' follows, that's an error
+        // If we consumed 'suspended'/'threaded' but no 'routine' follows, that's an error
         if (asyncStatus != AsyncStatus.None)
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.InvalidDeclarationInBody,
-                "'suspended' must be followed by 'routine'",
-                fileName, CurrentToken.Line, CurrentToken.Column);
+            string modifier = asyncStatus == AsyncStatus.Suspended ? "suspended" : "threaded";
+            throw new GrammarException(
+                GrammarDiagnosticCode.UnexpectedToken,
+                $"'{modifier}' must be followed by 'routine'",
+                fileName, CurrentToken.Line, CurrentToken.Column, _language);
         }
 
         // Validate: storage class modifiers are not valid for type declarations
-        if (storage != StorageClass.None && Check(TokenType.Entity, TokenType.Record,
-                TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol))
+        if (storage != StorageClass.None)
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.InvalidDeclarationInBody,
-                $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations",
-                fileName, CurrentToken.Line, CurrentToken.Column);
+            // Check all type keywords (including RF-only Resident)
+            bool isTypeKeyword = Check(TokenType.Entity, TokenType.Record,
+                TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol);
+
+            if (_language == Language.RazorForge)
+            {
+                isTypeKeyword = isTypeKeyword || Check(type: TokenType.Resident);
+            }
+
+            if (isTypeKeyword)
+            {
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations",
+                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+            }
         }
 
         // Entity/Record/Choice declarations
@@ -390,6 +453,12 @@ public partial class SuflaeParser
         if (Match(type: TokenType.Record))
         {
             return ParseRecordDeclaration(visibility: visibility);
+        }
+
+        // RF-only: Resident declarations (singleton static types)
+        if (_language == Language.RazorForge && Match(type: TokenType.Resident))
+        {
+            return ParseResidentDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Choice))
@@ -416,7 +485,11 @@ public partial class SuflaeParser
         // it is an record or protocol)
         if (visibility != VisibilityModifier.Open)
         {
-            throw ThrowParseError($"Visibility modifier '{visibility}' must be followed by a declaration " + $"(routine, entity, record, choice, variant, protocol, var, preset, or let)");
+            string validDeclarations = _language == Language.RazorForge
+                ? "routine, entity, record, resident, choice, variant, protocol, preset, or var"
+                : "routine, entity, record, choice, variant, protocol, preset, or var";
+            throw ThrowParseError($"Visibility modifier '{visibility}' must be followed by a declaration " +
+                                  $"({validDeclarations})");
         }
 
         // If we have attributes but no declaration, that's an error
@@ -432,12 +505,13 @@ public partial class SuflaeParser
     /// <summary>
     /// Parses a single statement within a block or function body.
     /// Handles: if, while, for, when, return, throw, absent, break, continue, and expression statements.
+    /// RazorForge-only: danger! block, steal expression, release statement, block statements.
     /// </summary>
     /// <remarks>
     /// Statement types (checked in sequence):
     ///
     /// INDENTATION HANDLING:
-    ///   dedent       - Process block end (Suflae uses indentation)
+    ///   dedent       - Process block end
     ///   newlines     - Skip empty lines
     ///
     /// CONTROL FLOW:
@@ -456,18 +530,24 @@ public partial class SuflaeParser
     ///   throw        - Throw error (in failable routines)
     ///   absent       - Return none (in failable routines)
     ///   pass         - Empty placeholder (no-op)
+    ///   using        - Resource management (declaration form)
+    ///
+    /// MEMORY BLOCKS (RazorForge only):
+    ///   danger!      - Unsafe block (raw pointers, FFI)
+    ///   release      - Early resource cleanup
     ///
     /// DECLARATIONS IN STATEMENT CONTEXT:
-    ///   var/let      - Variable declarations (including destructuring)
+    ///   var          - Variable declarations (including destructuring)
     ///
-    /// EXPRESSION:
+    /// BLOCK/EXPRESSION:
+    ///   { ... }      - Block statement (RazorForge only)
     ///   expr         - Expression statement (fallback)
     /// </remarks>
     /// <returns>The parsed statement, or null if at end of block.</returns>
     private Statement ParseStatement()
     {
         // ═══════════════════════════════════════════════════════════════════════════
-        // INDENTATION HANDLING (Suflae-specific)
+        // INDENTATION HANDLING
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Handle dedent tokens
@@ -541,12 +621,17 @@ public partial class SuflaeParser
         // SPECIAL STATEMENTS
         // ═══════════════════════════════════════════════════════════════════════════
 
+        if (Match(type: TokenType.Pass))
+        {
+            return ParsePassStatement();
+        }
+
         if (Match(type: TokenType.Throw))
         {
             return ParseThrowStatement();
         }
 
-        // Using statement for resource management: using expr as name:
+        // Using block (scoped resource management with indented body)
         if (Match(type: TokenType.Using))
         {
             return ParseUsingStatement();
@@ -557,19 +642,24 @@ public partial class SuflaeParser
             return ParseAbsentStatement();
         }
 
-        if (Match(type: TokenType.Pass))
-        {
-            return ParsePassStatement();
-        }
-
         if (Match(type: TokenType.Discard))
         {
             return ParseDiscardStatement();
         }
 
-        if (Match(type: TokenType.Generate))
+        if (Match(type: TokenType.Emit))
         {
-            return ParseGenerateStatement();
+            return ParseEmitStatement();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // RF-ONLY: MEMORY/SCOPE BLOCKS
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        // Danger block (unsafe operations) - RazorForge only
+        if (_language == Language.RazorForge && Match(type: TokenType.Danger))
+        {
+            return ParseDangerStatement();
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -577,9 +667,9 @@ public partial class SuflaeParser
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Variable declarations (can appear in statement context)
-        if (Match(TokenType.Var, TokenType.Let, TokenType.Preset))
+        if (Match(TokenType.Var, TokenType.Preset))
         {
-            // Check if this is destructuring: let (a, b) = expr or var (x, y) = expr
+            // Check if this is destructuring: var (a, b) = expr
             if (Check(type: TokenType.LeftParen))
             {
                 return ParseDestructuringDeclaration();
@@ -591,7 +681,7 @@ public partial class SuflaeParser
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // EXPRESSION STATEMENT (fallback)
+        // EXPRESSION STATEMENT (FALLBACK)
         // ═══════════════════════════════════════════════════════════════════════════
 
         return ParseExpressionStatement();

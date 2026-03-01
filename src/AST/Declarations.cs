@@ -1,4 +1,4 @@
-namespace Compilers.Shared.AST;
+namespace SyntaxTree;
 
 #region Base Declaration Types
 
@@ -38,12 +38,12 @@ public record PassDeclaration(SourceLocation Location) : Declaration(Location: L
 /// Specifies requirements that generic type arguments must satisfy.
 /// </summary>
 /// <param name="ParameterName">The name of the generic type parameter (e.g., "T")</param>
-/// <param name="ConstraintType">The type of constraint (follows, record, entity)</param>
+/// <param name="ConstraintType">The type of constraint (obeys, record, entity)</param>
 /// <param name="ConstraintTypes">List of types that the parameter must satisfy</param>
 /// <remarks>
 /// Supports various constraint syntaxes:
 /// <list type="bullet">
-/// <item>Protocol constraint: where T follows Comparable</item>
+/// <item>Protocol constraint: where T obeys Comparable</item>
 /// <item>Value type constraint: where T is record</item>
 /// <item>Reference type constraint: where T is entity</item>
 /// <item>Resident type constraint: where T is resident</item>
@@ -68,7 +68,6 @@ public record GenericConstraintDeclaration(
 /// <param name="Type">Optional type annotation; if null, type is inferred from initializer</param>
 /// <param name="Initializer">Optional initial value expression</param>
 /// <param name="Visibility">Access control modifier (public, published, internal, private)</param>
-/// <param name="IsMutable">true for 'var' (mutable), false for 'let' (immutable)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Variable declarations support various patterns:
@@ -76,8 +75,6 @@ public record GenericConstraintDeclaration(
 /// <item>Type inference: var x = 42 (infers s64 for RazorForge/Integer for Suflae)</item>
 /// <item>Explicit typing: var x: s64 = 42</item>
 /// <item>Uninitialized (requires type): var x: s32</item>
-/// <item>Immutable: let x = 42 (cannot be reassigned)</item>
-/// <item>Mutable: var x = 42 (can be reassigned)</item>
 /// <item>Published: published var x = 42 (public read, private write)</item>
 /// </list>
 ///
@@ -94,7 +91,6 @@ public record VariableDeclaration(
     TypeExpression? Type,
     Expression? Initializer,
     VisibilityModifier Visibility,
-    bool IsMutable, // var vs let
     SourceLocation Location,
     StorageClass Storage = StorageClass.None) : Declaration(Location: Location)
 {
@@ -159,18 +155,18 @@ public record RoutineDeclaration(
 /// </summary>
 /// <param name="Name">Class identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="Protocols">List of protocols to implement (follows)</param>
+/// <param name="Protocols">List of protocols to implement (obeys)</param>
 /// <param name="Members">List of member declarations (fields, methods, properties)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Entity declarations support:
 /// <list type="bullet">
-/// <item>Single protocol implementation: entity Dog follows Animal</item>
-/// <item>Multiple protocol implementation: entity Dog follows Nameable, Trainable</item>
+/// <item>Single protocol implementation: entity Dog obeys Animal</item>
+/// <item>Multiple protocol implementation: entity Dog obeys Nameable, Trainable</item>
 /// <item>Generic classes: entity Container[T]</item>
 /// <item>Member visibility: public, private, internal fields/methods</item>
-/// <item>Constructors: defined as special routine methods</item>
+/// <item>Creators: defined as special routine methods</item>
 /// </list>
 /// </remarks>
 public record EntityDeclaration(
@@ -191,11 +187,11 @@ public record EntityDeclaration(
 
 /// <summary>
 /// Record (struct) declaration that defines value types with structural equality.
-/// Represents immutable data structures with value semantics.
+/// Represents data structures with value semantics.
 /// </summary>
 /// <param name="Name">Record identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="Protocols">List of protocols to implement (follows)</param>
+/// <param name="Protocols">List of protocols to implement (obeys)</param>
 /// <param name="Members">List of member declarations (fields and methods)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
@@ -206,7 +202,7 @@ public record EntityDeclaration(
 /// <item>Immutability: fields are always readonly</item>
 /// <item>Stack allocation: stored inline rather than heap-allocated</item>
 /// <item>Generic records: record Point[T](x: T, y: T)</item>
-/// <item>Copy constructors: automatic with-expressions support</item>
+/// <item>Copy creators: automatic with-expressions support</item>
 /// </list>
 /// </remarks>
 public record RecordDeclaration(
@@ -230,7 +226,7 @@ public record RecordDeclaration(
 /// </summary>
 /// <param name="Name">Resident identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="Protocols">List of protocols to implement (follows)</param>
+/// <param name="Protocols">List of protocols to implement (obeys)</param>
 /// <param name="Members">Field and method declarations within the resident</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
@@ -238,7 +234,7 @@ public record RecordDeclaration(
 /// <remarks>
 /// Residents are permanent, foundational objects with:
 /// <list type="bullet">
-/// <item>Fixed size at compile time (like records)</item>
+/// <item>Fixed size at build time (like records)</item>
 /// <item>Reference semantics (like entities)</item>
 /// <item>Internal mutability (like entities)</item>
 /// <item>Persistent memory allocation</item>
@@ -296,7 +292,7 @@ public record ChoiceDeclaration(
 /// Each member represents a power-of-two bit flag backed by U64.
 /// </summary>
 /// <param name="Name">Flags type identifier name</param>
-/// <param name="Members">List of UPPER_IDENTIFIER member names (compiler assigns bit positions)</param>
+/// <param name="Members">List of UPPER_IDENTIFIER member names (builder assigns bit positions)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -359,7 +355,7 @@ public record VariantDeclaration(
 /// </summary>
 /// <param name="Name">Protocol identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="ParentProtocols">List of parent protocols this protocol extends (follows)</param>
+/// <param name="ParentProtocols">List of parent protocols this protocol extends (obeys)</param>
 /// <param name="Methods">List of method signatures (without implementations)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
@@ -370,8 +366,8 @@ public record VariantDeclaration(
 /// <item>Generic protocols: protocol Comparable[T] { routine Me.__cmp__(you: Me) -> ComparisonSign }</item>
 /// <item>Multiple implementation: types can implement multiple protocols</item>
 /// <item>Default methods: protocols can provide default implementations</item>
-/// <item>Protocol bounds: generic constraints (where T follows Comparable)</item>
-/// <item>Protocol inheritance: protocol DetailedPrintable follows Printable { ... }</item>
+/// <item>Protocol bounds: generic constraints (where T obeys Comparable)</item>
+/// <item>Protocol inheritance: protocol DetailedPrintable obeys Printable { ... }</item>
 /// </list>
 /// </remarks>
 public record ProtocolDeclaration(
@@ -564,20 +560,20 @@ public record DefineDeclaration(string OldName, string NewName, SourceLocation L
 }
 
 /// <summary>
-/// Preset declaration that defines a compile-time constant value.
+/// Preset declaration that defines a build-time constant value.
 /// Similar to const in other languages but with RazorForge naming convention.
 /// </summary>
 /// <param name="Name">Constant identifier name</param>
 /// <param name="Type">Type of the constant value</param>
-/// <param name="Value">Constant expression that must be evaluable at compile time</param>
+/// <param name="Value">Constant expression that must be evaluable at build time</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Preset declarations provide compile-time constants:
+/// Preset declarations provide build-time constants:
 /// <list type="bullet">
 /// <item>Simple constants: preset PI: f64 = 3.14159</item>
 /// <item>Integer constants: preset MAX_SIZE: u32 = 1024u32</item>
 /// <item>Pointer constants: preset cnullptr: uaddr = 0uaddr</item>
-/// <item>Must be evaluable at compile time</item>
+/// <item>Must be evaluable at build time</item>
 /// </list>
 /// </remarks>
 public record PresetDeclaration(
@@ -610,7 +606,7 @@ public record PresetDeclaration(
 /// <item>external("C") routine free(ptr: cptr&lt;cvoid&gt;)</item>
 /// <item>external routine heap_alloc!(bytes: uaddr) -> uaddr (default C convention)</item>
 /// <item>No function body - implementation provided by native runtime</item>
-/// <item>Links to C functions at compile time</item>
+/// <item>Links to C functions at build time</item>
 /// </list>
 /// </remarks>
 public record ExternalDeclaration(

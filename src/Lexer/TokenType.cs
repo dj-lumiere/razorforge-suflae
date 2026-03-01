@@ -1,4 +1,4 @@
-﻿namespace Compilers.Shared.Lexer;
+﻿namespace Compiler.Lexer;
 
 #region Token Type Enumeration
 
@@ -46,13 +46,13 @@ public enum TokenType
     /// <summary>Text literal - default for plain quotes ("hello world")</summary>
     TextLiteral,
 
-    /// <summary>Formatted text with interpolation expressions (f"hello {name}")</summary>
+    /// <summary>Formatted text with inserting expressions (f"hello {name}")</summary>
     FormattedText,
 
     /// <summary>Raw text that doesn't process escape sequences (r"C:\path\file")</summary>
     RawText,
 
-    /// <summary>Raw formatted text combining raw and interpolation (rf"path: {dir}\file")</summary>
+    /// <summary>Raw formatted text combining raw and inserting (rf"path: {dir}\file")</summary>
     RawFormattedText,
 
     /// <summary>Bytes literal with explicit prefix (b"hello")</summary>
@@ -204,9 +204,6 @@ public enum TokenType
     /// <summary>Regular identifier prefixed with let/var/nothing</summary>
     Identifier,
 
-    /// <summary>Type identifier prefixed with record/entity/resident/choice/variant/mutant</summary>
-    TypeIdentifier,
-
     #endregion
 
     #region Keywords
@@ -230,7 +227,7 @@ public enum TokenType
 
     /// <summary>
     /// Record declaration keyword.
-    /// Value type for simple, fixed-size, immutable data. Copied on assignment.
+    /// Value type for simple, fixed-size data with value semantics. Copied on assignment.
     /// Use 'with' for modified copies (record with (field: value)).
     /// </summary>
     Record,
@@ -266,7 +263,7 @@ public enum TokenType
     /// <summary>
     /// Protocol declaration keyword.
     /// Interface/trait contract defining method signatures that types must implement.
-    /// Types use 'follows' keyword to implement protocols.
+    /// Types use 'obeys' keyword to implement protocols.
     /// </summary>
     Protocol,
 
@@ -274,15 +271,12 @@ public enum TokenType
 
     #region Variable Declarations
 
-    /// <summary>Immutable variable binding - value cannot be reassigned after initialization</summary>
-    Let,
-
-    /// <summary>Mutable variable binding - value can be reassigned</summary>
+    /// <summary>Modifiable variable binding - value can be reassigned</summary>
     Var,
 
     /// <summary>
-    /// Compile-time constant declaration.
-    /// Immutable, compile-time evaluated. Use SCREAMING_SNAKE_CASE by convention.
+    /// Build-time constant declaration.
+    /// Unmodifiable, build-time evaluated. Use SCREAMING_SNAKE_CASE by convention.
     /// </summary>
     Preset,
 
@@ -327,16 +321,16 @@ public enum TokenType
 
     /// <summary>
     /// Protocol implementation keyword.
-    /// Declares that a type implements a protocol (record Foo follows Bar).
+    /// Declares that a type implements a protocol (record Foo obeys Bar).
     /// Similar to 'implements' in Java or ': Trait' in Rust.
     /// </summary>
-    Follows,
+    Obeys,
 
     /// <summary>
     /// Negated protocol constraint.
-    /// Asserts a type does NOT implement a protocol (requires T notfollows SomeTrait).
+    /// Asserts a type does NOT implement a protocol (needs T disobeys SomeTrait).
     /// </summary>
-    NotFollows,
+    Disobeys,
 
     #endregion
 
@@ -406,13 +400,10 @@ public enum TokenType
 
     #region Keywords - Special
 
-    /// <summary>Using statement keyword for resource management (using conn = db.open())</summary>
+    /// <summary>Using statement keyword for resource management (using db.open() as conn)</summary>
     Using,
 
-    /// <summary>Release statement keyword for premature resource cleanup (release conn)</summary>
-    Release,
-
-    /// <summary>Type alias as keyword (type Foo as Bar, or 'as' in scoped access blocks)</summary>
+    /// <summary>Type alias/Resource management as keyword (type Foo as Bar, or 'as' in scoped access blocks)</summary>
     As,
 
     /// <summary>Method/Type redefinition keyword (define A as B)</summary>
@@ -424,7 +415,7 @@ public enum TokenType
     /// <summary>Danger mode keyword for unsafe operations (danger! { ... })</summary>
     Danger,
 
-    /// <summary>With clause keyword for record copying with modifications (a with (x: 42))</summary>
+    /// <summary>With clause keyword for record copying with modifications (a with .x: 42)</summary>
     With,
 
     /// <summary>Given clause keyword for lambda captures (x given a => x + a)</summary>
@@ -450,8 +441,8 @@ public enum TokenType
     /// <summary>To keyword for ascending Range (for i in 1 to 10)</summary>
     To,
 
-    /// <summary>Downto keyword for descending Range (for i in 10 downto 1)</summary>
-    Downto,
+    /// <summary>Til keyword for exclusive range end (for i in 0 til 10 means [0, 10))</summary>
+    Til,
 
     /// <summary>By keyword for Range step size (for i in 1 to 10 by 2)</summary>
     By,
@@ -477,7 +468,7 @@ public enum TokenType
     /// <summary>
     /// Flags exact match keyword.
     /// Tests that only the specified flags are set — no more, no less.
-    /// 'isonly A and B' compiles to equality check (value == mask) vs
+    /// 'isonly A and B' builds to equality check (value == mask) vs
     /// 'is A and B' which is a superset check ((value &amp; mask) == mask).
     /// </summary>
     IsOnly,
@@ -536,20 +527,20 @@ public enum TokenType
     /// <summary>Wrapping addition operator (+%)</summary>
     PlusWrap,
 
-    /// <summary>Saturating addition operator (+^)</summary>
-    PlusSaturate,
+    /// <summary>Clamping addition operator (+^)</summary>
+    PlusClamp,
 
     /// <summary>Wrapping subtraction operator (-%)</summary>
     MinusWrap,
 
-    /// <summary>Saturating subtraction operator (-^)</summary>
-    MinusSaturate,
+    /// <summary>Clamping subtraction operator (-^)</summary>
+    MinusClamp,
 
     /// <summary>Wrapping multiplication operator (*%)</summary>
     MultiplyWrap,
 
-    /// <summary>Saturating multiplication operator (*^)</summary>
-    MultiplySaturate,
+    /// <summary>Clamping multiplication operator (*^)</summary>
+    MultiplyClamp,
 
     /// <summary>Exponentiation operator (**)</summary>
     Power,
@@ -557,8 +548,8 @@ public enum TokenType
     /// <summary>Wrapping exponentiation operator (**%)</summary>
     PowerWrap,
 
-    /// <summary>Saturating exponentiation operator (**^)</summary>
-    PowerSaturate,
+    /// <summary>Clamping exponentiation operator (**^)</summary>
+    PowerClamp,
 
     #endregion
 
@@ -680,17 +671,23 @@ public enum TokenType
     /// <summary>Wrapping power assignment operator (**%=)</summary>
     PowerWrapAssign,
 
-    /// <summary>Saturating add assignment operator (+^=)</summary>
-    PlusSaturateAssign,
+    /// <summary>Clamping add assignment operator (+^=)</summary>
+    PlusClampAssign,
 
-    /// <summary>Saturating subtract assignment operator (-^=)</summary>
-    MinusSaturateAssign,
+    /// <summary>Clamping subtract assignment operator (-^=)</summary>
+    MinusClampAssign,
 
-    /// <summary>Saturating multiply assignment operator (*^=)</summary>
-    MultiplySaturateAssign,
+    /// <summary>Clamping multiply assignment operator (*^=)</summary>
+    MultiplyClampAssign,
 
-    /// <summary>Saturating power assignment operator (**^=)</summary>
-    PowerSaturateAssign,
+    /// <summary>Clamping division operator (/^)</summary>
+    SlashClamp,
+
+    /// <summary>Clamping division assignment operator (/^=)</summary>
+    SlashClampAssign,
+
+    /// <summary>Clamping power assignment operator (**^=)</summary>
+    PowerClampAssign,
 
     /// <summary>None coalescing assignment operator (??=)</summary>
     NoneCoalesceAssign,
@@ -755,13 +752,16 @@ public enum TokenType
     /// <summary>Member access dot operator (.)</summary>
     Dot,
 
+    /// <summary>Optional chaining operator (?.)</summary>
+    QuestionDot,
+
     /// <summary>Comma separator (,)</summary>
     Comma,
 
     /// <summary>Type annotation colon (:)</summary>
     Colon,
 
-    /// <summary>Vararg declaration operator (...) (ex, routine foo(values...:s32) -> s32</summary>
+    /// <summary>Vararg declaration operator (...) (ex, routine foo(values...: S32) -> S32</summary>
     DotDotDot,
 
     #endregion
@@ -775,10 +775,10 @@ public enum TokenType
     /// <summary>Significant newline token (statement terminator)</summary>
     Newline,
 
-    /// <summary>Indentation increment token (Suflae language only)</summary>
+    /// <summary>Indentation increment token</summary>
     Indent,
 
-    /// <summary>Indentation decrement token (Suflae language only)</summary>
+    /// <summary>Indentation decrement token</summary>
     Dedent,
 
     /// <summary>Documentation comment token (###)</summary>
@@ -790,8 +790,8 @@ public enum TokenType
 
     /// <summary>
     /// Generic type constraint keyword.
-    /// Enforces compile-time protocol requirements on generic types.
-    /// Example: routine sort&lt;T&gt;() requires T follows Comparable
+    /// Enforces build-time protocol requirements on generic types.
+    /// Example: routine sort[T]() needs T obeys Comparable
     /// </summary>
     Requires,
 
@@ -804,7 +804,7 @@ public enum TokenType
     /// Yields values from generator/iterator functions (coroutine mechanism).
     /// Similar to 'yield' in Python/C#.
     /// </summary>
-    Generate,
+    Emit,
 
     /// <summary>
     /// Emitting routine modifier keyword.
@@ -827,14 +827,14 @@ public enum TokenType
     Waitfor,
 
     /// <summary>
-    /// Until keyword for await timeout settings.
+    /// Within keyword for await timeout settings.
     /// </summary>
-    Until,
+    Within,
 
     /// <summary>
     /// After keyword for task dependency chains.
     /// Declares dependencies that must complete before the current task can run.
-    /// Used with waitfor/until for declarative task graphs.
+    /// Used with waitfor/within for declarative task graphs.
     /// </summary>
     After,
 

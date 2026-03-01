@@ -3,8 +3,8 @@
 /// </summary>
 public enum ConstraintKind
 {
-    /// <summary>Protocol/interface implementation (T follows Comparable)</summary>
-    Follows,
+    /// <summary>Protocol/interface implementation (T obeys Comparable)</summary>
+    Obeys,
 
     /// <summary>Value type constraint (where T is record)</summary>
     ValueType,
@@ -26,9 +26,6 @@ public enum ConstraintKind
 
     /// <summary>Variant type constraint (where T is variant)</summary>
     VariantType,
-
-    /// <summary>Mutant type constraint (where T is mutant) - RazorForge only</summary>
-    MutantType,
 
     /// <summary>Const generic type constraint (where N is uaddr)</summary>
     ConstGeneric,

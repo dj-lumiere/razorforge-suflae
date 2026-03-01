@@ -1,15 +1,15 @@
-using RazorForge.Diagnostics;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Lexer;
+namespace Compiler.Lexer;
 
-using Compilers.Shared.Lexer;
+using Lexer;
 
 /// <summary>
-/// Partial class containing indentation and newline handling methods for the Suflae tokenizer.
+/// Partial class containing indentation and newline handling methods for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Suflae uses Python-style significant indentation for block structure.
+/// Both RazorForge and Suflae use Python-style significant indentation for block structure.
 /// This file contains the logic for:
 /// </para>
 /// <list type="bullet">
@@ -19,7 +19,7 @@ using Compilers.Shared.Lexer;
 ///   <item><description>Determining which newlines are significant</description></item>
 /// </list>
 /// </remarks>
-public partial class SuflaeTokenizer
+public partial class Tokenizer
 {
     #region Indentation Handling
 
@@ -35,15 +35,15 @@ public partial class SuflaeTokenizer
     /// <para>
     /// Indentation rules:
     /// <list type="bullet">
-    ///   <item><description>Each indentation level is 4 spaces</description></item>
-    ///   <item><description>Tabs are counted as 4 spaces</description></item>
-    ///   <item><description>Indentation must be a multiple of 4</description></item>
+    ///   <item><description>Each indentation level is 2 spaces</description></item>
+    ///   <item><description>Tabs are counted as 2 spaces</description></item>
+    ///   <item><description>Indentation must be a multiple of 2</description></item>
     ///   <item><description>Indentation increases start a new block</description></item>
     /// </list>
     /// </para>
     /// </remarks>
-    /// <exception cref="LexerException">
-    /// Thrown when indentation is misaligned (not a multiple of 4).
+    /// <exception cref="GrammarException">
+    /// Thrown when indentation is misaligned (not a multiple of 2).
     /// </exception>
     private void HandleIndentation()
     {
@@ -56,9 +56,9 @@ public partial class SuflaeTokenizer
             {
                 spaces += 1;
             }
-            else // Tab counts as 4 spaces
+            else // Tab counts as 2 spaces
             {
-                spaces += 4;
+                spaces += 2;
             }
 
             Advance();
@@ -77,15 +77,15 @@ public partial class SuflaeTokenizer
             return;
         }
 
-        int newIndentLevel = spaces / 4;
+        int newIndentLevel = spaces / 2;
 
         // Validate indentation alignment
-        if (spaces % 4 != 0)
+        if (spaces % 2 != 0)
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.InconsistentIndentation,
-                $"Indentation error: expected multiple of 4 spaces, got {spaces} spaces",
-                _fileName, _line, _column);
+            throw new GrammarException(
+                GrammarDiagnosticCode.InconsistentIndentation,
+                $"Indentation error: expected multiple of 2 spaces, got {spaces} spaces",
+                _fileName, _line, _column, _language);
         }
 
         // Handle indentation increase (new block)
@@ -121,7 +121,7 @@ public partial class SuflaeTokenizer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// In Suflae, newlines are significant when they terminate a statement.
+    /// Newlines are significant when they terminate a statement.
     /// However, newlines are ignored after certain tokens that indicate
     /// continuation (like open parentheses or binary operators).
     /// </para>

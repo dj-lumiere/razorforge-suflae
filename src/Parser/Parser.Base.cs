@@ -1,14 +1,13 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
-using RazorForge.Diagnostics;
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing base parser methods (token management, precedence, operators).
 /// </summary>
-public partial class SuflaeParser
+public partial class Parser
 {
     #region Token Management
 
@@ -66,10 +65,10 @@ public partial class SuflaeParser
         }
 
         Token current = CurrentToken;
-        throw new SuflaeGrammarException(
-            SuflaeDiagnosticCode.UnexpectedToken,
+        throw new GrammarException(
+            GrammarDiagnosticCode.UnexpectedToken,
             $"{errorMessage}. Expected {type}, got {current.Type}",
-            fileName, current.Line, current.Column);
+            fileName, current.Line, current.Column, _language);
     }
 
     /// <summary>
@@ -103,6 +102,28 @@ public partial class SuflaeParser
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Skips Newline tokens only if the specified token type follows them.
+    /// Returns true always (to be used in while loop conditions).
+    /// </summary>
+    private bool SkipNewlinesIfFollowedBy(TokenType type)
+    {
+        int offset = 0;
+        while (PeekToken(offset: offset).Type == TokenType.Newline)
+        {
+            offset++;
+        }
+
+        if (PeekToken(offset: offset).Type != type)
+        {
+            return true; // Don't skip, but let caller check Match
+        }
+
+        // Actually consume the newlines
+        while (Match(type: TokenType.Newline)) { }
+        return true;
     }
 
     #endregion
@@ -139,7 +160,7 @@ public partial class SuflaeParser
         /// <summary>Logical NOT: <c>not a</c>.</summary>
         LogicalNot = 7,
 
-        /// <summary>Comparison operators: <c>in, is, follows, &lt;, &lt;=, &gt;, &gt;=, ==, !=</c> and negated forms.</summary>
+        /// <summary>Comparison operators: <c>in, is, obeys, &lt;, &lt;=, &gt;, &gt;=, ==, !=</c> and negated forms.</summary>
         Comparison = 8,
 
         /// <summary>Bitwise OR: <c>a | b</c>.</summary>
@@ -188,8 +209,8 @@ public partial class SuflaeParser
             TokenType.And => Precedence.LogicalAnd,
 
             // Comparison operators
-            TokenType.In or TokenType.Is or TokenType.Follows => Precedence.Comparison,
-            TokenType.NotIn or TokenType.IsNot or TokenType.NotFollows => Precedence.Comparison,
+            TokenType.In or TokenType.Is or TokenType.Obeys => Precedence.Comparison,
+            TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => Precedence.Comparison,
             TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual => Precedence.Comparison,
             TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence.Comparison,
 
@@ -199,21 +220,21 @@ public partial class SuflaeParser
             TokenType.Ampersand => Precedence.BitwiseAnd,
 
             // Shift operators
-            TokenType.LeftShift or TokenType.LeftShiftChecked or TokenType.RightShift or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
+            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
 
             // Additive operators
             TokenType.Plus or TokenType.Minus => Precedence.Additive,
-            TokenType.PlusWrap or TokenType.PlusSaturate or TokenType.PlusChecked => Precedence.Additive,
-            TokenType.MinusWrap or TokenType.MinusSaturate or TokenType.MinusChecked => Precedence.Additive,
+            TokenType.PlusWrap or TokenType.PlusClamp => Precedence.Additive,
+            TokenType.MinusWrap or TokenType.MinusClamp => Precedence.Additive,
 
             // Multiplicative operators
             TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent => Precedence.Multiplicative,
-            TokenType.MultiplyWrap or TokenType.MultiplySaturate or TokenType.MultiplyChecked => Precedence.Multiplicative,
-            TokenType.DivideChecked or TokenType.ModuloChecked => Precedence.Multiplicative,
+            TokenType.MultiplyWrap or TokenType.MultiplyClamp => Precedence.Multiplicative,
+            TokenType.SlashClamp => Precedence.Multiplicative,
 
             // Power operators
             TokenType.Power => Precedence.Power,
-            TokenType.PowerWrap or TokenType.PowerSaturate or TokenType.PowerChecked => Precedence.Power,
+            TokenType.PowerWrap or TokenType.PowerClamp => Precedence.Power,
 
             _ => Precedence.None
         };
@@ -305,7 +326,7 @@ public partial class SuflaeParser
         return type switch
         {
             // Power operators are right-associative
-            TokenType.Power or TokenType.PowerWrap or TokenType.PowerSaturate or TokenType.PowerChecked => true,
+            TokenType.Power or TokenType.PowerWrap or TokenType.PowerClamp => true,
 
             // Assignment operators would be right-associative
             TokenType.Assign => true,
@@ -343,7 +364,6 @@ public partial class SuflaeParser
                 case TokenType.Protocol:
                 case TokenType.Routine:
                 case TokenType.Var:
-                case TokenType.Let:
                 case TokenType.Preset:
                 case TokenType.If:
                 case TokenType.Unless:
@@ -385,33 +405,61 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Creates a ParseException with the current token's location information.
+    /// Creates a GrammarException with the current token's location information.
     /// Use as: throw ThrowParseError("message");
     /// </summary>
     /// <param name="message">The error message.</param>
     /// <returns>The exception to throw.</returns>
-    protected SuflaeGrammarException ThrowParseError(string message)
+    protected GrammarException ThrowParseError(string message)
     {
         var token = CurrentToken;
-        return new SuflaeGrammarException(
-            SuflaeDiagnosticCode.UnexpectedToken,
+        return new GrammarException(
+            GrammarDiagnosticCode.UnexpectedToken,
             message,
-            fileName, token.Line, token.Column);
+            fileName, token.Line, token.Column, _language);
     }
 
     /// <summary>
-    /// Creates a ParseException with the specified token's location information.
+    /// Creates a GrammarException with the specified token's location information.
     /// Use as: throw ThrowParseError("message", token);
     /// </summary>
     /// <param name="message">The error message.</param>
     /// <param name="token">The token where the error occurred.</param>
     /// <returns>The exception to throw.</returns>
-    protected SuflaeGrammarException ThrowParseError(string message, Token token)
+    protected GrammarException ThrowParseError(string message, Token token)
     {
-        return new SuflaeGrammarException(
-            SuflaeDiagnosticCode.UnexpectedToken,
+        return new GrammarException(
+            GrammarDiagnosticCode.UnexpectedToken,
             message,
-            fileName, token.Line, token.Column);
+            fileName, token.Line, token.Column, _language);
+    }
+
+    /// <summary>
+    /// Creates a GrammarException with a specific diagnostic code and the current token's location.
+    /// Use as: throw ThrowParseError(code, "message");
+    /// </summary>
+    /// <param name="code">The diagnostic code for the error.</param>
+    /// <param name="message">The error message.</param>
+    /// <returns>The exception to throw.</returns>
+    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message)
+    {
+        var token = CurrentToken;
+        return new GrammarException(code, message,
+            fileName, token.Line, token.Column, _language);
+    }
+
+    /// <summary>
+    /// Creates a GrammarException with a specific diagnostic code and token location.
+    /// Use as: throw ThrowParseError(code, "message", token);
+    /// </summary>
+    /// <param name="code">The diagnostic code for the error.</param>
+    /// <param name="message">The error message.</param>
+    /// <param name="token">The token where the error occurred.</param>
+    /// <returns>The exception to throw.</returns>
+    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message, Token token)
+    {
+        return new GrammarException(code, message,
+            fileName, token.Line, token.Column, _language);
     }
 
     #endregion
@@ -433,21 +481,16 @@ public partial class SuflaeParser
             TokenType.Percent => BinaryOperator.Modulo,
             TokenType.Power => BinaryOperator.Power,
 
-            // Overflow variants
+            // Overflow variants (wrap and clamp)
             TokenType.PlusWrap => BinaryOperator.AddWrap,
-            TokenType.PlusSaturate => BinaryOperator.AddSaturate,
-            TokenType.PlusChecked => BinaryOperator.AddChecked,
+            TokenType.PlusClamp => BinaryOperator.AddClamp,
             TokenType.MinusWrap => BinaryOperator.SubtractWrap,
-            TokenType.MinusSaturate => BinaryOperator.SubtractSaturate,
-            TokenType.MinusChecked => BinaryOperator.SubtractChecked,
+            TokenType.MinusClamp => BinaryOperator.SubtractClamp,
             TokenType.MultiplyWrap => BinaryOperator.MultiplyWrap,
-            TokenType.MultiplySaturate => BinaryOperator.MultiplySaturate,
-            TokenType.MultiplyChecked => BinaryOperator.MultiplyChecked,
-            TokenType.ModuloChecked => BinaryOperator.ModuloChecked,
-            TokenType.DivideChecked => BinaryOperator.FloorDivideChecked,
+            TokenType.MultiplyClamp => BinaryOperator.MultiplyClamp,
+            TokenType.SlashClamp => BinaryOperator.TrueDivClamp,
             TokenType.PowerWrap => BinaryOperator.PowerWrap,
-            TokenType.PowerSaturate => BinaryOperator.PowerSaturate,
-            TokenType.PowerChecked => BinaryOperator.PowerChecked,
+            TokenType.PowerClamp => BinaryOperator.PowerClamp,
 
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,
@@ -465,7 +508,6 @@ public partial class SuflaeParser
             TokenType.Pipe => BinaryOperator.BitwiseOr,
             TokenType.Caret => BinaryOperator.BitwiseXor,
             TokenType.LeftShift => BinaryOperator.ArithmeticLeftShift,
-            TokenType.LeftShiftChecked => BinaryOperator.ArithmeticLeftShiftChecked,
             TokenType.RightShift => BinaryOperator.ArithmeticRightShift,
             TokenType.LogicalLeftShift => BinaryOperator.LogicalLeftShift,
             TokenType.LogicalRightShift => BinaryOperator.LogicalRightShift,
@@ -474,14 +516,14 @@ public partial class SuflaeParser
             TokenType.NotIn => BinaryOperator.NotIn,
             TokenType.Is => BinaryOperator.Is,
             TokenType.IsNot => BinaryOperator.IsNot,
-            TokenType.Follows => BinaryOperator.Follows,
-            TokenType.NotFollows => BinaryOperator.NotFollows,
+            TokenType.Obeys => BinaryOperator.Obeys,
+            TokenType.Disobeys => BinaryOperator.NotObeys,
             TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
 
-            _ => throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.UnexpectedToken,
+            _ => throw new GrammarException(
+                GrammarDiagnosticCode.UnexpectedToken,
                 $"Unknown binary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column)
+                fileName, CurrentToken.Line, CurrentToken.Column, _language)
         };
     }
 
@@ -496,10 +538,10 @@ public partial class SuflaeParser
             TokenType.Not => UnaryOperator.Not,
             TokenType.Tilde => UnaryOperator.BitwiseNot,
 
-            _ => throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.UnexpectedToken,
+            _ => throw new GrammarException(
+                GrammarDiagnosticCode.UnexpectedToken,
                 $"Unknown unary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column)
+                fileName, CurrentToken.Line, CurrentToken.Column, _language)
         };
     }
 
@@ -511,7 +553,7 @@ public partial class SuflaeParser
     /// Parse numeric literal value
     /// </summary>
     /// <remarks>
-    /// Types without direct C# equivalents (d128, Integer, Decimal) are stored
+    /// Types without direct C# equivalents (f128, d32, d64, d128, Integer, Decimal) are stored
     /// as raw strings in the AST. The semantic analyzer handles parsing these using native libraries.
     /// </remarks>
     protected object ParseNumericLiteral(Token token)
@@ -522,20 +564,29 @@ public partial class SuflaeParser
         return token.Type switch
         {
             // Fixed-width integers with C# equivalents - parse immediately
+            TokenType.S8Literal => ParseTypedInteger<sbyte>(text: text, suffix: "s8"),
+            TokenType.S16Literal => ParseTypedInteger<short>(text: text, suffix: "s16"),
             TokenType.S32Literal => ParseTypedInteger<int>(text: text, suffix: "s32"),
             TokenType.S64Literal => ParseTypedInteger<long>(text: text, suffix: "s64"),
             TokenType.S128Literal => ParseTypedInteger<Int128>(text: text, suffix: "s128"),
+            TokenType.U8Literal => ParseTypedInteger<byte>(text: text, suffix: "u8"),
+            TokenType.U16Literal => ParseTypedInteger<ushort>(text: text, suffix: "u16"),
             TokenType.U32Literal => ParseTypedInteger<uint>(text: text, suffix: "u32"),
             TokenType.U64Literal => ParseTypedInteger<ulong>(text: text, suffix: "u64"),
             TokenType.U128Literal => ParseTypedInteger<UInt128>(text: text, suffix: "u128"),
 
             // Fixed-width floats with C# equivalents - parse immediately
+            TokenType.F16Literal => ParseTypedFloat<Half>(text: text, suffix: "f16"),
             TokenType.F32Literal => ParseTypedFloat<float>(text: text, suffix: "f32"),
             TokenType.F64Literal => ParseTypedFloat<double>(text: text, suffix: "f64"),
 
             // Deferred types - store raw string for semantic analyzer to parse with native libraries
-            // d128: IEEE decimal floating-point, requires Intel DFP library
+            // f128: IEEE binary128, requires LibBF
+            // d32/d64/d128: IEEE decimal floating-point, requires Intel DFP library
             // Integer/Decimal: arbitrary precision, requires LibBF/MAPM
+            TokenType.F128Literal => CleanNumericSuffix(text: text, suffix: "f128"),
+            TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
+            TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),
             TokenType.D128Literal => CleanNumericSuffix(text: text, suffix: "d128"),
             TokenType.Integer => text,
             TokenType.Decimal => text,
@@ -590,12 +641,12 @@ public partial class SuflaeParser
     #region Warnings
 
     /// <summary>
-    /// Add a compile warning to the list
+    /// Add a build warning to the list
     /// </summary>
     protected void AddWarning(string message, Token token, string warningCode,
         WarningSeverity severity = WarningSeverity.Warning)
     {
-        Warnings.Add(item: new CompileWarning(message: message,
+        Warnings.Add(item: new BuildWarning(message: message,
             line: token.Line,
             column: token.Column,
             severity: severity,
@@ -605,19 +656,19 @@ public partial class SuflaeParser
     /// <summary>
     /// Get all warnings collected during parsing
     /// </summary>
-    public IReadOnlyList<CompileWarning> GetWarnings()
+    public IReadOnlyList<BuildWarning> GetWarnings()
     {
         return Warnings.AsReadOnly();
     }
 
     /// <summary>
-    /// Check for unnecessary closing brace (for Suflae)
+    /// Check for unnecessary closing brace (for indentation-based syntax)
     /// </summary>
     protected void CheckUnnecessaryBrace()
     {
         if (CurrentToken.Type == TokenType.RightBrace)
         {
-            AddWarning(message: "Unnecessary closing brace detected. Suflae uses indentation-based scoping, not braces.",
+            AddWarning(message: "Unnecessary closing brace detected. This language uses indentation-based scoping, not braces.",
                 token: CurrentToken,
                 warningCode: WarningCodes.UnnecessaryBraces,
                 severity: WarningSeverity.StyleViolation);

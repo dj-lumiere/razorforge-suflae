@@ -1,4 +1,4 @@
-namespace Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
 /// Represents a single token produced by the lexical analyzer.

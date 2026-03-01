@@ -56,19 +56,22 @@ public enum BinaryOperator
 
     #endregion
 
-    #region Arithmetic with overflow handling variants - Saturate (clamp to min/max)
+    #region Arithmetic with overflow handling variants - Clamping (clamp to min/max)
 
-    /// <summary>Addition that saturates at the type's bounds on overflow (+^)</summary>
-    AddSaturate,
+    /// <summary>Addition that clamps at the type's bounds on overflow (+^)</summary>
+    AddClamp,
 
-    /// <summary>Subtraction that saturates at the type's bounds on overflow (-^)</summary>
-    SubtractSaturate,
+    /// <summary>Subtraction that clamps at the type's bounds on overflow (-^)</summary>
+    SubtractClamp,
 
-    /// <summary>Multiplication that saturates at the type's bounds on overflow (*^)</summary>
-    MultiplySaturate,
+    /// <summary>Multiplication that clamps at the type's bounds on overflow (*^)</summary>
+    MultiplyClamp,
 
-    /// <summary>Exponentiation that saturates at the type's bounds on overflow (**^)</summary>
-    PowerSaturate,
+    /// <summary>Division that clamps at the type's bounds on overflow (/^)</summary>
+    TrueDivClamp,
+
+    /// <summary>Exponentiation that clamps at the type's bounds on overflow (**^)</summary>
+    PowerClamp,
 
     #endregion
 
@@ -114,11 +117,11 @@ public enum BinaryOperator
     /// <summary>Negated type check or pattern matching operator (isnot)</summary>
     IsNot,
 
-    /// <summary>Protocol conformance check operator (follows)</summary>
-    Follows,
+    /// <summary>Protocol conformance check operator (obeys)</summary>
+    Obeys,
 
-    /// <summary>Negated protocol conformance check operator (notfollows)</summary>
-    NotFollows,
+    /// <summary>Negated protocol conformance check operator (notobeys)</summary>
+    NotObeys,
 
     #endregion
 
@@ -202,10 +205,11 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.MultiplyWrap => "*%",
                 BinaryOperator.PowerWrap => "**%",
 
-                BinaryOperator.AddSaturate => "+^",
-                BinaryOperator.SubtractSaturate => "-^",
-                BinaryOperator.MultiplySaturate => "*^",
-                BinaryOperator.PowerSaturate => "**^",
+                BinaryOperator.AddClamp => "+^",
+                BinaryOperator.SubtractClamp => "-^",
+                BinaryOperator.MultiplyClamp => "*^",
+                BinaryOperator.TrueDivClamp => "/^",
+                BinaryOperator.PowerClamp => "**^",
 
                 BinaryOperator.Equal => "==",
                 BinaryOperator.NotEqual => "!=",
@@ -221,8 +225,8 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.NotIn => "notin",
                 BinaryOperator.Is => "is",
                 BinaryOperator.IsNot => "isnot",
-                BinaryOperator.Follows => "follows",
-                BinaryOperator.NotFollows => "notfollows",
+                BinaryOperator.Obeys => "obeys",
+                BinaryOperator.NotObeys => "notobeys",
 
                 BinaryOperator.And => "and",
                 BinaryOperator.Or => "or",
@@ -264,11 +268,12 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.MultiplyWrap => "__mul_wrap__",
                 BinaryOperator.PowerWrap => "__pow_wrap__",
 
-                // Saturating arithmetic
-                BinaryOperator.AddSaturate => "__add_sat__",
-                BinaryOperator.SubtractSaturate => "__sub_sat__",
-                BinaryOperator.MultiplySaturate => "__mul_sat__",
-                BinaryOperator.PowerSaturate => "__pow_sat__",
+                // Clamping arithmetic
+                BinaryOperator.AddClamp => "__add_clamp__",
+                BinaryOperator.SubtractClamp => "__sub_clamp__",
+                BinaryOperator.MultiplyClamp => "__mul_clamp__",
+                BinaryOperator.TrueDivClamp => "__truediv_clamp__",
+                BinaryOperator.PowerClamp => "__pow_clamp__",
 
                 // Ordering (overloadable)
                 BinaryOperator.Equal => "__eq__",
@@ -302,7 +307,7 @@ public static class BinaryOperatorExtensions
         /// <summary>
         /// Gets the in-place dunder method name for compound assignment dispatch.
         /// Returns null if the operator has no in-place variant (overflow, comparison, etc.).
-        /// In-place methods mutate the receiver and return Blank.
+        /// In-place methods modify the receiver and return Blank.
         /// </summary>
         public string? GetInPlaceMethodName()
         {

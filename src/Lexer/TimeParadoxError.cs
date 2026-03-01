@@ -1,4 +1,4 @@
-namespace Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
 /// Exception thrown when unnecessary syntax elements are detected that violate

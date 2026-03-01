@@ -1,4 +1,4 @@
-namespace RazorForge.Diagnostics;
+namespace SemanticAnalysis.Diagnostics;
 
 /// <summary>
 /// Semantic diagnostic codes for RazorForge (RF-S prefix).
@@ -19,7 +19,7 @@ namespace RazorForge.Diagnostics;
 /// - RF-S500-RF-S549: Call and Argument Errors
 /// - RF-S550-RF-S599: Collection Literal Errors
 /// - RF-S600-RF-S649: Memory Token Errors (RazorForge-specific)
-/// - RF-S650-RF-S699: Mutation Inference Errors
+/// - RF-S650-RF-S699: Modification Inference Errors
 /// - RF-S700-RF-S749: Protocol Conformance Errors
 /// - RF-S750-RF-S799: Error Handling Errors (throw/absent)
 /// - RF-S800-RF-S849: Language Restriction Errors
@@ -47,7 +47,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid Decimal literal format.</summary>
     InvalidDecimalLiteral = 5,
 
-    /// <summary>'me' keyword used outside of a type method context.</summary>
+    /// <summary>'me' keyword used outside a type method context.</summary>
     MeOutsideTypeMethod = 6,
 
     /// <summary>Referenced identifier is not declared in the current scope.</summary>
@@ -83,18 +83,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Logical operator (and/or) requires boolean operands.</summary>
     LogicalOperatorRequiresBool = 50,
-
-    /// <summary>True division (/) not supported on integer types.</summary>
-    TrueDivisionNotSupported = 51,
-
-    /// <summary>Floor division (//) not supported on this type.</summary>
-    FloorDivisionNotSupported = 52,
-
-    /// <summary>Overflow arithmetic operator only valid on fixed-width integers.</summary>
-    OverflowOperatorNotSupported = 53,
-
-    /// <summary>Binary operator cannot be applied to operands of incompatible types.</summary>
-    BinaryOperatorTypeMismatch = 54,
 
     /// <summary>Logical 'not' operator requires a boolean operand.</summary>
     LogicalNotRequiresBool = 55,
@@ -132,7 +120,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Unary operator method not found on type.</summary>
     UnaryOperatorNotFound = 66,
 
-    /// <summary>Waitfor 'until' clause requires a Duration type.</summary>
+    /// <summary>Waitfor 'within' clause requires a Duration type.</summary>
     WaitforTimeoutNotDuration = 67,
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -151,7 +139,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Type not found during conversion expression.</summary>
     UnknownConversionTargetType = 103,
 
-    /// <summary>Only protocols can be used with 'follows' keyword.</summary>
+    /// <summary>Only protocols can be used with 'obeys' keyword.</summary>
     NotAProtocol = 104,
 
     /// <summary>Cannot resolve import - module not found.</summary>
@@ -172,14 +160,14 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot import file from different language.</summary>
     LanguageMismatch = 110,
 
-    /// <summary>Parse error during compilation.</summary>
+    /// <summary>Parse error during building.</summary>
     ParseError = 111,
 
-    /// <summary>General compilation error.</summary>
+    /// <summary>General build error.</summary>
     CompilationError = 112,
 
-    /// <summary>Cannot instantiate generic type with given arguments.</summary>
-    GenericInstantiationFailed = 113,
+    /// <summary>Cannot resolve generic type with given arguments.</summary>
+    GenericResolutionFailed = 113,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GENERIC AND CONSTRAINT ERRORS (RF-S150 - RF-S199)
@@ -205,9 +193,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Type is not a variant type as required by constraint.</summary>
     VariantTypeConstraintViolation = 156,
-
-    /// <summary>Type is not a mutant type as required by constraint.</summary>
-    MutantTypeConstraintViolation = 157,
 
     /// <summary>Invalid const generic type.</summary>
     InvalidConstGenericType = 158,
@@ -271,7 +256,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid assignment target (not a variable, field, or index).</summary>
     InvalidAssignmentTarget = 250,
 
-    /// <summary>Cannot assign to immutable variable.</summary>
+    /// <summary>Cannot reassign a preset variable.</summary>
     AssignmentToImmutable = 251,
 
     /// <summary>Cannot assign value type to target type.</summary>
@@ -283,8 +268,17 @@ public enum SemanticDiagnosticCode
     /// <summary>Compound assignment operator not supported on type.</summary>
     CompoundAssignmentNotSupported = 254,
 
-    /// <summary>Attempting to mutate 'me' field in a @readonly method.</summary>
-    MutationInReadonlyMethod = 255,
+    /// <summary>Attempting to modify 'me' field in a @readonly method.</summary>
+    ModificationInReadonlyMethod = 255,
+
+    /// <summary>Cannot call modifying method on preset variable.</summary>
+    ModifyingCallOnImmutable = 256,
+
+    /// <summary>Cannot assign to field of preset variable.</summary>
+    FieldAssignmentOnImmutable = 257,
+
+    /// <summary>Preset initializer must be a build-time constant expression.</summary>
+    PresetNotConstant = 258,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
@@ -461,7 +455,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Type does not support field initialization.</summary>
     TypeNotFieldInitializable = 451,
 
-    /// <summary>Duplicate field initializer in constructor expression.</summary>
+    /// <summary>Duplicate field initializer in creator expression.</summary>
     DuplicateFieldInitializer = 452,
 
     /// <summary>Type does not have the specified field.</summary>
@@ -470,7 +464,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot assign type to field of different type.</summary>
     FieldTypeMismatch = 454,
 
-    /// <summary>Missing required field in constructor.</summary>
+    /// <summary>Missing required field in creator.</summary>
     MissingRequiredField = 455,
 
     /// <summary>Cannot call writable method through read-only wrapper.</summary>
@@ -579,20 +573,20 @@ public enum SemanticDiagnosticCode
     DangerousCallOutsideDangerBlock = 609,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
+    // MODIFICATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Mutating method requires ! token.</summary>
-    MutatingMethodRequiresToken = 650,
+    /// <summary>Modifying method requires ! token.</summary>
+    ModifyingMethodRequiresToken = 650,
 
-    /// <summary>Cannot call mutating method through read-only token.</summary>
-    MutatingMethodThroughReadOnlyToken = 651,
+    /// <summary>Cannot call modifying method through read-only token.</summary>
+    ModifyingMethodThroughReadOnlyToken = 651,
 
     /// <summary>Cannot call migratable method through exclusive token.</summary>
     MigratableMethodThroughExclusiveToken = 652,
 
-    /// <summary>Mutation category conflict detected.</summary>
-    MutationCategoryConflict = 653,
+    /// <summary>Modification category conflict detected.</summary>
+    ModificationCategoryConflict = 653,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PROTOCOL CONFORMANCE ERRORS (RF-S700 - RF-S749)
@@ -714,7 +708,7 @@ public static class SemanticDiagnosticCodeExtensions
             < 550 => "Call and Argument",
             < 600 => "Collection Literal",
             < 650 => "Memory Token",
-            < 700 => "Mutation",
+            < 700 => "Modification",
             < 750 => "Protocol",
             < 800 => "Error Handling",
             < 850 => "Language Restriction",

@@ -1,6 +1,6 @@
-using Compilers.Shared.Lexer;
+using Compiler.Lexer;
 
-namespace Compilers.Shared.AST;
+namespace SyntaxTree;
 
 #region Base Statement Types
 
@@ -59,7 +59,7 @@ public record ExpressionStatement(Expression Expression, SourceLocation Location
 /// This allows declarations to be used in contexts that expect statements:
 /// <list type="bullet">
 /// <item>Variable declarations inside function bodies: var x = 5</item>
-/// <item>Internal declarations inside blocks: let y = computeValue()</item>
+/// <item>Internal declarations inside blocks: var y = computeValue()</item>
 /// <item>Nested function definitions inside other functions</item>
 /// </list>
 /// </remarks>
@@ -100,26 +100,24 @@ public record AssignmentStatement(Expression Target, Expression Value, SourceLoc
 }
 
 /// <summary>
-/// Record/entity destructuring statement: let (field, field2) = expression
+/// Record/entity destructuring statement: var (field, field2) = expression
 /// Unpacks record/entity fields into multiple variables based on field names.
 /// Destructuring only works when ALL fields of the type are public.
 /// </summary>
 /// <param name="Pattern">The destructuring pattern with field bindings</param>
 /// <param name="Initializer">Expression that evaluates to a record/entity value</param>
-/// <param name="IsMutable">true for 'var' (mutable), false for 'let' (immutable)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>let (center, radius) = circle - field name matches binding name</item>
-/// <item>let (center: c, radius: r) = circle - aliased destructuring</item>
-/// <item>let ((x, y), radius) = circle - nested destructuring</item>
+/// <item>var (center, radius) = circle - field name matches binding name</item>
+/// <item>var (center: c, radius: r) = circle - aliased destructuring</item>
+/// <item>var ((x, y), radius) = circle - nested destructuring</item>
 /// </list>
 /// </remarks>
 public record DestructuringStatement(
     DestructuringPattern Pattern,
     Expression Initializer,
-    bool IsMutable,
     SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -168,13 +166,13 @@ public record ReturnStatement(Expression? Value, SourceLocation Location)
 /// <remarks>
 /// The becomes statement solves the "stray value" problem in indentation-based blocks:
 /// <code>
-/// let num = when result:
-///     is Crashable e:
-///         show(f"Error: {e.crash_message()}")
-///         becomes 0  // Explicit: this block produces 0
-///     else value:
-///         show(f"Success: {value}")
-///         becomes value
+/// var num = when result
+///   is Crashable e
+///     show(f"Error: {e.crash_message()}")
+///     becomes 0  # Explicit: this block produces 0
+///   else value
+///     show(f"Success: {value}")
+///     becomes value
 /// </code>
 /// Rules:
 /// <list type="bullet">
@@ -194,7 +192,7 @@ public record BecomesStatement(Expression Value, SourceLocation Location)
 }
 
 /// <summary>
-/// Statement that fails the current function with an error, returning it via Result&lt;T>.
+/// Statement that fails the current function with an error, returning it via Result[T].
 /// Used in RazorForge and Suflae for recoverable errors that should be handled by the caller.
 /// </summary>
 /// <param name="Error">Expression that evaluates to a Crashable error type</param>
@@ -202,14 +200,12 @@ public record BecomesStatement(Expression Value, SourceLocation Location)
 /// <remarks>
 /// The throw statement is used for expected throwures that should be handled:
 /// <code>
-/// routine divide!(a: s32, b: s32) -> s32 {
-///     if b == 0 {
-///         throw DivisionError(message: "Division by zero")
-///     }
-///     return a / b
-/// }
+/// routine divide!(a: s32, b: s32) -> s32
+///   if b == 0
+///     throw DivisionError(message: "Division by zero")
+///   return a // b
 /// </code>
-/// Compiler generates safe variants: try_divide() -> s32?, check_divide() -> Result&lt;s32>
+/// Builder generates safe variants: try_divide() -> s32?, check_divide() -> Result[s32]
 /// </remarks>
 public record ThrowStatement(Expression Error, SourceLocation Location)
     : Statement(Location: Location)
@@ -222,24 +218,21 @@ public record ThrowStatement(Expression Error, SourceLocation Location)
 }
 
 /// <summary>
-/// Statement indicating that a value is not found/absent, triggering Lookup&lt;T> generation.
+/// Statement indicating that a value is not found/absent, triggering Lookup[T] generation.
 /// Used when a search operation finds no matching value (distinct from an error condition).
 /// </summary>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// The absent statement is used to indicate "not found" in search/lookup operations:
 /// <code>
-/// routine get_user!(id: u64) -> User {
-///     unless database.connected() {
-///         throw DatabaseError(message: "Not connected")
-///     }
-///     unless database.has(id) {
-///         absent  // Value not found
-///     }
-///     return database.get(id)
-/// }
+/// routine get_user!(id: u64) -> User
+///   unless database.connected()
+///     throw DatabaseError(message: "Not connected")
+///   unless database.has(id)
+///     absent  # Value not found
+///   return database.get(id)
 /// </code>
-/// Compiler generates: try_get_user() -> User?, lookup_get_user() -> Lookup&lt;User>
+/// Builder generates: try_get_user() -> User?, lookup_get_user() -> Lookup[User]
 /// Pattern matching: is Crashable e / is None / else user
 /// </remarks>
 public record AbsentStatement(SourceLocation Location) : Statement(Location: Location)
@@ -282,7 +275,7 @@ public record PassStatement(SourceLocation Location) : Statement(Location: Locat
 /// <remarks>
 /// The discard statement prevents warnings about unused return values:
 /// <code>
-/// # Without discard - compile warning: unused return value
+/// # Without discard - build warning: unused return value
 /// process_data()
 ///
 /// # With discard - explicitly ignore return value
@@ -292,7 +285,7 @@ public record PassStatement(SourceLocation Location) : Statement(Location: Locat
 /// <list type="bullet">
 /// <item>Explicit intent - Makes it clear the return value is intentionally ignored</item>
 /// <item>Prevents bugs - Catches cases where return values are accidentally ignored</item>
-/// <item>Clean code - No need for dummy variables like let _ = process_data()</item>
+/// <item>Clean code - No need for dummy variables like var _ = process_data()</item>
 /// </list>
 /// </remarks>
 public record DiscardStatement(Expression Expression, SourceLocation Location)
@@ -306,23 +299,23 @@ public record DiscardStatement(Expression Expression, SourceLocation Location)
 }
 
 /// <summary>
-/// Generate statement that yields a value from a generator routine.
+/// Emit statement that yields a value from a generator routine.
 /// Analogous to Python's yield or Rust's yield — produces the next value in an iterator.
 /// </summary>
 /// <example>
 /// <code>
-/// generate value
+/// emit value
 /// </code>
 /// </example>
 /// <param name="Expression">The expression whose value is yielded</param>
 /// <param name="Location">Source location information</param>
-public record GenerateStatement(Expression Expression, SourceLocation Location)
+public record EmitStatement(Expression Expression, SourceLocation Location)
     : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
-        return visitor.VisitGenerateStatement(node: this);
+        return visitor.VisitEmitStatement(node: this);
     }
 }
 
@@ -468,7 +461,7 @@ public record BlockStatement(List<Statement> Statements, SourceLocation Location
 /// <list type="bullet">
 /// <item>Structural matching: when value { Point(x, y) => ... }</item>
 /// <item>Guard conditions: when x { n if n > 0 => ... }</item>
-/// <item>Exhaustiveness checking: compiler ensures all cases are covered</item>
+/// <item>Exhaustiveness checking: builder ensures all cases are covered</item>
 /// <item>Variable binding: patterns can extract and bind values</item>
 /// </list>
 /// </remarks>
@@ -505,7 +498,7 @@ public record WhenClause(Pattern Pattern, Statement Body, SourceLocation Locatio
 /// Break statement behavior:
 /// <list type="bullet">
 /// <item>Exits innermost loop only (while, for, when with iteration)</item>
-/// <item>Compile-time error if used outside loop context</item>
+/// <item>Build-time error if used outside loop context</item>
 /// <item>Skips any remaining loop iterations</item>
 /// <item>Continues execution after loop construct</item>
 /// </list>
@@ -529,7 +522,7 @@ public record BreakStatement(SourceLocation Location) : Statement(Location: Loca
 /// <list type="bullet">
 /// <item>Skips remaining statements in current loop iteration</item>
 /// <item>Returns to loop condition evaluation (while) or next element (for)</item>
-/// <item>Compile-time error if used outside loop context</item>
+/// <item>Build-time error if used outside loop context</item>
 /// <item>Does not exit the loop, only skips current iteration</item>
 /// </list>
 /// </remarks>
@@ -794,16 +787,16 @@ public record ElsePattern(string? VariableName, SourceLocation Location)
 
 /// <summary>
 /// Pattern for destructuring records and similar types.
-/// Used in let bindings and pattern matching for extracting fields.
+/// Used in var bindings and pattern matching for extracting fields.
 /// </summary>
 /// <param name="Bindings">List of field bindings to extract</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>let (center, radius) = circle</item>
-/// <item>let (x, y) = point</item>
-/// <item>let ((x, y), radius) = circle (nested)</item>
+/// <item>var (center, radius) = circle</item>
+/// <item>var (x, y) = point</item>
+/// <item>var ((x, y), radius) = circle (nested)</item>
 /// </list>
 /// </remarks>
 public record DestructuringPattern(
@@ -866,23 +859,24 @@ public record DangerStatement(BlockStatement Body, SourceLocation Location)
 #endregion
 
 /// <summary>
-/// Represents a resource management declaration (using name = resource_expr).
-/// Resource lifetime is tied to the enclosing scope; cleanup occurs at return/release.
+/// Represents a scoped resource management block (using expr as name).
+/// Resource lifetime is tied to the indented body; cleanup occurs at block exit.
 /// </summary>
 /// <remarks>
-/// <para>Syntax: <c>using conn = db.open()</c></para>
+/// <para>Syntax: <c>using open("file.txt") as file</c></para>
 /// <para>The resource expression must return an object that implements a disposable/closeable protocol.</para>
 /// <para>Example:</para>
 /// <code>
-/// using file = open("file.txt")
-/// let content = file.read_all()
-/// process(content)
-/// # file is automatically closed at return/release
+/// using open("file.txt") as file
+///   var content = file.read_all()
+///   process(content)
+///   # file is automatically closed at block exit
 /// </code>
 /// </remarks>
 public record UsingStatement(
     Expression Resource,
     string Name,
+    Statement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -892,25 +886,3 @@ public record UsingStatement(
     }
 }
 
-/// <summary>
-/// Represents a premature resource cleanup statement (release name).
-/// Forces cleanup of a using-bound resource before the enclosing scope exits.
-/// </summary>
-/// <remarks>
-/// <para>Syntax: <c>release conn</c></para>
-/// <para>Example:</para>
-/// <code>
-/// using conn = db.open()
-/// let data = conn.query("SELECT ...")
-/// release conn  # done with connection early
-/// process(data)  # conn no longer usable
-/// </code>
-/// </remarks>
-public record ReleaseStatement(string Name, SourceLocation Location) : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitReleaseStatement(node: this);
-    }
-}

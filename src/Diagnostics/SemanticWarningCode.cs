@@ -1,15 +1,15 @@
-namespace RazorForge.Diagnostics;
+namespace SemanticAnalysis.Diagnostics;
 
 /// <summary>
 /// Semantic warning codes for RazorForge (RF-W prefix).
-/// Covers non-fatal issues that may indicate problems but allow compilation.
+/// Covers non-fatal issues that may indicate problems but allow building.
 ///
 /// Code ranges:
 /// - RF-W001-RF-W049: Unused Code Warnings
 /// - RF-W050-RF-W099: Unreachable Code Warnings
 /// - RF-W100-RF-W149: Deprecated Feature Warnings
 /// - RF-W150-RF-W199: Redundant Code Warnings
-/// - RF-W200-RF-W249: Mutation Warnings
+/// - RF-W200-RF-W249: Modification Warnings
 /// - RF-W250-RF-W299: Pattern Matching Warnings
 /// - RF-W300-RF-W349: Style Warnings
 /// - RF-W350-RF-W399: Performance Warnings
@@ -30,7 +30,7 @@ public enum SemanticWarningCode
     /// <summary>Private routine is never called.</summary>
     UnusedPrivateRoutine = 3,
 
-    /// <summary>Private type is never instantiated or referenced.</summary>
+    /// <summary>Private type is never created or referenced.</summary>
     UnusedPrivateType = 4,
 
     /// <summary>Import is declared but no symbols from it are used.</summary>
@@ -91,7 +91,7 @@ public enum SemanticWarningCode
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>Method is readonly, no ! token needed.</summary>
-    UnnecessaryMutationToken = 150,
+    UnnecessaryModificationToken = 150,
 
     /// <summary>Redundant type annotation matches inferred type.</summary>
     RedundantTypeAnnotation = 151,
@@ -109,11 +109,11 @@ public enum SemanticWarningCode
     UnusedExpressionResult = 155,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MUTATION WARNINGS (RF-W200 - RF-W249)
+    // MODIFICATION WARNINGS (RF-W200 - RF-W249)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Variable marked mutable but never mutated.</summary>
-    UnnecessaryMutable = 200,
+    /// <summary>Variable marked modifiable but never modified.</summary>
+    UnnecessaryModifiable = 200,
 
     /// <summary>Method could be marked @readonly but is not.</summary>
     MethodCouldBeReadonly = 201,
@@ -190,7 +190,7 @@ public static class SemanticWarningCodeExtensions
                 < 100 => "Unreachable Code",
                 < 150 => "Deprecated Feature",
                 < 200 => "Redundant Code",
-                < 250 => "Mutation",
+                < 250 => "Modification",
                 < 300 => "Pattern Matching",
                 < 350 => "Style",
                 < 400 => "Performance",

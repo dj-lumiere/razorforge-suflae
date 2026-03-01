@@ -1,14 +1,13 @@
-﻿using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
-using RazorForge.Diagnostics;
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing expression parsing (precedence climbing chain).
 /// </summary>
-public partial class SuflaeParser
+public partial class Parser
 {
     /// <summary>
     /// Entry point for expression parsing. Delegates to the assignment level.
@@ -25,7 +24,7 @@ public partial class SuflaeParser
     /// Syntax: <c>target = value</c>, <c>target += value</c>, etc.
     /// Right-associative to support chained assignments.
     /// Base compound assignments (+=, -=, etc.) emit CompoundAssignmentExpression for in-place dispatch.
-    /// Overflow variants (+%=, +^=, etc.) and ??= are desugared: <c>a +%= b</c> becomes <c>a = a.__add_wrap__(b)</c>.
+    /// Overflow variants (+%=, +^=, etc.) and ??= expand to: <c>a +%= b</c> becomes <c>a = a +% b</c>.
     /// </summary>
     /// <returns>The parsed expression, possibly an assignment.</returns>
     private Expression ParseAssignment()
@@ -51,7 +50,7 @@ public partial class SuflaeParser
 
         value = ParseAssignment();
 
-        // Base operators with in-place dunder support → CompoundAssignmentExpression
+        // Base operators with in-place dunder support -> CompoundAssignmentExpression
         if (compoundOp.Value.GetInPlaceMethodName() != null)
         {
             return new CompoundAssignmentExpression(
@@ -61,12 +60,12 @@ public partial class SuflaeParser
                 Location: expr.Location);
         }
 
-        // Overflow variants and ??= → desugar to a = a.__op__(b)
-        Expression binaryExpr = CreateBinaryExpression(
-            left: expr,
-            op: compoundOp.Value,
-            right: value,
-            location: expr.Location);
+        // Overflow variants and ??= -> expand to a = a op b
+        Expression binaryExpr = new BinaryExpression(
+            Left: expr,
+            Operator: compoundOp.Value,
+            Right: value,
+            Location: expr.Location);
         return new BinaryExpression(Left: expr,
             Operator: BinaryOperator.Assign,
             Right: binaryExpr,
@@ -102,10 +101,11 @@ public partial class SuflaeParser
             TokenType.MinusWrapAssign => BinaryOperator.SubtractWrap,
             TokenType.MultiplyWrapAssign => BinaryOperator.MultiplyWrap,
             TokenType.PowerWrapAssign => BinaryOperator.PowerWrap,
-            TokenType.PlusSaturateAssign => BinaryOperator.AddSaturate,
-            TokenType.MinusSaturateAssign => BinaryOperator.SubtractSaturate,
-            TokenType.MultiplySaturateAssign => BinaryOperator.MultiplySaturate,
-            TokenType.PowerSaturateAssign => BinaryOperator.PowerSaturate,
+            TokenType.PlusClampAssign => BinaryOperator.AddClamp,
+            TokenType.MinusClampAssign => BinaryOperator.SubtractClamp,
+            TokenType.MultiplyClampAssign => BinaryOperator.MultiplyClamp,
+            TokenType.SlashClampAssign => BinaryOperator.TrueDivClamp,
+            TokenType.PowerClampAssign => BinaryOperator.PowerClamp,
             _ => null
         };
 
@@ -159,10 +159,11 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw new SuflaeGrammarException(
-                        SuflaeDiagnosticCode.UnexpectedToken,
+                    throw new GrammarException(
+                        GrammarDiagnosticCode.UnexpectedToken,
                         "Expected '.' or '[' in with expression",
-                        fileName, CurrentToken.Line, CurrentToken.Column);
+                        fileName, CurrentToken.Line, CurrentToken.Column,
+                        _language);
                 }
 
                 Consume(type: TokenType.Assign, errorMessage: "Expected '=' after field or index in with expression");
@@ -293,8 +294,8 @@ public partial class SuflaeParser
                 Location: expr.Location);
         }
 
-        // Handle descending range expressions: A downto B or A downto B by C
-        if (Match(type: TokenType.Downto))
+        // Handle exclusive range expressions: A til B or A til B by C
+        if (Match(type: TokenType.Til))
         {
             Expression end = ParseLogicalAnd();
             Expression? step = null;
@@ -351,11 +352,11 @@ public partial class SuflaeParser
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseComparison();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -387,36 +388,6 @@ public partial class SuflaeParser
             Token op = PeekToken(offset: -1);
             BinaryOperator binOp = TokenToBinaryOperator(tokenType: op.Type);
 
-            // Validate chain direction consistency
-            if (operators.Count > 0)
-            {
-                // Determine the direction of existing chain
-                bool isAscending = operators.All(predicate: o =>
-                    o == BinaryOperator.Less ||
-                    o == BinaryOperator.LessEqual ||
-                    o == BinaryOperator.Equal);
-                bool isDescending = operators.All(predicate: o =>
-                    o == BinaryOperator.Greater ||
-                    o == BinaryOperator.GreaterEqual ||
-                    o == BinaryOperator.Equal);
-
-                // Check if new operator is compatible
-                bool newIsAscending = binOp == BinaryOperator.Less ||
-                                      binOp == BinaryOperator.LessEqual ||
-                                      binOp == BinaryOperator.Equal;
-                bool newIsDescending = binOp == BinaryOperator.Greater ||
-                                       binOp == BinaryOperator.GreaterEqual ||
-                                       binOp == BinaryOperator.Equal;
-
-                if ((isAscending && !newIsAscending) || (isDescending && !newIsDescending))
-                {
-                    throw new SuflaeGrammarException(
-                        SuflaeDiagnosticCode.UnexpectedToken,
-                        "Invalid comparison chain: cannot mix ascending (<, <=) and descending (>, >=) operators",
-                        fileName, CurrentToken.Line, CurrentToken.Column);
-                }
-            }
-
             operators.Add(item: binOp);
             Expression right = ParseIsExpression();
             operands.Add(item: right);
@@ -431,12 +402,12 @@ public partial class SuflaeParser
         }
         if (operators.Count == 1)
         {
-            // Single comparison - desugar to method call
-            return CreateBinaryExpression(
-                left: operands[index: 0],
-                op: operators[index: 0],
-                right: operands[index: 1],
-                location: GetLocation());
+            // Single comparison
+            return new BinaryExpression(
+                Left: operands[index: 0],
+                Operator: operators[index: 0],
+                Right: operands[index: 1],
+                Location: GetLocation());
         }
 
         return expr;
@@ -452,8 +423,8 @@ public partial class SuflaeParser
     /// - <c>expr isnot Type</c> - negated type check
     /// - <c>expr in collection</c> - membership test (desugars to collection.__contains__(expr))
     /// - <c>expr notin collection</c> - negated membership test
-    /// - <c>expr follows Protocol</c> - protocol conformance check
-    /// - <c>expr notfollows Protocol</c> - negated protocol check
+    /// - <c>expr obeys Protocol</c> - protocol conformance check
+    /// - <c>expr disobeys Protocol</c> - negated protocol check
     /// Context-sensitive: disabled inside when clause bodies to avoid ambiguity.
     /// </summary>
     /// <returns>The parsed expression.</returns>
@@ -461,18 +432,18 @@ public partial class SuflaeParser
     {
         Expression expr = ParseBitwiseOr();
 
-        // Handle is/isnot/isonly/in/notin/follows/notfollows expressions when not in when pattern/clause context
+        // Handle is/isnot/isonly/in/notin/obeys/disobeys expressions when not in when pattern/clause context
         while (!_inWhenPatternContext && !_inWhenClauseBody && Match(TokenType.Is,
                    TokenType.IsNot, TokenType.IsOnly,
                    TokenType.In,
                    TokenType.NotIn,
-                   TokenType.Follows,
-                   TokenType.NotFollows))
+                   TokenType.Obeys,
+                   TokenType.Disobeys))
         {
             Token op = PeekToken(offset: -1);
             SourceLocation location = GetLocation(token: op);
 
-            // Handle 'isonly' — always a flags test (exact match)
+            // Handle 'isonly' -- always a flags test (exact match)
             if (op.Type == TokenType.IsOnly)
             {
                 string firstFlag = ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'");
@@ -524,7 +495,7 @@ public partial class SuflaeParser
                         break;
                     }
                     // Check for single binding: is Type identifier (only for 'is', not 'isnot')
-                    case false when Check(TokenType.Identifier, TokenType.TypeIdentifier) && !IsKeywordToken(token: CurrentToken):
+                    case false when Check(TokenType.Identifier) && !IsKeywordToken(token: CurrentToken):
                     {
                         string variableName = Advance()
                            .Text;
@@ -549,7 +520,7 @@ public partial class SuflaeParser
             }
             else
             {
-                // Handle follows/notfollows as binary operators
+                // Handle obeys/disobeys as binary operators
                 Expression right = ParseBitwiseOr();
                 expr = new BinaryExpression(Left: expr,
                     Operator: TokenToBinaryOperator(tokenType: op.Type),
@@ -782,7 +753,7 @@ public partial class SuflaeParser
     {
         return token.Type switch
         {
-            TokenType.And or TokenType.Or or TokenType.Not or TokenType.Is or TokenType.IsNot or TokenType.In or TokenType.NotIn or TokenType.Follows or TokenType.NotFollows or TokenType.If or TokenType.Else or TokenType.While or TokenType.For or TokenType.Return or TokenType.Throw or TokenType.When or TokenType.Then or TokenType.To or TokenType.Downto or TokenType.By => true,
+            TokenType.And or TokenType.Or or TokenType.Not or TokenType.Is or TokenType.IsNot or TokenType.In or TokenType.NotIn or TokenType.Obeys or TokenType.Disobeys or TokenType.If or TokenType.Else or TokenType.While or TokenType.For or TokenType.Return or TokenType.Throw or TokenType.When or TokenType.Then or TokenType.To or TokenType.Til or TokenType.By => true,
             _ => false
         };
     }
@@ -800,11 +771,11 @@ public partial class SuflaeParser
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseBitwiseXor();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -823,11 +794,11 @@ public partial class SuflaeParser
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseBitwiseAnd();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -846,11 +817,11 @@ public partial class SuflaeParser
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseShift();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -858,7 +829,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses bit shift expressions.
-    /// Syntax: <c>a &lt;&lt; b</c>, <c>a &gt;&gt; b</c>, and checked variants.
+    /// Syntax: <c>a &lt;&lt; b</c>, <c>a &gt;&gt; b</c>.
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParseShift()
@@ -866,18 +837,17 @@ public partial class SuflaeParser
         Expression expr = ParseAdditive();
 
         while (Match(TokenType.LeftShift,
-                   TokenType.LeftShiftChecked,
                    TokenType.RightShift,
                    TokenType.LogicalLeftShift,
                    TokenType.LogicalRightShift))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseAdditive();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -885,7 +855,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses additive expressions.
-    /// Syntax: <c>a + b</c>, <c>a - b</c>, and overflow variants (+%, +^, +!, -%, -^, -!).
+    /// Syntax: <c>a + b</c>, <c>a - b</c>, and overflow variants (+%, +^, -%, -^).
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expression ParseAdditive()
@@ -895,19 +865,17 @@ public partial class SuflaeParser
         while (Match(TokenType.Plus,
                    TokenType.Minus,
                    TokenType.PlusWrap,
-                   TokenType.PlusSaturate,
-                   TokenType.PlusChecked,
+                   TokenType.PlusClamp,
                    TokenType.MinusWrap,
-                   TokenType.MinusSaturate,
-                   TokenType.MinusChecked))
+                   TokenType.MinusClamp))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseMultiplicative();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -927,18 +895,16 @@ public partial class SuflaeParser
                    TokenType.Percent,
                    TokenType.Divide,
                    TokenType.MultiplyWrap,
-                   TokenType.MultiplySaturate,
-                   TokenType.MultiplyChecked,
-                   TokenType.DivideChecked,
-                   TokenType.ModuloChecked))
+                   TokenType.MultiplyClamp,
+                   TokenType.SlashClamp))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParsePower();
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -946,7 +912,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses power/exponentiation expressions.
-    /// Syntax: <c>a ** b</c> and overflow variants (**%, **^, **!).
+    /// Syntax: <c>a ** b</c> and overflow variants (**%, **^).
     /// Power is right-associative: <c>a ** b ** c</c> = <c>a ** (b ** c)</c>
     /// </summary>
     /// <returns>The parsed expression.</returns>
@@ -956,16 +922,15 @@ public partial class SuflaeParser
 
         if (Match(TokenType.Power,
                    TokenType.PowerWrap,
-                   TokenType.PowerSaturate,
-                   TokenType.PowerChecked))
+                   TokenType.PowerClamp))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParsePower(); // Recursive call for right-associativity
-            expr = CreateBinaryExpression(
-                left: expr,
-                op: TokenToBinaryOperator(tokenType: op.Type),
-                right: right,
-                location: GetLocation(token: op));
+            expr = new BinaryExpression(
+                Left: expr,
+                Operator: TokenToBinaryOperator(tokenType: op.Type),
+                Right: right,
+                Location: GetLocation(token: op));
         }
 
         return expr;
@@ -979,6 +944,14 @@ public partial class SuflaeParser
     /// <returns>The parsed expression.</returns>
     private Expression ParseUnary()
     {
+        // Handle steal expression (steal expr = ownership transfer, RazorForge only)
+        if (Match(type: TokenType.Steal))
+        {
+            SourceLocation stealLocation = GetLocation(token: PeekToken(offset: -1));
+            Expression operand = ParseUnary(); // Right-associative
+            return new StealExpression(Operand: operand, Location: stealLocation);
+        }
+
         // Handle backindex operator (^n = index from end)
         if (Match(type: TokenType.Caret))
         {
@@ -1044,20 +1017,18 @@ public partial class SuflaeParser
     /// <summary>
     /// Parses postfix expressions: function calls, indexing, member access, and more.
     /// Syntax: <c>f(args)</c>, <c>x[index]</c>, <c>obj.member</c>, <c>obj.method!()</c>, <c>value with (field: newVal)</c>
-    /// Handles generic method calls: <c>func&lt;T&gt;()</c>, <c>obj.method&lt;T&gt;()</c>
+    /// Handles generic method calls: <c>func[T]()</c>, <c>obj.method[T]()</c>
     /// </summary>
     /// <remarks>
     /// Postfix operators in order of check:
-    /// 1. Generic function call: func&lt;T&gt;() or func!&lt;T&gt;()
+    /// 1. Generic function call: func[T]() or func![T]()
     /// 2. Failable function call: func!(args)
     /// 3. Regular function call: func(args)
     /// 4. Index access: expr[index]
     /// 5. Member access: expr.member (with sub-cases for generic/failable methods)
     /// 6. Functional update: expr with (field: value)
     ///
-    /// DISAMBIGUATION CHALLENGE:
-    /// The '&lt;' token can be either a generic bracket or a less-than operator.
-    /// We disambiguate by scanning ahead: if we find &lt;...&gt;() or &lt;...&gt;., it's generics.
+    /// Generic type arguments use '[' and ']' which don't conflict with any operators.
     /// </remarks>
     /// <returns>The parsed expression.</returns>
     private Expression ParsePostfix()
@@ -1066,91 +1037,25 @@ public partial class SuflaeParser
 
         while (true)
         {
-            // ═══════════════════════════════════════════════════════════════════════════
-            // CASE 1: Generic function call - func<T>() or func!<T>()
-            // ═══════════════════════════════════════════════════════════════════════════
-            // The ! must come BEFORE < if present: func!<T>() not func<T>!()
-            if (expr is IdentifierExpression expression && (Check(type: TokenType.Less) || Check(type: TokenType.Bang) && PeekToken(offset: 1)
-                   .Type == TokenType.Less))
+            // ===============================================================================
+            // CASE 1: Generic function call - func[T]() or func![T]()
+            // ===============================================================================
+            // The ! must come BEFORE [ if present: func![T]() not func[T]!()
+            // IsLikelyGenericAfterIdentifier() checks bracket content and what follows ]
+            // to distinguish generic args from index/slice (e.g. list[5], list[0 to 5])
+            if (expr is IdentifierExpression expression && IsLikelyGenericAfterIdentifier())
             {
-                // Check for failable marker ! before generic parameters: func!<T>
+                // Check for failable marker ! before generic parameters: func![T]
                 bool isMemoryOperation = Match(type: TokenType.Bang);
 
-                // Now we should be at '<'
-                if (!Check(type: TokenType.Less))
-                {
-                    break;
-                }
-
-                // Lookahead to check if this is likely a generic or a comparison
-                int savedPos = Position;
-                Advance(); // consume '<'
-
-                bool isLikelyGeneric = false;
-                int scanPos = Position;
-                int depth = 1;
-
-                while (scanPos < Tokens.Count && depth > 0)
-                {
-                    TokenType tt = Tokens[index: scanPos].Type;
-                    if (tt == TokenType.Less)
-                    {
-                        depth++;
-                    }
-                    else if (tt == TokenType.Greater)
-                    {
-                        depth--;
-                        if (depth == 0)
-                        {
-                            if (scanPos + 1 < Tokens.Count && (Tokens[index: scanPos + 1].Type == TokenType.LeftParen || Tokens[index: scanPos + 1].Type == TokenType.Dot))
-                            {
-                                isLikelyGeneric = true;
-                            }
-
-                            break;
-                        }
-                    }
-                    else if (tt == TokenType.RightShift)
-                    {
-                        depth -= 2;
-                        if (depth == 0)
-                        {
-                            if (scanPos + 1 < Tokens.Count && (Tokens[index: scanPos + 1].Type == TokenType.LeftParen || Tokens[index: scanPos + 1].Type == TokenType.Dot))
-                            {
-                                isLikelyGeneric = true;
-                            }
-
-                            break;
-                        }
-
-                        if (depth < 0)
-                        {
-                            break;
-                        }
-                    }
-                    else if (tt == TokenType.Newline || tt == TokenType.Colon)
-                    {
-                        break;
-                    }
-
-                    scanPos++;
-                }
-
-                Position = savedPos;
-
-                if (!isLikelyGeneric)
-                {
-                    break;
-                }
-
-                Advance(); // consume '<' again
+                Advance(); // consume '['
                 var typeArgs = new List<TypeExpression>();
                 do
                 {
                     typeArgs.Add(item: ParseType());
                 } while (Match(type: TokenType.Comma));
 
-                ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic type arguments");
+                Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic type arguments");
 
                 if (Match(type: TokenType.LeftParen))
                 {
@@ -1211,20 +1116,14 @@ public partial class SuflaeParser
 
                 if (index is RangeExpression range)
                 {
-                    // [a to b] → SliceExpression (desugars to __getslice__)
-                    if (range.IsDescending)
-                    {
-                        throw new SuflaeGrammarException(
-                            SuflaeDiagnosticCode.UnexpectedToken,
-                            "'downto' is not supported in slice syntax. Use ascending 'to' only.",
-                            fileName, CurrentToken.Line, CurrentToken.Column);
-                    }
+                    // [a to b] or [a til b] -> SliceExpression (desugars to __getslice__)
                     if (range.Step != null)
                     {
-                        throw new SuflaeGrammarException(
-                            SuflaeDiagnosticCode.UnexpectedToken,
+                        throw new GrammarException(
+                            GrammarDiagnosticCode.UnexpectedToken,
                             "Step ('by') is not supported in slice syntax.",
-                            fileName, CurrentToken.Line, CurrentToken.Column);
+                            fileName, CurrentToken.Line, CurrentToken.Column,
+                            _language);
                     }
                     expr = new SliceExpression(Object: expr, Start: range.Start, End: range.End,
                         Location: expr.Location);
@@ -1234,120 +1133,67 @@ public partial class SuflaeParser
                     expr = new IndexExpression(Object: expr, Index: index, Location: expr.Location);
                 }
             }
+            else if (Match(type: TokenType.QuestionDot))
+            {
+                // Optional chaining: obj?.member
+                string member = ConsumeMethodName(errorMessage: "Expected member name after '?.'");
+                expr = new OptionalMemberExpression(Object: expr, PropertyName: member, Location: expr.Location);
+            }
             else if (Match(type: TokenType.Dot))
             {
                 // Member access - allow failable methods with ! suffix
                 string member = ConsumeMethodName(errorMessage: "Expected member name after '.'");
 
-                // Check for failable marker ! before generic parameters: obj.method!<T>
+                // Check for failable marker ! before generic parameters: obj.method![T]
                 bool isGenericMemOp = false;
                 if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
-                       .Type == TokenType.Less)
+                       .Type == TokenType.LeftBracket)
                 {
                     isGenericMemOp = true;
                     Match(type: TokenType.Bang);
                 }
 
                 // Check for generic method call with type parameters
-                // Disambiguate by scanning for the pattern <...>() or <...>.
-                // If we find matching > followed by ( or ., it's definitely a generic call.
-                if (Check(type: TokenType.Less))
+                // Disambiguate by checking bracket content (must look like type args)
+                // and what follows ] (must be ( or .)
+                if (Check(type: TokenType.LeftBracket) && IsLikelyGenericBracket(acceptDotAfterBracket: true))
                 {
-                    int savedPos = Position;
-                    Advance(); // consume '<'
-
-                    // Scan forward to find matching > and check what follows
-                    bool isLikelyGeneric = false;
-                    int scanPos = Position;
-                    int depth = 1;
-
-                    while (scanPos < Tokens.Count && depth > 0)
+                    Advance(); // consume '['
+                    var typeArgs = new List<TypeExpression>();
+                    do
                     {
-                        TokenType tt = Tokens[index: scanPos].Type;
-                        if (tt == TokenType.Less)
-                        {
-                            depth++;
-                        }
-                        else if (tt == TokenType.Greater)
-                        {
-                            depth--;
-                            if (depth == 0)
-                            {
-                                if (scanPos + 1 < Tokens.Count &&
-                                    (Tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
-                                     Tokens[index: scanPos + 1].Type == TokenType.Dot))
-                                {
-                                    isLikelyGeneric = true;
-                                }
+                        typeArgs.Add(item: ParseType());
+                    } while (Match(type: TokenType.Comma));
 
-                                break;
-                            }
-                        }
-                        else if (tt == TokenType.RightShift)
-                        {
-                            // >> could be two > in nested generics
-                            depth -= 2;
-                            if (depth <= 0)
-                            {
-                                if (scanPos + 1 < Tokens.Count &&
-                                    (Tokens[index: scanPos + 1].Type == TokenType.LeftParen ||
-                                     Tokens[index: scanPos + 1].Type == TokenType.Dot))
-                                {
-                                    isLikelyGeneric = true;
-                                }
+                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic type arguments");
 
-                                break;
-                            }
-                        }
-                        else if (tt == TokenType.Newline || tt == TokenType.Colon)
+                    if (Match(type: TokenType.LeftParen))
+                    {
+                        List<Expression> genericArgs = ParseArgumentList();
+                        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
+
+                        string methodName = member;
+                        if (isGenericMemOp)
                         {
-                            break;
+                            methodName += "!";
                         }
 
-                        scanPos++;
+                        expr = new GenericMethodCallExpression(Object: expr,
+                            MethodName: methodName,
+                            TypeArguments: typeArgs,
+                            Arguments: genericArgs,
+                            IsMemoryOperation: isGenericMemOp,
+                            Location: expr.Location);
+                    }
+                    else
+                    {
+                        expr = new GenericMemberExpression(Object: expr,
+                            MemberName: member,
+                            TypeArguments: typeArgs,
+                            Location: expr.Location);
                     }
 
-                    Position = savedPos;
-
-                    if (isLikelyGeneric)
-                    {
-                        Advance(); // consume '<' again
-                        var typeArgs = new List<TypeExpression>();
-                        do
-                        {
-                            typeArgs.Add(item: ParseType());
-                        } while (Match(type: TokenType.Comma));
-
-                        ConsumeGreaterForGeneric(errorMessage: "Expected '>' after generic type arguments");
-
-                        if (Match(type: TokenType.LeftParen))
-                        {
-                            List<Expression> genericArgs = ParseArgumentList();
-                            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
-
-                            string methodName = member;
-                            if (isGenericMemOp)
-                            {
-                                methodName += "!";
-                            }
-
-                            expr = new GenericMethodCallExpression(Object: expr,
-                                MethodName: methodName,
-                                TypeArguments: typeArgs,
-                                Arguments: genericArgs,
-                                IsMemoryOperation: isGenericMemOp,
-                                Location: expr.Location);
-                        }
-                        else
-                        {
-                            expr = new GenericMemberExpression(Object: expr,
-                                MemberName: member,
-                                TypeArguments: typeArgs,
-                                Location: expr.Location);
-                        }
-
-                        continue;
-                    }
+                    continue;
                 }
 
                 // Regular member access
@@ -1377,12 +1223,35 @@ public partial class SuflaeParser
                     expr = new MemberExpression(Object: expr, PropertyName: member, Location: expr.Location);
                 }
             }
-            // ═══════════════════════════════════════════════════════════════════════════
+            // ===============================================================================
             // CASE 7: Force unwrap - expr!! (extract value from Maybe<T>, panic if None)
-            // ═══════════════════════════════════════════════════════════════════════════
+            // ===============================================================================
             else if (Match(type: TokenType.BangBang))
             {
                 expr = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap, Operand: expr, Location: expr.Location);
+            }
+            // ===============================================================================
+            // CASE 8: Multi-line dot chaining - skip newlines if followed by a dot
+            // Allows:  items
+            //            .where(x => x > 0)
+            //            .select(x => x * 2)
+            // ===============================================================================
+            else if (Check(type: TokenType.Newline))
+            {
+                int offset = 0;
+                while (PeekToken(offset: offset).Type == TokenType.Newline)
+                {
+                    offset++;
+                }
+
+                if (PeekToken(offset: offset).Type == TokenType.Dot)
+                {
+                    // Consume newlines and let next iteration handle the dot
+                    while (Match(type: TokenType.Newline)) { }
+                    continue;
+                }
+
+                break;
             }
             else
             {
@@ -1463,9 +1332,9 @@ public partial class SuflaeParser
             return ParseArrowLambdaExpression(location: location);
         }
 
-        // Identifiers and Suflae-specific keywords
+        // Identifiers and language-specific keywords
         // Note: 'me' is tokenized as TokenType.Me, so we need to handle it explicitly
-        if (Match(TokenType.Identifier, TokenType.TypeIdentifier, TokenType.Me))
+        if (Match(TokenType.Identifier, TokenType.Me))
         {
             string text = PeekToken(offset: -1)
                .Text;
@@ -1517,26 +1386,26 @@ public partial class SuflaeParser
         }
 
         // When expression: when x: pattern => expr, ...
-        // Used in expression context: return when x: ..., let y = when x: ...
+        // Used in expression context: return when x: ..., var y = when x: ...
         if (Match(type: TokenType.When))
         {
             return ParseWhenExpression(location: location);
         }
 
-        // Dependent waitfor with 'after' clause: after dep [as binding] waitfor expr [until timeout]
+        // Dependent waitfor with 'after' clause: after dep [as binding] waitfor expr [within timeout]
         if (Match(type: TokenType.After))
         {
             return ParseDependentWaitfor(location: location);
         }
 
-        // Waitfor expression: waitfor expr or waitfor expr until timeout
-        // Used for async/concurrency: let result = waitfor asyncOperation
+        // Waitfor expression: waitfor expr or waitfor expr within timeout
+        // Used for async/concurrency: var result = waitfor asyncOperation
         if (Match(type: TokenType.Waitfor))
         {
             Expression operand = ParseUnary(); // Parse the expression to wait for
             Expression? timeout = null;
 
-            if (Match(type: TokenType.Until))
+            if (Match(type: TokenType.Within))
             {
                 timeout = ParseUnary(); // Parse the timeout expression
             }
@@ -1566,15 +1435,15 @@ public partial class SuflaeParser
     /// </summary>
     /// <remarks>
     /// Storing literals as strings enables:
-    /// - Contextual type inference: `let a: S16 = 100` treats 100 as S16
-    /// - Arbitrary precision: `let b: Integer = 123...123` handles any size
+    /// - Contextual type inference: `var a: S16 = 100` treats 100 as S16
+    /// - Arbitrary precision: `var b: Integer = 123...123` handles any size
     /// - Overflow detection: semantic analyzer can validate value fits in target type
     /// </remarks>
     private bool TryParseNumericLiteral(SourceLocation location, out Expression? result)
     {
         result = null;
 
-        // Integer literals (Suflae uses S32/S64/S128 and Integer for arbitrary precision)
+        // Integer literals (S32/S64/S128 and Integer for arbitrary precision)
         if (Match(TokenType.Integer,
                 TokenType.S32Literal,
                 TokenType.S64Literal,
@@ -1813,22 +1682,27 @@ public partial class SuflaeParser
                 _inWhenPatternContext = false;
             }
 
-            // Suflae supports two clause syntaxes:
+            // Mandatory => on all when expression arms:
             // 1. is PATTERN => expr           (single expression)
-            // 2. is PATTERN                   (indented block)
-            //        statements...
+            // 2. is PATTERN => \n INDENT ...  (block after =>)
             // Set flag to prevent 'is' expression parsing in when clause bodies
             _inWhenClauseBody = true;
             Statement body;
-            if (Match(type: TokenType.FatArrow))
+            Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after when pattern");
+            if (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Indent)
             {
-                // Single-line body: is PATTERN => expression
-                body = ParseExpressionStatement();
+                // Block form: PATTERN => \n INDENT body DEDENT
+                Advance(); // consume newline
+                body = ParseIndentedBlock();
+            }
+            else if (Match(type: TokenType.Pass))
+            {
+                body = new PassStatement(Location: GetLocation());
             }
             else
             {
-                // Multi-line body: is PATTERN followed by indented block
-                body = ParseIndentedBlock();
+                // Single-line body: PATTERN => expression
+                body = ParseExpressionStatement();
             }
 
             _inWhenClauseBody = false;
@@ -1846,7 +1720,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a dependent waitfor expression with task dependencies.
-    /// Syntax: after dep [as binding] [, ...] waitfor expr [until timeout]
+    /// Syntax: after dep [as binding] [, ...] waitfor expr [within timeout]
     /// </summary>
     /// <param name="location">Source location of the after keyword</param>
     /// <returns>The parsed DependentWaitforExpression</returns>
@@ -1860,7 +1734,7 @@ public partial class SuflaeParser
         Expression operand = ParseUnary();
         Expression? timeout = null;
 
-        if (Match(type: TokenType.Until))
+        if (Match(type: TokenType.Within))
         {
             timeout = ParseUnary();
         }
@@ -1979,10 +1853,11 @@ public partial class SuflaeParser
         if (expressions.Count != bindings.Count)
         {
             Token current = CurrentToken;
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.TupleDependencyCountMismatch,
+            throw new GrammarException(
+                GrammarDiagnosticCode.TupleDependencyCountMismatch,
                 $"Tuple dependency count ({expressions.Count}) does not match binding count ({bindings.Count})",
-                fileName, current.Line, current.Column);
+                fileName, current.Line, current.Column,
+                _language);
         }
 
         // Create TaskDependency for each pair
@@ -1997,5 +1872,124 @@ public partial class SuflaeParser
         }
 
         return dependencies;
+    }
+
+    /// <summary>
+    /// Checks whether the current <c>[</c> starts a generic type argument list.
+    /// Verifies that bracket contents look like type arguments (identifiers, commas, <c>?</c>, nested <c>[]</c>)
+    /// and that the closing <c>]</c> is followed by <c>(</c> (or <c>.</c> if <paramref name="acceptDotAfterBracket"/> is true).
+    /// Does not modify <see cref="Position"/>.
+    /// </summary>
+    /// <param name="acceptDotAfterBracket">If true, also returns true when <c>]</c> is followed by <c>.</c> (for member access generics).</param>
+    private bool IsLikelyGenericBracket(bool acceptDotAfterBracket)
+    {
+        if (!Check(type: TokenType.LeftBracket))
+            return false;
+
+        int scanPos = Position + 1; // start after [
+        int depth = 1;
+        int matchingBracketPos = -1;
+
+        while (scanPos < Tokens.Count && depth > 0)
+        {
+            TokenType tt = Tokens[index: scanPos].Type;
+            if (tt == TokenType.LeftBracket)
+            {
+                depth++;
+            }
+            else if (tt == TokenType.RightBracket)
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    matchingBracketPos = scanPos;
+                    break;
+                }
+            }
+            else if (tt is TokenType.Newline or TokenType.Eof)
+            {
+                return false;
+            }
+            else if (depth == 1 && tt is not TokenType.Identifier and not TokenType.Comma and not TokenType.Question)
+            {
+                return false; // Content has non-type tokens (numbers, operators, range keywords, etc.)
+            }
+
+            scanPos++;
+        }
+
+        if (matchingBracketPos < 0)
+            return false;
+
+        if (matchingBracketPos + 1 >= Tokens.Count)
+            return false;
+
+        TokenType afterBracket = Tokens[index: matchingBracketPos + 1].Type;
+        return afterBracket == TokenType.LeftParen ||
+               (acceptDotAfterBracket && afterBracket == TokenType.Dot);
+    }
+
+    /// <summary>
+    /// Checks whether the current position has brackets that likely contain generic type arguments
+    /// following a standalone identifier. Returns true for patterns like <c>func[T]()</c> or <c>func![T]()</c>.
+    /// Distinguishes generic brackets from index/slice brackets by checking:
+    /// <list type="number">
+    /// <item>If preceded by <c>!</c>, always considered generic (<c>func![T]()</c>)</item>
+    /// <item>Contents must look like type arguments (identifiers, commas, <c>?</c>, nested <c>[]</c> only)</item>
+    /// <item>Closing bracket must be followed by <c>(</c> to confirm a generic call</item>
+    /// </list>
+    /// This avoids false positives like <c>list[5]</c>, <c>list[0 to 5]</c>, or <c>list[i].foo</c>.
+    /// </summary>
+    private bool IsLikelyGenericAfterIdentifier()
+    {
+        // Check for ![ (failable generic) or [ (potential generic or index)
+        bool hasBang = Check(type: TokenType.Bang) && PeekToken(offset: 1).Type == TokenType.LeftBracket;
+        if (!Check(type: TokenType.LeftBracket) && !hasBang)
+            return false;
+
+        // func![T]() is always generic — ! before [ only makes sense for generics
+        if (hasBang)
+            return true;
+
+        // Scan the bracket contents without modifying Position
+        int scanPos = Position + 1; // start after [
+        int depth = 1;
+        int matchingBracketPos = -1;
+
+        while (scanPos < Tokens.Count && depth > 0)
+        {
+            TokenType tt = Tokens[index: scanPos].Type;
+            if (tt == TokenType.LeftBracket)
+            {
+                depth++;
+            }
+            else if (tt == TokenType.RightBracket)
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    matchingBracketPos = scanPos;
+                    break;
+                }
+            }
+            else if (tt is TokenType.Newline or TokenType.Eof)
+            {
+                return false; // Unclosed or multi-line brackets — not generic
+            }
+            else if (depth == 1 && tt is not TokenType.Identifier and not TokenType.Comma and not TokenType.Question)
+            {
+                // Content at top level doesn't look like type arguments (has numbers, operators, etc.)
+                return false;
+            }
+
+            scanPos++;
+        }
+
+        if (matchingBracketPos < 0)
+            return false;
+
+        // Only treat as generic if ] is followed by ( — avoids false positives like list[i].foo
+        return matchingBracketPos + 1 < Tokens.Count &&
+               Tokens[index: matchingBracketPos + 1].Type == TokenType.LeftParen;
     }
 }

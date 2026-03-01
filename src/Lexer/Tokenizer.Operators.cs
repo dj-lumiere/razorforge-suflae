@@ -1,28 +1,26 @@
-namespace Compilers.Suflae.Lexer;
-
-using Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
-/// Partial class containing operator scanning methods for the Suflae tokenizer.
+/// Partial class containing operator scanning methods for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Suflae supports the same operators as RazorForge, including overflow variants:
+/// Both languages support the same operator set, except RazorForge does not have checked operators.
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Arithmetic: +, -, *, /, %, **</description></item>
-///   <item><description>Overflow variants: +%, -%, *% (wrap), +^, -^, *^ (saturate), +?, -?, *?, //?, %? (checked)</description></item>
+///   <item><description>Overflow variants: +%, -%, *% (wrap), +^, -^, *^, /^ (clamping)</description></item>
 ///   <item><description>Comparison: ==, !=, &lt;, &gt;, &lt;=, &lt;=&gt;, &gt;=, ===, !==</description></item>
 ///   <item><description>Bitwise: &amp;, |, ^, ~, &lt;&lt;, &gt;&gt;, &lt;&lt;&lt;, &gt;&gt;&gt;</description></item>
 ///   <item><description>Special: -&gt;, =&gt;, @intrinsic, @native</description></item>
 /// </list>
 /// </remarks>
-public partial class SuflaeTokenizer
+public partial class Tokenizer
 {
     #region Arithmetic Operators
 
     /// <summary>
-    /// Scans a plus-based operator (+, +%, +^, +?, +=, +%=, +^=).
+    /// Scans a plus-based operator (+, +%, +^, +=, +%=, +^=).
     /// </summary>
     private void ScanPlusOperator()
     {
@@ -37,8 +35,8 @@ public partial class SuflaeTokenizer
             case '^':
                 Advance();
                 AddToken(type: Match(expected: '=')
-                    ? TokenType.PlusSaturateAssign
-                    : TokenType.PlusSaturate);
+                    ? TokenType.PlusClampAssign
+                    : TokenType.PlusClamp);
                 break;
             case '=':
                 Advance();
@@ -51,7 +49,7 @@ public partial class SuflaeTokenizer
     }
 
     /// <summary>
-    /// Scans a minus-based operator (-, -%, -^, -?, -=, -%=, -^=).
+    /// Scans a minus-based operator (-, -%, -^, -=, -%=, -^=).
     /// </summary>
     /// <remarks>
     /// Arrow (-&gt;) is handled separately in ScanToken.
@@ -69,8 +67,8 @@ public partial class SuflaeTokenizer
             case '^':
                 Advance();
                 AddToken(type: Match(expected: '=')
-                    ? TokenType.MinusSaturateAssign
-                    : TokenType.MinusSaturate);
+                    ? TokenType.MinusClampAssign
+                    : TokenType.MinusClamp);
                 break;
             case '=':
                 Advance();
@@ -83,7 +81,7 @@ public partial class SuflaeTokenizer
     }
 
     /// <summary>
-    /// Scans a star-based operator (*, **, *%, *^, *?, **%, **^, **?, *=, **=, *%=, **%=, *^=, **^=).
+    /// Scans a star-based operator (*, **, *%, *^, **%, **^, *=, **=, *%=, **%=, *^=, **^=).
     /// </summary>
     private void ScanStarOperator()
     {
@@ -114,14 +112,14 @@ public partial class SuflaeTokenizer
                 if (Match(expected: '='))
                 {
                     AddToken(type: isPow
-                        ? TokenType.PowerSaturateAssign
-                        : TokenType.MultiplySaturateAssign);
+                        ? TokenType.PowerClampAssign
+                        : TokenType.MultiplyClampAssign);
                 }
                 else
                 {
                     AddToken(type: isPow
-                        ? TokenType.PowerSaturate
-                        : TokenType.MultiplySaturate);
+                        ? TokenType.PowerClamp
+                        : TokenType.MultiplyClamp);
                 }
 
                 break;
@@ -141,14 +139,20 @@ public partial class SuflaeTokenizer
     }
 
     /// <summary>
-    /// Scans a slash-based operator (/, //, //?, /=, //=).
+    /// Scans a slash-based operator (/, /^, //, /=, /^=, //=).
     /// </summary>
     private void ScanSlashOperator()
     {
         if (!Match(expected: '/'))
         {
-            // Single / - check for /=
-            if (Match(expected: '='))
+            // Single / - check for /^, /^=, /=
+            if (Match(expected: '^'))
+            {
+                AddToken(type: Match(expected: '=')
+                    ? TokenType.SlashClampAssign
+                    : TokenType.SlashClamp);
+            }
+            else if (Match(expected: '='))
             {
                 AddToken(type: TokenType.SlashAssign);
             }
@@ -159,7 +163,7 @@ public partial class SuflaeTokenizer
         }
         else
         {
-            // Double // - check for //= or //?
+            // Double // - check for //=
             if (Match(expected: '='))
             {
                 AddToken(type: TokenType.DivideAssign); // //=
@@ -172,7 +176,7 @@ public partial class SuflaeTokenizer
     }
 
     /// <summary>
-    /// Scans a percent-based operator (%, %?, %=).
+    /// Scans a percent-based operator (%, %=).
     /// </summary>
     private void ScanPercentOperator()
     {
@@ -202,7 +206,6 @@ public partial class SuflaeTokenizer
     ///   <item><description>&lt;= (LessEqual) - less than or equal</description></item>
     ///   <item><description>&lt;=&gt; (ThreeWayComparison) - spaceship operator</description></item>
     ///   <item><description>&lt;&lt; (LeftShift) - arithmetic left shift</description></item>
-    ///   <item><description>&lt;&lt;? (LeftShiftChecked) - checked left shift</description></item>
     ///   <item><description>&lt;&lt;&lt; (LogicalLeftShift) - logical left shift</description></item>
     /// </list>
     /// </para>
@@ -223,17 +226,13 @@ public partial class SuflaeTokenizer
         }
         else if (Match(expected: '<'))
         {
-            // << or <<? or <<< or <<= or <<<=
+            // << or <<< or <<= or <<<=
             if (Match(expected: '<'))
             {
                 // <<< or <<<=
                 AddToken(type: Match(expected: '=')
                     ? TokenType.LogicalLeftShiftAssign
                     : TokenType.LogicalLeftShift);
-            }
-            else if (Match(expected: '?'))
-            {
-                AddToken(type: TokenType.LeftShiftChecked); // <<?
             }
             else if (Match(expected: '='))
             {
@@ -289,14 +288,8 @@ public partial class SuflaeTokenizer
     #region Special Operators
 
     /// <summary>
-    /// Scans tokens starting with '@' (@intrinsic, @native, or standalone @).
+    /// Scans tokens starting with '@' (@intrinsic or standalone @).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// While Suflae doesn't support danger! blocks, @intrinsic and @native
-    /// are still recognized for potential future use or error reporting.
-    /// </para>
-    /// </remarks>
     private void ScanAtSign()
     {
         if (Peek() == 'i' && PeekWord() == "intrinsic")

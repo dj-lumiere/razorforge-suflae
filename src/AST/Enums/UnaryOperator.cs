@@ -27,7 +27,7 @@ public enum UnaryOperator
     /// Transfers ownership from the source variable to the destination.
     /// </summary>
     /// <remarks>
-    /// The steal operator performs compile-time ownership tracking with runtime pass-through.
+    /// The steal operator performs build-time ownership tracking with runtime pass-through.
     /// After a steal, the source variable becomes a deadref and cannot be used.
     ///
     /// Stealable types:

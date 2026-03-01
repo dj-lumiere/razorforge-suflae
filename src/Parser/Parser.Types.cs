@@ -1,18 +1,17 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.Parser;
-using Compilers.RazorForge.Parser; // For ParseException
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing type parsing and generic constraints.
 /// </summary>
-public partial class SuflaeParser
+public partial class Parser
 {
     /// <summary>
     /// Parses a type expression.
-    /// Supports: named types, generic types (Type&lt;T&gt;), Routine types (Routine&lt;A, B, R&gt;),
+    /// Supports: named types, generic types (Type[T]),
     /// Me (self type), and nullable types (T?).
     /// </summary>
     /// <returns>A <see cref="TypeExpression"/> AST node.</returns>
@@ -20,7 +19,7 @@ public partial class SuflaeParser
     {
         TypeExpression baseType = ParseBaseType();
 
-        // Handle nullable suffix: T? -> Maybe<T>
+        // Handle nullable suffix: T? -> Maybe[T]
         if (Match(type: TokenType.Question))
         {
             return new TypeExpression(
@@ -38,11 +37,12 @@ public partial class SuflaeParser
     /// <remarks>
     /// Type forms in priority order:
     /// 1. Me               - Self type in protocols/methods
-    /// 2. Routine&lt;...&gt;     - Function type with parameter/return types
-    /// 3. Name&lt;T, U&gt;       - Generic named type
+    /// 2. @intrinsic.xxx   - LLVM IR intrinsic types (RazorForge stdlib)
+    /// 3. Name[T, U]       - Generic named type
     /// 4. Name             - Simple named type
     ///
-    /// Note: Suflae does not have @intrinsic types (those are RazorForge-only for stdlib).
+    /// Named types support qualified paths like razorforge/Collections.Dict
+    /// for referencing types from other modules in type annotations.
     /// </remarks>
     private TypeExpression ParseBaseType()
     {
@@ -57,34 +57,24 @@ public partial class SuflaeParser
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 2: Routine type - arity-based function types
+        // CASE 2: Intrinsic type - direct LLVM IR types
         // ═══════════════════════════════════════════════════════════════════════════
-        // Forms:
-        //   Routine            -> zero-arg void routine
-        //   Routine<R>         -> zero-arg returning R
-        //   Routine<P, R>      -> single param P, returns R
-        //   Routine<P1, P2, R> -> two params P1/P2, returns R (last type is return)
-        if (Match(type: TokenType.Routine))
+        // Forms: @intrinsic.i1, @intrinsic.i32, @intrinsic.f64, @intrinsic.iptr, @intrinsic.uptr
+        if (Match(type: TokenType.Intrinsic))
         {
-            string name = "Routine";
+            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
 
-            // Bare 'Routine' without generics - represents a zero-arg void routine
-            if (!Match(type: TokenType.Less))
+            // Allow any identifier as intrinsic type name (i1, i8, i16, i32, i64, i128, f16, f32, f64, f128, iptr, uptr, etc.)
+            if (!Match(TokenType.Identifier))
             {
-                return new TypeExpression(Name: name, GenericArguments: null, Location: location);
+                throw new GrammarException(
+                    GrammarDiagnosticCode.ExpectedIdentifier,
+                    $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}",
+                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
 
-            // Routine types require generic arguments: Routine<R>, Routine<P, R>, Routine<P1, P2, R>
-            var typeArgs = new List<TypeExpression>();
-
-            do
-            {
-                typeArgs.Add(item: ParseType());
-            } while (Match(type: TokenType.Comma));
-
-            ConsumeGreaterForGeneric(errorMessage: "Expected '>' after Routine type arguments");
-
-            return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
+            string intrinsicName = PeekToken(offset: -1).Text;
+            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}", GenericArguments: null, Location: location);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -92,59 +82,61 @@ public partial class SuflaeParser
         // ═══════════════════════════════════════════════════════════════════════════
         // Forms:
         //   User                  -> simple type
-        //   List<T>               -> generic type
-        //   Dict<Text, S32>       -> multi-param generic
-        //   FixedBytes<4>         -> const generic (number as type arg)
-        if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+        //   List[T]               -> generic type
+        //   Dict[Text, S32]       -> multi-param generic
+        //   FixedBytes[4]         -> const generic (number as type arg)
+        if (!Match(TokenType.Identifier))
         {
-            string name = PeekToken(offset: -1)
-               .Text;
-
-            // Support qualified type paths like razorforge/Collections.Dict
-            // This allows referencing types from other modules in type annotations
-            while (Match(type: TokenType.Slash))
-            {
-                string part = ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
-                name += "/" + part;
-
-                // Handle dot separator for type within module: razorforge/Core.Bool
-                if (Match(type: TokenType.Dot))
-                {
-                    string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
-                    name += "." + typeName;
-                    break; // Dot marks the end of the path (rest is the type name)
-                }
-            }
-
-            // ─────────────────────────────────────────────────────────────────────
-            // Simple type without generics
-            // ─────────────────────────────────────────────────────────────────────
-            if (!Match(type: TokenType.Less))
-            {
-                return new TypeExpression(Name: name, GenericArguments: null, Location: location);
-            }
-
-            // ─────────────────────────────────────────────────────────────────────
-            // Generic type with type arguments
-            // ─────────────────────────────────────────────────────────────────────
-            var typeArgs = new List<TypeExpression>();
-
-            do
-            {
-                typeArgs.Add(item: ParseTypeOrConstGeneric());
-            } while (Match(type: TokenType.Comma));
-
-            ConsumeGreaterForGeneric(errorMessage: "Expected '>' after type arguments");
-
-            return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedType,
+                $"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
         }
 
-        throw ThrowParseError($"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
+        string name = PeekToken(offset: -1)
+           .Text;
+
+        // Support qualified type paths like RazorForge/Collections.Dict
+        // This allows referencing types from other modules in type annotations
+        while (Match(type: TokenType.Slash))
+        {
+            string part = ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
+            name += "/" + part;
+
+            // Handle dot separator for type within module: razorforge/Core.Bool
+            if (Match(type: TokenType.Dot))
+            {
+                string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
+                name += "." + typeName;
+                break; // Dot marks the end of the path (rest is the type name)
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Simple type without generics
+        // ─────────────────────────────────────────────────────────────────────
+        if (!Match(type: TokenType.LeftBracket))
+        {
+            return new TypeExpression(Name: name, GenericArguments: null, Location: location);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Generic type with type arguments
+        // ─────────────────────────────────────────────────────────────────────
+        var typeArgs = new List<TypeExpression>();
+
+        do
+        {
+            typeArgs.Add(item: ParseTypeOrConstGeneric());
+        } while (Match(type: TokenType.Comma));
+
+        Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after type arguments");
+
+        return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
+
     }
 
     /// <summary>
     /// Parses a type expression or a const generic literal.
-    /// Used for generic arguments like FixedBytes&lt;4&gt;.
+    /// Used for generic arguments like FixedBytes[4].
     /// Supports: integers, booleans, letters, and choice values (e.g., Color.Red).
     /// </summary>
     private TypeExpression ParseTypeOrConstGeneric()
@@ -188,112 +180,83 @@ public partial class SuflaeParser
             return new TypeExpression(Name: value, GenericArguments: null, Location: location);
         }
 
-        // Check for choice value (const generic): ChoiceType.CASE_NAME
-        // TypeIdentifier starts with uppercase (choice types follow type naming conventions)
-        // Semantic analysis will validate that the type is actually a choice type
-        if (Check(type: TokenType.TypeIdentifier) && PeekToken(offset: 1)
-               .Type == TokenType.Dot)
-        {
-            // Parse choice value: Type.CASE
-            string typeName = Advance()
-               .Text;
-            Advance(); // consume dot
-            string caseName = ConsumeIdentifier(errorMessage: "Expected choice case name after '.'");
-            string value = $"{typeName}.{caseName}";
-            return new TypeExpression(Name: value, GenericArguments: null, Location: location);
-        }
-
         // Otherwise parse as normal type
         return ParseType();
     }
 
     /// <summary>
-    /// Consumes a '>' token for closing generic type arguments.
-    /// Handles the case where '>>' was tokenized as RightShift by splitting it
-    /// and leaving one '>' for the next parse.
-    /// </summary>
-    private void ConsumeGreaterForGeneric(string errorMessage)
-    {
-        if (Match(type: TokenType.Greater))
-        {
-            // Simple case - just a single '>'
-            return;
-        }
-
-        if (Check(type: TokenType.RightShift))
-        {
-            // '>>' was tokenized as RightShift - we need to split it
-            // Replace the current RightShift token with a single Greater token
-            // and leave a Greater for the next parse
-            Token currentToken = CurrentToken;
-            var newGreater = new Token(Type: TokenType.Greater,
-                FileName: currentToken.FileName,
-                Text: ">",
-                Line: currentToken.Line,
-                Column: currentToken.Column + 1); // Second > is one position after
-
-            // Advance past the RightShift
-            Advance();
-
-            // Insert a Greater token to be consumed next
-            // We do this by adjusting the position and inserting
-            InsertToken(token: newGreater);
-            return;
-        }
-
-        // Neither > nor >> found - error
-        throw ThrowParseError($"{errorMessage}. Expected Greater, got {CurrentToken.Type}.");
-    }
-
-    /// <summary>
-    /// Inserts a token at the current position to be parsed next.
-    /// Used for splitting '>>' into two '>' tokens.
-    /// </summary>
-    private void InsertToken(Token token)
-    {
-        Tokens.Insert(index: Position, item: token);
-    }
-
-    /// <summary>
-    /// Parses generic parameters with optional inline constraints like &lt;T follows Integral&gt;.
+    /// Parses generic parameters with optional inline constraints like [T obeys Integral].
     /// Returns both the parameter names and any inline constraints found.
     /// </summary>
+    /// <remarks>
+    /// Inline constraint forms (inside brackets):
+    ///
+    /// PROTOCOL CONSTRAINTS (obeys):
+    ///   [T obeys Comparable]           - Single protocol
+    ///   [T obeys Comparable, Hashable]  - Multiple protocols
+    ///
+    /// TYPE KIND CONSTRAINTS (is):
+    ///   [T is record]    - Must be a value type (record)
+    ///   [T is entity]    - Must be a reference type (entity)
+    ///   [T is resident]  - Must be a resident type
+    ///   [T is routine]   - Must be a routine type
+    ///   [T is choice]    - Must be a choice type
+    ///   [T is variant]   - Must be a variant type
+    ///   [N is S32]       - Const generic (N is a build-time constant of type S32)
+    ///
+    /// TYPE EQUALITY CONSTRAINTS (in):
+    ///   [T in [S32, S64, F64]]  - T must be one of the listed types
+    ///
+    /// DISAMBIGUATION CHALLENGE:
+    /// When parsing "T obeys A, B", we need to distinguish between:
+    ///   - Multiple protocols for same param: [T obeys A, B]
+    ///   - Next parameter with constraint: [T obeys A, U obeys B]
+    /// We look ahead to check if the next identifier has obeys/is/in after it.
+    /// </remarks>
     private (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) ParseGenericParametersWithConstraints()
     {
         var genericParams = new List<string>();
         var inlineConstraints = new List<GenericConstraintDeclaration>();
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Parse each generic parameter with optional inline constraint
+        // ═══════════════════════════════════════════════════════════════════════════
         do
         {
             SourceLocation location = GetLocation();
             string paramName = ConsumeIdentifier(errorMessage: "Expected generic parameter name");
             genericParams.Add(item: paramName);
 
-            // Check for inline constraint: T follows Protocol or T is record/entity/resident
-            if (Match(type: TokenType.Follows))
+            // ─────────────────────────────────────────────────────────────────────
+            // CONSTRAINT TYPE 1: obeys - protocol conformance
+            // ─────────────────────────────────────────────────────────────────────
+            // Forms: T obeys Protocol
+            //        T obeys Protocol1, Protocol2  (multiple protocols)
+            if (Match(type: TokenType.Obeys))
             {
-                // Parse protocol constraints: T follows Protocol
                 var constraintTypes = new List<TypeExpression>();
                 do
                 {
                     constraintTypes.Add(item: ParseType());
-                    // Continue if comma but next token is NOT an identifier followed by follows/is/in or greater
-                    // This handles both "T follows A, B" (multiple protocols) and "T follows A, U follows B" (next param)
-                } while (Match(type: TokenType.Comma) && !Check(type: TokenType.Greater) && !(Check(type: TokenType.Identifier) && (PeekToken(offset: 1)
-                            .Type == TokenType.Follows || PeekToken(offset: 1)
+                    // Continue if comma but next token is NOT an identifier followed by obeys/is/in or greater
+                    // This handles both "T obeys A, B" (multiple protocols) and "T obeys A, U obeys B" (next param)
+                } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightBracket) && !(Check(type: TokenType.Identifier) && (PeekToken(offset: 1)
+                            .Type == TokenType.Obeys || PeekToken(offset: 1)
                             .Type == TokenType.Is || PeekToken(offset: 1)
                             .Type == TokenType.In)));
 
                 inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
-                    ConstraintType: ConstraintKind.Follows,
+                    ConstraintType: ConstraintKind.Obeys,
                     ConstraintTypes: constraintTypes,
                     Location: location));
             }
+            // ─────────────────────────────────────────────────────────────────────
+            // CONSTRAINT TYPE 2: is - type kind or const generic
+            // ─────────────────────────────────────────────────────────────────────
+            // Type kinds: T is record/entity/resident/routine/choice/variant
+            // Const generic: N is S32 (N is a build-time S32 value)
             else if (Match(type: TokenType.Is))
             {
-                // Parse type kind constraints: T is record/entity/routine/choice/variant
-                // Or const generic type constraints: N is uaddr/s32/etc.
-                // Note: Suflae does not have 'resident' or 'mutant' - those are RazorForge only
                 if (Match(type: TokenType.Record))
                 {
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -305,6 +268,13 @@ public partial class SuflaeParser
                 {
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                         ConstraintType: ConstraintKind.ReferenceType,
+                        ConstraintTypes: null,
+                        Location: location));
+                }
+                else if (Match(type: TokenType.Resident))
+                {
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        ConstraintType: ConstraintKind.ResidentType,
                         ConstraintTypes: null,
                         Location: location));
                 }
@@ -336,7 +306,7 @@ public partial class SuflaeParser
                         ConstraintTypes: null,
                         Location: location));
                 }
-                else if (Check(type: TokenType.Identifier) || Check(type: TokenType.TypeIdentifier))
+                else if (Check(type: TokenType.Identifier))
                 {
                     // Const generic constraint: N is uaddr
                     // Type validation happens in semantic analysis, not parsing
@@ -348,12 +318,16 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
+                    throw ThrowParseError(GrammarDiagnosticCode.InvalidConstraintKind,
+                        "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
                 }
             }
+            // ─────────────────────────────────────────────────────────────────────
+            // CONSTRAINT TYPE 3: in - type equality (must be one of listed types)
+            // ─────────────────────────────────────────────────────────────────────
+            // Form: T in [S32, S64, F64]
             else if (Match(type: TokenType.In))
             {
-                // T in [s32, s64, u32] - type equality constraint with list syntax
                 Consume(type: TokenType.LeftBracket, errorMessage: "Expected '[' after 'in' for type equality constraint");
 
                 var equalityTypes = new List<TypeExpression>();
@@ -369,7 +343,7 @@ public partial class SuflaeParser
                     ConstraintTypes: equalityTypes,
                     Location: location));
             }
-            // No constraint for this parameter, continue
+            // No constraint for this parameter, continue to next
         } while (Match(type: TokenType.Comma));
 
         return (genericParams, inlineConstraints.Count > 0
@@ -378,9 +352,26 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses generic constraints for type parameters.
-    /// Supports inline constraints (T follows Protocol) and where clauses.
+    /// Parses generic constraints for type parameters using 'needs' clauses.
+    /// Called after generic parameters have been parsed.
     /// </summary>
+    /// <remarks>
+    /// This parses the EXTERNAL needs clause form (after brackets):
+    ///
+    /// Example:
+    ///   record Container[T, U]
+    ///   needs T obeys Comparable, U is entity
+    ///     ...
+    ///
+    /// The same constraint kinds are supported as inline constraints:
+    /// - obeys: protocol conformance
+    /// - is: type kind (record/entity/resident/routine/choice/variant) or const generic
+    /// - in: type equality (must be one of listed types)
+    ///
+    /// Multiple needs clauses can be chained, or constraints can be comma-separated:
+    ///   needs T obeys A needs U obeys B    (chained)
+    ///   needs T obeys A, U obeys B            (comma-separated)
+    /// </remarks>
     private List<GenericConstraintDeclaration>? ParseGenericConstraints(List<string>? genericParams, List<GenericConstraintDeclaration>? existingConstraints = null)
     {
         if (genericParams == null || genericParams.Count == 0)
@@ -392,42 +383,43 @@ public partial class SuflaeParser
             ? [..existingConstraints]
             : [];
 
-        // Parse requires clauses: requires T follows Protocol requires U is record
-        // Each parameter can have its own requires clause or they can be comma-separated
-        while (Match(type: TokenType.Requires))
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Parse needs clauses: needs T obeys Protocol
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Each parameter can have its own needs clause or they can be comma-separated
+        // Skip newlines between needs clauses only when 'needs' obeys
+        while (SkipNewlinesIfFollowedBy(type: TokenType.Requires) && Match(type: TokenType.Requires))
         {
             do
             {
                 SourceLocation location = GetLocation();
                 string paramName = ConsumeIdentifier(errorMessage: "Expected type parameter name");
 
-                // Verify this parameter was declared
-                if (!genericParams.Contains(item: paramName))
-                {
-                    throw ThrowParseError($"Type parameter '{paramName}' not declared in generic parameters");
-                }
+                // Note: Type parameter validation (whether paramName is in genericParams)
+                // is intentionally deferred to semantic analysis for better error reporting.
 
-                // Parse constraint kind and types
-                if (Match(type: TokenType.Follows))
+                // ─────────────────────────────────────────────────────────────────────
+                // Parse constraint kind and types (same logic as inline constraints)
+                // ─────────────────────────────────────────────────────────────────────
+                if (Match(type: TokenType.Obeys))
                 {
-                    // T follows Protocol1, Protocol2
+                    // T obeys Protocol1, Protocol2
                     var constraintTypes = new List<TypeExpression>();
                     do
                     {
                         constraintTypes.Add(item: ParseType());
                         // Continue if comma followed by type name that's NOT a new constraint declaration
-                        // (i.e., identifier NOT followed by follows/is/in)
+                        // (i.e., identifier NOT followed by obeys/is/in)
                     } while (Match(type: TokenType.Comma) && !IsNewConstraintDeclaration());
 
                     constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
-                        ConstraintType: ConstraintKind.Follows,
+                        ConstraintType: ConstraintKind.Obeys,
                         ConstraintTypes: constraintTypes,
                         Location: location));
                 }
                 else if (Match(type: TokenType.Is))
                 {
-                    // T is record/entity/routine/choice/variant or N is uaddr (const generic)
-                    // Note: Suflae does not have 'resident' or 'mutant' - those are RazorForge only
+                    // T is record/entity/resident/routine/choice/variant or N is uaddr (const generic)
                     if (Match(type: TokenType.Record))
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -439,6 +431,13 @@ public partial class SuflaeParser
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                             ConstraintType: ConstraintKind.ReferenceType,
+                            ConstraintTypes: null,
+                            Location: location));
+                    }
+                    else if (Match(type: TokenType.Resident))
+                    {
+                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                            ConstraintType: ConstraintKind.ResidentType,
                             ConstraintTypes: null,
                             Location: location));
                     }
@@ -470,7 +469,7 @@ public partial class SuflaeParser
                             ConstraintTypes: null,
                             Location: location));
                     }
-                    else if (Check(type: TokenType.Identifier) || Check(type: TokenType.TypeIdentifier))
+                    else if (Check(type: TokenType.Identifier))
                     {
                         // Const generic constraint: N is uaddr
                         // Type validation happens in semantic analysis, not parsing
@@ -482,7 +481,8 @@ public partial class SuflaeParser
                     }
                     else
                     {
-                        throw ThrowParseError("Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
+                        throw ThrowParseError(GrammarDiagnosticCode.InvalidConstraintKind,
+                            "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))
@@ -505,7 +505,8 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw ThrowParseError("Expected 'follows', 'is', or 'in' in generic constraint");
+                    throw ThrowParseError(GrammarDiagnosticCode.ExpectedConstraintType,
+                        "Expected 'obeys', 'is', or 'in' in generic constraint");
                 }
 
                 // Continue parsing if there's a comma
@@ -518,20 +519,20 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Checks if the current position looks like a new constraint declaration (Identifier follows/is/in).
-    /// Used to distinguish between "K follows A, B" (K follows both A and B) and
-    /// "K follows A, U follows B" (K follows A, then U follows B).
+    /// Checks if the current position looks like a new constraint declaration (Identifier obeys/is/in).
+    /// Used to distinguish between "K obeys A, B" (K obeys both A and B) and
+    /// "K obeys A, U obeys B" (K obeys A, then U obeys B).
     /// </summary>
     private bool IsNewConstraintDeclaration()
     {
         // Must start with an identifier (type parameter name)
-        if (!Check(TokenType.Identifier, TokenType.TypeIdentifier))
+        if (!Check(TokenType.Identifier))
         {
             return false;
         }
 
         // Lookahead: check if identifier is followed by a constraint keyword
         Token next = PeekToken(offset: 1);
-        return next.Type is TokenType.Follows or TokenType.Is or TokenType.In;
+        return next.Type is TokenType.Obeys or TokenType.Is or TokenType.In;
     }
 }

@@ -1,9 +1,9 @@
-namespace Compilers.Shared.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
-/// Represents a compile-time warning for style violations or deprecated patterns
+/// Represents a build-time warning for style violations or deprecated patterns
 /// </summary>
-public class CompileWarning(string message, int line, int column, WarningSeverity severity, string warningCode)
+public class BuildWarning(string message, int line, int column, WarningSeverity severity, string warningCode)
 {
     public string Message { get; } = message;
     public int Line { get; } = line;

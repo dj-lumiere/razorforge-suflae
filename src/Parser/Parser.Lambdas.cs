@@ -1,12 +1,13 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Diagnostics;
 
-namespace Compilers.RazorForge.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
-/// Partial class containing lambda expression and collection literal parsing.
+/// Partial class containing lambda expression parsing.
 /// </summary>
-public partial class RazorForgeParser
+public partial class Parser
 {
     /// <summary>
     /// Parse the 'given' clause for explicit lambda captures.
@@ -44,11 +45,13 @@ public partial class RazorForgeParser
     }
 
     /// <summary>
-    /// Parse arrow lambda with single unparenthesized parameter: x => expr or x given (a, b) => expr
+    /// Parse arrow lambda with single unparenthesized parameter: x => expr or x given y => expr
+    /// Syntax: <c>x => expression</c> or <c>x given (a, b) => expression</c>
+    /// Lambda bodies must be single expressions (one-liner only).
     /// </summary>
     private LambdaExpression ParseArrowLambdaExpression(SourceLocation location)
     {
-        // Single parameter without parentheses: x => expr or x given (a, b) => expr
+        // Single parameter without parentheses: x => expr or x given y => expr
         string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
 
         var parameters = new List<Parameter>
@@ -98,7 +101,7 @@ public partial class RazorForgeParser
     /// </remarks>
     private bool IsArrowLambdaParameters()
     {
-        int savedPosition = _position;
+        int savedPosition = Position;
 
         try
         {
@@ -109,7 +112,7 @@ public partial class RazorForgeParser
             {
                 Advance(); // consume )
                 bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                _position = savedPosition;
+                Position = savedPosition;
                 return result;
             }
 
@@ -123,7 +126,7 @@ public partial class RazorForgeParser
                 // ─────────────────────────────────────────────────────────────────────
                 if (!Check(type: TokenType.Identifier))
                 {
-                    _position = savedPosition;
+                    Position = savedPosition;
                     return false;
                 }
 
@@ -136,15 +139,15 @@ public partial class RazorForgeParser
                 if (Check(type: TokenType.Colon))
                 {
                     Advance(); // consume :
-                    // Skip the type (track < > depth for generics)
+                    // Skip the type (track [ ] depth for generics)
                     int depth = 0;
                     while (!IsAtEnd)
                     {
-                        if (Check(type: TokenType.Less))
+                        if (Check(type: TokenType.LeftBracket))
                         {
                             depth++;
                         }
-                        else if (Check(type: TokenType.Greater))
+                        else if (Check(type: TokenType.RightBracket))
                         {
                             depth--;
                         }
@@ -169,27 +172,28 @@ public partial class RazorForgeParser
                     Advance(); // consume )
                     // Accept either direct => or given ... =>
                     bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                    _position = savedPosition;
+                    Position = savedPosition;
                     return result;
                 }
                 else
                 {
                     // Not a valid lambda parameter list (e.g., expression like (x + y))
-                    _position = savedPosition;
+                    Position = savedPosition;
                     return false;
                 }
             }
         }
         catch
         {
-            _position = savedPosition;
+            Position = savedPosition;
             return false;
         }
     }
 
     /// <summary>
-    /// Parse arrow lambda with parenthesized parameters: (x) => expr or (x, y) given (a, b) => expr
+    /// Parse arrow lambda with parenthesized parameters: () => expr, (x) => expr, or (x, y) given (a, b) => expr
     /// Called after '(' has been consumed and IsArrowLambdaParameters() returned true.
+    /// Lambda bodies must be single expressions (one-liner only).
     /// </summary>
     private LambdaExpression ParseParenthesizedArrowLambda(SourceLocation location)
     {
@@ -227,126 +231,5 @@ public partial class RazorForgeParser
 
         Expression body = ParseExpression();
         return new LambdaExpression(Parameters: parameters, Body: body, Captures: captures, Location: location);
-    }
-
-    /// <summary>
-    /// Parse list literal: [expr, expr, ...]
-    /// The opening '[' has already been consumed.
-    /// </summary>
-    private ListLiteralExpression ParseListLiteral(SourceLocation location)
-    {
-        var elements = new List<Expression>();
-
-        if (!Check(type: TokenType.RightBracket))
-        {
-            do
-            {
-                elements.Add(item: ParseExpression());
-            } while (Match(type: TokenType.Comma));
-        }
-
-        Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after list elements");
-
-        return new ListLiteralExpression(Elements: elements, ElementType: null, Location: location);
-    }
-
-    /// <summary>
-    /// Parse set or dict literal: {expr, expr, ...} or {key: value, ...}
-    /// The opening '{' has already been consumed.
-    /// Disambiguation: If the first element contains ':', it's a dict; otherwise it's a set.
-    /// Empty {} is treated as an empty set.
-    /// </summary>
-    /// <remarks>
-    /// Collection literal forms:
-    ///
-    /// SET LITERALS:
-    ///   {}              - Empty set
-    ///   {1, 2, 3}       - Set with elements
-    ///   {"a", "b"}      - Set of strings
-    ///
-    /// DICT LITERALS:
-    ///   {"a": 1, "b": 2}  - Dict with key-value pairs
-    ///   {key: value}      - Single entry dict
-    ///
-    /// DISAMBIGUATION STRATEGY:
-    /// We parse the first expression, then check if a ':' follows.
-    /// - If ':' follows -> dict literal (first expr was a key)
-    /// - Otherwise -> set literal (first expr was an element)
-    ///
-    /// Note: Empty {} is always a set. For empty dict, use Dict&lt;K, V&gt;() constructor.
-    /// </remarks>
-    private Expression ParseSetOrDictLiteral(SourceLocation location)
-    {
-        // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 1: Empty braces -> empty set
-        // ═══════════════════════════════════════════════════════════════════════════
-        if (Match(type: TokenType.RightBrace))
-        {
-            return new SetLiteralExpression(Elements: [], ElementType: null, Location: location);
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 2: Parse first element to determine set vs dict
-        // ═══════════════════════════════════════════════════════════════════════════
-        Expression firstExpr = ParseExpression();
-
-        // ─────────────────────────────────────────────────────────────────────
-        // Colon after first expression -> dict literal
-        // ─────────────────────────────────────────────────────────────────────
-        if (Match(type: TokenType.Colon))
-        {
-            return ParseDictLiteralContinuation(firstKey: firstExpr, location: location);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // No colon -> set literal
-        // ─────────────────────────────────────────────────────────────────────
-        return ParseSetLiteralContinuation(firstElement: firstExpr, location: location);
-    }
-
-    /// <summary>
-    /// Continue parsing dict literal after first key and colon: {key: value, ...}
-    /// </summary>
-    private DictLiteralExpression ParseDictLiteralContinuation(Expression firstKey, SourceLocation location)
-    {
-        var pairs = new List<(Expression Key, Expression Value)>();
-
-        // Parse value for first key
-        Expression firstValue = ParseExpression();
-        pairs.Add(item: (firstKey, firstValue));
-
-        // Parse remaining key-value pairs
-        while (Match(type: TokenType.Comma))
-        {
-            Expression key = ParseExpression();
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' between dict key and value");
-            Expression value = ParseExpression();
-            pairs.Add(item: (key, value));
-        }
-
-        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after dict elements");
-
-        return new DictLiteralExpression(Pairs: pairs,
-            KeyType: null,
-            ValueType: null,
-            Location: location);
-    }
-
-    /// <summary>
-    /// Continue parsing set literal after first element: {expr, expr, ...}
-    /// </summary>
-    private SetLiteralExpression ParseSetLiteralContinuation(Expression firstElement, SourceLocation location)
-    {
-        var elements = new List<Expression> { firstElement };
-
-        // Parse remaining elements
-        while (Match(type: TokenType.Comma))
-        {
-            elements.Add(item: ParseExpression());
-        }
-
-        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after set elements");
-
-        return new SetLiteralExpression(Elements: elements, ElementType: null, Location: location);
     }
 }

@@ -1,63 +1,23 @@
-using RazorForge.Diagnostics;
+using SemanticAnalysis.Enums;
+using Compiler.Diagnostics;
 
-namespace Compilers.RazorForge.Lexer;
-
-using Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
-/// Partial class containing numeric literal scanning methods for the RazorForge tokenizer.
+/// Partial class containing numeric literal scanning methods for the unified tokenizer.
 /// </summary>
 /// <remarks>
-/// <para>
-/// This file handles all numeric literal scanning including:
-/// <list type="bullet">
-///   <item><description>Decimal integers (123, 1_000_000)</description></item>
-///   <item><description>Floating-point numbers (3.14, 1.5e10)</description></item>
-///   <item><description>Hexadecimal literals (0xFF, 0x1234_5678)</description></item>
-///   <item><description>Binary literals (0b1010, 0b1111_0000)</description></item>
-///   <item><description>Type suffixes (s32, u64, f32, etc.)</description></item>
-///   <item><description>ByteSize suffixes (kb, mib, gb, etc.)</description></item>
-///   <item><description>Duration suffixes (s, ms, h, etc.)</description></item>
-/// </list>
-/// </para>
-/// <para>
-/// Underscores can be used as digit separators for readability in any numeric literal.
-/// </para>
+/// Key language-conditional: unsuffixed defaults differ between RF and SF.
+/// RF: integer -> S64Literal, float -> F64Literal
+/// SF: integer -> Integer, float -> Decimal
 /// </remarks>
-public partial class RazorForgeTokenizer
+public partial class Tokenizer
 {
     #region Decimal Numbers
 
     /// <summary>
     /// Scans a decimal numeric literal, handling integers, floats, and suffixed numbers.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method is called after the first digit has been consumed by <see cref="ScanToken"/>.
-    /// It continues scanning to build a complete numeric literal, which may include:
-    /// <list type="bullet">
-    ///   <item><description>Additional digits and underscores</description></item>
-    ///   <item><description>Decimal point followed by fractional digits</description></item>
-    ///   <item><description>Scientific notation (e or E with optional sign)</description></item>
-    ///   <item><description>Type suffix</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// If no suffix is provided, the literal defaults to:
-    /// <list type="bullet">
-    ///   <item><description>S64 for whole numbers</description></item>
-    ///   <item><description>F64 for floating-point numbers</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// Use the 'n' suffix for arbitrary precision:
-    /// <list type="bullet">
-    ///   <item><description>42n → Integer (arbitrary precision integer)</description></item>
-    ///   <item><description>3.14n → Decimal (arbitrary precision decimal)</description></item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when an unknown suffix is encountered.</exception>
     private void ScanNumber()
     {
         // Consume digits and underscores
@@ -94,7 +54,7 @@ public partial class RazorForgeTokenizer
             }
 
             // Exponent digits
-            while (char.IsDigit(c: Peek()) || Peek() == '_')
+            while (char.IsDigit(c: Peek()))
             {
                 Advance();
             }
@@ -134,18 +94,29 @@ public partial class RazorForgeTokenizer
             }
             else
             {
-                throw new RazorForgeGrammarException(
-                    RazorForgeDiagnosticCode.InvalidNumericLiteral,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidNumericLiteral,
                     $"Unknown suffix '{suffix}'",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
         }
         else
         {
-            // No suffix - default to S64/F64 (fixed-width types)
-            AddToken(type: isFloat
-                ? TokenType.F64Literal
-                : TokenType.S64Literal);
+            // Language-conditional defaults:
+            // RF: S64Literal for integers, F64Literal for floats
+            // SF: Integer for integers, Decimal for floats
+            if (_language == Language.RazorForge)
+            {
+                AddToken(type: isFloat
+                    ? TokenType.F64Literal
+                    : TokenType.S64Literal);
+            }
+            else
+            {
+                AddToken(type: isFloat
+                    ? TokenType.Decimal
+                    : TokenType.Integer);
+            }
         }
     }
 
@@ -156,27 +127,6 @@ public partial class RazorForgeTokenizer
     /// <summary>
     /// Scans a prefixed numeric literal (hexadecimal or binary).
     /// </summary>
-    /// <param name="isHex">
-    /// <c>true</c> for hexadecimal (0x prefix); <c>false</c> for binary (0b prefix).
-    /// </param>
-    /// <remarks>
-    /// <para>
-    /// This method is called after the prefix (0x or 0b) has been consumed.
-    /// It scans the remaining digits and optional type suffix.
-    /// </para>
-    /// <para>
-    /// Hexadecimal literals accept digits 0-9 and letters a-f (case insensitive).
-    /// Binary literals accept only 0 and 1.
-    /// </para>
-    /// <para>
-    /// Underscores can be used as digit separators in both formats.
-    /// </para>
-    /// <para>
-    /// Only numeric type suffixes (s32, u64, etc.) are valid for prefixed literals.
-    /// Memory and duration suffixes are not allowed.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when an unknown or invalid suffix is encountered.</exception>
     private void ScanPrefixedNumber(bool isHex)
     {
         // Consume valid digits and underscores
@@ -221,39 +171,30 @@ public partial class RazorForgeTokenizer
                 string baseType = isHex
                     ? "hex"
                     : "binary";
-                throw new RazorForgeGrammarException(
-                    RazorForgeDiagnosticCode.InvalidNumericLiteral,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidNumericLiteral,
                     $"Unknown {baseType} suffix '{suffix}'",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
         }
         else
         {
-            // No suffix - default to S64 (matching decimal literal behavior)
-            AddToken(type: TokenType.S64Literal);
+            // Language-conditional defaults for prefixed:
+            // RF: S64Literal, SF: Integer
+            if (_language == Language.RazorForge)
+            {
+                AddToken(type: TokenType.S64Literal);
+            }
+            else
+            {
+                AddToken(type: TokenType.Integer);
+            }
         }
     }
 
     /// <summary>
     /// Scans an octal numeric literal (0o prefix).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method is called after the prefix (0o) has been consumed.
-    /// It scans the remaining digits and optional type suffix.
-    /// </para>
-    /// <para>
-    /// Octal literals accept digits 0-7.
-    /// </para>
-    /// <para>
-    /// Underscores can be used as digit separators.
-    /// </para>
-    /// <para>
-    /// Only numeric type suffixes (s32, u64, etc.) are valid for octal literals.
-    /// Memory and duration suffixes are not allowed.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="LexerException">Thrown when an unknown or invalid suffix is encountered.</exception>
     private void ScanOctalNumber()
     {
         // Consume valid octal digits and underscores
@@ -285,16 +226,24 @@ public partial class RazorForgeTokenizer
             }
             else
             {
-                throw new RazorForgeGrammarException(
-                    RazorForgeDiagnosticCode.InvalidNumericLiteral,
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidNumericLiteral,
                     $"Unknown octal suffix '{suffix}'",
-                    _fileName, _line, _column);
+                    _fileName, _line, _column, _language);
             }
         }
         else
         {
-            // No suffix - default to S64 (matching decimal literal behavior)
-            AddToken(type: TokenType.S64Literal);
+            // Language-conditional defaults for octal:
+            // RF: S64Literal, SF: Integer
+            if (_language == Language.RazorForge)
+            {
+                AddToken(type: TokenType.S64Literal);
+            }
+            else
+            {
+                AddToken(type: TokenType.Integer);
+            }
         }
     }
 

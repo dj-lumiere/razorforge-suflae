@@ -1,7 +1,7 @@
-﻿using Compilers.Analysis.Types;
-using Compilers.Shared.Lexer;
+﻿using SemanticAnalysis.Types;
+using Compiler.Lexer;
 
-namespace Compilers.Shared.AST;
+namespace SyntaxTree;
 
 #region Base Expression Types
 
@@ -18,7 +18,7 @@ namespace Compilers.Shared.AST;
 /// <item>Variable access and function calls</item>
 /// <item>Arithmetic and logical operations</item>
 /// <item>Complex operations: member access, indexing, type conversions</item>
-/// <item>Memory operations: slice constructors, memory slice method calls</item>
+/// <item>Memory operations: slice creators, memory slice method calls</item>
 /// <item>Danger zone operations: raw memory access, type punning</item>
 /// </list>
 /// After semantic analysis, ResolvedType contains the computed type of this expression.
@@ -187,7 +187,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 /// or falls back to create-and-assign (a = a.__add__(b)) for records/primitives.
 /// Entities require the in-place dunder (no fallback, since bare entity assignment is prohibited).
 /// </summary>
-/// <param name="Target">The assignment target (must be a mutable variable, field, or index)</param>
+/// <param name="Target">The assignment target (must be a modifiable variable, field, or index)</param>
 /// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>
 /// <param name="Value">The right-hand operand expression</param>
 /// <param name="Location">Source location information</param>
@@ -218,7 +218,7 @@ public sealed record CompoundAssignmentExpression(
 /// <item>Arithmetic: +, -, *, /, //, %, ** (with overflow variants)</item>
 /// <item>Comparison: ==, !=, ===, !==, &lt;, &lt;=, &gt;, &gt;=</item>
 /// <item>Logical: and, or</item>
-/// <item>Membership: in, notin, is, isnot, follows, notfollows</item>
+/// <item>Membership: in, notin, is, isnot, obeys, disobeys</item>
 /// <item>Bitwise: &amp;, |, ^, &lt;&lt;, &lt;&lt;?, &gt;&gt;, &lt;&lt;&lt;, &gt;&gt;&gt;</item>
 /// </list>
 /// </remarks>
@@ -262,7 +262,7 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 
 /// <summary>
 /// Expression that invokes a function or method with zero or more arguments.
-/// Represents function calls, method invocations, and constructor calls.
+/// Represents function calls, method invocations, and creator calls.
 /// </summary>
 /// <param name="Callee">Expression that evaluates to a callable (function, method, lambda)</param>
 /// <param name="Arguments">List of argument expressions to pass to the callable</param>
@@ -272,7 +272,7 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 /// <list type="bullet">
 /// <item>Function calls: routine(a, b, c)</item>
 /// <item>Method calls: me.method(x, y)</item>
-/// <item>Constructor calls: Point(x, y)</item>
+/// <item>Creator calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
 /// <item>Operator method calls: me.__add__(you)</item>
 /// </list>
@@ -324,22 +324,22 @@ public record NamedArgumentExpression(string Name, Expression Value, SourceLocat
 }
 
 /// <summary>
-/// Expression representing a constructor call with named field initializers.
+/// Expression representing a creator call with named field initializers.
 /// Creates instances using parenthesis syntax: TypeName(field1: value1, field2: value2)
 /// </summary>
-/// <param name="TypeName">The name of the type being instantiated</param>
+/// <param name="TypeName">The name of the type being created</param>
 /// <param name="TypeArguments">Optional generic type arguments (e.g., List&lt;T&gt;)</param>
 /// <param name="Fields">List of field name-value pairs for initialization</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Constructor expression patterns:
+/// Creator expression patterns:
 /// <list type="bullet">
 /// <item>Simple: Point(x: 10, y: 20)</item>
 /// <item>Generic: TextIterator&lt;T&gt;(text: me, index: 0)</item>
 /// <item>Nested: Node(value: 5, next: Node(value: 10, next: None))</item>
 /// </list>
 /// </remarks>
-public record ConstructorExpression(
+public record CreatorExpression(
     string TypeName,
     List<TypeExpression>? TypeArguments,
     List<(string Name, Expression Value)> Fields,
@@ -348,13 +348,13 @@ public record ConstructorExpression(
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
-        return visitor.VisitConstructorExpression(node: this);
+        return visitor.VisitCreatorExpression(node: this);
     }
 }
 
 /// <summary>
 /// Expression for functional update - creating a modified copy of a value with specified changes.
-/// Represents the 'with' keyword for immutable updates.
+/// Represents the 'with' keyword for unmodifiable updates.
 /// </summary>
 /// <param name="Base">The base expression to copy and modify</param>
 /// <param name="Updates">List of field/index updates (name/index, value)</param>
@@ -404,6 +404,27 @@ public record MemberExpression(Expression Object, string PropertyName, SourceLoc
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitMemberExpression(node: this);
+    }
+}
+
+/// <summary>
+/// Expression that conditionally accesses a member of an object if the object is not none.
+/// Represents the ?. operator for safe navigation / optional chaining.
+/// </summary>
+/// <param name="Object">Expression that may evaluate to none</param>
+/// <param name="PropertyName">Name of the property/field to access if object is not none</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples: obj?.field, result?.value
+/// If the object is none, the entire expression evaluates to none.
+/// </remarks>
+public record OptionalMemberExpression(Expression Object, string PropertyName, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitOptionalMemberExpression(node: this);
     }
 }
 
@@ -747,7 +768,7 @@ public record GenericMemberExpression(
 }
 
 /// <summary>
-/// Expression for compiler intrinsic function calls.
+/// Expression for builder intrinsic function calls.
 /// Intrinsics map directly to low-level operations and are only available in danger! blocks.
 /// </summary>
 /// <param name="IntrinsicName">Name of the intrinsic operation (e.g., "load", "add.wrapping", "icmp.slt")</param>
@@ -762,7 +783,7 @@ public record GenericMemberExpression(
 /// <item>@intrinsic.icmp.slt&lt;i64&gt;(x, y) - Signed less than comparison</item>
 /// <item>@intrinsic.bitcast&lt;f32, u32&gt;(value) - Type punning (reinterpret bits)</item>
 /// </list>
-/// All intrinsics must be called within danger! blocks and are validated at compile time.
+/// All intrinsics must be called within danger! blocks and are validated at build time.
 /// </remarks>
 public record IntrinsicCallExpression(
     string IntrinsicName,
@@ -793,7 +814,7 @@ public record IntrinsicCallExpression(
 /// <item>@native.free(ptr) - Free memory</item>
 /// </list>
 /// All native calls must be called within danger! blocks.
-/// The compiler will emit external function declarations for these calls.
+/// The builder will emit external function declarations for these calls.
 /// </remarks>
 public record NativeCallExpression(
     string FunctionName,
@@ -824,7 +845,7 @@ public record NativeCallExpression(
 /// <list type="bullet">
 /// <item>Can steal: raw entities, Shared&lt;T&gt;, Tracked&lt;T&gt;</item>
 /// <item>Cannot steal: Viewed&lt;T&gt;, Hijacked&lt;T&gt;, Inspected&lt;T&gt;, Seized&lt;T&gt;, Snatched&lt;T&gt;</item>
-/// <item>After stealing, source becomes deadref (using it is a compile error)</item>
+/// <item>After stealing, source becomes deadref (using it is a build error)</item>
 /// <item>Used for: ownership transfer (steal node), container push (list.push(steal node)),
 /// and consuming iteration (for item in steal list)</item>
 /// </list>
@@ -848,14 +869,14 @@ public record StealExpression(Expression Operand, SourceLocation Location)
 /// Used in suspended/threaded routines to await Task-like values.
 /// </summary>
 /// <param name="Operand">The suspended computation to wait for</param>
-/// <param name="Timeout">Optional timeout duration (with 'until' keyword)</param>
+/// <param name="Timeout">Optional timeout duration (with 'within' keyword)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Waitfor expression examples:
 /// <list type="bullet">
 /// <item>waitfor task - wait for task to complete</item>
-/// <item>waitfor task until 5s - wait with 5 second timeout</item>
-/// <item>waitfor http.get(url) until 30s - wait for HTTP request with timeout</item>
+/// <item>waitfor task within 5s - wait with 5 second timeout</item>
+/// <item>waitfor http.get(url) within 30s - wait for HTTP request with timeout</item>
 /// </list>
 /// Waitfor can only be used inside suspended/threaded routines.
 /// </remarks>
@@ -894,12 +915,12 @@ public record TaskDependency(Expression DependencyExpr, string? BindingName, Sou
 /// </summary>
 /// <param name="Dependencies">List of 'after' dependencies (empty means no dependencies)</param>
 /// <param name="Operand">The suspended computation to wait for</param>
-/// <param name="Timeout">Optional timeout duration (with 'until' keyword)</param>
+/// <param name="Timeout">Optional timeout duration (with 'within' keyword)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Dependent waitfor expression examples:
 /// <list type="bullet">
-/// <item>after a as val waitfor step2!(val) until 5s - single dependency with timeout</item>
+/// <item>after a as val waitfor step2!(val) within 5s - single dependency with timeout</item>
 /// <item>after (a, b) as (va, vb) waitfor step3!(va, vb) - multiple dependencies</item>
 /// <item>after a waitfor step2!() - ordering-only dependency (no value binding)</item>
 /// </list>
@@ -1026,7 +1047,7 @@ public record FlagsTestExpression(
 /// When expression examples:
 /// <list type="bullet">
 /// <item>return when x { 0 => "zero", 1 => "one", else => "many" }</item>
-/// <item>let desc = when status { is ACTIVE => "Running", else => "Not running" }</item>
+/// <item>var desc = when status { is ACTIVE => "Running", else => "Not running" }</item>
 /// </list>
 /// The body of each clause must evaluate to a value of the same type.
 /// </remarks>

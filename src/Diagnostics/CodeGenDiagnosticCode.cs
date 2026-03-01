@@ -1,3 +1,3 @@
-﻿namespace RazorForge.Diagnostics;
+﻿namespace Compiler.Diagnostics;
 
 public enum CodeGenDiagnosticCode {  }

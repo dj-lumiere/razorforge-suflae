@@ -1,45 +1,17 @@
-using RazorForge.Diagnostics;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Lexer;
-
-using Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
-/// Partial class containing the main token scanning dispatch logic for the Suflae tokenizer.
+/// Partial class containing the main token scanning dispatch logic for the unified tokenizer.
 /// </summary>
-/// <remarks>
-/// This file contains the core <see cref="ScanToken"/> method which routes character
-/// recognition to specialized scanning methods. Key differences from RazorForge:
-/// <list type="bullet">
-///   <item><description>Indentation handling at start of each line</description></item>
-///   <item><description>No braces (uses indentation for blocks)</description></item>
-///   <item><description>Colon detection for block starters</description></item>
-///   <item><description>Significant newline handling</description></item>
-/// </list>
-/// </remarks>
-public partial class SuflaeTokenizer
+public partial class Tokenizer
 {
     #region Main Token Scanning
 
     /// <summary>
     /// Scans a single token from the current position in the source code.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method handles indentation at the start of lines, then dispatches
-    /// to specialized scanning methods based on the current character.
-    /// </para>
-    /// <para>
-    /// Unlike RazorForge, Suflae:
-    /// <list type="bullet">
-    ///   <item><description>Has no braces - uses indentation-based INDENT/DEDENT tokens</description></item>
-    ///   <item><description>Treats newlines as significant in most contexts</description></item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    /// <exception cref="LexerException">
-    /// Thrown when invalid syntax is encountered.
-    /// </exception>
     private void ScanToken()
     {
         // Handle indentation at start of line
@@ -60,6 +32,7 @@ public partial class SuflaeTokenizer
 
         _tokenStart = _position;
         _tokenStartColumn = _column;
+        _tokenStartLine = _line;
         char c = Advance();
 
         switch (c)
@@ -68,7 +41,7 @@ public partial class SuflaeTokenizer
             case ' ' or '\r' or '\t':
                 break;
 
-            // Newlines are significant in Suflae
+            // Newlines are significant
             case '\n':
                 HandleNewline();
                 break;
@@ -103,7 +76,7 @@ public partial class SuflaeTokenizer
 
                 break;
 
-            // Delimiters (no braces in Suflae)
+            // Delimiters
             case '(':
                 AddToken(type: TokenType.LeftParen);
                 break;
@@ -116,14 +89,21 @@ public partial class SuflaeTokenizer
             case ']':
                 AddToken(type: TokenType.RightBracket);
                 break;
+            // Braces kept for set/dict literals and f-text inserting (not block delimiters)
+            case '{':
+                AddToken(type: TokenType.LeftBrace);
+                break;
+            case '}':
+                AddToken(type: TokenType.RightBrace);
+                break;
             case ',':
                 AddToken(type: TokenType.Comma);
                 break;
             case ';':
-                throw new SuflaeGrammarException(
-                    SuflaeDiagnosticCode.InvalidCharacter,
-                    "Semicolons are not used in Suflae. Statements are terminated by newlines.",
-                    _fileName, _line, _column);
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidCharacter,
+                    "Semicolons are not used. Statements are terminated by newlines.",
+                    _fileName, _line, _column, _language);
 
             // Multi-character punctuation
             case '.':
@@ -135,10 +115,10 @@ public partial class SuflaeTokenizer
                     }
                     else
                     {
-                        throw new SuflaeGrammarException(
-                            SuflaeDiagnosticCode.InvalidCharacter,
+                        throw new GrammarException(
+                            GrammarDiagnosticCode.InvalidCharacter,
                             "Range operator '..' is no longer supported. Use 'to' keyword instead (e.g., '1 to 10').",
-                            _fileName, _line, _column);
+                            _fileName, _line, _column, _language);
                     }
                 }
                 else
@@ -150,10 +130,10 @@ public partial class SuflaeTokenizer
             case ':':
                 if (Match(expected: ':'))
                 {
-                    throw new SuflaeGrammarException(
-                        SuflaeDiagnosticCode.InvalidCharacter,
+                    throw new GrammarException(
+                        GrammarDiagnosticCode.InvalidCharacter,
                         "Static access operator '::' is no longer supported. Use '.' instead.",
-                        _fileName, _line, _column);
+                        _fileName, _line, _column, _language);
                 }
 
                 AddToken(type: TokenType.Colon);
@@ -235,7 +215,11 @@ public partial class SuflaeTokenizer
                 AddToken(type: TokenType.Tilde);
                 break;
             case '?':
-                if (Match(expected: '?'))
+                if (Match(expected: '.'))
+                {
+                    AddToken(type: TokenType.QuestionDot);
+                }
+                else if (Match(expected: '?'))
                 {
                     // ?? or ??=
                     AddToken(type: Match(expected: '=')
@@ -283,7 +267,6 @@ public partial class SuflaeTokenizer
 
             // Default: digits, identifiers, or unknown
             default:
-                _hasTokenOnLine = true;
                 if (char.IsDigit(c: c))
                 {
                     ScanNumber();

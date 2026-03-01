@@ -1,4 +1,4 @@
-﻿namespace RazorForge.Diagnostics;
+﻿namespace SemanticAnalysis.Diagnostics;
 
 public class SemanticException
 {

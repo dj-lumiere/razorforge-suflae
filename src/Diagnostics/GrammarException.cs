@@ -1,24 +1,28 @@
-namespace RazorForge.Diagnostics;
+using SemanticAnalysis.Enums;
+
+namespace Compiler.Diagnostics;
 
 /// <summary>
-/// Exception thrown for RazorForge grammar (lexer/parser) errors.
-/// Contains diagnostic code, message, and source location.
+/// Exception thrown for grammar (lexer/parser) errors in both RazorForge and Suflae.
+/// Contains diagnostic code, message, source location, and language.
 /// </summary>
-public class RazorForgeGrammarException(
-    RazorForgeDiagnosticCode code,
+public class GrammarException(
+    GrammarDiagnosticCode code,
     string message,
     string fileName,
     int line,
-    int column) : Exception(FormatMessage(code,
+    int column,
+    Language language) : Exception(FormatMessage(code,
     message,
     fileName,
     line,
-    column))
+    column,
+    language))
 {
     /// <summary>
     /// The diagnostic code for this error.
     /// </summary>
-    public RazorForgeDiagnosticCode Code { get; } = code;
+    public GrammarDiagnosticCode Code { get; } = code;
 
     /// <summary>
     /// The source file where the error occurred.
@@ -36,15 +40,21 @@ public class RazorForgeGrammarException(
     public int Column { get; } = column;
 
     /// <summary>
+    /// The language that produced this error.
+    /// </summary>
+    public Language Language { get; } = language;
+
+    /// <summary>
     /// Formats the error message in the standard format:
     /// error[RF-G001]: filename.rf:10:5: message
     /// </summary>
     private static string FormatMessage(
-        RazorForgeDiagnosticCode code,
+        GrammarDiagnosticCode code,
         string message,
         string fileName,
         int line,
-        int column)
+        int column,
+        Language language)
     {
         var location = fileName;
         if (line > 0)
@@ -56,6 +66,6 @@ public class RazorForgeGrammarException(
             }
         }
 
-        return $"error[{code.ToCodeString()}]: {location}: {message}";
+        return $"error[{code.ToCodeString(language)}]: {location}: {message}";
     }
 }

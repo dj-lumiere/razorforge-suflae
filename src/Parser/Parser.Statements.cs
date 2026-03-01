@@ -1,24 +1,30 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
-using RazorForge.Diagnostics;
+using SyntaxTree;
+using Compiler.Lexer;
+using SemanticAnalysis.Enums;
+using Compiler.Diagnostics;
 
-namespace Compilers.Suflae.Parser;
+namespace Compiler.Parser;
 
 /// <summary>
-/// Partial class containing statement parsing (if, while, for, when, return, etc.).
+/// Partial class containing statement parsing (if, while, for, when, return, using, release, danger!, etc.).
+/// Handles both RazorForge and Suflae syntax via <c>_language</c> dispatch.
 /// </summary>
-public partial class SuflaeParser
+public partial class Parser
 {
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // CONTROL FLOW
+    // ═══════════════════════════════════════════════════════════════════════════════
+
     /// <summary>
-    /// Parses an if statement with indented blocks and optional elseif/else chains.
-    /// Syntax: <c>if condition:</c> followed by indented body, optional <c>elseif condition:</c> blocks, optional <c>else:</c> block.
+    /// Parses an if statement with optional elseif/else chains.
+    /// Syntax: <c>if condition</c> followed by indented body
     /// </summary>
     /// <remarks>
     /// Parsing phases:
     ///
     /// PHASE 1: INITIAL IF
     ///   - Parse condition expression
-    ///   - Parse indented then-block
+    ///   - Parse body (indented block or brace block)
     ///
     /// PHASE 2: ELSEIF CHAIN (optional)
     ///   - Parse each elseif as a nested IfStatement
@@ -45,7 +51,7 @@ public partial class SuflaeParser
         // PHASE 1: INITIAL IF (condition and then-block)
         // ═══════════════════════════════════════════════════════════════════════════
         Expression condition = ParseExpression();
-        Statement thenBranch = ParseIndentedBlock();
+        Statement thenBranch = ParseBody();
 
         Statement? elseBranch = null;
 
@@ -56,7 +62,7 @@ public partial class SuflaeParser
         {
             SourceLocation elseifLocation = GetLocation(token: PeekToken(offset: -1));
             Expression elseifCondition = ParseExpression();
-            Statement elseifBranch = ParseIndentedBlock();
+            Statement elseifBranch = ParseBody();
 
             // Create nested if statement for this elseif
             var nestedIf = new IfStatement(Condition: elseifCondition,
@@ -72,12 +78,6 @@ public partial class SuflaeParser
             else if (elseBranch is IfStatement prevIf)
             {
                 // Find the end of the elseif chain and attach
-                IfStatement current = prevIf;
-                while (current.ElseStatement is IfStatement nextIf)
-                {
-                    current = nextIf;
-                }
-                // Create new chain with the nested if attached
                 elseBranch = AttachElseBranch(root: prevIf, newBranch: nestedIf);
             }
         }
@@ -93,8 +93,7 @@ public partial class SuflaeParser
                 Location: location);
         }
 
-        // Block colon removed — indentation determines block structure
-        Statement finalElse = ParseIndentedBlock();
+        Statement finalElse = ParseBody();
 
         if (elseBranch == null)
         {
@@ -138,7 +137,7 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses an unless statement (inverted if).
-    /// Syntax: <c>unless condition { body }</c> = <c>if not condition { body }</c>
+    /// Syntax: <c>unless condition</c> = <c>if not condition</c>, followed by indented body.
     /// </summary>
     /// <returns>An <see cref="IfStatement"/> with negated condition.</returns>
     private Statement ParseUnlessStatement()
@@ -146,13 +145,12 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Statement thenBranch = ParseIndentedBlock();
+        Statement thenBranch = ParseBody();
         Statement? elseBranch = null;
 
         if (Match(type: TokenType.Else))
         {
-            // Block colon removed — indentation determines block structure
-            elseBranch = ParseIndentedBlock();
+            elseBranch = ParseBody();
         }
 
         // Unless is "if not condition"
@@ -166,8 +164,8 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a while loop statement.
-    /// Syntax: <c>while condition:</c> followed by indented body, optional <c>else:</c> block.
-    /// The else block executes if the loop completes without hitting a break.
+    /// Syntax: <c>while condition</c> followed by indented body
+    /// Optional <c>else</c> block executes if the loop completes without hitting a break.
     /// </summary>
     /// <returns>A <see cref="WhileStatement"/> AST node.</returns>
     private Statement ParseWhileStatement()
@@ -175,14 +173,13 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression condition = ParseExpression();
-        Statement body = ParseIndentedBlock();
+        Statement body = ParseBody();
 
-        // Check for Python-style else clause (runs if loop completes without break)
+        // Check for else clause (runs if loop completes without break)
         Statement? elseBranch = null;
         if (Match(type: TokenType.Else))
         {
-            // Block colon removed — indentation determines block structure
-            elseBranch = ParseIndentedBlock();
+            elseBranch = ParseBody();
         }
 
         return new WhileStatement(Condition: condition, Body: body, ElseBranch: elseBranch, Location: location);
@@ -190,8 +187,8 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a loop statement (infinite loop).
-    /// Syntax: <c>loop:</c> followed by indented body.
-    /// Equivalent to <c>while true:</c>
+    /// Syntax: <c>loop</c> followed by indented body
+    /// Equivalent to <c>while true</c>.
     /// </summary>
     /// <returns>A <see cref="WhileStatement"/> AST node with true condition.</returns>
     private Statement ParseLoopStatement()
@@ -200,15 +197,15 @@ public partial class SuflaeParser
 
         // loop body is equivalent to while true body
         Expression trueCondition = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
-        Statement body = ParseIndentedBlock();
+        Statement body = ParseBody();
 
         return new WhileStatement(Condition: trueCondition, Body: body, ElseBranch: null, Location: location);
     }
 
     /// <summary>
     /// Parses a for-in loop statement.
-    /// Syntax: <c>for variable in iterable:</c> or <c>for (a, b) in iterable:</c> followed by indented body.
-    /// Optional <c>else:</c> block executes if loop completes without break.
+    /// Syntax: <c>for variable in iterable</c> or <c>for (a, b) in iterable</c> followed by body.
+    /// Optional <c>else</c> block executes if loop completes without break.
     /// </summary>
     /// <returns>A <see cref="ForStatement"/> AST node.</returns>
     private Statement ParseForStatement()
@@ -231,14 +228,13 @@ public partial class SuflaeParser
 
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in for loop");
         Expression iterable = ParseExpression();
-        Statement body = ParseIndentedBlock();
+        Statement body = ParseBody();
 
-        // Check for Python-style else clause (runs if loop completes without break)
+        // Check for else clause (runs if loop completes without break)
         Statement? elseBranch = null;
         if (Match(type: TokenType.Else))
         {
-            // Block colon removed — indentation determines block structure
-            elseBranch = ParseIndentedBlock();
+            elseBranch = ParseBody();
         }
 
         return new ForStatement(Variable: variable,
@@ -249,32 +245,99 @@ public partial class SuflaeParser
             Location: location);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // WHEN (PATTERN MATCHING)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
     /// <summary>
     /// Parses a when (pattern matching) statement.
-    /// Syntax: <c>when expression:</c> followed by indented pattern clauses with<c> =&gt;</c>.
-    /// Similar to Rust's match or C# switch expressions.
+    /// Mandatory <c>=&gt;</c> on all arms.
+    /// Both languages use indentation-based arms.
     /// </summary>
+    /// <remarks>
+    /// Two forms of when statements:
+    /// 1. Subject-based: when expr { is Type =&gt; ..., LITERAL =&gt; ..., else =&gt; ... }
+    /// 2. Condition-based (RF only): when { condition1 =&gt; ..., condition2 =&gt; ..., else =&gt; ... }
+    ///
+    /// Pattern types supported:
+    /// - 'else' / 'else varName' - default case (wildcard or binding)
+    /// - '_' - explicit wildcard
+    /// - 'is Type' / 'is Type varName' - type pattern with optional binding
+    /// - 'is Type (field1, field2)' - destructuring pattern
+    /// - 'isnot Type' - negated type pattern
+    /// - 'isonly FLAG' - exact flags pattern
+    /// - comparison operators (==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==)
+    /// - literal values (42, "hello", true)
+    /// - expression patterns (for condition-based when)
+    /// </remarks>
     /// <returns>A <see cref="WhenStatement"/> AST node.</returns>
     private WhenStatement ParseWhenStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        Expression expression = ParseExpression();
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1: Determine when form (subject-based vs condition-based)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Subject-based:    when value { is Type => ... }     (RF)
+        //                   when value\n    is Type => ...     (SF)
+        // Condition-based:  when { x > 0 => ... }             (RF only)
+        //                   when true { x > 0 => ... }        (RF only)
+        // ═══════════════════════════════════════════════════════════════════════════
 
+        bool isConditionBased = false;
+        Expression expression;
+
+        // Check for condition-based forms:
+        // 1. `when true\n` - explicit condition-based
+        // 2. `when\n` - bare when (no subject) = condition-based
+        if (Check(type: TokenType.Newline))
+        {
+            // Bare `when` followed by newline — condition-based with no subject
+            isConditionBased = true;
+            expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
+        }
+        else if (Check(type: TokenType.True))
+        {
+            // Peek ahead to see if this is `when true\n  INDENT` (condition-based)
+            // vs `when true_var\n  INDENT` (subject-based with a variable named starting with true)
+            Token nextToken = PeekToken(offset: 1);
+            if (nextToken.Type == TokenType.Newline)
+            {
+                isConditionBased = true;
+                Advance(); // consume 'true'
+                expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
+            }
+            else
+            {
+                expression = ParseExpression();
+            }
+        }
+        else
+        {
+            expression = ParseExpression();
+        }
+
+        // Indentation-delimited when block for both languages
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after when expression");
 
-        // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError("Expected indented block after when");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock,
+                "Expected indented block after when");
         }
         ProcessIndentToken();
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 2: Parse clauses (pattern => body)
+        // ═══════════════════════════════════════════════════════════════════════════
+
         var clauses = new List<WhenClause>();
 
-        while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+        bool AtClauseEnd() => Check(type: TokenType.Dedent) || IsAtEnd;
+
+        while (!AtClauseEnd())
         {
-            // Skip newlines
+            // Skip newlines between clauses
             if (Match(type: TokenType.Newline))
             {
                 continue;
@@ -283,11 +346,42 @@ public partial class SuflaeParser
             Pattern pattern;
             SourceLocation clauseLocation = GetLocation();
 
-            // Handle 'is' keyword pattern: type patterns only
-            // Forms: is SomeType, is SomeType varName, is SomeType(field1, field2), is None
-            // Note: 'is <value>' is NOT allowed - use '== value' for value comparisons
-            // Semantic analysis validates whether the identifier is a valid type or variant
-            if (Match(type: TokenType.Is))
+            // ─────────────────────────────────────────────────────────────────────
+            // Pattern dispatch: determine which pattern type we're parsing
+            // Order matters - check specific patterns before general ones
+            // ─────────────────────────────────────────────────────────────────────
+
+            // Case 1: 'else' keyword - default/fallback case
+            if (Match(type: TokenType.Else))
+            {
+                // Check for variable binding: else varName => ... or else varName\n INDENT
+                if (Check(type: TokenType.Identifier))
+                {
+                    TokenType nextAfterIdent = PeekToken(offset: 1).Type;
+                    if (nextAfterIdent is TokenType.FatArrow or TokenType.Newline)
+                    {
+                        string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
+                        pattern = new ElsePattern(VariableName: varName, Location: clauseLocation);
+                    }
+                    else
+                    {
+                        pattern = new ElsePattern(VariableName: null, Location: clauseLocation);
+                    }
+                }
+                else
+                {
+                    // Plain else without variable binding
+                    pattern = new ElsePattern(VariableName: null, Location: clauseLocation);
+                }
+            }
+            // Case 2: Condition-based when (RF only) - parse full expression as pattern
+            else if (isConditionBased)
+            {
+                Expression condExpr = ParseExpression();
+                pattern = new ExpressionPattern(Expression: condExpr, Location: clauseLocation);
+            }
+            // Case 3: 'is' keyword - type pattern
+            else if (Match(type: TokenType.Is))
             {
                 _inWhenPatternContext = true;
                 // Check if this is a flags pattern: identifier followed by and/or/but
@@ -296,26 +390,24 @@ public partial class SuflaeParser
                 {
                     pattern = ParseFlagsIsWhenPattern();
                 }
-                // 'is' must be followed by a type/variant name - semantic analysis validates
-                else if (Check(type: TokenType.TypeIdentifier) ||
-                    Check(type: TokenType.None) ||
+                // 'is' must be followed by a type/variant name
+                else if (Check(type: TokenType.None) ||
                     Check(type: TokenType.Identifier))
                 {
-                    // Parse as type pattern - semantic analysis will validate if it's a valid type
                     pattern = ParseTypePattern();
                 }
                 else
                 {
-                    throw ThrowParseError($"'is' must be followed by a type name. For value comparisons, use '== {CurrentToken.Text}' instead of 'is {CurrentToken.Text}'.");
+                    throw ThrowParseError(GrammarDiagnosticCode.InvalidPattern,
+                        $"'is' must be followed by a type name. For value comparisons, use '== {CurrentToken.Text}' instead of 'is {CurrentToken.Text}'.");
                 }
                 _inWhenPatternContext = false;
             }
-            // 'isnot' keyword - negated type pattern (no variable binding)
+            // Case 4: 'isnot' keyword - negated type pattern (no variable binding)
             else if (Match(type: TokenType.IsNot))
             {
                 _inWhenPatternContext = true;
-                if (Check(type: TokenType.TypeIdentifier) ||
-                    Check(type: TokenType.None) ||
+                if (Check(type: TokenType.None) ||
                     Check(type: TokenType.Identifier))
                 {
                     TypeExpression type = ParseType();
@@ -323,12 +415,12 @@ public partial class SuflaeParser
                 }
                 else
                 {
-                    throw ThrowParseError("'isnot' must be followed by a type name.");
+                    throw ThrowParseError(GrammarDiagnosticCode.InvalidPattern,
+                        "'isnot' must be followed by a type name.");
                 }
                 _inWhenPatternContext = false;
             }
-            // 'isonly' keyword - exact flags pattern
-            // Forms: isonly FLAG_A, isonly FLAG_A and FLAG_B
+            // Case 5: 'isonly' keyword - exact flags pattern
             else if (Match(type: TokenType.IsOnly))
             {
                 _inWhenPatternContext = true;
@@ -342,28 +434,12 @@ public partial class SuflaeParser
                     ExcludedFlags: null, IsExact: true, Location: clauseLocation);
                 _inWhenPatternContext = false;
             }
-            // Handle 'else' keyword for default case: else => body or else varName => body
-            else if (Match(type: TokenType.Else))
-            {
-                // Check for variable binding: else varName => or else varName (followed by indent)
-                TokenType nextAfterIdent = PeekToken(offset: 1).Type;
-                if (Check(type: TokenType.Identifier) &&
-                    (nextAfterIdent == TokenType.FatArrow || nextAfterIdent == TokenType.Newline))
-                {
-                    string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
-                    pattern = new ElsePattern(VariableName: varName, Location: clauseLocation);
-                }
-                else
-                {
-                    // Plain else without variable binding
-                    pattern = new ElsePattern(VariableName: null, Location: clauseLocation);
-                }
-            }
-            // Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
+            // Case 6: Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
             else if (IsComparisonOperator(CurrentToken.Type))
             {
                 pattern = ParseComparisonPattern();
             }
+            // Case 7: Other patterns (wildcards, literals, identifiers)
             else
             {
                 // Set context flag to prevent single-param lambdas from being parsed
@@ -373,40 +449,53 @@ public partial class SuflaeParser
                 _inWhenPatternContext = false;
             }
 
-            // Suflae supports two clause syntaxes:
-            // 1. is PATTERN => expr           (single expression)
-            // 2. is PATTERN                   (indented block, requires 'becomes')
-            //        statements...
-            //        becomes value
+            // ─────────────────────────────────────────────────────────────────────
+            // Arm body: either `=> expression` (single-line) or indented block
+            // ─────────────────────────────────────────────────────────────────────
+
             Statement body;
+            _inWhenClauseBody = true;
             if (Match(type: TokenType.FatArrow))
             {
-                // Single-line body: is PATTERN => expression
-                // Set flag to prevent comparisons from continuing the expression
-                _inWhenClauseBody = true;
-                body = ParseExpressionStatement();
-                _inWhenClauseBody = false;
+                // After =>, check for block form: => \n INDENT block DEDENT
+                if (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Indent)
+                {
+                    Advance(); // consume newline
+                    body = ParseIndentedBlock();
+                }
+                else if (Match(type: TokenType.Pass))
+                {
+                    // Single-line pass: pattern => pass
+                    body = new PassStatement(Location: GetLocation());
+                }
+                else
+                {
+                    // Single-line form: pattern => expression
+                    body = ParseExpressionStatement();
+                }
             }
             else
             {
-                // Multi-line body: is PATTERN followed by indented block
-                body = ParseIndentedBlock();
+                Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after when pattern");
+                body = ParseExpressionStatement();
             }
+            _inWhenClauseBody = false;
 
             clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
 
-            // Optional newline between clauses
-            Match(type: TokenType.Newline);
+            // Optional comma or newline between clauses
+            Match(TokenType.Comma, TokenType.Newline);
         }
 
-        // Process the when block's dedent (matching the ProcessIndentToken at the start)
+        // Close the when block (indentation-based)
         if (Check(type: TokenType.Dedent))
         {
             ProcessDedentTokens();
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError("Expected dedent after when clauses");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedent,
+                "Expected dedent after when clauses");
         }
 
         return new WhenStatement(Expression: expression, Clauses: clauses, Location: location);
@@ -415,7 +504,7 @@ public partial class SuflaeParser
     /// <summary>
     /// Parses a flags pattern in a when clause after 'is' when the next tokens
     /// indicate a flags chain (identifier followed by and/or/but).
-    /// Examples: is READ and WRITE => ..., is READ or WRITE => ...
+    /// Examples: is READ and WRITE =&gt; ..., is READ or WRITE =&gt; ...
     /// </summary>
     private FlagsPattern ParseFlagsIsWhenPattern()
     {
@@ -486,13 +575,14 @@ public partial class SuflaeParser
             // Check for qualified name: Type.CASE or Type.CASE.SubCase
             while (Match(type: TokenType.Dot))
             {
-                if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+                if (Match(TokenType.Identifier))
                 {
                     name += "." + PeekToken(offset: -1).Text;
                 }
                 else
                 {
-                    throw ThrowParseError("Expected identifier after '.' in pattern");
+                    throw ThrowParseError(GrammarDiagnosticCode.ExpectedDotInQualifiedPattern,
+                        "Expected identifier after '.' in pattern");
                 }
             }
 
@@ -511,17 +601,9 @@ public partial class SuflaeParser
                 variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
             }
 
-            TypeExpression type = new (Name: name, GenericArguments: null, Location: location);
+            TypeExpression type = new(Name: name, GenericArguments: null, Location: location);
             Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
             return TryParseGuard(innerPattern: typePattern, location: location);
-        }
-
-        // Identifier pattern: variable binding
-        if (Check(type: TokenType.Identifier))
-        {
-            string name = ConsumeIdentifier(errorMessage: "Expected identifier for pattern");
-            Pattern identPattern = new IdentifierPattern(Name: name, Location: location);
-            return TryParseGuard(innerPattern: identPattern, location: location);
         }
 
         // Literal pattern: constants like 42, "hello", true, etc.
@@ -532,7 +614,8 @@ public partial class SuflaeParser
             return TryParseGuard(innerPattern: litPattern, location: location);
         }
 
-        throw ThrowParseError($"Expected pattern, got {CurrentToken.Type}");
+        // Otherwise, treat as expression pattern
+        return new ExpressionPattern(Expression: expr, Location: location);
     }
 
     /// <summary>
@@ -546,7 +629,13 @@ public partial class SuflaeParser
     {
         if (Match(type: TokenType.If))
         {
+            // Temporarily reset _inWhenClauseBody to allow full expression parsing for the guard.
+            // This is needed for nested when statements where the outer clause body flag would
+            // otherwise cause ParseEquality/ParseComparison to return early.
+            bool savedInWhenClauseBody = _inWhenClauseBody;
+            _inWhenClauseBody = false;
             Expression guard = ParseExpression();
+            _inWhenClauseBody = savedInWhenClauseBody;
             return new GuardPattern(InnerPattern: innerPattern, Guard: guard, Location: location);
         }
 
@@ -555,7 +644,6 @@ public partial class SuflaeParser
 
     /// <summary>
     /// Parses a type pattern (used after 'is' keyword).
-    /// Accepts all identifiers since Suflae lexer emits Identifier for all.
     /// Syntax: Type, Type varName, Type.CASE, Type.CASE varName, CASE (a, b)
     /// Also handles special keywords like 'none'.
     /// </summary>
@@ -567,16 +655,15 @@ public partial class SuflaeParser
         // Handle 'is None' as a special case - None is a keyword
         if (Match(type: TokenType.None))
         {
-            // Create a special "None" type pattern
             TypeExpression noneType = new TypeExpression(Name: "None", GenericArguments: null, Location: location);
             Pattern nonePattern = new TypePattern(Type: noneType, VariableName: null, Bindings: null, Location: location);
             return TryParseGuard(innerPattern: nonePattern, location: location);
         }
 
-        // Accept Identifier (Suflae emits Identifier for all identifiers)
-        if (!Check(type: TokenType.Identifier) && !Check(type: TokenType.TypeIdentifier))
+        if (!Check(type: TokenType.Identifier))
         {
-            throw ThrowParseError($"Expected type name after 'is', got {CurrentToken.Type}");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedPattern,
+                $"Expected type name after 'is', got {CurrentToken.Type}");
         }
 
         string name = CurrentToken.Text;
@@ -585,13 +672,14 @@ public partial class SuflaeParser
         // Check for qualified name: Type.CASE or Type.CASE.SubCase
         while (Match(type: TokenType.Dot))
         {
-            if (Match(TokenType.Identifier, TokenType.TypeIdentifier))
+            if (Match(TokenType.Identifier))
             {
                 name += "." + PeekToken(offset: -1).Text;
             }
             else
             {
-                throw ThrowParseError("Expected identifier after '.' in pattern");
+                throw ThrowParseError(GrammarDiagnosticCode.ExpectedDotInQualifiedPattern,
+                    "Expected identifier after '.' in pattern");
             }
         }
 
@@ -616,6 +704,63 @@ public partial class SuflaeParser
     }
 
     /// <summary>
+    /// Checks if the given token type is a comparison operator used in when patterns.
+    /// Supported operators: ==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==
+    /// </summary>
+    /// <param name="tokenType">The token type to check.</param>
+    /// <returns>True if the token is a comparison operator for patterns.</returns>
+    private static bool IsComparisonOperator(TokenType tokenType)
+    {
+        return tokenType is TokenType.Equal or TokenType.NotEqual
+            or TokenType.Less or TokenType.Greater
+            or TokenType.LessEqual or TokenType.GreaterEqual
+            or TokenType.ReferenceEqual or TokenType.ReferenceNotEqual;
+    }
+
+    /// <summary>
+    /// Parses a comparison pattern in a when clause.
+    /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
+    /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
+    /// </summary>
+    /// <returns>A <see cref="ComparisonPattern"/> or <see cref="GuardPattern"/> AST node.</returns>
+    private Pattern ParseComparisonPattern()
+    {
+        SourceLocation location = GetLocation();
+        TokenType op = CurrentToken.Type;
+        Advance(); // consume the operator
+
+        // Parse the value to compare against
+        // Set context flag to prevent lambda parsing
+        _inWhenPatternContext = true;
+        Expression value = ParsePrimary();
+
+        // Allow member access and calls on the primary expression (e.g., Status.ACTIVE, get_user())
+        while (Check(type: TokenType.Dot) || Check(type: TokenType.LeftParen))
+        {
+            if (Match(type: TokenType.Dot))
+            {
+                string memberName = ConsumeIdentifier(errorMessage: "Expected member name after '.'");
+                value = new MemberExpression(Object: value, PropertyName: memberName, Location: GetLocation());
+            }
+            else if (Match(type: TokenType.LeftParen))
+            {
+                List<Expression> args = ParseArgumentList();
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
+                value = new CallExpression(Callee: value, Arguments: args, Location: GetLocation());
+            }
+        }
+
+        _inWhenPatternContext = false;
+
+        var pattern = new ComparisonPattern(Operator: op, Value: value, Location: location);
+        return TryParseGuard(innerPattern: pattern, location: location);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // JUMP STATEMENTS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
     /// Parses a return statement.
     /// Syntax: <c>return</c> or <c>return expression</c>
     /// </summary>
@@ -625,8 +770,11 @@ public partial class SuflaeParser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         Expression? value = null;
-        // Check for both Newline and Dedent - in Suflae, either can follow a valueless return
-        if (!Check(type: TokenType.Newline) && !Check(type: TokenType.Dedent) && !IsAtEnd)
+        // Check for both Newline and Dedent/RightBrace - either can follow a valueless return
+        if (!Check(type: TokenType.Newline) &&
+            !Check(type: TokenType.Dedent) &&
+            !Check(type: TokenType.RightBrace) &&
+            !IsAtEnd)
         {
             value = ParseExpression();
         }
@@ -664,7 +812,7 @@ public partial class SuflaeParser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // fail requires an error expression (Crashable type)
+        // throw requires an error expression (Crashable type)
         Expression error = ParseExpression();
 
         ConsumeStatementTerminator();
@@ -739,11 +887,11 @@ public partial class SuflaeParser
         // Discard must be followed by a call expression
         if (expression is not CallExpression)
         {
-            throw new SuflaeGrammarException(
-                SuflaeDiagnosticCode.DiscardRequiresCall,
+            throw new GrammarException(
+                GrammarDiagnosticCode.DiscardRequiresCall,
                 "The 'discard' keyword must be followed by a routine call. " +
                 "Use 'discard routine_call()' to explicitly ignore a return value.",
-                fileName, location.Line, location.Column);
+                fileName, location.Line, location.Column, _language);
         }
 
         ConsumeStatementTerminator();
@@ -751,23 +899,106 @@ public partial class SuflaeParser
     }
 
     /// <summary>
-    /// Parses a generate statement (generator yield).
-    /// Syntax: <c>generate expression</c>
+    /// Parses an emit statement (generator yield).
+    /// Syntax: <c>emit expression</c>
     /// Yields a value from a generator routine.
     /// </summary>
-    /// <returns>A <see cref="GenerateStatement"/> AST node.</returns>
-    private GenerateStatement ParseGenerateStatement()
+    /// <returns>An <see cref="EmitStatement"/> AST node.</returns>
+    private EmitStatement ParseEmitStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         Expression expression = ParseExpression();
         ConsumeStatementTerminator();
-        return new GenerateStatement(Expression: expression, Location: location);
+        return new EmitStatement(Expression: expression, Location: location);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // RESOURCE MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Parses a using block for scoped resource management (P17).
+    /// Syntax: <c>using expr as name</c> with indented body.
+    /// Multi-resource: <c>using expr1 as name1, expr2 as name2</c> (desugars to nested blocks).
+    /// </summary>
+    /// <remarks>
+    /// <code>
+    /// using open("file.txt") as file
+    ///   var content = file.read_all()
+    ///   process(content)
+    ///   # file is automatically closed at block exit
+    /// </code>
+    /// </remarks>
+    /// <returns>A <see cref="UsingStatement"/> AST node (possibly nested for multi-resource).</returns>
+    private Statement ParseUsingStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // Parse resource-binding pairs: using expr as name [, expr as name]*
+        var resources = new List<(Expression Resource, string Name)>();
+
+        do
+        {
+            Expression resource = ParseExpression();
+            Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using block");
+            string name = ConsumeIdentifier(errorMessage: "Expected binding name after 'as'");
+            resources.Add(item: (resource, name));
+        } while (Match(type: TokenType.Comma));
+
+        // Parse the indented body
+        Statement body = ParseBody();
+
+        // Build nested UsingStatements from inside out (last resource is innermost)
+        Statement result = body;
+        for (int i = resources.Count - 1; i >= 0; i--)
+        {
+            result = new UsingStatement(
+                Resource: resources[index: i].Resource,
+                Name: resources[index: i].Name,
+                Body: result,
+                Location: location);
+        }
+
+        return result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // RF-ONLY CONSTRUCTS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Parses a danger! statement (unsafe memory operations block).
+    /// RF-only construct guarded by <c>_language == Language.RazorForge</c>.
+    /// Syntax: <c>danger!</c> followed by indented body.
+    /// </summary>
+    /// <returns>A <see cref="DangerStatement"/> AST node.</returns>
+    private DangerStatement ParseDangerStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        // 'danger!' is tokenized as a single Danger token (including the '!')
+        var body = (BlockStatement)ParseIndentedBlock();
+
+        return new DangerStatement(Body: body, Location: location);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // BLOCK / BODY PARSING
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Parses a block body using indentation (indent/dedent delimited).
+    /// Both RazorForge and Suflae use indentation-based syntax.
+    /// </summary>
+    /// <returns>A <see cref="BlockStatement"/> AST node.</returns>
+    private Statement ParseBody()
+    {
+        return ParseIndentedBlock();
     }
 
     /// <summary>
     /// Parses an indented block of statements.
     /// Expects INDENT token, parses statements until DEDENT.
-    /// This is core to Suflae's Python-like indentation syntax.
     /// </summary>
     /// <returns>A <see cref="BlockStatement"/> containing the parsed statements.</returns>
     private Statement ParseIndentedBlock()
@@ -776,20 +1007,21 @@ public partial class SuflaeParser
         var statements = new List<Statement>();
 
         // Consume newline before indent (optional if we're already at Indent)
-        // This handles cases like when clause blocks where token stream varies
         if (Check(type: TokenType.Newline))
         {
             Advance(); // consume newline
         }
         else if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError("Expected newline before indented block");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock,
+                "Expected newline before indented block");
         }
 
         // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError("Expected indented block");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock,
+                "Expected indented block");
         }
 
         // Process the indent token
@@ -815,14 +1047,15 @@ public partial class SuflaeParser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError("Expected dedent to close indented block");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedent,
+                "Expected dedent to close indented block");
         }
 
         return new BlockStatement(Statements: statements, Location: location);
     }
 
     /// <summary>
-    /// Parses an expression statement (expression followed by newline).
+    /// Parses an expression statement (expression followed by newline/terminator).
     /// Used for function calls, assignments, and other expressions at statement level.
     /// </summary>
     /// <returns>An <see cref="ExpressionStatement"/> AST node.</returns>
@@ -833,18 +1066,20 @@ public partial class SuflaeParser
         return new ExpressionStatement(Expression: expr, Location: expr.Location);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DESTRUCTURING
+    // ═══════════════════════════════════════════════════════════════════════════════
+
     /// <summary>
-    /// Parses record/entity destructuring in let/var bindings.
-    /// Syntax: <c>let (field, field2) = expr</c> or <c>let (field: alias, field2: alias2) = expr</c>
-    /// or nested: <c>let ((x, y), radius) = circle</c>
+    /// Parses record/entity destructuring in var bindings.
+    /// Syntax: <c>var (field, field2) = expr</c> or <c>var (field: alias, field2: alias2) = expr</c>
+    /// or nested: <c>var ((x, y), radius) = circle</c>
     /// Destructuring only works for types where ALL fields are public.
     /// </summary>
     /// <returns>A <see cref="DestructuringStatement"/> AST node.</returns>
     private DestructuringStatement ParseDestructuringDeclaration()
     {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we already consumed 'let'/'var'
-        bool isMutable = PeekToken(offset: -2)
-           .Type == TokenType.Var;
+        SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we already consumed 'var'
 
         // Parse the destructuring pattern (reuse ParseDestructuringBindings from Expressions)
         List<DestructuringBinding> bindings = ParseDestructuringBindings();
@@ -861,117 +1096,6 @@ public partial class SuflaeParser
 
         return new DestructuringStatement(Pattern: pattern,
             Initializer: initializer,
-            IsMutable: isMutable,
             Location: location);
-    }
-
-    /// <summary>
-    /// Parses a using statement for resource management.
-    /// Syntax: <c>using resource_expr as name:</c> or <c>using r1 as n1, r2 as n2:</c>
-    /// Similar to Python's 'with' statement or C#'s 'using' statement.
-    /// </summary>
-    /// <remarks>
-    /// The resource is acquired when entering the block and automatically released when exiting.
-    /// Supports multiple resources which are nested as inner using statements.
-    /// <code>
-    /// using open("file.txt") as file:
-    ///     let content = file.read_all()
-    ///     process(content)
-    /// # file is automatically closed here
-    ///
-    /// # Multiple resources:
-    /// using open("input.txt") as input, open("output.txt") as output:
-    ///     output.write(input.read_all())
-    /// </code>
-    /// </remarks>
-    /// <returns>A <see cref="UsingStatement"/> AST node (nested for multiple resources).</returns>
-    private Statement ParseUsingStatement()
-    {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
-
-        // Parse all resource bindings: resource as name [, resource as name, ...]
-        var resources = new List<(Expression Resource, string Name, SourceLocation Location)>();
-
-        do
-        {
-            SourceLocation resourceLocation = GetLocation();
-
-            // Parse resource expression
-            Expression resource = ParseExpression();
-
-            // Expect 'as'
-            Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using statement");
-
-            // Parse the binding name
-            string name = ConsumeIdentifier(errorMessage: "Expected identifier after 'as' in using statement");
-
-            resources.Add((resource, name, resourceLocation));
-        } while (Match(type: TokenType.Comma));
-
-        // Indented body follows
-        Statement body = ParseIndentedBlock();
-
-        // Build nested UsingStatements from inside out
-        // The last resource gets the actual body, others wrap around it
-        for (int i = resources.Count - 1; i >= 0; i--)
-        {
-            var (resource, name, resLocation) = resources[i];
-            body = new UsingStatement(Resource: resource, Name: name, Body: body, Location: i == 0 ? location : resLocation);
-        }
-
-        return body;
-    }
-
-    /// <summary>
-    /// Checks if the given token type is a comparison operator used in when patterns.
-    /// Supported operators: ==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==
-    /// </summary>
-    /// <param name="tokenType">The token type to check.</param>
-    /// <returns>True if the token is a comparison operator for patterns.</returns>
-    private static bool IsComparisonOperator(TokenType tokenType)
-    {
-        return tokenType is TokenType.Equal or TokenType.NotEqual
-            or TokenType.Less or TokenType.Greater
-            or TokenType.LessEqual or TokenType.GreaterEqual
-            or TokenType.ReferenceEqual or TokenType.ReferenceNotEqual;
-    }
-
-    /// <summary>
-    /// Parses a comparison pattern in a when clause.
-    /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
-    /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
-    /// </summary>
-    /// <returns>A <see cref="ComparisonPattern"/> or <see cref="GuardPattern"/> AST node.</returns>
-    private Pattern ParseComparisonPattern()
-    {
-        SourceLocation location = GetLocation();
-        TokenType op = CurrentToken.Type;
-        Advance(); // consume the operator
-
-        // Parse the value to compare against
-        // Set context flag to prevent lambda parsing
-        _inWhenPatternContext = true;
-        Expression value = ParsePrimary();
-
-        // Allow member access and calls on the primary expression (e.g., Status.ACTIVE, get_user())
-        while (Check(type: TokenType.Dot) || Check(type: TokenType.LeftParen))
-        {
-            if (Match(type: TokenType.Dot))
-            {
-                string memberName = ConsumeIdentifier(errorMessage: "Expected member name after '.'");
-                value = new MemberExpression(Object: value, PropertyName: memberName, Location: GetLocation());
-            }
-            else if (Match(type: TokenType.LeftParen))
-            {
-                List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
-                value = new CallExpression(Callee: value, Arguments: args, Location: GetLocation());
-            }
-        }
-
-        _inWhenPatternContext = false;
-
-        var pattern = new ComparisonPattern(Operator: op, Value: value, Location: location);
-        return TryParseGuard(innerPattern: pattern, location: location);
     }
 }
