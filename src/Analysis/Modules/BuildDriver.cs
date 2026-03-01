@@ -1,87 +1,84 @@
-﻿namespace Compilers.Analysis.Modules;
+﻿namespace Builder.Modules;
 
-using Enums;
-using Results;
-using RazorForge.Lexer;
-using RazorForge.Parser;
-using Shared.AST;
-using Shared.Lexer;
-using Shared.Parser;
-using Suflae.Lexer;
-using Suflae.Parser;
-using global::RazorForge.Diagnostics;
+using SemanticAnalysis.Enums;
+using SemanticAnalysis.Results;
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Parser;
+using SemanticAnalysis.Diagnostics;
+using Compiler.Diagnostics;
 
 /// <summary>
-/// Result of compiling a single source file.
+/// Result of building a single source file.
 /// </summary>
 /// <param name="FilePath">The path to the source file.</param>
 /// <param name="Module">The module declared in the file (module path).</param>
 /// <param name="Ast">The parsed AST.</param>
 /// <param name="Imports">Import declarations found in the file.</param>
 /// <param name="ParseWarnings">Warnings from parsing.</param>
-public sealed record FileCompilationUnit(
+public sealed record FileBuildUnit(
     string FilePath,
     string? Module,
     Program Ast,
     IReadOnlyList<ImportDeclaration> Imports,
-    IReadOnlyList<CompileWarning> ParseWarnings);
+    IReadOnlyList<BuildWarning> ParseWarnings);
 
 /// <summary>
-/// Result of a complete multi-file compilation.
+/// Result of a complete multi-file build.
 /// </summary>
-/// <param name="Units">All successfully compiled file units.</param>
-/// <param name="Errors">All errors encountered during compilation.</param>
-/// <param name="Warnings">All warnings encountered during compilation.</param>
+/// <param name="Units">All successfully built file units.</param>
+/// <param name="Errors">All errors encountered during building.</param>
+/// <param name="Warnings">All warnings encountered during building.</param>
 /// <param name="InitializationOrder">Modules in safe initialization order.</param>
-public sealed record CompilationResult(
-    IReadOnlyList<FileCompilationUnit> Units,
+public sealed record BuildResult(
+    IReadOnlyList<FileBuildUnit> Units,
     IReadOnlyList<SemanticError> Errors,
-    IReadOnlyList<CompileWarning> Warnings,
+    IReadOnlyList<BuildWarning> Warnings,
     IReadOnlyList<string> InitializationOrder);
 
 /// <summary>
-/// Coordinates multi-file compilation with circular import detection.
-/// This is the entry point for compiling RazorForge/Suflae projects.
+/// Coordinates multi-file building with circular import detection.
+/// This is the entry point for building RazorForge/Suflae projects.
 /// </summary>
-public sealed class CompilationDriver
+public sealed class BuildDriver
 {
     private readonly ModuleDependencyGraph _dependencyGraph = new();
     private readonly ModuleResolver _resolver;
     private readonly Language _language;
 
     private readonly List<SemanticError> _errors = [];
-    private readonly List<CompileWarning> _warnings = [];
-    private readonly Dictionary<string, FileCompilationUnit> _compiledUnits = [];
+    private readonly List<BuildWarning> _warnings = [];
+    private readonly Dictionary<string, FileBuildUnit> _compiledUnits = [];
     private readonly HashSet<string> _processingFiles = [];
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="CompilationDriver"/> class.
+    /// Initializes a new instance of the <see cref="BuildDriver"/> class.
     /// </summary>
     /// <param name="projectRoot">The root directory of the project.</param>
     /// <param name="stdlibRoot">The root directory of the standard library.</param>
-    /// <param name="language">The language being compiled.</param>
-    public CompilationDriver(string projectRoot, string stdlibRoot, Language language)
+    /// <param name="language">The language being built.</param>
+    public BuildDriver(string projectRoot, string stdlibRoot, Language language)
     {
         _resolver = new ModuleResolver(projectRoot: projectRoot, stdlibRoot: stdlibRoot);
         _language = language;
     }
 
     /// <summary>
-    /// Compiles a single source file and all its dependencies.
+    /// Builds a single source file and all its dependencies.
     /// </summary>
-    /// <param name="entryFile">The main source file to compile.</param>
-    /// <returns>The compilation result with all units and errors.</returns>
-    public CompilationResult CompileFile(string entryFile)
+    /// <param name="entryFile">The main source file to build.</param>
+    /// <returns>The build result with all units and errors.</returns>
+    public BuildResult CompileFile(string entryFile)
     {
         return CompileFiles(sourceFiles: [entryFile]);
     }
 
     /// <summary>
-    /// Compiles multiple source files and all their dependencies.
+    /// Builds multiple source files and all their dependencies.
     /// </summary>
-    /// <param name="sourceFiles">The source files to compile.</param>
-    /// <returns>The compilation result with all units and errors.</returns>
-    public CompilationResult CompileFiles(IReadOnlyList<string> sourceFiles)
+    /// <param name="sourceFiles">The source files to build.</param>
+    /// <returns>The build result with all units and errors.</returns>
+    public BuildResult CompileFiles(IReadOnlyList<string> sourceFiles)
     {
         // Process each entry file
         foreach (string sourceFile in sourceFiles)
@@ -119,7 +116,7 @@ public sealed class CompilationDriver
             }
         }
 
-        return new CompilationResult(
+        return new BuildResult(
             Units: _compiledUnits.Values.ToList(),
             Errors: _errors,
             Warnings: _warnings,
@@ -134,7 +131,7 @@ public sealed class CompilationDriver
         // Normalize the path
         filePath = Path.GetFullPath(path: filePath);
 
-        // Skip if already compiled
+        // Skip if already built
         if (_compiledUnits.ContainsKey(key: filePath))
         {
             return;
@@ -151,7 +148,7 @@ public sealed class CompilationDriver
         try
         {
             // Parse the file
-            FileCompilationUnit? unit = ParseFile(filePath: filePath);
+            FileBuildUnit? unit = ParseFile(filePath: filePath);
             if (unit == null)
             {
                 return;
@@ -208,7 +205,7 @@ public sealed class CompilationDriver
     /// <summary>
     /// Parses a single source file.
     /// </summary>
-    private FileCompilationUnit? ParseFile(string filePath)
+    private FileBuildUnit? ParseFile(string filePath)
     {
         try
         {
@@ -235,33 +232,14 @@ public sealed class CompilationDriver
             }
 
             // Tokenize
-            List<Token> tokens;
-            if (isSuflae)
-            {
-                var tokenizer = new SuflaeTokenizer(code, filePath);
-                tokens = tokenizer.Tokenize();
-            }
-            else
-            {
-                var tokenizer = new RazorForgeTokenizer(code, filePath);
-                tokens = tokenizer.Tokenize();
-            }
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+            var tokenizer = new Tokenizer(code, filePath, language);
+            List<Token> tokens = tokenizer.Tokenize();
 
             // Parse
-            Program ast;
-            IReadOnlyList<CompileWarning> warnings;
-            if (isSuflae)
-            {
-                var parser = new SuflaeParser(tokens: tokens, fileName: filePath);
-                ast = parser.Parse();
-                warnings = parser.GetWarnings();
-            }
-            else
-            {
-                var parser = new RazorForgeParser(tokens: tokens, fileName: filePath);
-                ast = parser.Parse();
-                warnings = parser.GetWarnings();
-            }
+            var parser = new Parser(tokens: tokens, language: language, fileName: filePath);
+            Program ast = parser.Parse();
+            IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
 
             // Extract module and imports
             string? modulePath = null;
@@ -279,14 +257,14 @@ public sealed class CompilationDriver
                 }
             }
 
-            return new FileCompilationUnit(
+            return new FileBuildUnit(
                 FilePath: filePath,
                 Module: modulePath,
                 Ast: ast,
                 Imports: imports,
                 ParseWarnings: warnings);
         }
-        catch (ParseException ex)
+        catch (GrammarException ex)
         {
             _errors.Add(item: new SemanticError(
                 Code: SemanticDiagnosticCode.ParseError,
@@ -311,7 +289,7 @@ public sealed class CompilationDriver
     {
         filePath = Path.GetFullPath(path: filePath);
 
-        if (_compiledUnits.TryGetValue(key: filePath, value: out FileCompilationUnit? unit))
+        if (_compiledUnits.TryGetValue(key: filePath, value: out FileBuildUnit? unit))
         {
             return unit.Module ?? Path.GetFileNameWithoutExtension(path: filePath);
         }

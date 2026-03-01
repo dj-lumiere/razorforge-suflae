@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace Compilers.Shared.Analysis.Native;
+namespace SemanticAnalysis.Native;
 
 /// <summary>
 /// P/Invoke bindings for native numeric literal parsing functions.

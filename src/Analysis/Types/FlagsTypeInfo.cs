@@ -1,11 +1,11 @@
-namespace Compilers.Analysis.Types;
+namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
 /// Type information for flags (bitmask types with named members).
 /// Backed by U64; max 64 members. Members are auto-assigned power-of-two bit positions.
-/// Only compiler-generated operators allowed (and, but, is, isnot, isonly).
+/// Only builder-generated operators allowed (and, but, is, isnot, isonly).
 /// </summary>
 public sealed class FlagsTypeInfo : TypeInfo
 {
@@ -24,10 +24,10 @@ public sealed class FlagsTypeInfo : TypeInfo
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Always thrown as flags types cannot be generic.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
-            message: $"Flags type '{Name}' cannot be instantiated with type arguments.");
+            message: $"Flags type '{Name}' cannot be resolved with type arguments.");
     }
 }
 

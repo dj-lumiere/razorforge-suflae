@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Enums;
+﻿namespace SemanticAnalysis.Enums;
 
 /// <summary>
 /// Supported languages for the type system.

@@ -1,7 +1,7 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
-using Shared.AST;
+using SyntaxTree;
 
 /// <summary>
 /// Information about a method signature in a protocol.
@@ -16,8 +16,8 @@ public sealed class ProtocolMethodInfo
     /// </summary>
     public bool IsInstanceMethod { get; init; } = true;
 
-    /// <summary>The mutation category for this method.</summary>
-    public MutationCategory Mutation { get; init; } = MutationCategory.Migratable;
+    /// <summary>The modification category for this method.</summary>
+    public ModificationCategory Modification { get; init; } = ModificationCategory.Migratable;
 
     /// <summary>Parameter types (excluding me for instance methods).</summary>
     public IReadOnlyList<TypeInfo> ParameterTypes { get; init; } = [];

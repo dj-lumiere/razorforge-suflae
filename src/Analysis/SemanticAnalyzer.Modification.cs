@@ -1,37 +1,37 @@
-﻿namespace Compilers.Analysis;
+﻿namespace SemanticAnalysis;
 
 using Enums;
 using Inference;
 using Symbols;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 
 /// <summary>
-/// Phase 4: Mutation inference for RazorForge.
+/// Phase 4: Modification inference for RazorForge.
 /// Implements the three-phase algorithm from the wiki:
 ///
 /// Phase 1: Direct analysis - detect me.field = value patterns (done during body analysis)
-/// Phase 2: Call graph propagation - if A calls mutating B on me, A is mutating
-/// Phase 3: Token verification - verify mutating methods called with ! token (enforced at call sites)
+/// Phase 2: Call graph propagation - if A calls modifying B on me, A is modifying
+/// Phase 3: Token verification - verify modifying methods called with ! token (enforced at call sites)
 /// </summary>
 public sealed partial class SemanticAnalyzer
 {
     #region Phase 4: Mutation Inference
 
     /// <summary>
-    /// Infers mutation categories for all routines using call graph analysis.
+    /// Infers modification categories for all routines using call graph analysis.
     /// Called after Phase 3 body analysis is complete.
     /// </summary>
-    private void InferMutationCategories()
+    private void InferModificationCategories()
     {
-        // Create the mutation inference engine and run propagation
-        _mutationInference = new MutationInference(callGraph: _callGraph, registry: _registry);
-        _mutationInference.InferAll();
+        // Create the modification inference engine and run propagation
+        _modificationInference = new ModificationInference(callGraph: _callGraph, registry: _registry);
+        _modificationInference.InferAll();
 
         // Apply inferred categories back to RoutineInfo
         foreach (CallGraphNode node in _callGraph.AllNodes)
         {
-            node.Routine.MutationCategory = node.InferredMutation;
+            node.Routine.ModificationCategory = node.InferredModification;
         }
     }
 
@@ -40,7 +40,7 @@ public sealed partial class SemanticAnalyzer
     /// Called during expression analysis when a method call is encountered.
     /// </summary>
     /// <param name="callee">The routine being called.</param>
-    /// <param name="callOnMe">Whether the call is on 'me' (affects mutation propagation).</param>
+    /// <param name="callOnMe">Whether the call is on 'me' (affects modification propagation).</param>
     private void TrackCall(RoutineInfo callee, bool callOnMe)
     {
         if (_currentRoutine == null)
@@ -55,18 +55,18 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Analyzes a statement for direct mutations to 'me' fields.
+    /// Analyzes a statement for direct modifications to 'me' fields.
     /// Called during Phase 3 body analysis.
     /// </summary>
-    /// <param name="statement">The statement to analyze for mutations.</param>
-    private void AnalyzeStatementForMutations(Statement statement)
+    /// <param name="statement">The statement to analyze for modifications.</param>
+    private void AnalyzeStatementForModifications(Statement statement)
     {
         if (_currentCallGraphNode == null)
         {
             return;
         }
 
-        _mutationInference?.AnalyzeStatementForMutation(
+        _modificationInference?.AnalyzeStatementForModification(
             node: _currentCallGraphNode,
             statement: statement);
     }
@@ -118,23 +118,23 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that a mutating call uses the correct token.
-    /// Called during method call analysis to enforce mutability rules.
+    /// Validates that a modifying call uses the correct token.
+    /// Called during method call analysis to enforce modifiability rules.
     /// </summary>
     /// <param name="callee">The routine being called.</param>
     /// <param name="callExpr">The call expression.</param>
-    /// <param name="hasMutatingToken">Whether the ! token was used.</param>
-    private void ValidateMutatingCall(RoutineInfo callee, Expression callExpr, bool hasMutatingToken)
+    /// <param name="hasModifyingToken">Whether the ! token was used.</param>
+    private void ValidateModifyingCall(RoutineInfo callee, Expression callExpr, bool hasModifyingToken)
     {
-        MutationCategory calleeCategory = callee.MutationCategory;
+        ModificationCategory calleeCategory = callee.ModificationCategory;
 
         // Readonly methods don't need special tokens
-        if (calleeCategory == MutationCategory.Readonly)
+        if (calleeCategory == ModificationCategory.Readonly)
         {
-            if (hasMutatingToken)
+            if (hasModifyingToken)
             {
                 ReportWarning(
-                    SemanticWarningCode.UnnecessaryMutationToken,
+                    SemanticWarningCode.UnnecessaryModificationToken,
                     $"Method '{callee.Name}' is readonly, no ! token needed.",
                     callExpr.Location);
             }
@@ -143,17 +143,17 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Writable and Migratable methods require ! token
-        if (!hasMutatingToken && calleeCategory >= MutationCategory.Writable)
+        if (!hasModifyingToken && calleeCategory >= ModificationCategory.Writable)
         {
             ReportError(
-                SemanticDiagnosticCode.MutatingMethodRequiresToken,
+                SemanticDiagnosticCode.ModifyingMethodRequiresToken,
                 $"Method '{callee.Name}' is {calleeCategory.ToString().ToLower()} and requires ! token.",
                 callExpr.Location);
         }
     }
 
     /// <summary>
-    /// Validates token-based access for mutation.
+    /// Validates token-based access for modification.
     /// Viewed/Inspected tokens can only call readonly methods.
     /// </summary>
     /// <param name="tokenType">The wrapper type (Viewed, Inspected, Hijacked, Seized).</param>
@@ -161,17 +161,17 @@ public sealed partial class SemanticAnalyzer
     /// <param name="callExpr">The call expression for error location.</param>
     private void ValidateTokenAccess(string tokenType, RoutineInfo callee, Expression callExpr)
     {
-        MutationCategory calleeCategory = callee.MutationCategory;
+        ModificationCategory calleeCategory = callee.ModificationCategory;
 
         switch (tokenType)
         {
             case "Viewed":
             case "Inspected":
                 // Read-only tokens can only call readonly methods
-                if (calleeCategory != MutationCategory.Readonly)
+                if (calleeCategory != ModificationCategory.Readonly)
                 {
                     ReportError(
-                        SemanticDiagnosticCode.MutatingMethodThroughReadOnlyToken,
+                        SemanticDiagnosticCode.ModifyingMethodThroughReadOnlyToken,
                         $"Cannot call {calleeCategory.ToString().ToLower()} method '{callee.Name}' through {tokenType} token.",
                         callExpr.Location);
                 }
@@ -182,7 +182,7 @@ public sealed partial class SemanticAnalyzer
             case "Seized":
                 // Write tokens can call readonly or writable
                 // TODO: Migratable is possible unless iterating.
-                if (calleeCategory == MutationCategory.Migratable)
+                if (calleeCategory == ModificationCategory.Migratable)
                 {
                     ReportError(
                         SemanticDiagnosticCode.MigratableMethodThroughExclusiveToken,

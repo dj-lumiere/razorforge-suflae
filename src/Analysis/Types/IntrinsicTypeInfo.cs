@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
@@ -41,10 +41,10 @@ public sealed class IntrinsicTypeInfo : TypeInfo
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Always thrown as intrinsic types cannot be generic.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         // Intrinsic types are never generic
-        throw new InvalidOperationException(message: $"Intrinsic type '{Name}' cannot be instantiated with type arguments.");
+        throw new InvalidOperationException(message: $"Intrinsic type '{Name}' cannot be resolved with type arguments.");
     }
 
     /// <summary>

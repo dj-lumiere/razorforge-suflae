@@ -1,4 +1,4 @@
-namespace Compilers.Analysis.Types;
+namespace SemanticAnalysis.Types;
 
 using Enums;
 
@@ -80,11 +80,11 @@ public sealed class RoutineTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         // Function types don't have generic parameters in the traditional sense
         // But we might need to substitute type parameters in param/return types
-        throw new NotSupportedException("Function types cannot be directly instantiated.");
+        throw new NotSupportedException("Function types cannot be directly resolved.");
     }
 
     /// <summary>
@@ -118,14 +118,14 @@ public sealed class RoutineTypeInfo : TypeInfo
             return substituted;
         }
 
-        // For generic instantiations, recursively substitute
-        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
+        // For generic resolutions, recursively substitute
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             type.TypeArguments
                 .Select(arg => SubstituteType(arg, substitution))
                 .ToList();
 
-            // Would need to reconstruct the instantiation - for now just return original
+            // Would need to reconstruct the resolution - for now just return original
             // This is a limitation that can be addressed later
         }
 

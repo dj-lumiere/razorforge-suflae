@@ -1,11 +1,11 @@
-﻿namespace Compilers.Analysis.Symbols;
+﻿namespace SemanticAnalysis.Symbols;
 
 using Enums;
-using Shared.AST;
+using SyntaxTree;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
-/// Information about a routine (function, method, constructor).
+/// Information about a routine (function, method, creator).
 /// </summary>
 public sealed class RoutineInfo
 {
@@ -52,14 +52,14 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine calls other failable functions (propagated failability).</summary>
     public bool HasFailableCalls { get; set; }
 
-    /// <summary>The declared mutation category for this routine (from source annotation).</summary>
-    public MutationCategory DeclaredMutation { get; init; } = MutationCategory.Migratable;
+    /// <summary>The declared modification category for this routine (from source annotation).</summary>
+    public ModificationCategory DeclaredModification { get; init; } = ModificationCategory.Migratable;
 
     /// <summary>
-    /// The inferred/final mutation category for this routine.
-    /// Initially set to declared value, then updated by mutation inference.
+    /// The inferred/final modification category for this routine.
+    /// Initially set to declared value, then updated by modification inference.
     /// </summary>
-    public MutationCategory MutationCategory { get; set; } = MutationCategory.Migratable;
+    public ModificationCategory ModificationCategory { get; set; } = ModificationCategory.Migratable;
 
     /// <summary>Generic type parameters, if any.</summary>
     public IReadOnlyList<string>? GenericParameters { get; init; }
@@ -70,7 +70,7 @@ public sealed class RoutineInfo
     /// <summary>Whether this is a generic routine definition.</summary>
     public bool IsGenericDefinition => GenericParameters is { Count: > 0 };
 
-    /// <summary>For instantiated generics, the type arguments used.</summary>
+    /// <summary>For resolved generics, the type arguments used.</summary>
     public IReadOnlyList<TypeSymbol>? TypeArguments { get; init; }
 
     /// <summary>Visibility modifier.</summary>
@@ -101,7 +101,7 @@ public sealed class RoutineInfo
     public bool IsSynthesized { get; init; }
 
     /// <summary>
-    /// For generic definitions, the original generic routine this was instantiated from.
+    /// For generic definitions, the original generic routine this was resolved from.
     /// </summary>
     public RoutineInfo? GenericDefinition { get; init; }
 
@@ -115,13 +115,13 @@ public sealed class RoutineInfo
     }
 
     /// <summary>
-    /// Creates an instantiated version of this generic routine with the given type arguments.
+    /// Creates a resolved version of this generic routine with the given type arguments.
     /// </summary>
     /// <param name="typeArguments">The type arguments to substitute for generic parameters.</param>
     /// <returns>A new <see cref="RoutineInfo"/> with types substituted.</returns>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public RoutineInfo Instantiate(IReadOnlyList<TypeSymbol> typeArguments)
+    public RoutineInfo CreateInstance(IReadOnlyList<TypeSymbol> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -160,8 +160,8 @@ public sealed class RoutineInfo
             Parameters = substitutedParams,
             ReturnType = substitutedReturnType,
             IsFailable = IsFailable,
-            DeclaredMutation = DeclaredMutation,
-            MutationCategory = MutationCategory,
+            DeclaredModification = DeclaredModification,
+            ModificationCategory = ModificationCategory,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,
@@ -176,7 +176,7 @@ public sealed class RoutineInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a parameter for generic instantiation.
+    /// Substitutes the type in a parameter for generic resolution.
     /// </summary>
     /// <param name="param">The parameter to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
@@ -202,13 +202,13 @@ public sealed class RoutineInfo
             return substituted;
         }
 
-        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
                 .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
                 .ToList();
 
-            return type.Instantiate(typeArguments: newArgs);
+            return type.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

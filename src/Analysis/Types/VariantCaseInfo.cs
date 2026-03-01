@@ -1,6 +1,6 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
-using Shared.AST;
+using SyntaxTree;
 
 /// <summary>
 /// Information about a single case in a variant type.
@@ -35,7 +35,7 @@ public sealed class VariantCaseInfo
     }
 
     /// <summary>
-    /// Creates a copy with substituted payload type for generic instantiation.
+    /// Creates a copy with substituted payload type for generic resolution.
     /// </summary>
     /// <param name="newPayloadType">The new payload type to substitute.</param>
     /// <returns>A new <see cref="VariantCaseInfo"/> with the substituted payload type.</returns>

@@ -1,6 +1,6 @@
-﻿namespace Compilers.Analysis.Symbols;
+﻿namespace SemanticAnalysis.Symbols;
 
-using Shared.AST;
+using SyntaxTree;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -35,7 +35,7 @@ public sealed class ParameterInfo
     }
 
     /// <summary>
-    /// Creates a copy with substituted type for generic instantiation.
+    /// Creates a copy with substituted type for generic resolution.
     /// </summary>
     /// <param name="newType">The new type to substitute.</param>
     /// <returns>A new <see cref="ParameterInfo"/> with the substituted type.</returns>

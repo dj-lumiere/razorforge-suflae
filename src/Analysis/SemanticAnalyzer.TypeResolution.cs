@@ -1,9 +1,9 @@
-﻿namespace Compilers.Analysis;
+﻿namespace SemanticAnalysis;
 
 using Enums;
 using Types;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -42,7 +42,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Looks up a routine by name, searching the Core module and imported modules.
-    /// Called after type constructor resolution to avoid shadowing type constructors
+    /// Called after type creator resolution to avoid shadowing type creators
     /// with identically-named convenience functions (e.g., "routine U32(from: U8)").
     /// </summary>
     private Symbols.RoutineInfo? LookupRoutineWithImports(string name)
@@ -206,7 +206,7 @@ public sealed partial class SemanticAnalyzer
             typeArgs: typeArgs,
             location: typeExpr.Location);
 
-        return _registry.GetOrCreateInstantiation(
+        return _registry.GetOrCreateResolution(
             genericDef: genericDef,
             typeArguments: typeArgs);
     }
@@ -252,7 +252,7 @@ public sealed partial class SemanticAnalyzer
 
             switch (constraint.ConstraintType)
             {
-                case ConstraintKind.Follows:
+                case ConstraintKind.Obeys:
                     ValidateFollowsConstraint(typeArg: typeArg, constraint: constraint, location: location);
                     break;
 
@@ -278,10 +278,6 @@ public sealed partial class SemanticAnalyzer
 
                 case ConstraintKind.VariantType:
                     ValidateVariantTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
-                    break;
-
-                case ConstraintKind.MutantType:
-                    ValidateMutantTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
                     break;
 
                 case ConstraintKind.ConstGeneric:
@@ -448,23 +444,9 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
-    private void ValidateMutantTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
-    {
-        if (typeArg.Category != TypeCategory.Mutant)
-        {
-            ReportError(
-                SemanticDiagnosticCode.MutantTypeConstraintViolation,
-                $"Type '{typeArg.Name}' is not a mutant type required by constraint on '{constraint.ParameterName}'.",
-                location);
-        }
-    }
-
     /// <summary>
     /// Validates a const generic constraint (e.g., requires N is uaddr).
-    /// Const generics are compile-time constant values, not types.
+    /// Const generics are build-time constant values, not types.
     /// </summary>
     private void ValidateConstGenericConstraint(
         TypeSymbol typeArg,

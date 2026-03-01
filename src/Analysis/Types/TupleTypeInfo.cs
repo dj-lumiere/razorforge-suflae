@@ -1,4 +1,4 @@
-namespace Compilers.Analysis.Types;
+namespace SemanticAnalysis.Types;
 
 using Enums;
 using Symbols;
@@ -19,7 +19,7 @@ public enum TupleKind
 }
 
 /// <summary>
-/// Type information for compiler-generated tuple types.
+/// Type information for builder-generated tuple types.
 /// Tuples are variadic and can contain any number of elements.
 ///
 /// - ValueTuple: All elements are value types (copy semantics)
@@ -80,7 +80,6 @@ public sealed class TupleTypeInfo : TypeInfo
         {
             fields.Add(item: new FieldInfo(name: $"item{i}", type: elementTypes[i])
             {
-                IsMutable = false, // Tuple fields are immutable
                 Visibility = VisibilityModifier.Open,
                 Index = i
             });
@@ -104,12 +103,12 @@ public sealed class TupleTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Tuples don't support further instantiation - they are already concrete types.
+    /// Tuples don't support further resolution - they are already concrete types.
     /// </summary>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
-            message: "Tuple types cannot be further instantiated. Create a new TupleTypeInfo instead.");
+            message: "Tuple types cannot be further resolved. Create a new TupleTypeInfo instead.");
     }
 
     /// <summary>

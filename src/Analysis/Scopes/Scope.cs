@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Scopes;
+﻿namespace SemanticAnalysis.Scopes;
 
 using Enums;
 using Symbols;

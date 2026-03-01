@@ -1,6 +1,6 @@
-﻿using Compilers.Shared.AST;
+﻿using SyntaxTree;
 
-namespace Compilers.Analysis.Results;
+namespace SemanticAnalysis.Results;
 
 /// <summary>
 /// Result of semantic analysis.

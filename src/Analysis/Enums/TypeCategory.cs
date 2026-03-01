@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Enums;
+﻿namespace SemanticAnalysis.Enums;
 
 /// <summary>
 /// Categories of types in RazorForge/Suflae.
@@ -6,18 +6,18 @@
 public enum TypeCategory
 {
     // ═══════════════════════════════════════════════════════════════════════
-    // Compiler-Internal Categories (not user-visible)
+    // Builder-Internal Categories (not user-visible)
     // ═══════════════════════════════════════════════════════════════════════
 
     /// <summary>
     /// Sentinel type used when type resolution fails.
-    /// Never instantiated at runtime - purely for error recovery during analysis.
+    /// Never created at runtime - purely for error recovery during analysis.
     /// </summary>
     Error,
 
     /// <summary>
     /// Unbound generic type parameter (T, U, etc.).
-    /// Replaced with concrete type during instantiation.
+    /// Replaced with concrete type during resolution.
     /// </summary>
     TypeParameter,
 
@@ -27,7 +27,7 @@ public enum TypeCategory
     /// </summary>
     ProtocolSelf,
 
-    /// <summary>LLVM intrinsic types (@intrinsic.*) - compiler internal only.</summary>
+    /// <summary>LLVM intrinsic types (@intrinsic.*) - builder internal only.</summary>
     Intrinsic,
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -46,27 +46,24 @@ public enum TypeCategory
     /// <summary>Simple enumeration with optional integer values, CAN have methods.</summary>
     Choice,
 
-    /// <summary>Bitmask type with named members, compiler-generated operators only.</summary>
+    /// <summary>Bitmask type with named members, builder-generated operators only.</summary>
     Flags,
 
-    /// <summary>Tagged union, local-only, immutable, NO methods.</summary>
+    /// <summary>Tagged union, local-only, unmodifiable, NO methods.</summary>
     Variant,
-
-    /// <summary>Untagged union, danger zone only, mutable, NO methods.</summary>
-    Mutant,
 
     /// <summary>Interface/trait definition (protocol).</summary>
     Protocol,
 
-    /// <summary>Compiler-generated error handling types (Maybe, Result, Lookup).</summary>
+    /// <summary>Builder-generated error handling types (Maybe, Result, Lookup).</summary>
     ErrorHandling,
 
     /// <summary>First-class function type for lambdas and function references (e.g., Routine&lt;s32, s32, s32&gt; = two s32 params, returns s32).</summary>
     Routine,
 
-    /// <summary>Compiler-generated tuple types (ValueTuple for value types, Tuple for reference types).</summary>
+    /// <summary>Builder-generated tuple types (ValueTuple for value types, Tuple for reference types).</summary>
     Tuple,
 
-    /// <summary>Compiler-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).</summary>
+    /// <summary>Builder-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).</summary>
     Wrapper
 }

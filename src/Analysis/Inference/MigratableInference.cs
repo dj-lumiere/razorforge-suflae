@@ -1,8 +1,8 @@
-﻿namespace Compilers.Analysis.Inference;
+﻿namespace SemanticAnalysis.Inference;
 
 using Enums;
 using Types;
-using Shared.AST;
+using SyntaxTree;
 
 /// <summary>
 /// Performs migratable inference for routines.
@@ -83,17 +83,17 @@ public sealed class MigratableInference
             foreach (CallGraphNode node in _callGraph.AllNodes)
             {
                 // Only upgrade to Migratable if calling migratable methods on me
-                if (node.InferredMutation >= MutationCategory.Migratable)
+                if (node.InferredModification >= ModificationCategory.Migratable)
                 {
                     continue;
                 }
 
-                if (!node.Callees.Any(edge => edge is { CallsOnMe: true, Target.InferredMutation: MutationCategory.Migratable }))
+                if (!node.Callees.Any(edge => edge is { CallsOnMe: true, Target.InferredModification: ModificationCategory.Migratable }))
                 {
                     continue;
                 }
 
-                node.InferredMutation = MutationCategory.Migratable;
+                node.InferredModification = ModificationCategory.Migratable;
                 changed = true;
             }
         }
@@ -133,7 +133,7 @@ public sealed class MigratableInference
         // Placeholder: lookup would happen here
         // RoutineInfo? calledRoutine = _registry.LookupRoutine($"{receiverType.Name}.{methodName}");
         // CallGraphNode? calledNode = _callGraph.GetNode(calledRoutine);
-        // if (calledNode?.InferredMutation == MutationCategory.Migratable) { ... }
+        // if (calledNode?.InferredModification == ModificationCategory.Migratable) { ... }
     }
 
     /// <summary>

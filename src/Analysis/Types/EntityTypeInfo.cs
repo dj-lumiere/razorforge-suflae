@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 using Symbols;
@@ -14,11 +14,11 @@ public sealed class EntityTypeInfo : TypeInfo
     /// <summary>Fields declared in this entity.</summary>
     public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
 
-    /// <summary>Protocols this entity implements (follows).</summary>
+    /// <summary>Protocols this entity implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
-    /// For generic definitions, the original generic type this was instantiated from.
+    /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public EntityTypeInfo? GenericDefinition { get; init; }
 
@@ -43,7 +43,7 @@ public sealed class EntityTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -70,11 +70,11 @@ public sealed class EntityTypeInfo : TypeInfo
             .Select(selector: f => SubstituteFieldType(field: f, substitution: substitution))
             .ToList();
 
-        // Build instantiated type name
-        string instantiatedName = $"{Name}<{string.Join(separator: ", ",
-            values: typeArguments.Select(selector: t => t.Name))}>";
+        // Build resolved type name
+        string resolvedName = $"{Name}[{string.Join(separator: ", ",
+            values: typeArguments.Select(selector: t => t.Name))}]";
 
-        return new EntityTypeInfo(name: instantiatedName)
+        return new EntityTypeInfo(name: resolvedName)
         {
             Fields = substitutedFields,
             ImplementedProtocols = ImplementedProtocols,
@@ -87,7 +87,7 @@ public sealed class EntityTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a field for generic instantiation.
+    /// Substitutes the type in a field for generic resolution.
     /// </summary>
     /// <param name="field">The field to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
@@ -113,7 +113,7 @@ public sealed class EntityTypeInfo : TypeInfo
             return substituted;
         }
 
-        if (!type.IsGenericInstantiation || type.TypeArguments == null)
+        if (!type.IsGenericResolution || type.TypeArguments == null)
         {
             return type;
         }
@@ -124,7 +124,7 @@ public sealed class EntityTypeInfo : TypeInfo
 
         if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
         {
-            return entityType.GenericDefinition.Instantiate(typeArguments: newArgs);
+            return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

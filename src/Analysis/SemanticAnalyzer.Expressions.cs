@@ -1,13 +1,13 @@
-﻿namespace Compilers.Analysis;
+﻿namespace SemanticAnalysis;
 
 using Enums;
 using Results;
-using Compilers.Shared.Analysis.Native;
+using Native;
 using Symbols;
 using Types;
-using Shared.Lexer;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -35,12 +35,13 @@ public sealed partial class SemanticAnalyzer
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
             CallExpression call => AnalyzeCallExpression(call: call),
             MemberExpression member => AnalyzeMemberExpression(member: member),
+            OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(optMember: optMember),
             IndexExpression index => AnalyzeIndexExpression(index: index),
             SliceExpression slice => AnalyzeSliceExpression(slice: slice),
             ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
             LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda),
             RangeExpression range => AnalyzeRangeExpression(range: range),
-            ConstructorExpression ctor => AnalyzeConstructorExpression(ctor: ctor),
+            CreatorExpression creator => AnalyzeCreatorExpression(creator: creator),
             ListLiteralExpression list => AnalyzeListLiteralExpression(list: list),
             SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set),
             DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict),
@@ -898,7 +899,7 @@ public sealed partial class SemanticAnalyzer
     /// - Assignment (=)
     /// - Logical operators (and, or) — require short-circuit evaluation
     /// - Identity operators (===, !==)
-    /// - Membership/type operators (in, notin, is, isnot, follows, notfollows)
+    /// - Membership/type operators (in, notin, is, isnot, obeys, disobeys)
     /// - None coalescing (??) — requires short-circuit evaluation
     /// </summary>
     private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
@@ -956,6 +957,33 @@ public sealed partial class SemanticAnalyzer
             return leftType;
         }
 
+        // Check for operator prohibitions on choice and flags types
+        // Choices do not support ANY overloadable operators — use 'is' for case matching
+        // Flags do not support arithmetic/comparison/bitwise operators — use 'is'/'isnot'/'but'
+        {
+            string? operatorMethod = binary.Operator.GetMethodName();
+            if (operatorMethod != null)
+            {
+                if (leftType is ChoiceTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                        $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with choice type '{leftType.Name}'. Use 'is' for case matching.",
+                        binary.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+
+                if (leftType is FlagsTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                        $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but' for flag operations.",
+                        binary.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+            }
+        }
+
         // Handle logical operators (and, or) — require bool operands, return bool
         // These are not desugared because they need short-circuit evaluation
         if (IsLogicalOperator(op: binary.Operator))
@@ -968,8 +996,8 @@ public sealed partial class SemanticAnalyzer
             return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 
-        // Handle non-desugared comparison operators (===, !==, in, is, follows, etc.)
-        // Note: ==, !=, <, <=, >, >=, <=> are desugared to method calls in the parser
+        // Handle comparison operators — all return Bool
+        // Includes overloadable (==, !=, <, <=, >, >=, in, notin) and non-overloadable (===, !==, is, isnot, obeys, disobeys)
         if (IsComparisonOperator(op: binary.Operator))
         {
             ValidateComparisonOperands(left: leftType, right: rightType, op: binary.Operator, location: binary.Location);
@@ -1016,15 +1044,15 @@ public sealed partial class SemanticAnalyzer
             return targetType;
         }
 
-        // Check mutability for variable assignments
+        // Check modifiability for variable assignments
         if (target is IdentifierExpression id)
         {
             VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
-            if (varInfo is { IsMutable: false })
+            if (varInfo is { IsModifiable: false })
             {
                 ReportError(
                     SemanticDiagnosticCode.AssignmentToImmutable,
-                    $"Cannot assign to immutable variable '{id.Name}'.",
+                    $"Cannot assign to preset variable '{id.Name}'.",
                     location);
             }
         }
@@ -1035,37 +1063,37 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
             ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: location);
 
-            // Check if we're in a @readonly method trying to mutate 'me'
+            // Check if we're in a @readonly method trying to modify 'me'
             if (_currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
                 ReportError(
-                    SemanticDiagnosticCode.MutationInReadonlyMethod,
-                    $"Cannot mutate field '{member.PropertyName}' in a @readonly method. " +
-                    "Use @writable or @migratable to allow mutations.",
+                    SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    $"Cannot modify field '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow modifications.",
                     location);
             }
         }
 
-        // Check mutability for index assignments (let vs var)
+        // Check modifiability for index assignments
         if (target is IndexExpression index)
         {
-            // The object being indexed must be mutable
+            // The object being indexed must be modifiable
             if (index.Object is IdentifierExpression indexedVar)
             {
                 VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);
-                if (varInfo is { IsMutable: false })
+                if (varInfo is { IsModifiable: false })
                 {
                     ReportError(
                         SemanticDiagnosticCode.AssignmentToImmutable,
-                        $"Cannot assign to index of immutable variable '{indexedVar.Name}'.",
+                        $"Cannot assign to index of preset variable '{indexedVar.Name}'.",
                         location);
                 }
             }
         }
 
         // RazorForge: Entity bare assignment prohibition
-        // `b = a` where `a` is a bare identifier of entity type is a compile error
+        // `b = a` where `a` is a bare identifier of entity type is a build error
         if (_registry.Language == Language.RazorForge
             && value is IdentifierExpression
             && valueType is EntityTypeInfo)
@@ -1111,7 +1139,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol targetType = AnalyzeExpression(expression: compound.Target);
         TypeSymbol valueType = AnalyzeExpression(expression: compound.Value);
 
-        // Step 0: Verify target is assignable and mutable
+        // Step 0: Verify target is assignable and modifiable
         if (!IsAssignableTarget(target: compound.Target))
         {
             ReportError(
@@ -1124,11 +1152,11 @@ public sealed partial class SemanticAnalyzer
         if (compound.Target is IdentifierExpression id)
         {
             VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
-            if (varInfo is { IsMutable: false })
+            if (varInfo is { IsModifiable: false })
             {
                 ReportError(
                     SemanticDiagnosticCode.AssignmentToImmutable,
-                    $"Cannot assign to immutable variable '{id.Name}'.",
+                    $"Cannot assign to preset variable '{id.Name}'.",
                     compound.Location);
             }
         }
@@ -1142,9 +1170,9 @@ public sealed partial class SemanticAnalyzer
                 member.Object is IdentifierExpression { Name: "me" })
             {
                 ReportError(
-                    SemanticDiagnosticCode.MutationInReadonlyMethod,
-                    $"Cannot mutate field '{member.PropertyName}' in a @readonly method. " +
-                    "Use @writable or @migratable to allow mutations.",
+                    SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    $"Cannot modify field '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow modifications.",
                     compound.Location);
             }
         }
@@ -1154,11 +1182,11 @@ public sealed partial class SemanticAnalyzer
             if (index.Object is IdentifierExpression indexedVar)
             {
                 VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);
-                if (varInfo is { IsMutable: false })
+                if (varInfo is { IsModifiable: false })
                 {
                     ReportError(
                         SemanticDiagnosticCode.AssignmentToImmutable,
-                        $"Cannot assign to index of immutable variable '{indexedVar.Name}'.",
+                        $"Cannot assign to index of preset variable '{indexedVar.Name}'.",
                         compound.Location);
                 }
             }
@@ -1202,7 +1230,7 @@ public sealed partial class SemanticAnalyzer
             RoutineInfo? inPlaceRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
             if (inPlaceRoutine != null)
             {
-                // In-place method found — returns Blank (mutates in-place)
+                // In-place method found — returns Blank (modifies in-place)
                 return _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
         }
@@ -1310,11 +1338,11 @@ public sealed partial class SemanticAnalyzer
                 return routine.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
 
-            // Could be a type constructor
+            // Could be a type creator
             TypeSymbol? type = LookupTypeWithImports(name: id.Name);
             if (type != null)
             {
-                // Constructor call - also validate token uniqueness
+                // Creator call - also validate token uniqueness
                 foreach (Expression arg in call.Arguments)
                 {
                     AnalyzeExpression(expression: arg);
@@ -1325,7 +1353,7 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Try module-prefixed routine lookup (e.g., Core.normalize_duration)
-            // This is done after type constructor check to avoid shadowing type constructors
+            // This is done after type creator check to avoid shadowing type creators
             // with identically-named convenience functions (e.g., "routine U32(from: U8)")
             routine = LookupRoutineWithImports(name: id.Name);
             if (routine != null)
@@ -1382,16 +1410,30 @@ public sealed partial class SemanticAnalyzer
                 // Validate method access
                 ValidateRoutineAccess(routine: method, accessLocation: call.Location);
 
-                // @readonly enforcement: cannot call mutating methods on 'me'
+                // @readonly enforcement: cannot call modifying methods on 'me'
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" } &&
                     !method.IsReadOnly)
                 {
                     ReportError(
-                        SemanticDiagnosticCode.MutationInReadonlyMethod,
+                        SemanticDiagnosticCode.ModificationInReadonlyMethod,
                         $"Cannot call non-readonly method '{method.Name}' on 'me' in a @readonly method. " +
                         "Mark the called method @readonly or use @writable/@migratable.",
                         call.Location);
+                }
+
+                // Preset enforcement: cannot call modifying methods on preset variables
+                if (member.Object is IdentifierExpression letTarget &&
+                    method.ModificationCategory != ModificationCategory.Readonly)
+                {
+                    VariableInfo? targetVar = _registry.LookupVariable(name: letTarget.Name);
+                    if (targetVar is { IsModifiable: false })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ModifyingCallOnImmutable,
+                            $"Cannot call modifying method '{method.Name}' on preset variable '{letTarget.Name}'.",
+                            call.Location);
+                    }
                 }
 
                 AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
@@ -1479,16 +1521,16 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Could be a method reference - use LookupMethod which handles generic instantiations
+        // Could be a method reference - use LookupMethod which handles generic resolutions
         RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: member.PropertyName);
         if (method != null)
         {
             // Validate method access
             ValidateRoutineAccess(routine: method, accessLocation: member.Location);
 
-            // For generic instantiations, substitute type parameters in return type
+            // For generic resolutions, substitute type parameters in return type
             TypeSymbol? returnType = method.ReturnType;
-            if (returnType != null && objectType is { IsGenericInstantiation: true, TypeArguments: not null })
+            if (returnType != null && objectType is { IsGenericResolution: true, TypeArguments: not null })
             {
                 returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
             }
@@ -1498,6 +1540,19 @@ public sealed partial class SemanticAnalyzer
 
         ReportError(SemanticDiagnosticCode.MemberNotFound, $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.", member.Location);
         return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeOptionalMemberExpression(OptionalMemberExpression optMember)
+    {
+        // Analyze the object expression to get its type
+        TypeSymbol objectType = AnalyzeExpression(expression: optMember.Object);
+
+        // Delegate to regular member analysis for the property lookup
+        // The result is wrapped in Maybe[T] since the access may produce none
+        var regularMember = new MemberExpression(Object: optMember.Object, PropertyName: optMember.PropertyName, Location: optMember.Location);
+        TypeSymbol memberType = AnalyzeMemberExpression(member: regularMember);
+
+        return memberType;
     }
 
     private TypeSymbol AnalyzeIndexExpression(IndexExpression index)
@@ -1581,7 +1636,7 @@ public sealed partial class SemanticAnalyzer
                 ? ResolveType(typeExpr: param.Type)
                 : ErrorTypeInfo.Instance;
 
-            _registry.DeclareVariable(name: param.Name, type: paramType, isMutable: false);
+            _registry.DeclareVariable(name: param.Name, type: paramType);
             parameterNames.Add(item: param.Name);
             parameterTypes.Add(paramType);
         }
@@ -1661,7 +1716,7 @@ public sealed partial class SemanticAnalyzer
                 SemanticDiagnosticCode.LambdaCaptureToken,
                 $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
                 $"scope-bound tokens cannot escape their scope. " +
-                $"Use a handle type (Shared<T> or Tracked<T>) instead.",
+                $"Use a handle type (Shared[T] or Tracked[T]) instead.",
                 location);
             return;
         }
@@ -1673,7 +1728,7 @@ public sealed partial class SemanticAnalyzer
                 SemanticDiagnosticCode.LambdaCaptureRawEntity,
                 $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
                 $"raw entities cannot be captured. " +
-                $"Wrap in a handle type (Shared<T> or Tracked<T>) before capturing.",
+                $"Wrap in a handle type (Shared[T] or Tracked[T]) before capturing.",
                 location);
         }
     }
@@ -1775,8 +1830,8 @@ public sealed partial class SemanticAnalyzer
                 }
                 break;
 
-            case ConstructorExpression ctor:
-                foreach ((_, Expression value) in ctor.Fields)
+            case CreatorExpression creator:
+                foreach ((_, Expression value) in creator.Fields)
                 {
                     CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
                 }
@@ -1899,41 +1954,41 @@ public sealed partial class SemanticAnalyzer
         return _registry.LookupType(name: "Range") ?? ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeConstructorExpression(ConstructorExpression ctor)
+    private TypeSymbol AnalyzeCreatorExpression(CreatorExpression creator)
     {
-        TypeSymbol? type = LookupTypeWithImports(name: ctor.TypeName);
+        TypeSymbol? type = LookupTypeWithImports(name: creator.TypeName);
         if (type == null)
         {
-            ReportError(SemanticDiagnosticCode.UnknownType, $"Unknown type '{ctor.TypeName}'.", ctor.Location);
+            ReportError(SemanticDiagnosticCode.UnknownType, $"Unknown type '{creator.TypeName}'.", creator.Location);
             return ErrorTypeInfo.Instance;
         }
 
         // Handle generic type arguments
-        if (ctor.TypeArguments is { Count: > 0 })
+        if (creator.TypeArguments is { Count: > 0 })
         {
             var typeArgs = new List<TypeSymbol>();
-            foreach (TypeExpression typeArg in ctor.TypeArguments)
+            foreach (TypeExpression typeArg in creator.TypeArguments)
             {
                 typeArgs.Add(item: ResolveType(typeExpr: typeArg));
             }
 
-            type = _registry.GetOrCreateInstantiation(genericDef: type, typeArguments: typeArgs);
+            type = _registry.GetOrCreateResolution(genericDef: type, typeArguments: typeArgs);
         }
 
         // Validate field initializers
-        ValidateConstructorFields(type: type, fields: ctor.Fields, location: ctor.Location);
+        ValidateCreatorFields(type: type, fields: creator.Fields, location: creator.Location);
 
         return type;
     }
 
     /// <summary>
-    /// Validates constructor field initializers:
+    /// Validates creator field initializers:
     /// - Each provided field exists on the type
     /// - Value types are assignable to field types
     /// - No duplicate field assignments
     /// - All required fields are provided
     /// </summary>
-    private void ValidateConstructorFields(
+    private void ValidateCreatorFields(
         TypeSymbol type,
         List<(string Name, Expression Value)> fields,
         SourceLocation location)
@@ -1996,8 +2051,8 @@ public sealed partial class SemanticAnalyzer
             // Analyze value with expected type for contextual inference
             TypeSymbol fieldType = expectedField.Type;
 
-            // For generic instantiations, substitute type parameters in field type
-            if (type is { IsGenericInstantiation: true, TypeArguments: not null })
+            // For generic resolutions, substitute type parameters in field type
+            if (type is { IsGenericResolution: true, TypeArguments: not null })
             {
                 fieldType = SubstituteTypeParameters(type: fieldType, genericType: type);
             }
@@ -2021,7 +2076,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.MissingRequiredField,
-                    $"Missing required field '{field.Name}' in constructor for '{type.Name}'.",
+                    $"Missing required field '{field.Name}' in creator for '{type.Name}'.",
                     location);
             }
         }
@@ -2060,7 +2115,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? listDef = _registry.LookupType(name: "List");
         if (listDef != null && elementType != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: listDef, typeArguments: [elementType]);
+            return _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [elementType]);
         }
 
         return ErrorTypeInfo.Instance;
@@ -2094,7 +2149,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? setDef = _registry.LookupType(name: "Set");
         if (setDef != null && elementType != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: setDef, typeArguments: [elementType]);
+            return _registry.GetOrCreateResolution(genericDef: setDef, typeArguments: [elementType]);
         }
 
         return ErrorTypeInfo.Instance;
@@ -2133,7 +2188,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
         if (dictDef != null && keyType != null && valueType != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: dictDef, typeArguments: [keyType, valueType]);
+            return _registry.GetOrCreateResolution(genericDef: dictDef, typeArguments: [keyType, valueType]);
         }
 
         return ErrorTypeInfo.Instance;
@@ -2570,11 +2625,11 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Substitutes type parameters in a type based on a generic instantiation.
+    /// Substitutes type parameters in a type based on a generic resolution.
     /// For example, if genericType is List&lt;S32&gt; and type is T, returns S32.
     /// </summary>
     /// <param name="type">The type that may contain type parameters.</param>
-    /// <param name="genericType">The instantiated generic type providing type argument bindings.</param>
+    /// <param name="genericType">The resolved generic type providing type argument bindings.</param>
     /// <returns>The substituted type.</returns>
     private TypeSymbol SubstituteTypeParameters(TypeSymbol type, TypeSymbol genericType)
     {
@@ -2584,7 +2639,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Get the generic definition to find type parameter names
-        TypeSymbol? genericDef = GetGenericDefinition(instantiation: genericType);
+        TypeSymbol? genericDef = GetGenericDefinition(resolution: genericType);
         if (genericDef == null)
         {
             return type;
@@ -2607,17 +2662,17 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Gets the generic definition from an instantiation.
+    /// Gets the generic definition from a resolution.
     /// </summary>
-    private TypeSymbol? GetGenericDefinition(TypeSymbol instantiation)
+    private TypeSymbol? GetGenericDefinition(TypeSymbol resolution)
     {
-        if (!instantiation.IsGenericInstantiation)
+        if (!resolution.IsGenericResolution)
         {
             return null;
         }
 
-        // Extract base name (e.g., "List" from "List<S32>")
-        string baseName = GetBaseTypeName(typeName: instantiation.Name);
+        // Extract base name (e.g., "List" from "List[S32]")
+        string baseName = GetBaseTypeName(typeName: resolution.Name);
         return _registry.LookupType(name: baseName);
     }
 
@@ -2632,8 +2687,8 @@ public sealed partial class SemanticAnalyzer
             return replacement;
         }
 
-        // For generic instantiations, recursively substitute in type arguments
-        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
+        // For generic resolutions, recursively substitute in type arguments
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var substitutedArgs = new List<TypeSymbol>();
             bool anyChanged = false;
@@ -2650,11 +2705,11 @@ public sealed partial class SemanticAnalyzer
 
             if (anyChanged)
             {
-                // Create a new instantiation with substituted arguments
-                TypeSymbol? baseDef = GetGenericDefinition(instantiation: type);
+                // Create a new resolution with substituted arguments
+                TypeSymbol? baseDef = GetGenericDefinition(resolution: type);
                 if (baseDef != null)
                 {
-                    return _registry.GetOrCreateInstantiation(genericDef: baseDef, typeArguments: substitutedArgs);
+                    return _registry.GetOrCreateResolution(genericDef: baseDef, typeArguments: substitutedArgs);
                 }
             }
         }
@@ -2671,15 +2726,15 @@ public sealed partial class SemanticAnalyzer
     /// <remarks>
     /// Stealable types:
     /// - Raw entities (direct entity references)
-    /// - Shared&lt;T&gt; (shared ownership handle)
-    /// - Tracked&lt;T&gt; (reference-counted handle)
+    /// - Shared[T] (shared ownership handle)
+    /// - Tracked[T] (reference-counted handle)
     ///
-    /// Non-stealable types (compile error):
-    /// - Viewed&lt;T&gt; (read-only token, scope-bound)
-    /// - Hijacked&lt;T&gt; (exclusive token, scope-bound)
-    /// - Inspected&lt;T&gt; (thread-safe read token, scope-bound)
-    /// - Seized&lt;T&gt; (thread-safe exclusive token, scope-bound)
-    /// - Snatched&lt;T&gt; (internal ownership, not for user code)
+    /// Non-stealable types (build error):
+    /// - Viewed[T] (read-only token, scope-bound)
+    /// - Hijacked[T] (exclusive token, scope-bound)
+    /// - Inspected[T] (thread-safe read token, scope-bound)
+    /// - Seized[T] (thread-safe exclusive token, scope-bound)
+    /// - Snatched[T] (internal ownership, not for user code)
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
     {
@@ -2693,22 +2748,22 @@ public sealed partial class SemanticAnalyzer
             ReportError(
                 SemanticDiagnosticCode.StealScopeBoundToken,
                 $"Cannot steal '{tokenKind}' - scope-bound tokens cannot be stolen. " +
-                $"Only raw entities, Shared<T>, and Tracked<T> can be stolen.",
+                $"Only raw entities, Shared[T], and Tracked[T] can be stolen.",
                 steal.Location);
             return operandType;
         }
 
-        // Check for Snatched<T> (internal ownership, not for user code)
+        // Check for Snatched[T] (internal ownership, not for user code)
         if (IsSnatched(type: operandType))
         {
             ReportError(
                 SemanticDiagnosticCode.StealSnatched,
-                "Cannot steal 'Snatched<T>' - internal ownership type cannot be stolen.",
+                "Cannot steal 'Snatched[T]' - internal ownership type cannot be stolen.",
                 steal.Location);
             return operandType;
         }
 
-        // For Shared<T> or Tracked<T>, return the inner type
+        // For Shared[T] or Tracked[T], return the inner type
         if (IsStealableHandle(type: operandType))
         {
             // Unwrap the handle to get the inner type
@@ -2730,10 +2785,10 @@ public sealed partial class SemanticAnalyzer
     private static bool IsMemoryToken(TypeSymbol type)
     {
         return type.Name is "Viewed" or "Hijacked" or "Inspected" or "Seized"
-            || (type.Name.StartsWith(value: "Viewed<") ||
-                type.Name.StartsWith(value: "Hijacked<") ||
-                type.Name.StartsWith(value: "Inspected<") ||
-                type.Name.StartsWith(value: "Seized<"));
+            || (type.Name.StartsWith(value: "Viewed[") ||
+                type.Name.StartsWith(value: "Hijacked[") ||
+                type.Name.StartsWith(value: "Inspected[") ||
+                type.Name.StartsWith(value: "Seized["));
     }
 
     /// <summary>
@@ -2741,29 +2796,29 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static string GetMemoryTokenKind(TypeSymbol type)
     {
-        if (type.Name.StartsWith(value: "Viewed")) return "Viewed<T>";
-        if (type.Name.StartsWith(value: "Hijacked")) return "Hijacked<T>";
-        if (type.Name.StartsWith(value: "Inspected")) return "Inspected<T>";
-        if (type.Name.StartsWith(value: "Seized")) return "Seized<T>";
+        if (type.Name.StartsWith(value: "Viewed")) return "Viewed[T]";
+        if (type.Name.StartsWith(value: "Hijacked")) return "Hijacked[T]";
+        if (type.Name.StartsWith(value: "Inspected")) return "Inspected[T]";
+        if (type.Name.StartsWith(value: "Seized")) return "Seized[T]";
         return type.Name;
     }
 
     /// <summary>
-    /// Checks if a type is Snatched&lt;T&gt; (internal ownership type).
+    /// Checks if a type is Snatched[T] (internal ownership type).
     /// </summary>
     private static bool IsSnatched(TypeSymbol type)
     {
-        return type.Name == "Snatched" || type.Name.StartsWith(value: "Snatched<");
+        return type.Name == "Snatched" || type.Name.StartsWith(value: "Snatched[");
     }
 
     /// <summary>
-    /// Checks if a type is a stealable handle (Shared&lt;T&gt; or Tracked&lt;T&gt;).
+    /// Checks if a type is a stealable handle (Shared[T] or Tracked[T]).
     /// </summary>
     private static bool IsStealableHandle(TypeSymbol type)
     {
         return type.Name is "Shared" or "Tracked"
-            || type.Name.StartsWith(value: "Shared<")
-            || type.Name.StartsWith(value: "Tracked<");
+            || type.Name.StartsWith(value: "Shared[")
+            || type.Name.StartsWith(value: "Tracked[");
     }
 
     /// <summary>
@@ -2850,7 +2905,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.WaitforTimeoutNotDuration,
-                    $"Waitfor 'until' clause requires a Duration, got '{timeoutType.Name}'.",
+                    $"Waitfor 'within' clause requires a Duration, got '{timeoutType.Name}'.",
                     waitfor.Timeout.Location);
             }
         }
@@ -2864,7 +2919,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Analyzes a dependent waitfor expression (task dependency graph).
-    /// Syntax: after dep1 [as val1], dep2 [as val2] waitfor expr [until timeout]
+    /// Syntax: after dep1 [as val1], dep2 [as val2] waitfor expr [within timeout]
     /// </summary>
     /// <param name="depWaitfor">The dependent waitfor expression to analyze.</param>
     /// <returns>Lookup&lt;T&gt; where T is the result type of the awaited operation.</returns>
@@ -2883,19 +2938,19 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.DependencyNotLookupType,
-                    $"Task dependency must be a Lookup<T> type, got '{depType.Name}'.",
+                    $"Task dependency must be a Lookup[T] type, got '{depType.Name}'.",
                     dep.Location);
 
                 // If there's a binding, still declare it (as error type) to prevent cascading errors
                 if (dep.BindingName != null)
                 {
-                    _registry.DeclareVariable(name: dep.BindingName, type: ErrorTypeInfo.Instance, isMutable: false);
+                    _registry.DeclareVariable(name: dep.BindingName, type: ErrorTypeInfo.Instance);
                 }
             }
             else if (dep.BindingName != null)
             {
                 // Introduce the binding variable with the unwrapped type T from Lookup<T>
-                _registry.DeclareVariable(name: dep.BindingName, type: lookupType.ValueType, isMutable: false);
+                _registry.DeclareVariable(name: dep.BindingName, type: lookupType.ValueType);
             }
         }
 
@@ -2913,7 +2968,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.WaitforTimeoutNotDuration,
-                    $"Waitfor 'until' clause requires a Duration, got '{timeoutType.Name}'.",
+                    $"Waitfor 'within' clause requires a Duration, got '{timeoutType.Name}'.",
                     depWaitfor.Timeout.Location);
             }
         }
@@ -2924,7 +2979,7 @@ public sealed partial class SemanticAnalyzer
         // TODO: Validate that we're inside a suspended/threaded routine
 
         // Result type is Lookup<R> where R is the operand type
-        return ErrorHandlingTypeInfo.WellKnown.LookupDefinition.Instantiate(typeArguments: [operandType]);
+        return ErrorHandlingTypeInfo.WellKnown.LookupDefinition.CreateInstance(typeArguments: [operandType]);
     }
 
     #endregion

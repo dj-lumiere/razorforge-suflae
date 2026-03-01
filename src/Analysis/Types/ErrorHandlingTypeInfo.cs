@@ -1,9 +1,9 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
-/// Type information for compiler-generated error handling types (Maybe, Result, Lookup).
+/// Type information for builder-generated error handling types (Maybe, Result, Lookup).
 /// These work similar to variants but have special semantics:
 /// - No looping over cases
 /// - Cannot be stored/returned (must be immediately pattern matched)
@@ -24,12 +24,12 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
 
     /// <summary>
     /// For Result and Lookup, the error type.
-    /// Always a type that follows Crashable protocol.
+    /// Always a type that obeys Crashable protocol.
     /// </summary>
     public TypeInfo? ErrorType { get; init; }
 
     /// <summary>
-    /// For generic definitions, the original generic type this was instantiated from.
+    /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public ErrorHandlingTypeInfo? GenericDefinition { get; init; }
 
@@ -48,7 +48,7 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentException">Thrown if not exactly 1 type argument is provided.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (typeArguments.Count != 1)
         {
@@ -57,9 +57,9 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
         }
 
         TypeInfo valueType = typeArguments[0];
-        string instantiatedName = $"{Kind}<{valueType.Name}>";
+        string resolvedName = $"{Kind}[{valueType.Name}]";
 
-        return new ErrorHandlingTypeInfo(name: instantiatedName, kind: Kind, valueType: valueType)
+        return new ErrorHandlingTypeInfo(name: resolvedName, kind: Kind, valueType: valueType)
         {
             ErrorType = ErrorType,
             TypeArguments = typeArguments,

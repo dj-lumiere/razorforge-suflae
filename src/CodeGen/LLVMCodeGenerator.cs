@@ -1,11 +1,11 @@
-﻿using Compilers.Analysis.Enums;
+﻿using SemanticAnalysis.Enums;
 
-namespace Compilers.CodeGen;
+namespace Compiler.CodeGen;
 
 using System.Text;
-using Analysis;
-using Analysis.Types;
-using Shared.AST;
+using SemanticAnalysis;
+using SemanticAnalysis.Types;
+using SyntaxTree;
 
 /// <summary>
 /// LLVM IR code generator for RazorForge and Suflae.
@@ -166,7 +166,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates LLVM function declarations (signatures only).
-    /// Only emits 'declare' for external/imported routines that don't have bodies.
+    /// Only emits 'declare' for external routines that don't have bodies.
     /// Routines with bodies (user program and stdlib) are handled by GenerateFunctionDefinitions().
     /// </summary>
     private void GenerateFunctionDeclarations()
@@ -218,7 +218,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Checks if a routine has any error types in its signature.
     /// </summary>
-    private static bool HasErrorTypes(Analysis.Symbols.RoutineInfo routine)
+    private static bool HasErrorTypes(SemanticAnalysis.Symbols.RoutineInfo routine)
     {
         // Check return type
         if (routine.ReturnType?.Category == TypeCategory.Error)
@@ -254,7 +254,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Then, generate stdlib routine definitions (for intrinsic operations)
-        // This allows S64.__add__ etc. to have their bodies compiled
+        // This allows S64.__add__ etc. to have their bodies built
         // We wrap each in try-catch since some stdlib routines may have parse errors
         foreach (var (program, _, _) in _stdlibPrograms)
         {

@@ -1,10 +1,10 @@
-namespace Compilers.Analysis;
+namespace SemanticAnalysis;
 
 using Enums;
 using Symbols;
 using Types;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -188,7 +188,7 @@ public sealed partial class SemanticAnalyzer
         {
             ReportError(
                 SemanticDiagnosticCode.ErrorHandlingTypeAsField,
-                $"'{errorHandlingType.Kind}<T>' cannot be used as a field type. " +
+                $"'{errorHandlingType.Kind}[T]' cannot be used as a field type. " +
                 "Error handling types are internal for error propagation and should not be stored.",
                 field.Location);
         }
@@ -199,7 +199,7 @@ public sealed partial class SemanticAnalyzer
     private void CollectPresetDeclaration(PresetDeclaration preset)
     {
         TypeSymbol presetType = ResolveType(typeExpr: preset.Type);
-        _registry.DeclareVariable(name: preset.Name, type: presetType, isMutable: false, isPreset: true);
+        _registry.DeclareVariable(name: preset.Name, type: presetType, isPreset: true);
     }
 
     private void CollectRecordDeclaration(RecordDeclaration record)
@@ -314,17 +314,17 @@ public sealed partial class SemanticAnalyzer
         if (_currentType != null)
         {
             // Inside a type body
-            kind = routine.Name == "__create__" ? RoutineKind.Constructor : RoutineKind.Method;
+            kind = routine.Name == "__create__" ? RoutineKind.Creator : RoutineKind.MemberRoutine;
         }
         else if (routine.Name.Contains(value: '.'))
         {
-            // Extension method syntax: "Type.method"
-            // Extract type name and method name separately
+            // Member routine syntax: "Type.routine"
+            // Extract type name and routine name separately
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
-            routineName = routine.Name[(dotIndex + 1)..]; // Just the method name
+            routineName = routine.Name[(dotIndex + 1)..]; // Just the routine name
 
-            kind = RoutineKind.Method;
+            kind = RoutineKind.MemberRoutine;
             ownerType = LookupTypeWithImports(name: typeName);
         }
         else
@@ -333,28 +333,28 @@ public sealed partial class SemanticAnalyzer
             kind = RoutineKind.Function;
         }
 
-        // Validate that variants cannot have methods
-        if (ownerType is VariantTypeInfo && kind == RoutineKind.Method)
+        // Validate that variants cannot have member routines
+        if (ownerType is VariantTypeInfo && kind == RoutineKind.MemberRoutine)
         {
             ReportError(
                 SemanticDiagnosticCode.VariantMethodNotAllowed,
-                $"Variant type '{ownerType.Name}' cannot have methods. " +
+                $"Variant type '{ownerType.Name}' cannot have member routines. " +
                 "Variants only support 'is', 'isnot', and pattern matching with 'when'.",
                 routine.Location);
         }
 
         // Validate that choice types cannot define any operator dunders
-        if (ownerType is ChoiceTypeInfo && kind == RoutineKind.Method && IsOperatorDunder(name: routineName))
+        if (ownerType is ChoiceTypeInfo && kind == RoutineKind.MemberRoutine && IsOperatorDunder(name: routineName))
         {
             ReportError(
                 SemanticDiagnosticCode.ArithmeticOnChoiceType,
                 $"Choice type '{ownerType.Name}' cannot define operator '{routineName}'. " +
-                "Choice types do not support operators. Use 'is' for case matching and regular methods for additional behavior.",
+                "Choice types do not support operators. Use 'is' for case matching and regular routines for additional behavior.",
                 routine.Location);
         }
 
         // #135: Flags types cannot define any operator dunders
-        if (ownerType is FlagsTypeInfo && kind == RoutineKind.Method && IsOperatorDunder(name: routineName))
+        if (ownerType is FlagsTypeInfo && kind == RoutineKind.MemberRoutine && IsOperatorDunder(name: routineName))
         {
             ReportError(
                 SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
@@ -389,11 +389,11 @@ public sealed partial class SemanticAnalyzer
 
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
-        MutationCategory declaredMutation = routine.Attributes.Contains(item: "readonly")
-            ? MutationCategory.Readonly
+        ModificationCategory declaredModification = routine.Attributes.Contains(item: "readonly")
+            ? ModificationCategory.Readonly
             : routine.Attributes.Contains(item: "writable")
-                ? MutationCategory.Writable
-                : MutationCategory.Migratable;
+                ? ModificationCategory.Writable
+                : ModificationCategory.Migratable;
 
         var routineInfo = new RoutineInfo(name: routineName)
         {
@@ -406,8 +406,8 @@ public sealed partial class SemanticAnalyzer
             Location = routine.Location,
             Module = GetCurrentModuleName(),
             Attributes = routine.Attributes,
-            DeclaredMutation = declaredMutation,
-            MutationCategory = declaredMutation,
+            DeclaredModification = declaredModification,
+            ModificationCategory = declaredModification,
             IsDangerous = routine.IsDangerous
         };
 
@@ -429,7 +429,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static readonly HashSet<string> KnownDunderMethods =
     [
-        // Constructor
+        // Creator
         "__create__",
 
         // Arithmetic operators
@@ -438,19 +438,15 @@ public sealed partial class SemanticAnalyzer
         // Wrapping arithmetic
         "__add_wrap__", "__sub_wrap__", "__mul_wrap__", "__pow_wrap__",
 
-        // Saturating arithmetic
-        "__add_sat__", "__sub_sat__", "__mul_sat__", "__pow_sat__",
-
-        // Checked arithmetic
-        "__add_checked__", "__sub_checked__", "__mul_checked__",
-        "__floordiv_checked__", "__mod_checked__", "__pow_checked__",
+        // Clamping arithmetic
+        "__add_clamp__", "__sub_clamp__", "__mul_clamp__", "__truediv_clamp__", "__pow_clamp__",
 
         // Comparison operators
         "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
 
         // Bitwise operators
         "__and__", "__or__", "__xor__",
-        "__ashl__", "__ashl_checked__", "__ashr__", "__lshl__", "__lshr__",
+        "__ashl__", "__ashr__", "__lshl__", "__lshr__",
 
         // Unary operators
         "__neg__", "__not__",
@@ -508,25 +504,18 @@ public sealed partial class SemanticAnalyzer
         ["__mod__"] = "FloorDivisible",
         ["__pow__"] = "Exponentiable",
 
-        // Overflow arithmetic (wrapping)
-        ["__add_wrap__"] = "OverflowAddable",
-        ["__sub_wrap__"] = "OverflowSubtractable",
-        ["__mul_wrap__"] = "OverflowMultiplicable",
-        ["__pow_wrap__"] = "OverflowExponentiable",
+        // Wrapping arithmetic
+        ["__add_wrap__"] = "WrappingAddable",
+        ["__sub_wrap__"] = "WrappingSubtractable",
+        ["__mul_wrap__"] = "WrappingMultiplicable",
+        ["__pow_wrap__"] = "WrappingExponentiable",
 
-        // Overflow arithmetic (saturating)
-        ["__add_sat__"] = "OverflowAddable",
-        ["__sub_sat__"] = "OverflowSubtractable",
-        ["__mul_sat__"] = "OverflowMultiplicable",
-        ["__pow_sat__"] = "OverflowExponentiable",
-
-        // Overflow arithmetic (checked)
-        ["__add_checked__"] = "OverflowAddable",
-        ["__sub_checked__"] = "OverflowSubtractable",
-        ["__mul_checked__"] = "OverflowMultiplicable",
-        ["__floordiv_checked__"] = "CheckedDivisible",
-        ["__mod_checked__"] = "CheckedDivisible",
-        ["__pow_checked__"] = "OverflowExponentiable",
+        // Clamping arithmetic
+        ["__add_clamp__"] = "ClampingAddable",
+        ["__sub_clamp__"] = "ClampingSubtractable",
+        ["__mul_clamp__"] = "ClampingMultiplicable",
+        ["__truediv_clamp__"] = "ClampingDivisible",
+        ["__pow_clamp__"] = "ClampingExponentiable",
 
         // Comparison operators
         ["__eq__"] = "Equatable",
@@ -547,8 +536,6 @@ public sealed partial class SemanticAnalyzer
         ["__ashr__"] = "Shiftable",
         ["__lshl__"] = "Shiftable",
         ["__lshr__"] = "Shiftable",
-        ["__ashl_checked__"] = "CheckedShiftable",
-
         // Unary operators
         ["__neg__"] = "Negatable",
         ["__not__"] = "Invertible",
@@ -693,7 +680,7 @@ public sealed partial class SemanticAnalyzer
                 {
                     ReportError(
                         SemanticDiagnosticCode.NotAProtocol,
-                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'obeys'.",
                         protoExpr.Location);
                 }
             }
@@ -732,14 +719,14 @@ public sealed partial class SemanticAnalyzer
                     ReportError(
                         SemanticDiagnosticCode.RecordContainsNonValueType,
                         $"Record field '{field.Name}' has type '{fieldType.Name}' which is not a value type. " +
-                        "Records can only contain value types (records, choices, variants, value tuples) and Snatched<T>.",
+                        "Records can only contain value types (records, choices, variants, value tuples) and Snatched[T].",
                         field.Location);
                 }
 
                 // Create field info
                 var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
                 {
-                    IsMutable = field.IsMutable,
+
                     Visibility = field.Visibility,
                     Index = fieldIndex++,
                     HasDefaultValue = field.Initializer != null,
@@ -787,7 +774,7 @@ public sealed partial class SemanticAnalyzer
                 {
                     ReportError(
                         SemanticDiagnosticCode.NotAProtocol,
-                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'obeys'.",
                         protoExpr.Location);
                 }
             }
@@ -809,7 +796,7 @@ public sealed partial class SemanticAnalyzer
 
                 var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
                 {
-                    IsMutable = field.IsMutable,
+
                     Visibility = field.Visibility,
                     Index = fieldIndex++,
                     HasDefaultValue = field.Initializer != null,
@@ -855,7 +842,7 @@ public sealed partial class SemanticAnalyzer
                 {
                     ReportError(
                         SemanticDiagnosticCode.NotAProtocol,
-                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'follows'.",
+                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'obeys'.",
                         protoExpr.Location);
                 }
             }
@@ -877,7 +864,7 @@ public sealed partial class SemanticAnalyzer
 
                 var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
                 {
-                    IsMutable = field.IsMutable,
+
                     Visibility = field.Visibility,
                     Index = fieldIndex++,
                     HasDefaultValue = field.Initializer != null,
@@ -909,7 +896,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Resolve parent protocols (protocol X follows Y, Z)
+        // Resolve parent protocols (protocol X obeys Y, Z)
         var parentProtocols = new List<ProtocolTypeInfo>();
         foreach (TypeExpression parentExpr in protocol.ParentProtocols)
         {
@@ -922,7 +909,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.NotAProtocol,
-                    $"'{parentExpr}' is not a protocol. Only protocols can be inherited with 'follows'.",
+                    $"'{parentExpr}' is not a protocol. Only protocols can be inherited with 'obeys'.",
                     parentExpr.Location);
             }
         }
@@ -960,18 +947,18 @@ public sealed partial class SemanticAnalyzer
                 ? ResolveProtocolType(typeExpr: sig.ReturnType)
                 : null;
 
-            // Extract mutation category from attributes
+            // Extract modification category from attributes
             // @readonly -> Readonly, @writable -> Writable, default/no annotation -> Migratable
-            MutationCategory mutation = MutationCategory.Migratable; // Default
+            ModificationCategory modification = ModificationCategory.Migratable; // Default
             if (sig.Attributes != null)
             {
                 if (sig.Attributes.Contains(item: "readonly"))
                 {
-                    mutation = MutationCategory.Readonly;
+                    modification = ModificationCategory.Readonly;
                 }
                 else if (sig.Attributes.Contains(item: "writable"))
                 {
-                    mutation = MutationCategory.Writable;
+                    modification = ModificationCategory.Writable;
                 }
                 // else: "migratable" or no annotation = Migratable (default)
             }
@@ -979,7 +966,7 @@ public sealed partial class SemanticAnalyzer
             var methodInfo = new ProtocolMethodInfo(name: methodName)
             {
                 IsInstanceMethod = isInstanceMethod,
-                Mutation = mutation,
+                Modification = modification,
                 ParameterTypes = paramTypes,
                 ParameterNames = paramNames,
                 ReturnType = returnType,
@@ -1231,7 +1218,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Resolves routine signatures including parameter types.
-    /// Performs protocol-as-type desugaring (routine foo(x: Displayable) → routine foo&lt;T follows Displayable&gt;(x: T)).
+    /// Performs protocol-as-type desugaring (routine foo(x: Displayable) → routine foo&lt;T obeys Displayable&gt;(x: T)).
     /// </summary>
     /// <param name="program">The program to resolve.</param>
     private void ResolveRoutineSignatures(Program program)
@@ -1330,22 +1317,22 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.ErrorHandlingTypeAsParameter,
-                    $"'{errorHandlingType.Kind}<T>' cannot be used as a parameter type. " +
+                    $"'{errorHandlingType.Kind}[T]' cannot be used as a parameter type. " +
                     "Error handling types are internal for error propagation and should not be passed as arguments.",
                     param.Location);
             }
 
-            // Protocol-as-type desugaring: routine foo(x: Displayable) → routine foo<T follows Displayable>(x: T)
+            // Protocol-as-type desugaring: routine foo(x: Displayable) → routine foo[T obeys Displayable](x: T)
             if (paramType is ProtocolTypeInfo)
             {
                 // Generate implicit generic parameter name
                 string implicitGenericName = $"__T{implicitGenericCounter++}";
                 implicitGenerics.Add(item: implicitGenericName);
 
-                // Create "follows" constraint for the implicit generic
+                // Create "obeys" constraint for the implicit generic
                 var constraint = new GenericConstraintDeclaration(
                     ParameterName: implicitGenericName,
-                    ConstraintType: ConstraintKind.Follows,
+                    ConstraintType: ConstraintKind.Obeys,
                     ConstraintTypes: [param.Type],
                     Location: param.Location);
                 implicitConstraints.Add(item: constraint);
@@ -1376,15 +1363,15 @@ public sealed partial class SemanticAnalyzer
             : null;
 
         // Validate that Maybe<T>/Result<T>/Lookup<T> are not used as return types
-        // These are compiler-generated wrapper types for failable routines (!)
+        // These are builder-generated wrapper types for failable routines (!)
         if (returnType is ErrorHandlingTypeInfo errorHandlingReturn &&
             errorHandlingReturn.Kind is ErrorHandlingKind.Maybe or ErrorHandlingKind.Result or ErrorHandlingKind.Lookup &&
             !IsStdlibFile(_currentFilePath))
         {
             ReportError(
                 SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType,
-                $"Routine cannot return '{errorHandlingReturn.Kind}<T>'. " +
-                "These types are compiler-generated for failable routines. " +
+                $"Routine cannot return '{errorHandlingReturn.Kind}[T]'. " +
+                "These types are builder-generated for failable routines. " +
                 "Use a failable routine (!) with 'throw'/'absent' instead.",
                 routine.ReturnType?.Location ?? routine.Location);
         }
@@ -1570,8 +1557,8 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that a type follows the required protocol when defining operator methods.
-    /// For example, defining __add__ requires the type to follow Addable.
+    /// Validates that a type obeys the required protocol when defining operator methods.
+    /// For example, defining __add__ requires the type to obey Addable.
     /// </summary>
     private void ValidateOperatorProtocolConformance(RoutineInfo routineInfo, SourceLocation? location)
     {
@@ -1596,21 +1583,21 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Check if the owner type EXPLICITLY follows the required protocol
-        // (structural conformance doesn't count - you must declare "follows Protocol")
+        // Check if the owner type EXPLICITLY obeys the required protocol
+        // (structural conformance doesn't count - you must declare "obeys Protocol")
         if (!ExplicitlyFollowsProtocol(type: currentOwnerType, protocolName: requiredProtocol))
         {
             ReportError(
                 SemanticDiagnosticCode.OperatorWithoutProtocol,
                 $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow '{requiredProtocol}'. " +
-                $"Add 'follows {requiredProtocol}' to the type declaration.",
+                $"Add 'obeys {requiredProtocol}' to the type declaration.",
                 location);
         }
     }
 
     /// <summary>
-    /// Checks if a type explicitly declares following a protocol (not structural conformance).
-    /// This is required for operator methods - you must explicitly declare "follows Protocol".
+    /// Checks if a type explicitly declares obeying a protocol (not structural conformance).
+    /// This is required for operator methods - you must explicitly declare "obeys Protocol".
     /// </summary>
     private bool ExplicitlyFollowsProtocol(TypeSymbol type, string protocolName)
     {
@@ -1687,10 +1674,209 @@ public sealed partial class SemanticAnalyzer
 
     #endregion
 
+    #region Phase 2.55: Auto-Register Builder-Generated Member Routines
+
+    /// <summary>
+    /// Auto-registers builder-generated member routine signatures for all user types.
+    /// These are default routines that every type of a given category gets (Text(), to_debug(), hash(), etc.).
+    /// Only registers if the user hasn't already defined the routine.
+    /// </summary>
+    private void AutoRegisterBuiltinRoutines()
+    {
+        // Look up required types (bail on each if not available)
+        TypeSymbol? textType = _registry.LookupType(name: "Text");
+        TypeSymbol? boolType = _registry.LookupType(name: "Bool");
+        TypeSymbol? u64Type = _registry.LookupType(name: "U64");
+        TypeSymbol? s64Type = _registry.LookupType(name: "S64");
+
+        foreach (TypeSymbol type in _registry.GetTypesWithMethods())
+        {
+            List<RoutineInfo> existingMethods = _registry.GetMethodsForType(type: type).ToList();
+
+            // All types: Text(), to_debug()
+            if (textType != null)
+            {
+                MaybeRegisterBuiltin(owner: type, name: "Text", returnType: textType,
+                    existingMethods: existingMethods);
+                MaybeRegisterBuiltin(owner: type, name: "to_debug", returnType: textType,
+                    existingMethods: existingMethods);
+            }
+
+            switch (type.Category)
+            {
+                case TypeCategory.Record:
+                    if (u64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "hash", returnType: u64Type,
+                            existingMethods: existingMethods);
+                    if (boolType != null)
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__eq__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                    break;
+
+                case TypeCategory.Entity:
+                    if (s64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "id", returnType: s64Type,
+                            existingMethods: existingMethods);
+                    if (boolType != null)
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__eq__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                    MaybeRegisterBuiltinFailable(owner: type, name: "copy!", returnType: type,
+                        existingMethods: existingMethods);
+                    break;
+
+                case TypeCategory.Resident:
+                    if (s64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "id", returnType: s64Type,
+                            existingMethods: existingMethods);
+                    if (boolType != null)
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__eq__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                    break;
+
+                case TypeCategory.Choice:
+                    if (u64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "hash", returnType: u64Type,
+                            existingMethods: existingMethods);
+                    if (s64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "S64", returnType: s64Type,
+                            existingMethods: existingMethods);
+                    if (textType != null)
+                        MaybeRegisterBuiltinFailable(owner: type, name: "__create__!", returnType: type,
+                            existingMethods: existingMethods,
+                            param: ("from", textType), kind: RoutineKind.Creator);
+                    // all_cases() -> List<Me> deferred until List<T> generic resolution is available
+                    break;
+
+                case TypeCategory.Flags:
+                    if (u64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "hash", returnType: u64Type,
+                            existingMethods: existingMethods);
+                    if (u64Type != null)
+                        MaybeRegisterBuiltin(owner: type, name: "U64", returnType: u64Type,
+                            existingMethods: existingMethods);
+                    break;
+            }
+        }
+
+        // Auto-register Text.__create__(from: T) for all concrete user types
+        // This makes every type structurally satisfy Representable[T]
+        if (textType != null)
+        {
+            List<RoutineInfo> textCreateMethods = _registry.GetMethodsForType(type: textType)
+                .Where(predicate: m => m.Name == "__create__")
+                .ToList();
+
+            foreach (TypeSymbol type in _registry.GetAllTypes())
+            {
+                if (type.Category is not (TypeCategory.Record or TypeCategory.Entity or
+                    TypeCategory.Resident or TypeCategory.Choice or
+                    TypeCategory.Flags or TypeCategory.Variant))
+                    continue;
+
+                bool alreadyDefined = textCreateMethods.Any(predicate: m =>
+                    m.Parameters.Count == 1 &&
+                    m.Parameters[0].Type.FullName == type.FullName);
+                if (alreadyDefined) continue;
+
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: "__create__")
+                {
+                    Kind = RoutineKind.Creator,
+                    OwnerType = textType,
+                    Parameters = [new ParameterInfo(name: "from", type: type)],
+                    ReturnType = textType,
+                    IsFailable = false,
+                    DeclaredModification = ModificationCategory.Readonly,
+                    ModificationCategory = ModificationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers a no-parameter readonly builtin routine if not already defined.
+    /// </summary>
+    private void MaybeRegisterBuiltin(TypeSymbol owner, string name, TypeSymbol returnType,
+        List<RoutineInfo> existingMethods)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == name))
+            return;
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = owner,
+            Parameters = [],
+            ReturnType = returnType,
+            IsFailable = false,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// Registers a single-parameter readonly builtin routine if not already defined.
+    /// </summary>
+    private void MaybeRegisterBuiltinWithParam(TypeSymbol owner, string name,
+        string paramName, TypeSymbol paramType, TypeSymbol returnType,
+        List<RoutineInfo> existingMethods)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == name))
+            return;
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = owner,
+            Parameters = [new ParameterInfo(name: paramName, type: paramType)],
+            ReturnType = returnType,
+            IsFailable = false,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// Registers a failable builtin routine if not already defined (for copy!, __create__!).
+    /// </summary>
+    private void MaybeRegisterBuiltinFailable(TypeSymbol owner, string name,
+        TypeSymbol returnType, List<RoutineInfo> existingMethods,
+        (string name, TypeSymbol type)? param = null,
+        RoutineKind kind = RoutineKind.MemberRoutine)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == name))
+            return;
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
+        {
+            Kind = kind,
+            OwnerType = owner,
+            Parameters = param.HasValue
+                ? [new ParameterInfo(name: param.Value.name, type: param.Value.type)]
+                : [],
+            ReturnType = returnType,
+            IsFailable = true,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    #endregion
+
     #region Phase 2.6: Derived Operator Generation
 
     /// <summary>
-    /// Generates derived comparison operators from __eq__ and __cmp__ methods.
+    /// Generates derived comparison operators from __eq__ and __cmp__ routines.
     /// </summary>
     private void GenerateDerivedOperators()
     {
@@ -1756,13 +1942,13 @@ public sealed partial class SemanticAnalyzer
 
         var neMethod = new RoutineInfo(name: "__ne__")
         {
-            Kind = RoutineKind.Method,
+            Kind = RoutineKind.MemberRoutine,
             OwnerType = type,
             Parameters = eqMethod.Parameters,
             ReturnType = boolType,
             IsFailable = false,
-            DeclaredMutation = MutationCategory.Readonly,
-            MutationCategory = MutationCategory.Readonly,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
             Visibility = eqMethod.Visibility,
             Location = eqMethod.Location,
             Module = eqMethod.Module,
@@ -1820,13 +2006,13 @@ public sealed partial class SemanticAnalyzer
             // Generate the derived operator
             var derivedMethod = new RoutineInfo(name: opName)
             {
-                Kind = RoutineKind.Method,
+                Kind = RoutineKind.MemberRoutine,
                 OwnerType = type,
                 Parameters = cmpMethod.Parameters,
                 ReturnType = boolType,
                 IsFailable = false,
-                DeclaredMutation = MutationCategory.Readonly,
-                MutationCategory = MutationCategory.Readonly,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
                 Visibility = cmpMethod.Visibility,
                 Location = cmpMethod.Location,
                 Module = cmpMethod.Module,
@@ -1843,7 +2029,7 @@ public sealed partial class SemanticAnalyzer
     #region Phase 2.7: Protocol Implementation Validation
 
     /// <summary>
-    /// Validates that all types declaring "follows Protocol" implement all required protocol methods.
+    /// Validates that all types declaring "obeys Protocol" implement all required protocol methods.
     /// This is called after all routines are registered (Phase 2.5) and derived operators are generated (Phase 2.6).
     /// </summary>
     private void ValidateProtocolImplementations()
@@ -1918,7 +2104,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.MissingProtocolMethod,
-                    $"Type '{type.Name}' declares 'follows {protocol.Name}' but does not implement required method '{requiredMethod.Name}'.",
+                    $"Type '{type.Name}' declares 'obeys {protocol.Name}' but does not implement required method '{requiredMethod.Name}'.",
                     type.Location ?? new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0));
             }
         }

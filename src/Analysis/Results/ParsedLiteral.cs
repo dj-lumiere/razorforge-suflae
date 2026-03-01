@@ -1,6 +1,6 @@
-﻿using Compilers.Shared.AST;
+﻿using SyntaxTree;
 
-namespace Compilers.Analysis.Results;
+namespace SemanticAnalysis.Results;
 
 /// <summary>
 /// Represents a parsed numeric literal value ready for code generation.

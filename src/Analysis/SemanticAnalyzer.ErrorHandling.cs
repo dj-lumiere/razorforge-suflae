@@ -1,9 +1,9 @@
-﻿namespace Compilers.Analysis;
+﻿namespace SemanticAnalysis;
 
 using Inference;
 using Symbols;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 
 /// <summary>
 /// Phase 5: Error handling variant generation.

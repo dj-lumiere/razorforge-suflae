@@ -1,4 +1,4 @@
-namespace Compilers.Analysis.Types;
+namespace SemanticAnalysis.Types;
 
 using Enums;
 
@@ -25,9 +25,9 @@ public sealed class ProtocolSelfTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
-            message: "Cannot instantiate the protocol self type 'Me'. It must be replaced with the implementing type.");
+            message: "Cannot resolve the protocol self type 'Me'. It must be replaced with the implementing type.");
     }
 }

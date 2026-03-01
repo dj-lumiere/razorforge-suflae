@@ -1,12 +1,12 @@
-namespace Compilers.Analysis.Modules;
+using SemanticAnalysis;
+using SemanticAnalysis.Types;
 
-using Enums;
-using RazorForge.Lexer;
-using RazorForge.Parser;
-using Suflae.Lexer;
-using Suflae.Parser;
-using Shared.AST;
-using Shared.Lexer;
+namespace Builder.Modules;
+
+using SemanticAnalysis.Enums;
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Parser;
 
 /// <summary>
 /// Loads the standard library based on module declarations.
@@ -19,7 +19,7 @@ public sealed class StdlibLoader
     /// <summary>The stdlib root directory path (e.g., stdlib/razorforge or stdlib/suflae).</summary>
     private readonly string _stdlibPath;
 
-    /// <summary>The language being compiled.</summary>
+    /// <summary>The language being built.</summary>
     private readonly Language _language;
 
     /// <summary>The file extension to scan (.rf or .sf).</summary>
@@ -41,7 +41,7 @@ public sealed class StdlibLoader
     /// Creates a new stdlib loader for a specific language.
     /// </summary>
     /// <param name="stdlibRoot">Path to the stdlib root directory (containing razorforge/ and suflae/ subdirectories).</param>
-    /// <param name="language">The language being compiled.</param>
+    /// <param name="language">The language being built.</param>
     public StdlibLoader(string stdlibRoot, Language language)
     {
         _language = language;
@@ -62,8 +62,8 @@ public sealed class StdlibLoader
         // Scan all stdlib files and categorize by module
         ScanStdlibFiles();
 
-        // Three-pass registration ensures protocols exist before types reference them in 'follows' clauses.
-        // Pass 1a: Register all protocols first (so 'follows' clauses can resolve)
+        // Three-pass registration ensures protocols exist before types reference them in 'obeys' clauses.
+        // Pass 1a: Register all protocols first (so 'obeys' clauses can resolve)
         foreach (var (program, _, ns) in _corePrograms)
         {
             RegisterProgramProtocols(registry, program, ns);
@@ -152,20 +152,10 @@ public sealed class StdlibLoader
     /// <returns>The parsed program AST.</returns>
     private Program ParseFile(string code, string filePath)
     {
-        if (_language == Language.Suflae)
-        {
-            var tokenizer = new SuflaeTokenizer(code, filePath);
-            List<Token> tokens = tokenizer.Tokenize();
-            var parser = new SuflaeParser(tokens, filePath);
-            return parser.Parse();
-        }
-        else
-        {
-            var tokenizer = new RazorForgeTokenizer(code, filePath);
-            List<Token> tokens = tokenizer.Tokenize();
-            var parser = new RazorForgeParser(tokens, filePath);
-            return parser.Parse();
-        }
+        var tokenizer = new Tokenizer(code, filePath, _language);
+        List<Token> tokens = tokenizer.Tokenize();
+        var parser = new Parser(tokens, _language, filePath);
+        return parser.Parse();
     }
 
     /// <summary>
@@ -178,21 +168,11 @@ public sealed class StdlibLoader
     private static Program ParseFileByExtension(string code, string filePath)
     {
         bool isSuflaeFile = filePath.EndsWith(".sf", StringComparison.OrdinalIgnoreCase);
-
-        if (isSuflaeFile)
-        {
-            var tokenizer = new SuflaeTokenizer(code, filePath);
-            List<Token> tokens = tokenizer.Tokenize();
-            var parser = new SuflaeParser(tokens, filePath);
-            return parser.Parse();
-        }
-        else
-        {
-            var tokenizer = new RazorForgeTokenizer(code, filePath);
-            List<Token> tokens = tokenizer.Tokenize();
-            var parser = new RazorForgeParser(tokens, filePath);
-            return parser.Parse();
-        }
+        var language = isSuflaeFile ? Language.Suflae : Language.RazorForge;
+        var tokenizer = new Tokenizer(code, filePath, language);
+        List<Token> tokens = tokenizer.Tokenize();
+        var parser = new Parser(tokens, language, filePath);
+        return parser.Parse();
     }
 
     /// <summary>
@@ -361,16 +341,16 @@ public sealed class StdlibLoader
             {
                 // Look up the registered protocol to get its FullName
                 var registeredProto = registry.LookupType(protocol.Name);
-                if (registeredProto is not Types.ProtocolTypeInfo)
+                if (registeredProto is not SemanticAnalysis.Types.ProtocolTypeInfo)
                 {
                     continue;
                 }
 
-                var parentProtocols = new List<Types.ProtocolTypeInfo>();
+                var parentProtocols = new List<SemanticAnalysis.Types.ProtocolTypeInfo>();
                 foreach (var parentExpr in protocol.ParentProtocols)
                 {
                     var parentType = ResolveSimpleType(registry, parentExpr);
-                    if (parentType is Types.ProtocolTypeInfo parentProto)
+                    if (parentType is SemanticAnalysis.Types.ProtocolTypeInfo parentProto)
                     {
                         parentProtocols.Add(parentProto);
                     }
@@ -386,7 +366,7 @@ public sealed class StdlibLoader
 
     /// <summary>
     /// Registers protocol declarations from a program.
-    /// This is pass 1a — protocols must be registered before other types so 'follows' clauses can resolve.
+    /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// </summary>
     private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string moduleName)
     {
@@ -453,7 +433,7 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Registers preset (compile-time constant) declarations from a program.
+    /// Registers preset (build-time constant) declarations from a program.
     /// Presets are module-level constants accessible across files within the same module.
     /// </summary>
     private static void RegisterProgramPresets(TypeRegistry registry, Program program)
@@ -479,7 +459,7 @@ public sealed class StdlibLoader
     {
         // Parse method names like "S32.__add__" or "Type.method"
         string routineName = routine.Name;
-        Types.TypeInfo? ownerType = null;
+        SemanticAnalysis.Types.TypeInfo? ownerType = null;
         string methodName = routineName;
 
         int dotIndex = routineName.IndexOf('.');
@@ -491,12 +471,12 @@ public sealed class StdlibLoader
         }
 
         // Resolve parameter types
-        var parameters = new List<Symbols.ParameterInfo>();
+        var parameters = new List<SemanticAnalysis.Symbols.ParameterInfo>();
         foreach (var param in routine.Parameters)
         {
             var paramType = ResolveSimpleType(registry, param.Type);
-            parameters.Add(new Symbols.ParameterInfo(param.Name,
-                paramType ?? Types.ErrorTypeInfo.Instance));
+            parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
+                paramType ?? SemanticAnalysis.Types.ErrorTypeInfo.Instance));
         }
 
         // Resolve return type
@@ -505,7 +485,7 @@ public sealed class StdlibLoader
             : null;
 
         // Use just the method name (not "S32.__add__", just "__add__")
-        var routineInfo = new Symbols.RoutineInfo(methodName)
+        var routineInfo = new SemanticAnalysis.Symbols.RoutineInfo(methodName)
         {
             OwnerType = ownerType,
             Parameters = parameters,
@@ -537,7 +517,7 @@ public sealed class StdlibLoader
         }
 
         // Build fields list upfront (TypeInfo uses init properties with IReadOnlyList)
-        var fields = new List<Symbols.FieldInfo>();
+        var fields = new List<SemanticAnalysis.Symbols.FieldInfo>();
         foreach (var member in record.Members)
         {
             if (member is VariableDeclaration { Type: not null } field)
@@ -545,16 +525,16 @@ public sealed class StdlibLoader
                 var fieldType = ResolveSimpleType(registry, field.Type);
                 if (fieldType != null)
                 {
-                    fields.Add(new Symbols.FieldInfo(field.Name, fieldType)
+                    fields.Add(new SemanticAnalysis.Symbols.FieldInfo(field.Name, fieldType)
                     {
-                        IsMutable = field.IsMutable, Visibility = field.Visibility
+                        Visibility = field.Visibility
                     });
                 }
             }
         }
 
-        // Resolve implemented protocols (follows clause)
-        var protocols = new List<Types.TypeInfo>();
+        // Resolve implemented protocols (obeys clause)
+        var protocols = new List<SemanticAnalysis.Types.TypeInfo>();
         foreach (var protoExpr in record.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -564,7 +544,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new Types.RecordTypeInfo(record.Name)
+        var typeInfo = new SemanticAnalysis.Types.RecordTypeInfo(record.Name)
         {
             Module = moduleName,
             Visibility = record.Visibility,
@@ -596,7 +576,7 @@ public sealed class StdlibLoader
         }
 
         // Build fields list upfront
-        var fields = new List<Symbols.FieldInfo>();
+        var fields = new List<SemanticAnalysis.Symbols.FieldInfo>();
         foreach (var member in entity.Members)
         {
             if (member is VariableDeclaration { Type: not null } field)
@@ -604,16 +584,16 @@ public sealed class StdlibLoader
                 var fieldType = ResolveSimpleType(registry, field.Type);
                 if (fieldType != null)
                 {
-                    fields.Add(new Symbols.FieldInfo(field.Name, fieldType)
+                    fields.Add(new SemanticAnalysis.Symbols.FieldInfo(field.Name, fieldType)
                     {
-                        IsMutable = field.IsMutable, Visibility = field.Visibility
+                        Visibility = field.Visibility
                     });
                 }
             }
         }
 
-        // Resolve implemented protocols (follows clause)
-        var protocols = new List<Types.TypeInfo>();
+        // Resolve implemented protocols (obeys clause)
+        var protocols = new List<SemanticAnalysis.Types.TypeInfo>();
         foreach (var protoExpr in entity.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -623,7 +603,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new Types.EntityTypeInfo(entity.Name)
+        var typeInfo = new SemanticAnalysis.Types.EntityTypeInfo(entity.Name)
         {
             Module = moduleName,
             Visibility = entity.Visibility,
@@ -649,7 +629,7 @@ public sealed class StdlibLoader
         }
 
         // Build fields list upfront
-        var fields = new List<Symbols.FieldInfo>();
+        var fields = new List<SemanticAnalysis.Symbols.FieldInfo>();
         foreach (var member in resident.Members)
         {
             if (member is VariableDeclaration { Type: not null } field)
@@ -657,16 +637,16 @@ public sealed class StdlibLoader
                 var fieldType = ResolveSimpleType(registry, field.Type);
                 if (fieldType != null)
                 {
-                    fields.Add(new Symbols.FieldInfo(field.Name, fieldType)
+                    fields.Add(new SemanticAnalysis.Symbols.FieldInfo(field.Name, fieldType)
                     {
-                        IsMutable = field.IsMutable, Visibility = field.Visibility
+                        Visibility = field.Visibility
                     });
                 }
             }
         }
 
-        // Resolve implemented protocols (follows clause)
-        var protocols = new List<Types.TypeInfo>();
+        // Resolve implemented protocols (obeys clause)
+        var protocols = new List<SemanticAnalysis.Types.TypeInfo>();
         foreach (var protoExpr in resident.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -676,7 +656,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new Types.ResidentTypeInfo(resident.Name)
+        var typeInfo = new SemanticAnalysis.Types.ResidentTypeInfo(resident.Name)
         {
             Module = moduleName,
             Visibility = resident.Visibility,
@@ -701,16 +681,16 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<Types.ChoiceCaseInfo>();
+        var cases = new List<SemanticAnalysis.Types.ChoiceCaseInfo>();
         foreach (var caseDecl in choice.Cases)
         {
-            cases.Add(new Types.ChoiceCaseInfo(caseDecl.Name)
+            cases.Add(new SemanticAnalysis.Types.ChoiceCaseInfo(caseDecl.Name)
             {
                 Value = null // TODO: Extract from caseDecl.Value expression
             });
         }
 
-        var typeInfo = new Types.ChoiceTypeInfo(choice.Name)
+        var typeInfo = new SemanticAnalysis.Types.ChoiceTypeInfo(choice.Name)
         {
             Module = moduleName, Visibility = choice.Visibility, Cases = cases
         };
@@ -729,13 +709,13 @@ public sealed class StdlibLoader
             return;
         }
 
-        var members = new List<Types.FlagsMemberInfo>();
+        var members = new List<SemanticAnalysis.Types.FlagsMemberInfo>();
         for (int i = 0; i < flags.Members.Count; i++)
         {
-            members.Add(new Types.FlagsMemberInfo(flags.Members[i], i));
+            members.Add(new SemanticAnalysis.Types.FlagsMemberInfo(flags.Members[i], i));
         }
 
-        var typeInfo = new Types.FlagsTypeInfo(flags.Name)
+        var typeInfo = new SemanticAnalysis.Types.FlagsTypeInfo(flags.Name)
         {
             Module = moduleName, Visibility = flags.Visibility, Members = members
         };
@@ -756,24 +736,24 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<Types.VariantCaseInfo>();
+        var cases = new List<SemanticAnalysis.Types.VariantCaseInfo>();
         int tagValue = 0;
         foreach (var caseDecl in variant.Cases)
         {
             // Determine payload type from AssociatedTypes if any
-            Types.TypeInfo? payloadType = null;
+            SemanticAnalysis.Types.TypeInfo? payloadType = null;
             if (caseDecl.AssociatedTypes != null)
             {
                 payloadType = ResolveSimpleType(registry, caseDecl.AssociatedTypes);
             }
 
-            cases.Add(new Types.VariantCaseInfo(caseDecl.Name)
+            cases.Add(new SemanticAnalysis.Types.VariantCaseInfo(caseDecl.Name)
             {
                 PayloadType = payloadType, TagValue = tagValue++
             });
         }
 
-        var typeInfo = new Types.VariantTypeInfo(variant.Name)
+        var typeInfo = new SemanticAnalysis.Types.VariantTypeInfo(variant.Name)
         {
             Module = moduleName,
             Cases = cases,
@@ -796,7 +776,7 @@ public sealed class StdlibLoader
         }
 
         // Build methods list upfront
-        var methods = new List<Types.ProtocolMethodInfo>();
+        var methods = new List<SemanticAnalysis.Types.ProtocolMethodInfo>();
         foreach (var method in protocol.Methods)
         {
             // Strip "!" suffix and "Me." prefix from method name
@@ -811,7 +791,7 @@ public sealed class StdlibLoader
                 ? ResolveSimpleType(registry, method.ReturnType)
                 : null;
 
-            var parameterTypes = new List<Types.TypeInfo>();
+            var parameterTypes = new List<SemanticAnalysis.Types.TypeInfo>();
             var parameterNames = new List<string>();
 
             foreach (var param in method.Parameters)
@@ -821,7 +801,7 @@ public sealed class StdlibLoader
 
                 // Handle the special 'Me' type (protocol self-type)
                 var paramType = param.Type?.Name == "Me"
-                    ? (Types.TypeInfo)Types.ProtocolSelfTypeInfo.Instance
+                    ? SemanticAnalysis.Types.ProtocolSelfTypeInfo.Instance
                     : ResolveSimpleType(registry, param.Type);
                 if (paramType != null)
                 {
@@ -832,10 +812,10 @@ public sealed class StdlibLoader
 
             // Handle the special 'Me' type in return type
             var resolvedReturnType = method.ReturnType?.Name == "Me"
-                ? (Types.TypeInfo)Types.ProtocolSelfTypeInfo.Instance
+                ? ProtocolSelfTypeInfo.Instance
                 : returnType;
 
-            methods.Add(new Types.ProtocolMethodInfo(methodName)
+            methods.Add(new ProtocolMethodInfo(methodName)
             {
                 IsInstanceMethod = isInstance,
                 ParameterTypes = parameterTypes,
@@ -845,7 +825,7 @@ public sealed class StdlibLoader
             });
         }
 
-        var typeInfo = new Types.ProtocolTypeInfo(protocol.Name)
+        var typeInfo = new SemanticAnalysis.Types.ProtocolTypeInfo(protocol.Name)
         {
             Module = moduleName,
             Visibility = protocol.Visibility,
@@ -860,7 +840,7 @@ public sealed class StdlibLoader
     /// Resolves a simple type expression.
     /// Only handles intrinsic types and direct type references.
     /// </summary>
-    private static Types.TypeInfo? ResolveSimpleType(TypeRegistry registry,
+    private static SemanticAnalysis.Types.TypeInfo? ResolveSimpleType(TypeRegistry registry,
         TypeExpression? typeExpr)
     {
         if (typeExpr == null) return null;

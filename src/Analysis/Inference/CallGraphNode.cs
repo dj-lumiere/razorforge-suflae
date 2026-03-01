@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Inference;
+﻿namespace SemanticAnalysis.Inference;
 
 using Enums;
 using Symbols;
@@ -18,15 +18,15 @@ public sealed class CallGraphNode
     private readonly List<CallGraphNode> _callers = [];
 
     /// <summary>
-    /// The inferred mutation category for this routine.
+    /// The inferred modification category for this routine.
     /// Starts as Readonly and propagates up to Writable/Migratable.
     /// </summary>
-    public MutationCategory InferredMutation { get; set; } = MutationCategory.Readonly;
+    public ModificationCategory InferredModification { get; set; } = ModificationCategory.Readonly;
 
     /// <summary>
     /// Whether this routine directly writes to fields of 'me'.
     /// </summary>
-    public bool DirectlyMutates { get; set; }
+    public bool DirectlyModifies { get; set; }
 
     /// <summary>
     /// Whether this routine directly modifies the internal Snatched buffer (migratable).

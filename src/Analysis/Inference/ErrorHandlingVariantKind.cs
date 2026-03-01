@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Inference;
+﻿namespace SemanticAnalysis.Inference;
 
 /// <summary>
 /// Kind of generated error handling variant.

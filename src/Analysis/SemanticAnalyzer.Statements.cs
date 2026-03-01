@@ -1,10 +1,10 @@
-namespace Compilers.Analysis;
+namespace SemanticAnalysis;
 
 using Enums;
 using Symbols;
 using Types;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -77,11 +77,22 @@ public sealed partial class SemanticAnalyzer
         // Declare parameters in scope
         foreach (ParameterInfo param in routineInfo.Parameters)
         {
-            _registry.DeclareVariable(name: param.Name, type: param.Type, isMutable: false);
+            _registry.DeclareVariable(name: param.Name, type: param.Type);
         }
 
         // Analyze body statement
         AnalyzeStatement(statement: routine.Body);
+
+        // Validate that non-void routines return on all paths (#144)
+        if (routineInfo.ReturnType != null &&
+            routineInfo.ReturnType.Name != "Blank" &&
+            !StatementAlwaysTerminates(statement: routine.Body))
+        {
+            ReportError(
+                SemanticDiagnosticCode.MissingReturn,
+                $"Routine '{routine.Name}' has return type '{routineInfo.ReturnType.Name}' but not all code paths return a value.",
+                routine.Location);
+        }
 
         // Store routine body for error handling variant generation (Phase 5)
         if (routineInfo.IsFailable)
@@ -166,12 +177,16 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeDiscardStatement(discard: discard);
                 break;
 
-            case GenerateStatement:
-                // TODO: AnalyzeGenerateStatement — validate inside generator routine
+            case EmitStatement:
+                // TODO: AnalyzeEmitStatement — validate inside generator routine
                 break;
 
             case DangerStatement danger:
                 AnalyzeDangerStatement(danger: danger);
+                break;
+
+            case UsingStatement usingStmt:
+                AnalyzeUsingStatement(usingStmt: usingStmt);
                 break;
 
             default:
@@ -258,8 +273,8 @@ public sealed partial class SemanticAnalyzer
         }
 
         // RazorForge: Entity bare assignment prohibition
-        // `let b = a` where `a` is an entity is a compile error (must use .share() or steal)
-        // Only applies to bare identifier references, not constructor calls or function returns
+        // `var b = a` where `a` is an entity is a build error (must use .share() or steal)
+        // Only applies to bare identifier references, not creator calls or function returns
         if (_registry.Language == Language.RazorForge
             && varDecl.Initializer is IdentifierExpression
             && varType is EntityTypeInfo)
@@ -271,9 +286,9 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
-        // Variant copy prohibition: `let box2 = box1` is not allowed
+        // Variant copy prohibition: `var box2 = box1` is not allowed
         // Variants must be dismantled immediately with pattern matching
-        // Binding from routine calls (`let result = make_shape()`) is allowed
+        // Binding from routine calls (`var result = make_shape()`) is allowed
         if (varDecl.Initializer is IdentifierExpression && varType is VariantTypeInfo)
         {
             ReportError(
@@ -286,8 +301,7 @@ public sealed partial class SemanticAnalyzer
         // Register variable in current scope
         bool declared = _registry.DeclareVariable(
             name: varDecl.Name,
-            type: varType,
-            isMutable: varDecl.IsMutable);
+            type: varType);
 
         if (!declared)
         {
@@ -338,15 +352,15 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Check mutability
+        // Check modifiability
         if (assign.Target is IdentifierExpression id)
         {
             VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
-            if (varInfo is { IsMutable: false })
+            if (varInfo is { IsModifiable: false })
             {
                 ReportError(
                     SemanticDiagnosticCode.AssignmentToImmutable,
-                    $"Cannot assign to immutable variable '{id.Name}'.",
+                    $"Cannot assign to preset variable '{id.Name}'.",
                     assign.Location);
             }
         }
@@ -357,14 +371,27 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
             ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: assign.Location);
 
-            // Check if we're in a @readonly method trying to mutate 'me'
+            // Preset enforcement: cannot assign to fields of preset variables
+            if (member.Object is IdentifierExpression fieldTarget)
+            {
+                VariableInfo? targetVar = _registry.LookupVariable(name: fieldTarget.Name);
+                if (targetVar is { IsModifiable: false })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.FieldAssignmentOnImmutable,
+                        $"Cannot assign to field '{member.PropertyName}' of preset variable '{fieldTarget.Name}'.",
+                        assign.Location);
+                }
+            }
+
+            // Check if we're in a @readonly method trying to modify 'me'
             if (_currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
                 ReportError(
-                    SemanticDiagnosticCode.MutationInReadonlyMethod,
-                    $"Cannot mutate field '{member.PropertyName}' in a @readonly method. " +
-                    "Use @writable or @migratable to allow mutations.",
+                    SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    $"Cannot modify field '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow modifications.",
                     assign.Location);
             }
         }
@@ -469,8 +496,7 @@ public sealed partial class SemanticAnalyzer
             // Simple variable binding: for item in items
             _registry.DeclareVariable(
                 name: forStmt.Variable,
-                type: elementType,
-                isMutable: false); // Loop variables are immutable
+                type: elementType);
         }
         else if (forStmt.VariablePattern != null)
         {
@@ -483,8 +509,7 @@ public sealed partial class SemanticAnalyzer
                 {
                     _registry.DeclareVariable(
                         name: binding.BindingName,
-                        type: elementType, // TODO: Extract proper tuple element types
-                        isMutable: false);
+                        type: elementType); // TODO: Extract proper tuple element types
                 }
             }
         }
@@ -552,8 +577,8 @@ public sealed partial class SemanticAnalyzer
             _registry.ExitScope();
         }
 
-        // Check exhaustiveness for enumerable types (choice, variant, mutant, error-handling)
-        if (matchedType is ChoiceTypeInfo or VariantTypeInfo or MutantTypeInfo or ErrorHandlingTypeInfo)
+        // Check exhaustiveness for enumerable types (choice, variant, error-handling)
+        if (matchedType is ChoiceTypeInfo or VariantTypeInfo or ErrorHandlingTypeInfo)
         {
             bool hasCatchAll = whenStmt.Clauses.Any(predicate: c =>
                 c.Pattern is WildcardPattern or ElsePattern or IdentifierPattern);
@@ -692,7 +717,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol initType = AnalyzeExpression(expression: destruct.Initializer);
 
         // Analyze the destructuring pattern and bind variables
-        AnalyzeDestructuringPattern(pattern: destruct.Pattern, sourceType: initType, isMutable: destruct.IsMutable);
+        AnalyzeDestructuringPattern(pattern: destruct.Pattern, sourceType: initType);
     }
 
     /// <summary>
@@ -751,5 +776,25 @@ public sealed partial class SemanticAnalyzer
             _registry.ExitScope();
         }
     }
+
+    private void AnalyzeUsingStatement(UsingStatement usingStmt)
+    {
+        // Analyze the resource expression to get its type
+        TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
+
+        // Create a new scope for the using block
+        _registry.EnterScope(kind: ScopeKind.Block);
+
+        // Declare the binding variable in the using scope
+        _registry.DeclareVariable(
+            name: usingStmt.Name,
+            type: resourceType);
+
+        // Analyze the body
+        AnalyzeStatement(statement: usingStmt.Body);
+
+        _registry.ExitScope();
+    }
+
     #endregion
 }

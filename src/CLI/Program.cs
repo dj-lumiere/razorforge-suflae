@@ -1,16 +1,13 @@
-using Compilers.RazorForge.Lexer;
-using Compilers.Suflae.Lexer;
-using Compilers.Shared.Lexer;
-using Compilers.RazorForge.Parser;
-using Compilers.Suflae.Parser;
-using Compilers.Shared.AST;
-using Compilers.Shared.Parser;
-using Compilers.Analysis;
-using Compilers.Analysis.Enums;
-using Compilers.Analysis.Results;
-using Compilers.CodeGen;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
+using Compiler.Parser;
+using SyntaxTree;
+using SemanticAnalysis;
+using SemanticAnalysis.Enums;
+using SemanticAnalysis.Results;
+using Compiler.CodeGen;
 
-namespace Compilers;
+namespace Builder;
 
 /// <summary>
 /// Minimal CLI for testing the lexer and parser during the overhaul.
@@ -83,7 +80,7 @@ internal class Program
 
     private static void PrintUsage()
     {
-        Console.WriteLine("RazorForge Compiler");
+        Console.WriteLine("RazorForge Builder");
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  RazorForge <source-file>                    - Parse file and show AST summary");
@@ -114,17 +111,9 @@ internal class Program
 
         try
         {
-            List<Token> tokens;
-            if (isSuflae)
-            {
-                var tokenizer = new SuflaeTokenizer(code, sourceFile);
-                tokens = tokenizer.Tokenize();
-            }
-            else
-            {
-                var tokenizer = new RazorForgeTokenizer(code, sourceFile);
-                tokens = tokenizer.Tokenize();
-            }
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+            var tokenizer = new Tokenizer(code, sourceFile, language);
+            List<Token> tokens = tokenizer.Tokenize();
 
             Console.WriteLine($"Generated {tokens.Count} tokens:");
             Console.WriteLine();
@@ -161,40 +150,20 @@ internal class Program
 
         try
         {
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+
             // Tokenize
             Console.WriteLine("=== TOKENIZATION ===");
-            List<Token> tokens;
-            if (isSuflae)
-            {
-                var tokenizer = new SuflaeTokenizer(code, sourceFile);
-                tokens = tokenizer.Tokenize();
-            }
-            else
-            {
-                var tokenizer = new RazorForgeTokenizer(code, sourceFile);
-                tokens = tokenizer.Tokenize();
-            }
+            var tokenizer = new Tokenizer(code, sourceFile, language);
+            List<Token> tokens = tokenizer.Tokenize();
             Console.WriteLine($"Generated {tokens.Count} tokens");
 
             // Parse
             Console.WriteLine();
             Console.WriteLine("=== PARSING ===");
-
-            Compilers.Shared.AST.Program ast;
-            IReadOnlyList<CompileWarning> warnings;
-
-            if (isSuflae)
-            {
-                var parser = new SuflaeParser(tokens: tokens, fileName: sourceFile);
-                ast = parser.Parse();
-                warnings = parser.GetWarnings();
-            }
-            else
-            {
-                var parser = new RazorForgeParser(tokens: tokens, fileName: sourceFile);
-                ast = parser.Parse();
-                warnings = parser.GetWarnings();
-            }
+            var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
+            SyntaxTree.Program ast = parser.Parse();
+            IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
 
             Console.WriteLine($"Successfully parsed! AST contains {ast.Declarations.Count} declarations");
 
@@ -221,7 +190,7 @@ internal class Program
             Console.WriteLine("Parsing successful!");
             return 0;
         }
-        catch (ParseException ex)
+        catch (GrammarException ex)
         {
             Console.WriteLine(ex.Message);
             return 1;
@@ -298,45 +267,25 @@ internal class Program
         string code = File.ReadAllText(sourceFile);
         bool isSuflae = IsSuflaeFile(sourceFile);
 
-        Console.WriteLine($"Compiling {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+        Console.WriteLine($"Building {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
         Console.WriteLine();
 
         try
         {
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+
             // Tokenize
             Console.WriteLine("=== TOKENIZATION ===");
-            List<Token> tokens;
-            if (isSuflae)
-            {
-                var tokenizer = new SuflaeTokenizer(code, sourceFile);
-                tokens = tokenizer.Tokenize();
-            }
-            else
-            {
-                var tokenizer = new RazorForgeTokenizer(code, sourceFile);
-                tokens = tokenizer.Tokenize();
-            }
+            var tokenizer = new Tokenizer(code, sourceFile, language);
+            List<Token> tokens = tokenizer.Tokenize();
             Console.WriteLine($"Generated {tokens.Count} tokens");
 
             // Parse
             Console.WriteLine();
             Console.WriteLine("=== PARSING ===");
-
-            Compilers.Shared.AST.Program ast;
-            IReadOnlyList<CompileWarning> parseWarnings;
-
-            if (isSuflae)
-            {
-                var parser = new SuflaeParser(tokens: tokens, fileName: sourceFile);
-                ast = parser.Parse();
-                parseWarnings = parser.GetWarnings();
-            }
-            else
-            {
-                var parser = new RazorForgeParser(tokens: tokens, fileName: sourceFile);
-                ast = parser.Parse();
-                parseWarnings = parser.GetWarnings();
-            }
+            var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
+            SyntaxTree.Program ast = parser.Parse();
+            IReadOnlyList<BuildWarning> parseWarnings = parser.GetWarnings();
 
             Console.WriteLine($"Parsed {ast.Declarations.Count} declarations");
 
@@ -344,7 +293,6 @@ internal class Program
             Console.WriteLine();
             Console.WriteLine("=== SEMANTIC ANALYSIS ===");
 
-            var language = isSuflae ? Language.Suflae : Language.RazorForge;
             var analyzer = new SemanticAnalyzer(language);
             var result = analyzer.Analyze(ast);
 
@@ -378,7 +326,7 @@ internal class Program
             Console.WriteLine();
             Console.WriteLine("=== CODE GENERATION ===");
 
-            // Pass stdlib programs to codegen so intrinsic routines get compiled
+            // Pass stdlib programs to codegen so intrinsic routines get built
             var stdlibPrograms = result.Registry.StdlibPrograms;
             var generator = new LLVMCodeGenerator(ast, result.Registry, stdlibPrograms);
             string llvmIR = generator.Generate();
@@ -401,14 +349,14 @@ internal class Program
             Console.WriteLine("Code generation successful!");
             return 0;
         }
-        catch (ParseException ex)
+        catch (GrammarException ex)
         {
             Console.WriteLine($"{ex.Message}");
             return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Compilation failed: {ex.Message}");
+            Console.WriteLine($"Build failed: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
             return 1;
         }
@@ -468,21 +416,21 @@ internal class Program
     private static List<string> GetModifiers(RoutineDeclaration func)
     {
         var mods = new List<string>();
-        if (func.GenericParameters?.Count > 0) mods.Add($"<{string.Join(", ", func.GenericParameters)}>");
+        if (func.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", func.GenericParameters)}]");
         return mods;
     }
 
     private static List<string> GetModifiers(RecordDeclaration rec)
     {
         var mods = new List<string>();
-        if (rec.GenericParameters?.Count > 0) mods.Add($"<{string.Join(", ", rec.GenericParameters)}>");
+        if (rec.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", rec.GenericParameters)}]");
         return mods;
     }
 
     private static List<string> GetModifiers(EntityDeclaration ent)
     {
         var mods = new List<string>();
-        if (ent.GenericParameters?.Count > 0) mods.Add($"<{string.Join(", ", ent.GenericParameters)}>");
+        if (ent.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", ent.GenericParameters)}]");
         return mods;
     }
 

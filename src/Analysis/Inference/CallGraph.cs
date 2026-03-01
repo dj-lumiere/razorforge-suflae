@@ -1,10 +1,10 @@
-﻿namespace Compilers.Analysis.Inference;
+﻿namespace SemanticAnalysis.Inference;
 
 using Symbols;
 
 /// <summary>
 /// Represents a call graph for analyzing method dependencies.
-/// Used for mutation inference and migratable inference.
+/// Used for modification inference and migratable inference.
 /// </summary>
 public sealed class CallGraph
 {

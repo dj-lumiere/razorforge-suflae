@@ -1,9 +1,9 @@
-﻿namespace Compilers.CodeGen;
+﻿namespace Compiler.CodeGen;
 
 using System.Text;
-using Analysis.Symbols;
-using Analysis.Types;
-using Shared.AST;
+using SemanticAnalysis.Symbols;
+using SemanticAnalysis.Types;
+using SyntaxTree;
 
 /// <summary>
 /// Expression code generation: allocation, field access, method calls, operators.
@@ -66,7 +66,7 @@ public partial class LLVMCodeGenerator
     /// <param name="sb">StringBuilder to emit code to.</param>
     /// <param name="expr">The constructor call expression.</param>
     /// <returns>The temporary variable holding the result.</returns>
-    private string EmitConstructorCall(StringBuilder sb, ConstructorExpression expr)
+    private string EmitConstructorCall(StringBuilder sb, CreatorExpression expr)
     {
         // Look up the type
         TypeInfo? type = _registry.LookupType(expr.TypeName);
@@ -86,7 +86,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates code to construct an entity with field values.
     /// </summary>
-    private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity, ConstructorExpression expr)
+    private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity, CreatorExpression expr)
     {
         // Evaluate all field value expressions first
         var fieldValues = new List<string>();
@@ -103,7 +103,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates code to construct a record (value type).
     /// </summary>
-    private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record, ConstructorExpression expr)
+    private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record, CreatorExpression expr)
     {
         // Single-field wrapper: just return the inner value
         if (record.IsSingleFieldWrapper && expr.Fields.Count == 1)
@@ -332,7 +332,8 @@ public partial class LLVMCodeGenerator
             LiteralExpression literal => EmitLiteral(sb, literal),
             IdentifierExpression identifier => EmitIdentifier(sb, identifier),
             MemberExpression memberAccess => EmitFieldAccess(sb, memberAccess),
-            ConstructorExpression constructor => EmitConstructorCall(sb, constructor),
+            OptionalMemberExpression => throw new NotImplementedException("Optional chaining (?.) codegen not yet implemented"),
+            CreatorExpression constructor => EmitConstructorCall(sb, constructor),
             CallExpression call => EmitCall(sb, call),
             BinaryExpression binary => EmitBinaryOp(sb, binary),
             UnaryExpression unary => EmitUnaryOp(sb, unary),
@@ -635,7 +636,7 @@ public partial class LLVMCodeGenerator
             LiteralExpression literal => GetLiteralType(literal),
             IdentifierExpression id => _localVariables.TryGetValue(id.Name, out var varType) ? varType : _registry.LookupVariable(id.Name)?.Type,
             MemberExpression member => GetMemberType(member),
-            ConstructorExpression ctor => _registry.LookupType(ctor.TypeName),
+            CreatorExpression ctor => _registry.LookupType(ctor.TypeName),
             BinaryExpression binary => GetExpressionType(binary.Left), // Use left operand type
             UnaryExpression unary => GetExpressionType(unary.Operand),
             CallExpression call => GetCallReturnType(call),
@@ -697,25 +698,25 @@ public partial class LLVMCodeGenerator
     {
         string? typeName = literal.LiteralType switch
         {
-            Shared.Lexer.TokenType.S8Literal => "S8",
-            Shared.Lexer.TokenType.S16Literal => "S16",
-            Shared.Lexer.TokenType.S32Literal => "S32",
-            Shared.Lexer.TokenType.S64Literal => "S64",
-            Shared.Lexer.TokenType.S128Literal => "S128",
-            Shared.Lexer.TokenType.U8Literal => "U8",
-            Shared.Lexer.TokenType.U16Literal => "U16",
-            Shared.Lexer.TokenType.U32Literal => "U32",
-            Shared.Lexer.TokenType.U64Literal => "U64",
-            Shared.Lexer.TokenType.U128Literal => "U128",
-            Shared.Lexer.TokenType.F16Literal => "F16",
-            Shared.Lexer.TokenType.F32Literal => "F32",
-            Shared.Lexer.TokenType.F64Literal => "F64",
-            Shared.Lexer.TokenType.F128Literal => "F128",
-            Shared.Lexer.TokenType.D32Literal => "D32",
-            Shared.Lexer.TokenType.D64Literal => "D64",
-            Shared.Lexer.TokenType.D128Literal => "D128",
-            Shared.Lexer.TokenType.True or Shared.Lexer.TokenType.False => "Bool",
-            Shared.Lexer.TokenType.TextLiteral => "Text",
+            Compiler.Lexer.TokenType.S8Literal => "S8",
+            Compiler.Lexer.TokenType.S16Literal => "S16",
+            Compiler.Lexer.TokenType.S32Literal => "S32",
+            Compiler.Lexer.TokenType.S64Literal => "S64",
+            Compiler.Lexer.TokenType.S128Literal => "S128",
+            Compiler.Lexer.TokenType.U8Literal => "U8",
+            Compiler.Lexer.TokenType.U16Literal => "U16",
+            Compiler.Lexer.TokenType.U32Literal => "U32",
+            Compiler.Lexer.TokenType.U64Literal => "U64",
+            Compiler.Lexer.TokenType.U128Literal => "U128",
+            Compiler.Lexer.TokenType.F16Literal => "F16",
+            Compiler.Lexer.TokenType.F32Literal => "F32",
+            Compiler.Lexer.TokenType.F64Literal => "F64",
+            Compiler.Lexer.TokenType.F128Literal => "F128",
+            Compiler.Lexer.TokenType.D32Literal => "D32",
+            Compiler.Lexer.TokenType.D64Literal => "D64",
+            Compiler.Lexer.TokenType.D128Literal => "D128",
+            Compiler.Lexer.TokenType.True or Compiler.Lexer.TokenType.False => "Bool",
+            Compiler.Lexer.TokenType.TextLiteral => "Text",
             _ => null
         };
 
@@ -1253,12 +1254,12 @@ public partial class LLVMCodeGenerator
     ///
     /// Stealable types:
     /// - Raw entities (ownership transferred)
-    /// - Shared&lt;T&gt; (reference count transferred)
-    /// - Tracked&lt;T&gt; (weak reference transferred)
+    /// - Shared[T] (reference count transferred)
+    /// - Tracked[T] (weak reference transferred)
     ///
     /// Non-stealable types (caught by semantic analyzer):
     /// - Scope-bound tokens (Viewed, Hijacked, Inspected, Seized)
-    /// - Snatched&lt;T&gt; (internal ownership type)
+    /// - Snatched[T] (internal ownership type)
     /// </remarks>
     private string EmitSteal(StringBuilder sb, StealExpression steal)
     {

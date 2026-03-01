@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
@@ -37,10 +37,10 @@ public sealed class ChoiceTypeInfo : TypeInfo
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Always thrown as choice types cannot be generic.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         // Choices are not generic
         throw new InvalidOperationException(
-            message: $"Choice type '{Name}' cannot be instantiated with type arguments.");
+            message: $"Choice type '{Name}' cannot be resolved with type arguments.");
     }
 }

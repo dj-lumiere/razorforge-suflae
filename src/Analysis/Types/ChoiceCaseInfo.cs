@@ -1,6 +1,6 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
-using Shared.AST;
+using SyntaxTree;
 
 /// <summary>
 /// Information about a single case in a choice type.

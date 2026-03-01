@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Inference;
+﻿namespace SemanticAnalysis.Inference;
 
 /// <summary>
 /// Result of analyzing throw/absent keywords in a failable function body.

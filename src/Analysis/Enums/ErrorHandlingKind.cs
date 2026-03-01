@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Enums;
+﻿namespace SemanticAnalysis.Enums;
 
 /// <summary>
 /// Kind of error handling type.

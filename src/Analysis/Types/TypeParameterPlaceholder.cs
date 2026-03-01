@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
@@ -21,10 +21,10 @@ public sealed class TypeParameterPlaceholder : TypeInfo
     }
 
     /// <inheritdoc/>
-    /// <exception cref="InvalidOperationException">Always thrown as type parameters cannot be instantiated.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    /// <exception cref="InvalidOperationException">Always thrown as type parameters cannot be resolved.</exception>
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
-            message: $"Type parameter '{Name}' cannot be instantiated.");
+            message: $"Type parameter '{Name}' cannot be resolved.");
     }
 }

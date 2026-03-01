@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 using Symbols;
@@ -15,7 +15,7 @@ public sealed class RecordTypeInfo : TypeInfo
     /// <summary>Fields declared in this record.</summary>
     public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
 
-    /// <summary>Protocols this record implements (follows).</summary>
+    /// <summary>Protocols this record implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
@@ -54,7 +54,7 @@ public sealed class RecordTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// For generic definitions, the original generic type this was instantiated from.
+    /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public RecordTypeInfo? GenericDefinition { get; init; }
 
@@ -79,7 +79,7 @@ public sealed class RecordTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -106,11 +106,11 @@ public sealed class RecordTypeInfo : TypeInfo
             .Select(selector: f => SubstituteFieldType(field: f, substitution: substitution))
             .ToList();
 
-        // Build instantiated type name (e.g., "List<s32>")
-        string instantiatedName = $"{Name}<{string.Join(separator: ", ",
-            values: typeArguments.Select(selector: t => t.Name))}>";
+        // Build resolved type name (e.g., "List[s32]")
+        string resolvedName = $"{Name}[{string.Join(separator: ", ",
+            values: typeArguments.Select(selector: t => t.Name))}]";
 
-        return new RecordTypeInfo(name: instantiatedName)
+        return new RecordTypeInfo(name: resolvedName)
         {
             Fields = substitutedFields,
             ImplementedProtocols = ImplementedProtocols, // TODO: substitute protocol type args
@@ -123,7 +123,7 @@ public sealed class RecordTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a field for generic instantiation.
+    /// Substitutes the type in a field for generic resolution.
     /// </summary>
     /// <param name="field">The field to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
@@ -150,8 +150,8 @@ public sealed class RecordTypeInfo : TypeInfo
             return substituted;
         }
 
-        // If it's a generic instantiation, recursively substitute
-        if (!type.IsGenericInstantiation || type.TypeArguments == null)
+        // If it's a generic resolution, recursively substitute
+        if (!type.IsGenericResolution || type.TypeArguments == null)
         {
             return type;
         }
@@ -160,10 +160,10 @@ public sealed class RecordTypeInfo : TypeInfo
                           .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
                           .ToList();
 
-        // Get the generic definition and instantiate with new args
+        // Get the generic definition and create resolved instance with new args
         if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
         {
-            return recordType.GenericDefinition.Instantiate(typeArguments: newArgs);
+            return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

@@ -1,8 +1,8 @@
-﻿namespace Compilers.CodeGen;
+﻿namespace Compiler.CodeGen;
 
 using System.Text;
-using Analysis.Types;
-using Shared.AST;
+using SemanticAnalysis.Types;
+using SyntaxTree;
 
 /// <summary>
 /// Statement code generation: control flow, assignments, declarations, returns.
@@ -74,9 +74,13 @@ public partial class LLVMCodeGenerator
 
             case DiscardStatement discard:
                 // Discard: evaluate the call expression and ignore the result
-                // TODO: Maybe NOT evaluating if it is constructor?
+                // TODO: Maybe NOT evaluating if it is creator?
                 EmitExpression(sb, discard.Expression);
                 return false;
+
+            case UsingStatement:
+                // TODO: Emit resource acquisition and register cleanup
+                throw new NotImplementedException("UsingStatement codegen not yet implemented");
 
             default:
                 throw new NotImplementedException($"Statement type not implemented: {stmt.GetType().Name}");

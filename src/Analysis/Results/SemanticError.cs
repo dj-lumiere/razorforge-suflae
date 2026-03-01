@@ -1,7 +1,7 @@
-using Compilers.Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using SemanticAnalysis.Diagnostics;
 
-namespace Compilers.Analysis.Results;
+namespace SemanticAnalysis.Results;
 
 /// <summary>
 /// Represents a semantic error during analysis.

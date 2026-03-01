@@ -1,21 +1,21 @@
-﻿namespace Compilers.Analysis.Enums;
+﻿namespace SemanticAnalysis.Enums;
 
 /// <summary>
-/// The kind of routine (function, method, constructor, etc.).
+/// The kind of routine (function, member routine, creator, etc.).
 /// </summary>
 public enum RoutineKind
 {
     /// <summary>Free-standing function (not attached to a type).</summary>
     Function,
 
-    /// <summary>Extension method in the same file as the type (routine Type.name()).</summary>
-    Method,
+    /// <summary>Member routine in the same file as the type (routine Type.name()).</summary>
+    MemberRoutine,
 
-    /// <summary>Extension method in a different file from the type (routine Type.name()).</summary>
-    ExtensionMethod,
+    /// <summary>Member routine in a different file from the type (routine Type.name()).</summary>
+    ExternalMemberRoutine,
 
-    /// <summary>Constructor (__create__).</summary>
-    Constructor,
+    /// <summary>Creator (__create__).</summary>
+    Creator,
 
     /// <summary>External FFI function.</summary>
     External,

@@ -1,8 +1,8 @@
-﻿namespace Compilers.Analysis.Modules;
+﻿namespace Builder.Modules;
 
-using Results;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SyntaxTree;
+using SemanticAnalysis.Diagnostics;
 
 /// <summary>
 /// Represents a module in the dependency graph.
@@ -36,9 +36,9 @@ public sealed class ModuleNode
 /// This is the core infrastructure for preventing Static Initialization Order Fiasco (SIOF).
 /// </summary>
 /// <remarks>
-/// RazorForge bans circular imports at compile time because:
+/// RazorForge/Suflae bans circular imports at build time because:
 /// <list type="bullet">
-/// <item>Presets (compile-time constants) may depend on other module presets</item>
+/// <item>Presets (build-time constants) may depend on other module presets</item>
 /// <item>Initialization order becomes undefined with circular dependencies</item>
 /// <item>Clean architecture: circular deps indicate design problems</item>
 /// </list>
@@ -275,7 +275,7 @@ public sealed class ModuleDependencyGraph
     }
 
     /// <summary>
-    /// Clears all modules and errors. Used for testing or recompilation.
+    /// Clears all modules and errors. Used for testing or rebuilding.
     /// </summary>
     public void Clear()
     {

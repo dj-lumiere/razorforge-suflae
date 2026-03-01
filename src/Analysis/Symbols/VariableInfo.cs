@@ -1,7 +1,7 @@
-﻿using Compilers.Shared.AST;
-using TypeSymbol = Compilers.Analysis.Types.TypeInfo;
+﻿using SyntaxTree;
+using TypeSymbol = SemanticAnalysis.Types.TypeInfo;
 
-namespace Compilers.Analysis.Symbols;
+namespace SemanticAnalysis.Symbols;
 
 /// <summary>
 /// Information about a variable in a scope.
@@ -14,10 +14,13 @@ public sealed class VariableInfo
     /// <summary>The resolved type of the variable.</summary>
     public TypeSymbol Type { get; }
 
-    /// <summary>Whether this variable is mutable (var) or immutable (let).</summary>
-    public bool IsMutable { get; init; }
+    /// <summary>Whether this variable is modifiable.
+    /// Presets are not modifiable (IsModifiable=false).
+    /// All other variables are modifiable (IsModifiable=true).</summary>
+    public bool IsModifiable { get; init; }
 
-    /// <summary>Whether this is a preset (compile-time constant).</summary>
+    /// <summary>Whether this is a preset (build-time constant).
+    /// Presets are always frozen (IsModifiable=false) and must be initialized with constant expressions.</summary>
     public bool IsPreset { get; init; }
 
     /// <summary>Source location where this variable is defined.</summary>

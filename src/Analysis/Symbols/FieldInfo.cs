@@ -1,6 +1,6 @@
-namespace Compilers.Analysis.Symbols;
+namespace SemanticAnalysis.Symbols;
 
-using Shared.AST;
+using SyntaxTree;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -22,9 +22,6 @@ public sealed class FieldInfo
 
     /// <summary>The resolved type of the field.</summary>
     public TypeSymbol Type { get; }
-
-    /// <summary>Whether this field is mutable (var) or immutable (let).</summary>
-    public bool IsMutable { get; init; }
 
     /// <summary>
     /// Visibility for the field (open, posted, secret).
@@ -56,7 +53,7 @@ public sealed class FieldInfo
     }
 
     /// <summary>
-    /// Creates a copy of this field with the type substituted for generic instantiation.
+    /// Creates a copy of this field with the type substituted for generic resolution.
     /// </summary>
     /// <param name="newType">The new type to substitute.</param>
     /// <returns>A new <see cref="FieldInfo"/> with the substituted type.</returns>
@@ -64,7 +61,6 @@ public sealed class FieldInfo
     {
         return new FieldInfo(name: Name, type: newType)
         {
-            IsMutable = IsMutable,
             Visibility = Visibility,
             Index = Index,
             HasDefaultValue = HasDefaultValue,

@@ -1,7 +1,7 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
-using Shared.AST;
+using SyntaxTree;
 
 /// <summary>
 /// Base class for all type information in the TypeRegistry.
@@ -23,11 +23,11 @@ public abstract class TypeInfo
     /// <summary>Whether this is a generic type definition (has unsubstituted type parameters).</summary>
     public bool IsGenericDefinition => GenericParameters is { Count: > 0 };
 
-    /// <summary>For instantiated generics, the type arguments used.</summary>
+    /// <summary>For resolved generics, the type arguments used.</summary>
     public IReadOnlyList<TypeInfo>? TypeArguments { get; init; }
 
-    /// <summary>Whether this is an instantiated generic type.</summary>
-    public bool IsGenericInstantiation => TypeArguments is { Count: > 0 };
+    /// <summary>Whether this is a resolved generic type.</summary>
+    public bool IsGenericResolution => TypeArguments is { Count: > 0 };
 
     /// <summary>Whether this is the Blank (unit/void) type.</summary>
     public bool IsBlank => Name == "Blank";
@@ -59,7 +59,7 @@ public abstract class TypeInfo
 
             string args = string.Join(separator: ", ",
                 values: TypeArguments.Select(selector: t => t.FullName));
-            return $"{baseName}<{args}>";
+            return $"{baseName}[{args}]";
         }
     }
 
@@ -69,7 +69,7 @@ public abstract class TypeInfo
     }
 
     /// <summary>
-    /// Creates an instantiated version of this generic type with the given type arguments.
+    /// Creates a resolved version of this generic type with the given type arguments.
     /// </summary>
-    public abstract TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments);
+    public abstract TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments);
 }

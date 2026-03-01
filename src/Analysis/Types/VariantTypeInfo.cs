@@ -1,10 +1,10 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
 /// Type information for variants (tagged unions).
-/// Variants are local-only and immutable with no methods.
+/// Variants are local-only and unmodifiable with no methods.
 /// Cases use SCREAMING_SNAKE_CASE with single-type payloads.
 /// </summary>
 public sealed class VariantTypeInfo : TypeInfo
@@ -15,7 +15,7 @@ public sealed class VariantTypeInfo : TypeInfo
     public IReadOnlyList<VariantCaseInfo> Cases { get; init; } = [];
 
     /// <summary>
-    /// For generic definitions, the original generic type this was instantiated from.
+    /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public VariantTypeInfo? GenericDefinition { get; init; }
 
@@ -30,7 +30,7 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -57,11 +57,11 @@ public sealed class VariantTypeInfo : TypeInfo
             .Select(selector: c => SubstituteCaseType(caseInfo: c, substitution: substitution))
             .ToList();
 
-        // Build instantiated type name
-        string instantiatedName = $"{Name}<{string.Join(separator: ", ",
-            values: typeArguments.Select(selector: t => t.Name))}>";
+        // Build resolved type name
+        string resolvedName = $"{Name}[{string.Join(separator: ", ",
+            values: typeArguments.Select(selector: t => t.Name))}]";
 
-        return new VariantTypeInfo(name: instantiatedName)
+        return new VariantTypeInfo(name: resolvedName)
         {
             Cases = substitutedCases,
             TypeArguments = typeArguments,
@@ -73,7 +73,7 @@ public sealed class VariantTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the payload type in a case for generic instantiation.
+    /// Substitutes the payload type in a case for generic resolution.
     /// </summary>
     /// <param name="caseInfo">The case to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
@@ -105,7 +105,7 @@ public sealed class VariantTypeInfo : TypeInfo
             return substituted;
         }
 
-        if (type is { IsGenericInstantiation: true, TypeArguments: not null })
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
                 .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
@@ -113,7 +113,7 @@ public sealed class VariantTypeInfo : TypeInfo
 
             if (type is VariantTypeInfo { GenericDefinition: not null } variantType)
             {
-                return variantType.GenericDefinition.Instantiate(typeArguments: newArgs);
+                return variantType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
         }
 

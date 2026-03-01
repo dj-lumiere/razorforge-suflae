@@ -1,9 +1,9 @@
-namespace Compilers.Analysis.Types;
+namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
-/// Compiler-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).
+/// Builder-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).
 /// These types transparently forward member access to their inner type while providing
 /// ownership and access control semantics.
 /// </summary>
@@ -33,7 +33,7 @@ public sealed class WrapperTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (typeArguments.Count != 1)
         {
@@ -49,23 +49,23 @@ public sealed class WrapperTypeInfo : TypeInfo
 
     /// <summary>
     /// Well-known wrapper type definitions.
-    /// These are used as templates for creating instantiated wrapper types.
+    /// These are used as templates for creating resolved wrapper types.
     /// </summary>
     public static class WellKnown
     {
         /// <summary>
-        /// Read-only single-threaded token. Provides immutable view of the inner value.
+        /// Read-only single-threaded token. Provides unmodifiable view of the inner value.
         /// </summary>
         public static readonly WrapperTypeInfo ViewedDefinition = new(
             wrapperName: "Viewed",
-            innerType: ErrorTypeInfo.Instance, // Placeholder, will be instantiated with actual type
+            innerType: ErrorTypeInfo.Instance, // Placeholder, will be resolved with actual type
             isReadOnly: true)
         {
             GenericParameters = ["T"]
         };
 
         /// <summary>
-        /// Exclusive write single-threaded token. Provides mutable access with exclusive ownership.
+        /// Exclusive write single-threaded token. Provides modifiable access with exclusive ownership.
         /// </summary>
         public static readonly WrapperTypeInfo HijackedDefinition = new(
             wrapperName: "Hijacked",
@@ -76,7 +76,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         };
 
         /// <summary>
-        /// Read-only multi-threaded token. Thread-safe immutable view.
+        /// Read-only multi-threaded token. Thread-safe unmodifiable view.
         /// </summary>
         public static readonly WrapperTypeInfo InspectedDefinition = new(
             wrapperName: "Inspected",
@@ -87,7 +87,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         };
 
         /// <summary>
-        /// Exclusive write multi-threaded token. Thread-safe mutable access with exclusive ownership.
+        /// Exclusive write multi-threaded token. Thread-safe modifiable access with exclusive ownership.
         /// </summary>
         public static readonly WrapperTypeInfo SeizedDefinition = new(
             wrapperName: "Seized",

@@ -1,6 +1,6 @@
-﻿namespace Compilers.CodeGen;
+﻿namespace Compiler.CodeGen;
 
-using Analysis.Types;
+using SemanticAnalysis.Types;
 
 /// <summary>
 /// Type mapping: RazorForge/Suflae types → LLVM IR types.
@@ -151,13 +151,13 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Mangles a type name to be LLVM-compatible.
-    /// Replaces angle brackets, commas, and spaces with underscores.
+    /// Replaces brackets, commas, and spaces with underscores.
     /// </summary>
     private static string MangleTypeName(string name)
     {
         return name
-            .Replace("<", "_")
-            .Replace(">", "_")
+            .Replace("[", "_")
+            .Replace("]", "_")
             .Replace(", ", "_")
             .Replace(",", "_")
             .Replace(" ", "_");

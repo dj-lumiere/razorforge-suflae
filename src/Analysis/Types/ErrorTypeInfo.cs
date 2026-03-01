@@ -1,10 +1,10 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
 /// Singleton error type used when type resolution fails.
-/// This is a compiler-internal sentinel, not a real user-visible type.
+/// This is a builder-internal sentinel, not a real user-visible type.
 /// </summary>
 public sealed class ErrorTypeInfo : TypeInfo
 {
@@ -22,7 +22,7 @@ public sealed class ErrorTypeInfo : TypeInfo
 
     /// <inheritdoc/>
     /// <returns>Always returns this instance.</returns>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         return this;
     }

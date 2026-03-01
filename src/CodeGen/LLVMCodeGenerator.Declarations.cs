@@ -1,9 +1,9 @@
-﻿namespace Compilers.CodeGen;
+﻿namespace Compiler.CodeGen;
 
 using System.Text;
-using Analysis.Symbols;
-using Analysis.Types;
-using Shared.AST;
+using SemanticAnalysis.Symbols;
+using SemanticAnalysis.Types;
+using SyntaxTree;
 
 /// <summary>
 /// Type and function declaration generation.

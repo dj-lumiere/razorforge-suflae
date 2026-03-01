@@ -1,11 +1,12 @@
-﻿namespace Compilers.Analysis;
+﻿using Builder.Modules;
+
+namespace SemanticAnalysis;
 
 using Enums;
-using Modules;
 using Scopes;
 using Symbols;
 using Types;
-using Shared.AST;
+using SyntaxTree;
 using TypeInfo = Types.TypeInfo;
 
 /// <summary>
@@ -14,7 +15,7 @@ using TypeInfo = Types.TypeInfo;
 /// </summary>
 public sealed class TypeRegistry
 {
-    /// <summary>The language being compiled.</summary>
+    /// <summary>The language being built.</summary>
     public Language Language { get; }
 
     #region Type Storage
@@ -25,8 +26,8 @@ public sealed class TypeRegistry
     /// <summary>Intrinsic types by name.</summary>
     private readonly Dictionary<string, IntrinsicTypeInfo> _intrinsics = new();
 
-    /// <summary>Generic type instantiations cache.</summary>
-    private readonly Dictionary<string, TypeInfo> _instantiations = new();
+    /// <summary>Generic type resolutions cache.</summary>
+    private readonly Dictionary<string, TypeInfo> _resolutions = new();
 
     /// <summary>Whether Core module has been loaded from stdlib.</summary>
     private bool _coreModuleLoaded;
@@ -59,8 +60,8 @@ public sealed class TypeRegistry
     /// <summary>Routines indexed by owner type for fast method lookup.</summary>
     private readonly Dictionary<string, List<RoutineInfo>> _routinesByOwner = new();
 
-    /// <summary>Generic routine instantiations cache.</summary>
-    private readonly Dictionary<string, RoutineInfo> _routineInstantiations = new();
+    /// <summary>Generic routine resolutions cache.</summary>
+    private readonly Dictionary<string, RoutineInfo> _routineResolutions = new();
 
     #endregion
 
@@ -84,7 +85,7 @@ public sealed class TypeRegistry
     /// <summary>
     /// Initializes a new instance of the <see cref="TypeRegistry"/> class.
     /// </summary>
-    /// <param name="language">The language being compiled.</param>
+    /// <param name="language">The language being built.</param>
     /// <param name="stdlibPath">Optional path to the stdlib directory.</param>
     public TypeRegistry(Language language, string? stdlibPath = null)
     {
@@ -565,19 +566,19 @@ public sealed class TypeRegistry
         _types[key: choiceName] = updatedChoice;
     }
 
-    public void UpdateFlagsMembers(string flagsName, IReadOnlyList<Types.FlagsMemberInfo> members)
+    public void UpdateFlagsMembers(string flagsName, IReadOnlyList<FlagsMemberInfo> members)
     {
         if (!_types.TryGetValue(key: flagsName, value: out TypeInfo? type))
         {
             return;
         }
 
-        if (type is not Types.FlagsTypeInfo flags)
+        if (type is not FlagsTypeInfo flags)
         {
             return;
         }
 
-        var updated = new Types.FlagsTypeInfo(name: flags.Name)
+        var updated = new FlagsTypeInfo(name: flags.Name)
         {
             Members = members,
             Visibility = flags.Visibility,
@@ -629,10 +630,10 @@ public sealed class TypeRegistry
             return intrinsic;
         }
 
-        // Try instantiation cache
-        if (_instantiations.TryGetValue(key: name, value: out TypeInfo? instantiation))
+        // Try resolution cache
+        if (_resolutions.TryGetValue(key: name, value: out TypeInfo? resolution))
         {
-            return instantiation;
+            return resolution;
         }
 
         // Try Core module prefix (Core types are auto-imported)
@@ -645,29 +646,29 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Gets or creates an instantiated generic type.
+    /// Gets or creates a resolved generic type.
     /// </summary>
     /// <param name="genericDef">The generic type definition.</param>
-    /// <param name="typeArguments">The type arguments for instantiation.</param>
-    /// <returns>The instantiated type (cached if already created).</returns>
-    public TypeInfo GetOrCreateInstantiation(TypeInfo genericDef,
+    /// <param name="typeArguments">The type arguments for resolution.</param>
+    /// <returns>The resolved type (cached if already created).</returns>
+    public TypeInfo GetOrCreateResolution(TypeInfo genericDef,
         IReadOnlyList<TypeInfo> typeArguments)
     {
-        // Build the instantiation name
+        // Build the resolution name
         string name =
-            $"{genericDef.Name}<{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}>";
+            $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}]";
 
         // Check cache
-        if (_instantiations.TryGetValue(key: name, value: out TypeInfo? existing))
+        if (_resolutions.TryGetValue(key: name, value: out TypeInfo? existing))
         {
             return existing;
         }
 
         // Create and cache
-        TypeInfo instantiated = genericDef.Instantiate(typeArguments: typeArguments);
-        _instantiations[key: name] = instantiated;
+        TypeInfo resolved = genericDef.CreateInstance(typeArguments: typeArguments);
+        _resolutions[key: name] = resolved;
 
-        return instantiated;
+        return resolved;
     }
 
     /// <summary>
@@ -690,14 +691,14 @@ public sealed class TypeRegistry
         string key = $"({paramList}) -> {returnName}{failableSuffix}";
 
         // Check cache
-        if (_instantiations.TryGetValue(key, out TypeInfo? existing) && existing is RoutineTypeInfo routineType)
+        if (_resolutions.TryGetValue(key, out TypeInfo? existing) && existing is RoutineTypeInfo routineType)
         {
             return routineType;
         }
 
         // Create and cache
         var newType = new RoutineTypeInfo(parameterTypes, returnType) { IsFailable = isFailable };
-        _instantiations[key] = newType;
+        _resolutions[key] = newType;
 
         return newType;
     }
@@ -721,17 +722,17 @@ public sealed class TypeRegistry
             _ => "Tuple"
         };
         string typeList = string.Join(separator: ", ", values: elementTypes.Select(selector: t => t.FullName));
-        string key = $"{prefix}<{typeList}>";
+        string key = $"{prefix}[{typeList}]";
 
         // Check cache
-        if (_instantiations.TryGetValue(key: key, value: out TypeInfo? existing) && existing is TupleTypeInfo tupleType)
+        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) && existing is TupleTypeInfo tupleType)
         {
             return tupleType;
         }
 
         // Create and cache
         var newType = new TupleTypeInfo(elementTypes: elementTypes, kind: kind);
-        _instantiations[key: key] = newType;
+        _resolutions[key: key] = newType;
 
         return newType;
     }
@@ -751,7 +752,7 @@ public sealed class TypeRegistry
 
     /// <summary>
     /// Gets or creates a synthesized wrapper type (Hijacked, Inspected, Seized, Viewed).
-    /// These are compiler-intrinsic types that don't need to be defined in the program.
+    /// These are builder-intrinsic types that don't need to be defined in the program.
     /// </summary>
     /// <param name="wrapperName">The name of the wrapper type (e.g., "Hijacked").</param>
     /// <param name="innerType">The type being wrapped.</param>
@@ -763,17 +764,17 @@ public sealed class TypeRegistry
         bool isReadOnly)
     {
         // Build the cache key
-        string key = $"{wrapperName}<{innerType.FullName}>";
+        string key = $"{wrapperName}[{innerType.FullName}]";
 
         // Check cache
-        if (_instantiations.TryGetValue(key: key, value: out TypeInfo? existing) && existing is WrapperTypeInfo wrapperType)
+        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) && existing is WrapperTypeInfo wrapperType)
         {
             return wrapperType;
         }
 
         // Create and cache
         var newType = new WrapperTypeInfo(wrapperName: wrapperName, innerType: innerType, isReadOnly: isReadOnly);
-        _instantiations[key: key] = newType;
+        _resolutions[key: key] = newType;
 
         return newType;
     }
@@ -852,7 +853,8 @@ public sealed class TypeRegistry
     {
         return _types.Values.Where(predicate: t =>
             t.Category is TypeCategory.Record or TypeCategory.Entity or
-                TypeCategory.Resident or TypeCategory.Choice);
+                TypeCategory.Resident or TypeCategory.Choice or
+                TypeCategory.Flags);
     }
 
     /// <summary>
@@ -906,9 +908,9 @@ public sealed class TypeRegistry
             return routine;
         }
 
-        if (_routineInstantiations.TryGetValue(key: fullName, value: out RoutineInfo? instantiation))
+        if (_routineResolutions.TryGetValue(key: fullName, value: out RoutineInfo? resolution))
         {
-            return instantiation;
+            return resolution;
         }
 
         return null;
@@ -943,8 +945,8 @@ public sealed class TypeRegistry
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
-            DeclaredMutation = routine.DeclaredMutation,
-            MutationCategory = routine.MutationCategory,
+            DeclaredModification = routine.DeclaredModification,
+            ModificationCategory = routine.ModificationCategory,
             GenericParameters = genericParameters,
             GenericConstraints = genericConstraints,
             Visibility = routine.Visibility,
@@ -991,8 +993,8 @@ public sealed class TypeRegistry
             }
         }
 
-        // For instantiated generics, check the generic definition's methods
-        if (type.IsGenericInstantiation)
+        // For resolved generics, check the generic definition's methods
+        if (type.IsGenericResolution)
         {
             TypeInfo? genericDef = type switch
             {
@@ -1007,7 +1009,7 @@ public sealed class TypeRegistry
                 RoutineInfo? genericMethod = LookupMethod(type: genericDef, methodName: methodName);
                 if (genericMethod != null)
                 {
-                    // Need to instantiate the method with the type's type arguments
+                    // Need to resolve the method with the type's type arguments
                     return genericMethod;
                 }
             }
@@ -1062,26 +1064,26 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Gets or creates an instantiated generic routine.
+    /// Gets or creates a resolved generic routine.
     /// </summary>
     /// <param name="genericDef">The generic routine definition.</param>
-    /// <param name="typeArguments">The type arguments for instantiation.</param>
-    /// <returns>The instantiated routine (cached if already created).</returns>
-    public RoutineInfo GetOrCreateRoutineInstantiation(RoutineInfo genericDef,
+    /// <param name="typeArguments">The type arguments for resolution.</param>
+    /// <returns>The resolved routine (cached if already created).</returns>
+    public RoutineInfo GetOrCreateRoutineResolution(RoutineInfo genericDef,
         IReadOnlyList<TypeInfo> typeArguments)
     {
         string name =
-            $"{genericDef.FullName}<{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}>";
+            $"{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}]";
 
-        if (_routineInstantiations.TryGetValue(key: name, value: out RoutineInfo? existing))
+        if (_routineResolutions.TryGetValue(key: name, value: out RoutineInfo? existing))
         {
             return existing;
         }
 
-        RoutineInfo instantiated = genericDef.Instantiate(typeArguments: typeArguments);
-        _routineInstantiations[key: name] = instantiated;
+        RoutineInfo resolved = genericDef.CreateInstance(typeArguments: typeArguments);
+        _routineResolutions[key: name] = resolved;
 
-        return instantiated;
+        return resolved;
     }
 
     #endregion
@@ -1119,14 +1121,13 @@ public sealed class TypeRegistry
     /// </summary>
     /// <param name="name">The name of the variable.</param>
     /// <param name="type">The type of the variable.</param>
-    /// <param name="isMutable">Whether the variable is mutable (var) or immutable (let).</param>
-    /// <param name="isPreset">Whether this is a preset (compile-time constant).</param>
+    /// <param name="isPreset">Whether this is a preset (build-time constant).</param>
     /// <returns>True if successful, false if already declared in this scope.</returns>
-    public bool DeclareVariable(string name, TypeInfo type, bool isMutable, bool isPreset = false)
+    public bool DeclareVariable(string name, TypeInfo type, bool isPreset = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsMutable = isMutable,
+            IsModifiable = !isPreset,
             IsPreset = isPreset
         };
 
@@ -1143,7 +1144,7 @@ public sealed class TypeRegistry
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsMutable = false,
+            IsModifiable = false,
             IsPreset = true
         };
 

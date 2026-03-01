@@ -1,8 +1,8 @@
-﻿namespace Compilers.Analysis.Modules;
+﻿namespace Builder.Modules;
 
-using Results;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SemanticAnalysis.Results;
+using SyntaxTree;
+using SemanticAnalysis.Diagnostics;
 
 /// <summary>
 /// Resolves import paths to actual source files.
@@ -18,7 +18,7 @@ using global::RazorForge.Diagnostics;
 /// </remarks>
 public sealed class ModuleResolver
 {
-    /// <summary>The root directory of the project being compiled.</summary>
+    /// <summary>The root directory of the project being built.</summary>
     public string ProjectRoot { get; }
 
     /// <summary>The standard library directory.</summary>
@@ -258,7 +258,7 @@ public sealed class ModuleResolver
 
                 string rest = trimmed[keyword.Length..].Trim();
                 // Extract type name (before < or { or space)
-                int endIdx = rest.IndexOfAny(['<', '{', ' ', '(']);
+                int endIdx = rest.IndexOfAny(['[', '{', ' ', '(']);
                 string typeName = endIdx >= 0 ? rest[..endIdx] : rest;
                 if (!string.IsNullOrEmpty(typeName))
                 {

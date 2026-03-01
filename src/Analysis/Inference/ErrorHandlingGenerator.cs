@@ -1,8 +1,8 @@
-namespace Compilers.Analysis.Inference;
+namespace SemanticAnalysis.Inference;
 
 using Symbols;
 using Types;
-using Shared.AST;
+using SyntaxTree;
 using TypeInfo = Types.TypeInfo;
 
 /// <summary>
@@ -197,7 +197,7 @@ public sealed class ErrorHandlingGenerator
         TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
             message: "Failable function must have a return type");
 
-        TypeInfo maybeType = _registry.GetOrCreateInstantiation(
+        TypeInfo maybeType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.MaybeDefinition,
             typeArguments: [returnType]);
 
@@ -208,8 +208,8 @@ public sealed class ErrorHandlingGenerator
             Parameters = original.Parameters,
             ReturnType = maybeType,
             IsFailable = false, // try_ variants don't fail
-            DeclaredMutation = original.DeclaredMutation,
-            MutationCategory = original.MutationCategory,
+            DeclaredModification = original.DeclaredModification,
+            ModificationCategory = original.ModificationCategory,
             GenericParameters = original.GenericParameters,
             GenericConstraints = original.GenericConstraints,
             Visibility = original.Visibility,
@@ -230,7 +230,7 @@ public sealed class ErrorHandlingGenerator
         TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
             message: "Failable function must have a return type");
 
-        TypeInfo resultType = _registry.GetOrCreateInstantiation(
+        TypeInfo resultType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.ResultDefinition,
             typeArguments: [returnType]);
 
@@ -241,8 +241,8 @@ public sealed class ErrorHandlingGenerator
             Parameters = original.Parameters,
             ReturnType = resultType,
             IsFailable = false, // check_ variants don't fail
-            DeclaredMutation = original.DeclaredMutation,
-            MutationCategory = original.MutationCategory,
+            DeclaredModification = original.DeclaredModification,
+            ModificationCategory = original.ModificationCategory,
             GenericParameters = original.GenericParameters,
             GenericConstraints = original.GenericConstraints,
             Visibility = original.Visibility,
@@ -264,7 +264,7 @@ public sealed class ErrorHandlingGenerator
         TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
             message: "Failable function must have a return type");
 
-        TypeInfo lookupType = _registry.GetOrCreateInstantiation(
+        TypeInfo lookupType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.LookupDefinition,
             typeArguments: [returnType]);
 
@@ -275,8 +275,8 @@ public sealed class ErrorHandlingGenerator
             Parameters = original.Parameters,
             ReturnType = lookupType,
             IsFailable = false, // lookup_ variants don't fail
-            DeclaredMutation = original.DeclaredMutation,
-            MutationCategory = original.MutationCategory,
+            DeclaredModification = original.DeclaredModification,
+            ModificationCategory = original.ModificationCategory,
             GenericParameters = original.GenericParameters,
             GenericConstraints = original.GenericConstraints,
             Visibility = original.Visibility,

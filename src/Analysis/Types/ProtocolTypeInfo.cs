@@ -1,10 +1,10 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
 /// Type information for protocols (interface/trait definitions).
-/// Protocols define contracts that types can implement via the `follows` keyword.
+/// Protocols define contracts that types can implement via the `obeys` keyword.
 /// </summary>
 public sealed class ProtocolTypeInfo : TypeInfo
 {
@@ -19,7 +19,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
         [];
 
     /// <summary>
-    /// For generic definitions, the original generic type this was instantiated from.
+    /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public ProtocolTypeInfo? GenericDefinition { get; init; }
 
@@ -34,7 +34,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -56,13 +56,13 @@ public sealed class ProtocolTypeInfo : TypeInfo
             substitution[key: GenericParameters[i]] = typeArguments[i];
         }
 
-        // Build instantiated type name
-        string instantiatedName = $"{Name}<{string.Join(separator: ", ",
-            values: typeArguments.Select(selector: t => t.Name))}>";
+        // Build resolved type name
+        string resolvedName = $"{Name}[{string.Join(separator: ", ",
+            values: typeArguments.Select(selector: t => t.Name))}]";
 
         // TODO: Substitute types in method signatures
 
-        return new ProtocolTypeInfo(name: instantiatedName)
+        return new ProtocolTypeInfo(name: resolvedName)
         {
             Methods = Methods,
             ParentProtocols = ParentProtocols,

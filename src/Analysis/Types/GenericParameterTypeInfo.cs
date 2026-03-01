@@ -1,10 +1,10 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
 /// Represents a generic type parameter (like T in List&lt;T&gt;).
-/// This is an unbound placeholder that gets replaced during generic instantiation.
+/// This is an unbound placeholder that gets replaced during generic resolution.
 /// </summary>
 public sealed class GenericParameterTypeInfo : TypeInfo
 {
@@ -20,10 +20,10 @@ public sealed class GenericParameterTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    /// <exception cref="InvalidOperationException">Always thrown as generic parameters cannot be instantiated.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    /// <exception cref="InvalidOperationException">Always thrown as generic parameters cannot be resolved.</exception>
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
-            message: "Cannot instantiate a generic type parameter.");
+            message: "Cannot resolve a generic type parameter.");
     }
 }

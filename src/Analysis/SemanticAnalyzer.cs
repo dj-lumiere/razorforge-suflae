@@ -1,18 +1,18 @@
-namespace Compilers.Analysis;
+namespace SemanticAnalysis;
 
 using Enums;
 using Inference;
 using Results;
 using Scopes;
 using Symbols;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
 /// Semantic analyzer for RazorForge and Suflae programs.
 /// Performs type checking, scope analysis, and inference for:
-/// - Method mutation (readonly/writable/migratable)
+/// - Method modification (readonly/writable/migratable)
 /// - Migratable modification tracking (buffer relocation detection)
 /// - Error handling variant generation (try_/check_/lookup_)
 /// </summary>
@@ -23,11 +23,11 @@ public sealed partial class SemanticAnalyzer
     /// <summary>The type registry for storing and looking up types.</summary>
     private readonly TypeRegistry _registry;
 
-    /// <summary>Call graph for mutation inference.</summary>
+    /// <summary>Call graph for modification inference.</summary>
     private readonly CallGraph _callGraph = new();
 
-    /// <summary>Mutation inference engine.</summary>
-    private MutationInference? _mutationInference;
+    /// <summary>Modification inference engine.</summary>
+    private ModificationInference? _modificationInference;
 
     /// <summary>Current call graph node for the routine being analyzed.</summary>
     private CallGraphNode? _currentCallGraphNode;
@@ -104,6 +104,9 @@ public sealed partial class SemanticAnalyzer
         // Phase 2.5: Resolve routine signatures (parameter types, protocol-as-type desugaring)
         ResolveRoutineSignatures(program: program);
 
+        // Phase 2.55: Auto-register builder-generated member routines (Text, hash, __eq__, etc.)
+        AutoRegisterBuiltinRoutines();
+
         // Phase 2.6: Generate derived comparison operators (__ne__ from __eq__, __lt__/__le__/__gt__/__ge__ from __cmp__)
         GenerateDerivedOperators();
 
@@ -113,8 +116,8 @@ public sealed partial class SemanticAnalyzer
         // Phase 3: Analyze routine bodies and expressions
         AnalyzeBodies(program: program);
 
-        // Phase 4: Mutation inference (call graph propagation)
-        InferMutationCategories();
+        // Phase 4: Modification inference (call graph propagation)
+        InferModificationCategories();
 
         // Phase 5: Error handling variant generation
         GenerateErrorHandlingVariants();

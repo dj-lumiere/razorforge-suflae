@@ -1,11 +1,11 @@
-﻿namespace Compilers.Analysis;
+﻿namespace SemanticAnalysis;
 
 using Enums;
 using Scopes;
 using Types;
-using Shared.AST;
-using Shared.Lexer;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Compiler.Lexer;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
@@ -18,8 +18,7 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Declares a pattern binding variable, checking for shadowing of variables in outer scopes.
     /// </summary>
-    private void DeclarePatternVariable(string name, TypeSymbol type, SourceLocation location,
-        bool isMutable = false)
+    private void DeclarePatternVariable(string name, TypeSymbol type, SourceLocation location)
     {
         // Check if this name exists in a parent scope (shadowing)
         Scope? parent = _registry.CurrentScope.Parent;
@@ -34,8 +33,7 @@ public sealed partial class SemanticAnalyzer
         // Still declare the variable even if shadowing, to avoid cascading errors
         _registry.DeclareVariable(
             name: name,
-            type: type,
-            isMutable: isMutable);
+            type: type);
     }
 
     private void AnalyzePattern(Pattern pattern, TypeSymbol matchedType)
@@ -226,7 +224,7 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case DestructuringPattern destruct:
-                AnalyzeDestructuringPattern(pattern: destruct, sourceType: matchedType, isMutable: false);
+                AnalyzeDestructuringPattern(pattern: destruct, sourceType: matchedType);
                 break;
 
             case TypeDestructuringPattern typeDestruct:
@@ -317,7 +315,7 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
-    private void AnalyzeDestructuringPattern(DestructuringPattern pattern, TypeSymbol sourceType, bool isMutable)
+    private void AnalyzeDestructuringPattern(DestructuringPattern pattern, TypeSymbol sourceType)
     {
         foreach (DestructuringBinding binding in pattern.Bindings)
         {
@@ -343,8 +341,7 @@ public sealed partial class SemanticAnalyzer
                 DeclarePatternVariable(
                     name: binding.BindingName,
                     type: fieldType,
-                    location: binding.Location,
-                    isMutable: isMutable);
+                    location: binding.Location);
             }
         }
     }
@@ -360,7 +357,6 @@ public sealed partial class SemanticAnalyzer
         IReadOnlyList<VariantCaseInfo>? cases = matchedType switch
         {
             VariantTypeInfo variant => variant.Cases,
-            MutantTypeInfo mutant => mutant.Cases,
             _ => null
         };
 
@@ -504,8 +500,7 @@ public sealed partial class SemanticAnalyzer
             {
                 _registry.DeclareVariable(
                     name: binding.BindingName,
-                    type: ErrorTypeInfo.Instance,
-                    isMutable: false);
+                    type: ErrorTypeInfo.Instance);
             }
         }
     }
@@ -588,8 +583,6 @@ public sealed partial class SemanticAnalyzer
             ChoiceTypeInfo choice => CheckChoiceExhaustiveness(clauses: clauses, choice: choice),
             VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses, cases: variant.Cases,
                 typeName: variant.Name),
-            MutantTypeInfo mutant => CheckVariantExhaustiveness(clauses: clauses, cases: mutant.Cases,
-                typeName: mutant.Name),
             ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses, ehType: eh),
             // #129: Flags when always requires else — too many combinations to exhaustively check
             FlagsTypeInfo => new ExhaustivenessResult(IsExhaustive: false, MissingCases: ["else"]),
@@ -688,7 +681,7 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Checks whether all cases of a variant/mutant type are covered.
     /// The parser creates TypePattern for variant case matching (is Shape.CIRCLE or is CIRCLE),
-    /// not VariantPattern (which is defined in the AST but never instantiated by the parser).
+    /// not VariantPattern (which is defined in the AST but never created by the parser).
     /// </summary>
     private static ExhaustivenessResult CheckVariantExhaustiveness(
         IReadOnlyList<WhenClause> clauses,
@@ -719,7 +712,7 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Extracts the variant case name from a pattern.
     /// Handles TypePattern with dotted names (is Shape.CIRCLE) or bare names (is CIRCLE),
-    /// as well as VariantPattern (if ever instantiated).
+    /// as well as VariantPattern (if ever created).
     /// </summary>
     private static string? ExtractVariantCaseName(Pattern pattern, string typeName)
     {

@@ -1,10 +1,10 @@
-﻿namespace Compilers.Analysis;
+﻿namespace SemanticAnalysis;
 
 using Enums;
 using Symbols;
 using Types;
-using Shared.AST;
-using global::RazorForge.Diagnostics;
+using SyntaxTree;
+using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
 
 #region Numeric Type Classification
@@ -141,8 +141,8 @@ public sealed partial class SemanticAnalyzer
             return true;
         }
 
-        // Generic type matching - check if instantiation matches definition
-        if (target.IsGenericDefinition && source.IsGenericInstantiation)
+        // Generic type matching - check if resolution matches definition
+        if (target.IsGenericDefinition && source.IsGenericResolution)
         {
             string baseName = GetBaseTypeName(typeName: source.Name);
             if (baseName == target.Name)
@@ -157,7 +157,7 @@ public sealed partial class SemanticAnalyzer
             return ImplementsProtocol(type: source, protocolName: target.Name);
         }
 
-        // No implicit conversions - all type conversions must be explicit via constructor syntax
+        // No implicit conversions - all type conversions must be explicit via creator syntax
         return false;
     }
 
@@ -166,7 +166,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static string GetBaseTypeName(string typeName)
     {
-        int genericIndex = typeName.IndexOf(value: '<');
+        int genericIndex = typeName.IndexOf(value: '[');
         return genericIndex >= 0 ? typeName[..genericIndex] : typeName;
     }
 
@@ -182,19 +182,19 @@ public sealed partial class SemanticAnalyzer
 
     private bool IsIntegerType(TypeSymbol type)
     {
-        // Check if type follows the Integral protocol
+        // Check if type obeys the Integral protocol
         return ImplementsProtocol(type: type, protocolName: "Integral");
     }
 
     private bool IsFloatType(TypeSymbol type)
     {
-        // Check if type follows the Floating protocol (binary floats)
+        // Check if type obeys the Floating protocol (binary floats)
         return ImplementsProtocol(type: type, protocolName: "BinaryFP");
     }
 
     private bool IsDecimalType(TypeSymbol type)
     {
-        // Check if type follows the DecimalFloating protocol
+        // Check if type obeys the DecimalFloating protocol
         return ImplementsProtocol(type: type, protocolName: "DecimalFP");
     }
 
@@ -215,15 +215,19 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if an operator is a non-desugared comparison operator.
-    /// Note: ==, !=, &lt;, &lt;=, &gt;, &gt;=, &lt;=&gt;, in, notin are desugared to method calls in the parser.
-    /// This only returns true for operators that remain as BinaryExpression nodes.
+    /// Checks if an operator is a comparison operator that returns Bool.
+    /// Includes both identity operators and overloadable comparison/membership operators.
+    /// Note: ThreeWayComparator (&lt;=&gt;) returns ComparisonSign, not Bool, so it is excluded.
     /// </summary>
     private static bool IsComparisonOperator(BinaryOperator op)
     {
-        return op is BinaryOperator.Identical or BinaryOperator.NotIdentical
+        return op is BinaryOperator.Equal or BinaryOperator.NotEqual
+            or BinaryOperator.Less or BinaryOperator.LessEqual
+            or BinaryOperator.Greater or BinaryOperator.GreaterEqual
+            or BinaryOperator.In or BinaryOperator.NotIn
+            or BinaryOperator.Identical or BinaryOperator.NotIdentical
             or BinaryOperator.Is or BinaryOperator.IsNot
-            or BinaryOperator.Follows or BinaryOperator.NotFollows;
+            or BinaryOperator.Obeys or BinaryOperator.NotObeys;
     }
 
     private bool IsLogicalOperator(BinaryOperator op)
@@ -241,16 +245,13 @@ public sealed partial class SemanticAnalyzer
         "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__",
         // Wrapping arithmetic
         "__add_wrap__", "__sub_wrap__", "__mul_wrap__", "__pow_wrap__",
-        // Saturating arithmetic
-        "__add_sat__", "__sub_sat__", "__mul_sat__", "__pow_sat__",
-        // Checked arithmetic
-        "__add_checked__", "__sub_checked__", "__mul_checked__",
-        "__floordiv_checked__", "__mod_checked__", "__pow_checked__",
+        // Clamping arithmetic
+        "__add_clamp__", "__sub_clamp__", "__mul_clamp__", "__truediv_clamp__", "__pow_clamp__",
         // Comparison
         "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
         // Bitwise
         "__and__", "__or__", "__xor__",
-        "__ashl__", "__ashl_checked__", "__ashr__", "__lshl__", "__lshr__",
+        "__ashl__", "__ashr__", "__lshl__", "__lshr__",
         // Unary
         "__neg__", "__not__",
         // Membership
@@ -270,7 +271,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Validates comparison operands for type compatibility and operator support.
-    /// Called from both AnalyzeBinaryExpression (for non-desugared operators like ===, is, follows)
+    /// Called from both AnalyzeBinaryExpression (for non-desugared operators like ===, is, obeys)
     /// and AnalyzeChainedComparisonExpression (for chained comparisons like a &lt; b &lt; c).
     /// </summary>
     private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op, SourceLocation location)
@@ -409,10 +410,10 @@ public sealed partial class SemanticAnalyzer
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
     {
         // Type must follow both Sequential and SequenceGenerator protocols
-        bool followsSequential = ImplementsProtocol(type: iterableType, protocolName: "Sequential");
-        bool followsSequenceGenerator = ImplementsProtocol(type: iterableType, protocolName: "SequenceGenerator");
+        bool obeysSequential = ImplementsProtocol(type: iterableType, protocolName: "Sequential");
+        bool obeysSequenceGenerator = ImplementsProtocol(type: iterableType, protocolName: "SequenceGenerator");
 
-        if (!followsSequential || !followsSequenceGenerator)
+        if (!obeysSequential || !obeysSequenceGenerator)
         {
             ReportError(
                 SemanticDiagnosticCode.TypeNotIterable,
@@ -436,7 +437,7 @@ public sealed partial class SemanticAnalyzer
 
         ReportError(
             SemanticDiagnosticCode.TypeNotIterable,
-            $"Cannot determine element type for '{iterableType.Name}'. The __seq__ method must return SequenceGenerator<T>.",
+            $"Cannot determine element type for '{iterableType.Name}'. The __seq__ method must return SequenceGenerator[T].",
             location);
         return ErrorTypeInfo.Instance;
     }
@@ -639,8 +640,8 @@ public sealed partial class SemanticAnalyzer
             return true;
         }
 
-        // Handle generic instantiations
-        if (expected.IsGenericDefinition && actual.IsGenericInstantiation)
+        // Handle generic resolutions
+        if (expected.IsGenericDefinition && actual.IsGenericResolution)
         {
             string baseName = GetBaseTypeName(typeName: actual.Name);
             if (baseName == expected.Name)
@@ -657,7 +658,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? viewedDef = _registry.LookupType(name: "Viewed");
         if (viewedDef != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: viewedDef, typeArguments: [innerType]);
+            return _registry.GetOrCreateResolution(genericDef: viewedDef, typeArguments: [innerType]);
         }
 
         // Synthesize wrapper type if not defined in the program
@@ -672,7 +673,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? hijackedDef = _registry.LookupType(name: "Hijacked");
         if (hijackedDef != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: hijackedDef, typeArguments: [innerType]);
+            return _registry.GetOrCreateResolution(genericDef: hijackedDef, typeArguments: [innerType]);
         }
 
         // Synthesize wrapper type if not defined in the program
@@ -687,7 +688,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? inspectedDef = _registry.LookupType(name: "Inspected");
         if (inspectedDef != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: inspectedDef, typeArguments: [innerType]);
+            return _registry.GetOrCreateResolution(genericDef: inspectedDef, typeArguments: [innerType]);
         }
 
         // Synthesize wrapper type if not defined in the program
@@ -702,7 +703,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? seizedDef = _registry.LookupType(name: "Seized");
         if (seizedDef != null)
         {
-            return _registry.GetOrCreateInstantiation(genericDef: seizedDef, typeArguments: [innerType]);
+            return _registry.GetOrCreateResolution(genericDef: seizedDef, typeArguments: [innerType]);
         }
 
         // Synthesize wrapper type if not defined in the program
@@ -749,7 +750,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static bool IsHijackedType(TypeSymbol type)
     {
-        // Check if the type name is "Hijacked" (for instantiated generic types)
+        // Check if the type name is "Hijacked" (for resolved generic types)
         return type.Name == "Hijacked";
     }
 
@@ -878,7 +879,7 @@ public sealed partial class SemanticAnalyzer
     {
         if (!IsReadOnlyWrapper(type: wrapperType))
         {
-            return; // Mutable wrappers can access all methods
+            return; // Modifiable wrappers can access all methods
         }
 
         // Read-only wrappers can only access @readonly methods
@@ -887,7 +888,7 @@ public sealed partial class SemanticAnalyzer
             string wrapperName = GetBaseTypeName(typeName: wrapperType.Name);
             ReportError(
                 SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
-                $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}<T>'. " +
+                $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}[T]'. " +
                 $"Only @readonly methods are accessible.",
                 location);
         }
@@ -1161,8 +1162,8 @@ public sealed partial class SemanticAnalyzer
             visibility: routine.Visibility,
             memberKind: routine.Kind switch
             {
-                RoutineKind.Constructor => "constructor",
-                RoutineKind.Method => "method",
+                RoutineKind.Creator => "creator",
+                RoutineKind.MemberRoutine => "member routine",
                 _ => "routine"
             },
             memberName: routine.Name,
@@ -1392,6 +1393,33 @@ public sealed partial class SemanticAnalyzer
 
             // Partial elimination on Lookup is not sufficient
             _ => null
+        };
+    }
+
+    /// <summary>
+    /// Checks if a statement always produces a return value (return, throw, absent, becomes).
+    /// Used for missing-return validation (#144).
+    /// Unlike <see cref="HasDefiniteExit"/>, this does not count break/continue as terminating,
+    /// since they exit loops but don't return a value from the routine.
+    /// </summary>
+    private static bool StatementAlwaysTerminates(Statement statement)
+    {
+        return statement switch
+        {
+            ReturnStatement => true,
+            ThrowStatement => true,
+            AbsentStatement => true,
+            BecomesStatement => true,
+            BlockStatement block => block.Statements.Count > 0
+                                    && StatementAlwaysTerminates(statement: block.Statements[^1]),
+            IfStatement { ElseStatement: not null } ifStmt =>
+                StatementAlwaysTerminates(statement: ifStmt.ThenStatement)
+                && StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
+            WhenStatement whenStmt =>
+                whenStmt.Clauses.Count > 0
+                && whenStmt.Clauses.Any(c => c.Pattern is ElsePattern or WildcardPattern)
+                && whenStmt.Clauses.All(c => StatementAlwaysTerminates(statement: c.Body)),
+            _ => false
         };
     }
 

@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Enums;
+﻿namespace SemanticAnalysis.Enums;
 
 /// <summary>
 /// The kind of scope in the program structure.
@@ -25,18 +25,6 @@ public enum ScopeKind
 
     /// <summary>Danger block scope (RazorForge only).</summary>
     Danger,
-
-    /// <summary>Viewing block scope - read-only token access.</summary>
-    Viewing,
-
-    /// <summary>Hijacking block scope - exclusive mutable access.</summary>
-    Hijacking,
-
-    /// <summary>Inspecting block scope - read lock for multi-threaded.</summary>
-    Inspecting,
-
-    /// <summary>Seizing block scope - write lock for multi-threaded.</summary>
-    Seizing,
 
     /// <summary>Iteration scope - tracks active iterators for migratable checking.</summary>
     Iteration

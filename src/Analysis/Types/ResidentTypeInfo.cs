@@ -1,4 +1,4 @@
-﻿namespace Compilers.Analysis.Types;
+﻿namespace SemanticAnalysis.Types;
 
 using Enums;
 using Symbols;
@@ -25,17 +25,17 @@ public sealed class ResidentTypeInfo : TypeInfo
         return Fields.FirstOrDefault(predicate: f => f.Name == fieldName);
     }
 
-    /// <summary>Protocols this resident implements (follows).</summary>
+    /// <summary>Protocols this resident implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
     /// The fixed size of this resident in bytes.
-    /// Residents have a compile-time known size.
+    /// Residents have a build-time known size.
     /// </summary>
     public int FixedSize { get; init; }
 
     /// <summary>
-    /// For generic definitions, the original generic type this was instantiated from.
+    /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public ResidentTypeInfo? GenericDefinition { get; init; }
 
@@ -50,7 +50,7 @@ public sealed class ResidentTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo Instantiate(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -77,11 +77,11 @@ public sealed class ResidentTypeInfo : TypeInfo
             .Select(selector: f => SubstituteFieldType(field: f, substitution: substitution))
             .ToList();
 
-        // Build instantiated type name
-        string instantiatedName = $"{Name}<{string.Join(separator: ", ",
-            values: typeArguments.Select(selector: t => t.Name))}>";
+        // Build resolved type name
+        string resolvedName = $"{Name}[{string.Join(separator: ", ",
+            values: typeArguments.Select(selector: t => t.Name))}]";
 
-        return new ResidentTypeInfo(name: instantiatedName)
+        return new ResidentTypeInfo(name: resolvedName)
         {
             Fields = substitutedFields,
             ImplementedProtocols = ImplementedProtocols,
@@ -95,7 +95,7 @@ public sealed class ResidentTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a field for generic instantiation.
+    /// Substitutes the type in a field for generic resolution.
     /// </summary>
     /// <param name="field">The field to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
@@ -121,7 +121,7 @@ public sealed class ResidentTypeInfo : TypeInfo
             return substituted;
         }
 
-        if (!type.IsGenericInstantiation || type.TypeArguments == null)
+        if (!type.IsGenericResolution || type.TypeArguments == null)
         {
             return type;
         }
@@ -132,7 +132,7 @@ public sealed class ResidentTypeInfo : TypeInfo
 
         if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
         {
-            return residentType.GenericDefinition.Instantiate(typeArguments: newArgs);
+            return residentType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;
