@@ -17,38 +17,30 @@ application development to high-performance systems programming.
 A precision systems language for absolute control and deterministic performance.
 
 ```razorforge
-entity ConnectionPool {
-    connections: List<Connection>
-    active_count: S64
-    max_connections: S64
-}
+entity ConnectionPool
+  connections: List<Connection>
+  active_count: S64
+  max_connections: S64
 
-routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection? {
-    # Scoped access for multiple operations
-    using pool.hijack() as p {
-        # Check capacity with pattern matching
-        when p.active_count < p.max_connections {
-            == true => {
-                let conn = Connection()
-                p.connections.add_last(steal conn)  # Explicit ownership transfer
-                p.active_count += 1
-                return conn
-            },
-            else => return None  # Pool exhausted
-        }
-    }
-}
+routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection?
+  # Block access for multiple operations
+  using pool.hijack() as p
+    # Check capacity with pattern matching
+    when p.active_count < p.max_connections
+      == true
+        var conn = Connection()
+        p.connections.add_last(steal conn)  # Explicit ownership transfer
+        p.active_count += 1
+        return conn
+      else => return None  # Pool exhausted
 
-routine monitor_pool(weak: Tracked<ConnectionPool>) {
-    # Try to recover weak reference
-    when weak.try_recover() {
-        is None => show("Pool was deallocated"),
-        else strong => {
-            # Inline access for single read
-            show(f"Pool stats: {strong.view().active_count}/{strong.view().max_connections}")
-        }
-    }
-}
+routine monitor_pool(weak: Tracked<ConnectionPool>)
+  # Try to recover weak reference
+  when weak.try_recover()
+    is None => show("Pool was deallocated")
+    else strong
+      # Inline access for single read
+      show(f"Pool stats: {strong.view().active_count}/{strong.view().max_connections}")
 ```
 
 **Use RazorForge for:**
@@ -65,37 +57,37 @@ A productivity-first language for building modern applications quickly and safel
 
 ```suflae
 entity UserCache
-    private cache: Dict<Integer, User>
-    private hit_count: Integer
-    private miss_count: Integer
+  secret cache: Dict<Integer, User>
+  secret hit_count: Integer
+  secret miss_count: Integer
 
-public routine UserCache.__create__()
-    me.cache = Dict()
-    me.hit_count = 0
-    me.miss_count = 0
+routine UserCache.__create__()
+  me.cache = Dict()
+  me.hit_count = 0
+  me.miss_count = 0
 
-public suspended routine UserCache.fetch_user!(id: Integer) -> User
-    # Check cache first
-    when me.cache.try_getitem(id)
-        is None
-            me.miss_count += 1
-            let user = waitfor http.get(f"/api/users/{id}")
-            unless user
-                throw NetworkError()
-            me.cache.insert(id, user)
-            return user
-        else cached
-            me.hit_count += 1
-            return cached
+suspended routine UserCache.fetch_user!(id: Integer) -> User
+  # Check cache first
+  when me.cache.try_getitem(id)
+    is None
+      me.miss_count += 1
+      var user = waitfor http.get(f"/api/users/{id}")
+      unless user
+        throw NetworkError()
+      me.cache.insert(id, user)
+      return user
+    else cached
+      me.hit_count += 1
+      return cached
 
 routine start()
-    # Create an actor (spawns a green thread)
-    let cache = UserCache().act()  # Type: Actor<UserCache>
+  # Create an actor (spawns a green thread)
+  var cache = UserCache().act()  # Type: Actor<UserCache>
 
-    # Multiple tasks can safely call cache methods concurrently
-    # Method calls become messages - no locks needed!
-    let user = waitfor cache.fetch_user(12345)
-    show(f"Got user: {user.name}")
+  # Multiple tasks can safely call cache methods concurrently
+  # Method calls become messages - no locks needed!
+  var user = waitfor cache.fetch_user(12345)
+  show(f"Got user: {user.name}")
 ```
 
 **Use Suflae for:**
@@ -168,9 +160,8 @@ bake run
 # hello.rf
 import IO/Console
 
-routine start() {
-    show("Hello from RazorForge!")
-}
+routine start()
+  show("Hello from RazorForge!")
 ```
 
 ### Hello World in Suflae
@@ -237,7 +228,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) — Unsafe operations and raw memory access
 - [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) — FFI and C interop
 - [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
-- [Lock Policies](https://razorforge.lumi-dev.xyz/Lock-Policies) — Mutex, MultiReadLock, RejectEdit
+- [Lock Policies](https://razorforge.lumi-dev.xyz/Lock-Policies) — Exclusive, MultiRead, ReadOnly
 - [Code Style](https://razorforge.lumi-dev.xyz/Code-Style) — Coding conventions
 - [Core](https://razorforge.lumi-dev.xyz/Core) — Auto-imported types and primitives
 
@@ -311,34 +302,27 @@ Start with Suflae for productivity, gradually learn RazorForge for control:
 RazorForge makes memory operations **visible and explicit** through inline tokens and scoped blocks:
 
 ```razorforge
-entity Node {
-    value: S32,
-    next: Shared<Node>?,
-    prev: Tracked<Node>?  # Weak to prevent cycles
-}
+entity Node
+  value: S32,
+  next: Shared<Node>?,
+  prev: Tracked<Node>?  # Weak to prevent cycles
 
-routine process_node(node: Node) {
-    # Inline read-only access
-    show(node.view().value)
+routine process_node(node: Node)
+  # Inline read-only access
+  show(node.view().value)
 
-    # Inline mutable access
-    node.hijack().value += 1
+  # Inline mutable access
+  node.hijack().value += 1
 
-    # Multiple operations - use scoped syntax
-    using node.hijack() as h {
-        h.value += 10
-        h.value *= 2
+  # Multiple operations - use scoped syntax
+  using node.hijack() as h
+    h.value += 10
+    h.value *= 2
+    show(h.value)
 
-        # Downgrade to read-only within hijack
-        using h.view() as v {
-            show(v.value)
-        }
-    }
-
-    # Ownership transfer
-    let list: List<Node> = List()
-    list.add_last(steal node)  # node becomes deadref
-}
+  # Ownership transfer
+  var list: List<Node> = List()
+  list.add_last(steal node)  # node becomes deadref
 ```
 
 ### RazorForge: Thread-Safe Concurrency
@@ -346,30 +330,27 @@ routine process_node(node: Node) {
 RazorForge provides **explicit control** over concurrent access with configurable lock policies:
 
 ```razorforge
-entity Counter {
-    value: S64
-}
+entity Counter
+  value: S64
 
-routine start() {
-    let counter = Counter(value: 0)
+routine start()
+  var counter = Counter(value: 0)
 
-    # Create thread-safe reference with MultiReadLock policy
-    let shared = counter.share<MultiReadLock>()
+  # Create thread-safe reference with MultiRead policy
+  var shared = counter.share<MultiRead>()
 
-    # Spawn reader threads - can run concurrently!
-    for i in 0 to 5 {
-        let reader = shared  # Clone Arc (atomic increment)
-        using reader.inspect!() as r {
-            show(f"Thread {i} reads: {r.value}")
-        }  # Read lock released automatically
-    }
+  # Spawn reader threads - can run concurrently!
+  for i in 0 to 5
+    var reader = shared  # Clone Arc (atomic increment)
+    using reader.inspect!() as r
+      show(f"Thread {i} reads: {r.value}")
+    # Read lock released automatically
 
-    # Writer thread - exclusive access
-    let writer = shared
-    using writer.seize!() as w {
-        w.value += 1
-    }  # Write lock released automatically
-}
+  # Writer thread - exclusive access
+  var writer = shared
+  using writer.seize!() as w
+    w.value += 1
+  # Write lock released automatically
 ```
 
 ### RazorForge: Lock-Free Atomic Operations
@@ -377,19 +358,16 @@ routine start() {
 For high-performance scenarios, use **lock-free atomics**:
 
 ```razorforge
-entity MetricsCollector {
-    request_count: Atomic<S64>
-    error_count: Atomic<S64>
-}
+entity MetricsCollector
+  request_count: Atomic<S64>
+  error_count: Atomic<S64>
 
-routine track_request(metrics: MetricsCollector, success: Bool) {
-    # Lock-free increment (~5-10 CPU cycles)
-    metrics.request_count.fetch_add(1)
+routine track_request(metrics: MetricsCollector, success: Bool)
+  # Lock-free increment (~5-10 CPU cycles)
+  metrics.request_count.fetch_add(1)
 
-    unless success {
-        metrics.error_count.fetch_add(1)
-    }
-}
+  unless success
+    metrics.error_count.fetch_add(1)
 ```
 
 ### RazorForge: Message Passing with Channels
@@ -397,34 +375,27 @@ routine track_request(metrics: MetricsCollector, success: Bool) {
 For clean thread communication, **transfer ownership** via channels:
 
 ```razorforge
-entity Task {
-    id: S32
-    data: Text
-}
+entity Task
+  id: S32
+  data: Text
 
-routine start() {
-    let (tx, rx) = Channel<Task>()
+routine start()
+  var (tx, rx) = Channel<Task>()
 
-    # Spawn worker threads
-    for worker_id in 0 to 4 {
-        let receiver = rx
-        loop {
-            when receiver.try_receive() {
-                is None => break,  # Channel closed
-                else task => {
-                    show(f"Worker {worker_id} processing task {task.id}")
-                    process_task(task)
-                }
-            }
-        }
-    }
+  # Spawn worker threads
+  for worker_id in 0 to 4
+    var receiver = rx
+    loop
+      when receiver.try_receive()
+        is None => break  # Channel closed
+        else task
+          show(f"Worker {worker_id} processing task {task.id}")
+          process_task(task)
 
-    # Send tasks (ownership transferred to channel)
-    for i in 0 to 100 {
-        let task = Task(id: i, data: "payload")
-        tx.send(steal task)  # Explicit: task becomes deadref
-    }
-}
+  # Send tasks (ownership transferred to channel)
+  for i in 0 to 100
+    var task = Task(id: i, data: "payload")
+    tx.send(steal task)  # Explicit: task becomes deadref
 ```
 
 ### Suflae: Actor Model Concurrency
@@ -433,27 +404,27 @@ Suflae uses the **actor model** for safe, simple concurrency:
 
 ```suflae
 entity Counter
-    value: S32
+  value: S32
 
 routine Counter.increment()
-    me.value += 1
+  me.value += 1
 
 routine Counter.get() -> S32
-    return me.value
+  return me.value
 
-let counter = Counter(value: 0).act()  # Type: Actor<Counter>
+var counter = Counter(value: 0).act()  # Type: Actor<Counter>
 
 suspended routine increment_worker()
-    for j in 0 to 100
-        counter.increment()  # Sends message to actor
+  for j in 0 to 100
+    counter.increment()  # Sends message to actor
 
 suspended routine start()
-    # Start 10 workers (fire-and-forget)
-    for i in 0 to 10
-        increment_worker()
+  # Start 10 workers (fire-and-forget)
+  for i in 0 to 10
+    increment_worker()
 
-    # counter.get() will return 1000 (always correct, no races!)
-    show(counter.get())  # Output: 1000
+  # counter.get() will return 1000 (always correct, no races!)
+  show(counter.get())  # Output: 1000
 ```
 
 **Why this works:**
@@ -467,17 +438,17 @@ suspended routine start()
 
 ```suflae
 suspended routine fetch(url: Text) -> Text
-    return waitfor http.get(url)
+  return waitfor http.get(url)
 
 suspended routine start()
-    # Sequential execution
-    let a = waitfor fetch("url1")
-    let b = waitfor fetch("url2")
+  # Sequential execution
+  var a = waitfor fetch("url1")
+  var b = waitfor fetch("url2")
 
-    # Parallel execution
-    let t1 = fetch("url1")  # Returns Task<Text>
-    let t2 = fetch("url2")  # Returns Task<Text>
-    let (a, b) = waitfor (t1, t2)  # Wait for both
+  # Parallel execution
+  var t1 = fetch("url1")  # Returns Task<Text>
+  var t2 = fetch("url2")  # Returns Task<Text>
+  var (a, b) = waitfor (t1, t2)  # Wait for both
 ```
 
 ---
@@ -487,8 +458,8 @@ suspended routine start()
 | Aspect           | Suflae (Actor Model)      | RazorForge (Primitives)                          |
 |------------------|---------------------------|--------------------------------------------------|
 | **Philosophy**   | "Just use actors"         | "Choose your primitive"                          |
-| **Primitives**   | Actors only               | Atomics, Mutex, MultiReadLock, Channels          |
-| **Syntax**       | `counter.increment()`     | `using counter.seize!() as c { c.increment() }`  |
+| **Primitives**   | Actors only               | Atomics, Mutex, MultiRead, Channels              |
+| **Syntax**       | `counter.increment()`     | `counter.seize!().increment()`                   |
 | **Field Access** | Forbidden on actors       | Allowed in lock scope                            |
 | **Channels**     | Not exposed (internal)    | Exposed for direct use                           |
 | **Atomics**      | Not exposed               | Exposed for lock-free ops                        |

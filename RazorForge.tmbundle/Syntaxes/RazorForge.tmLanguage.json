@@ -36,7 +36,7 @@
         {
           "comment": "Variable declarations",
           "name": "keyword.declaration.razorforge",
-          "match": "\\b(let|var|preset|common|define)\\b"
+          "match": "\\b(var|preset|common|define)\\b"
         },
         {
           "comment": "Access and routine modifiers",
@@ -46,7 +46,7 @@
         {
           "comment": "Control flow",
           "name": "keyword.control.razorforge",
-          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|release|emit)\\b"
+          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
         },
         {
           "comment": "Type and pattern operations",
@@ -66,7 +66,7 @@
         {
           "comment": "Async",
           "name": "keyword.control.razorforge",
-          "match": "\\b(waitfor)\\b"
+          "match": "\\b(waitfor|within|after)\\b"
         },
         {
           "comment": "Generic constraints",
@@ -86,12 +86,17 @@
         {
           "comment": "Range keywords",
           "name": "keyword.operator.razorforge",
-          "match": "\\b(to|downto|by)\\b"
+          "match": "\\b(to|til|by)\\b"
+        },
+        {
+          "comment": "Danger block keyword",
+          "name": "keyword.other.razorforge",
+          "match": "\\bdanger!"
         },
         {
           "comment": "Special keywords",
           "name": "keyword.other.razorforge",
-          "match": "\\b(as|pass|danger|with|steal)\\b"
+          "match": "\\b(as|pass|with|steal|given)\\b"
         },
         {
           "comment": "Boolean literals",

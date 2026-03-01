@@ -20,12 +20,12 @@ indent_size = 4
 # RazorForge source files
 [*.rf]
 indent_style = space
-indent_size = 4
+indent_size = 2
 
 # Suflae source files
 [*.sf]
 indent_style = space
-indent_size = 4
+indent_size = 2
 
 # MSBuild files
 [*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,projitems,shproj}]
