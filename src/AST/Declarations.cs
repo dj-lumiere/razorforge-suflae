@@ -176,7 +176,8 @@ public record EntityDeclaration(
     List<Declaration> Members,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null)
+    List<GenericConstraintDeclaration>? GenericConstraints = null,
+    bool HasPassBody = false)
     : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -212,7 +213,8 @@ public record RecordDeclaration(
     List<Declaration> Members,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null) : Declaration(Location: Location)
+    List<GenericConstraintDeclaration>? GenericConstraints = null,
+    bool HasPassBody = false) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
@@ -248,7 +250,8 @@ public record ResidentDeclaration(
     List<Declaration> Members,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null) : Declaration(Location: Location)
+    List<GenericConstraintDeclaration>? GenericConstraints = null,
+    bool HasPassBody = false) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {

@@ -533,6 +533,7 @@ public partial class Parser
         }
 
         var members = new List<Declaration>();
+        bool hasPass = false;
 
         // Parse entity body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after entity header");
@@ -559,6 +560,7 @@ public partial class Parser
                 // Allow 'pass' to indicate empty body
                 if (Match(type: TokenType.Pass))
                 {
+                    hasPass = true;
                     Match(type: TokenType.Newline);
                     continue;
                 }
@@ -596,7 +598,8 @@ public partial class Parser
             Protocols: interfaces,
             Members: members,
             Visibility: visibility,
-            Location: location);
+            Location: location,
+            HasPassBody: hasPass);
     }
 
     /// <summary>
@@ -641,6 +644,7 @@ public partial class Parser
         }
 
         var members = new List<Declaration>();
+        bool hasPass = false;
 
         // Parse record body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after record header");
@@ -666,6 +670,7 @@ public partial class Parser
                 // Allow 'pass' to indicate empty body
                 if (Match(type: TokenType.Pass))
                 {
+                    hasPass = true;
                     Match(type: TokenType.Newline);
                     continue;
                 }
@@ -703,7 +708,8 @@ public partial class Parser
             Protocols: interfaces,
             Members: members,
             Visibility: visibility,
-            Location: location);
+            Location: location,
+            HasPassBody: hasPass);
     }
 
     /// <summary>
@@ -752,6 +758,7 @@ public partial class Parser
         }
 
         var members = new List<Declaration>();
+        bool hasPass = false;
 
         // Parse resident body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after resident header");
@@ -777,6 +784,7 @@ public partial class Parser
                 // Allow 'pass' to indicate empty body
                 if (Match(type: TokenType.Pass))
                 {
+                    hasPass = true;
                     Match(type: TokenType.Newline);
                     continue;
                 }
@@ -814,7 +822,8 @@ public partial class Parser
             Protocols: interfaces,
             Members: members,
             Visibility: visibility,
-            Location: location);
+            Location: location,
+            HasPassBody: hasPass);
     }
 
     /// <summary>

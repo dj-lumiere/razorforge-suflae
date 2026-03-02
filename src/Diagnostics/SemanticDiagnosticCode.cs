@@ -242,6 +242,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Warning: Routine call's return value is unused. Use 'discard' to explicitly ignore it.</summary>
     UnusedReturnValue = 210,
 
+    /// <summary>Empty block or type body requires 'pass' keyword.</summary>
+    EmptyBlockWithoutPass = 211,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ASSIGNMENT AND MUTABILITY ERRORS (RF-S250 - RF-S299)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -436,6 +439,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Entity field cannot be a resident type (residents are global singletons).</summary>
     EntityContainsResidentField = 432,
+
+    /// <summary>Enumeration type (choice, variant, flags) must have at least one member/case.</summary>
+    EmptyEnumerationBody = 433,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)

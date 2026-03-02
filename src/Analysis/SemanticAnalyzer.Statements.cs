@@ -214,6 +214,15 @@ public sealed partial class SemanticAnalyzer
 
     private void AnalyzeBlockStatement(BlockStatement block)
     {
+        if (block.Statements.Count == 0)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyBlockWithoutPass,
+                "Empty block requires 'pass' keyword.",
+                block.Location);
+            return;
+        }
+
         _registry.EnterScope(kind: ScopeKind.Block, name: null);
 
         foreach (Statement stmt in block.Statements)

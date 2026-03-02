@@ -679,6 +679,14 @@ public sealed partial class SemanticAnalyzer
 
     private void ResolveRecordBody(RecordDeclaration record)
     {
+        if (record.Members.Count == 0 && !record.HasPassBody)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyBlockWithoutPass,
+                "Empty record body requires 'pass' keyword.",
+                record.Location);
+        }
+
         TypeSymbol? previousType = _currentType;
         HashSet<string>? previousFieldNames = _currentTypeFieldNames;
 
@@ -773,6 +781,14 @@ public sealed partial class SemanticAnalyzer
 
     private void ResolveEntityBody(EntityDeclaration entity)
     {
+        if (entity.Members.Count == 0 && !entity.HasPassBody)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyBlockWithoutPass,
+                "Empty entity body requires 'pass' keyword.",
+                entity.Location);
+        }
+
         TypeSymbol? previousType = _currentType;
         HashSet<string>? previousFieldNames = _currentTypeFieldNames;
 
@@ -841,6 +857,14 @@ public sealed partial class SemanticAnalyzer
 
     private void ResolveResidentBody(ResidentDeclaration resident)
     {
+        if (resident.Members.Count == 0 && !resident.HasPassBody)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyBlockWithoutPass,
+                "Empty resident body requires 'pass' keyword.",
+                resident.Location);
+        }
+
         TypeSymbol? previousType = _currentType;
         HashSet<string>? previousFieldNames = _currentTypeFieldNames;
 
@@ -1016,6 +1040,15 @@ public sealed partial class SemanticAnalyzer
 
     private void ResolveVariantBody(VariantDeclaration variant)
     {
+        if (variant.Cases.Count == 0)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyEnumerationBody,
+                $"Variant type '{variant.Name}' must have at least one case.",
+                variant.Location);
+            return;
+        }
+
         // Validate each variant case's payload type
         foreach (VariantCase variantCase in variant.Cases)
         {
@@ -1039,6 +1072,15 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void ResolveChoiceBody(ChoiceDeclaration choice)
     {
+        if (choice.Cases.Count == 0)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyEnumerationBody,
+                $"Choice type '{choice.Name}' must have at least one case.",
+                choice.Location);
+            return;
+        }
+
         TypeSymbol? choiceType = _registry.LookupType(name: choice.Name);
         if (choiceType is not ChoiceTypeInfo choiceInfo)
         {
@@ -1135,6 +1177,15 @@ public sealed partial class SemanticAnalyzer
 
     private void ResolveFlagsBody(FlagsDeclaration flags)
     {
+        if (flags.Members.Count == 0)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmptyEnumerationBody,
+                $"Flags type '{flags.Name}' must have at least one member.",
+                flags.Location);
+            return;
+        }
+
         TypeSymbol? flagsType = _registry.LookupType(name: flags.Name);
         if (flagsType is not FlagsTypeInfo flagsInfo)
         {
