@@ -144,4 +144,58 @@ public class RecordContainmentTests
     }
 
     #endregion
+
+    #region With Expression on Non-Records
+
+    [Fact]
+    public void Analyze_WithOnEntity_ReportsError()
+    {
+        string source = """
+                        entity Foo
+                          x: S32
+                        routine test(f: Foo)
+                          var g = f with .x = 2
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
+    }
+
+    [Fact]
+    public void Analyze_WithOnRecord_NoError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        routine test(p: Point)
+                          var q = p with .x = 2
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
+    }
+
+    [Fact]
+    public void Analyze_WithOnRecordMultiField_NoError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        routine test(p: Point)
+                          var q = p with .x = 2, .y = 3
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
+    }
+
+    #endregion
 }

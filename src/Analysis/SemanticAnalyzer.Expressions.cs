@@ -2283,11 +2283,10 @@ public sealed partial class SemanticAnalyzer
     {
         TypeSymbol baseType = AnalyzeExpression(expression: with.Base);
 
-        // Validate that base is a record type (for field updates) or supports indexing (for index updates)
-        bool hasFieldUpdates = with.Updates.Any(u => u.FieldPath != null);
-        if (hasFieldUpdates && baseType.Category != TypeCategory.Record)
+        // 'with' expressions are only valid on record types
+        if (baseType.Category != TypeCategory.Record)
         {
-            ReportError(SemanticDiagnosticCode.WithExpressionNotRecord, $"'with' expression with field updates requires a record type, got '{baseType.Name}'.", with.Location);
+            ReportError(SemanticDiagnosticCode.WithExpressionNotRecord, $"'with' expression requires a record type, got '{baseType.Name}'.", with.Location);
         }
 
         // Analyze update expressions

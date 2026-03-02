@@ -108,4 +108,36 @@ public class TypeProhibitionTests
     }
 
     #endregion
+
+    #region Byte Literal ASCII Validation
+
+    [Fact]
+    public void Analyze_ByteLiteralNonAscii_ReportsError()
+    {
+        // Non-ASCII byte literals are rejected at the lexer level (RF-G005)
+        string source = """
+                        routine test()
+                          var x: Byte = b'é'
+                          return
+                        """;
+
+        Assert.ThrowsAny<Compiler.Diagnostics.GrammarException>(() => Analyze(source: source));
+    }
+
+    [Fact]
+    public void Analyze_ByteLiteralAscii_NoGrammarError()
+    {
+        // ASCII byte literals pass the lexer without throwing
+        string source = """
+                        routine test()
+                          var x: Byte = b'a'
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        // No GrammarException thrown — lexer accepts ASCII byte literals
+        Assert.NotNull(@object: result);
+    }
+
+    #endregion
 }
