@@ -25,6 +25,10 @@ public sealed class ModuleNode
     /// <summary>Source locations of import statements for error reporting.</summary>
     public Dictionary<string, SourceLocation> ImportLocations { get; } = [];
 
+    /// <summary>
+    /// Initializes a new <see cref="ModuleNode"/> with the given module path.
+    /// </summary>
+    /// <param name="modulePath">The fully-qualified module path (e.g., "Collections", "Banking/Core").</param>
     public ModuleNode(string modulePath)
     {
         ModulePath = modulePath;
@@ -137,10 +141,13 @@ public sealed class ModuleDependencyGraph
     /// <returns>The cycle path if found, null otherwise.</returns>
     private List<string>? FindCycleFrom(string startModule, string targetModule)
     {
-        // DFS to find if there's a path from startModule to targetModule
         var visited = new HashSet<string>();
         var path = new List<string>();
 
+        /// <summary>
+        /// Recursively searches for a path from <paramref name="current"/> to <paramref name="targetModule"/>
+        /// using depth-first search. Appends visited nodes to <c>path</c> and returns true if the target is reachable.
+        /// </summary>
         bool DFS(string current)
         {
             if (current == targetModule)
@@ -191,6 +198,11 @@ public sealed class ModuleDependencyGraph
         var visited = new HashSet<string>();
         var visiting = new HashSet<string>(); // For cycle detection
 
+        /// <summary>
+        /// Recursively visits a module and all its dependencies using depth-first post-order traversal,
+        /// adding each module to <c>result</c> after all dependencies have been visited.
+        /// Throws <see cref="InvalidOperationException"/> if an unexpected cycle is encountered.
+        /// </summary>
         void Visit(string module)
         {
             if (visited.Contains(item: module))

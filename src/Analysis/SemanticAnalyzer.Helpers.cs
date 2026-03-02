@@ -54,6 +54,10 @@ public sealed partial class SemanticAnalyzer
 {
     #region Helper Methods for Analysis
 
+    /// <summary>
+    /// Validates argument count and types for a routine call against the routine's parameter list.
+    /// Reports errors for too-few arguments, too-many arguments (on non-variadic routines), and type mismatches.
+    /// </summary>
     private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments, SourceLocation location)
     {
         IReadOnlyList<ParameterInfo> parameters = routine.Parameters;
@@ -120,6 +124,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Returns true if the expression can appear on the left-hand side of an assignment.
+    /// Valid assignment targets are identifiers, member accesses, and index expressions.
+    /// </summary>
     private bool IsAssignableTarget(Expression target)
     {
         return target is IdentifierExpression
@@ -127,6 +135,11 @@ public sealed partial class SemanticAnalyzer
             or IndexExpression;
     }
 
+    /// <summary>
+    /// Returns true if a value of type <paramref name="source"/> can be assigned to a variable of type <paramref name="target"/>.
+    /// Handles error types (to suppress cascading errors), generic resolution matching, and protocol conformance.
+    /// No implicit numeric or widening conversions are performed.
+    /// </summary>
     private bool IsAssignableTo(TypeSymbol source, TypeSymbol target)
     {
         // Same type
@@ -170,28 +183,42 @@ public sealed partial class SemanticAnalyzer
         return genericIndex >= 0 ? typeName[..genericIndex] : typeName;
     }
 
+    /// <summary>Returns true if the type is the built-in <c>Bool</c> type.</summary>
     private bool IsBoolType(TypeSymbol type)
     {
         return type.Name is "Bool";
     }
 
+    /// <summary>Returns true if the type is any numeric type (integer, binary float, or decimal float).</summary>
     private bool IsNumericType(TypeSymbol type)
     {
         return IsIntegerType(type: type) || IsFloatType(type: type) || IsDecimalType(type: type);
     }
 
+    /// <summary>
+    /// Returns true if the type implements the <c>Integral</c> protocol (i.e., is a fixed-width or
+    /// arbitrary-precision integer type such as s32, u64, uaddr, or Suflae's Integer).
+    /// </summary>
     private bool IsIntegerType(TypeSymbol type)
     {
         // Check if type obeys the Integral protocol
         return ImplementsProtocol(type: type, protocolName: "Integral");
     }
 
+    /// <summary>
+    /// Returns true if the type implements the <c>BinaryFP</c> protocol (i.e., is a binary
+    /// floating-point type such as f32 or f64).
+    /// </summary>
     private bool IsFloatType(TypeSymbol type)
     {
         // Check if type obeys the Floating protocol (binary floats)
         return ImplementsProtocol(type: type, protocolName: "BinaryFP");
     }
 
+    /// <summary>
+    /// Returns true if the type implements the <c>DecimalFP</c> protocol (i.e., is a decimal
+    /// floating-point type such as d64 or Suflae's Decimal).
+    /// </summary>
     private bool IsDecimalType(TypeSymbol type)
     {
         // Check if type obeys the DecimalFloating protocol
@@ -230,6 +257,7 @@ public sealed partial class SemanticAnalyzer
             or BinaryOperator.Obeys or BinaryOperator.NotObeys;
     }
 
+    /// <summary>Returns true if the operator is a short-circuit logical operator (<c>and</c> or <c>or</c>).</summary>
     private bool IsLogicalOperator(BinaryOperator op)
     {
         return op is BinaryOperator.And or BinaryOperator.Or;
@@ -264,6 +292,7 @@ public sealed partial class SemanticAnalyzer
         "__enter__", "__exit__"
     ];
 
+    /// <summary>Returns true if the given method name is an operator dunder (e.g., <c>__add__</c>, <c>__eq__</c>).</summary>
     private static bool IsOperatorDunder(string name)
     {
         return OperatorDunders.Contains(value: name);
@@ -399,6 +428,11 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Returns the wider of two numeric types for binary expression type inference.
+    /// Because the language has no implicit numeric conversions, both operands must already
+    /// be the same type; this method simply returns the left operand's type.
+    /// </summary>
     private TypeSymbol GetWiderNumericType(TypeSymbol left, TypeSymbol right)
     {
         // With no implicit conversions, types must match exactly
@@ -407,6 +441,12 @@ public sealed partial class SemanticAnalyzer
         return left;
     }
 
+    /// <summary>
+    /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
+    /// The type must implement both the <c>Sequential</c> and <c>SequenceGenerator</c> protocols.
+    /// The element type is taken from the return type of the <c>__seq__</c> method or the type's first generic argument.
+    /// Reports an error and returns <see cref="ErrorTypeInfo"/> if the type is not iterable or the element type cannot be determined.
+    /// </summary>
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
     {
         // Type must follow both Sequential and SequenceGenerator protocols
@@ -442,6 +482,11 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
+    /// <summary>
+    /// Returns true if <paramref name="type"/> implements the named protocol.
+    /// Checks explicit protocol declarations, parent protocol chains, and structural conformance
+    /// (i.e., whether the type has all required methods of the protocol).
+    /// </summary>
     private bool ImplementsProtocol(TypeSymbol type, string protocolName)
     {
         // Get the protocol type
@@ -653,6 +698,10 @@ public sealed partial class SemanticAnalyzer
         return false;
     }
 
+    /// <summary>
+    /// Creates or retrieves a <c>Viewed&lt;T&gt;</c> wrapper type for the given inner type.
+    /// <c>Viewed</c> is a read-only, single-threaded access token.
+    /// </summary>
     private TypeSymbol CreateViewedType(TypeSymbol innerType)
     {
         TypeSymbol? viewedDef = _registry.LookupType(name: "Viewed");
@@ -668,6 +717,10 @@ public sealed partial class SemanticAnalyzer
             isReadOnly: true);
     }
 
+    /// <summary>
+    /// Creates or retrieves a <c>Hijacked&lt;T&gt;</c> wrapper type for the given inner type.
+    /// <c>Hijacked</c> is an exclusive write, single-threaded access token.
+    /// </summary>
     private TypeSymbol CreateHijackedType(TypeSymbol innerType)
     {
         TypeSymbol? hijackedDef = _registry.LookupType(name: "Hijacked");
@@ -683,6 +736,10 @@ public sealed partial class SemanticAnalyzer
             isReadOnly: false);
     }
 
+    /// <summary>
+    /// Creates or retrieves an <c>Inspected&lt;T&gt;</c> wrapper type for the given inner type.
+    /// <c>Inspected</c> is a read-only, multi-threaded (shared) access token.
+    /// </summary>
     private TypeSymbol CreateInspectedType(TypeSymbol innerType)
     {
         TypeSymbol? inspectedDef = _registry.LookupType(name: "Inspected");
@@ -698,6 +755,10 @@ public sealed partial class SemanticAnalyzer
             isReadOnly: true);
     }
 
+    /// <summary>
+    /// Creates or retrieves a <c>Seized&lt;T&gt;</c> wrapper type for the given inner type.
+    /// <c>Seized</c> is an exclusive write, multi-threaded access token.
+    /// </summary>
     private TypeSymbol CreateSeizedType(TypeSymbol innerType)
     {
         TypeSymbol? seizedDef = _registry.LookupType(name: "Seized");

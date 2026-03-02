@@ -134,6 +134,11 @@ public sealed partial class SemanticAnalyzer
         return ResolveType(typeExpr: typeExpr);
     }
 
+    /// <summary>
+    /// Resolves a generic type expression (e.g., <c>List[T]</c>, <c>Maybe[s32]</c>) to a concrete
+    /// generic resolution, looking up the base type, resolving each type argument, validating
+    /// argument counts and generic constraints, and returning the cached resolved type.
+    /// </summary>
     private TypeSymbol ResolveGenericType(TypeExpression typeExpr)
     {
         TypeSymbol? genericDef = LookupTypeWithImports(name: typeExpr.Name);
@@ -291,6 +296,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies an <c>obeys</c> constraint by implementing
+    /// all of the required protocols listed in the constraint.
+    /// </summary>
     private void ValidateFollowsConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -313,6 +322,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>from</c> constraint by being equal to
+    /// or a subtype of the required base type specified in the constraint.
+    /// </summary>
     private void ValidateFromConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -345,6 +358,10 @@ public sealed partial class SemanticAnalyzer
             location);
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>valuetype</c> constraint,
+    /// requiring the argument to be a record (value type).
+    /// </summary>
     private void ValidateValueTypeConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -359,6 +376,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>referencetype</c> constraint,
+    /// requiring the argument to be an entity (reference type).
+    /// </summary>
     private void ValidateReferenceTypeConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -373,6 +394,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>residenttype</c> constraint,
+    /// requiring the argument to be a resident type.
+    /// </summary>
     private void ValidateResidentTypeConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -387,6 +412,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Returns true if <paramref name="name"/> is a generic type parameter declared on the
+    /// currently-analyzed routine or type, allowing it to be used as a valid type reference.
+    /// </summary>
     private bool IsGenericParameter(string name)
     {
         if (_currentRoutine?.GenericParameters?.Contains(value: name) == true)
@@ -402,6 +431,10 @@ public sealed partial class SemanticAnalyzer
         return false;
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>routinetype</c> constraint,
+    /// requiring the argument to be a routine (function) type.
+    /// </summary>
     private void ValidateRoutineTypeConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -416,6 +449,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>choicetype</c> constraint,
+    /// requiring the argument to be a choice (discriminated union of unit cases) type.
+    /// </summary>
     private void ValidateChoiceTypeConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,
@@ -430,6 +467,10 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>varianttype</c> constraint,
+    /// requiring the argument to be a variant (tagged union with payloads) type.
+    /// </summary>
     private void ValidateVariantTypeConstraint(
         TypeSymbol typeArg,
         GenericConstraintDeclaration constraint,

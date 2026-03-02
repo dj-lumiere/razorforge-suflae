@@ -17,17 +17,17 @@ public partial class Parser
     /// <summary>
     /// The list of tokens to parse.
     /// </summary>
-    protected readonly List<Token> Tokens;
+    private readonly List<Token> Tokens;
 
     /// <summary>
     /// Current position in the token stream.
     /// </summary>
-    protected int Position = 0;
+    private int Position = 0;
 
     /// <summary>
     /// Collection of warnings generated during parsing.
     /// </summary>
-    protected readonly List<BuildWarning> Warnings = [];
+    private readonly List<BuildWarning> Warnings = [];
 
     /// <summary>
     /// Collection of errors accumulated during error recovery.

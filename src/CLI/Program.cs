@@ -15,6 +15,11 @@ namespace Builder;
 /// </summary>
 internal class Program
 {
+    /// <summary>
+    /// Entry point for the RazorForge builder CLI.
+    /// Dispatches to the appropriate command handler based on the first argument.
+    /// Returns 0 on success or 1 on error.
+    /// </summary>
     public static int Main(string[] args)
     {
         if (args.Length == 0)
@@ -78,6 +83,9 @@ internal class Program
         }
     }
 
+    /// <summary>
+    /// Prints the CLI usage instructions to standard output.
+    /// </summary>
     private static void PrintUsage()
     {
         Console.WriteLine("RazorForge Builder");
@@ -93,8 +101,13 @@ internal class Program
         Console.WriteLine("  <source-file>: .rf file for RazorForge or .sf file for Suflae");
     }
 
+    /// <summary>Returns true if the given file path has a <c>.sf</c> extension (Suflae source file).</summary>
     private static bool IsSuflaeFile(string path) => path.EndsWith(".sf", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Tokenizes the given source file and prints each token with its position and text to standard output.
+    /// Returns 0 on success or 1 if the file is not found or tokenization fails.
+    /// </summary>
     private static int TokenizeFile(string sourceFile)
     {
         if (!File.Exists(sourceFile))
@@ -134,6 +147,10 @@ internal class Program
         }
     }
 
+    /// <summary>
+    /// Tokenizes and parses the given source file, then prints a summary of the resulting AST
+    /// along with any warnings. Returns 0 on success or 1 if the file is not found or parsing fails.
+    /// </summary>
     private static int ParseFile(string sourceFile)
     {
         if (!File.Exists(sourceFile))
@@ -203,6 +220,10 @@ internal class Program
         }
     }
 
+    /// <summary>
+    /// Runs the semantic analyzer over the standard library routine bodies for the given language
+    /// and reports any errors found. Returns 0 if all bodies are valid, or 1 if errors were found.
+    /// </summary>
     private static int ValidateStdlib(Language language)
     {
         try
@@ -256,6 +277,12 @@ internal class Program
         }
     }
 
+    /// <summary>
+    /// Runs the full compiler pipeline (tokenize → parse → semantic analysis → LLVM IR generation)
+    /// on the given source file and writes the resulting IR to <paramref name="outputFile"/>,
+    /// or to a default <c>.ll</c> file if no output path is specified.
+    /// Returns 0 on success or 1 if any stage fails.
+    /// </summary>
     private static int GenerateCode(string sourceFile, string? outputFile)
     {
         if (!File.Exists(sourceFile))
@@ -362,6 +389,10 @@ internal class Program
         }
     }
 
+    /// <summary>
+    /// Recursively prints a one-line summary of an AST node to standard output,
+    /// indented to the given depth. Used to display a human-readable AST overview after parsing.
+    /// </summary>
     private static void PrintDeclarationSummary(IAstNode node, int indent)
     {
         string prefix = new string(' ', indent * 2);
@@ -413,6 +444,7 @@ internal class Program
         }
     }
 
+    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for a routine declaration.</summary>
     private static List<string> GetModifiers(RoutineDeclaration func)
     {
         var mods = new List<string>();
@@ -420,6 +452,7 @@ internal class Program
         return mods;
     }
 
+    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for a record declaration.</summary>
     private static List<string> GetModifiers(RecordDeclaration rec)
     {
         var mods = new List<string>();
@@ -427,6 +460,7 @@ internal class Program
         return mods;
     }
 
+    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for an entity declaration.</summary>
     private static List<string> GetModifiers(EntityDeclaration ent)
     {
         var mods = new List<string>();
@@ -434,6 +468,10 @@ internal class Program
         return mods;
     }
 
+    /// <summary>
+    /// Escapes newline, carriage return, and tab characters in a string to their
+    /// backslash-escaped equivalents for safe display on a single console line.
+    /// </summary>
     private static string EscapeString(string s)
     {
         return s.Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");

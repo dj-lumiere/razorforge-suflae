@@ -5,17 +5,34 @@ namespace Compiler.Parser;
 /// </summary>
 public class BuildWarning(string message, int line, int column, WarningSeverity severity, string warningCode)
 {
+    /// <summary>Human-readable description of the warning condition.</summary>
     public string Message { get; } = message;
+
+    /// <summary>Source line number (1-based) where the warning was detected.</summary>
     public int Line { get; } = line;
+
+    /// <summary>Source column number (1-based) where the warning was detected.</summary>
     public int Column { get; } = column;
+
+    /// <summary>The severity level of this warning.</summary>
     public WarningSeverity Severity { get; } = severity;
+
+    /// <summary>The machine-readable warning code (e.g., "CK001") used to suppress or categorize this warning.</summary>
     public string WarningCode { get; } = warningCode;
 }
 
+/// <summary>
+/// Severity levels for build-time warnings, determining how they are displayed and filtered.
+/// </summary>
 public enum WarningSeverity
 {
+    /// <summary>Informational message only; does not indicate a problem.</summary>
     Info,
+
+    /// <summary>Potential issue that may lead to incorrect behavior or future errors.</summary>
     Warning,
+
+    /// <summary>Code style violation that does not affect behavior but should be corrected.</summary>
     StyleViolation
 }
 
@@ -24,6 +41,9 @@ public enum WarningSeverity
 /// </summary>
 public static class WarningCodes
 {
+    /// <summary>Unnecessary braces in a context where indentation delimiters are expected (CK001).</summary>
     public const string UnnecessaryBraces = "CK001";
+
+    /// <summary>C-style syntax used in a context where RazorForge/Suflae idioms are expected (ST001).</summary>
     public const string CStyleSyntax = "ST001";
 }

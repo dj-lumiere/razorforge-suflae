@@ -236,6 +236,10 @@ public sealed partial class SemanticAnalyzer
 
     #region Helper Methods
 
+    /// <summary>
+    /// Walks the current scope chain and returns the fully-qualified module name
+    /// for the scope being analyzed, or null if analysis is not inside any module scope.
+    /// </summary>
     private string? GetCurrentModuleName()
     {
         Scope? current = _registry.CurrentScope;

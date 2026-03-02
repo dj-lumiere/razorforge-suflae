@@ -60,10 +60,18 @@ public enum UnaryOperator
     ForceUnwrap
 }
 
+/// <summary>
+/// Extension methods for the <see cref="UnaryOperator"/> enum, providing string representations
+/// and operator overloading support via dunder method names.
+/// </summary>
 internal static class UnaryOperatorExtensions
 {
     extension(UnaryOperator op)
     {
+        /// <summary>
+        /// Returns the source-level string representation of the operator (e.g., "-", "not", "~"),
+        /// or null if the operator has no simple string form.
+        /// </summary>
         public string? ToStringRepresentation()
         {
             return op switch
