@@ -193,6 +193,16 @@ public sealed partial class SemanticAnalyzer
                 field.Location);
         }
 
+        // Entity cannot hold resident fields (#48)
+        if (_currentType is EntityTypeInfo && fieldType is ResidentTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EntityContainsResidentField,
+                $"Entity field '{field.Name}' cannot be a resident type ('{fieldType.Name}'). " +
+                "Residents are global singletons and cannot be embedded in other types.",
+                field.Location);
+        }
+
         // TODO: Register field in the current type's field list when type body resolution is implemented
     }
 
@@ -410,6 +420,16 @@ public sealed partial class SemanticAnalyzer
             ModificationCategory = declaredModification,
             IsDangerous = routine.IsDangerous
         };
+
+        // Check for duplicate routine definitions (#150)
+        if (_registry.LookupRoutine(fullName: routineInfo.FullName) != null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.DuplicateRoutineDefinition,
+                $"Routine '{routineInfo.Name}' is already defined.",
+                routine.Location);
+            return;
+        }
 
         _registry.RegisterRoutine(routine: routineInfo);
     }

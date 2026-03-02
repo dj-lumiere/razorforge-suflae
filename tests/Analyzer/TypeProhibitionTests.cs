@@ -109,6 +109,38 @@ public class TypeProhibitionTests
 
     #endregion
 
+    #region Nested Maybe Prohibition
+
+    [Fact]
+    public void Analyze_NestedMaybe_ReportsError()
+    {
+        string source = """
+                        routine test(x: Maybe[Maybe[S32]])
+                          pass
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
+    }
+
+    [Fact]
+    public void Analyze_SingleMaybe_NoError()
+    {
+        string source = """
+                        routine test(x: S32?)
+                          pass
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
+    }
+
+    #endregion
+
     #region Byte Literal ASCII Validation
 
     [Fact]

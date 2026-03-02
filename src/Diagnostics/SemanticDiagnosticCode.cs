@@ -434,6 +434,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Operand is not a flags type for a flags operator.</summary>
     FlagsTypeMismatch = 431,
 
+    /// <summary>Entity field cannot be a resident type (residents are global singletons).</summary>
+    EntityContainsResidentField = 432,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -584,6 +587,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Thrown value must implement Crashable protocol.</summary>
     ThrowNotCrashable = 700,
 
+    /// <summary>Only record types can be thrown (error types must be records).</summary>
+    ThrowRequiresRecordType = 701,
+
     /// <summary>Missing required protocol method implementation.</summary>
     MissingProtocolMethod = 702,
 
@@ -612,6 +618,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Error handling type (Result/Lookup) cannot be used as field type.</summary>
     ErrorHandlingTypeAsField = 755,
 
+    /// <summary>Failable routine (!) contains neither 'throw' nor 'absent'.</summary>
+    FailableWithoutThrowOrAbsent = 756,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -630,6 +639,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Routine cannot directly return Maybe&lt;T&gt;/Result&lt;T&gt;/Lookup&lt;T&gt; — use failable routines (!) instead.</summary>
     ErrorHandlingTypeAsReturnType = 807,
+
+    /// <summary>Nested Maybe types (Maybe[Maybe[T]] / T??) are not allowed.</summary>
+    NestedMaybeProhibited = 808,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // INTRINSIC AND NATIVE CALL ERRORS (RF-S850 - RF-S899)

@@ -205,6 +205,16 @@ public sealed partial class SemanticAnalyzer
                 typeExpr.Location);
         }
 
+        // Reject nested Maybe types (#83): Maybe[Maybe[T]] / T??
+        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe }
+            && typeArgs[0] is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe })
+        {
+            ReportError(
+                SemanticDiagnosticCode.NestedMaybeProhibited,
+                "'Maybe[Maybe[T]]' is not allowed. A single '?' already expresses optionality.",
+                typeExpr.Location);
+        }
+
         // Validate generic constraints
         ValidateGenericConstraints(
             genericDef: genericDef,

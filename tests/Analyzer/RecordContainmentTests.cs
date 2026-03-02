@@ -145,6 +145,25 @@ public class RecordContainmentTests
 
     #endregion
 
+    #region Entity Cannot Hold Resident Fields
+
+    [Fact]
+    public void Analyze_EntityWithResidentField_ReportsError()
+    {
+        string source = """
+                        resident GlobalState
+                          counter: S32
+                        entity BadEntity
+                          state: GlobalState
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.EntityContainsResidentField);
+    }
+
+    #endregion
+
     #region With Expression on Non-Records
 
     [Fact]

@@ -94,6 +94,16 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
+        // Failable routines must contain throw or absent (#77)
+        if (routineInfo is { IsFailable: true, HasThrow: false, HasAbsent: false })
+        {
+            ReportError(
+                SemanticDiagnosticCode.FailableWithoutThrowOrAbsent,
+                $"Failable routine '{routine.Name}!' contains neither 'throw' nor 'absent'. " +
+                "Remove the '!' suffix or add error-handling statements.",
+                routine.Location);
+        }
+
         // Store routine body for error handling variant generation (Phase 5)
         if (routineInfo.IsFailable)
         {
@@ -668,6 +678,18 @@ public sealed partial class SemanticAnalyzer
             ReportError(
                 SemanticDiagnosticCode.ThrowNotCrashable,
                 $"Thrown value must implement Crashable protocol, got '{errorType.Name}'.",
+                throwStmt.Error.Location);
+        }
+
+        // Error types must be records (#84)
+        if (errorType.Category != TypeCategory.Record &&
+            errorType is not ErrorTypeInfo &&
+            errorType.Name != "Error")
+        {
+            ReportError(
+                SemanticDiagnosticCode.ThrowRequiresRecordType,
+                $"Only record types can be thrown, got '{errorType.Name}' ({errorType.Category}). " +
+                "Error types must be records for safe stack-based error propagation.",
                 throwStmt.Error.Location);
         }
 
