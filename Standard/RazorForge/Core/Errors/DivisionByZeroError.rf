@@ -2,6 +2,7 @@ module Core
 
 # DivisionByZeroError - thrown on division by zero
 record DivisionByZeroError obeys Crashable
+  pass
 
 routine DivisionByZeroError.crash_message() -> Text
   return "You tried to divide by zero, which is not allowed."

@@ -4,6 +4,7 @@ module Core
 # Used when converting between integer types and the value doesn't fit
 
 record IntegerOverflowError obeys Crashable
+  pass
 
 routine IntegerOverflowError.crash_message() -> Text
   return "Integer overflow: value does not fit in the target type."

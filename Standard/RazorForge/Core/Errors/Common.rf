@@ -7,24 +7,28 @@ module Core
 
 # AbsentValueError - thrown when accessing an absent value
 record AbsentValueError obeys Crashable
+  pass
 
 routine AbsentValueError.crash_message() -> Text
   return ptr_to_text(me.message_handle.ptr)
 
 # UserTerminationError - thrown by stop!()
 record UserTerminationError obeys Crashable
+  pass
 
 routine UserTerminationError.crash_message() -> Text
   return ptr_to_text(me.message_handle.ptr)
 
 # VerificationFailedError - thrown by verify!()
 record VerificationFailedError obeys Crashable
+  pass
 
 routine VerificationFailedError.crash_message() -> Text
   return ptr_to_text(me.message_handle.ptr)
 
 # LogicBreachedError - thrown by breach!()
 record LogicBreachedError obeys Crashable
+  pass
 
 routine LogicBreachedError.crash_message() -> Text
   return ptr_to_text(me.message_handle.ptr)

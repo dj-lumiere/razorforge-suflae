@@ -8,6 +8,7 @@ module Core
 # Size: ~228 bytes (fixed, fits inline in type unions)
 
 record RuntimeError obeys Crashable
+  pass
 
 routine RuntimeError.crash_message() -> Text
   # Dereference the message pointer to get the string
