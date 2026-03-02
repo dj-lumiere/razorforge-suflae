@@ -37,9 +37,6 @@ public enum GrammarDiagnosticCode
     // INDENTATION ERRORS (050 - 079)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>An indented block was expected but the next line does not have greater indentation.</summary>
-    ExpectedIndent = 50,
-
     /// <summary>A dedent (return to previous indentation level) was expected but the indentation did not decrease.</summary>
     ExpectedDedent = 51,
 
@@ -113,9 +110,6 @@ public enum GrammarDiagnosticCode
     /// <summary>An opening parenthesis '(' was expected but not found.</summary>
     ExpectedLeftParen = 119,
 
-    /// <summary>A closing parenthesis ')' was expected but not found in this specific context.</summary>
-    ExpectedRightParen = 120,
-
     /// <summary>The 'as' keyword was expected (e.g., in import aliasing or cast expressions) but not found.</summary>
     ExpectedAs = 121,
 
@@ -162,9 +156,6 @@ public enum GrammarDiagnosticCode
 
     /// <summary>The number of variables in a tuple destructuring assignment does not match the tuple's field count.</summary>
     TupleDependencyCountMismatch = 207,
-
-    /// <summary>A routine with a non-void return type does not always return a value on all code paths.</summary>
-    MissingReturn = 208,
 
     /// <summary>A RazorForge-only language construct was used in a Suflae source file.</summary>
     RFOnlyConstruct = 210,

@@ -488,14 +488,16 @@ public partial class Parser
             string validDeclarations = _language == Language.RazorForge
                 ? "routine, entity, record, resident, choice, variant, protocol, preset, or var"
                 : "routine, entity, record, choice, variant, protocol, preset, or var";
-            throw ThrowParseError($"Visibility modifier '{visibility}' must be followed by a declaration " +
-                                  $"({validDeclarations})");
+            throw ThrowParseError(GrammarDiagnosticCode.VisibilityWithoutDeclaration,
+                $"Visibility modifier '{visibility}' must be followed by a declaration " +
+                $"({validDeclarations})");
         }
 
         // If we have attributes but no declaration, that's an error
         if (attributes.Count > 0)
         {
-            throw ThrowParseError("Attributes must be followed by a declaration (routine, entity, record, etc.)");
+            throw ThrowParseError(GrammarDiagnosticCode.AttributesWithoutDeclaration,
+                "Attributes must be followed by a declaration (routine, entity, record, etc.)");
         }
 
         // Otherwise parse as statement

@@ -166,8 +166,7 @@ public enum SemanticDiagnosticCode
     /// <summary>General build error.</summary>
     CompilationError = 112,
 
-    /// <summary>Cannot resolve generic type with given arguments.</summary>
-    GenericResolutionFailed = 113,
+
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GENERIC AND CONSTRAINT ERRORS (RF-S150 - RF-S199)
@@ -206,9 +205,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Type does not satisfy 'from' constraint.</summary>
     FromConstraintViolation = 161,
 
-    /// <summary>Generic constraint violation (general).</summary>
-    GenericConstraintViolation = 162,
-
     /// <summary>Type parameter in constraint is not declared on the type or function.</summary>
     UnknownTypeParameterInConstraint = 163,
 
@@ -221,9 +217,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Cannot assign initializer type to declared variable type.</summary>
     VariableInitializerTypeMismatch = 201,
-
-    /// <summary>Unexpected declaration in statement context.</summary>
-    UnexpectedDeclarationInStatement = 202,
 
     /// <summary>If condition must be boolean.</summary>
     IfConditionNotBool = 203,
@@ -311,8 +304,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Single-expression when branch should use '=>' syntax instead of block with 'becomes'.</summary>
     SingleExpressionBranchUsesBecomes = 308,
 
-    /// <summary>Nested if-then-else expressions are not allowed. Use 'when' for complex conditionals.</summary>
-    NestedConditionalExpression = 309,
+
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)
@@ -354,9 +346,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Module 'Core' is reserved for standard library.</summary>
     ReservedModuleCore = 401,
-
-    /// <summary>Invalid getter/setter visibility combination.</summary>
-    InvalidVisibilityCombination = 402,
 
     /// <summary>Cannot access private member from outside its defining file.</summary>
     PrivateMemberAccess = 403,
@@ -595,9 +584,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Thrown value must implement Crashable protocol.</summary>
     ThrowNotCrashable = 700,
 
-    /// <summary>Type does not implement required protocol.</summary>
-    ProtocolNotImplemented = 701,
-
     /// <summary>Missing required protocol method implementation.</summary>
     MissingProtocolMethod = 702,
 
@@ -635,9 +621,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Danger blocks cannot be nested.</summary>
     NestedDangerBlock = 801,
-
-    /// <summary>Feature only available in RazorForge.</summary>
-    FeatureOnlyInRazorForge = 804,
 
     /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
     BlankAsTypeArgument = 805,

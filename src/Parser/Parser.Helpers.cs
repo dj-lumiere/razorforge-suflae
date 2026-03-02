@@ -64,7 +64,8 @@ public partial class Parser
         }
 
         Token current = CurrentToken;
-        throw ThrowParseError($"{errorMessage}. Expected Identifier, got {current.Type}.");
+        throw ThrowParseError(GrammarDiagnosticCode.ExpectedIdentifier,
+            $"{errorMessage}. Expected Identifier, got {current.Type}.");
     }
 
     /// <summary>
@@ -77,7 +78,7 @@ public partial class Parser
     {
         if (!Check(type: TokenType.Identifier))
         {
-            throw ThrowParseError(errorMessage);
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIdentifier, errorMessage);
         }
 
         string name = CurrentToken.Text;
@@ -99,7 +100,7 @@ public partial class Parser
     {
         if (!Match(type: TokenType.Indent))
         {
-            throw ThrowParseError("Expected INDENT token");
+            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock, "Expected INDENT token");
         }
 
         _currentIndentationLevel++;
@@ -127,7 +128,7 @@ public partial class Parser
             }
             else
             {
-                throw ThrowParseError("Unexpected dedent - no matching indent");
+                throw ThrowParseError(GrammarDiagnosticCode.UnexpectedDedent, "Unexpected dedent - no matching indent");
             }
         }
     }

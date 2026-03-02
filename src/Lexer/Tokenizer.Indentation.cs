@@ -48,6 +48,8 @@ public partial class Tokenizer
     private void HandleIndentation()
     {
         int spaces = 0;
+        bool hasSpaces = false;
+        bool hasTabs = false;
 
         // Count leading whitespace
         while (Peek() == ' ' || Peek() == '\t')
@@ -55,13 +57,24 @@ public partial class Tokenizer
             if (Peek() == ' ')
             {
                 spaces += 1;
+                hasSpaces = true;
             }
             else // Tab counts as 2 spaces
             {
                 spaces += 2;
+                hasTabs = true;
             }
 
             Advance();
+        }
+
+        // Reject mixed tabs and spaces
+        if (hasTabs && hasSpaces)
+        {
+            throw new GrammarException(
+                GrammarDiagnosticCode.MixedTabsAndSpaces,
+                "Indentation mixes tabs and spaces; use one or the other",
+                _fileName, _line, _column, _language);
         }
 
         // Skip empty lines (don't change indentation state)

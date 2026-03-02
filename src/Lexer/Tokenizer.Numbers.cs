@@ -95,7 +95,7 @@ public partial class Tokenizer
             else
             {
                 throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidNumericLiteral,
+                    ClassifySuffixError(suffix: suffix, isFloat: isFloat),
                     $"Unknown suffix '{suffix}'",
                     _fileName, _line, _column, _language);
             }
@@ -245,6 +245,36 @@ public partial class Tokenizer
                 AddToken(type: TokenType.Integer);
             }
         }
+    }
+
+    #endregion
+
+    #region Suffix Error Classification
+
+    /// <summary>
+    /// Classifies an unknown numeric suffix into the most specific diagnostic code.
+    /// </summary>
+    private static GrammarDiagnosticCode ClassifySuffixError(string suffix, bool isFloat)
+    {
+        char first = char.ToLowerInvariant(c: suffix[0]);
+
+        // Memory-unit-like suffixes (b, k, m, g)
+        if (first is 'b' or 'k' or 'm' or 'g')
+            return GrammarDiagnosticCode.InvalidMemoryLiteral;
+
+        // Duration-like suffixes (w, d, h, s, or contains ms/us/ns)
+        if (first is 'w' or 'd' or 'h' or 's')
+            return GrammarDiagnosticCode.InvalidDurationLiteral;
+
+        string lower = suffix.ToLowerInvariant();
+        if (lower.Contains(value: "ms") || lower.Contains(value: "us") || lower.Contains(value: "ns"))
+            return GrammarDiagnosticCode.InvalidDurationLiteral;
+
+        // Float with decimal point
+        if (isFloat)
+            return GrammarDiagnosticCode.InvalidFloatLiteral;
+
+        return GrammarDiagnosticCode.InvalidNumericLiteral;
     }
 
     #endregion

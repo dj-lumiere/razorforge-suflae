@@ -1425,7 +1425,7 @@ public partial class Parser
             return ParseSetOrDictLiteral(location: location);
         }
 
-        throw ThrowParseError($"Unexpected token: {CurrentToken.Type}");
+        throw ThrowParseError(GrammarDiagnosticCode.ExpectedExpression, $"Unexpected token: {CurrentToken.Type}");
     }
 
     /// <summary>

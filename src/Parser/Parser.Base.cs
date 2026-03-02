@@ -66,9 +66,34 @@ public partial class Parser
 
         Token current = CurrentToken;
         throw new GrammarException(
-            GrammarDiagnosticCode.UnexpectedToken,
+            GetExpectedTokenCode(type: type),
             $"{errorMessage}. Expected {type}, got {current.Type}",
             fileName, current.Line, current.Column, _language);
+    }
+
+    /// <summary>
+    /// Maps an expected token type to the most specific grammar diagnostic code.
+    /// Used by <see cref="Consume"/> to provide precise error codes.
+    /// </summary>
+    private static GrammarDiagnosticCode GetExpectedTokenCode(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.RightParen => GrammarDiagnosticCode.ExpectedClosingParen,
+            TokenType.RightBracket => GrammarDiagnosticCode.ExpectedClosingBracket,
+            TokenType.RightBrace => GrammarDiagnosticCode.ExpectedClosingBrace,
+            TokenType.Colon => GrammarDiagnosticCode.ExpectedColon,
+            TokenType.Arrow => GrammarDiagnosticCode.ExpectedArrow,
+            TokenType.FatArrow => GrammarDiagnosticCode.ExpectedFatArrow,
+            TokenType.Assign => GrammarDiagnosticCode.ExpectedEquals,
+            TokenType.Comma => GrammarDiagnosticCode.ExpectedComma,
+            TokenType.Dot => GrammarDiagnosticCode.ExpectedDot,
+            TokenType.Identifier => GrammarDiagnosticCode.ExpectedIdentifier,
+            TokenType.LeftParen => GrammarDiagnosticCode.ExpectedLeftParen,
+            TokenType.As => GrammarDiagnosticCode.ExpectedAs,
+            TokenType.Waitfor => GrammarDiagnosticCode.ExpectedWaitforAfterDependencies,
+            _ => GrammarDiagnosticCode.UnexpectedToken
+        };
     }
 
     /// <summary>
