@@ -1760,6 +1760,9 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? u64Type = _registry.LookupType(name: "U64");
         TypeSymbol? s64Type = _registry.LookupType(name: "S64");
 
+        // Look up protocols for auto-conformance
+        TypeSymbol? hashableProtocol = _registry.LookupType(name: "Hashable");
+
         foreach (TypeSymbol type in _registry.GetTypesWithMethods())
         {
             List<RoutineInfo> existingMethods = _registry.GetMethodsForType(type: type).ToList();
@@ -1783,6 +1786,18 @@ public sealed partial class SemanticAnalyzer
                         MaybeRegisterBuiltinWithParam(owner: type, name: "__eq__",
                             paramName: "you", paramType: type, returnType: boolType,
                             existingMethods: existingMethods);
+
+                    // Records are value types — auto-add Hashable conformance
+                    if (hashableProtocol != null && type is RecordTypeInfo record)
+                    {
+                        if (record.ImplementedProtocols.All(p => p.Name != "Hashable"))
+                        {
+                            var protocols = record.ImplementedProtocols.ToList();
+                            protocols.Add(item: hashableProtocol);
+                            _registry.UpdateRecordProtocols(recordName: type.FullName, protocols: protocols);
+                        }
+                    }
+
                     break;
 
                 case TypeCategory.Entity:
