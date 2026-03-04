@@ -9,7 +9,7 @@
 module Core
 
 # Core UAddr type definition - maps to LLVM iptr/usize
-record UAddr obeys UnsignedIntegral, Ordered
+record UAddr obeys UnsignedIntegral, Ordered, ConstCompatible
   value: @intrinsic.uptr
 
 # ============================================================================

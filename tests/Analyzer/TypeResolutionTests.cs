@@ -754,4 +754,108 @@ public class TypeResolutionTests
     }
 
     #endregion
+
+    #region Const Generic Validation
+
+    [Fact]
+    public void Analyze_ConstGeneric_IntegerType_NoError()
+    {
+        // Integer types implement ConstCompatible and should be valid
+        string source = """
+                        resident Buffer[T, N]
+                        needs N is UAddr
+                          data: T
+
+                        routine test(buf: Buffer[U8, UAddr])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        // Should not have InvalidConstGenericType error
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
+    }
+
+    [Fact]
+    public void Analyze_ConstGeneric_BoolType_NoError()
+    {
+        // Bool implements ConstCompatible
+        string source = """
+                        record Config[T]
+                        needs T is Bool
+                          value: S32
+
+                        routine test(cfg: Config[Bool])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
+    }
+
+    [Fact]
+    public void Analyze_ConstGeneric_ChoiceType_NoError()
+    {
+        // Choice types are valid for const generics by category
+        string source = """
+                        choice Direction
+                          North
+                          South
+                          East
+                          West
+
+                        record Compass[D]
+                        needs D is Direction
+                          strength: F32
+
+                        routine test(c: Compass[Direction])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
+    }
+
+    [Fact]
+    public void Analyze_ConstGeneric_RecordType_ReportsError()
+    {
+        // Arbitrary record types should fail validation when used as type expression
+        string source = """
+                        record Foo
+                          x: S32
+
+                        record Bar[T]
+                        needs T is Foo
+                          value: S32
+
+                        routine test(b: Bar[Foo])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
+    }
+
+    [Fact]
+    public void Analyze_ConstGeneric_TypeMismatch_ReportsError()
+    {
+        // Type argument doesn't match required const type
+        string source = """
+                        resident Buffer[T, N]
+                        needs N is UAddr
+                          data: T
+
+                        routine test(buf: Buffer[U8, S32])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch);
+    }
+
+    #endregion
 }

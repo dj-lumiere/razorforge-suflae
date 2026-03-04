@@ -364,8 +364,9 @@ public class ScopeTests
     #region Closure Scoping
 
     [Fact]
-    public void Analyze_LambdaCapturesOuter_NoError()
+    public void Analyze_LambdaImplicitCapture_ReportsError()
     {
+        // Implicit capture of local variable without 'given' should now error
         string source = """
                         routine test()
                           var multiplier = 10
@@ -374,7 +375,10 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "given", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -399,7 +403,7 @@ public class ScopeTests
     [Fact]
     public void Analyze_LambdaWithGivenClause_ValidCapture_NoError()
     {
-        // Captured variable 'z' exists in outer scope
+        // Captured variable 'z' exists in outer scope and is declared in given
         string source = """
                         routine test()
                           var z = 100
@@ -408,6 +412,53 @@ public class ScopeTests
                         """;
 
         Analyze(source: source);
+    }
+
+    [Fact]
+    public void Analyze_LambdaCapturePreset_NoError()
+    {
+        // Preset (module constant) captures are exempt from 'given' requirement
+        string source = """
+                        preset MAX_VALUE = 100
+                        routine test()
+                          var scale = x => x * MAX_VALUE
+                          return
+                        """;
+
+        Analyze(source: source);
+    }
+
+    [Fact]
+    public void Analyze_LambdaCaptureGlobalVar_NoError()
+    {
+        // Module-scope variables are exempt — not truly "captured" from a function
+        string source = """
+                        var global_val = 42
+                        routine test()
+                          var scale = x => x + global_val
+                          return
+                        """;
+
+        Analyze(source: source);
+    }
+
+    [Fact]
+    public void Analyze_LambdaCaptureNotInGiven_ReportsError()
+    {
+        // Lambda has 'given' but captures a variable not listed in it
+        string source = """
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          var f = (x) given a => x + a + b
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "b", comparisonType: StringComparison.OrdinalIgnoreCase)
+                      && e.Message.Contains(value: "given", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
     #endregion

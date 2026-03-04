@@ -1,3 +1,4 @@
+using SemanticAnalysis.Diagnostics;
 using SemanticAnalysis.Results;
 using SemanticAnalysis.Types;
 using Xunit;
@@ -123,6 +124,26 @@ public class TupleTests
 
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region For-Loop Destructuring
+
+    [Fact]
+    public void Analyze_ForLoopDestructuring_NonTuple_ReportsError()
+    {
+        // Destructuring on non-tuple iterable (range produces integers, not tuples)
+        string source = """
+                        routine test()
+                          for (a, b) in 0 til 10
+                            var x = a
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DestructuringArityMismatch);
     }
 
     #endregion

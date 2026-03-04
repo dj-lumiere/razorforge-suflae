@@ -245,6 +245,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Empty block or type body requires 'pass' keyword.</summary>
     EmptyBlockWithoutPass = 211,
 
+    /// <summary>Destructuring pattern arity doesn't match tuple element count.</summary>
+    DestructuringArityMismatch = 220,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ASSIGNMENT AND MUTABILITY ERRORS (RF-S250 - RF-S299)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -569,6 +572,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Dangerous routine called outside a danger! block.</summary>
     DangerousCallOutsideDangerBlock = 609,
+
+    /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
+    LambdaCaptureWithoutGiven = 610,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MODIFICATION INFERENCE ERRORS (RF-S650 - RF-S699)

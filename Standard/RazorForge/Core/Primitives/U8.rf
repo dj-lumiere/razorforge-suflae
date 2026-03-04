@@ -2,7 +2,7 @@
 # Maps directly to LLVM i8 type using compiler intrinsics
 module Core
 # Core U8 type definition - maps to LLVM i8
-record U8 obeys UnsignedIntegral, Ordered
+record U8 obeys UnsignedIntegral, Ordered, ConstCompatible
   secret value: @intrinsic.i8
 
 # Constants for U8 limits

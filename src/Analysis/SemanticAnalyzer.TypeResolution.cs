@@ -509,24 +509,32 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // The constraint specifies the required const value type (e.g., uaddr)
         TypeExpression requiredTypeExpr = constraint.ConstraintTypes[0];
         string requiredTypeName = requiredTypeExpr.Name;
 
-        // Valid const generic types are fixed-size integers
-        var validConstTypes = new HashSet<string>
-        {
-            "u8", "u16", "u32", "u64", "u128", "uaddr",
-            "s8", "s16", "s32", "s64", "s128", "saddr",
-            "letter", "byte", "bool"
-        }; // TODO: instead of hardcoding, I will add some protocol?
-
-        if (!validConstTypes.Contains(value: requiredTypeName))
+        // Resolve the required type and check ConstCompatible conformance
+        TypeSymbol? requiredType = LookupTypeWithImports(name: requiredTypeName);
+        if (requiredType == null)
         {
             ReportError(
                 SemanticDiagnosticCode.InvalidConstGenericType,
-                $"Invalid const generic type '{requiredTypeName}' for '{constraint.ParameterName}'. " +
-                         "Const generics must be integer types.",
+                $"Unknown const generic type '{requiredTypeName}' for '{constraint.ParameterName}'.",
+                location);
+            return;
+        }
+
+        // Check explicit protocol conformance OR choice category.
+        // Uses explicit-only check (not structural conformance) because ConstCompatible
+        // is a marker protocol — structural conformance would match any type.
+        bool isValid = ExplicitlyImplementsProtocol(type: requiredType, protocolName: "ConstCompatible")
+                       || requiredType.Category == TypeCategory.Choice;
+
+        if (!isValid)
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidConstGenericType,
+                $"Type '{requiredTypeName}' is not valid for const generic '{constraint.ParameterName}'. " +
+                "Const generic types must implement ConstCompatible or be a choice type.",
                 location);
             return;
         }

@@ -2,7 +2,7 @@
 # Maps directly to LLVM i64 type using compiler intrinsics
 module Core
 # Core U64 type definition - maps to LLVM i64
-record U64 obeys UnsignedIntegral, Ordered
+record U64 obeys UnsignedIntegral, Ordered, ConstCompatible
   value: @intrinsic.i64
 
 # Constants for U64 limits

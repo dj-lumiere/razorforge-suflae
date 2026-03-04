@@ -1624,6 +1624,8 @@ public sealed partial class SemanticAnalyzer
     {
         // Collect variables from enclosing scope that might be captured
         var enclosingScopeVariables = _registry.GetAllVariablesInScope();
+        // Collect only local (function-level) variables — these require 'given' to capture
+        var localScopeVariables = _registry.GetLocalScopeVariables();
 
         _registry.EnterScope(kind: ScopeKind.Function, name: "lambda");
 
@@ -1649,6 +1651,7 @@ public sealed partial class SemanticAnalyzer
         ValidateLambdaCaptures(
             lambda: lambda,
             enclosingScopeVariables: enclosingScopeVariables,
+            localScopeVariables: localScopeVariables,
             parameterNames: parameterNames);
 
         _registry.ExitScope();
@@ -1661,21 +1664,26 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that lambda captures don't include forbidden types.
-    /// In RazorForge, lambdas cannot capture:
-    /// - Memory tokens (Viewed, Hijacked, Inspected, Seized) - scope-bound
-    /// - Raw entities - must use handles for capture
+    /// Validates that lambda captures don't include forbidden types and that all
+    /// local-scope captures are declared in the 'given' clause (RazorForge only).
     /// </summary>
     /// <param name="lambda">The lambda expression being analyzed.</param>
-    /// <param name="enclosingScopeVariables">Variables available in the enclosing scope.</param>
+    /// <param name="enclosingScopeVariables">All variables available in the enclosing scope.</param>
+    /// <param name="localScopeVariables">Variables from local (function-level) scopes only — require 'given'.</param>
     /// <param name="parameterNames">Names of lambda parameters (not captures).</param>
     private void ValidateLambdaCaptures(
         LambdaExpression lambda,
         IReadOnlyDictionary<string, VariableInfo> enclosingScopeVariables,
+        IReadOnlyDictionary<string, VariableInfo> localScopeVariables,
         HashSet<string> parameterNames)
     {
         // Find all identifier expressions in the lambda body
         var identifiers = CollectIdentifiers(expression: lambda.Body);
+
+        // Build set of given captures for quick lookup
+        var givenNames = lambda.Captures != null
+            ? new HashSet<string>(collection: lambda.Captures)
+            : null;
 
         foreach (IdentifierExpression id in identifiers)
         {
@@ -1696,6 +1704,30 @@ public sealed partial class SemanticAnalyzer
             {
                 // Validate that the captured type is allowed
                 ValidateCapturedType(varName: id.Name, varType: varInfo.Type, location: id.Location);
+
+                // Check 'given' clause enforcement for local captures (RazorForge only)
+                if (_registry.Language == Language.RazorForge
+                    && localScopeVariables.ContainsKey(key: id.Name)
+                    && !varInfo.IsPreset)
+                {
+                    if (givenNames == null)
+                    {
+                        // No 'given' clause — implicit capture of local variable
+                        ReportError(
+                            SemanticDiagnosticCode.LambdaCaptureWithoutGiven,
+                            $"Lambda captures local variable '{id.Name}' without declaring it in 'given' clause. " +
+                            "All local captures must be explicit via 'given'.",
+                            id.Location);
+                    }
+                    else if (!givenNames.Contains(item: id.Name))
+                    {
+                        // Has 'given' clause but this variable isn't in it
+                        ReportError(
+                            SemanticDiagnosticCode.LambdaCaptureWithoutGiven,
+                            $"Lambda captures local variable '{id.Name}' but it is not listed in the 'given' clause.",
+                            id.Location);
+                    }
+                }
             }
         }
     }
@@ -1972,6 +2004,7 @@ public sealed partial class SemanticAnalyzer
                 typeArgs.Add(item: ResolveType(typeExpr: typeArg));
             }
 
+            ValidateGenericConstraints(genericDef: type, typeArgs: typeArgs, location: creator.Location);
             type = _registry.GetOrCreateResolution(genericDef: type, typeArguments: typeArgs);
         }
 

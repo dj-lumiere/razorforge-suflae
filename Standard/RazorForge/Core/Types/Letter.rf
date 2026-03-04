@@ -12,7 +12,7 @@
 # For legacy 32-bit encodings, use List[U32] instead.
 module Core
 
-record Letter
+record Letter obeys ConstCompatible
   secret value: U32
 
 # Unicode constants

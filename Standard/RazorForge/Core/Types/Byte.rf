@@ -12,7 +12,7 @@
 # For text processing, use Letter (Unicode codepoint) and Text types.
 module Core
 
-record Byte
+record Byte obeys ConstCompatible
   secret value: U8
 
 # Common byte constants

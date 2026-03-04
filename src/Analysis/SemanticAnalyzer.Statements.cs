@@ -520,15 +520,45 @@ public sealed partial class SemanticAnalyzer
         else if (forStmt.VariablePattern != null)
         {
             // Destructuring pattern: for (index, item) in items.enumerate()
-            // For tuple destructuring, we need to extract element types from the tuple
-            // For now, we'll declare each binding with the element type (to be refined with proper tuple handling)
-            foreach (DestructuringBinding binding in forStmt.VariablePattern.Bindings)
+            if (elementType is TupleTypeInfo tupleType)
             {
-                if (binding.BindingName != null)
+                // Check arity match
+                int bindingCount = forStmt.VariablePattern.Bindings.Count;
+                if (bindingCount != tupleType.Arity)
                 {
-                    _registry.DeclareVariable(
-                        name: binding.BindingName,
-                        type: elementType); // TODO: Extract proper tuple element types
+                    ReportError(
+                        SemanticDiagnosticCode.DestructuringArityMismatch,
+                        $"Destructuring pattern has {bindingCount} bindings but tuple has {tupleType.Arity} elements.",
+                        forStmt.VariablePattern.Location);
+                }
+
+                // Declare each binding with its corresponding tuple element type
+                for (int i = 0; i < forStmt.VariablePattern.Bindings.Count; i++)
+                {
+                    DestructuringBinding binding = forStmt.VariablePattern.Bindings[i];
+                    if (binding.BindingName != null)
+                    {
+                        TypeSymbol bindingType = i < tupleType.Arity
+                            ? (TypeSymbol)tupleType.ElementTypes[i]
+                            : ErrorTypeInfo.Instance;
+                        _registry.DeclareVariable(name: binding.BindingName, type: bindingType);
+                    }
+                }
+            }
+            else
+            {
+                // Non-tuple type with destructuring pattern
+                ReportError(
+                    SemanticDiagnosticCode.DestructuringArityMismatch,
+                    $"Cannot destructure non-tuple type '{elementType.Name}' in for loop.",
+                    forStmt.VariablePattern.Location);
+                // Still declare variables with error type so analysis can continue
+                foreach (DestructuringBinding binding in forStmt.VariablePattern.Bindings)
+                {
+                    if (binding.BindingName != null)
+                    {
+                        _registry.DeclareVariable(name: binding.BindingName, type: ErrorTypeInfo.Instance);
+                    }
                 }
             }
         }

@@ -535,6 +535,42 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Returns true if <paramref name="type"/> explicitly declares conformance to the named protocol
+    /// via <c>obeys</c>. Unlike <see cref="ImplementsProtocol"/>, this does NOT fall back to
+    /// structural conformance, making it suitable for marker protocols like ConstCompatible.
+    /// </summary>
+    private bool ExplicitlyImplementsProtocol(TypeSymbol type, string protocolName)
+    {
+        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        {
+            RecordTypeInfo record => record.ImplementedProtocols,
+            EntityTypeInfo entity => entity.ImplementedProtocols,
+            ResidentTypeInfo resident => resident.ImplementedProtocols,
+            _ => null
+        };
+
+        if (implementedProtocols == null)
+        {
+            return false;
+        }
+
+        foreach (TypeSymbol implemented in implementedProtocols)
+        {
+            if (implemented.Name == protocolName || GetBaseTypeName(typeName: implemented.Name) == protocolName)
+            {
+                return true;
+            }
+
+            if (implemented is ProtocolTypeInfo proto && CheckParentProtocols(proto: proto, targetName: protocolName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Checks if any parent protocol matches the target.
     /// </summary>
     private bool CheckParentProtocols(ProtocolTypeInfo proto, string targetName)

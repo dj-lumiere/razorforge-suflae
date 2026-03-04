@@ -1200,6 +1200,34 @@ public sealed class TypeRegistry
         return variables;
     }
 
+    /// <summary>
+    /// Gets variables from local (function-level) scopes only, stopping at Global/Module/Type boundaries.
+    /// Variables from these scopes are truly "captured" by lambdas and require 'given' declarations.
+    /// </summary>
+    public IReadOnlyDictionary<string, VariableInfo> GetLocalScopeVariables()
+    {
+        var variables = new Dictionary<string, VariableInfo>();
+
+        Scope? current = _currentScope;
+        while (current != null)
+        {
+            // Stop at non-local scope boundaries
+            if (current.Kind is ScopeKind.Global or ScopeKind.Module or ScopeKind.Type)
+            {
+                break;
+            }
+
+            foreach (VariableInfo variable in current.GetLocalVariables())
+            {
+                variables.TryAdd(key: variable.Name, value: variable);
+            }
+
+            current = current.Parent;
+        }
+
+        return variables;
+    }
+
     #endregion
 
     #region Language-Specific Validation

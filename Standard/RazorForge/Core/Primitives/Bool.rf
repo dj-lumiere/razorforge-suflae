@@ -1,6 +1,6 @@
 module Core
 
-record Bool obeys Equatable
+record Bool obeys Equatable, ConstCompatible
   secret value: @intrinsic.i1
 
 routine Bool.__eq__(you: Bool) -> Bool

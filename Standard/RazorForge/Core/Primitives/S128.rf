@@ -2,7 +2,7 @@
 # Maps directly to LLVM i128 type using compiler intrinsics
 module Core
 # Core S128 type definition - maps to LLVM i128
-record S128 obeys SignedIntegral, Ordered
+record S128 obeys SignedIntegral, Ordered, ConstCompatible
   value: @intrinsic.i128
 
 # Constants for S128 limits
