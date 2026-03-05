@@ -79,22 +79,28 @@ public partial class Tokenizer
             // Delimiters
             case '(':
                 AddToken(type: TokenType.LeftParen);
+                _bracketDepth++;
                 break;
             case ')':
                 AddToken(type: TokenType.RightParen);
+                if (_bracketDepth > 0) _bracketDepth--;
                 break;
             case '[':
                 AddToken(type: TokenType.LeftBracket);
+                _bracketDepth++;
                 break;
             case ']':
                 AddToken(type: TokenType.RightBracket);
+                if (_bracketDepth > 0) _bracketDepth--;
                 break;
             // Braces kept for set/dict literals and f-text inserting (not block delimiters)
             case '{':
                 AddToken(type: TokenType.LeftBrace);
+                _bracketDepth++;
                 break;
             case '}':
                 AddToken(type: TokenType.RightBrace);
+                if (_bracketDepth > 0) _bracketDepth--;
                 break;
             case ',':
                 AddToken(type: TokenType.Comma);

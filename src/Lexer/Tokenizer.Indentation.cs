@@ -90,6 +90,12 @@ public partial class Tokenizer
             return;
         }
 
+        // Skip INDENT/DEDENT inside brackets (L21)
+        if (_bracketDepth > 0)
+        {
+            return;
+        }
+
         int newIndentLevel = spaces / 2;
 
         // Validate indentation alignment
@@ -145,6 +151,13 @@ public partial class Tokenizer
     /// </remarks>
     private void HandleNewline()
     {
+        // Suppress all newlines inside brackets (L21)
+        if (_bracketDepth > 0)
+        {
+            _hasTokenOnLine = false;
+            return;
+        }
+
         bool isSignificant = IsNewlineSignificant();
 
         if (isSignificant)

@@ -1084,6 +1084,117 @@ public class ExpressionTests
 
     #endregion
 
+    #region Multi-Line Bracketed Expression Tests (L21)
+
+    [Fact]
+    public void Parse_MultiLineConstructorCall_WithNamedArgs()
+    {
+        string source = """
+                        routine test()
+                          var result = BitList(
+                            data: 0u64,
+                            count: 0u64,
+                            capacity: 0u64
+                          )
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_MultiLineFunctionCall_WithPositionalArgs()
+    {
+        string source = """
+                        routine test()
+                          var result = compute(
+                            1,
+                            2,
+                            3
+                          )
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_NestedBrackets_MultiLine()
+    {
+        string source = """
+                        routine test()
+                          var result = f(
+                            g(
+                              x
+                            )
+                          )
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_MultiLineListLiteral()
+    {
+        string source = """
+                        routine test()
+                          var items = [
+                            1,
+                            2,
+                            3
+                          ]
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_MultiLineReturn_WithConstructor()
+    {
+        string source = """
+                        routine create() -> S32
+                          return BitList(
+                            data: 0u64,
+                            count: 0u64,
+                            capacity: 0u64
+                          )
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Tokenize_MultiLineParens_NoIndentDedent()
+    {
+        string source = """
+                        routine test()
+                          var x = f(
+                            1,
+                            2
+                          )
+                          return
+                        """;
+
+        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
+
+        // Find the LeftParen and RightParen for f(...)
+        int leftParenIndex = tokens.FindIndex(match: t => t.Type == Compiler.Lexer.TokenType.LeftParen && t.Text == "(");
+        // Skip the first LeftParen (routine params), find the second one
+        int callParenIndex = tokens.FindIndex(startIndex: leftParenIndex + 1, match: t => t.Type == Compiler.Lexer.TokenType.LeftParen);
+        int rightParenIndex = tokens.FindIndex(startIndex: callParenIndex, match: t => t.Type == Compiler.Lexer.TokenType.RightParen);
+
+        // Between the call parens, there should be no Indent or Dedent tokens
+        for (int i = callParenIndex + 1; i < rightParenIndex; i++)
+        {
+            Assert.NotEqual(expected: Compiler.Lexer.TokenType.Indent, actual: tokens[i].Type);
+            Assert.NotEqual(expected: Compiler.Lexer.TokenType.Dedent, actual: tokens[i].Type);
+        }
+    }
+
+    #endregion
+
     #region Slice Expression Tests
 
     [Fact]

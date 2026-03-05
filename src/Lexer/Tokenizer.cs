@@ -29,6 +29,7 @@ public partial class Tokenizer
     private readonly List<Token> _tokens = [];
     private int _currentIndentLevel;
     private bool _hasTokenOnLine;
+    private int _bracketDepth;
     private bool _hasDefinitions;
 
     #endregion
