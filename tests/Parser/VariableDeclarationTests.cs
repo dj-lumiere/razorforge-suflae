@@ -11,95 +11,7 @@ using static TestHelpers;
 /// </summary>
 public class VariableDeclarationTests
 {
-    #region Let (Immutable) Declarations
-
-    [Fact]
-    public void Parse_LetWithTypeAndInitializer()
-    {
-        string source = """
-                        routine test()
-                          var x: S32 = 42
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_LetWithInferredType()
-    {
-        string source = """
-                        routine test()
-                          var x = 42
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_LetWithComplexType()
-    {
-        string source = """
-                        routine test()
-                          var items: List[S32] = [1, 2, 3]
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_LetWithGenericType()
-    {
-        string source = """
-                        routine test()
-                          var map: Dict[Text, S32] = Dict()
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_LetWithMaybeType()
-    {
-        string source = """
-                        routine test()
-                          var value: S32? = None
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_LetWithFunctionCall()
-    {
-        string source = """
-                        routine test()
-                          var result = compute(10, 20)
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_LetWithExpression()
-    {
-        string source = """
-                        routine test()
-                          var sum = a + b * c
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    #endregion
-
-    #region Var (Mutable) Declarations
+    #region Variable Declarations
 
     [Fact]
     public void Parse_VarWithTypeAndInitializer()
@@ -119,6 +31,66 @@ public class VariableDeclarationTests
         string source = """
                         routine test()
                           var x = 42
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_VarWithComplexType()
+    {
+        string source = """
+                        routine test()
+                          var items: List[S32] = [1, 2, 3]
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_VarWithGenericType()
+    {
+        string source = """
+                        routine test()
+                          var map: Dict[Text, S32] = Dict()
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_VarWithMaybeType()
+    {
+        string source = """
+                        routine test()
+                          var value: S32? = None
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_VarWithFunctionCall()
+    {
+        string source = """
+                        routine test()
+                          var result = compute(10, 20)
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_VarWithExpression()
+    {
+        string source = """
+                        routine test()
+                          var sum = a + b * c
                           return
                         """;
 
@@ -157,7 +129,7 @@ public class VariableDeclarationTests
     #region Multiple Declarations
 
     [Fact]
-    public void Parse_MultipleLetDeclarations()
+    public void Parse_MultipleVarDeclarations()
     {
         string source = """
                         routine test()
@@ -170,26 +142,12 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
 
-    [Fact]
-    public void Parse_MixedDeclarations()
-    {
-        string source = """
-                        routine test()
-                          var constant = 100
-                          var mutable = 0
-                          var another_constant = 200
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
     #endregion
 
     #region Destructuring Declarations
 
     [Fact]
-    public void Parse_LetDestructuringTuple()
+    public void Parse_VarDestructuringTuple()
     {
         string source = """
                         routine test()
@@ -201,7 +159,7 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_LetDestructuringRecord()
+    public void Parse_VarDestructuringRecord()
     {
         string source = """
                         routine test()
@@ -213,7 +171,7 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_LetNestedDestructuring()
+    public void Parse_VarNestedDestructuring()
     {
         string source = """
                         routine test()
@@ -225,7 +183,7 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_LetDestructuringWithAlias()
+    public void Parse_VarDestructuringWithAlias()
     {
         string source = """
                         routine test()
@@ -237,7 +195,7 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_LetDestructuringWithWildcard()
+    public void Parse_VarDestructuringWithWildcard()
     {
         string source = """
                         routine test()
@@ -467,7 +425,7 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_EntityLetFields_Rejected()
+    public void Parse_EntityMultipleVarFields_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
         // Fields use 'name: Type' syntax without var keywords

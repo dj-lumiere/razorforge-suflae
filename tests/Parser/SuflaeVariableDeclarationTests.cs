@@ -12,88 +12,7 @@ using static TestHelpers;
 /// </summary>
 public class SuflaeVariableDeclarationTests
 {
-    #region Let (Immutable) Declarations
-
-    [Fact]
-    public void ParseSuflae_LetWithTypeAndInitializer()
-    {
-        string source = """
-                        routine test()
-                          var x: Integer = 42
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_LetWithInferredType()
-    {
-        string source = """
-                        routine test()
-                          var x = 42
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_LetWithComplexType()
-    {
-        string source = """
-                        routine test()
-                          var items: List[Integer] = [1, 2, 3]
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_LetWithGenericType()
-    {
-        string source = """
-                        routine test()
-                          var map: Dict[Text, Integer] = Dict()
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_LetWithMaybeType()
-    {
-        string source = """
-                        routine test()
-                          var value: Integer? = none
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_LetWithFunctionCall()
-    {
-        string source = """
-                        routine test()
-                          var result = compute(10, 20)
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
-    public void ParseSuflae_LetWithExpression()
-    {
-        string source = """
-                        routine test()
-                          var sum = a + b * c
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    #endregion
-
-    #region Var (Mutable) Declarations
+    #region Variable Declarations
 
     [Fact]
     public void ParseSuflae_VarWithTypeAndInitializer()
@@ -112,6 +31,61 @@ public class SuflaeVariableDeclarationTests
         string source = """
                         routine test()
                           var x = 42
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_VarWithComplexType()
+    {
+        string source = """
+                        routine test()
+                          var items: List[Integer] = [1, 2, 3]
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_VarWithGenericType()
+    {
+        string source = """
+                        routine test()
+                          var map: Dict[Text, Integer] = Dict()
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_VarWithMaybeType()
+    {
+        string source = """
+                        routine test()
+                          var value: Integer? = none
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_VarWithFunctionCall()
+    {
+        string source = """
+                        routine test()
+                          var result = compute(10, 20)
+                        """;
+
+        AssertParsesSuflae(source: source);
+    }
+
+    [Fact]
+    public void ParseSuflae_VarWithExpression()
+    {
+        string source = """
+                        routine test()
+                          var sum = a + b * c
                         """;
 
         AssertParsesSuflae(source: source);
@@ -147,7 +121,7 @@ public class SuflaeVariableDeclarationTests
     #region Multiple Declarations
 
     [Fact]
-    public void ParseSuflae_MultipleLetDeclarations()
+    public void ParseSuflae_MultipleVarDeclarations()
     {
         string source = """
                         routine test()
@@ -159,25 +133,12 @@ public class SuflaeVariableDeclarationTests
         AssertParsesSuflae(source: source);
     }
 
-    [Fact]
-    public void ParseSuflae_MixedDeclarations()
-    {
-        string source = """
-                        routine test()
-                          var constant = 100
-                          var mutable = 0
-                          var another_constant = 200
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
     #endregion
 
     #region Destructuring Declarations
 
     [Fact]
-    public void ParseSuflae_LetDestructuringTuple()
+    public void ParseSuflae_VarDestructuringTuple()
     {
         string source = """
                         routine test()
@@ -188,7 +149,7 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_LetDestructuringRecord()
+    public void ParseSuflae_VarDestructuringRecord()
     {
         string source = """
                         routine test()
@@ -199,7 +160,7 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_LetNestedDestructuring()
+    public void ParseSuflae_VarNestedDestructuring()
     {
         string source = """
                         routine test()
@@ -210,7 +171,7 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_LetDestructuringWithAlias()
+    public void ParseSuflae_VarDestructuringWithAlias()
     {
         string source = """
                         routine test()
@@ -221,7 +182,7 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_LetDestructuringWithWildcard()
+    public void ParseSuflae_VarDestructuringWithWildcard()
     {
         string source = """
                         routine test()
@@ -399,7 +360,7 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_EntityLetFields_Rejected()
+    public void ParseSuflae_EntityMultipleVarFields_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
         // Fields use 'name: Type' syntax without var keywords
