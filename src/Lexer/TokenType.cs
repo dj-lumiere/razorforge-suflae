@@ -55,6 +55,18 @@ public enum TokenType
     /// <summary>Raw formatted text combining raw and inserting (rf"path: {dir}\file")</summary>
     RawFormattedText,
 
+    /// <summary>Marks the beginning of an f-string (f" or rf")</summary>
+    InsertionStart,
+
+    /// <summary>Marks the end of an f-string (closing ")</summary>
+    InsertionEnd,
+
+    /// <summary>Literal text portion within an f-string</summary>
+    TextSegment,
+
+    /// <summary>Format specifier after : in {expr:spec}</summary>
+    FormatSpec,
+
     /// <summary>Bytes literal with explicit prefix (b"hello")</summary>
     BytesLiteral,
 

@@ -63,6 +63,7 @@ public sealed partial class SemanticAnalyzer
             WhenExpression whenExpr => AnalyzeWhenExpression(when: whenExpr),
             WaitforExpression waitfor => AnalyzeWaitforExpression(waitfor: waitfor),
             DependentWaitforExpression depWaitfor => AnalyzeDependentWaitforExpression(depWaitfor: depWaitfor),
+            InsertedTextExpression insertedText => AnalyzeInsertedTextExpression(insertedText: insertedText),
             _ => HandleUnknownExpression(expression: expression)
         };
 
@@ -2654,6 +2655,23 @@ public sealed partial class SemanticAnalyzer
     {
         ReportWarning(SemanticWarningCode.UnknownExpressionType, $"Unknown expression type: {expression.GetType().Name}", expression.Location);
         return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Analyzes an inserted text expression (f-string).
+    /// Validates all embedded expressions and returns Text type.
+    /// </summary>
+    private TypeSymbol AnalyzeInsertedTextExpression(InsertedTextExpression insertedText)
+    {
+        foreach (InsertedTextPart part in insertedText.Parts)
+        {
+            if (part is ExpressionPart exprPart)
+            {
+                AnalyzeExpression(expression: exprPart.Expression);
+            }
+        }
+
+        return _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance;
     }
 
     /// <summary>

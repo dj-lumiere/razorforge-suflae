@@ -345,6 +345,7 @@ public partial class LLVMCodeGenerator
             RangeExpression range => EmitRange(sb, range),
             StealExpression steal => EmitSteal(sb, steal),
             TupleLiteralExpression tuple => EmitTupleLiteral(sb, tuple),
+            InsertedTextExpression => throw new NotImplementedException("Text insertion codegen not yet implemented"),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
     }

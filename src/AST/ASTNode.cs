@@ -286,6 +286,11 @@ public interface IAstVisitor<T>
     /// <remarks>^n creates an index that counts from the end of a sequence</remarks>
     T VisitBackIndexExpression(BackIndexExpression node);
 
+    /// <summary>Visits an inserted text expression node (f-string like f"Hello, {name}!")</summary>
+    /// <param name="node">The inserted text expression to visit</param>
+    /// <returns>Result of visiting the inserted text expression</returns>
+    T VisitInsertedTextExpression(InsertedTextExpression node);
+
     // Statement visitor methods - handle all statement node types
 
     /// <summary>Visits an expression statement node (expressions executed for side effects)</summary>

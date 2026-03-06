@@ -1,4 +1,5 @@
 using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
@@ -342,6 +343,145 @@ public class SuflaeExpressionTests
                         """;
 
         AssertParsesSuflae(source: source);
+    }
+
+    #endregion
+
+    #region Inserted Text AST Tests
+
+    /// <summary>
+    /// Helper to extract InsertedTextExpression from f-string assignment in a Suflae routine.
+    /// </summary>
+    private static InsertedTextExpression GetInsertedTextSuflae(string source)
+    {
+        Program program = AssertParsesSuflae(source: source);
+        var routine = (RoutineDeclaration)program.Declarations[0];
+        var block = (BlockStatement)routine.Body;
+        var declStmt = (DeclarationStatement)block.Statements[0];
+        var varDecl = (VariableDeclaration)declStmt.Declaration;
+        return (InsertedTextExpression)varDecl.Initializer!;
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_SimpleInterpolation_HasThreeParts()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"Hello, {name}!"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Equal(expected: 3, actual: expr.Parts.Count);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "Hello, ", actual: ((TextPart)expr.Parts[0]).Text);
+        Assert.IsType<ExpressionPart>(expr.Parts[1]);
+        Assert.IsType<TextPart>(expr.Parts[2]);
+        Assert.Equal(expected: "!", actual: ((TextPart)expr.Parts[2]).Text);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_MultipleInsertions_HasFiveParts()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{a} + {b} = {a + b}"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Equal(expected: 5, actual: expr.Parts.Count);
+        Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<TextPart>(expr.Parts[1]);
+        Assert.IsType<ExpressionPart>(expr.Parts[2]);
+        Assert.IsType<TextPart>(expr.Parts[3]);
+        Assert.IsType<ExpressionPart>(expr.Parts[4]);
+        Assert.IsType<BinaryExpression>(((ExpressionPart)expr.Parts[4]).Expression);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_EscapedBraces_SingleTextPart()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"Set: {{1, 2}}"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Single(collection: expr.Parts);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "Set: {1, 2}", actual: ((TextPart)expr.Parts[0]).Text);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_FormatSpec()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{value:D2}"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Single(collection: expr.Parts);
+        var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.Equal(expected: "D2", actual: exprPart.FormatSpec);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_NestedBrackets_IndexAccess()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{list[0]}"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Single(collection: expr.Parts);
+        var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<IndexExpression>(exprPart.Expression);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_NoInsertions_SingleTextPart()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"plain text"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Single(collection: expr.Parts);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "plain text", actual: ((TextPart)expr.Parts[0]).Text);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_AdjacentInsertions()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{x}{y}"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.Equal(expected: 2, actual: expr.Parts.Count);
+        Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<ExpressionPart>(expr.Parts[1]);
+    }
+
+    [Fact]
+    public void ParseSuflae_InsertedText_RawFormatted()
+    {
+        string source = """
+                        routine test()
+                          var msg = rf"path: {dir}\file"
+                        """;
+
+        InsertedTextExpression expr = GetInsertedTextSuflae(source: source);
+        Assert.True(condition: expr.IsRaw);
+        Assert.Equal(expected: 3, actual: expr.Parts.Count);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.IsType<ExpressionPart>(expr.Parts[1]);
+        Assert.IsType<TextPart>(expr.Parts[2]);
+        Assert.Contains(expectedSubstring: "\\", actualString: ((TextPart)expr.Parts[2]).Text);
     }
 
     #endregion

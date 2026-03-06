@@ -1301,6 +1301,12 @@ public partial class Parser
             return numericExpr!;
         }
 
+        // Inserted text (f-strings)
+        if (TryParseInsertedText(location: location, result: out Expression? insertedTextExpr))
+        {
+            return insertedTextExpr!;
+        }
+
         // Text literals
         if (TryParseTextLiteral(location: location, result: out Expression? textExpr))
         {
@@ -1482,9 +1488,7 @@ public partial class Parser
         result = null;
 
         if (!Match(TokenType.TextLiteral,
-                TokenType.FormattedText,
                 TokenType.RawText,
-                TokenType.RawFormattedText,
                 TokenType.BytesLiteral,
                 TokenType.BytesRawLiteral))
         {
@@ -1493,14 +1497,6 @@ public partial class Parser
 
         Token token = PeekToken(offset: -1);
         string value = token.Text;
-
-        // Formatted text literals (f"...")
-        if (value.StartsWith(value: "f\"") && value.EndsWith(value: "\""))
-        {
-            value = value.Substring(startIndex: 2, length: value.Length - 3);
-            result = new LiteralExpression(Value: value, LiteralType: TokenType.FormattedText, Location: location);
-            return true;
-        }
 
         // Regular text literals
         if (value.StartsWith(value: "\"") && value.EndsWith(value: "\""))
@@ -1517,6 +1513,66 @@ public partial class Parser
         }
 
         result = new LiteralExpression(Value: value, LiteralType: token.Type, Location: location);
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to parse an inserted text expression (f-string).
+    /// Consumes InsertionStart, then text segments and expression parts, until InsertionEnd.
+    /// </summary>
+    private bool TryParseInsertedText(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        if (!Match(type: TokenType.InsertionStart))
+        {
+            return false;
+        }
+
+        Token startToken = PeekToken(offset: -1);
+        bool isRaw = startToken.Text.StartsWith(value: "rf");
+        var parts = new List<InsertedTextPart>();
+
+        while (!IsAtEnd && !Check(type: TokenType.InsertionEnd))
+        {
+            if (Match(type: TokenType.TextSegment))
+            {
+                Token textToken = PeekToken(offset: -1);
+                parts.Add(item: new TextPart(
+                    Text: textToken.Text,
+                    Location: GetLocation(token: textToken)));
+            }
+            else if (Match(type: TokenType.LeftBrace))
+            {
+                Token braceToken = PeekToken(offset: -1);
+                SourceLocation partLocation = GetLocation(token: braceToken);
+
+                // Parse the expression inside the braces
+                Expression expr = ParseExpression();
+
+                // Check for optional format specifier
+                string? formatSpec = null;
+                if (Match(type: TokenType.FormatSpec))
+                {
+                    formatSpec = PeekToken(offset: -1).Text;
+                }
+
+                Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after insertion expression");
+
+                parts.Add(item: new ExpressionPart(
+                    Expression: expr,
+                    FormatSpec: formatSpec,
+                    Location: partLocation));
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        Consume(type: TokenType.InsertionEnd, errorMessage: "Expected closing '\"' for inserted text");
+
+        result = new InsertedTextExpression(Parts: parts, IsRaw: isRaw, Location: location);
         return true;
     }
 

@@ -1,4 +1,5 @@
 ﻿using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
@@ -475,6 +476,175 @@ public class ExpressionTests
                         """;
 
         AssertParses(source: source);
+    }
+
+    #endregion
+
+    #region Inserted Text AST Tests
+
+    /// <summary>
+    /// Helper to extract InsertedTextExpression from f-string assignment in a routine.
+    /// </summary>
+    private static InsertedTextExpression GetInsertedText(string source)
+    {
+        Program program = AssertParses(source: source);
+        var routine = (RoutineDeclaration)program.Declarations[0];
+        var block = (BlockStatement)routine.Body;
+        var declStmt = (DeclarationStatement)block.Statements[0];
+        var varDecl = (VariableDeclaration)declStmt.Declaration;
+        return (InsertedTextExpression)varDecl.Initializer!;
+    }
+
+    [Fact]
+    public void Parse_InsertedText_SimpleInterpolation_HasThreeParts()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"Hello, {name}!"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Equal(expected: 3, actual: expr.Parts.Count);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "Hello, ", actual: ((TextPart)expr.Parts[0]).Text);
+        Assert.IsType<ExpressionPart>(expr.Parts[1]);
+        Assert.IsType<IdentifierExpression>(((ExpressionPart)expr.Parts[1]).Expression);
+        Assert.IsType<TextPart>(expr.Parts[2]);
+        Assert.Equal(expected: "!", actual: ((TextPart)expr.Parts[2]).Text);
+        Assert.False(condition: expr.IsRaw);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_MultipleInsertions_HasFiveParts()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{a} + {b} = {a + b}"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Equal(expected: 5, actual: expr.Parts.Count);
+        Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<TextPart>(expr.Parts[1]);
+        Assert.Equal(expected: " + ", actual: ((TextPart)expr.Parts[1]).Text);
+        Assert.IsType<ExpressionPart>(expr.Parts[2]);
+        Assert.IsType<TextPart>(expr.Parts[3]);
+        Assert.Equal(expected: " = ", actual: ((TextPart)expr.Parts[3]).Text);
+        Assert.IsType<ExpressionPart>(expr.Parts[4]);
+        // The third expression should be a + b (binary expression)
+        Assert.IsType<BinaryExpression>(((ExpressionPart)expr.Parts[4]).Expression);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_EscapedBraces_SingleTextPart()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"Set: {{1, 2}}"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Single(collection: expr.Parts);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "Set: {1, 2}", actual: ((TextPart)expr.Parts[0]).Text);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_FormatSpec()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{value:D2}"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Single(collection: expr.Parts);
+        var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.Equal(expected: "D2", actual: exprPart.FormatSpec);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_NestedBrackets_IndexAccess()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{list[0]}"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Single(collection: expr.Parts);
+        var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<IndexExpression>(exprPart.Expression);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_NestedBrackets_FunctionCall()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{compute(x, y)}"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Single(collection: expr.Parts);
+        var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<CallExpression>(exprPart.Expression);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_NoInsertions_SingleTextPart()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"plain text"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Single(collection: expr.Parts);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "plain text", actual: ((TextPart)expr.Parts[0]).Text);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_AdjacentInsertions()
+    {
+        string source = """
+                        routine test()
+                          var msg = f"{x}{y}"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.Equal(expected: 2, actual: expr.Parts.Count);
+        Assert.IsType<ExpressionPart>(expr.Parts[0]);
+        Assert.IsType<ExpressionPart>(expr.Parts[1]);
+    }
+
+    [Fact]
+    public void Parse_InsertedText_RawFormatted()
+    {
+        string source = """
+                        routine test()
+                          var msg = rf"path: {dir}\file"
+                          return
+                        """;
+
+        InsertedTextExpression expr = GetInsertedText(source: source);
+        Assert.True(condition: expr.IsRaw);
+        Assert.Equal(expected: 3, actual: expr.Parts.Count);
+        Assert.IsType<TextPart>(expr.Parts[0]);
+        Assert.Equal(expected: "path: ", actual: ((TextPart)expr.Parts[0]).Text);
+        Assert.IsType<ExpressionPart>(expr.Parts[1]);
+        Assert.IsType<TextPart>(expr.Parts[2]);
+        // Raw mode: backslash is preserved
+        Assert.Contains(expectedSubstring: "\\", actualString: ((TextPart)expr.Parts[2]).Text);
     }
 
     #endregion

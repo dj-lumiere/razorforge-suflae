@@ -67,6 +67,36 @@ public record LiteralExpression(object Value, TokenType LiteralType, SourceLocat
 }
 
 /// <summary>
+/// Abstract base for parts of an inserted text expression (f-string).
+/// </summary>
+public abstract record InsertedTextPart(SourceLocation Location);
+
+/// <summary>
+/// A literal text segment within an f-string.
+/// </summary>
+public record TextPart(string Text, SourceLocation Location) : InsertedTextPart(Location: Location);
+
+/// <summary>
+/// An embedded expression within an f-string, with optional format specifier.
+/// </summary>
+public record ExpressionPart(Expression Expression, string? FormatSpec, SourceLocation Location)
+    : InsertedTextPart(Location: Location);
+
+/// <summary>
+/// Expression representing an f-string with text insertion: f"Hello, {name}!"
+/// Contains a list of text and expression parts.
+/// </summary>
+public record InsertedTextExpression(List<InsertedTextPart> Parts, bool IsRaw, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitInsertedTextExpression(node: this);
+    }
+}
+
+/// <summary>
 /// Expression representing a list literal: [1, 2, 3]
 /// Creates a List containing the specified elements.
 /// </summary>
