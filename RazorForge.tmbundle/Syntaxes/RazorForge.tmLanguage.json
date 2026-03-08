@@ -14,10 +14,9 @@
     "comments": {
       "patterns": [
         {
-          "comment": "Documentation comment block",
+          "comment": "Documentation comment",
           "name": "comment.block.documentation.razorforge",
-          "begin": "###",
-          "end": "###"
+          "match": "###.*$"
         },
         {
           "comment": "Line comment",
