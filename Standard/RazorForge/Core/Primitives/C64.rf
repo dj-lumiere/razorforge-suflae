@@ -1,5 +1,203 @@
+# RazorForge C64 (double precision complex number) type implementation
+# Record of two F64 values (real and imaginary parts)
 module Core
 
+### Complex number with double precision (2x F64) components
+###
+### C64 is the default complex type for scientific computing.
+### Not @intrinsic — implemented as a record of two F64 fields.
+###
+### Example:
+###   var z = C64(real: 3.0, imag: 4.0)
+###   var w = z.conjugate()
+###   var r = z.abs()  # 5.0
 record C64 obeys Numeric, Equatable
   real: F64
   imag: F64
+
+# Complex constants
+preset C64_ZERO: C64 = C64(real: 0.0_f64, imag: 0.0_f64)
+preset C64_ONE: C64 = C64(real: 1.0_f64, imag: 0.0_f64)
+preset C64_I: C64 = C64(real: 0.0_f64, imag: 1.0_f64)
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Create a C64 from a real F64 value (imaginary part is zero)
+routine C64.__create__(from: F64) -> C64
+  return C64(real: from, imag: 0.0_f64)
+
+### Create a C64 from a C32 by extending both components (F32 -> F64)
+routine C64.__create__(from: C32) -> C64
+  return C64(real: F64(from.real), imag: F64(from.imag))
+
+### Create a C64 from a C128 by truncating both components (F128 -> F64)
+routine C64.__create__(from: C128) -> C64
+  return C64(real: F64(from.real), imag: F64(from.imag))
+
+### Create a C64 from polar coordinates (magnitude and angle)
+###
+### Args:
+###   r: The magnitude (distance from origin)
+###   theta: The angle in radians
+###
+### Example:
+###   var z = C64.from_polar(r: 5.0, theta: 0.9273)
+routine C64.from_polar(r: F64, theta: F64) -> C64
+  return C64(real: r * theta.cos(), imag: r * theta.sin())
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Complex addition: (a+bi) + (c+di) = (a+c) + (b+d)i
+routine C64.__add__(you: C64) -> C64
+  return C64(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Complex subtraction: (a+bi) - (c+di) = (a-c) + (b-d)i
+routine C64.__sub__(you: C64) -> C64
+  return C64(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+routine C64.__mul__(you: C64) -> C64
+  return C64(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
+
+### Complex division: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
+routine C64.__truediv__(you: C64) -> C64
+  var d = you.real * you.real + you.imag * you.imag
+  return C64(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
+
+### Complex negation: -(a+bi) = (-a) + (-b)i
+routine C64.__neg__() -> C64
+  return C64(real: -me.real, imag: -me.imag)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Component-wise equality (no ordering — complex numbers have no total order)
+routine C64.__eq__(you: C64) -> Bool
+  return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Magnitude: |z| = sqrt(real² + imag²)
+###
+### Example:
+###   C64(real: 3.0, imag: 4.0).abs()  # 5.0
+routine C64.abs() -> F64
+  return (me.real * me.real + me.imag * me.imag).sqrt()
+
+### Complex conjugate: flip the sign of the imaginary part
+###
+### Example:
+###   C64(real: 3.0, imag: 4.0).conjugate()  # C64(real: 3.0, imag: -4.0)
+routine C64.conjugate() -> C64
+  return C64(real: me.real, imag: -me.imag)
+
+### Squared magnitude: real² + imag² (avoids the sqrt in abs)
+routine C64.norm() -> F64
+  return me.real * me.real + me.imag * me.imag
+
+# ============================================================================
+# Trigonometric (sinh/cosh computed from exp since F64 lacks native versions)
+# ============================================================================
+
+### Complex sine: sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)
+routine C64.sin() -> C64
+  var ep = me.imag.exp()
+  var em = (-me.imag).exp()
+  var ch = (ep + em) / 2.0_f64
+  var sh = (ep - em) / 2.0_f64
+  return C64(real: me.real.sin() * ch, imag: me.real.cos() * sh)
+
+### Complex cosine: cos(a+bi) = cos(a)cosh(b) - i·sin(a)sinh(b)
+routine C64.cos() -> C64
+  var ep = me.imag.exp()
+  var em = (-me.imag).exp()
+  var ch = (ep + em) / 2.0_f64
+  var sh = (ep - em) / 2.0_f64
+  return C64(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
+
+### Complex tangent: sin(2a)/d + i·sinh(2b)/d where d = cos(2a) + cosh(2b)
+routine C64.tan() -> C64
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var ep = b2.exp()
+  var em = (-b2).exp()
+  var d = a2.cos() + (ep + em) / 2.0_f64
+  return C64(real: a2.sin() / d, imag: (ep - em) / 2.0_f64 / d)
+
+# ============================================================================
+# Hyperbolic (sinh/cosh computed from exp since F64 lacks native versions)
+# ============================================================================
+
+### Complex hyperbolic sine: sinh(a+bi) = sinh(a)cos(b) + i·cosh(a)sin(b)
+routine C64.sinh() -> C64
+  var ep = me.real.exp()
+  var em = (-me.real).exp()
+  var sh = (ep - em) / 2.0_f64
+  var ch = (ep + em) / 2.0_f64
+  return C64(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
+
+### Complex hyperbolic cosine: cosh(a+bi) = cosh(a)cos(b) + i·sinh(a)sin(b)
+routine C64.cosh() -> C64
+  var ep = me.real.exp()
+  var em = (-me.real).exp()
+  var sh = (ep - em) / 2.0_f64
+  var ch = (ep + em) / 2.0_f64
+  return C64(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
+
+### Complex hyperbolic tangent: sinh(2a)/d + i·sin(2b)/d where d = cosh(2a) + cos(2b)
+routine C64.tanh() -> C64
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var ep = a2.exp()
+  var em = (-a2).exp()
+  var d = (ep + em) / 2.0_f64 + b2.cos()
+  return C64(real: (ep - em) / 2.0_f64 / d, imag: b2.sin() / d)
+
+# ============================================================================
+# Exponential and Square Root
+# ============================================================================
+
+### Complex exponential: exp(a+bi) = exp(a)(cos(b) + i·sin(b))
+routine C64.exp() -> C64
+  var ea = me.real.exp()
+  return C64(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Complex square root (principal branch)
+###
+### Uses the algebraic formula (no atan2 required):
+###   sqrt(z) = sqrt((|z|+a)/2) + i·sign(b)·sqrt((|z|-a)/2)
+###
+### Example:
+###   C64(real: 3.0, imag: 4.0).sqrt()  # C64(real: 2.0, imag: 1.0)
+routine C64.sqrt() -> C64
+  var r = me.abs()
+  if r == 0.0_f64
+    return C64_ZERO
+  var rp = ((r + me.real) / 2.0_f64).sqrt()
+  var ip = ((r - me.real) / 2.0_f64).sqrt()
+  if me.imag < 0.0_f64
+    ip = -ip
+  return C64(real: rp, imag: ip)
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### True if both components are zero
+routine C64.is_zero() -> Bool
+  return me.real == 0.0_f64 and me.imag == 0.0_f64
+
+### True if the imaginary part is zero (purely real number)
+routine C64.is_real() -> Bool
+  return me.imag == 0.0_f64
+
+### True if the real part is zero (purely imaginary number)
+routine C64.is_imaginary() -> Bool
+  return me.real == 0.0_f64
