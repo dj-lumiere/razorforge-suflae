@@ -60,19 +60,15 @@ routine ValueList[T, N].last!() -> T
   return me[^1]
 
 routine ValueList[T, N].contains(value: T) -> Bool
-  var i = 0uaddr
-  while i < N
+  for i in 0 til N
     if me[i] == value
       return true
-    i = i + 1uaddr
   return false
 
 routine ValueList[T, N].index_of!(value: T) -> UAddr
-  var i = 0uaddr
-  while i < N
+  for i in 0 til N
     if me[i] == value
       return i
-    i = i + 1uaddr
   absent
 
 # ============================================================================
