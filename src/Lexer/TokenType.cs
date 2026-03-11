@@ -240,7 +240,7 @@ public enum TokenType
     /// <summary>
     /// Record declaration keyword.
     /// Value type for simple, fixed-size data with value semantics. Copied on assignment.
-    /// Use 'with' for modified copies (record with (field: value)).
+    /// Use 'with' for modified copies (record with (memberVar: value)).
     /// </summary>
     Record,
 
@@ -713,7 +713,7 @@ public enum TokenType
     /// <summary>Optional type operator (?)</summary>
     Question,
 
-    /// <summary>Attribute operator (@)</summary>
+    /// <summary>Annotation operator (@)</summary>
     At,
 
     /// <summary>Intrinsic type (@intrinsic) - LLVM IR primitive types like i8, i32, f64, ptr</summary>

@@ -83,14 +83,14 @@ public partial class Parser
 
     /// <summary>
     /// Indicates whether we're currently parsing inside a type body (record, entity, resident).
-    /// When true, allows field declarations without var keywords.
+    /// When true, allows member variable declarations without var keywords.
     /// </summary>
     private bool _parsingTypeBody = false;
 
     /// <summary>
     /// Indicates whether we're parsing inside a record body (actual record, not entity/resident).
     /// When true, only secret/posted/open modifiers are allowed (not external).
-    /// Also var/preset keywords are disallowed (use 'field: Type' syntax).
+    /// Also var/preset keywords are disallowed (use 'name: Type' syntax).
     /// </summary>
     private bool _parsingStrictRecordBody = false;
 
@@ -195,7 +195,7 @@ public partial class Parser
     ///
     /// TYPE/VALUE DECLARATIONS:
     ///   external     - FFI routine declaration (RazorForge only)
-    ///   field: Type  - Field declaration (inside type bodies)
+    ///   name: Type  - Member variable declaration (inside type bodies)
     ///   var          - Variable declarations
     ///   pass         - Empty placeholder (RazorForge only)
     ///   routine      - Function declaration
@@ -259,7 +259,7 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Parse attributes (e.g., @inline, @crash_only, @intrinsic("name"))
-        List<string> attributes = ParseAttributes();
+        List<string> attributes = ParseAnnotations();
 
         // Skip newlines between attributes and the declaration they modify
         // e.g., @readonly\nroutine foo() should work
@@ -343,23 +343,23 @@ public partial class Parser
             {
                 throw new GrammarException(
                     GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    $"'{visibility.ToString().ToLower()}' is not valid for record fields. " +
-                    "Record fields can use 'secret', 'posted', or 'open'",
+                    $"'{visibility.ToString().ToLower()}' is not valid for record member variables. " +
+                    "Record member variables can use 'secret', 'posted', or 'open'",
                     fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
-            return ParseFieldDeclaration(visibility: visibility);
+            return ParseMemberVariableDeclaration(visibility: visibility);
         }
 
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Preset))
         {
             // In type bodies (record, entity, resident), var/preset are not allowed
-            // Fields use 'name: Type' syntax without var keywords
+            // MemberVariables use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
             {
                 throw new GrammarException(
                     GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    "Type fields cannot use 'var' or 'preset'. " +
+                    "Type member variables cannot use 'var' or 'preset'. " +
                     "Use 'name: Type' syntax instead",
                     fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
@@ -496,8 +496,8 @@ public partial class Parser
         // If we have attributes but no declaration, that's an error
         if (attributes.Count > 0)
         {
-            throw ThrowParseError(GrammarDiagnosticCode.AttributesWithoutDeclaration,
-                "Attributes must be followed by a declaration (routine, entity, record, etc.)");
+            throw ThrowParseError(GrammarDiagnosticCode.AnnotationsWithoutDeclaration,
+                "Annotations must be followed by a declaration (routine, entity, record, etc.)");
         }
 
         // Otherwise parse as statement

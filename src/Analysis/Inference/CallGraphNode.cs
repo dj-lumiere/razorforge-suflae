@@ -24,7 +24,7 @@ public sealed class CallGraphNode
     public ModificationCategory InferredModification { get; set; } = ModificationCategory.Readonly;
 
     /// <summary>
-    /// Whether this routine directly writes to fields of 'me'.
+    /// Whether this routine directly writes to member variables of 'me'.
     /// </summary>
     public bool DirectlyModifies { get; set; }
 

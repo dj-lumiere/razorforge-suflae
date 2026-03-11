@@ -84,7 +84,7 @@ public record DeclarationStatement(Declaration Declaration, SourceLocation Locat
 /// Supports various assignment targets:
 /// <list type="bullet">
 /// <item>Variables: x = 42</item>
-/// <item>Object properties: obj.field = value</item>
+/// <item>Object properties: obj.memberVar = value</item>
 /// <item>Array elements: arr[index] = item</item>
 /// <item>Chained assignments: a.b.c = value</item>
 /// </list>
@@ -100,17 +100,17 @@ public record AssignmentStatement(Expression Target, Expression Value, SourceLoc
 }
 
 /// <summary>
-/// Record/entity destructuring statement: var (field, field2) = expression
-/// Unpacks record/entity fields into multiple variables based on field names.
-/// Destructuring only works when ALL fields of the type are public.
+/// Record/entity destructuring statement: var (memberVar, memberVar2) = expression
+/// Unpacks record/entity member variables into multiple variables based on member variable names.
+/// Destructuring only works when ALL member variables of the type are public.
 /// </summary>
-/// <param name="Pattern">The destructuring pattern with field bindings</param>
+/// <param name="Pattern">The destructuring pattern with member variable bindings</param>
 /// <param name="Initializer">Expression that evaluates to a record/entity value</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>var (center, radius) = circle - field name matches binding name</item>
+/// <item>var (center, radius) = circle - member variable name matches binding name</item>
 /// <item>var (center: c, radius: r) = circle - aliased destructuring</item>
 /// <item>var ((x, y), radius) = circle - nested destructuring</item>
 /// </list>
@@ -681,7 +681,7 @@ public record ComparisonPattern(
 /// </summary>
 /// <param name="VariantType">Optional type qualifier (e.g., "Message" in Message.TEXT)</param>
 /// <param name="CaseName">The variant case name (e.g., "TEXT", "NUMBER")</param>
-/// <param name="Bindings">Optional field bindings for destructuring the case data</param>
+/// <param name="Bindings">Optional member variable bindings for destructuring the case data</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
@@ -700,22 +700,22 @@ public record VariantPattern(
 
 /// <summary>
 /// Represents a single binding in destructuring patterns.
-/// Supports both direct field-name binding and aliased binding.
+/// Supports both direct member-variable-name binding and aliased binding.
 /// </summary>
-/// <param name="FieldName">The field name to extract (null for positional binding)</param>
+/// <param name="MemberVariableName">The member variable name to extract (null for positional binding)</param>
 /// <param name="BindingName">The variable name to bind the value to</param>
 /// <param name="NestedPattern">Optional nested pattern for deep destructuring</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>(center, radius) - field name matches binding name</item>
+/// <item>(center, radius) - member variable name matches binding name</item>
 /// <item>(center: c, radius: r) - explicit alias</item>
 /// <item>((x, y), radius) - nested destructuring</item>
 /// </list>
 /// </remarks>
 public record DestructuringBinding(
-    string? FieldName,
+    string? MemberVariableName,
     string? BindingName,
     Pattern? NestedPattern,
     SourceLocation Location);
@@ -787,9 +787,9 @@ public record ElsePattern(string? VariableName, SourceLocation Location)
 
 /// <summary>
 /// Pattern for destructuring records and similar types.
-/// Used in var bindings and pattern matching for extracting fields.
+/// Used in var bindings and pattern matching for extracting member variables.
 /// </summary>
-/// <param name="Bindings">List of field bindings to extract</param>
+/// <param name="Bindings">List of member variable bindings to extract</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
@@ -808,17 +808,17 @@ public record DestructuringPattern(
 /// Used in is expressions like: value is Point (x, y)
 /// </summary>
 /// <param name="Type">The type to check and destructure</param>
-/// <param name="Bindings">List of field bindings to extract from the matched value</param>
+/// <param name="Bindings">List of member variable bindings to extract from the matched value</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>value is Point (x, y) - positional, field names match binding names</item>
-/// <item>value is Point (x: a, y: b) - named, field 'x' binds to 'a', 'y' binds to 'b'</item>
+/// <item>value is Point (x, y) - positional, member variable names match binding names</item>
+/// <item>value is Point (x: a, y: b) - named, member variable 'x' binds to 'a', 'y' binds to 'b'</item>
 /// <item>value is Line ((x: x1, y: y1), (x: x2, y: y2)) - nested destructuring</item>
 /// <item>value is Rectangle (topLeft, _) - partial destructuring with wildcard</item>
 /// </list>
-/// Destructuring is only allowed when ALL fields of the type are public.
+/// Destructuring is only allowed when ALL member variables of the type are public.
 /// </remarks>
 public record TypeDestructuringPattern(
     TypeExpression Type,

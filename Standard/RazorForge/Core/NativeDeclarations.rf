@@ -108,7 +108,7 @@ external("C") routine rf_D64_from_string(cstr: CStr) -> U64
 
 # ============================================================================
 # D128 (Decimal128) - Intel DFP Library
-# D128 is stored as two U64 fields (low, high)
+# D128 is stored as two U64 member variables (low, high)
 # Functions take (low: U64, high: U64) pairs and return D128
 # ============================================================================
 

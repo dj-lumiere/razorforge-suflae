@@ -6,7 +6,7 @@ module Core
 ###
 ### C32 is suited for graphics, games, and signal processing where
 ### memory footprint matters more than precision.
-### Not @intrinsic — implemented as a record of two F32 fields.
+### Not @intrinsic — implemented as a record of two F32 member variables.
 ###
 ### Example:
 ###   var z = C32(real: 3.0_f32, imag: 4.0_f32)

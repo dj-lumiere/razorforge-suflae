@@ -119,7 +119,7 @@ public partial class Parser
 
     /// <summary>
     /// Parses with expressions (lowest precedence operator).
-    /// Syntax: <c>expr with .field = value, .nested.field = value, [index] = value</c>
+    /// Syntax: <c>expr with .memberVar = value, .nested.memberVar = value, [index] = value</c>
     /// </summary>
     /// <returns>The parsed expression, possibly a with expression.</returns>
     private Expression ParseWith()
@@ -129,7 +129,7 @@ public partial class Parser
         if (Match(type: TokenType.With))
         {
             SourceLocation withLocation = GetLocation(token: PeekToken(offset: -1));
-            var updates = new List<(List<string>? FieldPath, Expression? Index, Expression Value)>();
+            var updates = new List<(List<string>? MemberVariablePath, Expression? Index, Expression Value)>();
 
             do
             {
@@ -144,16 +144,16 @@ public partial class Parser
                 }
                 else if (Match(type: TokenType.Dot))
                 {
-                    // Field update: .field or .field.nested
+                    // Member variable update: .memberVar or .memberVar.nested
                     fieldPath = new List<string>();
-                    Token fieldToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name after '.' in with expression");
-                    fieldPath.Add(item: fieldToken.Text);
+                    Token memberVariableToken = Consume(type: TokenType.Identifier, errorMessage: "Expected member variable name after '.' in with expression");
+                    fieldPath.Add(item: memberVariableToken.Text);
 
-                    // Parse nested field path: .address.city
+                    // Parse nested member variable path: .address.city
                     while (Check(type: TokenType.Dot) && PeekToken(offset: 1).Type == TokenType.Identifier)
                     {
                         Advance(); // consume dot
-                        Token nestedToken = Consume(type: TokenType.Identifier, errorMessage: "Expected field name in with expression");
+                        Token nestedToken = Consume(type: TokenType.Identifier, errorMessage: "Expected member variable name in with expression");
                         fieldPath.Add(item: nestedToken.Text);
                     }
                 }
@@ -166,7 +166,7 @@ public partial class Parser
                         _language);
                 }
 
-                Consume(type: TokenType.Assign, errorMessage: "Expected '=' after field or index in with expression");
+                Consume(type: TokenType.Assign, errorMessage: "Expected '=' after member variable or index in with expression");
                 Expression value = ParseInlineConditional();
                 updates.Add(item: (fieldPath, indexExpr, value));
             } while (Match(type: TokenType.Comma));
@@ -419,7 +419,7 @@ public partial class Parser
     /// - <c>expr is Type</c> - type check
     /// - <c>expr is Type binding</c> - type check with variable binding
     /// - <c>expr is Type (field1, field2)</c> - destructuring pattern
-    /// - <c>expr is Type (field: binding)</c> - named destructuring
+    /// - <c>expr is Type (memberVar: binding)</c> - named destructuring
     /// - <c>expr isnot Type</c> - negated type check
     /// - <c>expr in collection</c> - membership test (desugars to collection.__contains__(expr))
     /// - <c>expr notin collection</c> - negated membership test
@@ -595,7 +595,7 @@ public partial class Parser
 
     /// <summary>
     /// Parses destructuring bindings for pattern matching.
-    /// Syntax: (field1, field2) or (field: binding, ...) or nested ((x: x1, y: y1), ...)
+    /// Syntax: (memberVar1, memberVar2) or (memberVar: binding, ...) or nested ((x: x1, y: y1), ...)
     /// </summary>
     private List<DestructuringBinding> ParseDestructuringBindings()
     {
@@ -610,10 +610,10 @@ public partial class Parser
             // Check for nested pattern: (...)
             if (Check(type: TokenType.LeftParen))
             {
-                // Nested destructuring without type name - used for anonymous record fields
+                // Nested destructuring without type name - used for anonymous record member variables
                 List<DestructuringBinding> nestedBindings = ParseDestructuringBindings();
-                // For nested patterns without a field name, use index-based binding
-                bindings.Add(item: new DestructuringBinding(FieldName: null,
+                // For nested patterns without a member variable name, use index-based binding
+                bindings.Add(item: new DestructuringBinding(MemberVariableName: null,
                     BindingName: "_nested",
                     NestedPattern: new DestructuringPattern(Bindings: nestedBindings, Location: bindingLocation),
                     Location: bindingLocation));
@@ -622,7 +622,7 @@ public partial class Parser
             else if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_")
             {
                 Advance();
-                bindings.Add(item: new DestructuringBinding(FieldName: null,
+                bindings.Add(item: new DestructuringBinding(MemberVariableName: null,
                     BindingName: "_",
                     NestedPattern: null,
                     Location: bindingLocation));
@@ -630,16 +630,16 @@ public partial class Parser
             else
             {
                 // Named or positional binding
-                string name = ConsumeIdentifier(errorMessage: "Expected field name or binding in destructuring pattern");
+                string name = ConsumeIdentifier(errorMessage: "Expected member variable name or binding in destructuring pattern");
 
                 if (Match(type: TokenType.Colon))
                 {
-                    // Named binding: field: binding
+                    // Named binding: memberVar: binding
                     // Check if binding is a nested pattern
                     if (Check(type: TokenType.LeftParen))
                     {
                         List<DestructuringBinding> nestedBindings = ParseDestructuringBindings();
-                        bindings.Add(item: new DestructuringBinding(FieldName: name,
+                        bindings.Add(item: new DestructuringBinding(MemberVariableName: name,
                             BindingName: name,
                             NestedPattern: new DestructuringPattern(Bindings: nestedBindings, Location: bindingLocation),
                             Location: bindingLocation));
@@ -647,7 +647,7 @@ public partial class Parser
                     else
                     {
                         string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name after ':'");
-                        bindings.Add(item: new DestructuringBinding(FieldName: name,
+                        bindings.Add(item: new DestructuringBinding(MemberVariableName: name,
                             BindingName: bindingName,
                             NestedPattern: null,
                             Location: bindingLocation));
@@ -655,8 +655,8 @@ public partial class Parser
                 }
                 else
                 {
-                    // Positional binding: name binds to field of same name
-                    bindings.Add(item: new DestructuringBinding(FieldName: name,
+                    // Positional binding: name binds to member variable of same name
+                    bindings.Add(item: new DestructuringBinding(MemberVariableName: name,
                         BindingName: name,
                         NestedPattern: null,
                         Location: bindingLocation));
@@ -691,8 +691,8 @@ public partial class Parser
             {
                 // Nested destructuring - recursively parse with parens
                 List<DestructuringBinding> nestedBindings = ParseDestructuringBindings();
-                // For nested patterns without a field name, use null FieldName
-                bindings.Add(item: new DestructuringBinding(FieldName: null,
+                // For nested patterns without a member variable name, use null MemberVariableName
+                bindings.Add(item: new DestructuringBinding(MemberVariableName: null,
                     BindingName: null,
                     NestedPattern: new DestructuringPattern(Bindings: nestedBindings, Location: bindingLocation),
                     Location: bindingLocation));
@@ -701,7 +701,7 @@ public partial class Parser
             else if (Check(type: TokenType.Identifier) && CurrentToken.Text == "_")
             {
                 Advance();
-                bindings.Add(item: new DestructuringBinding(FieldName: null,
+                bindings.Add(item: new DestructuringBinding(MemberVariableName: null,
                     BindingName: "_",
                     NestedPattern: null,
                     Location: bindingLocation));
@@ -709,15 +709,15 @@ public partial class Parser
             else
             {
                 // Named or positional binding
-                string name = ConsumeIdentifier(errorMessage: "Expected field name or binding in destructuring pattern");
+                string name = ConsumeIdentifier(errorMessage: "Expected member variable name or binding in destructuring pattern");
 
                 if (Match(type: TokenType.Colon))
                 {
-                    // Named binding: field: binding or field: (nested)
+                    // Named binding: memberVar: binding or memberVar: (nested)
                     if (Check(type: TokenType.LeftParen))
                     {
                         List<DestructuringBinding> nestedBindings = ParseDestructuringBindings();
-                        bindings.Add(item: new DestructuringBinding(FieldName: name,
+                        bindings.Add(item: new DestructuringBinding(MemberVariableName: name,
                             BindingName: null,
                             NestedPattern: new DestructuringPattern(Bindings: nestedBindings, Location: bindingLocation),
                             Location: bindingLocation));
@@ -725,7 +725,7 @@ public partial class Parser
                     else
                     {
                         string bindingName = ConsumeIdentifier(errorMessage: "Expected binding name after ':'");
-                        bindings.Add(item: new DestructuringBinding(FieldName: name,
+                        bindings.Add(item: new DestructuringBinding(MemberVariableName: name,
                             BindingName: bindingName,
                             NestedPattern: null,
                             Location: bindingLocation));
@@ -733,8 +733,8 @@ public partial class Parser
                 }
                 else
                 {
-                    // Positional binding: name binds to field of same name
-                    bindings.Add(item: new DestructuringBinding(FieldName: name,
+                    // Positional binding: name binds to member variable of same name
+                    bindings.Add(item: new DestructuringBinding(MemberVariableName: name,
                         BindingName: name,
                         NestedPattern: null,
                         Location: bindingLocation));
@@ -1016,7 +1016,7 @@ public partial class Parser
 
     /// <summary>
     /// Parses postfix expressions: function calls, indexing, member access, and more.
-    /// Syntax: <c>f(args)</c>, <c>x[index]</c>, <c>obj.member</c>, <c>obj.method!()</c>, <c>value with (field: newVal)</c>
+    /// Syntax: <c>f(args)</c>, <c>x[index]</c>, <c>obj.member</c>, <c>obj.method!()</c>, <c>value with (memberVar: newVal)</c>
     /// Handles generic method calls: <c>func[T]()</c>, <c>obj.method[T]()</c>
     /// </summary>
     /// <remarks>
@@ -1026,7 +1026,7 @@ public partial class Parser
     /// 3. Regular function call: func(args)
     /// 4. Index access: expr[index]
     /// 5. Member access: expr.member (with sub-cases for generic/failable methods)
-    /// 6. Functional update: expr with (field: value)
+    /// 6. Functional update: expr with (memberVar: value)
     ///
     /// Generic type arguments use '[' and ']' which don't conflict with any operators.
     /// </remarks>

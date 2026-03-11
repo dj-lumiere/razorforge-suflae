@@ -3,7 +3,7 @@ module Core
 # RoutineRecord - Runtime routine record for error tracking
 #
 # Each record represents a single routine call in the call history.
-# All fields are U32 IDs that reference builder-generated lookup tables.
+# All member variables are U32 IDs that reference builder-generated lookup tables.
 
 record RoutineRecord
   file_id: U32

@@ -81,7 +81,7 @@ public class MutabilityTests
     #region Entity Field Mutability
 
     [Fact]
-    public void Analyze_VarFieldMutation_NoError()
+    public void Analyze_VarMemberVariableMutation_NoError()
     {
         string source = """
                         entity Counter
@@ -97,10 +97,10 @@ public class MutabilityTests
     }
 
     [Fact]
-    public void Analyze_LetFieldMutation_ReportsError()
+    public void Analyze_LetMemberVariableMutation_ReportsError()
     {
         // All entity fields are immutable
-        // Mutating any field should produce an error
+        // Mutating any member variable should produce an error
         string source = """
                         entity User
                           id: U64
@@ -173,7 +173,7 @@ public class MutabilityTests
     #region Record Field Mutability
 
     [Fact]
-    public void Analyze_RecordFieldsImmutable_NoError()
+    public void Analyze_RecordMemberVariablesImmutable_NoError()
     {
         string source = """
                         record Point

@@ -36,8 +36,8 @@ public enum SemanticWarningCode
     /// <summary>Import is declared but no symbols from it are used.</summary>
     UnusedImport = 5,
 
-    /// <summary>Field is declared but never read.</summary>
-    UnusedField = 6,
+    /// <summary>Member variable is declared but never read.</summary>
+    UnusedMemberVariable = 6,
 
     /// <summary>Routine call's return value is unused. Use 'discard' to explicitly ignore it.</summary>
     UnusedRoutineReturnValue = 7,
@@ -80,8 +80,8 @@ public enum SemanticWarningCode
     /// <summary>Using a deprecated routine.</summary>
     DeprecatedRoutine = 101,
 
-    /// <summary>Using a deprecated field.</summary>
-    DeprecatedField = 102,
+    /// <summary>Using a deprecated member variable.</summary>
+    DeprecatedMemberVariable = 102,
 
     /// <summary>Using a deprecated syntax construct.</summary>
     DeprecatedSyntax = 103,

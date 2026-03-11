@@ -12,17 +12,17 @@ public sealed class ResidentTypeInfo : TypeInfo
 {
     public override TypeCategory Category => TypeCategory.Resident;
 
-    /// <summary>Fields declared in this resident.</summary>
-    public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
+    /// <summary>MemberVariables declared in this resident.</summary>
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; init; } = [];
 
     /// <summary>
-    /// Looks up a field by name.
+    /// Looks up a member variable by name.
     /// </summary>
-    /// <param name="fieldName">The name of the field to look up.</param>
-    /// <returns>The field info if found, null otherwise.</returns>
-    public FieldInfo? LookupField(string fieldName)
+    /// <param name="memberVariableName">The name of the member variable to look up.</param>
+    /// <returns>The member variable info if found, null otherwise.</returns>
+    public MemberVariableInfo? LookupMemberVariable(string memberVariableName)
     {
-        return Fields.FirstOrDefault(predicate: f => f.Name == fieldName);
+        return MemberVariables.FirstOrDefault(predicate: f => f.Name == memberVariableName);
     }
 
     /// <summary>Protocols this resident implements (obeys).</summary>
@@ -72,9 +72,9 @@ public sealed class ResidentTypeInfo : TypeInfo
             substitution[key: GenericParameters[i]] = typeArguments[i];
         }
 
-        // Substitute types in fields
-        var substitutedFields = Fields
-            .Select(selector: f => SubstituteFieldType(field: f, substitution: substitution))
+        // Substitute types in member variables
+        var substitutedMemberVariables = MemberVariables
+            .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
             .ToList();
 
         // Build resolved type name
@@ -83,7 +83,7 @@ public sealed class ResidentTypeInfo : TypeInfo
 
         return new ResidentTypeInfo(name: resolvedName)
         {
-            Fields = substitutedFields,
+            MemberVariables = substitutedMemberVariables,
             ImplementedProtocols = ImplementedProtocols,
             FixedSize = FixedSize, // May need recalculation based on type args
             TypeArguments = typeArguments,
@@ -95,16 +95,16 @@ public sealed class ResidentTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a field for generic resolution.
+    /// Substitutes the type in a member variable for generic resolution.
     /// </summary>
-    /// <param name="field">The field to substitute.</param>
+    /// <param name="memberVariable">The member variable to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
-    /// <returns>A new <see cref="FieldInfo"/> with the substituted type.</returns>
-    private static FieldInfo SubstituteFieldType(FieldInfo field,
+    /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>
+    private static MemberVariableInfo SubstituteMemberVariableType(MemberVariableInfo memberVariable,
         Dictionary<string, TypeInfo> substitution)
     {
-        TypeInfo substitutedType = SubstituteType(type: field.Type, substitution: substitution);
-        return field.WithSubstitutedType(newType: substitutedType);
+        TypeInfo substitutedType = SubstituteType(type: memberVariable.Type, substitution: substitution);
+        return memberVariable.WithSubstitutedType(newType: substitutedType);
     }
 
     /// <summary>

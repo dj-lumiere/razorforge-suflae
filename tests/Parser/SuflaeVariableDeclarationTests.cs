@@ -332,7 +332,7 @@ public class SuflaeVariableDeclarationTests
     #region Field Declarations in Types
 
     [Fact]
-    public void ParseSuflae_RecordFields()
+    public void ParseSuflae_RecordMemberVariables()
     {
         string source = """
                         record Point
@@ -346,10 +346,10 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_EntityVarFields_Rejected()
+    public void ParseSuflae_EntityVarMemberVariables_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var keywords
+        // MemberVariables use 'name: Type' syntax without var keywords
         string source = """
                         entity Counter
                           var count: Integer
@@ -360,10 +360,10 @@ public class SuflaeVariableDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_EntityMultipleVarFields_Rejected()
+    public void ParseSuflae_EntityMultipleVarMemberVariables_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var keywords
+        // MemberVariables use 'name: Type' syntax without var keywords
         string source = """
                         entity User
                           var id: U64

@@ -922,12 +922,12 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Tries to look up a field on the inner type of a wrapper type.
+    /// Tries to look up a member variable on the inner type of a wrapper type.
     /// </summary>
     /// <param name="wrapperType">The wrapper type.</param>
-    /// <param name="fieldName">The name of the field to look up.</param>
-    /// <returns>The field info if found, null otherwise.</returns>
-    private FieldInfo? LookupFieldOnWrapperInnerType(TypeSymbol wrapperType, string fieldName)
+    /// <param name="memberVariableName">The name of the member variable to look up.</param>
+    /// <returns>The member variable info if found, null otherwise.</returns>
+    private MemberVariableInfo? LookupMemberVariableOnWrapperInnerType(TypeSymbol wrapperType, string memberVariableName)
     {
         TypeSymbol? innerType = GetWrapperInnerType(wrapperType: wrapperType);
         if (innerType == null)
@@ -937,9 +937,9 @@ public sealed partial class SemanticAnalyzer
 
         return innerType switch
         {
-            RecordTypeInfo record => record.LookupField(fieldName: fieldName),
-            EntityTypeInfo entity => entity.LookupField(fieldName: fieldName),
-            ResidentTypeInfo resident => resident.LookupField(fieldName: fieldName),
+            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName),
+            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName),
+            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName),
             _ => null
         };
     }
@@ -996,7 +996,7 @@ public sealed partial class SemanticAnalyzer
     #region Memory Token Validation
 
     /// <summary>
-    /// Token types that cannot be returned from routines or stored in fields.
+    /// Token types that cannot be returned from routines or stored in member variables.
     /// These are inline-only access tokens that must stay within their scope.
     /// </summary>
     private static readonly HashSet<string> InlineOnlyTokenTypes =
@@ -1018,7 +1018,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Checks if a type is an inline-only token type (Viewed, Hijacked, Inspected, Seized).
-    /// These tokens cannot be returned from routines or stored in fields.
+    /// These tokens cannot be returned from routines or stored in member variables.
     /// </summary>
     private bool IsInlineOnlyTokenType(TypeSymbol type)
     {
@@ -1072,9 +1072,9 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that a type is not an inline-only token when used as a field type.
+    /// Validates that a type is not an inline-only token when used as a member variable type.
     /// </summary>
-    private void ValidateNotTokenFieldType(TypeSymbol type, string fieldName, SourceLocation location)
+    private void ValidateNotTokenMemberVariableType(TypeSymbol type, string memberVariableName, SourceLocation location)
     {
         if (_registry.Language != Language.RazorForge)
         {
@@ -1084,8 +1084,8 @@ public sealed partial class SemanticAnalyzer
         if (IsInlineOnlyTokenType(type: type))
         {
             ReportError(
-                SemanticDiagnosticCode.TokenFieldNotAllowed,
-                $"Cannot store {GetTokenKindDescription(type: type)} in field '{fieldName}'. Tokens are inline-only and cannot be stored.",
+                SemanticDiagnosticCode.TokenMemberVariableNotAllowed,
+                $"Cannot store {GetTokenKindDescription(type: type)} in member variable '{memberVariableName}'. Tokens are inline-only and cannot be stored.",
                 location);
         }
     }
@@ -1195,7 +1195,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that a field's setter visibility is equal to or more restrictive than its getter visibility.
+    /// Validates that a member variable's setter visibility is equal to or more restrictive than its getter visibility.
     /// The 3 valid combinations are:
     /// 1. open (getter: open, setter: open)
     /// 2. posted (getter: open, setter: secret)
@@ -1214,37 +1214,37 @@ public sealed partial class SemanticAnalyzer
     #region Access Modifier Enforcement
 
     /// <summary>
-    /// Gets the effective visibility for field write access.
-    /// For posted fields, write access is secret (only owner can write).
+    /// Gets the effective visibility for member variable write access.
+    /// For posted member variables, write access is secret (only owner can write).
     /// </summary>
-    /// <param name="field">The field to check.</param>
+    /// <param name="memberVariable">The member variable to check.</param>
     /// <returns>The effective visibility for write access.</returns>
-    private static VisibilityModifier GetEffectiveWriteVisibility(FieldInfo field)
+    private static VisibilityModifier GetEffectiveWriteVisibility(MemberVariableInfo memberVariable)
     {
-        // Posted fields have open read but secret write
-        return field.Visibility == VisibilityModifier.Posted
+        // Posted member variables have open read but secret write
+        return memberVariable.Visibility == VisibilityModifier.Posted
             ? VisibilityModifier.Secret
-            : field.Visibility;
+            : memberVariable.Visibility;
     }
 
     /// <summary>
-    /// Checks if access to a field is allowed from the current context.
+    /// Checks if access to a member variable is allowed from the current context.
     /// </summary>
-    /// <param name="field">The field being accessed.</param>
+    /// <param name="memberVariable">The member variable being accessed.</param>
     /// <param name="isWrite">Whether this is a write access (assignment).</param>
     /// <param name="accessLocation">Source location of the access site.</param>
-    private void ValidateFieldAccess(FieldInfo field, bool isWrite, SourceLocation accessLocation)
+    private void ValidateMemberVariableAccess(MemberVariableInfo memberVariable, bool isWrite, SourceLocation accessLocation)
     {
-        // For published fields, write access is restricted to private (owner only)
+        // For published member variables, write access is restricted to private (owner only)
         VisibilityModifier visibility = isWrite
-            ? GetEffectiveWriteVisibility(field: field)
-            : field.Visibility;
+            ? GetEffectiveWriteVisibility(memberVariable: memberVariable)
+            : memberVariable.Visibility;
 
         ValidateMemberAccess(
             visibility: visibility,
-            memberKind: "field",
-            memberName: field.Name,
-            ownerType: field.Owner,
+            memberKind: "member variable",
+            memberName: memberVariable.Name,
+            ownerType: memberVariable.Owner,
             accessLocation: accessLocation);
     }
 
@@ -1281,7 +1281,7 @@ public sealed partial class SemanticAnalyzer
     /// Validates access to a member based on visibility rules.
     /// </summary>
     /// <param name="visibility">The visibility modifier of the member.</param>
-    /// <param name="memberKind">The kind of member (field, method, etc.) for error messages.</param>
+    /// <param name="memberKind">The kind of member (member variable, method, etc.) for error messages.</param>
     /// <param name="memberName">The name of the member.</param>
     /// <param name="ownerType">The type that owns this member, if any.</param>
     /// <param name="accessLocation">Source location of the access site.</param>
@@ -1339,24 +1339,24 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates write access to a field, checking setter visibility.
+    /// Validates write access to a member variable, checking setter visibility.
     /// </summary>
     /// <param name="objectType">The type of the object being accessed.</param>
-    /// <param name="fieldName">The name of the field being written.</param>
+    /// <param name="memberVariableName">The name of the member variable being written.</param>
     /// <param name="location">The source location of the write.</param>
-    private void ValidateFieldWriteAccess(TypeSymbol objectType, string fieldName, SourceLocation location)
+    private void ValidateMemberVariableWriteAccess(TypeSymbol objectType, string memberVariableName, SourceLocation location)
     {
-        FieldInfo? field = objectType switch
+        MemberVariableInfo? memberVariable = objectType switch
         {
-            RecordTypeInfo record => record.LookupField(fieldName: fieldName),
-            EntityTypeInfo entity => entity.LookupField(fieldName: fieldName),
-            ResidentTypeInfo resident => resident.LookupField(fieldName: fieldName),
+            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName),
+            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName),
+            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName),
             _ => null
         };
 
-        if (field != null)
+        if (memberVariable != null)
         {
-            ValidateFieldAccess(field: field, isWrite: true, accessLocation: location);
+            ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: true, accessLocation: location);
         }
     }
 

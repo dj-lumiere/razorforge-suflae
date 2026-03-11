@@ -173,7 +173,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits code for an assignment statement.
-    /// Handles simple variable assignment and field assignment.
+    /// Handles simple variable assignment and member variable assignment.
     /// </summary>
     private void EmitAssignment(StringBuilder sb, AssignmentStatement assign)
     {
@@ -188,7 +188,7 @@ public partial class LLVMCodeGenerator
                 break;
 
             case MemberExpression member:
-                EmitFieldAssignment(sb, member, value);
+                EmitMemberVariableAssignment(sb, member, value);
                 break;
 
             case IndexExpression index:
@@ -215,9 +215,9 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits a store to a field.
+    /// Emits a store to a member variable.
     /// </summary>
-    private void EmitFieldAssignment(StringBuilder sb, MemberExpression member, string value)
+    private void EmitMemberVariableAssignment(StringBuilder sb, MemberExpression member, string value)
     {
         // Evaluate the object
         string target = EmitExpression(sb, member.Object);
@@ -225,11 +225,11 @@ public partial class LLVMCodeGenerator
 
         if (targetType is EntityTypeInfo entity)
         {
-            EmitEntityFieldWrite(sb, target, entity, member.PropertyName, value);
+            EmitEntityMemberVariableWrite(sb, target, entity, member.PropertyName, value);
         }
         else
         {
-            throw new InvalidOperationException($"Cannot assign to field on type: {targetType?.Name}");
+            throw new InvalidOperationException($"Cannot assign to member variable on type: {targetType?.Name}");
         }
     }
 
@@ -605,7 +605,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitVariantPatternMatch(StringBuilder sb, string subject, VariantPattern variant, string matchLabel, string failLabel)
     {
-        // Extract tag from variant (first field)
+        // Extract tag from variant (first member variable)
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb, $"  {tagPtr} = getelementptr {{ i32 }}, ptr {subject}, i32 0, i32 0");

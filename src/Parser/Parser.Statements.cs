@@ -586,7 +586,7 @@ public partial class Parser
                 }
             }
 
-            // Check for destructuring: Type.CASE (field1, field2), (field: alias), or ((x, y), z)
+            // Check for destructuring: Type.CASE (memberVar1, memberVar2), (memberVar: alias), or ((x, y), z)
             List<DestructuringBinding>? bindings = null;
             if (Match(type: TokenType.LeftParen))
             {
@@ -683,7 +683,7 @@ public partial class Parser
             }
         }
 
-        // Check for destructuring: Type.CASE (field1, field2), (field: alias), or ((x, y), z)
+        // Check for destructuring: Type.CASE (memberVar1, memberVar2), (memberVar: alias), or ((x, y), z)
         List<DestructuringBinding>? bindings = null;
         if (Match(type: TokenType.LeftParen))
         {
@@ -1072,9 +1072,9 @@ public partial class Parser
 
     /// <summary>
     /// Parses record/entity destructuring in var bindings.
-    /// Syntax: <c>var (field, field2) = expr</c> or <c>var (field: alias, field2: alias2) = expr</c>
+    /// Syntax: <c>var (memberVar, memberVar2) = expr</c> or <c>var (memberVar: alias, memberVar2: alias2) = expr</c>
     /// or nested: <c>var ((x, y), radius) = circle</c>
-    /// Destructuring only works for types where ALL fields are public.
+    /// Destructuring only works for types where ALL member variables are public.
     /// </summary>
     /// <returns>A <see cref="DestructuringStatement"/> AST node.</returns>
     private DestructuringStatement ParseDestructuringDeclaration()

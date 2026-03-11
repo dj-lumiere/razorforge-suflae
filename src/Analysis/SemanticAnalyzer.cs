@@ -56,8 +56,8 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Gets whether we're currently inside a danger block.</summary>
     private bool InDangerBlock => _dangerBlockDepth > 0;
 
-    /// <summary>Field names seen in the current type during body resolution (for duplicate detection).</summary>
-    private HashSet<string>? _currentTypeFieldNames;
+    /// <summary>Member variable names seen in the current type during body resolution (for duplicate detection).</summary>
+    private HashSet<string>? _currentTypeMemberVariableNames;
 
     /// <summary>The source file path of the program being analyzed (for import resolution).</summary>
     private string _currentFilePath = string.Empty;
@@ -98,7 +98,7 @@ public sealed partial class SemanticAnalyzer
         // Phase 1: Collect all type and routine declarations (forward declarations)
         CollectDeclarations(program: program);
 
-        // Phase 2: Resolve type bodies (fields, method signatures)
+        // Phase 2: Resolve type bodies (member variables, method signatures)
         ResolveTypeBodies(program: program);
 
         // Phase 2.5: Resolve routine signatures (parameter types, protocol-as-type desugaring)

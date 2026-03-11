@@ -5,37 +5,37 @@ using Symbols;
 
 /// <summary>
 /// Type information for records (value types with copy semantics).
-/// Includes "primitive-like" types (s32, bool, etc.) which are single-field records
+/// Includes "primitive-like" types (s32, bool, etc.) which are single-member-variable records
 /// wrapping LLVM intrinsics.
 /// </summary>
 public sealed class RecordTypeInfo : TypeInfo
 {
     public override TypeCategory Category => TypeCategory.Record;
 
-    /// <summary>Fields declared in this record.</summary>
-    public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
+    /// <summary>MemberVariables declared in this record.</summary>
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; init; } = [];
 
     /// <summary>Protocols this record implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
-    /// Whether this is a single-field record that wraps an intrinsic type.
+    /// Whether this is a single-member-variable record that wraps an intrinsic type.
     /// These records can be treated as their underlying LLVM type for operations.
     /// Examples: s32, bool, f64, uaddr
     /// </summary>
-    public bool IsSingleFieldWrapper => Fields is [{ Type: IntrinsicTypeInfo }];
+    public bool IsSingleMemberVariableWrapper => MemberVariables is [{ Type: IntrinsicTypeInfo }];
 
     /// <summary>
-    /// For single-field wrappers, gets the underlying intrinsic type.
-    /// Returns null if not a single-field wrapper.
+    /// For single-member-variable wrappers, gets the underlying intrinsic type.
+    /// Returns null if not a single-member-variable wrapper.
     /// </summary>
     public IntrinsicTypeInfo? UnderlyingIntrinsic =>
-        IsSingleFieldWrapper ? Fields[0].Type as IntrinsicTypeInfo : null;
+        IsSingleMemberVariableWrapper ? MemberVariables[0].Type as IntrinsicTypeInfo : null;
 
     /// <summary>
     /// The LLVM type representation for this record.
-    /// For single-field wrappers, this is the intrinsic type (e.g., "i32").
-    /// For multi-field records, this is a struct type.
+    /// For single-member-variable wrappers, this is the intrinsic type (e.g., "i32").
+    /// For multi-member-variable records, this is a struct type.
     /// </summary>
     public string LlvmType
     {
@@ -46,10 +46,10 @@ public sealed class RecordTypeInfo : TypeInfo
                 return UnderlyingIntrinsic.LlvmType;
             }
 
-            // Multi-field record: struct type
-            string fieldTypes = string.Join(separator: ", ",
-                values: Fields.Select(selector: GetLlvmTypeForField));
-            return $"{{ {fieldTypes} }}";
+            // Multi-member-variable record: struct type
+            string memberVariableTypes = string.Join(separator: ", ",
+                values: MemberVariables.Select(selector: GetLlvmTypeForMemberVariable));
+            return $"{{ {memberVariableTypes} }}";
         }
     }
 
@@ -59,13 +59,13 @@ public sealed class RecordTypeInfo : TypeInfo
     public RecordTypeInfo? GenericDefinition { get; init; }
 
     /// <summary>
-    /// Looks up a field by name in this record.
+    /// Looks up a member variable by name in this record.
     /// </summary>
-    /// <param name="fieldName">The name of the field to look up.</param>
-    /// <returns>The field info if found, null otherwise.</returns>
-    public FieldInfo? LookupField(string fieldName)
+    /// <param name="memberVariableName">The name of the member variable to look up.</param>
+    /// <returns>The member variable info if found, null otherwise.</returns>
+    public MemberVariableInfo? LookupMemberVariable(string memberVariableName)
     {
-        return Fields.FirstOrDefault(predicate: f => f.Name == fieldName);
+        return MemberVariables.FirstOrDefault(predicate: f => f.Name == memberVariableName);
     }
 
     /// <summary>
@@ -101,9 +101,9 @@ public sealed class RecordTypeInfo : TypeInfo
             substitution[key: GenericParameters[i]] = typeArguments[i];
         }
 
-        // Substitute types in fields
-        var substitutedFields = Fields
-            .Select(selector: f => SubstituteFieldType(field: f, substitution: substitution))
+        // Substitute types in member variables
+        var substitutedMemberVariables = MemberVariables
+            .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
             .ToList();
 
         // Build resolved type name (e.g., "List[s32]")
@@ -112,7 +112,7 @@ public sealed class RecordTypeInfo : TypeInfo
 
         return new RecordTypeInfo(name: resolvedName)
         {
-            Fields = substitutedFields,
+            MemberVariables = substitutedMemberVariables,
             ImplementedProtocols = ImplementedProtocols, // TODO: substitute protocol type args
             TypeArguments = typeArguments,
             GenericDefinition = this,
@@ -123,16 +123,16 @@ public sealed class RecordTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a field for generic resolution.
+    /// Substitutes the type in a member variable for generic resolution.
     /// </summary>
-    /// <param name="field">The field to substitute.</param>
+    /// <param name="memberVariable">The member variable to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
-    /// <returns>A new <see cref="FieldInfo"/> with the substituted type.</returns>
-    private static FieldInfo SubstituteFieldType(FieldInfo field,
+    /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>
+    private static MemberVariableInfo SubstituteMemberVariableType(MemberVariableInfo memberVariable,
         Dictionary<string, TypeInfo> substitution)
     {
-        TypeInfo substitutedType = SubstituteType(type: field.Type, substitution: substitution);
-        return field.WithSubstitutedType(newType: substitutedType);
+        TypeInfo substitutedType = SubstituteType(type: memberVariable.Type, substitution: substitution);
+        return memberVariable.WithSubstitutedType(newType: substitutedType);
     }
 
     /// <summary>
@@ -170,13 +170,13 @@ public sealed class RecordTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Gets the LLVM type string for a field.
+    /// Gets the LLVM type string for a member variable.
     /// </summary>
-    /// <param name="field">The field to get the LLVM type for.</param>
+    /// <param name="memberVariable">The member variable to get the LLVM type for.</param>
     /// <returns>The LLVM type string.</returns>
-    private static string GetLlvmTypeForField(FieldInfo field)
+    private static string GetLlvmTypeForMemberVariable(MemberVariableInfo memberVariable)
     {
-        return field.Type switch
+        return memberVariable.Type switch
         {
             IntrinsicTypeInfo intrinsic => intrinsic.LlvmType,
             RecordTypeInfo record => record.LlvmType,

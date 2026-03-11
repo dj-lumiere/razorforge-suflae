@@ -11,7 +11,7 @@ using TypeInfo = Types.TypeInfo;
 
 /// <summary>
 /// Central registry for all type information in a RazorForge/Suflae program.
-/// Provides unified lookup for types, routines, fields, and scopes.
+/// Provides unified lookup for types, routines, member variables, and scopes.
 /// </summary>
 public sealed class TypeRegistry
 {
@@ -326,7 +326,7 @@ public sealed class TypeRegistry
         // Create updated record with protocols
         var updatedRecord = new RecordTypeInfo(name: record.Name)
         {
-            Fields = record.Fields,
+            MemberVariables = record.MemberVariables,
             ImplementedProtocols = protocols,
             GenericParameters = record.GenericParameters,
             GenericConstraints = record.GenericConstraints,
@@ -340,11 +340,11 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Updates a record type with its resolved fields.
+    /// Updates a record type with its resolved member variables.
     /// </summary>
     /// <param name="recordName">The name of the record to update.</param>
-    /// <param name="fields">The resolved fields.</param>
-    public void UpdateRecordFields(string recordName, IReadOnlyList<FieldInfo> fields)
+    /// <param name="memberVariables">The resolved member variables.</param>
+    public void UpdateRecordMemberVariables(string recordName, IReadOnlyList<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: recordName, value: out TypeInfo? type))
         {
@@ -356,10 +356,10 @@ public sealed class TypeRegistry
             return;
         }
 
-        // Create updated record with fields
+        // Create updated record with member variables
         var updatedRecord = new RecordTypeInfo(name: record.Name)
         {
-            Fields = fields,
+            MemberVariables = memberVariables,
             ImplementedProtocols = record.ImplementedProtocols,
             GenericParameters = record.GenericParameters,
             GenericConstraints = record.GenericConstraints,
@@ -373,11 +373,11 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Updates an entity type with its resolved fields.
+    /// Updates an entity type with its resolved member variables.
     /// </summary>
     /// <param name="entityName">The name of the entity to update.</param>
-    /// <param name="fields">The resolved fields.</param>
-    public void UpdateEntityFields(string entityName, IReadOnlyList<FieldInfo> fields)
+    /// <param name="memberVariables">The resolved member variables.</param>
+    public void UpdateEntityMemberVariables(string entityName, IReadOnlyList<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: entityName, value: out TypeInfo? type))
         {
@@ -391,7 +391,7 @@ public sealed class TypeRegistry
 
         var updatedEntity = new EntityTypeInfo(name: entity.Name)
         {
-            Fields = fields,
+            MemberVariables = memberVariables,
             ImplementedProtocols = entity.ImplementedProtocols,
             GenericParameters = entity.GenericParameters,
             GenericConstraints = entity.GenericConstraints,
@@ -423,7 +423,7 @@ public sealed class TypeRegistry
 
         var updatedEntity = new EntityTypeInfo(name: entity.Name)
         {
-            Fields = entity.Fields,
+            MemberVariables = entity.MemberVariables,
             ImplementedProtocols = protocols,
             GenericParameters = entity.GenericParameters,
             GenericConstraints = entity.GenericConstraints,
@@ -437,11 +437,11 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Updates a resident type with its resolved fields.
+    /// Updates a resident type with its resolved member variables.
     /// </summary>
     /// <param name="residentName">The name of the resident to update.</param>
-    /// <param name="fields">The resolved fields.</param>
-    public void UpdateResidentFields(string residentName, IReadOnlyList<FieldInfo> fields)
+    /// <param name="memberVariables">The resolved member variables.</param>
+    public void UpdateResidentMemberVariables(string residentName, IReadOnlyList<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: residentName, value: out TypeInfo? type))
         {
@@ -455,7 +455,7 @@ public sealed class TypeRegistry
 
         var updatedResident = new ResidentTypeInfo(name: resident.Name)
         {
-            Fields = fields,
+            MemberVariables = memberVariables,
             ImplementedProtocols = resident.ImplementedProtocols,
             FixedSize = resident.FixedSize,
             GenericParameters = resident.GenericParameters,
@@ -488,7 +488,7 @@ public sealed class TypeRegistry
 
         var updatedResident = new ResidentTypeInfo(name: resident.Name)
         {
-            Fields = resident.Fields,
+            MemberVariables = resident.MemberVariables,
             ImplementedProtocols = protocols,
             FixedSize = resident.FixedSize,
             GenericParameters = resident.GenericParameters,
@@ -816,20 +816,20 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Checks if a type is a single-field record wrapping an intrinsic.
+    /// Checks if a type is a single-member-variable record wrapping an intrinsic.
     /// </summary>
     /// <param name="type">The type to check.</param>
-    /// <returns>True if the type is a single-field wrapper, false otherwise.</returns>
-    public bool IsSingleFieldWrapper(TypeInfo type)
+    /// <returns>True if the type is a single-member-variable wrapper, false otherwise.</returns>
+    public bool IsSingleMemberVariableWrapper(TypeInfo type)
     {
-        return type is RecordTypeInfo { IsSingleFieldWrapper: true };
+        return type is RecordTypeInfo { IsSingleMemberVariableWrapper: true };
     }
 
     /// <summary>
-    /// Gets the underlying intrinsic type for a single-field wrapper.
+    /// Gets the underlying intrinsic type for a single-member-variable wrapper.
     /// </summary>
     /// <param name="type">The type to extract the intrinsic from.</param>
-    /// <returns>The underlying intrinsic type, or null if not a single-field wrapper.</returns>
+    /// <returns>The underlying intrinsic type, or null if not a single-member-variable wrapper.</returns>
     public IntrinsicTypeInfo? GetUnderlyingIntrinsic(TypeInfo type)
     {
         return type is RecordTypeInfo record ? record.UnderlyingIntrinsic : null;
@@ -952,7 +952,7 @@ public sealed class TypeRegistry
             Visibility = routine.Visibility,
             Location = routine.Location,
             Module = routine.Module,
-            Attributes = routine.Attributes,
+            Annotations = routine.Annotations,
             CallingConvention = routine.CallingConvention,
             IsVariadic = routine.IsVariadic,
             IsDangerous = routine.IsDangerous

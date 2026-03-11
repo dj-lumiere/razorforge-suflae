@@ -75,7 +75,7 @@ public class ProtocolImplementationTests
 
     #endregion
 
-    #region Protocol Method Attributes
+    #region Protocol Method Annotations
 
     [Fact]
     public void Analyze_MethodMissingReadonly_ReportsError()
@@ -94,7 +94,7 @@ public class ProtocolImplementationTests
                         """;
 
         Analyze(source: source);
-        // Should warn about missing @readonly attribute
+        // Should warn about missing @readonly annotation
     }
 
     [Fact]

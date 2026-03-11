@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing expressions in RazorForge:
-/// method calls, field access, indexing, lambdas, closures, string interpolation.
+/// method calls, member variable access, indexing, lambdas, closures, string interpolation.
 /// </summary>
 public class ExpressionTests
 {
@@ -102,7 +102,7 @@ public class ExpressionTests
     #region Field Access Tests
 
     [Fact]
-    public void Parse_SimpleFieldAccess()
+    public void Parse_SimpleMemberVariableAccess()
     {
         string source = """
                         routine test()
@@ -114,7 +114,7 @@ public class ExpressionTests
     }
 
     [Fact]
-    public void Parse_ChainedFieldAccess()
+    public void Parse_ChainedMemberVariableAccess()
     {
         string source = """
                         routine test()
@@ -126,7 +126,7 @@ public class ExpressionTests
     }
 
     [Fact]
-    public void Parse_MixedFieldAndMethodAccess()
+    public void Parse_MixedMemberVariableAndMethodAccess()
     {
         string source = """
                         routine test()
@@ -138,7 +138,7 @@ public class ExpressionTests
     }
 
     [Fact]
-    public void Parse_MeFieldAccess()
+    public void Parse_MeMemberVariableAccess()
     {
         string source = """
                         @readonly
@@ -1124,7 +1124,7 @@ public class ExpressionTests
     #region With Expression Tests
 
     [Fact]
-    public void Parse_WithFieldUpdate()
+    public void Parse_WithMemberVariableUpdate()
     {
         string source = """
                         routine test()
@@ -1160,7 +1160,7 @@ public class ExpressionTests
     }
 
     [Fact]
-    public void Parse_WithNestedField()
+    public void Parse_WithNestedMemberVariable()
     {
         string source = """
                         routine test()
@@ -1201,14 +1201,14 @@ public class ExpressionTests
 
         Assert.NotNull(withExpr);
         Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
-        Assert.Equal(expected: "x", actual: withExpr.Updates[0].FieldPath![0]);
-        Assert.Equal(expected: "y", actual: withExpr.Updates[1].FieldPath![0]);
+        Assert.Equal(expected: "x", actual: withExpr.Updates[0].MemberVariablePath![0]);
+        Assert.Equal(expected: "y", actual: withExpr.Updates[1].MemberVariablePath![0]);
         Assert.Null(withExpr.Updates[0].Index);
         Assert.Null(withExpr.Updates[1].Index);
     }
 
     [Fact]
-    public void Parse_WithExpression_NestedFieldPath_ASTStructure()
+    public void Parse_WithExpression_NestedMemberVariablePath_ASTStructure()
     {
         string source = """
                         routine test()
@@ -1225,9 +1225,9 @@ public class ExpressionTests
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
-        Assert.Equal(expected: 2, actual: withExpr.Updates[0].FieldPath!.Count);
-        Assert.Equal(expected: "address", actual: withExpr.Updates[0].FieldPath![0]);
-        Assert.Equal(expected: "city", actual: withExpr.Updates[0].FieldPath![1]);
+        Assert.Equal(expected: 2, actual: withExpr.Updates[0].MemberVariablePath!.Count);
+        Assert.Equal(expected: "address", actual: withExpr.Updates[0].MemberVariablePath![0]);
+        Assert.Equal(expected: "city", actual: withExpr.Updates[0].MemberVariablePath![1]);
     }
 
     [Fact]
@@ -1248,7 +1248,7 @@ public class ExpressionTests
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
-        Assert.Null(withExpr.Updates[0].FieldPath);
+        Assert.Null(withExpr.Updates[0].MemberVariablePath);
         Assert.NotNull(withExpr.Updates[0].Index);
     }
 

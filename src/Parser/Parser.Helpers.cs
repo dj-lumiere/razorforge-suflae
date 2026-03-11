@@ -211,29 +211,29 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Parses field initializers for record/entity literals: (field1: value1, field2: value2)
+    /// Parses member variable initializers for record/entity literals: (name1: value1, name2: value2)
     /// Called after '(' has been consumed.
     /// </summary>
-    /// <returns>List of field name and value pairs.</returns>
+    /// <returns>List of member variable name and value pairs.</returns>
     private List<(string Name, Expression Value)> ParseAllArgsCreatorFields()
     {
-        var fields = new List<(string Name, Expression Value)>();
+        var memberVariables = new List<(string Name, Expression Value)>();
 
         if (!Check(type: TokenType.RightParen))
         {
             do
             {
-                // Parse field name
-                string fieldName = ConsumeIdentifier(errorMessage: "Expected field name in record/entity literal");
-                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after field name");
+                // Parse member variable name
+                string memberVariableName = ConsumeIdentifier(errorMessage: "Expected member variable name in record/entity literal");
+                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after member variable name");
 
-                // Parse field value
+                // Parse member variable value
                 Expression value = ParseExpression();
-                fields.Add(item: (fieldName, value));
+                memberVariables.Add(item: (memberVariableName, value));
             } while (Match(type: TokenType.Comma));
         }
 
-        return fields;
+        return memberVariables;
     }
 
     #endregion

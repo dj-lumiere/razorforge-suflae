@@ -11,7 +11,7 @@ using static TestHelpers;
 /// </summary>
 public class AttributeTests
 {
-    #region Simple Attribute Tests
+    #region Simple Annotation Tests
 
     [Fact]
     public void Parse_ReadonlyAttribute()
@@ -24,8 +24,8 @@ public class AttributeTests
 
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Attributes);
-        Assert.Contains(expected: "readonly", collection: routine.Attributes);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "readonly", collection: routine.Annotations);
     }
 
     [Fact]
@@ -40,8 +40,8 @@ public class AttributeTests
 
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Attributes);
-        Assert.Contains(expected: "writable", collection: routine.Attributes);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "writable", collection: routine.Annotations);
     }
 
     [Fact]
@@ -57,8 +57,8 @@ public class AttributeTests
 
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Attributes);
-        Assert.Contains(expected: "crash_only", collection: routine.Attributes);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "crash_only", collection: routine.Annotations);
     }
 
     [Fact]
@@ -73,8 +73,8 @@ public class AttributeTests
 
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Attributes);
-        Assert.Contains(expected: "prelude", collection: routine.Attributes);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "prelude", collection: routine.Annotations);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Parameterized Attribute Tests
+    #region Parameterized Annotation Tests
 
     [Fact]
     public void Parse_ConfigAttributeTargetOs()
@@ -116,7 +116,7 @@ public class AttributeTests
 
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Attributes);
+        Assert.NotNull(@object: routine.Annotations);
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Compound Attribute Tests
+    #region Compound Annotation Tests
 
     [Fact]
     public void Parse_CompoundAttributes()
@@ -190,7 +190,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Type Attribute Tests
+    #region Type Annotation Tests
 
     [Fact]
     public void Parse_AttributeOnRecord()
@@ -245,7 +245,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Field Attribute Tests
+    #region Field Annotation Tests
 
     [Fact]
     public void Parse_AttributeOnField()
@@ -263,7 +263,7 @@ public class AttributeTests
     }
 
     [Fact]
-    public void Parse_AttributeOnEntityField()
+    public void Parse_AttributeOnEntityMemberVariable()
     {
         string source = """
                         entity User
@@ -279,7 +279,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Multiple Attribute Lines Tests
+    #region Multiple Annotation Lines Tests
 
     [Fact]
     public void Parse_MultipleAttributeLines()
@@ -318,7 +318,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Visibility with Attribute Tests
+    #region Visibility with Annotation Tests
 
     [Fact]
     public void Parse_VisibilityAndAttribute()
@@ -359,7 +359,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Protocol Method Attributes
+    #region Protocol Method Annotations
 
     [Fact]
     public void Parse_ProtocolMethodAttributes()
@@ -381,7 +381,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Test Attribute Tests
+    #region Test Annotation Tests
 
     [Fact]
     public void Parse_TestAttribute()

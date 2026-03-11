@@ -82,11 +82,11 @@ public sealed class RoutineInfo
     /// <summary>The module this routine belongs to.</summary>
     public string? Module { get; init; }
 
-    /// <summary>Attributes on this routine (e.g., @readonly, @inline).</summary>
-    public IReadOnlyList<string> Attributes { get; init; } = [];
+    /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
+    public IReadOnlyList<string> Annotations { get; init; } = [];
 
     /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
-    public bool IsReadOnly => Attributes.Contains(value: "readonly");
+    public bool IsReadOnly => Annotations.Contains(value: "readonly");
 
     /// <summary>For external routines, the calling convention.</summary>
     public string? CallingConvention { get; init; }
@@ -167,7 +167,7 @@ public sealed class RoutineInfo
             Visibility = Visibility,
             Location = Location,
             Module = Module,
-            Attributes = Attributes,
+            Annotations = Annotations,
             CallingConvention = CallingConvention,
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,

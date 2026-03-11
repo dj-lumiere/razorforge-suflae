@@ -516,18 +516,18 @@ public sealed class StdlibLoader
             return;
         }
 
-        // Build fields list upfront (TypeInfo uses init properties with IReadOnlyList)
-        var fields = new List<SemanticAnalysis.Symbols.FieldInfo>();
+        // Build member variables list upfront (TypeInfo uses init properties with IReadOnlyList)
+        var memberVariables = new List<SemanticAnalysis.Symbols.MemberVariableInfo>();
         foreach (var member in record.Members)
         {
-            if (member is VariableDeclaration { Type: not null } field)
+            if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var fieldType = ResolveSimpleType(registry, field.Type);
-                if (fieldType != null)
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type);
+                if (memberVariableType != null)
                 {
-                    fields.Add(new SemanticAnalysis.Symbols.FieldInfo(field.Name, fieldType)
+                    memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
                     {
-                        Visibility = field.Visibility
+                        Visibility = memberVariable.Visibility
                     });
                 }
             }
@@ -548,7 +548,7 @@ public sealed class StdlibLoader
         {
             Module = moduleName,
             Visibility = record.Visibility,
-            Fields = fields,
+            MemberVariables = memberVariables,
             ImplementedProtocols = protocols,
             GenericParameters = record.GenericParameters
         };
@@ -575,18 +575,18 @@ public sealed class StdlibLoader
             return;
         }
 
-        // Build fields list upfront
-        var fields = new List<SemanticAnalysis.Symbols.FieldInfo>();
+        // Build member variables list upfront
+        var memberVariables = new List<SemanticAnalysis.Symbols.MemberVariableInfo>();
         foreach (var member in entity.Members)
         {
-            if (member is VariableDeclaration { Type: not null } field)
+            if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var fieldType = ResolveSimpleType(registry, field.Type);
-                if (fieldType != null)
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type);
+                if (memberVariableType != null)
                 {
-                    fields.Add(new SemanticAnalysis.Symbols.FieldInfo(field.Name, fieldType)
+                    memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
                     {
-                        Visibility = field.Visibility
+                        Visibility = memberVariable.Visibility
                     });
                 }
             }
@@ -607,7 +607,7 @@ public sealed class StdlibLoader
         {
             Module = moduleName,
             Visibility = entity.Visibility,
-            Fields = fields,
+            MemberVariables = memberVariables,
             ImplementedProtocols = protocols,
             GenericParameters = entity.GenericParameters
         };
@@ -628,18 +628,18 @@ public sealed class StdlibLoader
             return;
         }
 
-        // Build fields list upfront
-        var fields = new List<SemanticAnalysis.Symbols.FieldInfo>();
+        // Build member variables list upfront
+        var memberVariables = new List<SemanticAnalysis.Symbols.MemberVariableInfo>();
         foreach (var member in resident.Members)
         {
-            if (member is VariableDeclaration { Type: not null } field)
+            if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var fieldType = ResolveSimpleType(registry, field.Type);
-                if (fieldType != null)
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type);
+                if (memberVariableType != null)
                 {
-                    fields.Add(new SemanticAnalysis.Symbols.FieldInfo(field.Name, fieldType)
+                    memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
                     {
-                        Visibility = field.Visibility
+                        Visibility = memberVariable.Visibility
                     });
                 }
             }
@@ -660,7 +660,7 @@ public sealed class StdlibLoader
         {
             Module = moduleName,
             Visibility = resident.Visibility,
-            Fields = fields,
+            MemberVariables = memberVariables,
             ImplementedProtocols = protocols,
             GenericParameters = resident.GenericParameters
         };

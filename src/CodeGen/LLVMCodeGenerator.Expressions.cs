@@ -6,7 +6,7 @@ using SemanticAnalysis.Types;
 using SyntaxTree;
 
 /// <summary>
-/// Expression code generation: allocation, field access, method calls, operators.
+/// Expression code generation: allocation, member variable access, method calls, operators.
 /// </summary>
 public partial class LLVMCodeGenerator
 {
@@ -16,14 +16,14 @@ public partial class LLVMCodeGenerator
     /// Generates code to allocate a new entity instance.
     /// Entity allocation:
     /// 1. Call rf_alloc(size) to get heap memory
-    /// 2. Initialize all fields to zero/default values
+    /// 2. Initialize all member variables to zero/default values
     /// 3. Return pointer to the entity
     /// </summary>
     /// <param name="sb">StringBuilder to emit code to.</param>
     /// <param name="entity">The entity type to allocate.</param>
-    /// <param name="fieldValues">Optional field initializer values (in field order).</param>
+    /// <param name="memberVariableValues">Optional field initializer values (in member variable order).</param>
     /// <returns>The temporary variable holding the entity pointer.</returns>
-    private string EmitEntityAllocation(StringBuilder sb, EntityTypeInfo entity, List<string>? fieldValues = null)
+    private string EmitEntityAllocation(StringBuilder sb, EntityTypeInfo entity, List<string>? memberVariableValues = null)
     {
         string typeName = GetEntityTypeName(entity);
         int size = CalculateEntitySize(entity);
@@ -32,29 +32,29 @@ public partial class LLVMCodeGenerator
         string rawPtr = NextTemp();
         EmitLine(sb, $"  {rawPtr} = call ptr @rf_alloc(i64 {size})");
 
-        // Initialize fields
-        for (int i = 0; i < entity.Fields.Count; i++)
+        // Initialize member variables
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
-            var field = entity.Fields[i];
-            string fieldType = GetLLVMType(field.Type);
+            var memberVariable = entity.MemberVariables[i];
+            string memberVariableType = GetLLVMType(memberVariable.Type);
 
-            // Get field pointer using GEP
-            string fieldPtr = NextTemp();
-            EmitLine(sb, $"  {fieldPtr} = getelementptr {typeName}, ptr {rawPtr}, i32 0, i32 {i}");
+            // Get member variable pointer using GEP
+            string memberVariablePtr = NextTemp();
+            EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {rawPtr}, i32 0, i32 {i}");
 
             // Get value to store
             string value;
-            if (fieldValues != null && i < fieldValues.Count)
+            if (memberVariableValues != null && i < memberVariableValues.Count)
             {
-                value = fieldValues[i];
+                value = memberVariableValues[i];
             }
             else
             {
-                value = GetZeroValue(field.Type);
+                value = GetZeroValue(memberVariable.Type);
             }
 
             // Store the value
-            EmitLine(sb, $"  store {fieldType} {value}, ptr {fieldPtr}");
+            EmitLine(sb, $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
         }
 
         return rawPtr;
@@ -84,20 +84,20 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Generates code to construct an entity with field values.
+    /// Generates code to construct an entity with member variable values.
     /// </summary>
     private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity, CreatorExpression expr)
     {
-        // Evaluate all field value expressions first
-        var fieldValues = new List<string>();
-        foreach (var (_, fieldExpr) in expr.Fields)
+        // Evaluate all member variable value expressions first
+        var memberVariableValues = new List<string>();
+        foreach (var (_, fieldExpr) in expr.MemberVariables)
         {
             string value = EmitExpression(sb, fieldExpr);
-            fieldValues.Add(value);
+            memberVariableValues.Add(value);
         }
 
         // Allocate and initialize
-        return EmitEntityAllocation(sb, entity, fieldValues);
+        return EmitEntityAllocation(sb, entity, memberVariableValues);
     }
 
     /// <summary>
@@ -105,24 +105,24 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record, CreatorExpression expr)
     {
-        // Single-field wrapper: just return the inner value
-        if (record.IsSingleFieldWrapper && expr.Fields.Count == 1)
+        // Single-member-variable wrapper: just return the inner value
+        if (record.IsSingleMemberVariableWrapper && expr.MemberVariables.Count == 1)
         {
-            return EmitExpression(sb, expr.Fields[0].Value);
+            return EmitExpression(sb, expr.MemberVariables[0].Value);
         }
 
-        // Multi-field record: build struct value
+        // Multi-member-variable record: build struct value
         string typeName = GetRecordTypeName(record);
 
-        // Start with undef and insert each field
+        // Start with undef and insert each member variable
         string result = "undef";
-        for (int i = 0; i < expr.Fields.Count && i < record.Fields.Count; i++)
+        for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
-            string value = EmitExpression(sb, expr.Fields[i].Value);
-            string fieldType = GetLLVMType(record.Fields[i].Type);
+            string value = EmitExpression(sb, expr.MemberVariables[i].Value);
+            string memberVariableType = GetLLVMType(record.MemberVariables[i].Type);
 
             string newResult = NextTemp();
-            EmitLine(sb, $"  {newResult} = insertvalue {typeName} {result}, {fieldType} {value}, {i}");
+            EmitLine(sb, $"  {newResult} = insertvalue {typeName} {result}, {memberVariableType} {value}, {i}");
             result = newResult;
         }
 
@@ -134,14 +134,14 @@ public partial class LLVMCodeGenerator
     #region Field Access
 
     /// <summary>
-    /// Generates code to read a field from an entity/record.
+    /// Generates code to read a member variable from an entity/record.
     /// For entities: GEP + load
     /// For records: extractvalue
     /// </summary>
     /// <param name="sb">StringBuilder to emit code to.</param>
     /// <param name="expr">The member access expression.</param>
-    /// <returns>The temporary variable holding the field value.</returns>
-    private string EmitFieldAccess(StringBuilder sb, MemberExpression expr)
+    /// <returns>The temporary variable holding the member variable value.</returns>
+    private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
     {
         // Evaluate the target expression
         string target = EmitExpression(sb, expr.Object);
@@ -150,129 +150,129 @@ public partial class LLVMCodeGenerator
         TypeInfo? targetType = GetExpressionType(expr.Object);
         if (targetType == null)
         {
-            throw new InvalidOperationException("Cannot determine type of field access target");
+            throw new InvalidOperationException("Cannot determine type of member variable access target");
         }
 
         return targetType switch
         {
-            EntityTypeInfo entity => EmitEntityFieldRead(sb, target, entity, expr.PropertyName),
-            RecordTypeInfo record => EmitRecordFieldRead(sb, target, record, expr.PropertyName),
-            ResidentTypeInfo resident => EmitResidentFieldRead(sb, target, resident, expr.PropertyName),
-            _ => throw new InvalidOperationException($"Cannot access field on type: {targetType.Category}")
+            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, target, entity, expr.PropertyName),
+            RecordTypeInfo record => EmitRecordMemberVariableRead(sb, target, record, expr.PropertyName),
+            ResidentTypeInfo resident => EmitResidentMemberVariableRead(sb, target, resident, expr.PropertyName),
+            _ => throw new InvalidOperationException($"Cannot access member variable on type: {targetType.Category}")
         };
     }
 
     /// <summary>
-    /// Generates code to read a field from an entity (pointer type).
-    /// Uses GEP to get field address, then load.
+    /// Generates code to read a member variable from an entity (pointer type).
+    /// Uses GEP to get member variable address, then load.
     /// </summary>
-    private string EmitEntityFieldRead(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string fieldName)
+    private string EmitEntityMemberVariableRead(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName)
     {
-        // Find field index
-        int fieldIndex = -1;
-        FieldInfo? field = null;
-        for (int i = 0; i < entity.Fields.Count; i++)
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
-            if (entity.Fields[i].Name == fieldName)
+            if (entity.MemberVariables[i].Name == memberVariableName)
             {
-                fieldIndex = i;
-                field = entity.Fields[i];
+                memberVariableIndex = i;
+                memberVariable = entity.MemberVariables[i];
                 break;
             }
         }
 
-        if (fieldIndex < 0 || field == null)
+        if (memberVariableIndex < 0 || memberVariable == null)
         {
-            throw new InvalidOperationException($"Field '{fieldName}' not found on entity '{entity.Name}'");
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on entity '{entity.Name}'");
         }
 
         string typeName = GetEntityTypeName(entity);
-        string fieldType = GetLLVMType(field.Type);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
 
-        // GEP to get field pointer
-        string fieldPtr = NextTemp();
-        EmitLine(sb, $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {fieldIndex}");
+        // GEP to get member variable pointer
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
 
-        // Load the field value
+        // Load the member variable value
         string value = NextTemp();
-        EmitLine(sb, $"  {value} = load {fieldType}, ptr {fieldPtr}");
+        EmitLine(sb, $"  {value} = load {memberVariableType}, ptr {memberVariablePtr}");
 
         return value;
     }
 
     /// <summary>
-    /// Generates code to read a field from a record (value type).
+    /// Generates code to read a member variable from a record (value type).
     /// Uses extractvalue instruction.
     /// </summary>
-    private string EmitRecordFieldRead(StringBuilder sb, string recordValue, RecordTypeInfo record, string fieldName)
+    private string EmitRecordMemberVariableRead(StringBuilder sb, string recordValue, RecordTypeInfo record, string memberVariableName)
     {
-        // Single-field wrapper: the value IS the field
-        if (record.IsSingleFieldWrapper)
+        // Single-member-variable wrapper: the value IS the field
+        if (record.IsSingleMemberVariableWrapper)
         {
             return recordValue;
         }
 
-        // Find field index
-        int fieldIndex = -1;
-        FieldInfo? field = null;
-        for (int i = 0; i < record.Fields.Count; i++)
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < record.MemberVariables.Count; i++)
         {
-            if (record.Fields[i].Name == fieldName)
+            if (record.MemberVariables[i].Name == memberVariableName)
             {
-                fieldIndex = i;
-                field = record.Fields[i];
+                memberVariableIndex = i;
+                memberVariable = record.MemberVariables[i];
                 break;
             }
         }
 
-        if (fieldIndex < 0 || field == null)
+        if (memberVariableIndex < 0 || memberVariable == null)
         {
-            throw new InvalidOperationException($"Field '{fieldName}' not found on record '{record.Name}'");
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on record '{record.Name}'");
         }
 
         string typeName = GetRecordTypeName(record);
-        string fieldType = GetLLVMType(field.Type);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
 
-        // Extract the field value
+        // Extract the member variable value
         string value = NextTemp();
-        EmitLine(sb, $"  {value} = extractvalue {typeName} {recordValue}, {fieldIndex}");
+        EmitLine(sb, $"  {value} = extractvalue {typeName} {recordValue}, {memberVariableIndex}");
 
         return value;
     }
 
     /// <summary>
-    /// Generates code to read a field from a resident (like entity).
+    /// Generates code to read a member variable from a resident (like entity).
     /// </summary>
-    private string EmitResidentFieldRead(StringBuilder sb, string residentPtr, ResidentTypeInfo resident, string fieldName)
+    private string EmitResidentMemberVariableRead(StringBuilder sb, string residentPtr, ResidentTypeInfo resident, string memberVariableName)
     {
-        // Find field index
-        int fieldIndex = -1;
-        FieldInfo? field = null;
-        for (int i = 0; i < resident.Fields.Count; i++)
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < resident.MemberVariables.Count; i++)
         {
-            if (resident.Fields[i].Name == fieldName)
+            if (resident.MemberVariables[i].Name == memberVariableName)
             {
-                fieldIndex = i;
-                field = resident.Fields[i];
+                memberVariableIndex = i;
+                memberVariable = resident.MemberVariables[i];
                 break;
             }
         }
 
-        if (fieldIndex < 0 || field == null)
+        if (memberVariableIndex < 0 || memberVariable == null)
         {
-            throw new InvalidOperationException($"Field '{fieldName}' not found on resident '{resident.Name}'");
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on resident '{resident.Name}'");
         }
 
         string typeName = GetResidentTypeName(resident);
-        string fieldType = GetLLVMType(field.Type);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
 
-        // GEP to get field pointer
-        string fieldPtr = NextTemp();
-        EmitLine(sb, $"  {fieldPtr} = getelementptr {typeName}, ptr {residentPtr}, i32 0, i32 {fieldIndex}");
+        // GEP to get member variable pointer
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {residentPtr}, i32 0, i32 {memberVariableIndex}");
 
-        // Load the field value
+        // Load the member variable value
         string value = NextTemp();
-        EmitLine(sb, $"  {value} = load {fieldType}, ptr {fieldPtr}");
+        EmitLine(sb, $"  {value} = load {memberVariableType}, ptr {memberVariablePtr}");
 
         return value;
     }
@@ -282,37 +282,37 @@ public partial class LLVMCodeGenerator
     #region Field Write
 
     /// <summary>
-    /// Generates code to write a field on an entity.
+    /// Generates code to write a member variable on an entity.
     /// </summary>
-    private void EmitEntityFieldWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string fieldName, string value)
+    private void EmitEntityMemberVariableWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName, string value)
     {
-        // Find field index
-        int fieldIndex = -1;
-        FieldInfo? field = null;
-        for (int i = 0; i < entity.Fields.Count; i++)
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
-            if (entity.Fields[i].Name == fieldName)
+            if (entity.MemberVariables[i].Name == memberVariableName)
             {
-                fieldIndex = i;
-                field = entity.Fields[i];
+                memberVariableIndex = i;
+                memberVariable = entity.MemberVariables[i];
                 break;
             }
         }
 
-        if (fieldIndex < 0 || field == null)
+        if (memberVariableIndex < 0 || memberVariable == null)
         {
-            throw new InvalidOperationException($"Field '{fieldName}' not found on entity '{entity.Name}'");
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on entity '{entity.Name}'");
         }
 
         string typeName = GetEntityTypeName(entity);
-        string fieldType = GetLLVMType(field.Type);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
 
-        // GEP to get field pointer
-        string fieldPtr = NextTemp();
-        EmitLine(sb, $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {fieldIndex}");
+        // GEP to get member variable pointer
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
 
         // Store the value
-        EmitLine(sb, $"  store {fieldType} {value}, ptr {fieldPtr}");
+        EmitLine(sb, $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
     }
 
     #endregion
@@ -331,7 +331,7 @@ public partial class LLVMCodeGenerator
         {
             LiteralExpression literal => EmitLiteral(sb, literal),
             IdentifierExpression identifier => EmitIdentifier(sb, identifier),
-            MemberExpression memberAccess => EmitFieldAccess(sb, memberAccess),
+            MemberExpression memberAccess => EmitMemberVariableAccess(sb, memberAccess),
             OptionalMemberExpression => throw new NotImplementedException("Optional chaining (?.) codegen not yet implemented"),
             CreatorExpression constructor => EmitConstructorCall(sb, constructor),
             CallExpression call => EmitCall(sb, call),
@@ -732,15 +732,15 @@ public partial class LLVMCodeGenerator
         TypeInfo? targetType = GetExpressionType(member.Object);
         if (targetType == null) return null;
 
-        FieldInfo? field = targetType switch
+        MemberVariableInfo? memberVariable = targetType switch
         {
-            EntityTypeInfo e => e.LookupField(member.PropertyName),
-            RecordTypeInfo r => r.LookupField(member.PropertyName),
-            ResidentTypeInfo res => res.LookupField(member.PropertyName),
+            EntityTypeInfo e => e.LookupMemberVariable(member.PropertyName),
+            RecordTypeInfo r => r.LookupMemberVariable(member.PropertyName),
+            ResidentTypeInfo res => res.LookupMemberVariable(member.PropertyName),
             _ => null
         };
 
-        return field?.Type;
+        return memberVariable?.Type;
     }
 
     #endregion
@@ -1280,8 +1280,8 @@ public partial class LLVMCodeGenerator
     /// <returns>The temporary variable holding the tuple pointer.</returns>
     /// <remarks>
     /// Tuple layout:
-    /// - ValueTuple: stack-allocated struct with fields item0, item1, ...
-    /// - Tuple: heap-allocated entity with fields item0, item1, ...
+    /// - ValueTuple: stack-allocated struct with member variables item0, item1, ...
+    /// - Tuple: heap-allocated entity with member variables item0, item1, ...
     ///
     /// The semantic analyzer determines which type to use based on element types.
     /// </remarks>
@@ -1289,8 +1289,8 @@ public partial class LLVMCodeGenerator
     {
         // TODO: Full implementation needs to:
         // 1. Check ResolvedType to determine if ValueTuple or Tuple
-        // 2. For ValueTuple: allocate on stack, initialize fields
-        // 3. For Tuple: allocate on heap via rf_alloc, initialize fields
+        // 2. For ValueTuple: allocate on stack, initialize member variables
+        // 3. For Tuple: allocate on heap via rf_alloc, initialize member variables
         // 4. Return pointer to the tuple
 
         // For now, evaluate all elements and return a placeholder

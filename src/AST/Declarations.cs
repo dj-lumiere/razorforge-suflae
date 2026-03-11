@@ -109,7 +109,7 @@ public record VariableDeclaration(
 /// <param name="ReturnType">Optional return type; null for void/procedure functions</param>
 /// <param name="Body">Function body statement (typically a BlockStatement)</param>
 /// <param name="Visibility">Access control modifier</param>
-/// <param name="Attributes">Decorators like @inline for properties</param>
+/// <param name="Annotations">Decorators like @inline for properties</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <remarks>
@@ -118,7 +118,7 @@ public record VariableDeclaration(
 /// <item>Generic functions: routine sort[T](items: List[T])</item>
 /// <item>Default parameters: routine greet(name: text = "World")</item>
 /// <item>Type inference: parameters and return types can be inferred</item>
-/// <item>Attributes: @inline,etc.</item>
+/// <item>Annotations: @inline,etc.</item>
 /// <item>Visibility: public, private, internal</item>
 /// <item>Suspended: async function that can use waitfor</item>
 /// </list>
@@ -129,7 +129,7 @@ public record RoutineDeclaration(
     TypeExpression? ReturnType,
     Statement Body,
     VisibilityModifier Visibility,
-    List<string> Attributes, // For decorators like @inline, @readonly
+    List<string> Annotations, // For decorators like @inline, @readonly
     SourceLocation Location,
     List<string>? GenericParameters = null,
     List<GenericConstraintDeclaration>? GenericConstraints = null,
@@ -151,12 +151,12 @@ public record RoutineDeclaration(
 
 /// <summary>
 /// Entity (class) declaration that defines reference types with inheritance.
-/// Represents object-oriented classes with fields, methods, and inheritance.
+/// Represents object-oriented classes with member variables, methods, and inheritance.
 /// </summary>
 /// <param name="Name">Class identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">List of member declarations (fields, methods, properties)</param>
+/// <param name="Members">List of member declarations (member variables, methods, properties)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -165,7 +165,7 @@ public record RoutineDeclaration(
 /// <item>Single protocol implementation: entity Dog obeys Animal</item>
 /// <item>Multiple protocol implementation: entity Dog obeys Nameable, Trainable</item>
 /// <item>Generic classes: entity Container[T]</item>
-/// <item>Member visibility: public, private, internal fields/methods</item>
+/// <item>Member visibility: public, private, internal member variables/methods</item>
 /// <item>Creators: defined as special routine methods</item>
 /// </list>
 /// </remarks>
@@ -193,14 +193,14 @@ public record EntityDeclaration(
 /// <param name="Name">Record identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">List of member declarations (fields and methods)</param>
+/// <param name="Members">List of member declarations (member variables and methods)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Record declarations provide:
 /// <list type="bullet">
-/// <item>Value semantics: equality based on field values, not identity</item>
-/// <item>Immutability: fields are always readonly</item>
+/// <item>Value semantics: equality based on member variable values, not identity</item>
+/// <item>Immutability: member variables are always readonly</item>
 /// <item>Stack allocation: stored inline rather than heap-allocated</item>
 /// <item>Generic records: record Point[T](x: T, y: T)</item>
 /// <item>Copy creators: automatic with-expressions support</item>
@@ -323,7 +323,7 @@ public record FlagsDeclaration(
 /// <summary>
 /// Variant declaration that defines tagged unions with multiple possible value types.
 /// Represents algebraic data types with multiple cases and associated data.
-/// All fields must be records or memory handles - safe, no danger! needed.
+/// All member variables must be records or memory handles - safe, no danger! needed.
 /// </summary>
 /// <param name="Name">Variant identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
@@ -531,7 +531,7 @@ public record RoutineSignature(
     string Name,
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
-    List<string>? Attributes,
+    List<string>? Annotations,
     SourceLocation Location);
 
 #endregion
@@ -620,7 +620,7 @@ public record ExternalDeclaration(
     TypeExpression? ReturnType,
     string? CallingConvention,
     bool IsVariadic,
-    List<string>? Attributes,
+    List<string>? Annotations,
     bool IsDangerous,
     SourceLocation Location) : Declaration(Location: Location)
 {

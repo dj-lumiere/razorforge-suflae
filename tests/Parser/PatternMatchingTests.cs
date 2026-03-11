@@ -945,7 +945,7 @@ public class PatternMatchingTests
     }
 
     [Fact]
-    public void Parse_WhenGuardWithFieldAccess()
+    public void Parse_WhenGuardWithMemberVariableAccess()
     {
         string source = """
                         routine handle(user: User)

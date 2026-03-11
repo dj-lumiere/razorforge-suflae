@@ -165,17 +165,17 @@ public sealed partial class SemanticAnalyzer
                 {
                     foreach (DestructuringBinding binding in typePat.Bindings)
                     {
-                        TypeSymbol fieldType = LookupFieldType(type: patternType, fieldName: binding.FieldName);
+                        TypeSymbol memberVariableType = LookupMemberVariableType(type: patternType, memberVariableName: binding.MemberVariableName);
 
                         if (binding.NestedPattern != null)
                         {
-                            AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
+                            AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
                         }
                         else if (binding.BindingName != null)
                         {
                             DeclarePatternVariable(
                                 name: binding.BindingName,
-                                type: fieldType,
+                                type: memberVariableType,
                                 location: binding.Location);
                         }
                     }
@@ -319,28 +319,28 @@ public sealed partial class SemanticAnalyzer
     {
         foreach (DestructuringBinding binding in pattern.Bindings)
         {
-            TypeSymbol fieldType = ErrorTypeInfo.Instance;
+            TypeSymbol memberVariableType = ErrorTypeInfo.Instance;
 
-            // Get field type from source type
-            if (binding.FieldName != null && sourceType is RecordTypeInfo record)
+            // Get member variable type from source type
+            if (binding.MemberVariableName != null && sourceType is RecordTypeInfo record)
             {
-                fieldType = record.LookupField(fieldName: binding.FieldName)?.Type ?? ErrorTypeInfo.Instance;
+                memberVariableType = record.LookupMemberVariable(memberVariableName: binding.MemberVariableName)?.Type ?? ErrorTypeInfo.Instance;
             }
-            else if (binding.FieldName != null && sourceType is EntityTypeInfo entity)
+            else if (binding.MemberVariableName != null && sourceType is EntityTypeInfo entity)
             {
-                fieldType = entity.LookupField(fieldName: binding.FieldName)?.Type ?? ErrorTypeInfo.Instance;
+                memberVariableType = entity.LookupMemberVariable(memberVariableName: binding.MemberVariableName)?.Type ?? ErrorTypeInfo.Instance;
             }
 
             if (binding.NestedPattern != null)
             {
                 // Handle nested destructuring
-                AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
+                AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
             }
             else if (binding.BindingName != null)
             {
                 DeclarePatternVariable(
                     name: binding.BindingName,
-                    type: fieldType,
+                    type: memberVariableType,
                     location: binding.Location);
             }
         }
@@ -401,8 +401,8 @@ public sealed partial class SemanticAnalyzer
         // Variant cases have a single payload type
         TypeSymbol payloadType = matchedCase.PayloadType!;
 
-        // For a single binding without field name, bind directly to the payload
-        if (pattern.Bindings.Count == 1 && pattern.Bindings[0].FieldName == null)
+        // For a single binding without member variable name, bind directly to the payload
+        if (pattern.Bindings.Count == 1 && pattern.Bindings[0].MemberVariableName == null)
         {
             DestructuringBinding binding = pattern.Bindings[0];
             if (binding.NestedPattern != null)
@@ -422,17 +422,17 @@ public sealed partial class SemanticAnalyzer
             // Multiple bindings - payload must be a record/entity type
             foreach (DestructuringBinding binding in pattern.Bindings)
             {
-                TypeSymbol fieldType = LookupFieldType(type: payloadType, fieldName: binding.FieldName);
+                TypeSymbol memberVariableType = LookupMemberVariableType(type: payloadType, memberVariableName: binding.MemberVariableName);
 
                 if (binding.NestedPattern != null)
                 {
-                    AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
+                    AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
                 }
                 else if (binding.BindingName != null)
                 {
                     DeclarePatternVariable(
                         name: binding.BindingName,
-                        type: fieldType,
+                        type: memberVariableType,
                         location: binding.Location);
                 }
             }
@@ -440,7 +440,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Analyzes a type destructuring pattern, looking up field types from the target type.
+    /// Analyzes a type destructuring pattern, looking up member variable types from the target type.
     /// </summary>
     /// <param name="pattern">The type destructuring pattern to analyze.</param>
     private void AnalyzeTypeDestructuringPattern(TypeDestructuringPattern pattern)
@@ -449,37 +449,37 @@ public sealed partial class SemanticAnalyzer
 
         foreach (DestructuringBinding binding in pattern.Bindings)
         {
-            TypeSymbol fieldType = LookupFieldType(type: targetType, fieldName: binding.FieldName);
+            TypeSymbol memberVariableType = LookupMemberVariableType(type: targetType, memberVariableName: binding.MemberVariableName);
 
             if (binding.NestedPattern != null)
             {
-                AnalyzePattern(pattern: binding.NestedPattern, matchedType: fieldType);
+                AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
             }
             else if (binding.BindingName != null)
             {
                 DeclarePatternVariable(
                     name: binding.BindingName,
-                    type: fieldType,
+                    type: memberVariableType,
                     location: binding.Location);
             }
         }
     }
 
     /// <summary>
-    /// Looks up a field type from a type. Returns ErrorTypeInfo if not found.
+    /// Looks up a member variable type from a type. Returns ErrorTypeInfo if not found.
     /// </summary>
-    private TypeSymbol LookupFieldType(TypeSymbol type, string? fieldName)
+    private TypeSymbol LookupMemberVariableType(TypeSymbol type, string? memberVariableName)
     {
-        if (fieldName == null)
+        if (memberVariableName == null)
         {
             return ErrorTypeInfo.Instance;
         }
 
         return type switch
         {
-            RecordTypeInfo record => record.LookupField(fieldName: fieldName)?.Type ?? ErrorTypeInfo.Instance,
-            EntityTypeInfo entity => entity.LookupField(fieldName: fieldName)?.Type ?? ErrorTypeInfo.Instance,
-            ResidentTypeInfo resident => resident.LookupField(fieldName: fieldName)?.Type ?? ErrorTypeInfo.Instance,
+            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
+            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
+            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
             _ => ErrorTypeInfo.Instance
         };
     }

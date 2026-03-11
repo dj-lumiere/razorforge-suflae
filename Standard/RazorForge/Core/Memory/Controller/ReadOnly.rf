@@ -12,4 +12,4 @@ routine ReadOnly.__create__() -> ReadOnly
   return ReadOnly()
 
 # No lock/unlock methods needed - data is unmodifiable
-# Direct field access is allowed for Shared[T, ReadOnly]
+# Direct member variable access is allowed for Shared[T, ReadOnly]

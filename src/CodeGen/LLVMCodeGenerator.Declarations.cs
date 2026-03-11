@@ -30,34 +30,34 @@ public partial class LLVMCodeGenerator
         _generatedTypes.Add(typeName);
 
         // Build the struct type
-        var fieldTypes = new List<string>();
-        foreach (var field in entity.Fields)
+        var memberVariableTypes = new List<string>();
+        foreach (var memberVariable in entity.MemberVariables)
         {
-            string fieldType = GetLLVMType(field.Type);
-            fieldTypes.Add(fieldType);
+            string memberVariableType = GetLLVMType(memberVariable.Type);
+            memberVariableTypes.Add(memberVariableType);
         }
 
-        // Handle empty entities (no fields)
-        if (fieldTypes.Count == 0)
+        // Handle empty entities (no member variables)
+        if (memberVariableTypes.Count == 0)
         {
             // Empty struct needs at least a dummy byte for addressability
             EmitLine(_typeDeclarations, $"{typeName} = type {{ i8 }}");
         }
         else
         {
-            string fields = string.Join(", ", fieldTypes);
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ {fields} }}");
+            string memberVars = string.Join(", ", memberVariableTypes);
+            EmitLine(_typeDeclarations, $"{typeName} = type {{ {memberVars} }}");
         }
 
-        // Add field comment for documentation
-        if (entity.Fields.Count > 0)
+        // Add member variable comment for documentation
+        if (entity.MemberVariables.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.Append($"; {typeName} fields: ");
-            for (int i = 0; i < entity.Fields.Count; i++)
+            sb.Append($"; {typeName} member variables: ");
+            for (int i = 0; i < entity.MemberVariables.Count; i++)
             {
                 if (i > 0) sb.Append(", ");
-                sb.Append($"{i}={entity.Fields[i].Name}");
+                sb.Append($"{i}={entity.MemberVariables[i].Name}");
             }
             EmitLine(_typeDeclarations, sb.ToString());
         }
@@ -70,13 +70,13 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates the LLVM struct type for a record.
     /// Record = value type, stack-allocated, copy semantics.
-    /// Single-field wrappers are unwrapped to their underlying intrinsic.
+    /// Single-member-variable wrappers are unwrapped to their underlying intrinsic.
     /// </summary>
     /// <param name="record">The record type info.</param>
     private void GenerateRecordType(RecordTypeInfo record)
     {
-        // Single-field wrappers don't need struct types
-        if (record.IsSingleFieldWrapper)
+        // Single-member-variable wrappers don't need struct types
+        if (record.IsSingleMemberVariableWrapper)
         {
             return;
         }
@@ -90,33 +90,33 @@ public partial class LLVMCodeGenerator
         }
 
         // Build the struct type
-        var fieldTypes = new List<string>();
-        foreach (var field in record.Fields)
+        var memberVariableTypes = new List<string>();
+        foreach (var memberVariable in record.MemberVariables)
         {
-            string fieldType = GetLLVMType(field.Type);
-            fieldTypes.Add(fieldType);
+            string memberVariableType = GetLLVMType(memberVariable.Type);
+            memberVariableTypes.Add(memberVariableType);
         }
 
         // Handle empty records
-        if (fieldTypes.Count == 0)
+        if (memberVariableTypes.Count == 0)
         {
             EmitLine(_typeDeclarations, $"{typeName} = type {{ }}");
         }
         else
         {
-            string fields = string.Join(", ", fieldTypes);
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ {fields} }}");
+            string memberVars = string.Join(", ", memberVariableTypes);
+            EmitLine(_typeDeclarations, $"{typeName} = type {{ {memberVars} }}");
         }
 
-        // Add field comment
-        if (record.Fields.Count > 0)
+        // Add member variable comment
+        if (record.MemberVariables.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.Append($"; {typeName} fields: ");
-            for (int i = 0; i < record.Fields.Count; i++)
+            sb.Append($"; {typeName} member variables: ");
+            for (int i = 0; i < record.MemberVariables.Count; i++)
             {
                 if (i > 0) sb.Append(", ");
-                sb.Append($"{i}={record.Fields[i].Name}");
+                sb.Append($"{i}={record.MemberVariables[i].Name}");
             }
             EmitLine(_typeDeclarations, sb.ToString());
         }
@@ -144,33 +144,33 @@ public partial class LLVMCodeGenerator
         _generatedTypes.Add(typeName);
 
         // Build the struct type
-        var fieldTypes = new List<string>();
-        foreach (var field in resident.Fields)
+        var memberVariableTypes = new List<string>();
+        foreach (var memberVariable in resident.MemberVariables)
         {
-            string fieldType = GetLLVMType(field.Type);
-            fieldTypes.Add(fieldType);
+            string memberVariableType = GetLLVMType(memberVariable.Type);
+            memberVariableTypes.Add(memberVariableType);
         }
 
         // Handle empty residents
-        if (fieldTypes.Count == 0)
+        if (memberVariableTypes.Count == 0)
         {
             EmitLine(_typeDeclarations, $"{typeName} = type {{ i8 }}");
         }
         else
         {
-            string fields = string.Join(", ", fieldTypes);
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ {fields} }}");
+            string memberVars = string.Join(", ", memberVariableTypes);
+            EmitLine(_typeDeclarations, $"{typeName} = type {{ {memberVars} }}");
         }
 
-        // Add field comment
-        if (resident.Fields.Count > 0)
+        // Add member variable comment
+        if (resident.MemberVariables.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.Append($"; {typeName} fields: ");
-            for (int i = 0; i < resident.Fields.Count; i++)
+            sb.Append($"; {typeName} member variables: ");
+            for (int i = 0; i < resident.MemberVariables.Count; i++)
             {
                 if (i > 0) sb.Append(", ");
-                sb.Append($"{i}={resident.Fields[i].Name}");
+                sb.Append($"{i}={resident.MemberVariables[i].Name}");
             }
             EmitLine(_typeDeclarations, sb.ToString());
         }
@@ -182,7 +182,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates the LLVM type for a choice (enum).
-    /// Choice = record with single integer field (tag value).
+    /// Choice = record with single integer member variable (tag value).
     /// </summary>
     /// <param name="choice">The choice type info.</param>
     private void GenerateChoiceType(ChoiceTypeInfo choice)
@@ -453,7 +453,7 @@ public partial class LLVMCodeGenerator
                 "@intrinsic.ptr" => "null",
                 _ => "0"
             },
-            RecordTypeInfo { IsSingleFieldWrapper: true } record =>
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetZeroValue(record.UnderlyingIntrinsic!),
             EntityTypeInfo or ResidentTypeInfo => "null",
             _ => "zeroinitializer"

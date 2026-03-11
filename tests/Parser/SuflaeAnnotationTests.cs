@@ -12,7 +12,7 @@ using static TestHelpers;
 /// </summary>
 public class SuflaeAttributeTests
 {
-    #region Simple Attribute Tests
+    #region Simple Annotation Tests
 
     [Fact]
     public void ParseSuflae_ReadonlyAttribute()
@@ -25,8 +25,8 @@ public class SuflaeAttributeTests
 
         Program program = AssertParsesSuflae(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Attributes);
-        Assert.Contains(expected: "readonly", collection: routine.Attributes);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "readonly", collection: routine.Annotations);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Parameterized Attribute Tests
+    #region Parameterized Annotation Tests
 
     [Fact]
     public void ParseSuflae_ConfigAttributeTargetOs()
@@ -133,7 +133,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Compound Attribute Tests
+    #region Compound Annotation Tests
 
     [Fact]
     public void ParseSuflae_CompoundAttributes()
@@ -163,7 +163,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Type Attribute Tests
+    #region Type Annotation Tests
 
     [Fact]
     public void ParseSuflae_AttributeOnRecord()
@@ -206,7 +206,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Field Attribute Tests
+    #region Field Annotation Tests
 
     [Fact]
     public void ParseSuflae_AttributeOnField()
@@ -224,7 +224,7 @@ public class SuflaeAttributeTests
     }
 
     [Fact]
-    public void ParseSuflae_AttributeOnEntityField()
+    public void ParseSuflae_AttributeOnEntityMemberVariable()
     {
         string source = """
                         entity User
@@ -240,7 +240,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Multiple Attribute Lines Tests
+    #region Multiple Annotation Lines Tests
 
     [Fact]
     public void ParseSuflae_MultipleAttributeLines()
@@ -278,7 +278,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Visibility with Attribute Tests
+    #region Visibility with Annotation Tests
 
     [Fact]
     public void ParseSuflae_VisibilityAndAttribute()
@@ -319,7 +319,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Protocol Method Attributes
+    #region Protocol Method Annotations
 
     [Fact]
     public void ParseSuflae_ProtocolMethodAttributes()
@@ -341,7 +341,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Async Attributes
+    #region Async Annotations
 
     [Fact]
     public void ParseSuflae_SuspendedWithAttribute()
@@ -358,7 +358,7 @@ public class SuflaeAttributeTests
 
     #endregion
 
-    #region Test Attribute Tests
+    #region Test Annotation Tests
 
     [Fact]
     public void ParseSuflae_TestAttribute()

@@ -5,7 +5,7 @@
 /// <remarks>
 /// Storage class determines the lifetime and association of a symbol:
 /// <list type="bullet">
-/// <item>None - Instance member (default for fields/methods) or module-level (for routines)</item>
+/// <item>None - Instance member (default for member variables/methods) or module-level (for routines)</item>
 /// <item>Common - Type-level static, accessed via Type.member()</item>
 /// <item>Global - File-scope static variable, not valid for routines</item>
 /// </list>

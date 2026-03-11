@@ -98,8 +98,8 @@ public enum GrammarDiagnosticCode
     /// <summary>A top-level declaration (routine, record, entity, etc.) was expected but not found.</summary>
     ExpectedDeclaration = 115,
 
-    /// <summary>An attribute value expression was expected after the attribute name.</summary>
-    ExpectedAttributeValue = 116,
+    /// <summary>An annotation value expression was expected after the annotation name.</summary>
+    ExpectedAnnotationValue = 116,
 
     /// <summary>A type argument inside generic brackets was expected but not found.</summary>
     ExpectedTypeArgument = 117,
@@ -140,7 +140,7 @@ public enum GrammarDiagnosticCode
     VisibilityWithoutDeclaration = 201,
 
     /// <summary>One or more attributes were specified without a following declaration to attach them to.</summary>
-    AttributesWithoutDeclaration = 202,
+    AnnotationsWithoutDeclaration = 202,
 
     /// <summary>A declaration that is only valid at the top level appeared inside a type or routine body.</summary>
     InvalidDeclarationInBody = 203,
@@ -154,7 +154,7 @@ public enum GrammarDiagnosticCode
     /// <summary>A discard statement ('_') was used on a non-call expression; discards are only valid for call results.</summary>
     DiscardRequiresCall = 206,
 
-    /// <summary>The number of variables in a tuple destructuring assignment does not match the tuple's field count.</summary>
+    /// <summary>The number of variables in a tuple destructuring assignment does not match the tuple's member variable count.</summary>
     TupleDependencyCountMismatch = 207,
 
     /// <summary>A RazorForge-only language construct was used in a Suflae source file.</summary>

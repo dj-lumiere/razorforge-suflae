@@ -398,7 +398,7 @@ public class VariableDeclarationTests
     #region Field Declarations in Types
 
     [Fact]
-    public void Parse_RecordFields()
+    public void Parse_RecordMemberVariables()
     {
         string source = """
                         record Point
@@ -412,10 +412,10 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_EntityVarFields_Rejected()
+    public void Parse_EntityVarMemberVariables_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var keywords
+        // MemberVariables use 'name: Type' syntax without var keywords
         string source = """
                         entity Counter
                           var count: S32
@@ -425,10 +425,10 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_EntityMultipleVarFields_Rejected()
+    public void Parse_EntityMultipleVarMemberVariables_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var keywords
+        // MemberVariables use 'name: Type' syntax without var keywords
         string source = """
                         entity User
                           var id: U64
@@ -439,7 +439,7 @@ public class VariableDeclarationTests
     }
 
     [Fact]
-    public void Parse_ResidentFields()
+    public void Parse_ResidentMemberVariables()
     {
         string source = """
                         resident GlobalState

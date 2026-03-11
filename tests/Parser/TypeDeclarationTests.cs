@@ -13,7 +13,7 @@ public class TypeDeclarationTests
     #region Record Tests
 
     [Fact]
-    public void Parse_SimpleRecord_WithFields()
+    public void Parse_SimpleRecord_WithMemberVariables()
     {
         string source = """
                         record Point
@@ -424,7 +424,7 @@ public class TypeDeclarationTests
     #region Posted Record Field Tests
 
     [Fact]
-    public void Parse_RecordWithPostedField()
+    public void Parse_RecordWithPostedMemberVariable()
     {
         string source = """
                         record Percentage
@@ -439,7 +439,7 @@ public class TypeDeclarationTests
     }
 
     [Fact]
-    public void Parse_RecordWithMixedVisibilityFields()
+    public void Parse_RecordWithMixedVisibilityMemberVariables()
     {
         string source = """
                         record Config

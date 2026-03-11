@@ -192,7 +192,7 @@ public class TypeResolutionTests
     #region Field Resolution
 
     [Fact]
-    public void Analyze_RecordFields_ResolveTypes()
+    public void Analyze_RecordMemberVariables_ResolveTypes()
     {
         string source = """
                         record Color
@@ -209,7 +209,7 @@ public class TypeResolutionTests
     }
 
     [Fact]
-    public void Analyze_EntityFields_ResolveTypes()
+    public void Analyze_EntityMemberVariables_ResolveTypes()
     {
         string source = """
                         entity Document
@@ -258,7 +258,7 @@ public class TypeResolutionTests
     }
 
     [Fact]
-    public void Analyze_DuplicateFieldName_ReportsError()
+    public void Analyze_DuplicateMemberVariableName_ReportsError()
     {
         string source = """
                         record Point
@@ -436,7 +436,7 @@ public class TypeResolutionTests
     #region Variant Restrictions
 
     [Fact]
-    public void Analyze_VariantInField_ReportsError()
+    public void Analyze_VariantInMemberVariable_ReportsError()
     {
         string source = """
                         variant Shape
@@ -448,7 +448,7 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
     }
 
     [Fact]
@@ -498,12 +498,12 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
     }
 
     [Fact]
-    public void AnalyzeSuflae_VariantInField_ReportsError()
+    public void AnalyzeSuflae_VariantInMemberVariable_ReportsError()
     {
         string source = """
                         variant Shape
@@ -515,7 +515,7 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantFieldNotAllowed);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
     }
 
     [Fact]

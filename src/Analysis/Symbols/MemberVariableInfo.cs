@@ -15,7 +15,7 @@ using TypeSymbol = Types.TypeInfo;
 /// <item>private - read/write within file</item>
 /// </list>
 /// </remarks>
-public sealed class FieldInfo
+public sealed class MemberVariableInfo
 {
     /// <summary>The name of the field.</summary>
     public string Name { get; }
@@ -24,8 +24,8 @@ public sealed class FieldInfo
     public TypeSymbol Type { get; }
 
     /// <summary>
-    /// Visibility for the field (open, posted, secret).
-    /// For posted fields, read is open but write is secret.
+    /// Visibility for the member variable (open, posted, secret).
+    /// For posted member variables, read is open but write is secret.
     /// </summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 
@@ -42,11 +42,11 @@ public sealed class FieldInfo
     public TypeSymbol? Owner { get; init; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FieldInfo"/> class.
+    /// Initializes a new instance of the <see cref="MemberVariableInfo"/> class.
     /// </summary>
     /// <param name="name">The name of the field.</param>
     /// <param name="type">The resolved type of the field.</param>
-    public FieldInfo(string name, TypeSymbol type)
+    public MemberVariableInfo(string name, TypeSymbol type)
     {
         Name = name;
         Type = type;
@@ -56,10 +56,10 @@ public sealed class FieldInfo
     /// Creates a copy of this field with the type substituted for generic resolution.
     /// </summary>
     /// <param name="newType">The new type to substitute.</param>
-    /// <returns>A new <see cref="FieldInfo"/> with the substituted type.</returns>
-    public FieldInfo WithSubstitutedType(TypeSymbol newType)
+    /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>
+    public MemberVariableInfo WithSubstitutedType(TypeSymbol newType)
     {
-        return new FieldInfo(name: Name, type: newType)
+        return new MemberVariableInfo(name: Name, type: newType)
         {
             Visibility = Visibility,
             Index = Index,

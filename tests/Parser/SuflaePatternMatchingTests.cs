@@ -882,7 +882,7 @@ public class SuflaePatternMatchingTests
     }
 
     [Fact]
-    public void ParseSuflae_WhenGuardWithFieldAccess()
+    public void ParseSuflae_WhenGuardWithMemberVariableAccess()
     {
         string source = """
                         routine handle(user: User)

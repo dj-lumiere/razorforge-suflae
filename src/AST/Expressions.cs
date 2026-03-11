@@ -217,7 +217,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 /// or falls back to create-and-assign (a = a.__add__(b)) for records/primitives.
 /// Entities require the in-place dunder (no fallback, since bare entity assignment is prohibited).
 /// </summary>
-/// <param name="Target">The assignment target (must be a modifiable variable, field, or index)</param>
+/// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
 /// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>
 /// <param name="Value">The right-hand operand expression</param>
 /// <param name="Location">Source location information</param>
@@ -354,12 +354,12 @@ public record NamedArgumentExpression(string Name, Expression Value, SourceLocat
 }
 
 /// <summary>
-/// Expression representing a creator call with named field initializers.
+/// Expression representing a creator call with named member variable initializers.
 /// Creates instances using parenthesis syntax: TypeName(field1: value1, field2: value2)
 /// </summary>
 /// <param name="TypeName">The name of the type being created</param>
 /// <param name="TypeArguments">Optional generic type arguments (e.g., List&lt;T&gt;)</param>
-/// <param name="Fields">List of field name-value pairs for initialization</param>
+/// <param name="MemberVariables">List of member variable name-value pairs for initialization</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Creator expression patterns:
@@ -372,7 +372,7 @@ public record NamedArgumentExpression(string Name, Expression Value, SourceLocat
 public record CreatorExpression(
     string TypeName,
     List<TypeExpression>? TypeArguments,
-    List<(string Name, Expression Value)> Fields,
+    List<(string Name, Expression Value)> MemberVariables,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -387,22 +387,22 @@ public record CreatorExpression(
 /// Represents the 'with' keyword for unmodifiable updates.
 /// </summary>
 /// <param name="Base">The base expression to copy and modify</param>
-/// <param name="Updates">List of field/index updates (name/index, value)</param>
+/// <param name="Updates">List of member variable/index updates (name/index, value)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// With expression patterns:
 /// <list type="bullet">
-/// <item>Field update: record with .field = newValue</item>
-/// <item>Multiple fields: record with .x = 1, .y = 2</item>
-/// <item>Nested field: record with .address.city = "NYC"</item>
+/// <item>Member variable update: record with .memberVar = newValue</item>
+/// <item>Multiple member variables: record with .x = 1, .y = 2</item>
+/// <item>Nested member variable: record with .address.city = "NYC"</item>
 /// <item>Index update: collection with [i] = newValue</item>
 /// </list>
-/// For field updates, FieldPath is set and Index is null.
-/// For index updates, Index is set and FieldPath is null.
+/// For member variable updates, MemberVariablePath is set and Index is null.
+/// For index updates, Index is set and MemberVariablePath is null.
 /// </remarks>
 public record WithExpression(
     Expression Base,
-    List<(List<string>? FieldPath, Expression? Index, Expression Value)> Updates,
+    List<(List<string>? MemberVariablePath, Expression? Index, Expression Value)> Updates,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -413,7 +413,7 @@ public record WithExpression(
 }
 
 /// <summary>
-/// Expression that accesses a member (field, property, or method) of an object.
+/// Expression that accesses a member (member variable, property, or method) of an object.
 /// Represents the dot notation for accessing object members.
 /// </summary>
 /// <param name="Object">Expression that evaluates to the object containing the member</param>
@@ -422,7 +422,7 @@ public record WithExpression(
 /// <remarks>
 /// Member access patterns:
 /// <list type="bullet">
-/// <item>Field access: obj.field</item>
+/// <item>Field access: obj.memberVar</item>
 /// <item>Method reference: obj.method (not a call)</item>
 /// <item>Chained access: obj.child.grandchild</item>
 /// </list>
@@ -442,10 +442,10 @@ public record MemberExpression(Expression Object, string PropertyName, SourceLoc
 /// Represents the ?. operator for safe navigation / optional chaining.
 /// </summary>
 /// <param name="Object">Expression that may evaluate to none</param>
-/// <param name="PropertyName">Name of the property/field to access if object is not none</param>
+/// <param name="PropertyName">Name of the property/member variable to access if object is not none</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Examples: obj?.field, result?.value
+/// Examples: obj?.memberVar, result?.value
 /// If the object is none, the entire expression evaluates to none.
 /// </remarks>
 public record OptionalMemberExpression(Expression Object, string PropertyName, SourceLocation Location)
@@ -778,7 +778,7 @@ public record GenericMethodCallExpression(
 
 /// <summary>
 /// Expression representing generic member access with type parameters.
-/// Used for accessing generic properties or fields with type specification.
+/// Used for accessing generic properties or member variables with type specification.
 /// </summary>
 /// <param name="Object">Expression representing the object being accessed</param>
 /// <param name="MemberName">Name of the generic member</param>

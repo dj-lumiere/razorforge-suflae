@@ -215,7 +215,7 @@ public sealed class ErrorHandlingGenerator
             Visibility = original.Visibility,
             Location = original.Location,
             Module = original.Module,
-            Attributes = original.Attributes
+            Annotations = original.Annotations
         };
     }
 
@@ -248,7 +248,7 @@ public sealed class ErrorHandlingGenerator
             Visibility = original.Visibility,
             Location = original.Location,
             Module = original.Module,
-            Attributes = original.Attributes
+            Annotations = original.Annotations
         };
     }
 
@@ -282,7 +282,7 @@ public sealed class ErrorHandlingGenerator
             Visibility = original.Visibility,
             Location = original.Location,
             Module = original.Module,
-            Attributes = original.Attributes
+            Annotations = original.Annotations
         };
     }
 }

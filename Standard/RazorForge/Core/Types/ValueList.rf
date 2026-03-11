@@ -16,7 +16,7 @@ module Core
 record ValueList[T, N]
 needs T is record
 needs N is UAddr
-  # N elements of T stored inline by compiler - no explicit fields needed
+  # N elements of T stored inline by compiler - no explicit member variables needed
   pass
 
 # ============================================================================

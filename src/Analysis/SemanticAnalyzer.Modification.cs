@@ -10,7 +10,7 @@ using Diagnostics;
 /// Phase 4: Modification inference for RazorForge.
 /// Implements the three-phase algorithm from the wiki:
 ///
-/// Phase 1: Direct analysis - detect me.field = value patterns (done during body analysis)
+/// Phase 1: Direct analysis - detect me.memberVar = value patterns (done during body analysis)
 /// Phase 2: Call graph propagation - if A calls modifying B on me, A is modifying
 /// Phase 3: Token verification - verify modifying methods called with ! token (enforced at call sites)
 /// </summary>
@@ -55,7 +55,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Analyzes a statement for direct modifications to 'me' fields.
+    /// Analyzes a statement for direct modifications to 'me' member variables.
     /// Called during Phase 3 body analysis.
     /// </summary>
     /// <param name="statement">The statement to analyze for modifications.</param>
@@ -76,7 +76,7 @@ public sealed partial class SemanticAnalyzer
     /// Used for call graph edge annotation.
     /// </summary>
     /// <param name="target">The call target expression.</param>
-    /// <returns>True if the call is on 'me' or a field of 'me'.</returns>
+    /// <returns>True if the call is on 'me' or a member variable of 'me'.</returns>
     private bool IsCallOnMe(Expression target)
     {
         return target switch
@@ -84,8 +84,8 @@ public sealed partial class SemanticAnalyzer
             // me.method() - direct call on me
             MemberExpression { Object: IdentifierExpression { Name: "me" } } => true,
 
-            // me.field.method() - call on a field of me
-            MemberExpression member => IsFieldOfMe(expression: member.Object),
+            // me.memberVar.method() - call on a member variable of me
+            MemberExpression member => IsMemberVariableOfMe(expression: member.Object),
 
             // me itself (for protocols)
             IdentifierExpression { Name: "me" } => true,
@@ -95,21 +95,21 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if an expression is a field access on 'me' (directly or transitively).
-    /// Examples: me.field, me.field.subfield, me.list[0]
+    /// Checks if an expression is a member variable access on 'me' (directly or transitively).
+    /// Examples: me.memberVar, me.memberVar.subfield, me.list[0]
     /// </summary>
     /// <param name="expression">The expression to check.</param>
-    /// <returns>True if the expression accesses a field of 'me'.</returns>
-    private bool IsFieldOfMe(Expression expression)
+    /// <returns>True if the expression accesses a member variable of 'me'.</returns>
+    private bool IsMemberVariableOfMe(Expression expression)
     {
         return expression switch
         {
             MemberExpression memberExpr =>
                 memberExpr.Object is IdentifierExpression { Name: "me" } ||
-                IsFieldOfMe(expression: memberExpr.Object),
+                IsMemberVariableOfMe(expression: memberExpr.Object),
 
             IndexExpression indexExpr =>
-                IsFieldOfMe(expression: indexExpr.Object),
+                IsMemberVariableOfMe(expression: indexExpr.Object),
 
             IdentifierExpression { Name: "me" } => true,
 

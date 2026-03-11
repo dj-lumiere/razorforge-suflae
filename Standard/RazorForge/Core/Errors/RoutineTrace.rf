@@ -3,7 +3,7 @@ module Core
 # RoutineTrace - Collection of routine records captured at error time
 #
 # Contains up to 10 routine records, stored inline as a ValueList.
-# The depth field indicates how many records are actually valid.
+# The depth member variable indicates how many records are actually valid.
 
 record RoutineTrace
   frames: ValueList[RoutineRecord, 10]

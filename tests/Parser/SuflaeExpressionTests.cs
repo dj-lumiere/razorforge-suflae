@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing expressions in Suflae:
-/// method calls, field access, indexing, lambdas, closures, string interpolation.
+/// method calls, member variable access, indexing, lambdas, closures, string interpolation.
 /// Suflae uses indentation-based syntax.
 /// </summary>
 public class SuflaeExpressionTests
@@ -96,7 +96,7 @@ public class SuflaeExpressionTests
     #region Field Access Tests
 
     [Fact]
-    public void ParseSuflae_SimpleFieldAccess()
+    public void ParseSuflae_SimpleMemberVariableAccess()
     {
         string source = """
                         routine test()
@@ -107,7 +107,7 @@ public class SuflaeExpressionTests
     }
 
     [Fact]
-    public void ParseSuflae_ChainedFieldAccess()
+    public void ParseSuflae_ChainedMemberVariableAccess()
     {
         string source = """
                         routine test()
@@ -118,7 +118,7 @@ public class SuflaeExpressionTests
     }
 
     [Fact]
-    public void ParseSuflae_MixedFieldAndMethodAccess()
+    public void ParseSuflae_MixedMemberVariableAndMethodAccess()
     {
         string source = """
                         routine test()
@@ -129,7 +129,7 @@ public class SuflaeExpressionTests
     }
 
     [Fact]
-    public void ParseSuflae_MeFieldAccess()
+    public void ParseSuflae_MeMemberVariableAccess()
     {
         string source = """
                         @readonly
@@ -847,7 +847,7 @@ public class SuflaeExpressionTests
     #region With Expression Tests
 
     [Fact]
-    public void ParseSuflae_WithFieldUpdate()
+    public void ParseSuflae_WithMemberVariableUpdate()
     {
         string source = """
                         routine test()
@@ -880,7 +880,7 @@ public class SuflaeExpressionTests
     }
 
     [Fact]
-    public void ParseSuflae_WithNestedField()
+    public void ParseSuflae_WithNestedMemberVariable()
     {
         string source = """
                         routine test()
@@ -918,12 +918,12 @@ public class SuflaeExpressionTests
 
         Assert.NotNull(withExpr);
         Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
-        Assert.Equal(expected: "x", actual: withExpr.Updates[0].FieldPath![0]);
-        Assert.Equal(expected: "y", actual: withExpr.Updates[1].FieldPath![0]);
+        Assert.Equal(expected: "x", actual: withExpr.Updates[0].MemberVariablePath![0]);
+        Assert.Equal(expected: "y", actual: withExpr.Updates[1].MemberVariablePath![0]);
     }
 
     [Fact]
-    public void ParseSuflae_WithExpression_NestedFieldPath_ASTStructure()
+    public void ParseSuflae_WithExpression_NestedMemberVariablePath_ASTStructure()
     {
         string source = """
                         routine test()
@@ -939,9 +939,9 @@ public class SuflaeExpressionTests
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
-        Assert.Equal(expected: 2, actual: withExpr.Updates[0].FieldPath!.Count);
-        Assert.Equal(expected: "address", actual: withExpr.Updates[0].FieldPath![0]);
-        Assert.Equal(expected: "city", actual: withExpr.Updates[0].FieldPath![1]);
+        Assert.Equal(expected: 2, actual: withExpr.Updates[0].MemberVariablePath!.Count);
+        Assert.Equal(expected: "address", actual: withExpr.Updates[0].MemberVariablePath![0]);
+        Assert.Equal(expected: "city", actual: withExpr.Updates[0].MemberVariablePath![1]);
     }
 
     #endregion

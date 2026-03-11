@@ -13,79 +13,79 @@ public partial class Parser
 {
     /// <summary>
     /// Parses attributes like @crash_only, @inline, @[readonly, inline], etc.
-    /// Attributes are prefixed with @ and followed by an identifier, optionally with arguments.
+    /// Annotations are prefixed with @ and followed by an identifier, optionally with arguments.
     /// Also supports compound attributes: @[attr1, attr2, attr3]
     /// </summary>
-    private List<string> ParseAttributes()
+    private List<string> ParseAnnotations()
     {
-        var attributes = new List<string>();
+        var annotations = new List<string>();
 
-        // Handle @attribute, @[...] compound, and @intrinsic special token
+        // Handle @annotation, @[...] compound, and @intrinsic special token
         while (Check(TokenType.At, TokenType.Intrinsic))
         {
-            string attrName;
+            string annotName;
 
             if (Match(type: TokenType.Intrinsic))
             {
                 // @intrinsic was tokenized as a single Intrinsic token
-                attrName = "intrinsic";
-                attributes.Add(item: attrName);
+                annotName = "intrinsic";
+                annotations.Add(item: annotName);
             }
             else if (Match(type: TokenType.At))
             {
-                // Check for compound attribute syntax: @[attr1, attr2, ...]
+                // Check for compound annotation syntax: @[attr1, attr2, ...]
                 if (Match(type: TokenType.LeftBracket))
                 {
-                    // Parse comma-separated list of attribute names
+                    // Parse comma-separated list of annotation names
                     do
                     {
-                        string compoundAttr = ConsumeIdentifier(errorMessage: "Expected attribute name in compound attribute");
+                        string compoundAnnot = ConsumeIdentifier(errorMessage: "Expected annotation name in compound annotation");
 
-                        // Check for optional arguments on each attribute
+                        // Check for optional arguments on each annotation
                         if (Match(type: TokenType.LeftParen))
                         {
-                            compoundAttr += "(" + ParseAttributeArgumentList() + ")";
+                            compoundAnnot += "(" + ParseAnnotationArgumentList() + ")";
                         }
 
-                        attributes.Add(item: compoundAttr);
+                        annotations.Add(item: compoundAnnot);
                     } while (Match(type: TokenType.Comma));
 
-                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after compound attributes");
+                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after compound annotations");
                 }
                 else
                 {
-                    // Regular attribute: @identifier
-                    attrName = ConsumeIdentifier(errorMessage: "Expected attribute name after '@'");
+                    // Regular annotation: @identifier
+                    annotName = ConsumeIdentifier(errorMessage: "Expected annotation name after '@'");
 
-                    // Check for attribute arguments: @something("size_of") or @config(name: "value", count: 5)
+                    // Check for annotation arguments: @something("size_of") or @config(name: "value", count: 5)
                     if (Match(type: TokenType.LeftParen))
                     {
-                        attrName += "(" + ParseAttributeArgumentList() + ")";
+                        annotName += "(" + ParseAnnotationArgumentList() + ")";
                     }
 
-                    attributes.Add(item: attrName);
+                    annotations.Add(item: annotName);
                 }
             }
             else
             {
-                break; // No more attributes
+                break; // No more annotations
             }
 
-            // Skip newlines between attributes (allows multiple @attr on separate lines)
+            // Skip newlines between annotations (allows multiple @attr on separate lines)
             while (Match(type: TokenType.Newline))
             {
                 // Skip newlines
             }
         }
 
-        return attributes;
+        return annotations;
     }
 
     /// <summary>
-    /// Parses the argument list for an attribute (the content inside parentheses).
+    /// Parses the argument list for an annotation (the content inside parentheses).
     /// </summary>
     /// <returns>String representation of the argument list.</returns>
-    private string ParseAttributeArgumentList()
+    private string ParseAnnotationArgumentList()
     {
         var arguments = new List<string>();
 
@@ -105,29 +105,29 @@ public partial class Parser
                         throw ThrowParseError(GrammarDiagnosticCode.UnexpectedToken,
                             "Expected ':' or '=' after argument name");
                     }
-                    string argValue = ParseAttributeValue();
+                    string argValue = ParseAnnotationValue();
                     arguments.Add(item: $"{argName}={argValue}");
                 }
                 else
                 {
                     // Positional argument (string literal, number, identifier)
-                    arguments.Add(item: ParseAttributeValue());
+                    arguments.Add(item: ParseAnnotationValue());
                 }
             } while (Match(type: TokenType.Comma));
         }
 
-        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after attribute arguments");
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after annotation arguments");
 
         return string.Join(separator: ", ", values: arguments);
     }
 
     /// <summary>
-    /// Parses a single attribute argument value (string, number, bool, or identifier).
+    /// Parses a single annotation argument value (string, number, bool, or identifier).
     /// </summary>
-    /// <returns>String representation of the attribute value.</returns>
-    private string ParseAttributeValue()
+    /// <returns>String representation of the annotation value.</returns>
+    private string ParseAnnotationValue()
     {
-        // Attribute values are limited to build-time constants:
+        // Annotation values are limited to build-time constants:
         // string, number, bool, or identifier (for enums/presets)
 
         // String literal
@@ -173,8 +173,8 @@ public partial class Parser
                .Text;
         }
 
-        throw ThrowParseError(GrammarDiagnosticCode.ExpectedAttributeValue,
-            $"Expected attribute value, got {CurrentToken.Type}");
+        throw ThrowParseError(GrammarDiagnosticCode.ExpectedAnnotationValue,
+            $"Expected annotation value, got {CurrentToken.Type}");
     }
 
     /// <summary>
@@ -215,19 +215,19 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Parses a field declaration in records.
+    /// Parses a member variable declaration in records.
     /// Syntax: <c>name: Type</c> or <c>public name: Type = value</c>
-    /// Fields are declared without var keywords.
+    /// MemberVariables are declared without var keywords.
     /// </summary>
     /// <param name="visibility">Access modifier (public, published, internal, private).</param>
     /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
-    private VariableDeclaration ParseFieldDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
+    private VariableDeclaration ParseMemberVariableDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
     {
         SourceLocation location = GetLocation();
 
-        string name = ConsumeIdentifier(errorMessage: "Expected field name");
+        string name = ConsumeIdentifier(errorMessage: "Expected member variable name");
 
-        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after field name");
+        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after member variable name");
         TypeExpression type = ParseType();
 
         Expression? initializer = null;
@@ -481,7 +481,7 @@ public partial class Parser
             ReturnType: returnType,
             Body: body,
             Visibility: visibility,
-            Attributes: attributes ?? [],
+            Annotations: attributes ?? [],
             Location: location,
             GenericParameters: genericParams,
             GenericConstraints: constraints,
@@ -538,8 +538,8 @@ public partial class Parser
         // Parse entity body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after entity header");
 
-        // Enable field declaration syntax inside entity body
-        // Entities allow modifiers on fields (unlike records)
+        // Enable member variable declaration syntax inside entity body
+        // Entities allow modifiers on member variables (unlike records)
         bool wasParsingTypeBody = _parsingTypeBody;
         bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
         _parsingTypeBody = true;
@@ -649,12 +649,12 @@ public partial class Parser
         // Parse record body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after record header");
 
-        // Enable field declaration syntax inside record body
-        // Records are strict: no modifiers allowed on fields
+        // Enable member variable declaration syntax inside record body
+        // Records are strict: no modifiers allowed on member variables
         bool wasParsingTypeBody = _parsingTypeBody;
         bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
         _parsingTypeBody = true;
-        _parsingStrictRecordBody = true;  // Records disallow modifiers on fields
+        _parsingStrictRecordBody = true;  // Records disallow modifiers on member variables
 
         if (Check(type: TokenType.Indent))
         {
@@ -763,8 +763,8 @@ public partial class Parser
         // Parse resident body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after resident header");
 
-        // Enable field declaration syntax inside resident body
-        // Residents allow modifiers on fields (like entities, unlike records)
+        // Enable member variable declaration syntax inside resident body
+        // Residents allow modifiers on member variables (like entities, unlike records)
         bool wasParsingTypeBody = _parsingTypeBody;
         bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
         _parsingTypeBody = true;
@@ -1111,9 +1111,9 @@ public partial class Parser
             }
 
             // Parse optional attributes on routine signatures (e.g., @readonly)
-            List<string> methodAttributes = ParseAttributes();
+            List<string> methodAnnotations = ParseAnnotations();
 
-            // Skip newlines between attributes and routine keyword
+            // Skip newlines between annotations and routine keyword
             while (Match(type: TokenType.Newline))
             {
             }
@@ -1191,7 +1191,7 @@ public partial class Parser
                 methods.Add(item: new RoutineSignature(Name: methodName,
                     Parameters: parameters,
                     ReturnType: returnType,
-                    Attributes: methodAttributes.Count > 0 ? methodAttributes : null,
+                    Annotations: methodAnnotations.Count > 0 ? methodAnnotations : null,
                     Location: GetLocation()));
                 Match(type: TokenType.Newline);
             }
@@ -1458,7 +1458,7 @@ public partial class Parser
             ReturnType: returnType,
             CallingConvention: effectiveCallingConvention,
             IsVariadic: isVariadic,
-            Attributes: attributes,
+            Annotations: attributes,
             IsDangerous: isDangerous,
             Location: location);
     }

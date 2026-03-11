@@ -54,9 +54,9 @@ public sealed class TupleTypeInfo : TypeInfo
     public IReadOnlyList<TypeInfo> ElementTypes { get; }
 
     /// <summary>
-    /// Synthetic fields generated for this tuple (item0, item1, etc.).
+    /// Synthetic member variables generated for this tuple (item0, item1, etc.).
     /// </summary>
-    public IReadOnlyList<FieldInfo> Fields { get; }
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; }
 
     /// <summary>
     /// Creates a new tuple type with the specified element types and kind.
@@ -74,18 +74,18 @@ public sealed class TupleTypeInfo : TypeInfo
         ElementTypes = elementTypes;
         Kind = kind;
 
-        // Generate synthetic fields: item0, item1, ..., itemN
-        var fields = new List<FieldInfo>(capacity: elementTypes.Count);
+        // Generate synthetic member variables: item0, item1, ..., itemN
+        var memberVariables = new List<MemberVariableInfo>(capacity: elementTypes.Count);
         for (int i = 0; i < elementTypes.Count; i++)
         {
-            fields.Add(item: new FieldInfo(name: $"item{i}", type: elementTypes[i])
+            memberVariables.Add(item: new MemberVariableInfo(name: $"item{i}", type: elementTypes[i])
             {
                 Visibility = VisibilityModifier.Open,
                 Index = i
             });
         }
 
-        Fields = fields;
+        MemberVariables = memberVariables;
 
         // Set TypeArguments so FullName displays correctly (e.g., "ValueTuple<S32, S32>")
         TypeArguments = elementTypes;
@@ -112,28 +112,28 @@ public sealed class TupleTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Gets the field info for a specific element index.
+    /// Gets the member variable info for a specific element index.
     /// </summary>
     /// <param name="index">The zero-based index (0 for item0, 1 for item1, etc.).</param>
-    /// <returns>The field info, or null if index is out of range.</returns>
-    public FieldInfo? GetField(int index)
+    /// <returns>The member variable info, or null if index is out of range.</returns>
+    public MemberVariableInfo? GetField(int index)
     {
-        return index >= 0 && index < Fields.Count ? Fields[index] : null;
+        return index >= 0 && index < MemberVariables.Count ? MemberVariables[index] : null;
     }
 
     /// <summary>
-    /// Gets the field info by name (item0, item1, etc.).
+    /// Gets the member variable info by name (item0, item1, etc.).
     /// </summary>
-    /// <param name="fieldName">The field name (e.g., "item0", "item1").</param>
-    /// <returns>The field info, or null if not found.</returns>
-    public FieldInfo? GetField(string fieldName)
+    /// <param name="memberVariableName">The member variable name (e.g., "item0", "item1").</param>
+    /// <returns>The member variable info, or null if not found.</returns>
+    public MemberVariableInfo? GetField(string memberVariableName)
     {
-        if (!fieldName.StartsWith(value: "item", comparisonType: StringComparison.Ordinal))
+        if (!memberVariableName.StartsWith(value: "item", comparisonType: StringComparison.Ordinal))
         {
             return null;
         }
 
-        if (int.TryParse(s: fieldName.AsSpan(start: 4), result: out int index))
+        if (int.TryParse(s: memberVariableName.AsSpan(start: 4), result: out int index))
         {
             return GetField(index: index);
         }

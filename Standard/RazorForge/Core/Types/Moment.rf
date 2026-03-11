@@ -123,7 +123,7 @@ routine Moment.now() -> Moment
   return rf_moment_now()
 
 # ============================================================================
-# Date accessors (derived from seconds field)
+# Date accessors (derived from seconds member variable)
 # ============================================================================
 
 @readonly
@@ -148,7 +148,7 @@ routine Moment.day_of_week() -> S64
   return dow
 
 # ============================================================================
-# Time accessors (derived from seconds and nanoseconds fields)
+# Time accessors (derived from seconds and nanoseconds member variables)
 # ============================================================================
 
 @readonly

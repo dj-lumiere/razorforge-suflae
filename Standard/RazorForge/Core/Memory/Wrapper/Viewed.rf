@@ -5,7 +5,7 @@
 #
 # Syntax:
 #   viewing <entity_or_resident> as v
-#       show(v.field)  # Read-only access
+#       show(v.member variable)  # Read-only access
 #       var copy = v   # OK - Viewed can be copied
 #   } # v destroyed here, cannot escape scope
 #
@@ -27,5 +27,5 @@ routine T.view!() -> Viewed[T]
   return Viewed[T](T.snatch())
 
 # NOTE: No creators, no methods - all operations handled by compiler
-# The address field is managed internally by the viewing syntax implementation
+# The address member variable is managed internally by the viewing syntax implementation
 # Users should NEVER create Viewed[T] values directly

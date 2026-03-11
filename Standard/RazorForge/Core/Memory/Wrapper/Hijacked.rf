@@ -5,7 +5,7 @@
 #
 # Syntax:
 #   hijacking <entity_or_resident> as h
-#       h.field = 42  # Exclusive write access
+#       h.member variable = 42  # Exclusive write access
 #   } # h destroyed here, cannot escape scope
 #
 # Properties:
@@ -25,5 +25,5 @@ routine T.hijack!() -> Hijacked[T]
   return Hijacked[T](T.snatch())
 
 # NOTE: No creators, no methods - all operations handled by compiler
-# The address field is managed internally by the hijacking syntax implementation
+# The address member variable is managed internally by the hijacking syntax implementation
 # Users should NEVER create Hijacked[T] values directly

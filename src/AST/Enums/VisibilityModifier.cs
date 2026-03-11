@@ -8,7 +8,7 @@
 /// Both languages share the same visibility levels:
 /// <list type="bullet">
 /// <item>secret - Only the declaring module can access</item>
-/// <item>posted - Open read, secret write (for fields)</item>
+/// <item>posted - Open read, secret write (for member variables)</item>
 /// <item>open - Any code can access</item>
 /// <item>external - External/FFI linkage</item>
 /// </list>

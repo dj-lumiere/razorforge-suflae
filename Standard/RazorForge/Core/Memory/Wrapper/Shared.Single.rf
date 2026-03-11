@@ -51,6 +51,6 @@ routine Shared[T].weak_count() -> S32
   danger!
     return me.controller.weak_count()
 
-# Direct field access allowed for single-threaded Shared
+# Direct member variable access allowed for single-threaded Shared
 # No locking needed - just dereference the data pointer
 # Use .view() or .hijack() for temporary access

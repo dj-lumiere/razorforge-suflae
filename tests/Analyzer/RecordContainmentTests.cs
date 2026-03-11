@@ -13,10 +13,10 @@ using static TestHelpers;
 /// </summary>
 public class RecordContainmentTests
 {
-    #region Valid Record Fields (no errors expected)
+    #region Valid Record MemberVariables (no errors expected)
 
     [Fact]
-    public void Analyze_RecordWithPrimitiveFields_NoErrors()
+    public void Analyze_RecordWithPrimitiveMemberVariables_NoErrors()
     {
         string source = """
                         record Point
@@ -30,7 +30,7 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_RecordWithRecordField_NoErrors()
+    public void Analyze_RecordWithRecordMemberVariable_NoErrors()
     {
         string source = """
                         record Inner
@@ -45,7 +45,7 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_RecordWithChoiceField_NoErrors()
+    public void Analyze_RecordWithChoiceMemberVariable_NoErrors()
     {
         string source = """
                         choice Color
@@ -93,10 +93,10 @@ public class RecordContainmentTests
 
     #endregion
 
-    #region Invalid Record Fields (errors expected)
+    #region Invalid Record MemberVariables (errors expected)
 
     [Fact]
-    public void Analyze_RecordWithEntityField_ReportsError()
+    public void Analyze_RecordWithEntityMemberVariable_ReportsError()
     {
         string source = """
                         entity User
@@ -112,7 +112,7 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_RecordWithEntityField_MessageMentionsValueTypes()
+    public void Analyze_RecordWithEntityMemberVariable_MessageMentionsValueTypes()
     {
         string source = """
                         entity Connection
@@ -128,7 +128,7 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_RecordWithResidentField_ReportsError()
+    public void Analyze_RecordWithResidentMemberVariable_ReportsError()
     {
         string source = """
                         resident GlobalState
@@ -145,10 +145,10 @@ public class RecordContainmentTests
 
     #endregion
 
-    #region Entity Cannot Hold Resident Fields
+    #region Entity Cannot Hold Resident MemberVariables
 
     [Fact]
-    public void Analyze_EntityWithResidentField_ReportsError()
+    public void Analyze_EntityWithResidentMemberVariable_ReportsError()
     {
         string source = """
                         resident GlobalState
@@ -159,7 +159,7 @@ public class RecordContainmentTests
 
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EntityContainsResidentField);
+            filter: e => e.Code == SemanticDiagnosticCode.EntityContainsResidentMemberVariable);
     }
 
     #endregion
@@ -200,7 +200,7 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_WithOnRecordMultiField_NoError()
+    public void Analyze_WithOnRecordMultiMemberVariable_NoError()
     {
         string source = """
                         record Point

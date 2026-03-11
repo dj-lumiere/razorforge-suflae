@@ -8,8 +8,8 @@
 /// The builder automatically infers modification categories using three-phase analysis:
 ///
 /// Phase 1 (Direct Analysis):
-///   - If method writes to any field of me → Writable
-///   - If method calls .hijack() on me fields → Writable
+///   - If method writes to any member variable of me → Writable
+///   - If method calls .hijack() on me member variables → Writable
 ///
 /// Phase 2 (Call Graph Propagation):
 ///   - If method calls a Writable method on me → Writable

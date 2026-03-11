@@ -21,11 +21,11 @@ public partial class LLVMCodeGenerator
             // Intrinsic types map directly to LLVM
             IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic),
 
-            // Single-field record wrappers → unwrap to underlying intrinsic
-            RecordTypeInfo { IsSingleFieldWrapper: true } record =>
+            // Single-member-variable record wrappers → unwrap to underlying intrinsic
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetLLVMType(record.UnderlyingIntrinsic!),
 
-            // Multi-field records → LLVM struct type
+            // Multi-member-variable records → LLVM struct type
             RecordTypeInfo record => GetRecordTypeName(record),
 
             // Entities → pointer to LLVM struct
@@ -189,7 +189,7 @@ public partial class LLVMCodeGenerator
         return type switch
         {
             IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic),
-            RecordTypeInfo { IsSingleFieldWrapper: true } record =>
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetTypeSize(record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record),
             EntityTypeInfo entity => CalculateEntitySize(entity),
@@ -225,17 +225,17 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Calculates the size of a record type (sum of field sizes with alignment).
+    /// Calculates the size of a record type (sum of member variable sizes with alignment).
     /// </summary>
     private int CalculateRecordSize(RecordTypeInfo record)
     {
         int size = 0;
-        foreach (var field in record.Fields)
+        foreach (var memberVariable in record.MemberVariables)
         {
-            int fieldSize = GetTypeSize(field.Type);
-            // Align to field size (simplified - real alignment is more complex)
-            size = AlignTo(size, Math.Min(fieldSize, 8));
-            size += fieldSize;
+            int memberVariableSize = GetTypeSize(memberVariable.Type);
+            // Align to member variable size (simplified - real alignment is more complex)
+            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            size += memberVariableSize;
         }
         return AlignTo(size, 8); // Align struct to 8 bytes
     }
@@ -246,11 +246,11 @@ public partial class LLVMCodeGenerator
     private int CalculateEntitySize(EntityTypeInfo entity)
     {
         int size = 0;
-        foreach (var field in entity.Fields)
+        foreach (var memberVariable in entity.MemberVariables)
         {
-            int fieldSize = GetTypeSize(field.Type);
-            size = AlignTo(size, Math.Min(fieldSize, 8));
-            size += fieldSize;
+            int memberVariableSize = GetTypeSize(memberVariable.Type);
+            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            size += memberVariableSize;
         }
         return AlignTo(size, 8);
     }
@@ -261,11 +261,11 @@ public partial class LLVMCodeGenerator
     private int CalculateResidentSize(ResidentTypeInfo resident)
     {
         int size = 0;
-        foreach (var field in resident.Fields)
+        foreach (var memberVariable in resident.MemberVariables)
         {
-            int fieldSize = GetTypeSize(field.Type);
-            size = AlignTo(size, Math.Min(fieldSize, 8));
-            size += fieldSize;
+            int memberVariableSize = GetTypeSize(memberVariable.Type);
+            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            size += memberVariableSize;
         }
         return AlignTo(size, 8);
     }

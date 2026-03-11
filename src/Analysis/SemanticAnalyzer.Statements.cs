@@ -361,7 +361,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol targetType = AnalyzeExpression(expression: assign.Target);
         TypeSymbol valueType = AnalyzeExpression(expression: assign.Value);
 
-        // Check if target is assignable (variable, field, or index)
+        // Check if target is assignable (variable, member variable, or index)
         if (!IsAssignableTarget(target: assign.Target))
         {
             ReportError(
@@ -384,21 +384,21 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Validate field write access (setter visibility)
+        // Validate member variable write access (setter visibility)
         if (assign.Target is MemberExpression member)
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
-            ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: assign.Location);
+            ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: assign.Location);
 
-            // Preset enforcement: cannot assign to fields of preset variables
-            if (member.Object is IdentifierExpression fieldTarget)
+            // Preset enforcement: cannot assign to member variables of preset variables
+            if (member.Object is IdentifierExpression memberVariableTarget)
             {
-                VariableInfo? targetVar = _registry.LookupVariable(name: fieldTarget.Name);
+                VariableInfo? targetVar = _registry.LookupVariable(name: memberVariableTarget.Name);
                 if (targetVar is { IsModifiable: false })
                 {
                     ReportError(
-                        SemanticDiagnosticCode.FieldAssignmentOnImmutable,
-                        $"Cannot assign to field '{member.PropertyName}' of preset variable '{fieldTarget.Name}'.",
+                        SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable,
+                        $"Cannot assign to member variable '{member.PropertyName}' of preset variable '{memberVariableTarget.Name}'.",
                         assign.Location);
                 }
             }
@@ -409,7 +409,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.ModificationInReadonlyMethod,
-                    $"Cannot modify field '{member.PropertyName}' in a @readonly method. " +
+                    $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
                     "Use @writable or @migratable to allow modifications.",
                     assign.Location);
             }

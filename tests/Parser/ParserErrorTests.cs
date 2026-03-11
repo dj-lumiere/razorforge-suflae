@@ -27,7 +27,7 @@ public class ParserErrorTests
     }
 
     [Fact]
-    public void Parse_Record_MissingFieldType_ThrowsOrRecovers()
+    public void Parse_Record_MissingMemberVariableType_ThrowsOrRecovers()
     {
         string source = """
                         record Point
@@ -50,10 +50,10 @@ public class ParserErrorTests
                           y: F32
                         """;
 
-        // This tests that var in record field is either rejected or ignored
+        // This tests that var in record member variable is either rejected or ignored
         // Depending on parser behavior, this may parse but semantic analysis should catch it
         Parse(source: source);
-        // If it parses, the field should still be immutable
+        // If it parses, the member variable should still be immutable
     }
 
     #endregion
@@ -61,7 +61,7 @@ public class ParserErrorTests
     #region Entity Errors
 
     [Fact]
-    public void Parse_Entity_FieldWithoutVarOrLet_IsValid()
+    public void Parse_Entity_MemberVariableWithoutVarOrLet_IsValid()
     {
         // Entity fields use 'name: Type' syntax without var keyword
         string source = """

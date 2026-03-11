@@ -5,7 +5,7 @@ module Core
 ### Complex number with double precision (2x F64) components
 ###
 ### C64 is the default complex type for scientific computing.
-### Not @intrinsic — implemented as a record of two F64 fields.
+### Not @intrinsic — implemented as a record of two F64 member variables.
 ###
 ### Example:
 ###   var z = C64(real: 3.0, imag: 4.0)

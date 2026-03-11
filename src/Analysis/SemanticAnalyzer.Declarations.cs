@@ -78,7 +78,7 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case VariableDeclaration variable:
-                CollectFieldDeclaration(field: variable);
+                CollectMemberVariableDeclaration(memberVariable: variable);
                 break;
 
             case ModuleDeclaration ns:
@@ -141,69 +141,69 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
-    private void CollectFieldDeclaration(VariableDeclaration field)
+    private void CollectMemberVariableDeclaration(VariableDeclaration memberVariable)
     {
-        // Fields are VariableDeclarations within type members
+        // MemberVariables are VariableDeclarations within type members
         // Visibility is validated using the simplified four-level system:
         // - public: read/write from anywhere
         // - published: public read, private write
         // - internal: read/write within module
         // - private: read/write within file
 
-        // Check for duplicate field names within the same type
-        if (_currentTypeFieldNames != null)
+        // Check for duplicate member variable names within the same type
+        if (_currentTypeMemberVariableNames != null)
         {
-            if (!_currentTypeFieldNames.Add(item: field.Name))
+            if (!_currentTypeMemberVariableNames.Add(item: memberVariable.Name))
             {
                 ReportError(
-                    SemanticDiagnosticCode.DuplicateFieldDefinition,
-                    $"Field '{field.Name}' is already defined in this type.",
-                    field.Location);
+                    SemanticDiagnosticCode.DuplicateMemberVariableDefinition,
+                    $"Member variable '{memberVariable.Name}' is already defined in this type.",
+                    memberVariable.Location);
             }
         }
 
-        if (field.Type == null)
+        if (memberVariable.Type == null)
         {
             return; // Type inference will be handled later
         }
 
-        TypeSymbol fieldType = ResolveType(typeExpr: field.Type);
+        TypeSymbol memberVariableType = ResolveType(typeExpr: memberVariable.Type);
 
-        // Validate that tokens cannot be stored in fields
-        ValidateNotTokenFieldType(type: fieldType, fieldName: field.Name, location: field.Location);
+        // Validate that tokens cannot be stored in member variables
+        ValidateNotTokenMemberVariableType(type: memberVariableType, memberVariableName: memberVariable.Name, location: memberVariable.Location);
 
-        // Validate that variant types cannot be stored in fields
-        if (fieldType is VariantTypeInfo)
+        // Validate that variant types cannot be stored in member variables
+        if (memberVariableType is VariantTypeInfo)
         {
             ReportError(
-                SemanticDiagnosticCode.VariantFieldNotAllowed,
-                $"Variant type '{fieldType.Name}' cannot be stored in field '{field.Name}'. " +
+                SemanticDiagnosticCode.VariantMemberVariableNotAllowed,
+                $"Variant type '{memberVariableType.Name}' cannot be stored in member variable '{memberVariable.Name}'. " +
                 "Variants must be dismantled immediately with pattern matching.",
-                field.Location);
+                memberVariable.Location);
         }
 
-        // Validate that Result<T> and Lookup<T> are not used as field types
-        if (fieldType is ErrorHandlingTypeInfo errorHandlingType &&
+        // Validate that Result<T> and Lookup<T> are not used as member variable types
+        if (memberVariableType is ErrorHandlingTypeInfo errorHandlingType &&
             errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
         {
             ReportError(
-                SemanticDiagnosticCode.ErrorHandlingTypeAsField,
-                $"'{errorHandlingType.Kind}[T]' cannot be used as a field type. " +
+                SemanticDiagnosticCode.ErrorHandlingTypeAsMemberVariable,
+                $"'{errorHandlingType.Kind}[T]' cannot be used as a member variable type. " +
                 "Error handling types are internal for error propagation and should not be stored.",
-                field.Location);
+                memberVariable.Location);
         }
 
-        // Entity cannot hold resident fields (#48)
-        if (_currentType is EntityTypeInfo && fieldType is ResidentTypeInfo)
+        // Entity cannot hold resident member variables (#48)
+        if (_currentType is EntityTypeInfo && memberVariableType is ResidentTypeInfo)
         {
             ReportError(
-                SemanticDiagnosticCode.EntityContainsResidentField,
-                $"Entity field '{field.Name}' cannot be a resident type ('{fieldType.Name}'). " +
+                SemanticDiagnosticCode.EntityContainsResidentMemberVariable,
+                $"Entity member variable '{memberVariable.Name}' cannot be a resident type ('{memberVariableType.Name}'). " +
                 "Residents are global singletons and cannot be embedded in other types.",
-                field.Location);
+                memberVariable.Location);
         }
 
-        // TODO: Register field in the current type's field list when type body resolution is implemented
+        // TODO: Register member variable in the current type's member variable list when type body resolution is implemented
     }
 
     private void CollectPresetDeclaration(PresetDeclaration preset)
@@ -399,9 +399,9 @@ public sealed partial class SemanticAnalyzer
 
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
-        ModificationCategory declaredModification = routine.Attributes.Contains(item: "readonly")
+        ModificationCategory declaredModification = routine.Annotations.Contains(item: "readonly")
             ? ModificationCategory.Readonly
-            : routine.Attributes.Contains(item: "writable")
+            : routine.Annotations.Contains(item: "writable")
                 ? ModificationCategory.Writable
                 : ModificationCategory.Migratable;
 
@@ -415,7 +415,7 @@ public sealed partial class SemanticAnalyzer
             Visibility = routine.Visibility,
             Location = routine.Location,
             Module = GetCurrentModuleName(),
-            Attributes = routine.Attributes,
+            Annotations = routine.Annotations,
             DeclaredModification = declaredModification,
             ModificationCategory = declaredModification,
             IsDangerous = routine.IsDangerous
@@ -605,7 +605,7 @@ public sealed partial class SemanticAnalyzer
             Visibility = VisibilityModifier.Open, // External declarations are always open
             Location = external.Location,
             Module = GetCurrentModuleName(),
-            Attributes = external.Attributes ?? [],
+            Annotations = external.Annotations ?? [],
             IsDangerous = external.IsDangerous
         };
 
@@ -632,7 +632,7 @@ public sealed partial class SemanticAnalyzer
     #region Phase 2: Type Body Resolution
 
     /// <summary>
-    /// Resolves type bodies including fields and method signatures.
+    /// Resolves type bodies including member variables and method signatures.
     /// </summary>
     /// <param name="program">The program to resolve.</param>
     private void ResolveTypeBodies(Program program)
@@ -688,10 +688,10 @@ public sealed partial class SemanticAnalyzer
         }
 
         TypeSymbol? previousType = _currentType;
-        HashSet<string>? previousFieldNames = _currentTypeFieldNames;
+        HashSet<string>? previousFieldNames = _currentTypeMemberVariableNames;
 
         _currentType = _registry.LookupType(name: record.Name);
-        _currentTypeFieldNames = [];
+        _currentTypeMemberVariableNames = [];
 
         // Resolve implemented protocols
         if (_currentType is RecordTypeInfo && record.Protocols.Count > 0)
@@ -723,22 +723,22 @@ public sealed partial class SemanticAnalyzer
             typeParameters: record.GenericParameters,
             location: record.Location);
 
-        // Collect fields and other members
-        var fields = new List<FieldInfo>();
-        int fieldIndex = 0;
+        // Collect member variables and other members
+        var memberVariables = new List<MemberVariableInfo>();
+        int memberVariableIndex = 0;
 
         foreach (Declaration member in record.Members)
         {
-            if (member is VariableDeclaration field)
+            if (member is VariableDeclaration memberVariable)
             {
-                // Resolve field type
-                TypeSymbol fieldType = field.Type != null
-                    ? ResolveType(typeExpr: field.Type)
+                // Resolve member variable type
+                TypeSymbol memberVariableType = memberVariable.Type != null
+                    ? ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
                 // Records can only contain value types + Snatched<T>
                 // Entities, wrappers (Shared, Tracked, Viewed, etc.), and reference tuples are not allowed
-                if (fieldType is TypeInfo fieldTypeInfo
+                if (memberVariableType is TypeInfo fieldTypeInfo
                     && fieldTypeInfo is not ErrorTypeInfo
                     && fieldTypeInfo is not GenericParameterTypeInfo
                     && !TypeRegistry.IsValueType(type: fieldTypeInfo)
@@ -746,37 +746,37 @@ public sealed partial class SemanticAnalyzer
                 {
                     ReportError(
                         SemanticDiagnosticCode.RecordContainsNonValueType,
-                        $"Record field '{field.Name}' has type '{fieldType.Name}' which is not a value type. " +
+                        $"Record member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not a value type. " +
                         "Records can only contain value types (records, choices, variants, value tuples) and Snatched[T].",
-                        field.Location);
+                        memberVariable.Location);
                 }
 
-                // Create field info
-                var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
+                // Create member variable info
+                var memberVariableInfo = new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
                 {
 
-                    Visibility = field.Visibility,
-                    Index = fieldIndex++,
-                    HasDefaultValue = field.Initializer != null,
-                    Location = field.Location,
+                    Visibility = memberVariable.Visibility,
+                    Index = memberVariableIndex++,
+                    HasDefaultValue = memberVariable.Initializer != null,
+                    Location = memberVariable.Location,
                     Owner = _currentType
                 };
 
-                fields.Add(item: fieldInfo);
+                memberVariables.Add(item: memberVariableInfo);
             }
 
             // Still call CollectDeclaration for validation and other member types
             CollectDeclaration(node: member);
         }
 
-        // Update the record with resolved fields
-        if (fields.Count > 0)
+        // Update the record with resolved member variables
+        if (memberVariables.Count > 0)
         {
-            _registry.UpdateRecordFields(recordName: _currentType!.FullName, fields: fields);
+            _registry.UpdateRecordMemberVariables(recordName: _currentType!.FullName, memberVariables: memberVariables);
         }
 
         _currentType = previousType;
-        _currentTypeFieldNames = previousFieldNames;
+        _currentTypeMemberVariableNames = previousFieldNames;
     }
 
     private void ResolveEntityBody(EntityDeclaration entity)
@@ -790,10 +790,10 @@ public sealed partial class SemanticAnalyzer
         }
 
         TypeSymbol? previousType = _currentType;
-        HashSet<string>? previousFieldNames = _currentTypeFieldNames;
+        HashSet<string>? previousFieldNames = _currentTypeMemberVariableNames;
 
         _currentType = _registry.LookupType(name: entity.Name);
-        _currentTypeFieldNames = [];
+        _currentTypeMemberVariableNames = [];
 
         // Resolve implemented protocols
         if (_currentType is EntityTypeInfo && entity.Protocols.Count > 0)
@@ -818,41 +818,41 @@ public sealed partial class SemanticAnalyzer
             _registry.UpdateEntityProtocols(entityName: _currentType!.FullName, protocols: resolvedProtocols);
         }
 
-        // Collect fields and other members
-        var fields = new List<FieldInfo>();
-        int fieldIndex = 0;
+        // Collect member variables and other members
+        var memberVariables = new List<MemberVariableInfo>();
+        int memberVariableIndex = 0;
 
         foreach (Declaration member in entity.Members)
         {
-            if (member is VariableDeclaration field)
+            if (member is VariableDeclaration memberVariable)
             {
-                TypeSymbol fieldType = field.Type != null
-                    ? ResolveType(typeExpr: field.Type)
+                TypeSymbol memberVariableType = memberVariable.Type != null
+                    ? ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
+                var memberVariableInfo = new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
                 {
 
-                    Visibility = field.Visibility,
-                    Index = fieldIndex++,
-                    HasDefaultValue = field.Initializer != null,
-                    Location = field.Location,
+                    Visibility = memberVariable.Visibility,
+                    Index = memberVariableIndex++,
+                    HasDefaultValue = memberVariable.Initializer != null,
+                    Location = memberVariable.Location,
                     Owner = _currentType
                 };
 
-                fields.Add(item: fieldInfo);
+                memberVariables.Add(item: memberVariableInfo);
             }
 
             CollectDeclaration(node: member);
         }
 
-        if (fields.Count > 0)
+        if (memberVariables.Count > 0)
         {
-            _registry.UpdateEntityFields(entityName: _currentType!.FullName, fields: fields);
+            _registry.UpdateEntityMemberVariables(entityName: _currentType!.FullName, memberVariables: memberVariables);
         }
 
         _currentType = previousType;
-        _currentTypeFieldNames = previousFieldNames;
+        _currentTypeMemberVariableNames = previousFieldNames;
     }
 
     private void ResolveResidentBody(ResidentDeclaration resident)
@@ -866,10 +866,10 @@ public sealed partial class SemanticAnalyzer
         }
 
         TypeSymbol? previousType = _currentType;
-        HashSet<string>? previousFieldNames = _currentTypeFieldNames;
+        HashSet<string>? previousFieldNames = _currentTypeMemberVariableNames;
 
         _currentType = _registry.LookupType(name: resident.Name);
-        _currentTypeFieldNames = [];
+        _currentTypeMemberVariableNames = [];
 
         // Resolve implemented protocols
         if (_currentType is ResidentTypeInfo && resident.Protocols.Count > 0)
@@ -894,41 +894,41 @@ public sealed partial class SemanticAnalyzer
             _registry.UpdateResidentProtocols(residentName: _currentType!.FullName, protocols: resolvedProtocols);
         }
 
-        // Collect fields and other members
-        var fields = new List<FieldInfo>();
-        int fieldIndex = 0;
+        // Collect member variables and other members
+        var memberVariables = new List<MemberVariableInfo>();
+        int memberVariableIndex = 0;
 
         foreach (Declaration member in resident.Members)
         {
-            if (member is VariableDeclaration field)
+            if (member is VariableDeclaration memberVariable)
             {
-                TypeSymbol fieldType = field.Type != null
-                    ? ResolveType(typeExpr: field.Type)
+                TypeSymbol memberVariableType = memberVariable.Type != null
+                    ? ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                var fieldInfo = new FieldInfo(name: field.Name, type: fieldType)
+                var memberVariableInfo = new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
                 {
 
-                    Visibility = field.Visibility,
-                    Index = fieldIndex++,
-                    HasDefaultValue = field.Initializer != null,
-                    Location = field.Location,
+                    Visibility = memberVariable.Visibility,
+                    Index = memberVariableIndex++,
+                    HasDefaultValue = memberVariable.Initializer != null,
+                    Location = memberVariable.Location,
                     Owner = _currentType
                 };
 
-                fields.Add(item: fieldInfo);
+                memberVariables.Add(item: memberVariableInfo);
             }
 
             CollectDeclaration(node: member);
         }
 
-        if (fields.Count > 0)
+        if (memberVariables.Count > 0)
         {
-            _registry.UpdateResidentFields(residentName: _currentType!.FullName, fields: fields);
+            _registry.UpdateResidentMemberVariables(residentName: _currentType!.FullName, memberVariables: memberVariables);
         }
 
         _currentType = previousType;
-        _currentTypeFieldNames = previousFieldNames;
+        _currentTypeMemberVariableNames = previousFieldNames;
     }
 
     private void ResolveProtocolBody(ProtocolDeclaration protocol)
@@ -994,13 +994,13 @@ public sealed partial class SemanticAnalyzer
             // Extract modification category from attributes
             // @readonly -> Readonly, @writable -> Writable, default/no annotation -> Migratable
             ModificationCategory modification = ModificationCategory.Migratable; // Default
-            if (sig.Attributes != null)
+            if (sig.Annotations != null)
             {
-                if (sig.Attributes.Contains(item: "readonly"))
+                if (sig.Annotations.Contains(item: "readonly"))
                 {
                     modification = ModificationCategory.Readonly;
                 }
-                else if (sig.Attributes.Contains(item: "writable"))
+                else if (sig.Annotations.Contains(item: "writable"))
                 {
                     modification = ModificationCategory.Writable;
                 }
@@ -2038,7 +2038,7 @@ public sealed partial class SemanticAnalyzer
             Visibility = eqMethod.Visibility,
             Location = eqMethod.Location,
             Module = eqMethod.Module,
-            Attributes = ["readonly"],
+            Annotations = ["readonly"],
             IsSynthesized = true
         };
 
@@ -2102,7 +2102,7 @@ public sealed partial class SemanticAnalyzer
                 Visibility = cmpMethod.Visibility,
                 Location = cmpMethod.Location,
                 Module = cmpMethod.Module,
-                Attributes = ["readonly"],
+                Annotations = ["readonly"],
                 IsSynthesized = true
             };
 

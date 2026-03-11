@@ -14,7 +14,7 @@ public class SuflaeTypeDeclarationTests
     #region Record Tests
 
     [Fact]
-    public void ParseSuflae_SimpleRecord_WithFields()
+    public void ParseSuflae_SimpleRecord_WithMemberVariables()
     {
         string source = """
                         record Point
@@ -101,7 +101,7 @@ public class SuflaeTypeDeclarationTests
     public void ParseSuflae_Entity_MixedMutability_Rejected()
     {
         // var keywords are no longer allowed in entity bodies
-        // Fields use 'name: Type' syntax without var keywords
+        // MemberVariables use 'name: Type' syntax without var keywords
         string source = """
                         entity Document
                           var id: U64
@@ -366,7 +366,7 @@ public class SuflaeTypeDeclarationTests
     #region Posted Record Field Tests
 
     [Fact]
-    public void ParseSuflae_RecordWithPostedField()
+    public void ParseSuflae_RecordWithPostedMemberVariable()
     {
         string source = """
                         record Percentage
@@ -381,7 +381,7 @@ public class SuflaeTypeDeclarationTests
     }
 
     [Fact]
-    public void ParseSuflae_RecordWithMixedVisibilityFields()
+    public void ParseSuflae_RecordWithMixedVisibilityMemberVariables()
     {
         string source = """
                         record Config

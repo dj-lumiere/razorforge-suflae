@@ -145,7 +145,7 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Generate choice types (enums → single-field records)
+        // Generate choice types (enums → single-member-variable records)
         foreach (var type in _registry.GetTypesByCategory(TypeCategory.Choice))
         {
             if (type is ChoiceTypeInfo choice)

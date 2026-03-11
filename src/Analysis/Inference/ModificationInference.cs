@@ -8,8 +8,8 @@ using SyntaxTree;
 /// Implements the three-phase algorithm from the wiki:
 ///
 /// Phase 1 (Direct Analysis):
-///   - If method writes to any field of me → mark as Writable
-///   - If method calls .hijack() on me fields → mark as Writable
+///   - If method writes to any member variable of me → mark as Writable
+///   - If method calls .hijack() on me member variables → mark as Writable
 ///
 /// Phase 2 (Call Graph Propagation):
 ///   - If method calls a Writable method on me → mark as Writable
@@ -117,7 +117,7 @@ public sealed class ModificationInference
     }
 
     /// <summary>
-    /// Analyzes a statement for direct modifications (field writes to 'me').
+    /// Analyzes a statement for direct modifications (member variable writes to 'me').
     /// Call this during Phase 1 AST traversal.
     /// </summary>
     /// <param name="node">The call graph node for the current routine.</param>
@@ -155,7 +155,7 @@ public sealed class ModificationInference
                 AnalyzeStatementForModification(node: node, statement: forStmt.Body);
                 break;
 
-            // Other statement types don't directly modify fields
+            // Other statement types don't directly modify member variables
         }
     }
 
@@ -166,8 +166,8 @@ public sealed class ModificationInference
     /// <param name="assignment">The assignment statement.</param>
     private void AnalyzeAssignmentForModification(CallGraphNode node, AssignmentStatement assignment)
     {
-        // Check if the target is me.field or me.field.subfield...
-        if (IsFieldOfMe(expression: assignment.Target))
+        // Check if the target is me.memberVar or me.memberVar.subfield...
+        if (IsMemberVariableOfMe(expression: assignment.Target))
         {
             node.DirectlyModifies = true;
             node.InferredModification = ModificationCategory.Writable;
@@ -175,21 +175,21 @@ public sealed class ModificationInference
     }
 
     /// <summary>
-    /// Checks if an expression is a field access on 'me' (directly or transitively).
-    /// Examples: me.field, me.field.subfield, me.list[0]
+    /// Checks if an expression is a member variable access on 'me' (directly or transitively).
+    /// Examples: me.memberVar, me.memberVar.subfield, me.list[0]
     /// </summary>
     /// <param name="expression">The expression to check.</param>
-    /// <returns>True if the expression accesses a field of 'me'.</returns>
-    private bool IsFieldOfMe(Expression expression)
+    /// <returns>True if the expression accesses a member variable of 'me'.</returns>
+    private bool IsMemberVariableOfMe(Expression expression)
     {
         return expression switch
         {
             MemberExpression memberExpr =>
                 memberExpr.Object is IdentifierExpression { Name: "me" } ||
-                IsFieldOfMe(expression: memberExpr.Object),
+                IsMemberVariableOfMe(expression: memberExpr.Object),
 
             IndexExpression indexExpr =>
-                IsFieldOfMe(expression: indexExpr.Object),
+                IsMemberVariableOfMe(expression: indexExpr.Object),
 
             IdentifierExpression { Name: "me" } => true,
 

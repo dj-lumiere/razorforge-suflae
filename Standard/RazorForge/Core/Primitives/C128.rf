@@ -5,7 +5,7 @@ module Core
 ### Complex number with quadruple precision (2x F128) components
 ###
 ### C128 is for extended precision scientific computing.
-### Not @intrinsic — implemented as a record of two F128 fields.
+### Not @intrinsic — implemented as a record of two F128 member variables.
 ### Has full API including arg, log, pow, and inverse trig (F128 provides atan2/sinh/cosh).
 ###
 ### Example:

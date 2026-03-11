@@ -11,8 +11,8 @@ public sealed class EntityTypeInfo : TypeInfo
 {
     public override TypeCategory Category => TypeCategory.Entity;
 
-    /// <summary>Fields declared in this entity.</summary>
-    public IReadOnlyList<FieldInfo> Fields { get; init; } = [];
+    /// <summary>MemberVariables declared in this entity.</summary>
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; init; } = [];
 
     /// <summary>Protocols this entity implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
@@ -23,13 +23,13 @@ public sealed class EntityTypeInfo : TypeInfo
     public EntityTypeInfo? GenericDefinition { get; init; }
 
     /// <summary>
-    /// Looks up a field by name in this entity.
+    /// Looks up a member variable by name in this entity.
     /// </summary>
-    /// <param name="fieldName">The name of the field to look up.</param>
-    /// <returns>The field info if found, null otherwise.</returns>
-    public FieldInfo? LookupField(string fieldName)
+    /// <param name="memberVariableName">The name of the member variable to look up.</param>
+    /// <returns>The member variable info if found, null otherwise.</returns>
+    public MemberVariableInfo? LookupMemberVariable(string memberVariableName)
     {
-        return Fields.FirstOrDefault(predicate: f => f.Name == fieldName);
+        return MemberVariables.FirstOrDefault(predicate: f => f.Name == memberVariableName);
     }
 
     /// <summary>
@@ -65,9 +65,9 @@ public sealed class EntityTypeInfo : TypeInfo
             substitution[key: GenericParameters[i]] = typeArguments[i];
         }
 
-        // Substitute types in fields
-        var substitutedFields = Fields
-            .Select(selector: f => SubstituteFieldType(field: f, substitution: substitution))
+        // Substitute types in member variables
+        var substitutedMemberVariables = MemberVariables
+            .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
             .ToList();
 
         // Build resolved type name
@@ -76,7 +76,7 @@ public sealed class EntityTypeInfo : TypeInfo
 
         return new EntityTypeInfo(name: resolvedName)
         {
-            Fields = substitutedFields,
+            MemberVariables = substitutedMemberVariables,
             ImplementedProtocols = ImplementedProtocols,
             TypeArguments = typeArguments,
             GenericDefinition = this,
@@ -87,16 +87,16 @@ public sealed class EntityTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the type in a field for generic resolution.
+    /// Substitutes the type in a member variable for generic resolution.
     /// </summary>
-    /// <param name="field">The field to substitute.</param>
+    /// <param name="memberVariable">The member variable to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
-    /// <returns>A new <see cref="FieldInfo"/> with the substituted type.</returns>
-    private static FieldInfo SubstituteFieldType(FieldInfo field,
+    /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>
+    private static MemberVariableInfo SubstituteMemberVariableType(MemberVariableInfo memberVariable,
         Dictionary<string, TypeInfo> substitution)
     {
-        TypeInfo substitutedType = SubstituteType(type: field.Type, substitution: substitution);
-        return field.WithSubstitutedType(newType: substitutedType);
+        TypeInfo substitutedType = SubstituteType(type: memberVariable.Type, substitution: substitution);
+        return memberVariable.WithSubstitutedType(newType: substitutedType);
     }
 
     /// <summary>

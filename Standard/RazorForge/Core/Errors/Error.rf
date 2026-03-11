@@ -3,7 +3,7 @@ module Core
 # Error - Base error record with message and routine trace
 #
 # This is the core error type used by Result[T] and Lookup[T].
-# All fields are compiler-generated when throw is executed.
+# All member variables are compiler-generated when throw is executed.
 #
 # Size: ~228 bytes (fixed, fits inline in type unions)
 

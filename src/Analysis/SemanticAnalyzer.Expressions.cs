@@ -839,7 +839,7 @@ public sealed partial class SemanticAnalyzer
             // For extension methods (routine Type.method), check the routine's owner type
             if (_currentRoutine?.OwnerType != null)
             {
-                // Re-lookup to get the updated type with resolved protocols/fields
+                // Re-lookup to get the updated type with resolved protocols/member variables
                 TypeSymbol? ownerType = _registry.LookupType(name: _currentRoutine.OwnerType.Name);
                 if (ownerType != null)
                 {
@@ -1020,7 +1020,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Analyzes an assignment expression (target = value).
-    /// Validates mutability, field access, and type compatibility.
+    /// Validates mutability, member variable access, and type compatibility.
     /// </summary>
     /// <param name="target">The assignment target expression.</param>
     /// <param name="value">The value being assigned.</param>
@@ -1035,7 +1035,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol valueType,
         SourceLocation location)
     {
-        // Check if target is assignable (variable, field, or index)
+        // Check if target is assignable (variable, member variable, or index)
         if (!IsAssignableTarget(target: target))
         {
             ReportError(
@@ -1058,11 +1058,11 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Validate field write access (setter visibility)
+        // Validate member variable write access (setter visibility)
         if (target is MemberExpression member)
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
-            ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: location);
+            ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: location);
 
             // Check if we're in a @readonly method trying to modify 'me'
             if (_currentRoutine is { IsReadOnly: true } &&
@@ -1070,7 +1070,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.ModificationInReadonlyMethod,
-                    $"Cannot modify field '{member.PropertyName}' in a @readonly method. " +
+                    $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
                     "Use @writable or @migratable to allow modifications.",
                     location);
             }
@@ -1165,14 +1165,14 @@ public sealed partial class SemanticAnalyzer
         if (compound.Target is MemberExpression member)
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
-            ValidateFieldWriteAccess(objectType: objectType, fieldName: member.PropertyName, location: compound.Location);
+            ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: compound.Location);
 
             if (_currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
                 ReportError(
                     SemanticDiagnosticCode.ModificationInReadonlyMethod,
-                    $"Cannot modify field '{member.PropertyName}' in a @readonly method. " +
+                    $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
                     "Use @writable or @migratable to allow modifications.",
                     compound.Location);
             }
@@ -1466,47 +1466,47 @@ public sealed partial class SemanticAnalyzer
     {
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-        // Look up the field/property on the type
+        // Look up the member variable/property on the type
         if (objectType is RecordTypeInfo record)
         {
-            FieldInfo? field = record.LookupField(fieldName: member.PropertyName);
-            if (field != null)
+            MemberVariableInfo? memberVariable = record.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
             {
-                // Validate field access (read access)
-                ValidateFieldAccess(field: field, isWrite: false, accessLocation: member.Location);
-                return field.Type;
+                // Validate member variable access (read access)
+                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
+                return memberVariable.Type;
             }
         }
         else if (objectType is EntityTypeInfo entity)
         {
-            FieldInfo? field = entity.LookupField(fieldName: member.PropertyName);
-            if (field != null)
+            MemberVariableInfo? memberVariable = entity.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
             {
-                // Validate field access (read access)
-                ValidateFieldAccess(field: field, isWrite: false, accessLocation: member.Location);
-                return field.Type;
+                // Validate member variable access (read access)
+                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
+                return memberVariable.Type;
             }
         }
         else if (objectType is ResidentTypeInfo resident)
         {
-            FieldInfo? field = resident.LookupField(fieldName: member.PropertyName);
-            if (field != null)
+            MemberVariableInfo? memberVariable = resident.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
             {
-                // Validate field access (read access)
-                ValidateFieldAccess(field: field, isWrite: false, accessLocation: member.Location);
-                return field.Type;
+                // Validate member variable access (read access)
+                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
+                return memberVariable.Type;
             }
         }
         // Wrapper type forwarding: Viewed<T>, Hijacked<T>, Shared<T>, etc.
         else if (IsWrapperType(type: objectType))
         {
-            // Try to forward field access to the inner type
-            FieldInfo? innerField = LookupFieldOnWrapperInnerType(wrapperType: objectType, fieldName: member.PropertyName);
-            if (innerField != null)
+            // Try to forward member variable access to the inner type
+            MemberVariableInfo? innerMemberVariable = LookupMemberVariableOnWrapperInnerType(wrapperType: objectType, memberVariableName: member.PropertyName);
+            if (innerMemberVariable != null)
             {
-                // Validate field access on the inner type
-                ValidateFieldAccess(field: innerField, isWrite: false, accessLocation: member.Location);
-                return innerField.Type;
+                // Validate member variable access on the inner type
+                ValidateMemberVariableAccess(memberVariable: innerMemberVariable, isWrite: false, accessLocation: member.Location);
+                return innerMemberVariable.Type;
             }
 
             // Try to forward method access to the inner type
@@ -1864,7 +1864,7 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case CreatorExpression creator:
-                foreach ((_, Expression value) in creator.Fields)
+                foreach ((_, Expression value) in creator.MemberVariables)
                 {
                     CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
                 }
@@ -2009,108 +2009,108 @@ public sealed partial class SemanticAnalyzer
             type = _registry.GetOrCreateResolution(genericDef: type, typeArguments: typeArgs);
         }
 
-        // Validate field initializers
-        ValidateCreatorFields(type: type, fields: creator.Fields, location: creator.Location);
+        // Validate member variable initializers
+        ValidateCreatorMemberVariables(type: type, memberVariables: creator.MemberVariables, location: creator.Location);
 
         return type;
     }
 
     /// <summary>
-    /// Validates creator field initializers:
-    /// - Each provided field exists on the type
-    /// - Value types are assignable to field types
-    /// - No duplicate field assignments
-    /// - All required fields are provided
+    /// Validates creator member variable initializers:
+    /// - Each provided member variable exists on the type
+    /// - Value types are assignable to member variable types
+    /// - No duplicate member variable assignments
+    /// - All required member variables are provided
     /// </summary>
-    private void ValidateCreatorFields(
+    private void ValidateCreatorMemberVariables(
         TypeSymbol type,
-        List<(string Name, Expression Value)> fields,
+        List<(string Name, Expression Value)> memberVariables,
         SourceLocation location)
     {
-        // Get the type's fields
-        IReadOnlyList<FieldInfo>? typeFields = type switch
+        // Get the type's member variables
+        IReadOnlyList<MemberVariableInfo>? typeMemberVariables = type switch
         {
-            RecordTypeInfo record => record.Fields,
-            EntityTypeInfo entity => entity.Fields,
-            ResidentTypeInfo resident => resident.Fields,
+            RecordTypeInfo record => record.MemberVariables,
+            EntityTypeInfo entity => entity.MemberVariables,
+            ResidentTypeInfo resident => resident.MemberVariables,
             _ => null
         };
 
-        if (typeFields == null)
+        if (typeMemberVariables == null)
         {
-            if (fields.Count > 0)
+            if (memberVariables.Count > 0)
             {
                 ReportError(
-                    SemanticDiagnosticCode.TypeNotFieldInitializable,
-                    $"Type '{type.Name}' does not support field initialization.",
+                    SemanticDiagnosticCode.TypeNotMemberVariableInitializable,
+                    $"Type '{type.Name}' does not support member variable initialization.",
                     location);
             }
             return;
         }
 
-        // Build a lookup for expected fields
-        var fieldLookup = new Dictionary<string, FieldInfo>();
-        foreach (FieldInfo field in typeFields)
+        // Build a lookup for expected member variables
+        var memberVariableLookup = new Dictionary<string, MemberVariableInfo>();
+        foreach (MemberVariableInfo memberVariable in typeMemberVariables)
         {
-            fieldLookup[field.Name] = field;
+            memberVariableLookup[memberVariable.Name] = memberVariable;
         }
 
-        // Track which fields have been provided (to detect duplicates and missing fields)
-        var providedFields = new HashSet<string>();
+        // Track which member variables have been provided (to detect duplicates and missing member variables)
+        var providedMemberVariables = new HashSet<string>();
 
-        // Validate each provided field
-        foreach ((string fieldName, Expression value) in fields)
+        // Validate each provided member variable
+        foreach ((string memberVariableName, Expression value) in memberVariables)
         {
             // Check for duplicates
-            if (!providedFields.Add(fieldName))
+            if (!providedMemberVariables.Add(memberVariableName))
             {
                 ReportError(
-                    SemanticDiagnosticCode.DuplicateFieldInitializer,
-                    $"Duplicate field initializer for '{fieldName}'.",
+                    SemanticDiagnosticCode.DuplicateMemberVariableInitializer,
+                    $"Duplicate member variable initializer for '{memberVariableName}'.",
                     value.Location);
                 continue;
             }
 
-            // Check if field exists
-            if (!fieldLookup.TryGetValue(fieldName, out FieldInfo? expectedField))
+            // Check if member variable exists
+            if (!memberVariableLookup.TryGetValue(memberVariableName, out MemberVariableInfo? expectedMemberVariable))
             {
                 ReportError(
-                    SemanticDiagnosticCode.FieldNotFound,
-                    $"Type '{type.Name}' does not have a field named '{fieldName}'.",
+                    SemanticDiagnosticCode.MemberVariableNotFound,
+                    $"Type '{type.Name}' does not have a member variable named '{memberVariableName}'.",
                     value.Location);
                 AnalyzeExpression(expression: value); // Still analyze the value
                 continue;
             }
 
             // Analyze value with expected type for contextual inference
-            TypeSymbol fieldType = expectedField.Type;
+            TypeSymbol memberVariableType = expectedMemberVariable.Type;
 
-            // For generic resolutions, substitute type parameters in field type
+            // For generic resolutions, substitute type parameters in member variable type
             if (type is { IsGenericResolution: true, TypeArguments: not null })
             {
-                fieldType = SubstituteTypeParameters(type: fieldType, genericType: type);
+                memberVariableType = SubstituteTypeParameters(type: memberVariableType, genericType: type);
             }
 
-            TypeSymbol valueType = AnalyzeExpression(expression: value, expectedType: fieldType);
+            TypeSymbol valueType = AnalyzeExpression(expression: value, expectedType: memberVariableType);
 
             // Check type compatibility
-            if (!IsAssignableTo(source: valueType, target: fieldType))
+            if (!IsAssignableTo(source: valueType, target: memberVariableType))
             {
                 ReportError(
-                    SemanticDiagnosticCode.FieldTypeMismatch,
-                    $"Cannot assign '{valueType.Name}' to field '{fieldName}' of type '{fieldType.Name}'.",
+                    SemanticDiagnosticCode.MemberVariableTypeMismatch,
+                    $"Cannot assign '{valueType.Name}' to member variable '{memberVariableName}' of type '{memberVariableType.Name}'.",
                     value.Location);
             }
         }
 
-        // Check for missing required fields (fields without default values)
-        foreach (FieldInfo field in typeFields)
+        // Check for missing required member variables (member variables without default values)
+        foreach (MemberVariableInfo memberVariable in typeMemberVariables)
         {
-            if (!providedFields.Contains(field.Name) && !field.HasDefaultValue)
+            if (!providedMemberVariables.Contains(memberVariable.Name) && !memberVariable.HasDefaultValue)
             {
                 ReportError(
-                    SemanticDiagnosticCode.MissingRequiredField,
-                    $"Missing required field '{field.Name}' in creator for '{type.Name}'.",
+                    SemanticDiagnosticCode.MissingRequiredMemberVariable,
+                    $"Missing required member variable '{memberVariable.Name}' in creator for '{type.Name}'.",
                     location);
             }
         }
@@ -2332,7 +2332,7 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeExpression(expression: index);
             }
             AnalyzeExpression(expression: value);
-            // TODO: Validate field exists and types match for field updates
+            // TODO: Validate member variable exists and types match for member variable updates
             // TODO: Validate index type and value type match for index updates
         }
 

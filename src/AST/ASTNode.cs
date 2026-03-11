@@ -162,22 +162,22 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the named argument expression</returns>
     T VisitNamedArgumentExpression(NamedArgumentExpression node);
 
-    /// <summary>Visits a creator expression node (Type(field: value) syntax)</summary>
+    /// <summary>Visits a creator expression node (Type(memberVar: value) syntax)</summary>
     /// <param name="node">The creator expression to visit</param>
     /// <returns>Result of visiting the creator expression</returns>
     T VisitCreatorExpression(CreatorExpression node);
 
-    /// <summary>Visits a with expression node (functional update like value with (field: newVal))</summary>
+    /// <summary>Visits a with expression node (functional update like value with (memberVar: newVal))</summary>
     /// <param name="node">The with expression to visit</param>
     /// <returns>Result of visiting the with expression</returns>
     T VisitWithExpression(WithExpression node);
 
-    /// <summary>Visits a member expression node (field access like obj.field)</summary>
+    /// <summary>Visits a member expression node (member variable access like obj.memberVar)</summary>
     /// <param name="node">The member expression to visit</param>
     /// <returns>Result of visiting the member expression</returns>
     T VisitMemberExpression(MemberExpression node);
 
-    /// <summary>Visits an optional member expression node (safe navigation like obj?.field)</summary>
+    /// <summary>Visits an optional member expression node (safe navigation like obj?.memberVar)</summary>
     /// <param name="node">The optional member expression to visit</param>
     /// <returns>Result of visiting the optional member expression</returns>
     T VisitOptionalMemberExpression(OptionalMemberExpression node);
@@ -308,7 +308,7 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the assignment statement</returns>
     T VisitAssignmentStatement(AssignmentStatement node);
 
-    /// <summary>Visits a record/entity destructuring statement node (var (field, field2) = expr)</summary>
+    /// <summary>Visits a record/entity destructuring statement node (var (memberVar, memberVar2) = expr)</summary>
     /// <param name="node">The destructuring statement to visit</param>
     /// <returns>Result of visiting the destructuring statement</returns>
     T VisitDestructuringStatement(DestructuringStatement node);

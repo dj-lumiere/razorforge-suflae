@@ -46,9 +46,9 @@ public sealed class MigratableInference
     /// </summary>
     /// <remarks>
     /// TODO: Implement base case detection for migratable methods.
-    /// A method is migratable if it reassigns the internal Snatched<U8> field of an entity.
+    /// A method is migratable if it reassigns the internal Snatched<U8> member variable of an entity.
     /// All entity types use Snatched<U8> internally for their dynamic storage.
-    /// Detection should analyze method bodies for assignments to Snatched<U8>-typed fields.
+    /// Detection should analyze method bodies for assignments to Snatched<U8>-typed member variables.
     /// </remarks>
     private void DetectDirectMigrations()
     {
@@ -61,10 +61,10 @@ public sealed class MigratableInference
 
             // TODO: Base case detection - a method is migratable if it:
             // 1. Operates on an entity type (all entities have internal Snatched<U8>)
-            // 2. Contains assignments that modify the Snatched<U8> field
+            // 2. Contains assignments that modify the Snatched<U8> member variable
             //    (pointer, size, or capacity changes that could trigger reallocation)
             //
-            // This requires analyzing the method body for Snatched<U8> field writes.
+            // This requires analyzing the method body for Snatched<U8> member variable writes.
             // Currently no detection is implemented - this is a placeholder.
         }
     }
@@ -111,21 +111,21 @@ public sealed class MigratableInference
     /// <remarks>
     /// TODO: Implement call-site migratable detection.
     /// This should check if the called method (methodName on receiverType) is migratable,
-    /// and if the receiver is a field of 'me', mark the calling method as migratable too.
+    /// and if the receiver is a member variable of 'me', mark the calling method as migratable too.
     /// Currently no detection is implemented - this is a placeholder.
     /// </remarks>
     public void AnalyzeCallForMigration(CallGraphNode node, CallExpression callExpr,
         string methodName, Expression receiver, TypeInfo receiverType)
     {
         // TODO: Check if the called method is migratable (from the call graph)
-        // and if the receiver is a field of 'me', propagate migratable to the caller.
+        // and if the receiver is a member variable of 'me', propagate migratable to the caller.
         //
         // This requires:
         // 1. Looking up the called method in the call graph
         // 2. Checking if it's marked as migratable
-        // 3. If the receiver is me or me.field, mark the current method as migratable
+        // 3. If the receiver is me or me.memberVar, mark the current method as migratable
 
-        if (!IsFieldOfMe(expression: receiver))
+        if (!IsMemberVariableOfMe(expression: receiver))
         {
             return;
         }
@@ -137,20 +137,20 @@ public sealed class MigratableInference
     }
 
     /// <summary>
-    /// Checks if an expression is a field access on 'me'.
+    /// Checks if an expression is a member variable access on 'me'.
     /// </summary>
     /// <param name="expression">The expression to check.</param>
-    /// <returns>True if the expression accesses a field of 'me'.</returns>
-    private bool IsFieldOfMe(Expression expression)
+    /// <returns>True if the expression accesses a member variable of 'me'.</returns>
+    private bool IsMemberVariableOfMe(Expression expression)
     {
         return expression switch
         {
             MemberExpression memberExpr =>
                 memberExpr.Object is IdentifierExpression { Name: "me" } ||
-                IsFieldOfMe(expression: memberExpr.Object),
+                IsMemberVariableOfMe(expression: memberExpr.Object),
 
             IndexExpression indexExpr =>
-                IsFieldOfMe(expression: indexExpr.Object),
+                IsMemberVariableOfMe(expression: indexExpr.Object),
 
             IdentifierExpression { Name: "me" } => true,
 

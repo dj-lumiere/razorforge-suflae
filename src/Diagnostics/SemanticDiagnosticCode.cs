@@ -252,7 +252,7 @@ public enum SemanticDiagnosticCode
     // ASSIGNMENT AND MUTABILITY ERRORS (RF-S250 - RF-S299)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Invalid assignment target (not a variable, field, or index).</summary>
+    /// <summary>Invalid assignment target (not a variable, member variable, or index).</summary>
     InvalidAssignmentTarget = 250,
 
     /// <summary>Cannot reassign a preset variable.</summary>
@@ -261,20 +261,20 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot assign value type to target type.</summary>
     AssignmentTypeMismatch = 252,
 
-    /// <summary>Cannot assign to published field from outside defining file.</summary>
+    /// <summary>Cannot assign to published member variable from outside defining file.</summary>
     AssignmentToPublished = 253,
 
     /// <summary>Compound assignment operator not supported on type.</summary>
     CompoundAssignmentNotSupported = 254,
 
-    /// <summary>Attempting to modify 'me' field in a @readonly method.</summary>
+    /// <summary>Attempting to modify 'me' member variable in a @readonly method.</summary>
     ModificationInReadonlyMethod = 255,
 
     /// <summary>Cannot call modifying method on preset variable.</summary>
     ModifyingCallOnImmutable = 256,
 
-    /// <summary>Cannot assign to field of preset variable.</summary>
-    FieldAssignmentOnImmutable = 257,
+    /// <summary>Cannot assign to member variable of preset variable.</summary>
+    MemberVariableAssignmentOnImmutable = 257,
 
     /// <summary>Preset initializer must be a build-time constant expression.</summary>
     PresetNotConstant = 258,
@@ -365,8 +365,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Duplicate routine definition.</summary>
     DuplicateRoutineDefinition = 406,
 
-    /// <summary>Duplicate field definition.</summary>
-    DuplicateFieldDefinition = 407,
+    /// <summary>Duplicate member variable definition.</summary>
+    DuplicateMemberVariableDefinition = 407,
 
     /// <summary>Invalid visibility modifier for this context.</summary>
     InvalidVisibilityModifier = 408,
@@ -380,14 +380,14 @@ public enum SemanticDiagnosticCode
     /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
     OperatorWithoutProtocol = 411,
 
-    /// <summary>Record field has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
+    /// <summary>Record member variable has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
     RecordContainsNonValueType = 412,
 
     /// <summary>Entity cannot be directly assigned from another variable. Must use .share() or steal.</summary>
     BareEntityAssignment = 413,
 
-    /// <summary>Variant type cannot be stored in fields.</summary>
-    VariantFieldNotAllowed = 414,
+    /// <summary>Variant type cannot be stored in member variables.</summary>
+    VariantMemberVariableNotAllowed = 414,
 
     /// <summary>Variant type cannot be used as a parameter type.</summary>
     VariantParameterNotAllowed = 415,
@@ -440,8 +440,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Operand is not a flags type for a flags operator.</summary>
     FlagsTypeMismatch = 431,
 
-    /// <summary>Entity field cannot be a resident type (residents are global singletons).</summary>
-    EntityContainsResidentField = 432,
+    /// <summary>Entity member variable cannot be a resident type (residents are global singletons).</summary>
+    EntityContainsResidentMemberVariable = 432,
 
     /// <summary>Enumeration type (choice, variant, flags) must have at least one member/case.</summary>
     EmptyEnumerationBody = 433,
@@ -453,20 +453,20 @@ public enum SemanticDiagnosticCode
     /// <summary>Type does not have the specified member.</summary>
     MemberNotFound = 450,
 
-    /// <summary>Type does not support field initialization.</summary>
-    TypeNotFieldInitializable = 451,
+    /// <summary>Type does not support member variable initialization.</summary>
+    TypeNotMemberVariableInitializable = 451,
 
-    /// <summary>Duplicate field initializer in creator expression.</summary>
-    DuplicateFieldInitializer = 452,
+    /// <summary>Duplicate member variable initializer in creator expression.</summary>
+    DuplicateMemberVariableInitializer = 452,
 
-    /// <summary>Type does not have the specified field.</summary>
-    FieldNotFound = 453,
+    /// <summary>Type does not have the specified member variable.</summary>
+    MemberVariableNotFound = 453,
 
-    /// <summary>Cannot assign type to field of different type.</summary>
-    FieldTypeMismatch = 454,
+    /// <summary>Cannot assign type to member variable of different type.</summary>
+    MemberVariableTypeMismatch = 454,
 
-    /// <summary>Missing required field in creator.</summary>
-    MissingRequiredField = 455,
+    /// <summary>Missing required member variable in creator.</summary>
+    MissingRequiredMemberVariable = 455,
 
     /// <summary>Cannot call writable method through read-only wrapper.</summary>
     WritableMethodThroughReadOnlyWrapper = 456,
@@ -546,8 +546,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot return scope-bound token from routine.</summary>
     TokenReturnNotAllowed = 600,
 
-    /// <summary>Cannot store scope-bound token in field.</summary>
-    TokenFieldNotAllowed = 601,
+    /// <summary>Cannot store scope-bound token in member variable.</summary>
+    TokenMemberVariableNotAllowed = 601,
 
     /// <summary>Cannot use scope-bound token as variant payload.</summary>
     TokenVariantPayloadNotAllowed = 602,
@@ -627,8 +627,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Error handling type (Result/Lookup) cannot be used as parameter type.</summary>
     ErrorHandlingTypeAsParameter = 754,
 
-    /// <summary>Error handling type (Result/Lookup) cannot be used as field type.</summary>
-    ErrorHandlingTypeAsField = 755,
+    /// <summary>Error handling type (Result/Lookup) cannot be used as member variable type.</summary>
+    ErrorHandlingTypeAsMemberVariable = 755,
 
     /// <summary>Failable routine (!) contains neither 'throw' nor 'absent'.</summary>
     FailableWithoutThrowOrAbsent = 756,
