@@ -167,7 +167,7 @@ routine Deque[T].reserve(new_capacity: UAddr)
 
 routine Deque[T].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)
@@ -175,7 +175,7 @@ needs I obeys Integral
 
 routine Deque[T].__setitem__![I](index: I, value: T)
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)

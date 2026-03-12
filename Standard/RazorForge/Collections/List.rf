@@ -20,7 +20,7 @@ routine List[T].__create__() -> List[T]
 
 routine List[T].__create__(capacity: U64) -> List[T]
   var byte_size = capacity * data_size[T]()
-  var ptr = heap_alloc(byte_size.to_uaddr())
+  var ptr = heap_alloc(byte_size.UAddr())
   return List[T](
     data: Snatched[T](address: ptr),
     count: 0u64,
@@ -68,7 +68,7 @@ routine List[T].add_first(value: T)
 
 routine List[T].add_at!(index: U64, value: T)
   if index > me.count
-    throw IndexOutOfBoundsError(index: index.to_uaddr(), count: me.count.to_uaddr())
+    throw IndexOutOfBoundsError(index: index.UAddr(), count: me.count.UAddr())
 
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
@@ -95,7 +95,7 @@ routine List[T].remove_first!() -> T
 
 routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
-    throw IndexOutOfBoundsError(index: index.to_uaddr(), count: me.count.to_uaddr())
+    throw IndexOutOfBoundsError(index: index.UAddr(), count: me.count.UAddr())
 
   var byte_offset = index * data_size[T]()
   var value = me.data.offset(byte_offset).read()
@@ -120,17 +120,17 @@ routine List[T].remove_at!(index: U64) -> T
 
 routine List[T].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.to_u64()
+  var idx = index.U64()
   if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx.to_uaddr(), count: me.count.to_uaddr())
+    throw IndexOutOfBoundsError(index: idx.UAddr(), count: me.count.UAddr())
   var byte_offset = idx * data_size[T]()
   return me.data.offset(byte_offset).read()
 
 routine List[T].__setitem__![I](index: I, value: T)
 needs I obeys Integral
-  var idx = index.to_u64()
+  var idx = index.U64()
   if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx.to_uaddr(), count: me.count.to_uaddr())
+    throw IndexOutOfBoundsError(index: idx.UAddr(), count: me.count.UAddr())
   var byte_offset = idx * data_size[T]()
   me.data.offset(byte_offset).write(value)
   return
@@ -158,11 +158,11 @@ needs I obeys Integral
 
 routine List[T].__getslice__![I](start: I, end: I) -> List[T]
 needs I obeys Integral
-  var s = start.to_u64()
-  var e = end.to_u64()
+  var s = start.U64()
+  var e = end.U64()
 
   if s > me.count or e > me.count
-    throw IndexOutOfBoundsError(index: e.to_uaddr(), count: me.count.to_uaddr())
+    throw IndexOutOfBoundsError(index: e.UAddr(), count: me.count.UAddr())
 
   var result = List[T]()
   var i = s
@@ -200,10 +200,10 @@ routine List[T].reserve(new_capacity: U64)
     var new_byte_size = new_capacity * data_size[T]()
 
     if me.data.is_none()
-      var ptr = heap_alloc(new_byte_size.to_uaddr())
+      var ptr = heap_alloc(new_byte_size.UAddr())
       me.data = Snatched[T](address: ptr)
     else
-      var ptr = heap_realloc(me.data.address, new_byte_size.to_uaddr())
+      var ptr = heap_realloc(me.data.address, new_byte_size.UAddr())
       me.data = Snatched[T](address: ptr)
 
     me.capacity = new_capacity

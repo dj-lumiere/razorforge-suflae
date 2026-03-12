@@ -316,7 +316,7 @@ routine SortedList[T].remove_all(value: T) -> UAddr
 
 routine SortedList[T].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!, idx)

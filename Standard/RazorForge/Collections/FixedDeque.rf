@@ -117,7 +117,7 @@ routine FixedDeque[T, N].remove_first!() -> T
 
 routine FixedDeque[T, N].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical = me.physical_index(idx)
@@ -125,7 +125,7 @@ needs I obeys Integral
 
 routine FixedDeque[T, N].__setitem__![I](index: I, value: T)
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical = me.physical_index(idx)
@@ -238,8 +238,8 @@ routine FixedDeque[T, N].index_of!(value: T) -> UAddr
 routine FixedDeque[T, N].swap![I, J](i: I, j: J)
 needs I obeys Integral
 needs J obeys Integral
-  var idx_i = i.to_uaddr()
-  var idx_j = j.to_uaddr()
+  var idx_i = i.UAddr()
+  var idx_j = j.UAddr()
   if idx_i >= me.count or idx_j >= me.count
     throw IndexOutOfBoundsError(index: if idx_i >= me.count then idx_i else idx_j, count: me.count)
   var phys_i = me.physical_index(idx_i)

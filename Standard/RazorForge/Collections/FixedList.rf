@@ -71,14 +71,14 @@ routine FixedList[T, N].clear()
 
 routine FixedList[T, N].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me[idx]
 
 routine FixedList[T, N].__setitem__![I](index: I, value: T)
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   me[idx] = value
@@ -106,7 +106,7 @@ needs I obeys Integral
 routine FixedList[T, N].add_at![I](index: I, value: T)
 needs I obeys Integral
   # Insert at index, shifting elements right - O(n)
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx > me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   if me.is_full()
@@ -124,7 +124,7 @@ needs I obeys Integral
 routine FixedList[T, N].remove_at![I](index: I) -> T
 needs I obeys Integral
   # Remove at index, shifting elements left - O(n)
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
 

@@ -93,14 +93,14 @@ secret routine FixedBitList[N].set_bit(index: UAddr, value: Bool)
 
 routine FixedBitList[N].__getitem__![I](index: I) -> Bool
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_bit(idx)
 
 routine FixedBitList[N].__setitem__![I](index: I, value: Bool)
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   me.set_bit(idx, value)
@@ -170,7 +170,7 @@ routine FixedBitList[N].fill(value: Bool)
 
 routine FixedBitList[N].flip![I](index: I)
 needs I obeys Integral
-  var idx = index.to_uaddr()
+  var idx = index.UAddr()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   me.set_bit(idx, not me.get_bit(idx))
