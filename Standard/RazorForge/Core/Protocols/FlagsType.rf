@@ -1,0 +1,17 @@
+# FlagsType - Marker protocol for all flags types
+# Every flags implicitly conforms to this protocol
+# Provides: Diagnosable (-> Representable), Hashable, plus flags-specific routines
+module Core
+
+protocol FlagsType obeys Diagnosable, Hashable
+  @[readonly, final, generated]
+  routine U64.__create__(from: Me) -> U64
+
+  @[readonly, final, generated]
+  routine Me.all_cases() -> List[Me]
+
+  @[readonly, final, generated]
+  routine Me.all_on() -> Me
+
+  @[readonly, final, generated]
+  routine Me.all_off() -> Me

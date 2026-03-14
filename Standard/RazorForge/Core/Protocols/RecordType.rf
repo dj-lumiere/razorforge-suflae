@@ -1,0 +1,7 @@
+# RecordType - Marker protocol for all record types
+# Every record implicitly conforms to this protocol
+# Provides: Diagnosable (-> Representable), Equatable, Hashable
+module Core
+
+protocol RecordType obeys Diagnosable, Equatable, Hashable
+  pass
