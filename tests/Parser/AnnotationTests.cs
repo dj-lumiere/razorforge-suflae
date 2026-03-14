@@ -188,6 +188,66 @@ public class AttributeTests
         AssertParses(source: source);
     }
 
+    [Fact]
+    public void Parse_FinalAttribute()
+    {
+        string source = """
+                        @final
+                        routine EntityType.id() -> U64
+                          return internal_object_id(me)
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "final", collection: routine.Annotations);
+    }
+
+    [Fact]
+    public void Parse_DerivedAttribute()
+    {
+        string source = """
+                        @derived
+                        routine Me.__ne__(you: Me) -> Bool
+                          return !(me == you)
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+        Assert.NotNull(@object: routine.Annotations);
+        Assert.Contains(expected: "derived", collection: routine.Annotations);
+    }
+
+    [Fact]
+    public void Parse_CompoundFinalDerived()
+    {
+        string source = """
+                        @[readonly, final, generated]
+                        routine EntityType.id() -> U64
+                          return internal_object_id(me)
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_CompoundProtocolAnnotations()
+    {
+        string source = """
+                        protocol EntityType obeys Diagnosable, Equatable
+                          @[readonly, final, generated]
+                          routine Me.id() -> U64
+
+                          @[readonly, final, generated]
+                          routine Me.__same__(you: Me) -> Bool
+
+                          @[readonly, final, generated]
+                          routine Me.__not_same__(you: Me) -> Bool
+                        """;
+
+        AssertParses(source: source);
+    }
+
     #endregion
 
     #region Type Annotation Tests
