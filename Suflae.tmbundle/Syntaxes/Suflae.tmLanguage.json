@@ -213,6 +213,11 @@
           "match": "@intrinsic\\b"
         },
         {
+          "comment": "Compound annotation",
+          "name": "storage.modifier.annotation.sf",
+          "match": "@\\[[a-zA-Z_][a-zA-Z0-9_, ]*\\]"
+        },
+        {
           "comment": "Annotation",
           "name": "storage.modifier.annotation.sf",
           "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
