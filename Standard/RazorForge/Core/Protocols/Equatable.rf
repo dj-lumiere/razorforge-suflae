@@ -1,11 +1,9 @@
 # Equatable - Protocol for types that support equality (==, !=)
-# __ne__ is auto-generated from __eq__
 module Core
 
 protocol Equatable
   @readonly
   routine Me.__eq__(you: Me) -> Bool
 
-  @generated
-  @readonly
+  @[readonly, generated]
   routine Me.__ne__(you: Me) -> Bool

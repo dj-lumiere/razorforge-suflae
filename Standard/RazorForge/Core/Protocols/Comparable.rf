@@ -1,23 +1,18 @@
 # Comparable - Protocol for types that support ordering (<, <=, >, >=, <=>)
-# __lt__, __le__, __gt__, __ge__ are auto-generated from __cmp__
 module Core
 
 protocol Comparable obeys Equatable
   @readonly
   routine Me.__cmp__(you: Me) -> ComparisonSign
 
-  @generated
-  @readonly
+  @[readonly, generated]
   routine Me.__lt__(you: Me) -> Bool
 
-  @generated
-  @readonly
+  @[readonly, generated]
   routine Me.__le__(you: Me) -> Bool
 
-  @generated
-  @readonly
+  @[readonly, generated]
   routine Me.__gt__(you: Me) -> Bool
 
-  @generated
-  @readonly
+  @[readonly, generated]
   routine Me.__ge__(you: Me) -> Bool

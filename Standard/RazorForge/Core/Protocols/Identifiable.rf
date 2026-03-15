@@ -1,0 +1,9 @@
+# Identifiable - Protocol for types that support identity comparison (===, !==)
+module Core
+
+protocol Identifiable
+  @[readonly, innate]
+  routine Me.__same__(you: Me) -> Bool
+
+  @[readonly, innate]
+  routine Me.__notsame__(you: Me) -> Bool

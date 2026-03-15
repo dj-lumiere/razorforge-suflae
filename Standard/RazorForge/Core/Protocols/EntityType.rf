@@ -1,14 +1,7 @@
 # EntityType - Marker protocol for all entity types
 # Every entity implicitly conforms to this protocol
-# Provides: Diagnosable (-> Representable), Equatable, plus identity routines
+# Provides: Diagnosable (-> Representable), Equatable, Identifiable
 module Core
 
-protocol EntityType obeys Diagnosable, Equatable
-  @[readonly, final, generated]
-  routine Me.id() -> U64
-
-  @[readonly, final, generated]
-  routine Me.__same__(you: Me) -> Bool
-
-  @[readonly, final, generated]
-  routine Me.__not_same__(you: Me) -> Bool
+protocol EntityType obeys Diagnosable, Equatable, Identifiable
+  pass

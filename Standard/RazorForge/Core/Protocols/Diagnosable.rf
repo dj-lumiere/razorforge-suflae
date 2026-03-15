@@ -1,7 +1,6 @@
 # Diagnosable - Protocol for types that provide debug text representation
-# Inherits Text.__create__(from: T) from Representable, adds to_debug()
 module Core
 
 protocol Diagnosable obeys Representable
-  @readonly
+  @[readonly, generated]
   routine Me.to_debug() -> Text

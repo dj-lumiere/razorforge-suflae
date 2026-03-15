@@ -1,14 +1,7 @@
 # ResidentType - Marker protocol for all resident types
 # Every resident implicitly conforms to this protocol
-# Provides: Diagnosable (-> Representable), Equatable, plus identity routines
+# Provides: Diagnosable (-> Representable), Equatable, Identifiable
 module Core
 
-protocol ResidentType obeys Diagnosable, Equatable
-  @[readonly, final, generated]
-  routine Me.id() -> U64
-
-  @[readonly, final, generated]
-  routine Me.__same__(you: Me) -> Bool
-
-  @[readonly, final, generated]
-  routine Me.__not_same__(you: Me) -> Bool
+protocol ResidentType obeys Diagnosable, Equatable, Identifiable
+  pass
