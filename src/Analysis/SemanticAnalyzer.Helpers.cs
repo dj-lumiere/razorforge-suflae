@@ -61,11 +61,121 @@ public sealed partial class SemanticAnalyzer
     private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments, SourceLocation location)
     {
         IReadOnlyList<ParameterInfo> parameters = routine.Parameters;
-        int requiredParams = parameters.Count(p => !p.HasDefaultValue);
         int totalParams = parameters.Count;
 
-        // Check argument count
-        if (arguments.Count < requiredParams)
+        // Phase 1: Validate named argument ordering and build parameter bindings.
+        // Each entry maps parameter index → argument expression.
+        bool seenNamed = false;
+        var boundParams = new Dictionary<int, Expression>();
+        int positionalIndex = 0;
+
+        // S510: Routines with 2+ non-me parameters require all arguments to be named.
+        // This prevents argument-swap bugs at call sites. Variadic routines are exempt
+        // because their extra positional args don't map to named parameters.
+        int nonMeParamCount = parameters.Count(predicate: p => p.Name != "me");
+        bool requiresNamedArgs = nonMeParamCount >= 2 && !routine.IsVariadic;
+
+        foreach (Expression arg in arguments)
+        {
+            if (arg is NamedArgumentExpression named)
+            {
+                seenNamed = true;
+
+                // Look up parameter by name
+                int paramIndex = -1;
+                for (int j = 0; j < totalParams; j++)
+                {
+                    if (parameters[j].Name == named.Name)
+                    {
+                        paramIndex = j;
+                        break;
+                    }
+                }
+
+                if (paramIndex == -1)
+                {
+                    // S505: Unknown named argument
+                    ReportError(
+                        SemanticDiagnosticCode.UnknownNamedArgument,
+                        $"'{routine.Name}' has no parameter named '{named.Name}'.",
+                        named.Location);
+                    AnalyzeExpression(expression: named.Value);
+                }
+                else if (boundParams.ContainsKey(key: paramIndex))
+                {
+                    // S506: Duplicate named argument (parameter already bound)
+                    ReportError(
+                        SemanticDiagnosticCode.DuplicateNamedArgument,
+                        $"Parameter '{named.Name}' of '{routine.Name}' is already bound.",
+                        named.Location);
+                    AnalyzeExpression(expression: named.Value);
+                }
+                else
+                {
+                    boundParams[key: paramIndex] = named.Value;
+                }
+            }
+            else
+            {
+                if (requiresNamedArgs)
+                {
+                    // S510: Named argument enforcement — subsumes S507
+                    ReportError(
+                        SemanticDiagnosticCode.NamedArgumentRequired,
+                        $"Routine '{routine.Name}' has {nonMeParamCount} parameters — all arguments must be named.",
+                        arg.Location);
+                }
+                else if (seenNamed)
+                {
+                    // S507: Positional argument after named argument
+                    ReportError(
+                        SemanticDiagnosticCode.PositionalAfterNamed,
+                        $"Positional argument cannot appear after named arguments in call to '{routine.Name}'.",
+                        arg.Location);
+                }
+
+                if (positionalIndex < totalParams)
+                {
+                    if (boundParams.ContainsKey(key: positionalIndex))
+                    {
+                        // S506: Positional arg collides with earlier named arg that bound this slot
+                        ReportError(
+                            SemanticDiagnosticCode.DuplicateNamedArgument,
+                            $"Parameter '{parameters[positionalIndex].Name}' of '{routine.Name}' is already bound.",
+                            arg.Location);
+                    }
+                    else
+                    {
+                        boundParams[key: positionalIndex] = arg;
+                    }
+                }
+                else if (!routine.IsVariadic)
+                {
+                    // Extra positional arg beyond parameter count — handled by count check below
+                    boundParams[key: positionalIndex] = arg;
+                }
+                else
+                {
+                    // Variadic extra argument — just analyze it
+                    AnalyzeExpression(expression: arg);
+                }
+
+                positionalIndex++;
+            }
+        }
+
+        // Phase 2: Check argument count against required parameters.
+        int requiredParams = parameters.Count(p => !p.HasDefaultValue);
+        int unboundRequired = 0;
+        for (int i = 0; i < totalParams; i++)
+        {
+            if (!boundParams.ContainsKey(key: i) && !parameters[i].HasDefaultValue)
+            {
+                unboundRequired++;
+            }
+        }
+
+        if (unboundRequired > 0)
         {
             if (requiredParams == totalParams)
             {
@@ -82,7 +192,7 @@ public sealed partial class SemanticAnalyzer
                     location);
             }
         }
-        else if (arguments.Count > totalParams && !routine.IsVariadic)
+        else if (positionalIndex > totalParams && !routine.IsVariadic)
         {
             ReportError(
                 SemanticDiagnosticCode.TooManyArguments,
@@ -90,25 +200,22 @@ public sealed partial class SemanticAnalyzer
                 location);
         }
 
-        // Check argument types
-        for (int i = 0; i < arguments.Count; i++)
+        // Phase 3: Type-check each bound argument against its parameter.
+        foreach (KeyValuePair<int, Expression> binding in boundParams)
         {
-            Expression arg = arguments[i];
-
-            // Skip type check for extra variadic arguments
-            if (i >= totalParams)
+            if (binding.Key >= totalParams)
             {
-                AnalyzeExpression(expression: arg);
+                // Extra positional beyond params (already reported as TooManyArguments)
+                AnalyzeExpression(expression: binding.Value);
                 continue;
             }
 
-            ParameterInfo param = parameters[i];
+            ParameterInfo param = parameters[binding.Key];
             TypeSymbol paramType = param.Type;
 
-            // Pass expected type for contextual inference (e.g., integer literals)
-            TypeSymbol argType = AnalyzeExpression(expression: arg, expectedType: paramType);
+            Expression argExpr = binding.Value;
+            TypeSymbol argType = AnalyzeExpression(expression: argExpr, expectedType: paramType);
 
-            // Skip if either is an error type (to reduce cascading errors)
             if (argType.Category == TypeCategory.Error || paramType.Category == TypeCategory.Error)
             {
                 continue;
@@ -118,8 +225,8 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(
                     SemanticDiagnosticCode.ArgumentTypeMismatch,
-                    $"Argument {i + 1} of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
-                    arg.Location);
+                    $"Argument '{param.Name}' of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
+                    argExpr.Location);
             }
         }
     }

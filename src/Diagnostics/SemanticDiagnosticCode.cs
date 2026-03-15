@@ -514,6 +514,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Type does not support indexing.</summary>
     TypeNotIndexable = 509,
 
+    /// <summary>Routine with 2+ parameters requires named arguments at call site.</summary>
+    NamedArgumentRequired = 510,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════

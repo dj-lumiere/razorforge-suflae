@@ -3,5 +3,5 @@
 # Provides: Diagnosable (-> Representable), Equatable, Hashable
 module Core
 
-protocol RecordType obeys Diagnosable, Equatable, Hashable
+protocol RecordType obeys Diagnosable, Equatable, Hashable, Copyable
   pass

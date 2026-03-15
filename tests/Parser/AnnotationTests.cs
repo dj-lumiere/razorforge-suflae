@@ -204,18 +204,18 @@ public class AttributeTests
     }
 
     [Fact]
-    public void Parse_DerivedAttribute()
+    public void Parse_GeneratedAttribute()
     {
         string source = """
-                        @derived
+                        @generated
                         routine Me.__ne__(you: Me) -> Bool
-                          return !(me == you)
+                          return not (me == you)
                         """;
 
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "derived", collection: routine.Annotations);
+        Assert.Contains(expected: "generated", collection: routine.Annotations);
     }
 
     [Fact]

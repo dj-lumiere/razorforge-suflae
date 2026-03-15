@@ -177,18 +177,18 @@ public class SuflaeAttributeTests
     }
 
     [Fact]
-    public void ParseSuflae_DerivedAttribute()
+    public void ParseSuflae_GeneratedAttribute()
     {
         string source = """
-                        @derived
+                        @generated
                         routine Me.__ne__(you: Me) -> Bool
-                          return !(me == you)
+                          return not (me == you)
                         """;
 
         Program program = AssertParsesSuflae(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "derived", collection: routine.Annotations);
+        Assert.Contains(expected: "generated", collection: routine.Annotations);
     }
 
     [Fact]
