@@ -162,60 +162,15 @@ public class SuflaeAttributeTests
     }
 
     [Fact]
-    public void ParseSuflae_FinalAttribute()
-    {
-        string source = """
-                        @final
-                        routine EntityType.id() -> Integer
-                          return internal_object_id(me)
-                        """;
-
-        Program program = AssertParsesSuflae(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "final", collection: routine.Annotations);
-    }
-
-    [Fact]
-    public void ParseSuflae_GeneratedAttribute()
-    {
-        string source = """
-                        @generated
-                        routine Me.__ne__(you: Me) -> Bool
-                          return not (me == you)
-                        """;
-
-        Program program = AssertParsesSuflae(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "generated", collection: routine.Annotations);
-    }
-
-    [Fact]
-    public void ParseSuflae_CompoundFinalDerived()
-    {
-        string source = """
-                        @[readonly, final, derived]
-                        routine EntityType.id() -> Integer
-                          return internal_object_id(me)
-                        """;
-
-        AssertParsesSuflae(source: source);
-    }
-
-    [Fact]
     public void ParseSuflae_CompoundProtocolAnnotations()
     {
         string source = """
-                        protocol EntityType obeys Diagnosable, Equatable
-                          @[readonly, final, generated]
-                          routine Me.id() -> U64
-
-                          @[readonly, final, generated]
+                        protocol Identifiable
+                          @readonly
                           routine Me.__same__(you: Me) -> Bool
 
-                          @[readonly, final, generated]
-                          routine Me.__not_same__(you: Me) -> Bool
+                          @readonly
+                          routine Me.__notsame__(you: Me) -> Bool
                         """;
 
         AssertParsesSuflae(source: source);

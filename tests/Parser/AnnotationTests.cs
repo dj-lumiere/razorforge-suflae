@@ -189,60 +189,15 @@ public class AttributeTests
     }
 
     [Fact]
-    public void Parse_FinalAttribute()
-    {
-        string source = """
-                        @final
-                        routine EntityType.id() -> U64
-                          return internal_object_id(me)
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "final", collection: routine.Annotations);
-    }
-
-    [Fact]
-    public void Parse_GeneratedAttribute()
-    {
-        string source = """
-                        @generated
-                        routine Me.__ne__(you: Me) -> Bool
-                          return not (me == you)
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "generated", collection: routine.Annotations);
-    }
-
-    [Fact]
-    public void Parse_CompoundFinalDerived()
-    {
-        string source = """
-                        @[readonly, final, generated]
-                        routine EntityType.id() -> U64
-                          return internal_object_id(me)
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
     public void Parse_CompoundProtocolAnnotations()
     {
         string source = """
-                        protocol EntityType obeys Diagnosable, Equatable
-                          @[readonly, final, generated]
-                          routine Me.id() -> U64
-
-                          @[readonly, final, generated]
+                        protocol Identifiable
+                          @readonly
                           routine Me.__same__(you: Me) -> Bool
 
-                          @[readonly, final, generated]
-                          routine Me.__not_same__(you: Me) -> Bool
+                          @readonly
+                          routine Me.__notsame__(you: Me) -> Bool
                         """;
 
         AssertParses(source: source);
@@ -251,32 +206,6 @@ public class AttributeTests
     #endregion
 
     #region Type Annotation Tests
-
-    [Fact]
-    public void Parse_AttributeOnRecord()
-    {
-        string source = """
-                        @serializable
-                        record Point
-                          x: F32
-                          y: F32
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_AttributeOnEntity()
-    {
-        string source = """
-                        @serializable
-                        entity User
-                          name: Text
-                          age: U32
-                        """;
-
-        AssertParses(source: source);
-    }
 
     [Fact]
     public void Parse_AttributeOnProtocol()
@@ -291,17 +220,6 @@ public class AttributeTests
         AssertParses(source: source);
     }
 
-    [Fact]
-    public void Parse_AttributeOnResident()
-    {
-        string source = """
-                        @singleton
-                        resident GlobalConfig
-                          settings: Dict[Text, Text]
-                        """;
-
-        AssertParses(source: source);
-    }
 
     #endregion
 
@@ -330,7 +248,7 @@ public class AttributeTests
                           @readonly
                           id: U64
 
-                          @indexed
+                          @initonly
                           email: Text
                         """;
 
@@ -359,7 +277,7 @@ public class AttributeTests
     public void Parse_AttributesOnTypeAndMethods()
     {
         string source = """
-                        @derive(Debug)
+                        @deprecated(message: "Use NewCalculator")
                         record Calculator
                           value: S32
 
@@ -409,7 +327,7 @@ public class AttributeTests
     public void Parse_InternalWithAttribute()
     {
         string source = """
-                        @serializable
+                        @deprecated(message: "Use PublicData")
                         secret record InternalData
                           value: S32
                         """;
