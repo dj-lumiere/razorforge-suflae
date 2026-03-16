@@ -31,6 +31,9 @@ public sealed class ProtocolMethodInfo
     /// <summary>Whether this method can fail (has ! suffix).</summary>
     public bool IsFailable { get; init; }
 
+    /// <summary>The generation kind for this method (None, Generated, or Innate).</summary>
+    public ProtocolRoutineKind GenerationKind { get; init; } = ProtocolRoutineKind.None;
+
     /// <summary>Whether this method has a default implementation.</summary>
     public bool HasDefaultImplementation { get; init; }
 

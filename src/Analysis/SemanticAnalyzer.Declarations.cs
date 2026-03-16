@@ -397,6 +397,15 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
+        // @generated and @innate are only valid on protocol routine declarations
+        if (routine.Annotations.Contains(item: "generated") || routine.Annotations.Contains(item: "innate"))
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidGeneratedInnatePlacement,
+                "'@generated' and '@innate' annotations are only valid on protocol routine declarations.",
+                routine.Location);
+        }
+
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
         ModificationCategory declaredModification = routine.Annotations.Contains(item: "readonly")
@@ -1007,10 +1016,22 @@ public sealed partial class SemanticAnalyzer
                 // else: "migratable" or no annotation = Migratable (default)
             }
 
+            // Extract generation kind from annotations
+            ProtocolRoutineKind generationKind = ProtocolRoutineKind.None;
+            if (sig.Annotations?.Contains(item: "innate") == true)
+            {
+                generationKind = ProtocolRoutineKind.Innate;
+            }
+            else if (sig.Annotations?.Contains(item: "generated") == true)
+            {
+                generationKind = ProtocolRoutineKind.Generated;
+            }
+
             var methodInfo = new ProtocolMethodInfo(name: methodName)
             {
                 IsInstanceMethod = isInstanceMethod,
                 Modification = modification,
+                GenerationKind = generationKind,
                 ParameterTypes = paramTypes,
                 ParameterNames = paramNames,
                 ReturnType = returnType,
@@ -2006,16 +2027,8 @@ public sealed partial class SemanticAnalyzer
 
         if (existingNe != null)
         {
-            // User cannot override derived operators
-            if (!existingNe.IsSynthesized)
-            {
-                ReportError(
-                    SemanticDiagnosticCode.DerivedOperatorOverride,
-                    "Cannot define '__ne__' when '__eq__' is defined. " +
-                             "'__ne__' is auto-generated from '__eq__'.",
-                    existingNe.Location);
-            }
-
+            // User provided their own implementation — it takes priority over generated.
+            // This is expected behavior for @generated protocol routines (#179).
             return;
         }
 
@@ -2076,16 +2089,8 @@ public sealed partial class SemanticAnalyzer
 
             if (existing != null)
             {
-                // User cannot override derived operators
-                if (!existing.IsSynthesized)
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.DerivedOperatorOverride,
-                        $"Cannot define '{opName}' when '__cmp__' is defined. " +
-                                 $"'{opName}' is auto-generated from '__cmp__'.",
-                        existing.Location);
-                }
-
+                // User provided their own implementation — it takes priority over generated.
+                // This is expected behavior for @generated protocol routines (#179).
                 continue;
             }
 
@@ -2192,6 +2197,14 @@ public sealed partial class SemanticAnalyzer
                     SemanticDiagnosticCode.MissingProtocolMethod,
                     $"Type '{type.Name}' declares 'obeys {protocol.Name}' but does not implement required method '{requiredMethod.Name}'.",
                     type.Location ?? new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0));
+            }
+            else if (requiredMethod.GenerationKind == ProtocolRoutineKind.Innate && !typeMethod.IsSynthesized)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.InnateOverrideNotAllowed,
+                    $"Cannot override innate routine '{protocol.Name}.{requiredMethod.Name}'. " +
+                    "Innate routines are compiler-provided and cannot be overridden.",
+                    typeMethod.Location);
             }
         }
 

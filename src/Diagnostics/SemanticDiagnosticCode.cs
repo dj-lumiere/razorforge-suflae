@@ -359,8 +359,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot access internal member from outside the module.</summary>
     InternalMemberAccess = 404,
 
-    /// <summary>Cannot define derived operator when base operator exists.</summary>
-    DerivedOperatorOverride = 405,
+    /// <summary>Cannot define generated operator when base operator exists.</summary>
+    GeneratedOperatorOverride = 405,
 
     /// <summary>Duplicate routine definition.</summary>
     DuplicateRoutineDefinition = 406,
@@ -610,6 +610,12 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Protocol method signature mismatch.</summary>
     ProtocolMethodSignatureMismatch = 703,
+
+    /// <summary>@generated or @innate annotation used outside a protocol routine declaration.</summary>
+    InvalidGeneratedInnatePlacement = 704,
+
+    /// <summary>Cannot override an @innate protocol routine.</summary>
+    InnateOverrideNotAllowed = 705,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLING ERRORS (RF-S750 - RF-S799)

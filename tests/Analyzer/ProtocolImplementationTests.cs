@@ -366,6 +366,188 @@ public class ProtocolImplementationTests
 
     #endregion
 
+    #region Annotation Placement Validation (#177)
+
+    [Fact]
+    public void Analyze_GeneratedOnNonProtocolRoutine_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: F32
+                          y: F32
+
+                        @generated
+                        @readonly
+                        routine Point.display() -> Text
+                          return "point"
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
+    }
+
+    [Fact]
+    public void Analyze_InnateOnNonProtocolRoutine_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: F32
+                          y: F32
+
+                        @innate
+                        @readonly
+                        routine Point.display() -> Text
+                          return "point"
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
+    }
+
+    [Fact]
+    public void Analyze_GeneratedOnProtocolRoutine_NoError()
+    {
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.__eq__(you: Me) -> Bool
+
+                          @generated
+                          @readonly
+                          routine Me.__ne__(you: Me) -> Bool
+
+                        record Point obeys Equatable
+                          x: F32
+                          y: F32
+
+                        @readonly
+                        routine Point.__eq__(you: Point) -> Bool
+                          return me.x == you.x and me.y == you.y
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
+    }
+
+    [Fact]
+    public void Analyze_InnateOnProtocolRoutine_NoError()
+    {
+        string source = """
+                        protocol Identifiable
+                          @innate
+                          @readonly
+                          routine Me.__same__(you: Me) -> Bool
+
+                        entity Widget obeys Identifiable
+                          name: Text
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
+    }
+
+    #endregion
+
+    #region Innate Override Prohibition (#178)
+
+    [Fact]
+    public void Analyze_OverrideInnateRoutine_ReportsError()
+    {
+        string source = """
+                        protocol Identifiable
+                          @innate
+                          @readonly
+                          routine Me.__same__(you: Me) -> Bool
+
+                        entity Widget obeys Identifiable
+                          name: Text
+
+                        @readonly
+                        routine Widget.__same__(you: Widget) -> Bool
+                          return false
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
+    }
+
+    [Fact]
+    public void Analyze_InnateRoutineNotOverridden_NoError()
+    {
+        string source = """
+                        protocol Identifiable
+                          @innate
+                          @readonly
+                          routine Me.__same__(you: Me) -> Bool
+
+                        entity Widget obeys Identifiable
+                          name: Text
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
+    }
+
+    #endregion
+
+    #region Generated Override Prioritization (#179)
+
+    [Fact]
+    public void Analyze_OverrideGeneratedNe_NoError()
+    {
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.__eq__(you: Me) -> Bool
+
+                          @generated
+                          @readonly
+                          routine Me.__ne__(you: Me) -> Bool
+
+                        record Point obeys Equatable
+                          x: F32
+                          y: F32
+
+                        @readonly
+                        routine Point.__eq__(you: Point) -> Bool
+                          return me.x == you.x and me.y == you.y
+
+                        @readonly
+                        routine Point.__ne__(you: Point) -> Bool
+                          return me.x != you.x or me.y != you.y
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.GeneratedOperatorOverride);
+    }
+
+    [Fact]
+    public void Analyze_GeneratedNeNotOverridden_NoError()
+    {
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.__eq__(you: Me) -> Bool
+
+                          @generated
+                          @readonly
+                          routine Me.__ne__(you: Me) -> Bool
+
+                        record Point obeys Equatable
+                          x: F32
+                          y: F32
+
+                        @readonly
+                        routine Point.__eq__(you: Point) -> Bool
+                          return me.x == you.x and me.y == you.y
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
     #region Protocol with Default Values
 
     [Fact]
