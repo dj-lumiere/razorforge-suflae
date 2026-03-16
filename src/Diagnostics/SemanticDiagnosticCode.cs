@@ -353,11 +353,11 @@ public enum SemanticDiagnosticCode
     /// <summary>Module 'Core' is reserved for standard library.</summary>
     ReservedModuleCore = 401,
 
-    /// <summary>Cannot access private member from outside its defining file.</summary>
-    PrivateMemberAccess = 403,
+    /// <summary>Cannot access secret member from outside its defining file.</summary>
+    SecretMemberAccess = 403,
 
-    /// <summary>Cannot access internal member from outside the module.</summary>
-    InternalMemberAccess = 404,
+    /// <summary> Cannot set posted member from outside its defining file. </summary>
+    PostedMemberAccess = 404,
 
     /// <summary>Cannot define generated operator when base operator exists.</summary>
     GeneratedOperatorOverride = 405,
@@ -477,8 +477,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Method not found on type.</summary>
     MethodNotFound = 458,
 
-    /// <summary>Static method called on instance or vice versa.</summary>
-    StaticInstanceMismatch = 459,
+    /// <summary>Common routine called on object or vice versa.</summary>
+    CommonRoutineMismatch = 459,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CALL AND ARGUMENT ERRORS (RF-S500 - RF-S549)

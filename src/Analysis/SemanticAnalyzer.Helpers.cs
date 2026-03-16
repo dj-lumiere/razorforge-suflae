@@ -1342,7 +1342,19 @@ public sealed partial class SemanticAnalyzer
     /// <param name="accessLocation">Source location of the access site.</param>
     private void ValidateMemberVariableAccess(MemberVariableInfo memberVariable, bool isWrite, SourceLocation accessLocation)
     {
-        // For published member variables, write access is restricted to private (owner only)
+        // Posted member variables: open read, module-only write
+        if (isWrite && memberVariable.Visibility == VisibilityModifier.Posted
+                    && !IsAccessingFromSameModule(memberModule: memberVariable.Owner?.Module))
+        {
+            string typeName = memberVariable.Owner?.Name ?? "type";
+            ReportError(
+                SemanticDiagnosticCode.PostedMemberAccess,
+                $"Cannot write to posted member variable '{memberVariable.Name}' of '{typeName}' from outside its module.",
+                accessLocation);
+            return;
+        }
+
+        // For posted member variables, write access is restricted to secret (module only)
         VisibilityModifier visibility = isWrite
             ? GetEffectiveWriteVisibility(memberVariable: memberVariable)
             : memberVariable.Visibility;
@@ -1407,7 +1419,7 @@ public sealed partial class SemanticAnalyzer
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(
-                        SemanticDiagnosticCode.PrivateMemberAccess,
+                        SemanticDiagnosticCode.SecretMemberAccess,
                         $"Cannot access secret {memberKind} '{memberName}' of '{typeName}' from outside its module.",
                         accessLocation);
                 }

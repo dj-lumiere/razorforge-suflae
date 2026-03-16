@@ -477,4 +477,43 @@ public class MutabilityTests
     }
 
     #endregion
+
+    #region Posted Member Variable Access
+
+    [Fact]
+    public void Analyze_PostedMemberVariableWrite_SameModule_NoError()
+    {
+        // Within the same module (null == null), writing to posted member variable is allowed
+        string source = """
+                        entity Config
+                          posted name: Text
+
+                        @writable
+                        routine Config.rename(new_name: Text)
+                          me.name = new_name
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
+    }
+
+    [Fact]
+    public void Analyze_PostedMemberVariableRead_NoError()
+    {
+        // Reading a posted member variable is always allowed
+        string source = """
+                        entity Config
+                          posted name: Text
+
+                        @readonly
+                        routine Config.get_name() -> Text
+                          return me.name
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
+    }
+
+    #endregion
 }
