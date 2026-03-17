@@ -386,6 +386,7 @@ public partial class LLVMCodeGenerator
     {
         // Clear local variables for this function
         _localVariables.Clear();
+        _currentBlock = "entry";
 
         // Set current function return type for use in EmitReturn
         _currentFunctionReturnType = routine.ReturnType;
@@ -473,6 +474,136 @@ public partial class LLVMCodeGenerator
         string typeName = MangleTypeName(routine.OwnerType.Name);
         // Use underscore separator for C ABI compatibility
         return $"{typeName}_{routine.Name}";
+    }
+
+    #endregion
+
+    #region Synthesized Routine Generation
+
+    /// <summary>
+    /// Generates LLVM IR bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__).
+    /// These routines are registered by the semantic analyzer (Phase 2.6) with IsSynthesized = true
+    /// but have no AST body — their IR is emitted directly here.
+    /// </summary>
+    private void GenerateSynthesizedRoutines()
+    {
+        foreach (var routine in _registry.GetAllRoutines())
+        {
+            if (!routine.IsSynthesized)
+                continue;
+
+            // Skip generic definitions and routines with error types
+            if (routine.IsGenericDefinition || HasErrorTypes(routine))
+                continue;
+
+            // Only handle the comparison operators we know how to synthesize
+            if (routine.Name is not ("__ne__" or "__lt__" or "__le__" or "__gt__" or "__ge__"))
+                continue;
+
+            string funcName = MangleFunctionName(routine);
+
+            // Skip if already generated
+            if (!_generatedFunctionDefs.Add(funcName))
+                continue;
+
+            // Also mark in declarations set to prevent declare/define conflicts
+            _generatedFunctions.Add(funcName);
+
+            switch (routine.Name)
+            {
+                case "__ne__":
+                    EmitSynthesizedNe(routine, funcName);
+                    break;
+                case "__lt__":
+                    EmitSynthesizedCmpDerived(routine, funcName, -1, "eq");
+                    break;
+                case "__le__":
+                    EmitSynthesizedCmpDerived(routine, funcName, 1, "ne");
+                    break;
+                case "__gt__":
+                    EmitSynthesizedCmpDerived(routine, funcName, 1, "eq");
+                    break;
+                case "__ge__":
+                    EmitSynthesizedCmpDerived(routine, funcName, -1, "ne");
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized __ne__ routine: not __eq__(me, you).
+    /// </summary>
+    private void EmitSynthesizedNe(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        // Build parameter types for the 'you' parameter
+        string youType = routine.Parameters.Count > 0
+            ? GetParameterLLVMType(routine.Parameters[0].Type)
+            : meType;
+        string youName = routine.Parameters.Count > 0
+            ? routine.Parameters[0].Name
+            : "you";
+
+        // Look up the __eq__ function name on the same owner type
+        string eqFuncName = $"{MangleTypeName(routine.OwnerType.Name)}___eq__";
+
+        EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  %eq = call i1 @{eqFuncName}({meType} %me, {youType} %{youName})");
+        EmitLine(_functionDefinitions, "  %ne = xor i1 %eq, true");
+        EmitLine(_functionDefinitions, "  ret i1 %ne");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized comparison operator derived from __cmp__.
+    /// E.g., __lt__ = __cmp__(me, you) == -1 (ME_SMALL).
+    /// </summary>
+    private void EmitSynthesizedCmpDerived(RoutineInfo routine, string funcName, long tagValue, string cmpOp)
+    {
+        if (routine.OwnerType == null) return;
+
+        // Look up the actual tag value from the registry if ComparisonSign is defined
+        long resolvedTag = tagValue;
+        string caseName = tagValue switch
+        {
+            -1 => "ME_SMALL",
+            0 => "SAME",
+            1 => "ME_LARGE",
+            _ => ""
+        };
+        if (caseName.Length > 0)
+        {
+            var choiceCase = _registry.LookupChoiceCase(caseName);
+            if (choiceCase != null)
+            {
+                resolvedTag = choiceCase.Value.CaseInfo.ComputedValue;
+            }
+        }
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        string youType = routine.Parameters.Count > 0
+            ? GetParameterLLVMType(routine.Parameters[0].Type)
+            : meType;
+        string youName = routine.Parameters.Count > 0
+            ? routine.Parameters[0].Name
+            : "you";
+
+        // Look up the __cmp__ function name on the same owner type
+        string cmpFuncName = $"{MangleTypeName(routine.OwnerType.Name)}___cmp__";
+
+        EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  %cmp = call i64 @{cmpFuncName}({meType} %me, {youType} %{youName})");
+        EmitLine(_functionDefinitions, $"  %result = icmp {cmpOp} i64 %cmp, {resolvedTag}");
+        EmitLine(_functionDefinitions, "  ret i1 %result");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
     }
 
     #endregion

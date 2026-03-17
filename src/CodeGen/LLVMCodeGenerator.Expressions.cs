@@ -345,6 +345,7 @@ public partial class LLVMCodeGenerator
             RangeExpression range => EmitRange(sb, range),
             StealExpression steal => EmitSteal(sb, steal),
             TupleLiteralExpression tuple => EmitTupleLiteral(sb, tuple),
+            GenericMethodCallExpression generic => EmitGenericMethodCall(sb, generic),
             InsertedTextExpression => throw new NotImplementedException("Text insertion codegen not yet implemented"),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
@@ -447,6 +448,13 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
     {
+        // Check if this is a choice case (e.g., ME_SMALL, NORTH)
+        var choiceCase = _registry.LookupChoiceCase(identifier.Name);
+        if (choiceCase != null)
+        {
+            return choiceCase.Value.CaseInfo.ComputedValue.ToString();
+        }
+
         // Look up the variable in local variables first
         if (!_localVariables.TryGetValue(identifier.Name, out var varType))
         {
@@ -602,23 +610,883 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates code for a binary operation.
+    /// Only handles operators that are NOT desugared to method calls by the parser.
+    /// Arithmetic/comparison/bitwise operators are desugared to __add__, __eq__, etc.
     /// </summary>
     private string EmitBinaryOp(StringBuilder sb, BinaryExpression binary)
     {
-        // TODO: Implement binary operators
-        // For now, placeholder
-        return "0";
+        return binary.Operator switch
+        {
+            BinaryOperator.And => EmitShortCircuitAnd(sb, binary),
+            BinaryOperator.Or => EmitShortCircuitOr(sb, binary),
+            BinaryOperator.Identical => EmitIdentityComparison(sb, binary, "eq"),
+            BinaryOperator.NotIdentical => EmitIdentityComparison(sb, binary, "ne"),
+            BinaryOperator.Assign => EmitBinaryAssign(sb, binary),
+            BinaryOperator.But => EmitBitClear(sb, binary),
+            BinaryOperator.In => EmitContainsCall(sb, binary, "__contains__"),
+            BinaryOperator.NotIn => EmitContainsCall(sb, binary, "__notcontains__"),
+            BinaryOperator.Is => EmitChoiceIs(sb, binary, "eq"),
+            BinaryOperator.IsNot => EmitChoiceIs(sb, binary, "ne"),
+            BinaryOperator.Obeys => EmitCompileTimeConstant("true"),
+            BinaryOperator.NotObeys => EmitCompileTimeConstant("false"),
+            BinaryOperator.NoneCoalesce =>
+                throw new NotImplementedException("'??' operator codegen not yet implemented"),
+            _ => throw new NotImplementedException(
+                $"Binary operator '{binary.Operator}' should have been desugared to a method call")
+        };
+    }
+
+    /// <summary>
+    /// Emits choice case comparison (is / isnot).
+    /// Left operand is a choice value (i64 tag), right operand is a choice case identifier.
+    /// </summary>
+    private string EmitChoiceIs(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb, binary.Left);
+
+        // Try to resolve RHS as a known choice case identifier
+        if (binary.Right is IdentifierExpression id)
+        {
+            var choiceCase = _registry.LookupChoiceCase(id.Name);
+            if (choiceCase != null)
+            {
+                string result = NextTemp();
+                EmitLine(sb, $"  {result} = icmp {cmpOp} i64 {left}, {choiceCase.Value.CaseInfo.ComputedValue}");
+                return result;
+            }
+        }
+
+        // Fallback: evaluate RHS as an expression (e.g., qualified access Direction.NORTH)
+        string right = EmitExpression(sb, binary.Right);
+        string fallbackResult = NextTemp();
+        EmitLine(sb, $"  {fallbackResult} = icmp {cmpOp} i64 {left}, {right}");
+        return fallbackResult;
+    }
+
+    /// <summary>
+    /// Emits short-circuit AND: evaluate left, branch, phi merge.
+    /// </summary>
+    private string EmitShortCircuitAnd(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+
+        string rhsLabel = NextLabel("and_rhs");
+        string endLabel = NextLabel("and_end");
+        string leftBlock = _currentBlock;
+
+        EmitLine(sb, $"  br i1 {left}, label %{rhsLabel}, label %{endLabel}");
+
+        EmitLine(sb, $"{rhsLabel}:");
+        _currentBlock = rhsLabel;
+        string right = EmitExpression(sb, binary.Right);
+        string rightBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi i1 [ false, %{leftBlock} ], [ {right}, %{rightBlock} ]");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits short-circuit OR: evaluate left, branch, phi merge.
+    /// </summary>
+    private string EmitShortCircuitOr(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+
+        string rhsLabel = NextLabel("or_rhs");
+        string endLabel = NextLabel("or_end");
+        string leftBlock = _currentBlock;
+
+        EmitLine(sb, $"  br i1 {left}, label %{endLabel}, label %{rhsLabel}");
+
+        EmitLine(sb, $"{rhsLabel}:");
+        _currentBlock = rhsLabel;
+        string right = EmitExpression(sb, binary.Right);
+        string rightBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi i1 [ true, %{leftBlock} ], [ {right}, %{rightBlock} ]");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits identity comparison (=== / !==) using pointer comparison.
+    /// </summary>
+    private string EmitIdentityComparison(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = icmp {cmpOp} ptr {left}, {right}");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits assignment as an expression (evaluates right, stores into left's alloca).
+    /// </summary>
+    private string EmitBinaryAssign(StringBuilder sb, BinaryExpression binary)
+    {
+        string value = EmitExpression(sb, binary.Right);
+
+        if (binary.Left is IdentifierExpression id)
+        {
+            EmitVariableAssignment(sb, id.Name, value);
+        }
+        else if (binary.Left is MemberExpression member)
+        {
+            EmitMemberVariableAssignment(sb, member, value);
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"Assignment target not implemented for expression type: {binary.Left.GetType().Name}");
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// Emits bit clear: left &amp; ~right (flags 'but' operator).
+    /// </summary>
+    private string EmitBitClear(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+
+        TypeInfo? type = GetExpressionType(binary.Left);
+        string llvmType = type != null ? GetLLVMType(type) : "i64";
+
+        string inverted = NextTemp();
+        EmitLine(sb, $"  {inverted} = xor {llvmType} {right}, -1");
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = and {llvmType} {left}, {inverted}");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits 'in' / 'notin' by calling the right operand's __contains__ / __notcontains__ method.
+    /// </summary>
+    private string EmitContainsCall(StringBuilder sb, BinaryExpression binary, string methodName)
+    {
+        // 'x in collection' → collection.__contains__(x)
+        string collection = EmitExpression(sb, binary.Right);
+        string element = EmitExpression(sb, binary.Left);
+
+        TypeInfo? collectionType = GetExpressionType(binary.Right);
+        if (collectionType == null)
+        {
+            throw new InvalidOperationException("Cannot determine collection type for 'in'/'notin' operator");
+        }
+
+        string methodFullName = $"{collectionType.Name}.{methodName}";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        var argValues = new List<string> { collection, element };
+        var argTypes = new List<string> { GetParameterLLVMType(collectionType) };
+
+        TypeInfo? elemType = GetExpressionType(binary.Left);
+        argTypes.Add(elemType != null ? GetLLVMType(elemType) : "i64");
+
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(collectionType.Name)}_{methodName}";
+
+        string result = NextTemp();
+        string args = BuildCallArgs(argTypes, argValues);
+        EmitLine(sb, $"  {result} = call i1 @{mangledName}({args})");
+        return result;
+    }
+
+    /// <summary>
+    /// Returns a compile-time constant value.
+    /// </summary>
+    private static string EmitCompileTimeConstant(string value)
+    {
+        return value;
     }
 
     /// <summary>
     /// Generates code for a unary operation.
+    /// Minus and BitwiseNot are emitted as method calls to __neg__ / __not__
+    /// so the stdlib bodies (which call LLVM intrinsics) do the actual work.
     /// </summary>
     private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
     {
-        // TODO: Implement unary operators
-        // For now, placeholder
-        return "0";
+        return unary.Operator switch
+        {
+            UnaryOperator.Not => EmitLogicalNot(sb, unary),
+            UnaryOperator.Minus => EmitUnaryMethodCall(sb, unary, "__neg__"),
+            UnaryOperator.BitwiseNot => EmitUnaryMethodCall(sb, unary, "__not__"),
+            UnaryOperator.Steal => EmitExpression(sb, unary.Operand),
+            UnaryOperator.ForceUnwrap =>
+                throw new NotImplementedException("'!!' (force unwrap) codegen not yet implemented"),
+            _ => throw new NotImplementedException(
+                $"Unary operator '{unary.Operator}' codegen not implemented")
+        };
     }
+
+    /// <summary>
+    /// Emits logical not: xor i1 %val, true.
+    /// </summary>
+    private string EmitLogicalNot(StringBuilder sb, UnaryExpression unary)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = xor i1 {operand}, true");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits a unary operator as a method call (e.g., -x → x.__neg__(), ~x → x.__not__()).
+    /// </summary>
+    private string EmitUnaryMethodCall(StringBuilder sb, UnaryExpression unary, string methodName)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        TypeInfo? operandType = GetExpressionType(unary.Operand);
+
+        if (operandType == null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot determine operand type for unary operator '{unary.Operator}'");
+        }
+
+        string methodFullName = $"{operandType.Name}.{methodName}";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        // Build call: receiver (me) is the only argument
+        var argValues = new List<string> { operand };
+        var argTypes = new List<string> { GetParameterLLVMType(operandType) };
+
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(operandType.Name)}_{methodName}";
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : GetLLVMType(operandType);
+
+        string result = NextTemp();
+        string args = BuildCallArgs(argTypes, argValues);
+        EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+        return result;
+    }
+
+    #region Generic Method Calls (C21)
+
+    /// <summary>
+    /// Generates code for a generic method call expression.
+    /// Handles LLVM intrinsic routines (CallingConvention == "llvm") by emitting
+    /// LLVM IR instructions directly, and regular generic calls by resolving type
+    /// arguments and calling the mangled function.
+    /// </summary>
+    private string EmitGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic)
+    {
+        // Resolve the receiver type and look up the method
+        TypeInfo? receiverType = GetExpressionType(generic.Object);
+
+        // Try method lookup: "Type.MethodName" for methods, or standalone "MethodName"
+        string methodFullName = receiverType != null
+            ? $"{receiverType.Name}.{generic.MethodName}"
+            : generic.MethodName;
+
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName)
+                              ?? _registry.LookupRoutine(generic.MethodName);
+
+        // If this is an LLVM intrinsic, emit directly as LLVM IR
+        if (method is { CallingConvention: "llvm" })
+        {
+            return EmitLlvmIntrinsicGenericCall(sb, generic, method);
+        }
+
+        // Otherwise, emit as a regular generic method call
+        return EmitRegularGenericMethodCall(sb, generic, method, receiverType);
+    }
+
+    /// <summary>
+    /// Emits an LLVM intrinsic generic call by resolving type arguments to LLVM types
+    /// and delegating to EmitLlvmInstruction.
+    /// </summary>
+    private string EmitLlvmIntrinsicGenericCall(StringBuilder sb, GenericMethodCallExpression generic, RoutineInfo method)
+    {
+        // Evaluate all arguments
+        var args = new List<string>();
+        foreach (var arg in generic.Arguments)
+        {
+            args.Add(EmitExpression(sb, arg));
+        }
+
+        // Also evaluate the receiver if this is a method call (it becomes 'me')
+        string? receiver = null;
+        if (generic.Object is not IdentifierExpression)
+        {
+            receiver = EmitExpression(sb, generic.Object);
+        }
+
+        // Resolve type arguments to LLVM types
+        var llvmTypeArgs = new List<string>();
+        foreach (var typeArg in generic.TypeArguments)
+        {
+            llvmTypeArgs.Add(ResolveTypeExpressionToLLVM(typeArg));
+        }
+
+        if (llvmTypeArgs.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"LLVM intrinsic call to '{generic.MethodName}' requires type arguments");
+        }
+
+        string llvmType = llvmTypeArgs[0];
+
+        // Get the LLVM instruction name (may differ from routine name via @llvm_ir annotation)
+        string instrName = GetLlvmIrName(method);
+
+        // Build full arg list: receiver first if method call, then explicit args
+        var allArgs = new List<string>();
+        if (receiver != null)
+        {
+            allArgs.Add(receiver);
+        }
+        allArgs.AddRange(args);
+
+        return EmitLlvmInstruction(sb, instrName, llvmType, llvmTypeArgs, allArgs);
+    }
+
+    /// <summary>
+    /// Emits a single LLVM instruction. Shared by both EmitIntrinsicCall and EmitLlvmIntrinsicGenericCall.
+    /// </summary>
+    private string EmitLlvmInstruction(StringBuilder sb, string name, string llvmType, List<string> llvmTypeArgs, List<string> args)
+    {
+        string result = NextTemp();
+
+        // Arithmetic operations
+        if (name is "add.wrapping" or "add")
+        {
+            string op = IsFloatLLVMType(llvmType) ? "fadd" : "add";
+            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name is "sub.wrapping" or "sub")
+        {
+            string op = IsFloatLLVMType(llvmType) ? "fsub" : "sub";
+            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name is "mul.wrapping" or "mul")
+        {
+            string op = IsFloatLLVMType(llvmType) ? "fmul" : "mul";
+            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name is "div.wrapping" or "div")
+        {
+            string op = IsFloatLLVMType(llvmType) ? "fdiv" : "sdiv";
+            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "sdiv")
+        {
+            EmitLine(sb, $"  {result} = sdiv {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "udiv")
+        {
+            EmitLine(sb, $"  {result} = udiv {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "srem")
+        {
+            EmitLine(sb, $"  {result} = srem {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "urem")
+        {
+            EmitLine(sb, $"  {result} = urem {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "frem")
+        {
+            EmitLine(sb, $"  {result} = frem {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name is "rem.wrapping" or "rem")
+        {
+            string op = IsFloatLLVMType(llvmType) ? "frem" : (IsSignedLLVMType(llvmType) ? "srem" : "urem");
+            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+        }
+        // Unary arithmetic
+        else if (name == "neg")
+        {
+            if (IsFloatLLVMType(llvmType))
+                EmitLine(sb, $"  {result} = fneg {llvmType} {args[0]}");
+            else
+                EmitLine(sb, $"  {result} = sub {llvmType} 0, {args[0]}");
+        }
+        else if (name == "abs")
+        {
+            if (IsFloatLLVMType(llvmType))
+                EmitLine(sb, $"  {result} = call {llvmType} @llvm.fabs.{llvmType}({llvmType} {args[0]})");
+            else
+                EmitLine(sb, $"  {result} = call {llvmType} @llvm.abs.{llvmType}({llvmType} {args[0]}, i1 false)");
+        }
+        // Bitwise operations
+        else if (name == "and")
+        {
+            EmitLine(sb, $"  {result} = and {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "or")
+        {
+            EmitLine(sb, $"  {result} = or {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "xor")
+        {
+            EmitLine(sb, $"  {result} = xor {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "not")
+        {
+            EmitLine(sb, $"  {result} = xor {llvmType} {args[0]}, -1");
+        }
+        // Shift operations
+        else if (name == "shl")
+        {
+            EmitLine(sb, $"  {result} = shl {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "lshr")
+        {
+            EmitLine(sb, $"  {result} = lshr {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "ashr")
+        {
+            EmitLine(sb, $"  {result} = ashr {llvmType} {args[0]}, {args[1]}");
+        }
+        // Integer comparisons
+        else if (name == "icmp.eq")
+        {
+            EmitLine(sb, $"  {result} = icmp eq {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.ne")
+        {
+            EmitLine(sb, $"  {result} = icmp ne {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.slt")
+        {
+            EmitLine(sb, $"  {result} = icmp slt {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.sle")
+        {
+            EmitLine(sb, $"  {result} = icmp sle {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.sgt")
+        {
+            EmitLine(sb, $"  {result} = icmp sgt {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.sge")
+        {
+            EmitLine(sb, $"  {result} = icmp sge {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.ult")
+        {
+            EmitLine(sb, $"  {result} = icmp ult {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.ule")
+        {
+            EmitLine(sb, $"  {result} = icmp ule {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.ugt")
+        {
+            EmitLine(sb, $"  {result} = icmp ugt {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "icmp.uge")
+        {
+            EmitLine(sb, $"  {result} = icmp uge {llvmType} {args[0]}, {args[1]}");
+        }
+        // Float comparisons
+        else if (name == "fcmp.oeq")
+        {
+            EmitLine(sb, $"  {result} = fcmp oeq {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "fcmp.one")
+        {
+            EmitLine(sb, $"  {result} = fcmp one {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "fcmp.olt")
+        {
+            EmitLine(sb, $"  {result} = fcmp olt {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "fcmp.ole")
+        {
+            EmitLine(sb, $"  {result} = fcmp ole {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "fcmp.ogt")
+        {
+            EmitLine(sb, $"  {result} = fcmp ogt {llvmType} {args[0]}, {args[1]}");
+        }
+        else if (name == "fcmp.oge")
+        {
+            EmitLine(sb, $"  {result} = fcmp oge {llvmType} {args[0]}, {args[1]}");
+        }
+        // Type conversions
+        else if (name == "sext")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = sext {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "zext")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = zext {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "trunc")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = trunc {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "bitcast")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = bitcast {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "fpext")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = fpext {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "fptrunc")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = fptrunc {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "sitofp")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = sitofp {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "uitofp")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = uitofp {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "fptosi")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = fptosi {fromType} {args[0]} to {toType}");
+        }
+        else if (name == "fptoui")
+        {
+            string fromType = llvmTypeArgs[0];
+            string toType = llvmTypeArgs[1];
+            EmitLine(sb, $"  {result} = fptoui {fromType} {args[0]} to {toType}");
+        }
+        // Memory operations
+        else if (name == "load")
+        {
+            EmitLine(sb, $"  {result} = load {llvmType}, ptr {args[0]}");
+        }
+        else if (name == "store")
+        {
+            EmitLine(sb, $"  store {llvmType} {args[0]}, ptr {args[1]}");
+            return args[0];
+        }
+        else if (name == "store.volatile")
+        {
+            EmitLine(sb, $"  store volatile {llvmType} {args[0]}, ptr {args[1]}");
+            return args[0];
+        }
+        // Bit query operations
+        else if (name == "bitwidth")
+        {
+            int bitWidth = GetTypeBitWidth(llvmType);
+            return bitWidth.ToString();
+        }
+        else if (name == "min.value")
+        {
+            if (IsFloatLLVMType(llvmType))
+            {
+                // Negative infinity for float types
+                EmitLine(sb, $"  {result} = fcmp ord {llvmType} 0.0, 0.0"); // placeholder
+            }
+            else
+            {
+                int bits = GetTypeBitWidth(llvmType);
+                // Minimum signed integer: -(2^(bits-1))
+                string minVal = bits == 1 ? "0" : $"{(long)(-Math.Pow(2, bits - 1))}";
+                return minVal;
+            }
+        }
+        // Bit manipulation
+        else if (name == "ctlz")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ctlz.{llvmType}({llvmType} {args[0]}, i1 false)");
+        }
+        else if (name == "cttz")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.cttz.{llvmType}({llvmType} {args[0]}, i1 false)");
+        }
+        else if (name == "ctpop")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ctpop.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "bitreverse")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.bitreverse.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "bswap")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.bswap.{llvmType}({llvmType} {args[0]})");
+        }
+        // Overflow-detecting operations
+        else if (name == "add.overflow")
+        {
+            string overflowType = $"{{ {llvmType}, i1 }}";
+            string intrinsicName = llvmType.StartsWith("i") ? $"llvm.sadd.with.overflow.{llvmType}" : throw new NotImplementedException();
+            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        else if (name == "sub.overflow")
+        {
+            string overflowType = $"{{ {llvmType}, i1 }}";
+            string intrinsicName = $"llvm.ssub.with.overflow.{llvmType}";
+            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        else if (name == "mul.overflow")
+        {
+            string overflowType = $"{{ {llvmType}, i1 }}";
+            string intrinsicName = $"llvm.smul.with.overflow.{llvmType}";
+            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        // Saturating arithmetic
+        else if (name == "add.saturate")
+        {
+            string intrinsicName = IsSignedLLVMType(llvmType)
+                ? $"llvm.sadd.sat.{llvmType}"
+                : $"llvm.uadd.sat.{llvmType}";
+            EmitLine(sb, $"  {result} = call {llvmType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        else if (name == "sub.saturate")
+        {
+            string intrinsicName = IsSignedLLVMType(llvmType)
+                ? $"llvm.ssub.sat.{llvmType}"
+                : $"llvm.usub.sat.{llvmType}";
+            EmitLine(sb, $"  {result} = call {llvmType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        else if (name == "mul.saturate")
+        {
+            EmitLine(sb, $"  {result} = mul {llvmType} {args[0]}, {args[1]}");
+        }
+        // Float math
+        else if (name == "sqrt")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.sqrt.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "fabs")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.fabs.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "floor")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.floor.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "ceil")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ceil.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "round")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.round.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "trunc.float")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.trunc.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "sin")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.sin.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "cos")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.cos.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "exp")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.exp.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "log")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.log.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "log10")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.log10.{llvmType}({llvmType} {args[0]})");
+        }
+        else if (name == "pow")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.pow.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        else if (name == "copysign")
+        {
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.copysign.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
+        }
+        // Atomic operations
+        else if (name == "atomic.load")
+        {
+            EmitLine(sb, $"  {result} = load atomic {llvmType}, ptr {args[0]} seq_cst, align {GetTypeBitWidth(llvmType) / 8}");
+        }
+        else if (name == "atomic.store")
+        {
+            EmitLine(sb, $"  store atomic {llvmType} {args[0]}, ptr {args[1]} seq_cst, align {GetTypeBitWidth(llvmType) / 8}");
+            return args[0];
+        }
+        else if (name == "atomic.add")
+        {
+            EmitLine(sb, $"  {result} = atomicrmw add ptr {args[0]}, {llvmType} {args[1]} seq_cst");
+        }
+        else if (name == "atomic.sub")
+        {
+            EmitLine(sb, $"  {result} = atomicrmw sub ptr {args[0]}, {llvmType} {args[1]} seq_cst");
+        }
+        else if (name == "atomic.and")
+        {
+            EmitLine(sb, $"  {result} = atomicrmw and ptr {args[0]}, {llvmType} {args[1]} seq_cst");
+        }
+        else if (name == "atomic.or")
+        {
+            EmitLine(sb, $"  {result} = atomicrmw or ptr {args[0]}, {llvmType} {args[1]} seq_cst");
+        }
+        else if (name == "atomic.xor")
+        {
+            EmitLine(sb, $"  {result} = atomicrmw xor ptr {args[0]}, {llvmType} {args[1]} seq_cst");
+        }
+        else if (name == "atomic.xchg")
+        {
+            EmitLine(sb, $"  {result} = atomicrmw xchg ptr {args[0]}, {llvmType} {args[1]} seq_cst");
+        }
+        else if (name == "atomic.cmpxchg")
+        {
+            string pairType = $"{{ {llvmType}, i1 }}";
+            EmitLine(sb, $"  {result} = cmpxchg ptr {args[0]}, {llvmType} {args[1]}, {llvmType} {args[2]} seq_cst seq_cst");
+        }
+        else
+        {
+            throw new NotImplementedException($"LLVM intrinsic not implemented: {name}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Emits a regular (non-LLVM-intrinsic) generic method call.
+    /// </summary>
+    private string EmitRegularGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic,
+        RoutineInfo? method, TypeInfo? receiverType)
+    {
+        // Evaluate the receiver
+        string receiver = EmitExpression(sb, generic.Object);
+
+        // Build argument list: receiver first (becomes 'me'), then explicit arguments
+        var argValues = new List<string> { receiver };
+        var argTypes = new List<string> { receiverType != null ? GetParameterLLVMType(receiverType) : "ptr" };
+
+        foreach (var arg in generic.Arguments)
+        {
+            string value = EmitExpression(sb, arg);
+            argValues.Add(value);
+
+            TypeInfo? argType = GetExpressionType(arg);
+            if (argType == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot determine type for argument in generic method call to '{generic.MethodName}'");
+            }
+            argTypes.Add(GetLLVMType(argType));
+        }
+
+        // Build the call
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : receiverType != null
+                ? $"{MangleTypeName(receiverType.Name)}_{generic.MethodName}"
+                : generic.MethodName;
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : "void";
+
+        if (returnType == "void")
+        {
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  call void @{mangledName}({args})");
+            return "undef";
+        }
+        else
+        {
+            string result = NextTemp();
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Gets the LLVM IR instruction name for a routine, checking for @llvm_ir("name") annotation.
+    /// Falls back to the routine name if no annotation is present.
+    /// </summary>
+    private static string GetLlvmIrName(RoutineInfo routine)
+    {
+        foreach (var annotation in routine.Annotations)
+        {
+            if (annotation.StartsWith("llvm_ir("))
+            {
+                // Extract: llvm_ir("name") → name
+                int start = annotation.IndexOf('"') + 1;
+                int end = annotation.LastIndexOf('"');
+                if (start > 0 && end > start)
+                {
+                    return annotation[start..end];
+                }
+            }
+        }
+
+        return routine.Name;
+    }
+
+    /// <summary>
+    /// Resolves a TypeExpression (AST node) to its LLVM type string.
+    /// </summary>
+    private string ResolveTypeExpressionToLLVM(TypeExpression typeExpr)
+    {
+        // Look up the type in the registry
+        TypeInfo? type = _registry.LookupType(typeExpr.Name);
+        if (type != null)
+        {
+            return GetLLVMType(type);
+        }
+
+        // Fall back to MapIntrinsicTypeToLLVM for raw type names
+        return MapIntrinsicTypeToLLVM(typeExpr.Name);
+    }
+
+    /// <summary>
+    /// Gets the return type of a generic method call expression.
+    /// </summary>
+    private TypeInfo? GetGenericMethodCallReturnType(GenericMethodCallExpression generic)
+    {
+        TypeInfo? receiverType = GetExpressionType(generic.Object);
+
+        string methodFullName = receiverType != null
+            ? $"{receiverType.Name}.{generic.MethodName}"
+            : generic.MethodName;
+
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName)
+                              ?? _registry.LookupRoutine(generic.MethodName);
+
+        return method?.ReturnType;
+    }
+
+    #endregion
 
     /// <summary>
     /// Gets the type of an expression (from semantic analysis metadata).
@@ -642,6 +1510,7 @@ public partial class LLVMCodeGenerator
             UnaryExpression unary => GetExpressionType(unary.Operand),
             CallExpression call => GetCallReturnType(call),
             IntrinsicCallExpression intrinsic => GetIntrinsicReturnType(intrinsic),
+            GenericMethodCallExpression generic => GetGenericMethodCallReturnType(generic),
             _ => null
         };
     }

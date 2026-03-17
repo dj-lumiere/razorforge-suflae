@@ -66,6 +66,9 @@ public partial class LLVMCodeGenerator
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentFunctionReturnType;
 
+    /// <summary>The label of the current basic block (for phi node generation).</summary>
+    private string _currentBlock = "entry";
+
     #endregion
 
     #region Constructor
@@ -203,6 +206,12 @@ public partial class LLVMCodeGenerator
                 continue;
             }
 
+            // Skip synthesized routines (they will be emitted as 'define' by GenerateSynthesizedRoutines)
+            if (routine.IsSynthesized)
+            {
+                continue;
+            }
+
             // Skip routines that have bodies (they will be emitted as 'define' in GenerateFunctionDefinitions)
             string fullName = routine.OwnerType != null ? $"{routine.OwnerType.Name}.{routine.Name}" : routine.Name;
             if (routinesWithBodies.Contains(routine.Name) || routinesWithBodies.Contains(fullName))
@@ -274,6 +283,9 @@ public partial class LLVMCodeGenerator
                 }
             }
         }
+
+        // Finally, generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__)
+        GenerateSynthesizedRoutines();
     }
 
     /// <summary>

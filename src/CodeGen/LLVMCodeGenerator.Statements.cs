@@ -410,7 +410,7 @@ public partial class LLVMCodeGenerator
         _loopStack.Push((incrLabel, endLabel));
 
         // Evaluate the iterable
-        EmitExpression(sb, forStmt.Iterable);
+        EmitExpression(sb, forStmt.Sequenceable);
 
         // TODO: For now, assume it's a range and just jump to condition
         EmitLine(sb, $"  br label %{condLabel}");
