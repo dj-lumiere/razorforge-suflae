@@ -1,6 +1,0 @@
-# SequenceGenerator - Protocol for types that produce elements one at a time
-module Core
-
-protocol SequenceGenerator[T]
-  @writable
-  routine Me.__next__!() -> Maybe[T]
