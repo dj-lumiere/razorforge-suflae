@@ -550,26 +550,26 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
-    /// The type must implement both the <c>Sequential</c> and <c>SequenceGenerator</c> protocols.
+    /// The type must implement the <c>Sequenceable</c> protocol, whose <c>__seq__</c> returns a <c>SequenceEmitter[T]</c>.
     /// The element type is taken from the return type of the <c>__seq__</c> method or the type's first generic argument.
     /// Reports an error and returns <see cref="ErrorTypeInfo"/> if the type is not iterable or the element type cannot be determined.
     /// </summary>
-    private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
+    private TypeSymbol GetSequenceableElementType(TypeSymbol iterableType, SourceLocation location)
     {
-        // Type must follow both Sequential and SequenceGenerator protocols
-        bool obeysSequential = ImplementsProtocol(type: iterableType, protocolName: "Sequential");
-        bool obeysSequenceGenerator = ImplementsProtocol(type: iterableType, protocolName: "SequenceGenerator");
+        // Type must follow the Sequenceable protocol
+        bool obeysSequenceable = ImplementsProtocol(type: iterableType, protocolName: "Sequenceable");
 
-        if (!obeysSequential || !obeysSequenceGenerator)
+        if (!obeysSequenceable)
         {
             ReportError(
                 SemanticDiagnosticCode.TypeNotIterable,
-                $"Type '{iterableType.Name}' is not iterable. Types must follow both 'Sequential' and 'SequenceGenerator' protocols to be used in for-in loops.",
+                $"Type '{iterableType.Name}' is not sequenceable. Types must follow the " +
+                $"'Sequenceable' protocol to be used in for-in loops.",
                 location);
             return ErrorTypeInfo.Instance;
         }
 
-        // Look for __seq__ method to get element type from SequenceGenerator<T> return type
+        // Look for __seq__ method to get element type from SequenceEmitter[T] return type
         RoutineInfo? seqMethod = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__seq__");
         if (seqMethod?.ReturnType?.TypeArguments is { Count: > 0 })
         {
@@ -584,7 +584,7 @@ public sealed partial class SemanticAnalyzer
 
         ReportError(
             SemanticDiagnosticCode.TypeNotIterable,
-            $"Cannot determine element type for '{iterableType.Name}'. The __seq__ method must return SequenceGenerator[T].",
+            $"Cannot determine element type for '{iterableType.Name}'. The __seq__ method must return SequenceEmitter[T].",
             location);
         return ErrorTypeInfo.Instance;
     }

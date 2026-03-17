@@ -503,11 +503,11 @@ public sealed partial class SemanticAnalyzer
     {
         _registry.EnterScope(kind: ScopeKind.Loop, name: "for");
 
-        // Analyze iterable expression
-        TypeSymbol iterableType = AnalyzeExpression(expression: forStmt.Iterable);
+        // Analyze sequenceable expression
+        TypeSymbol sequenceableType = AnalyzeExpression(expression: forStmt.Sequenceable);
 
-        // Get element type from iterable
-        TypeSymbol elementType = GetIterableElementType(iterableType: iterableType, location: forStmt.Location);
+        // Get element type from sequenceable
+        TypeSymbol elementType = GetSequenceableElementType(iterableType: sequenceableType, location: forStmt.Location);
 
         // Handle either simple variable or destructuring pattern
         if (forStmt.Variable != null)

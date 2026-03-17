@@ -227,7 +227,7 @@ public partial class Parser
         }
 
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in for loop");
-        Expression iterable = ParseExpression();
+        Expression sequenceable = ParseExpression();
         Statement body = ParseBody();
 
         // Check for else clause (runs if loop completes without break)
@@ -239,7 +239,7 @@ public partial class Parser
 
         return new ForStatement(Variable: variable,
             VariablePattern: variablePattern,
-            Iterable: iterable,
+            Sequenceable: sequenceable,
             Body: body,
             ElseBranch: elseBranch,
             Location: location);
