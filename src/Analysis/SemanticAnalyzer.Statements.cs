@@ -330,6 +330,15 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
+        // #52: Residents can only be declared as global variables, not local variables
+        if (varType is ResidentTypeInfo && _currentRoutine != null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ResidentAsLocalVariable,
+                $"Resident type '{varType.Name}' can only be declared as a global variable, not a local variable.",
+                varDecl.Location);
+        }
+
         // Register variable in current scope
         bool declared = _registry.DeclareVariable(
             name: varDecl.Name,
@@ -610,6 +619,42 @@ public sealed partial class SemanticAnalyzer
     private void AnalyzeWhenStatement(WhenStatement whenStmt)
     {
         TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
+
+        // #88: Pattern order enforcement — else/wildcard must be last, detect unreachable patterns
+        {
+            bool seenElse = false;
+            foreach (WhenClause clause in whenStmt.Clauses)
+            {
+                if (seenElse)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.PatternOrderViolation,
+                        "Unreachable pattern after 'else' or wildcard.",
+                        clause.Pattern.Location);
+                }
+
+                if (clause.Pattern is ElsePattern or WildcardPattern)
+                {
+                    seenElse = true;
+                }
+            }
+        }
+
+        // #130/#148: Duplicate pattern detection
+        {
+            var seenPatterns = new HashSet<string>();
+            foreach (WhenClause clause in whenStmt.Clauses)
+            {
+                string? patternKey = GetPatternKey(pattern: clause.Pattern);
+                if (patternKey != null && !seenPatterns.Add(item: patternKey))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.DuplicatePattern,
+                        $"Duplicate pattern: {patternKey}.",
+                        clause.Pattern.Location);
+                }
+            }
+        }
 
         // Track handled patterns for narrowing the else clause
         bool handledNone = false;

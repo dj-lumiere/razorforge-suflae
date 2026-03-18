@@ -985,6 +985,21 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // #117: Fixed-width numeric types must match exactly (S32 + S64 = error)
+        // System types (SAddr/UAddr) are exempt
+        if (leftType.Name != rightType.Name
+            && IsFixedWidthNumericType(type: leftType)
+            && IsFixedWidthNumericType(type: rightType)
+            && !IsLogicalOperator(op: binary.Operator)
+            && !IsComparisonOperator(op: binary.Operator))
+        {
+            ReportError(
+                SemanticDiagnosticCode.FixedWidthTypeMismatch,
+                $"Fixed-width type mismatch: '{leftType.Name}' and '{rightType.Name}'. Explicit conversion required.",
+                binary.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
         // Handle logical operators (and, or) — require bool operands, return bool
         // These are not desugared because they need short-circuit evaluation
         if (IsLogicalOperator(op: binary.Operator))
@@ -1201,6 +1216,17 @@ public sealed partial class SemanticAnalyzer
                         compound.Location);
                 }
             }
+        }
+
+        // #67: Cannot use compound assignment on read-only token (Viewed or Inspected)
+        if (targetType is WrapperTypeInfo { IsReadOnly: true } readOnlyWrapper)
+        {
+            ReportError(
+                SemanticDiagnosticCode.CompoundAssignmentOnReadOnlyToken,
+                $"Cannot use compound assignment on read-only token '{readOnlyWrapper.Name}'. " +
+                "Read-only tokens (Viewed, Inspected) do not allow modifications.",
+                compound.Location);
+            return ErrorTypeInfo.Instance;
         }
 
         // Don't try dispatch on error types (prevent cascade)
@@ -1499,6 +1525,16 @@ public sealed partial class SemanticAnalyzer
         }
         else if (objectType is ResidentTypeInfo resident)
         {
+            // #54: Residents cannot use .share() or .track() — they have program lifetime
+            if (member.PropertyName is "share" or "track")
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ResidentShareTrackProhibited,
+                    $"Residents cannot use '.{member.PropertyName}()' — they have program lifetime.",
+                    member.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
             MemberVariableInfo? memberVariable = resident.LookupMemberVariable(memberVariableName: member.PropertyName);
             if (memberVariable != null)
             {
@@ -1611,6 +1647,16 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond)
     {
+        // #145: Track nesting depth for deep conditional warning
+        _conditionalNestingDepth++;
+        if (_conditionalNestingDepth > 2)
+        {
+            ReportWarning(
+                SemanticWarningCode.NestedConditionalExpression,
+                "Deeply nested conditional expression. Consider using 'when' for readability.",
+                cond.Location);
+        }
+
         TypeSymbol conditionType = AnalyzeExpression(expression: cond.Condition);
 
         if (!IsBoolType(type: conditionType))
@@ -1626,6 +1672,8 @@ public sealed partial class SemanticAnalyzer
         {
             ReportError(SemanticDiagnosticCode.ConditionalBranchTypeMismatch, $"Conditional expression branches have incompatible types: '{trueType.Name}' and '{falseType.Name}'.", cond.Location);
         }
+
+        _conditionalNestingDepth--;
 
         // Return the common type (for now, use the true branch type)
         return trueType;
@@ -2342,8 +2390,19 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeExpression(expression: index);
             }
             AnalyzeExpression(expression: value);
-            // TODO: Validate member variable exists and types match for member variable updates
-            // TODO: Validate index type and value type match for index updates
+
+            // #45: Cannot modify secret member variables in 'with' expression
+            if (fieldPath is { Count: > 0 } && baseType is RecordTypeInfo recordType)
+            {
+                MemberVariableInfo? memberInfo = recordType.LookupMemberVariable(memberVariableName: fieldPath[0]);
+                if (memberInfo is { Visibility: VisibilityModifier.Secret })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.WithSecretMemberProhibited,
+                        $"Cannot modify secret member variable '{fieldPath[0]}' in 'with' expression.",
+                        with.Location);
+                }
+            }
         }
 
         // Returns the same type as the base
@@ -2358,6 +2417,42 @@ public sealed partial class SemanticAnalyzer
     {
         // Analyze the matched expression
         TypeSymbol matchedType = AnalyzeExpression(expression: when.Expression);
+
+        // #88: Pattern order enforcement — else/wildcard must be last
+        {
+            bool seenElse = false;
+            foreach (WhenClause clause in when.Clauses)
+            {
+                if (seenElse)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.PatternOrderViolation,
+                        "Unreachable pattern after 'else' or wildcard.",
+                        clause.Pattern.Location);
+                }
+
+                if (clause.Pattern is ElsePattern or WildcardPattern)
+                {
+                    seenElse = true;
+                }
+            }
+        }
+
+        // #130/#148: Duplicate pattern detection
+        {
+            var seenPatterns = new HashSet<string>();
+            foreach (WhenClause clause in when.Clauses)
+            {
+                string? patternKey = GetPatternKey(pattern: clause.Pattern);
+                if (patternKey != null && !seenPatterns.Add(item: patternKey))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.DuplicatePattern,
+                        $"Duplicate pattern: {patternKey}.",
+                        clause.Pattern.Location);
+                }
+            }
+        }
 
         TypeSymbol? resultType = null;
         bool hasElse = false;

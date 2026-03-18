@@ -415,6 +415,34 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
+        // #66: Index operators (__getitem__/__setitem__) are only valid on entities and residents
+        if (baseName is "__getitem__" or "__setitem__"
+            && ownerType is not null
+            && ownerType is not EntityTypeInfo
+            && ownerType is not ResidentTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
+                $"Index operators are only valid on entities and residents, not on '{ownerType.Name}'.",
+                routine.Location);
+        }
+
+        // #157: Conflicting mutation category annotations
+        {
+            int mutationCount = 0;
+            if (routine.Annotations.Contains(item: "readonly")) mutationCount++;
+            if (routine.Annotations.Contains(item: "writable")) mutationCount++;
+            if (routine.Annotations.Contains(item: "migratable")) mutationCount++;
+            if (mutationCount > 1)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MutationCategoryConflict,
+                    "Routine has conflicting mutation annotations. " +
+                    "Only one of @readonly, @writable, or @migratable can be specified.",
+                    routine.Location);
+            }
+        }
+
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
         ModificationCategory declaredModification = routine.Annotations.Contains(item: "readonly")
@@ -899,6 +927,16 @@ public sealed partial class SemanticAnalyzer
                 if (protoType is ProtocolTypeInfo proto)
                 {
                     resolvedProtocols.Add(item: proto);
+
+                    // #55: Residents cannot implement Hashable
+                    if (proto.Name == "Hashable")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ResidentHashableProhibited,
+                            $"Resident type '{resident.Name}' cannot implement Hashable. " +
+                            "Residents are identity-based, not content-based.",
+                            protoExpr.Location);
+                    }
                 }
                 else if (protoType is not ErrorTypeInfo)
                 {
@@ -923,6 +961,19 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol memberVariableType = memberVariable.Type != null
                     ? ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
+
+                // #53: Resident member variables can only contain records, primitives, Snatched[T], or other residents
+                if (memberVariableType is TypeInfo fieldTypeInfo
+                    && fieldTypeInfo is not ErrorTypeInfo
+                    && fieldTypeInfo is not GenericParameterTypeInfo
+                    && !IsValidResidentFieldType(type: fieldTypeInfo))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ResidentContainsInvalidType,
+                        $"Resident member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not valid. " +
+                        "Resident member variables can only contain records, primitives, Snatched[T], or other residents.",
+                        memberVariable.Location);
+                }
 
                 var memberVariableInfo = new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
                 {
@@ -1094,6 +1145,23 @@ public sealed partial class SemanticAnalyzer
                 type: payloadType,
                 caseName: variantCase.Name,
                 location: variantCase.Location);
+
+            // #59: Variant cases cannot hold nested variants, Result[T], or Lookup[T]
+            if (payloadType is VariantTypeInfo)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.VariantCaseContainsInvalidType,
+                    $"Variant case '{variantCase.Name}' cannot contain nested variant type '{payloadType.Name}'.",
+                    variantCase.Location);
+            }
+            else if (payloadType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.VariantCaseContainsInvalidType,
+                    $"Variant case '{variantCase.Name}' cannot contain '{payloadType.Name}'. " +
+                    "Use failable routines (!) instead of storing Result/Lookup in variants.",
+                    variantCase.Location);
+            }
         }
     }
 
@@ -2214,6 +2282,30 @@ public sealed partial class SemanticAnalyzer
                     $"Cannot override innate routine '{protocol.Name}.{requiredMethod.Name}'. " +
                     "Innate routines are compiler-provided and cannot be overridden.",
                     typeMethod.Location);
+            }
+            else if (typeMethod != null)
+            {
+                // #61: Protocol mutation contract validation
+                // Protocol @readonly -> impl must be @readonly
+                // Protocol @writable -> impl must be @readonly or @writable (not @migratable)
+                if (requiredMethod.Modification == ModificationCategory.Readonly
+                    && typeMethod.ModificationCategory != ModificationCategory.Readonly)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ProtocolMutationContractViolation,
+                        $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be @readonly, " +
+                        $"but implementation on '{type.Name}' is @{typeMethod.ModificationCategory.ToString().ToLowerInvariant()}.",
+                        typeMethod.Location);
+                }
+                else if (requiredMethod.Modification == ModificationCategory.Writable
+                         && typeMethod.ModificationCategory == ModificationCategory.Migratable)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ProtocolMutationContractViolation,
+                        $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be at most @writable, " +
+                        $"but implementation on '{type.Name}' is @migratable.",
+                        typeMethod.Location);
+                }
             }
         }
 

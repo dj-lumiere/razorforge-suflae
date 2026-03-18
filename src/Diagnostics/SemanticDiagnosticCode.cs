@@ -648,6 +648,66 @@ public enum SemanticDiagnosticCode
     /// <summary>Result/Lookup stored in variable beyond immediate dismantling.</summary>
     ErrorHandlingTypeStoredInVariable = 758,
 
+    /// <summary>Resident types can only be declared as global variables, not local variables.</summary>
+    ResidentAsLocalVariable = 759,
+
+    /// <summary>The 'global' keyword is only valid for resident type variables.</summary>
+    GlobalOnlyForResidents = 760,
+
+    /// <summary>Resident member variables can only contain records, primitives, Snatched[T], or other residents.</summary>
+    ResidentContainsInvalidType = 761,
+
+    /// <summary>Resident types cannot implement Hashable (identity-based, not content-based).</summary>
+    ResidentHashableProhibited = 762,
+
+    /// <summary>Residents cannot use .share() or .track() — they have program lifetime.</summary>
+    ResidentShareTrackProhibited = 763,
+
+    /// <summary>Variant case cannot contain nested variants, Result[T], Lookup[T], or tokens.</summary>
+    VariantCaseContainsInvalidType = 764,
+
+    /// <summary>Index operators (__getitem__/__setitem__) are only valid on entities and residents.</summary>
+    IndexOperatorTypeKindRestriction = 765,
+
+    /// <summary>Cannot use compound assignment on a read-only token (Viewed or Inspected).</summary>
+    CompoundAssignmentOnReadOnlyToken = 766,
+
+    /// <summary>Fixed-width numeric types must match exactly; explicit conversion required.</summary>
+    FixedWidthTypeMismatch = 767,
+
+    /// <summary>Varargs parameter must be the first parameter in the parameter list.</summary>
+    VarargsNotFirst = 768,
+
+    /// <summary>Only one varargs parameter is allowed per routine.</summary>
+    VarargsMultiple = 769,
+
+    /// <summary>Method-chain syntax only works with single-argument constructors.</summary>
+    MethodChainMultiArg = 770,
+
+    /// <summary>Protocol mutation contract violated: implementation does not match protocol's mutation category.</summary>
+    ProtocolMutationContractViolation = 771,
+
+    /// <summary>Cannot use multiple protocols directly as a type; use generic parameter with 'requires' clause.</summary>
+    MultipleProtocolAsType = 772,
+
+    /// <summary>Type does not implement the required protocol.</summary>
+    ProtocolNotImplemented = 773,
+
+    /// <summary>Pattern order violation: unreachable or misordered pattern in when statement.</summary>
+    PatternOrderViolation = 774,
+
+    /// <summary>Invalid combination of visibility modifiers (e.g., both open and secret).</summary>
+    InvalidVisibilityCombination = 775,
+
+    /// <summary>Conflicting mutation category annotations (e.g., both @readonly and @writable).</summary>
+    MutationCategoryConflict = 776,
+
+    /// <summary>Annotation arguments must be build-time constants.</summary>
+    AnnotationArgNotConstant = 777,
+
+    /// <summary>Cannot modify secret member variable in a 'with' expression.</summary>
+    WithSecretMemberProhibited = 778,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)
     // ═══════════════════════════════════════════════════════════════════════════

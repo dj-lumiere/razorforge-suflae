@@ -1701,5 +1701,42 @@ public sealed partial class SemanticAnalyzer
         };
     }
 
+    /// <summary>
+    /// Checks if a type is valid for resident member variables.
+    /// Residents can contain: records, primitives (intrinsic wrappers), Snatched[T], other residents, choices, flags.
+    /// </summary>
+    /// <summary>
+    /// Fixed-width numeric type names (excludes system-dependent SAddr/UAddr).
+    /// </summary>
+    private static readonly HashSet<string> FixedWidthNumericTypeNames =
+    [
+        "S8", "S16", "S32", "S64", "S128",
+        "U8", "U16", "U32", "U64", "U128",
+        "F16", "F32", "F64", "F128",
+        "D32", "D64", "D128"
+    ];
+
+    /// <summary>
+    /// Returns true if the type is a fixed-width numeric type (excludes SAddr/UAddr).
+    /// </summary>
+    private static bool IsFixedWidthNumericType(TypeInfo type)
+    {
+        return FixedWidthNumericTypeNames.Contains(item: type.Name);
+    }
+
+    private static bool IsValidResidentFieldType(TypeInfo type)
+    {
+        return type switch
+        {
+            RecordTypeInfo record => true, // includes primitive wrappers like Text, S32, Bool
+            ResidentTypeInfo => true,
+            ChoiceTypeInfo => true,
+            FlagsTypeInfo => true,
+            IntrinsicTypeInfo => true, // raw primitives
+            WrapperTypeInfo { Name: "Snatched" } => true,
+            _ => false
+        };
+    }
+
     #endregion
 }

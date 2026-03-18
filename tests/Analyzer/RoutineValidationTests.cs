@@ -1,0 +1,54 @@
+using SemanticAnalysis.Results;
+using SemanticAnalysis.Diagnostics;
+using Xunit;
+
+namespace RazorForge.Tests.Analyzer;
+
+using static TestHelpers;
+
+/// <summary>
+/// Tests for routine declaration validation rules:
+/// #157: Mutation category conflict
+/// </summary>
+public class RoutineValidationTests
+{
+    #region #157: Mutation category conflict
+
+    [Fact]
+    public void Analyze_SingleMutationAnnotation_NoError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        @readonly
+                        routine Point.get_x() -> S32
+                          return me.x
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
+    }
+
+    [Fact]
+    public void Analyze_ConflictingMutationAnnotations_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        @readonly
+                        @writable
+                        routine Point.set_x(new_x: S32)
+                          me.x = new_x
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
+    }
+
+    #endregion
+}

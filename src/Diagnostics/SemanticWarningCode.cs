@@ -131,6 +131,9 @@ public enum SemanticWarningCode
     /// <summary>Wildcard pattern makes subsequent patterns unreachable.</summary>
     WildcardNotLast = 252,
 
+    /// <summary>Deeply nested conditional expression; consider using 'when' for readability.</summary>
+    NestedConditionalExpression = 253,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STYLE WARNINGS (RF-W300 - RF-W349)
     // ═══════════════════════════════════════════════════════════════════════════

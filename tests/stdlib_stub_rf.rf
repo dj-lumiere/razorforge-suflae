@@ -1,0 +1,42 @@
+# RazorForge stdlib integration stub
+# Tests that all stdlib modules can be loaded together
+# Core module types are auto-imported, so we only import non-Core modules
+
+# Collections module
+import Collections.BitList
+import Collections.Deque
+import Collections.Dict
+import Collections.FixedBitList
+import Collections.FixedDeque
+import Collections.FixedDict
+import Collections.FixedList
+import Collections.FixedSet
+import Collections.List
+import Collections.PriorityQueue
+import Collections.Set
+import Collections.SortedDict
+import Collections.SortedList
+import Collections.SortedSet
+
+# IO module
+import IO.Console
+
+# Numeric module
+import Numeric.Decimal
+import Numeric.Fraction
+import Numeric.Integer
+
+# Bytes module
+import Bytes.Bytes
+import Bytes.FixedBytes
+
+# Text module
+import Text.FixedText
+import Text.Representable
+import Text.Text
+
+module StdlibStub
+
+# Dummy routine to make this a valid compilation unit
+routine stdlib_stub_test() -> Bool
+  return true

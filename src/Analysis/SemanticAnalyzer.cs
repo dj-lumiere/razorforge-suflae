@@ -65,6 +65,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Modules imported by the current file. Used for type resolution of non-Core types.</summary>
     private readonly HashSet<string> _importedModules = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Nesting depth for conditional expressions (for #145 deep nesting warning).</summary>
+    private int _conditionalNestingDepth;
+
     #endregion
 
     #region Constructor

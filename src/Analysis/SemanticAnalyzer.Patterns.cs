@@ -826,5 +826,24 @@ public sealed partial class SemanticAnalyzer
             MissingCases: missing);
     }
 
+    /// <summary>
+    /// Produces a string key from a pattern for duplicate detection.
+    /// Returns null for patterns that cannot be meaningfully compared (identifiers, wildcards, else).
+    /// </summary>
+    private static string? GetPatternKey(Pattern pattern)
+    {
+        return pattern switch
+        {
+            LiteralPattern lit => $"literal:{lit.Value}",
+            TypePattern tp => $"type:{tp.Type.Name}",
+            VariantPattern vp => $"variant:{vp.CaseName}",
+            NonePattern => "none",
+            CrashablePattern => "crashable",
+            FlagsPattern fp => $"flags:{string.Join(separator: "|", values: fp.FlagNames.OrderBy(keySelector: n => n))}",
+            // Identifier, wildcard, else, guard, expression patterns are not deduplicated
+            _ => null
+        };
+    }
+
     #endregion
 }
