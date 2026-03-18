@@ -317,6 +317,19 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
+        // #81: Result/Lookup cannot be copied from variable to variable
+        // `var r = check_parse!(data)` then `when r` is allowed (call result)
+        // `var r2 = r1` where r1: Result[T] is not allowed (variable copy)
+        if (varDecl.Initializer is IdentifierExpression
+            && varType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup })
+        {
+            ReportError(
+                SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
+                $"'{varType.Name}' cannot be copied to another variable. " +
+                "Dismantle it immediately with 'when', '??', or 'if is'.",
+                varDecl.Location);
+        }
+
         // Register variable in current scope
         bool declared = _registry.DeclareVariable(
             name: varDecl.Name,
@@ -335,6 +348,20 @@ public sealed partial class SemanticAnalyzer
     {
         // Analyze the expression for side effects and type validation
         TypeSymbol exprType = AnalyzeExpression(expression: expr.Expression);
+
+        // #159: Unhandled crashable call — failable call as statement in non-failable routine
+        if (expr.Expression is CallExpression failableCall)
+        {
+            RoutineInfo? calledRoutine = ResolveCalledRoutine(call: failableCall);
+            if (calledRoutine is { IsFailable: true } && _currentRoutine is not { IsFailable: true })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.UnhandledCrashableCall,
+                    $"Failable routine '{calledRoutine.Name}!' called without error handling. " +
+                    "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                    failableCall.Location);
+            }
+        }
 
         // Check if this is a call expression with a non-Blank return value
         // If so, warn that the return value is unused (use 'discard' to explicitly ignore)
@@ -413,6 +440,17 @@ public sealed partial class SemanticAnalyzer
                     "Use @writable or @migratable to allow modifications.",
                     assign.Location);
             }
+        }
+
+        // #81: Result/Lookup cannot be copied from variable to variable via assignment
+        if (assign.Value is IdentifierExpression
+            && valueType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup })
+        {
+            ReportError(
+                SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
+                $"'{valueType.Name}' cannot be copied to another variable. " +
+                "Dismantle it immediately with 'when', '??', or 'if is'.",
+                assign.Location);
         }
 
         // Check type compatibility
@@ -643,10 +681,23 @@ public sealed partial class SemanticAnalyzer
                     string missing = exhaustiveness.MissingCases.Count > 0
                         ? $" Missing cases: {string.Join(separator: ", ", values: exhaustiveness.MissingCases)}."
                         : "";
-                    ReportWarning(
-                        SemanticWarningCode.NonExhaustiveWhen,
-                        $"When statement may not cover all cases of '{matchedType.Name}'.{missing}",
-                        whenStmt.Location);
+
+                    // #89: Result/Lookup missing Crashable catch-all is an error, not a warning
+                    if (matchedType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup }
+                        && exhaustiveness.MissingCases.Contains(item: "Crashable"))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.NonExhaustiveMatch,
+                            $"Pattern match on '{matchedType.Name}' requires a 'Crashable' catch-all arm.{missing}",
+                            whenStmt.Location);
+                    }
+                    else
+                    {
+                        ReportWarning(
+                            SemanticWarningCode.NonExhaustiveWhen,
+                            $"When statement may not cover all cases of '{matchedType.Name}'.{missing}",
+                            whenStmt.Location);
+                    }
                 }
             }
         }

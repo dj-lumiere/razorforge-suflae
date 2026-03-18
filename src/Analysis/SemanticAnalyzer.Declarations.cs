@@ -406,6 +406,15 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
+        // @crash_only is only valid on failable (!) routines (#76)
+        if (routine.Annotations.Contains(item: "crash_only") && !routine.IsFailable)
+        {
+            ReportError(
+                SemanticDiagnosticCode.CrashOnlyOnNonFailable,
+                "'@crash_only' is only valid on failable (!) routines.",
+                routine.Location);
+        }
+
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
         ModificationCategory declaredModification = routine.Annotations.Contains(item: "readonly")

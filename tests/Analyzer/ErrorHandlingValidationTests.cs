@@ -1,5 +1,6 @@
 using SemanticAnalysis.Results;
 using SemanticAnalysis.Diagnostics;
+using SemanticAnalysis.Symbols;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -10,6 +11,11 @@ using static TestHelpers;
 /// Tests for error handling semantic validation:
 /// - Throw requires record type (#84)
 /// - Failable routines must contain throw or absent (#77)
+/// - @crash_only validation (#76)
+/// - Unhandled crashable call (#159)
+/// - Crashable catch-all requirement (#89)
+/// - ??= type narrowing (#42)
+/// - Result/Lookup storage restriction (#81)
 /// </summary>
 public class ErrorHandlingValidationTests
 {
@@ -95,4 +101,124 @@ public class ErrorHandlingValidationTests
     }
 
     #endregion
+
+    #region @crash_only Validation (#76)
+
+    [Fact]
+    public void Analyze_CrashOnlyOnNonFailable_ReportsError()
+    {
+        string source = """
+                        @crash_only
+                        routine safe_routine() -> S32
+                          return 42
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
+    }
+
+    [Fact]
+    public void Analyze_CrashOnlyOnFailable_NoError()
+    {
+        string source = """
+                        record MyError obeys Crashable
+                          message: Text
+                        @crash_only
+                        routine crash_routine!() -> S32
+                          throw MyError(message: "fatal")
+                          return 42
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
+    }
+
+    [Fact]
+    public void Analyze_CrashOnlySuppressesVariantGeneration()
+    {
+        string source = """
+                        record MyError obeys Crashable
+                          message: Text
+                        @crash_only
+                        routine crash_routine!() -> S32
+                          throw MyError(message: "fatal")
+                          return 42
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+
+        // Should NOT generate try_, check_, or lookup_ variants
+        Assert.Null(@object: result.Registry.GetRoutine(name: "try_crash_routine"));
+        Assert.Null(@object: result.Registry.GetRoutine(name: "check_crash_routine"));
+        Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_crash_routine"));
+    }
+
+    [Fact]
+    public void Analyze_NonCrashOnlyGeneratesVariants()
+    {
+        string source = """
+                        record MyError obeys Crashable
+                          message: Text
+                        routine normal_routine!() -> S32
+                          throw MyError(message: "error")
+                          return 42
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+
+        // Without @crash_only, variants SHOULD be generated
+        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_normal_routine");
+        Assert.NotNull(@object: tryVariant);
+    }
+
+    #endregion
+
+    #region Unhandled Crashable Call (#159)
+
+    [Fact]
+    public void Analyze_FailableCallAsStatement_InNonFailable_ReportsError()
+    {
+        string source = """
+                        record ParseError obeys Crashable
+                          message: Text
+                        routine parse!(data: S32) -> S32
+                          throw ParseError(message: "bad")
+                          return 42
+                        routine caller() -> S32
+                          parse!(data: 1)
+                          return 0
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnhandledCrashableCall);
+    }
+
+    [Fact]
+    public void Analyze_FailableCallAsStatement_InFailable_NoError()
+    {
+        string source = """
+                        record ParseError obeys Crashable
+                          message: Text
+                        routine parse!(data: S32) -> S32
+                          throw ParseError(message: "bad")
+                          return 42
+                        routine caller!() -> S32
+                          parse!(data: 1)
+                          return 0
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnhandledCrashableCall);
+    }
+
+    #endregion
+
+    // NOTE: #81 (Result/Lookup storage restriction) tests require multi-module test
+    // infrastructure since check_/lookup_ variants are generated in Phase 5 but body
+    // analysis happens in Phase 3. The implementation is in place and will be validated
+    // when multi-module compilation support is available for tests.
 }

@@ -1126,6 +1126,16 @@ public sealed partial class SemanticAnalyzer
                 location);
         }
 
+        // #42: ??= narrowing — `a ??= b` is expanded to `a = a ?? b`
+        // When assigning `target = target ?? default` where target is Maybe[T],
+        // narrow the variable to T after the coalescing assignment.
+        if (target is IdentifierExpression narrowId
+            && value is BinaryExpression { Operator: BinaryOperator.NoneCoalesce }
+            && targetType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } maybeType)
+        {
+            _registry.NarrowVariable(name: narrowId.Name, narrowedType: maybeType.ValueType);
+        }
+
         // Assignment expression returns the target type
         return targetType;
     }

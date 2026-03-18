@@ -752,7 +752,7 @@ public sealed partial class SemanticAnalyzer
         ErrorHandlingTypeInfo ehType)
     {
         bool hasNone = false;
-        bool hasCrashable = false;
+        bool hasCrashableCatchAll = false;
         bool hasValue = false;
 
         foreach (WhenClause clause in clauses)
@@ -761,9 +761,10 @@ public sealed partial class SemanticAnalyzer
             {
                 hasNone = true;
             }
-            else if (IsCrashablePattern(pattern: clause.Pattern))
+            else if (IsCrashableCatchAll(pattern: clause.Pattern))
             {
-                hasCrashable = true;
+                // Only generic 'is Crashable e' counts as catch-all, not specific error types (#89)
+                hasCrashableCatchAll = true;
             }
             else if (clause.Pattern is not (NonePattern or CrashablePattern))
             {
@@ -781,12 +782,12 @@ public sealed partial class SemanticAnalyzer
                 if (!hasValue) missing.Add(item: "value");
                 break;
             case ErrorHandlingKind.Result:
-                if (!hasCrashable) missing.Add(item: "Crashable");
+                if (!hasCrashableCatchAll) missing.Add(item: "Crashable");
                 if (!hasValue) missing.Add(item: "value");
                 break;
             case ErrorHandlingKind.Lookup:
                 if (!hasNone) missing.Add(item: "None");
-                if (!hasCrashable) missing.Add(item: "Crashable");
+                if (!hasCrashableCatchAll) missing.Add(item: "Crashable");
                 if (!hasValue) missing.Add(item: "value");
                 break;
         }

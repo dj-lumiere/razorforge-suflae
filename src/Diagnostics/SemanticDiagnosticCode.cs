@@ -642,6 +642,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Failable routine (!) contains neither 'throw' nor 'absent'.</summary>
     FailableWithoutThrowOrAbsent = 756,
 
+    /// <summary>@crash_only annotation applied to a non-failable routine.</summary>
+    CrashOnlyOnNonFailable = 757,
+
+    /// <summary>Result/Lookup stored in variable beyond immediate dismantling.</summary>
+    ErrorHandlingTypeStoredInVariable = 758,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)
     // ═══════════════════════════════════════════════════════════════════════════

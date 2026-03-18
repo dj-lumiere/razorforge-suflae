@@ -1589,6 +1589,46 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Checks if a pattern is a generic Crashable catch-all (not a specific error type).
+    /// 'is Crashable e' is a catch-all; 'is FileNotFoundError e' is not.
+    /// </summary>
+    private static bool IsCrashableCatchAll(Pattern pattern)
+    {
+        return pattern is CrashablePattern { ErrorType: null }
+            or TypePattern { Type.Name: "Crashable" };
+    }
+
+    /// <summary>
+    /// Resolves the RoutineInfo for a call expression's callee.
+    /// Returns null if the callee cannot be resolved to a known routine.
+    /// The parser appends '!' to failable call names, so we strip it for lookup.
+    /// </summary>
+    private RoutineInfo? ResolveCalledRoutine(CallExpression call)
+    {
+        switch (call.Callee)
+        {
+            case IdentifierExpression id:
+            {
+                string name = id.Name;
+                // Parser appends '!' to failable call identifiers (e.g., "parse!")
+                // but routines are registered without it (e.g., "parse")
+                string baseName = name.EndsWith('!') ? name[..^1] : name;
+                return _registry.LookupRoutine(fullName: baseName)
+                    ?? _registry.LookupRoutine(fullName: name)
+                    ?? LookupRoutineWithImports(name: baseName)
+                    ?? LookupRoutineWithImports(name: name);
+            }
+            case MemberExpression member:
+            {
+                TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+                return _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
     /// Computes the narrowed type after eliminating None and/or Crashable possibilities.
     /// </summary>
     /// <returns>The narrowed type, or null if narrowing is not possible.</returns>
