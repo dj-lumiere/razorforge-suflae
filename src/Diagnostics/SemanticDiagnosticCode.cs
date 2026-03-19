@@ -123,6 +123,15 @@ public enum SemanticDiagnosticCode
     /// <summary>Waitfor 'within' clause requires a Duration type.</summary>
     WaitforTimeoutNotDuration = 67,
 
+    /// <summary>Real-to-Complex promotion only allowed for addition and subtraction.</summary>
+    RealComplexPromotionInvalid = 68,
+
+    /// <summary>BackIndex (^n) operator only valid in subscript/slice context.</summary>
+    BackIndexOutsideSubscript = 69,
+
+    /// <summary>Slice must have both bounds, no step, and produces a read-only view.</summary>
+    SliceInvalidUsage = 70,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // TYPE RESOLUTION ERRORS (RF-S100 - RF-S149)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -166,7 +175,14 @@ public enum SemanticDiagnosticCode
     /// <summary>General build error.</summary>
     CompilationError = 112,
 
+    /// <summary>Two imports expose the same symbol name in the current scope.</summary>
+    ImportNameCollision = 113,
 
+    /// <summary>Import declarations must appear before other declarations in a file.</summary>
+    ImportPositionViolation = 114,
+
+    /// <summary>Cannot import non-open symbol from another module.</summary>
+    ImportNonOpenSymbol = 115,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GENERIC AND CONSTRAINT ERRORS (RF-S150 - RF-S199)
@@ -446,6 +462,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Enumeration type (choice, variant, flags) must have at least one member/case.</summary>
     EmptyEnumerationBody = 433,
 
+    /// <summary>Variant must be dismantled immediately with 'when' — cannot be used after other statements.</summary>
+    VariantNotDismantled = 434,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -707,6 +726,15 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Cannot modify secret member variable in a 'with' expression.</summary>
     WithSecretMemberProhibited = 778,
+
+    /// <summary>ValueTuple can only contain value types (records, primitives, choices).</summary>
+    ValueTupleContainmentViolation = 779,
+
+    /// <summary>FixedTuple can only contain records, choices, residents, or other FixedTuples.</summary>
+    FixedTupleContainmentViolation = 780,
+
+    /// <summary>Result, Lookup, variants, and tokens cannot be boxed to Data.</summary>
+    DataBoxingProhibited = 781,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)

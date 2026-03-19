@@ -97,6 +97,12 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine is marked dangerous (requires danger! block to call).</summary>
     public bool IsDangerous { get; init; }
 
+    /// <summary>Storage class: None (instance/module-level), Common (type-level static).</summary>
+    public StorageClass Storage { get; init; } = StorageClass.None;
+
+    /// <summary>Whether this routine is a common (static) routine.</summary>
+    public bool IsCommon => Storage == StorageClass.Common;
+
     /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>
     public bool IsSynthesized { get; init; }
 
@@ -171,7 +177,8 @@ public sealed class RoutineInfo
             CallingConvention = CallingConvention,
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,
-            IsSynthesized = IsSynthesized
+            IsSynthesized = IsSynthesized,
+            Storage = Storage
         };
     }
 

@@ -118,6 +118,9 @@ public enum SemanticWarningCode
     /// <summary>Method could be marked @readonly but is not.</summary>
     MethodCouldBeReadonly = 201,
 
+    /// <summary>Calling .hijack() on @initonly record — the record is frozen after construction.</summary>
+    HijackOnInitOnly = 210,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING WARNINGS (RF-W250 - RF-W299)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -156,6 +159,9 @@ public enum SemanticWarningCode
 
     /// <summary>Allocation in hot loop; consider hoisting.</summary>
     AllocationInLoop = 351,
+
+    /// <summary>Nested Data wrapping (Data(Data(x))) should be flattened.</summary>
+    NestedDataWrapping = 360,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL/DEBUG WARNINGS (RF-W400 - RF-W449)

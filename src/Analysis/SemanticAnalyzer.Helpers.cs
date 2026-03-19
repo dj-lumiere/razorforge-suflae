@@ -332,6 +332,12 @@ public sealed partial class SemanticAnalyzer
         return ImplementsProtocol(type: type, protocolName: "DecimalFP");
     }
 
+    /// <summary>Returns true if the type is a complex number type (C32, C64, C128, Complex).</summary>
+    private static bool IsComplexType(TypeSymbol type)
+    {
+        return type.Name is "C32" or "C64" or "C128" or "Complex";
+    }
+
     /// <summary>
     /// Checks if a type supports a specific binary operator by looking up the operator method.
     /// </summary>

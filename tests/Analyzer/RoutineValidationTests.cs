@@ -8,6 +8,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for routine declaration validation rules:
+/// #151: Static/instance mismatch
 /// #157: Mutation category conflict
 /// </summary>
 public class RoutineValidationTests
@@ -48,6 +49,49 @@ public class RoutineValidationTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
+    }
+
+    #endregion
+
+    #region #151: Static/instance mismatch
+
+    [Fact]
+    public void Analyze_CommonRoutineCalledOnInstance_ReportsError()
+    {
+        string source = """
+                        record Counter
+                          value: S32
+                        common routine Counter.create() -> Counter
+                          return Counter(value: 0)
+
+                        routine test()
+                          var c = Counter(value: 0)
+                          var d = c.create()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CommonRoutineMismatch);
+    }
+
+    [Fact]
+    public void Analyze_CommonRoutineCalledOnType_NoError()
+    {
+        string source = """
+                        record Counter
+                          value: S32
+                        common routine Counter.create() -> Counter
+                          return Counter(value: 0)
+
+                        routine test()
+                          var c = Counter.create()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CommonRoutineMismatch);
     }
 
     #endregion

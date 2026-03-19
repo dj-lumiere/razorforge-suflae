@@ -65,4 +65,82 @@ public class VariantValidationTests
     }
 
     #endregion
+
+    #region #58: Variant must dismantle immediately
+
+    [Fact]
+    public void Analyze_VariantDismantledImmediately_NoError()
+    {
+        string source = """
+                        variant Shape
+                          Circle: S32
+                          Square: S32
+
+                        routine make_shape() -> Shape
+                          pass
+                          return
+
+                        routine test()
+                          var s = make_shape()
+                          when s
+                            is Circle(r) => pass
+                            else => pass
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
+    }
+
+    [Fact]
+    public void Analyze_VariantNotDismantled_ReportsError()
+    {
+        string source = """
+                        variant Shape
+                          Circle: S32
+                          Square: S32
+
+                        routine make_shape() -> Shape
+                          pass
+                          return
+
+                        routine other()
+                          return
+
+                        routine test()
+                          var s = make_shape()
+                          other()
+                          when s
+                            is Circle(r) => pass
+                            else => pass
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
+    }
+
+    [Fact]
+    public void Analyze_VariantNeverDismantled_ReportsError()
+    {
+        string source = """
+                        variant Shape
+                          Circle: S32
+                          Square: S32
+
+                        routine make_shape() -> Shape
+                          pass
+                          return
+
+                        routine test()
+                          var s = make_shape()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
+    }
+
+    #endregion
 }

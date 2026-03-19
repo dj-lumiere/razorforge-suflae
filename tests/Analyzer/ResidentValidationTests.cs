@@ -204,4 +204,37 @@ public class ResidentValidationTests
     }
 
     #endregion
+
+    #region #57: Global only for residents
+
+    [Fact]
+    public void Analyze_GlobalRecord_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        global var p: Point
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.GlobalOnlyForResidents);
+    }
+
+    [Fact]
+    public void Analyze_GlobalResident_NoError()
+    {
+        string source = """
+                        resident AppState
+                          counter: S32
+                        global var state: AppState
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.GlobalOnlyForResidents);
+    }
+
+    #endregion
 }

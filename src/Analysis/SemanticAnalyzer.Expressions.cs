@@ -1050,6 +1050,49 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol valueType,
         SourceLocation location)
     {
+        // #173: Tuple assignment destructuring — (a, b) = (b, a)
+        if (target is TupleLiteralExpression tupleLhs)
+        {
+            // Verify all elements of the LHS tuple are assignable targets
+            foreach (Expression element in tupleLhs.Elements)
+            {
+                if (!IsAssignableTarget(target: element))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.InvalidAssignmentTarget,
+                        "All elements of tuple destructuring must be assignable targets (variables, member accesses, or indices).",
+                        element.Location);
+                }
+
+                // Check modifiability for identifier elements
+                if (element is IdentifierExpression elemId)
+                {
+                    VariableInfo? varInfo = _registry.LookupVariable(name: elemId.Name);
+                    if (varInfo is { IsModifiable: false })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.AssignmentToImmutable,
+                            $"Cannot assign to preset variable '{elemId.Name}'.",
+                            location);
+                    }
+                }
+            }
+
+            // Check that RHS is a tuple with matching arity
+            if (valueType is TupleTypeInfo tupleType)
+            {
+                if (tupleLhs.Elements.Count != tupleType.ElementTypes.Count)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.DestructuringArityMismatch,
+                        $"Tuple destructuring has {tupleLhs.Elements.Count} targets but the value has {tupleType.ElementTypes.Count} elements.",
+                        location);
+                }
+            }
+
+            return targetType;
+        }
+
         // Check if target is assignable (variable, member variable, or index)
         if (!IsAssignableTarget(target: target))
         {
@@ -1379,10 +1422,39 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol? type = LookupTypeWithImports(name: id.Name);
             if (type != null)
             {
-                // Creator call - also validate token uniqueness
+                // Creator call - analyze arguments and validate
+                var argTypes = new List<TypeSymbol>();
                 foreach (Expression arg in call.Arguments)
                 {
-                    AnalyzeExpression(expression: arg);
+                    argTypes.Add(item: AnalyzeExpression(expression: arg));
+                }
+
+                // #115: Data boxing restrictions — certain types cannot be boxed to Data
+                if (id.Name == "Data" && argTypes.Count > 0)
+                {
+                    TypeSymbol argType = argTypes[0];
+                    if (argType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup }
+                        or VariantTypeInfo
+                        or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
+                        || (argType is WrapperTypeInfo wrapper
+                            && wrapper.InnerType != null
+                            && wrapper.Name is "Hijacked" or "Seized"))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.DataBoxingProhibited,
+                            $"Type '{argType.Name}' cannot be boxed to Data. " +
+                            "Result, Lookup, variants, and access tokens (Viewed, Hijacked, Inspected, Seized) cannot be stored in Data.",
+                            call.Location);
+                    }
+
+                    // #116: Nested Data flattening — Data(Data(x)) should warn
+                    if (argType.Name == "Data")
+                    {
+                        ReportWarning(
+                            SemanticWarningCode.NestedDataWrapping,
+                            "Nested Data wrapping is redundant. Data(Data(x)) should be flattened to Data(x).",
+                            call.Location);
+                    }
                 }
 
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
@@ -1444,6 +1516,16 @@ public sealed partial class SemanticAnalyzer
                     _currentRoutine.HasFailableCalls = true;
                 }
 
+                // #151: Static/instance mismatch — common routine called on instance
+                if (method.IsCommon && member.Object is IdentifierExpression instanceId
+                    && LookupTypeWithImports(name: instanceId.Name) == null)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.CommonRoutineMismatch,
+                        $"Common routine '{method.Name}' must be called on the type '{objectType.Name}', not on an instance.",
+                        call.Location);
+                }
+
                 // Validate method access
                 ValidateRoutineAccess(routine: method, accessLocation: call.Location);
 
@@ -1474,6 +1556,24 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
+
+                // #68: Real-to-Complex promotion — only __add__/__sub__ allow float↔complex cross-type
+                if (IsOperatorDunder(name: member.PropertyName)
+                    && member.PropertyName is not ("__add__" or "__sub__" or "__iadd__" or "__isub__")
+                    && call.Arguments.Count > 0
+                    && method.Parameters.Count > 0)
+                {
+                    TypeSymbol argType = method.Parameters[0].Type;
+                    if ((IsFloatType(type: objectType) && IsComplexType(type: argType))
+                        || (IsComplexType(type: objectType) && IsFloatType(type: argType)))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.RealComplexPromotionInvalid,
+                            $"Operator '{member.PropertyName}' does not allow real↔complex promotion. " +
+                            "Only '+' and '-' support implicit real-to-complex conversion. Use explicit conversion for other operators.",
+                            call.Location);
+                    }
+                }
 
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
@@ -2035,6 +2135,23 @@ public sealed partial class SemanticAnalyzer
             AnalyzeExpression(expression: range.Step);
         }
 
+        // #119: BackIndex (^n) cannot be used in Range expressions — only in subscript/slice context
+        if (range.Start is BackIndexExpression)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BackIndexOutsideSubscript,
+                "BackIndex (^n) cannot be used in Range expressions. Use it in subscript [^n] or slice [a to b] context instead.",
+                range.Start.Location);
+        }
+
+        if (range.End is BackIndexExpression)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BackIndexOutsideSubscript,
+                "BackIndex (^n) cannot be used in Range expressions. Use it in subscript [^n] or slice [a to b] context instead.",
+                range.End.Location);
+        }
+
         // Range types must be compatible
         if (!IsNumericType(type: startType) || !IsNumericType(type: endType))
         {
@@ -2313,12 +2430,34 @@ public sealed partial class SemanticAnalyzer
         bool allValueTypes = elementTypes.All(predicate: TypeRegistry.IsValueType);
         if (allValueTypes)
         {
+            // #111: Validate ValueTuple containment — no entities, variants, or tokens
+            foreach (TypeSymbol et in elementTypes)
+            {
+                if (et is VariantTypeInfo or EntityTypeInfo or ResidentTypeInfo or WrapperTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ValueTupleContainmentViolation,
+                        $"ValueTuple cannot contain type '{et.Name}'. Only value types (records, choices, primitives) are allowed.",
+                        tuple.Location);
+                }
+            }
             return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
         }
 
         bool allResidentCompatible = elementTypes.All(predicate: TypeRegistry.IsResidentCompatible);
         if (allResidentCompatible)
         {
+            // #112: Validate FixedTuple containment — no entities or tokens
+            foreach (TypeSymbol et in elementTypes)
+            {
+                if (et is EntityTypeInfo or VariantTypeInfo or WrapperTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.FixedTupleContainmentViolation,
+                        $"FixedTuple cannot contain type '{et.Name}'. Only records, choices, residents, and other FixedTuples are allowed.",
+                        tuple.Location);
+                }
+            }
             return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Fixed);
         }
 

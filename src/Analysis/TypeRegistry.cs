@@ -955,7 +955,8 @@ public sealed class TypeRegistry
             Annotations = routine.Annotations,
             CallingConvention = routine.CallingConvention,
             IsVariadic = routine.IsVariadic,
-            IsDangerous = routine.IsDangerous
+            IsDangerous = routine.IsDangerous,
+            Storage = routine.Storage
         };
 
         _routines[key: key] = updatedRoutine;

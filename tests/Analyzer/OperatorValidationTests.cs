@@ -11,6 +11,7 @@ using static TestHelpers;
 /// #66: Index operator type-kind restriction
 /// #67: Compound assignment on read-only tokens
 /// #117: Fixed-width numeric type mismatch
+/// #119: BackIndex in Range restriction
 /// </summary>
 public class OperatorValidationTests
 {
@@ -86,6 +87,38 @@ public class OperatorValidationTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
+    }
+
+    #endregion
+
+    #region #119: BackIndex in Range restriction
+
+    [Fact]
+    public void Analyze_BackIndexInRange_ReportsError()
+    {
+        string source = """
+                        routine test()
+                          var r = (^1 to 10)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
+    }
+
+    [Fact]
+    public void Analyze_BackIndexInSlice_NoError()
+    {
+        string source = """
+                        routine test(list: Sequence[S32])
+                          var x = list[^1]
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
     }
 
     #endregion

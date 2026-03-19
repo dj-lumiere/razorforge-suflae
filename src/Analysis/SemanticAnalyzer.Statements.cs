@@ -45,6 +45,10 @@ public sealed partial class SemanticAnalyzer
             case ResidentDeclaration resident:
                 AnalyzeTypeMembers(members: resident.Members);
                 break;
+
+            case VariableDeclaration varDecl:
+                AnalyzeVariableDeclaration(varDecl: varDecl);
+                break;
         }
     }
 
@@ -227,7 +231,37 @@ public sealed partial class SemanticAnalyzer
 
         foreach (Statement stmt in block.Statements)
         {
+            // #58: Check if previous statement declared a variant that hasn't been dismantled
+            if (_lastDeclaredVariantVar is { } pendingVariant)
+            {
+                bool isDismantling = stmt is WhenStatement when
+                    && when.Expression is IdentifierExpression id
+                    && id.Name == pendingVariant.Name;
+
+                if (!isDismantling)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.VariantNotDismantled,
+                        $"Variant variable '{pendingVariant.Name}' must be dismantled immediately with 'when'. " +
+                        "Variants cannot be used after other statements.",
+                        pendingVariant.Location);
+                }
+
+                _lastDeclaredVariantVar = null;
+            }
+
             AnalyzeStatement(statement: stmt);
+        }
+
+        // #58: Check if the last statement declared a variant without a subsequent when
+        if (_lastDeclaredVariantVar is { } trailingVariant)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantNotDismantled,
+                $"Variant variable '{trailingVariant.Name}' must be dismantled immediately with 'when'. " +
+                "Variants cannot be used after other statements.",
+                trailingVariant.Location);
+            _lastDeclaredVariantVar = null;
         }
 
         _registry.ExitScope();
@@ -339,6 +373,15 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
+        // #57: The 'global' keyword is only valid for resident type variables
+        if (varDecl.Storage == StorageClass.Global && varType is not ResidentTypeInfo && varType is not ErrorTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.GlobalOnlyForResidents,
+                $"The 'global' keyword is only valid for resident type variables, not for type '{varType.Name}'.",
+                varDecl.Location);
+        }
+
         // Register variable in current scope
         bool declared = _registry.DeclareVariable(
             name: varDecl.Name,
@@ -350,6 +393,12 @@ public sealed partial class SemanticAnalyzer
                 SemanticDiagnosticCode.VariableRedeclaration,
                 $"Variable '{varDecl.Name}' is already declared in this scope.",
                 varDecl.Location);
+        }
+
+        // #58: Track variant variable declaration for immediate dismantling check
+        if (varType is VariantTypeInfo && varDecl.Initializer is not IdentifierExpression)
+        {
+            _lastDeclaredVariantVar = (varDecl.Name, varDecl.Location);
         }
     }
 
@@ -394,6 +443,52 @@ public sealed partial class SemanticAnalyzer
 
     private void AnalyzeAssignmentStatement(AssignmentStatement assign)
     {
+        // #173: Tuple assignment destructuring — (a, b) = (b, a)
+        if (assign.Target is TupleLiteralExpression tupleLhs)
+        {
+            TypeSymbol rhsType = AnalyzeExpression(expression: assign.Value);
+
+            // Verify all elements of the LHS tuple are assignable targets
+            foreach (Expression element in tupleLhs.Elements)
+            {
+                AnalyzeExpression(expression: element);
+                if (!IsAssignableTarget(target: element))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.InvalidAssignmentTarget,
+                        "All elements of tuple destructuring must be assignable targets (variables, member accesses, or indices).",
+                        element.Location);
+                }
+
+                // Check modifiability for identifier elements
+                if (element is IdentifierExpression elemId)
+                {
+                    VariableInfo? varInfo = _registry.LookupVariable(name: elemId.Name);
+                    if (varInfo is { IsModifiable: false })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.AssignmentToImmutable,
+                            $"Cannot assign to preset variable '{elemId.Name}'.",
+                            assign.Location);
+                    }
+                }
+            }
+
+            // Check that RHS is a tuple with matching arity
+            if (rhsType is TupleTypeInfo tupleType)
+            {
+                if (tupleLhs.Elements.Count != tupleType.ElementTypes.Count)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.DestructuringArityMismatch,
+                        $"Tuple destructuring has {tupleLhs.Elements.Count} targets but the value has {tupleType.ElementTypes.Count} elements.",
+                        assign.Location);
+                }
+            }
+
+            return;
+        }
+
         TypeSymbol targetType = AnalyzeExpression(expression: assign.Target);
         TypeSymbol valueType = AnalyzeExpression(expression: assign.Value);
 

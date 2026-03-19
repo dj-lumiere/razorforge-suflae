@@ -21,6 +21,26 @@ public sealed partial class SemanticAnalyzer
     /// <param name="program">The program to collect declarations from.</param>
     private void CollectDeclarations(Program program)
     {
+        // #106: Validate that imports appear before other declarations
+        bool seenNonImport = false;
+        foreach (IAstNode declaration in program.Declarations)
+        {
+            if (declaration is ImportDeclaration import)
+            {
+                if (seenNonImport)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ImportPositionViolation,
+                        $"Import '{import.ModulePath}' must appear before other declarations.",
+                        import.Location);
+                }
+            }
+            else if (declaration is not ModuleDeclaration)
+            {
+                seenNonImport = true;
+            }
+        }
+
         foreach (IAstNode declaration in program.Declarations)
         {
             CollectDeclaration(node: declaration);
@@ -132,6 +152,21 @@ public sealed partial class SemanticAnalyzer
                 $"Cannot resolve import '{import.ModulePath}'. Module not found.",
                 import.Location);
             return;
+        }
+
+        // #105: Check for import name collisions with specific imports
+        if (import.SpecificImports != null)
+        {
+            foreach (string symbolName in import.SpecificImports)
+            {
+                if (!_importedSymbolNames.Add(item: symbolName))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ImportNameCollision,
+                        $"Symbol '{symbolName}' is already imported from another module.",
+                        import.Location);
+                }
+            }
         }
 
         // Track the imported module for per-file type resolution
@@ -464,7 +499,8 @@ public sealed partial class SemanticAnalyzer
             Annotations = routine.Annotations,
             DeclaredModification = declaredModification,
             ModificationCategory = declaredModification,
-            IsDangerous = routine.IsDangerous
+            IsDangerous = routine.IsDangerous,
+            Storage = routine.Storage
         };
 
         // Check for duplicate routine definitions (#150)
@@ -1885,10 +1921,11 @@ public sealed partial class SemanticAnalyzer
                             paramName: "you", paramType: type, returnType: boolType,
                             existingMethods: existingMethods);
 
-                    // Records are value types — auto-add Hashable conformance
+                    // #27: Records with all-Hashable fields auto-add Hashable conformance
                     if (hashableProtocol != null && type is RecordTypeInfo record)
                     {
-                        if (record.ImplementedProtocols.All(p => p.Name != "Hashable"))
+                        if (record.ImplementedProtocols.All(p => p.Name != "Hashable")
+                            && AllFieldsHashable(record: record))
                         {
                             var protocols = record.ImplementedProtocols.ToList();
                             protocols.Add(item: hashableProtocol);
@@ -2053,6 +2090,45 @@ public sealed partial class SemanticAnalyzer
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
+    }
+
+    /// <summary>
+    /// Checks whether all member variables of a record implement Hashable.
+    /// Primitives (S32, U64, Text, Bool, etc.), choices, flags, and other records
+    /// that are Hashable are considered hashable. Entities, variants, and
+    /// generic parameters are not.
+    /// </summary>
+    private bool AllFieldsHashable(RecordTypeInfo record)
+    {
+        IReadOnlyList<MemberVariableInfo> fields = record.MemberVariables;
+        if (fields.Count == 0) return true; // empty records are trivially hashable
+
+        foreach (MemberVariableInfo field in fields)
+        {
+            TypeSymbol fieldType = field.Type;
+
+            // Intrinsic types (primitives) are always hashable
+            if (fieldType is IntrinsicTypeInfo) continue;
+
+            // Choices and flags are always hashable
+            if (fieldType is ChoiceTypeInfo or FlagsTypeInfo) continue;
+
+            // Records are hashable if they implement Hashable (recursive)
+            if (fieldType is RecordTypeInfo fieldRecord)
+            {
+                if (fieldRecord.ImplementedProtocols.Any(p => p.Name == "Hashable"))
+                    continue;
+                // Check structurally: does it have hash()?
+                if (_registry.LookupMethod(type: fieldType, methodName: "hash") != null)
+                    continue;
+                return false;
+            }
+
+            // Entities, variants, generic parameters, etc. — not hashable
+            return false;
+        }
+
+        return true;
     }
 
     #endregion

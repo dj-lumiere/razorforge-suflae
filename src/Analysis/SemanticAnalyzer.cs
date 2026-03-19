@@ -65,8 +65,14 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Modules imported by the current file. Used for type resolution of non-Core types.</summary>
     private readonly HashSet<string> _importedModules = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Tracks imported symbol names for collision detection (#105).</summary>
+    private readonly HashSet<string> _importedSymbolNames = new(StringComparer.Ordinal);
+
     /// <summary>Nesting depth for conditional expressions (for #145 deep nesting warning).</summary>
     private int _conditionalNestingDepth;
+
+    /// <summary>Tracks the last variant variable declared, for immediate dismantling check (#58).</summary>
+    private (string Name, SourceLocation Location)? _lastDeclaredVariantVar;
 
     #endregion
 
@@ -97,6 +103,7 @@ public sealed partial class SemanticAnalyzer
         // Store file path for import resolution
         _currentFilePath = filePath ?? program.Location.FileName;
         _importedModules.Clear();
+        _importedSymbolNames.Clear();
 
         // Phase 1: Collect all type and routine declarations (forward declarations)
         CollectDeclarations(program: program);

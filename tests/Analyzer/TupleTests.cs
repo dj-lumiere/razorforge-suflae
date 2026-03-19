@@ -175,4 +175,38 @@ public class TupleTests
     }
 
     #endregion
+
+    #region #173: Tuple assignment destructuring
+
+    [Fact]
+    public void Analyze_TupleAssignmentDestructuring_NoError()
+    {
+        string source = """
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          (a, b) = (b, a)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_TupleAssignmentNonAssignableTarget_ReportsError()
+    {
+        string source = """
+                        routine test()
+                          var a = 1
+                          (a, 42) = (1, 2)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidAssignmentTarget);
+    }
+
+    #endregion
 }
