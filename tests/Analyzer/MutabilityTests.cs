@@ -303,7 +303,7 @@ public class MutabilityTests
 
     #region Hijacking Restrictions
 
-    [Fact(Skip = "Gap #137: Nested hijacking detection not yet implemented")]
+    [Fact]
     public void Analyze_NestedHijacking_ReportsError()
     {
         // Nested hijacking (partial hijacking) should not be allowed
