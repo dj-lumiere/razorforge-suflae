@@ -105,8 +105,8 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record, CreatorExpression expr)
     {
-        // Single-member-variable wrapper: just return the inner value
-        if (record.IsSingleMemberVariableWrapper && expr.MemberVariables.Count == 1)
+        // Backend-annotated or single-member-variable wrapper: just return the inner value
+        if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) && expr.MemberVariables.Count <= 1)
         {
             return EmitExpression(sb, expr.MemberVariables[0].Value);
         }
@@ -206,8 +206,8 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitRecordMemberVariableRead(StringBuilder sb, string recordValue, RecordTypeInfo record, string memberVariableName)
     {
-        // Single-member-variable wrapper: the value IS the field
-        if (record.IsSingleMemberVariableWrapper)
+        // Backend-annotated or single-member-variable wrapper: the value IS the field
+        if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
         {
             return recordValue;
         }
@@ -337,8 +337,6 @@ public partial class LLVMCodeGenerator
             CallExpression call => EmitCall(sb, call),
             BinaryExpression binary => EmitBinaryOp(sb, binary),
             UnaryExpression unary => EmitUnaryOp(sb, unary),
-            IntrinsicCallExpression intrinsic => EmitIntrinsicCall(sb, intrinsic),
-            NativeCallExpression native => EmitNativeCall(sb, native),
             ConditionalExpression cond => EmitConditional(sb, cond),
             IndexExpression index => EmitIndexAccess(sb, index),
             SliceExpression slice => EmitSliceAccess(sb, slice),
@@ -957,230 +955,83 @@ public partial class LLVMCodeGenerator
         return EmitLlvmInstruction(sb, instrName, llvmType, llvmTypeArgs, allArgs);
     }
 
+    // Instruction classification tables for table-driven LLVM IR emission.
+    // Each set corresponds to a distinct emit pattern.
+
+    /// <summary>Binary instructions: {result} = {name} {type} {a}, {b}</summary>
+    private static readonly HashSet<string> LlvmBinaryInstructions =
+    [
+        "add", "sub", "mul", "sdiv", "udiv", "srem", "urem",
+        "fadd", "fsub", "fmul", "fdiv", "frem",
+        "and", "or", "xor", "shl", "lshr", "ashr"
+    ];
+
+    /// <summary>Type conversions: {result} = {name} {fromType} {a} to {toType}</summary>
+    private static readonly HashSet<string> LlvmConversionInstructions =
+    [
+        "sext", "zext", "trunc", "bitcast", "fpext", "fptrunc",
+        "sitofp", "uitofp", "fptosi", "fptoui"
+    ];
+
+    /// <summary>1-arg @llvm.* intrinsics: call {type} @llvm.{name}.{type}({type} {a})</summary>
+    private static readonly HashSet<string> LlvmIntrinsic1Arg =
+    [
+        "ctpop", "bitreverse", "bswap", "sqrt", "fabs",
+        "floor", "ceil", "round", "sin", "cos",
+        "exp", "log", "log10"
+    ];
+
+    /// <summary>1-arg @llvm.* intrinsics with extra i1 false flag</summary>
+    private static readonly HashSet<string> LlvmIntrinsic1ArgWithFlag =
+    [
+        "ctlz", "cttz", "abs"
+    ];
+
+    /// <summary>2-arg @llvm.* intrinsics: call {type} @llvm.{name}.{type}({type} {a}, {type} {b})</summary>
+    private static readonly HashSet<string> LlvmIntrinsic2Arg =
+    [
+        "pow", "copysign",
+        "sadd.sat", "uadd.sat", "ssub.sat", "usub.sat"
+    ];
+
+    /// <summary>2-arg @llvm.* overflow intrinsics returning { type, i1 }</summary>
+    private static readonly HashSet<string> LlvmOverflowIntrinsics =
+    [
+        "sadd.with.overflow", "uadd.with.overflow",
+        "ssub.with.overflow", "usub.with.overflow",
+        "smul.with.overflow", "umul.with.overflow"
+    ];
+
     /// <summary>
-    /// Emits a single LLVM instruction. Shared by both EmitIntrinsicCall and EmitLlvmIntrinsicGenericCall.
+    /// Emits a single LLVM instruction. Table-driven — each instruction maps 1:1 to an LLVM
+    /// instruction or @llvm.* intrinsic, with no signed/unsigned/float dispatch.
     /// </summary>
     private string EmitLlvmInstruction(StringBuilder sb, string name, string llvmType, List<string> llvmTypeArgs, List<string> args)
     {
         string result = NextTemp();
 
-        // Arithmetic operations
-        if (name is "add.wrapping" or "add")
+        // Binary instructions: add, sub, mul, sdiv, fadd, and, shl, etc.
+        if (LlvmBinaryInstructions.Contains(name))
         {
-            string op = IsFloatLLVMType(llvmType) ? "fadd" : "add";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+            EmitLine(sb, $"  {result} = {name} {llvmType} {args[0]}, {args[1]}");
         }
-        else if (name is "sub.wrapping" or "sub")
+        // Unary instruction: fneg
+        else if (name == "fneg")
         {
-            string op = IsFloatLLVMType(llvmType) ? "fsub" : "sub";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+            EmitLine(sb, $"  {result} = fneg {llvmType} {args[0]}");
         }
-        else if (name is "mul.wrapping" or "mul")
+        // Comparisons: icmp.eq → "icmp eq", fcmp.olt → "fcmp olt"
+        else if (name.StartsWith("icmp.") || name.StartsWith("fcmp."))
         {
-            string op = IsFloatLLVMType(llvmType) ? "fmul" : "mul";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
+            string llvmOp = name.Replace('.', ' ');
+            EmitLine(sb, $"  {result} = {llvmOp} {llvmType} {args[0]}, {args[1]}");
         }
-        else if (name is "div.wrapping" or "div")
-        {
-            string op = IsFloatLLVMType(llvmType) ? "fdiv" : "sdiv";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "sdiv")
-        {
-            EmitLine(sb, $"  {result} = sdiv {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "udiv")
-        {
-            EmitLine(sb, $"  {result} = udiv {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "srem")
-        {
-            EmitLine(sb, $"  {result} = srem {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "urem")
-        {
-            EmitLine(sb, $"  {result} = urem {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "frem")
-        {
-            EmitLine(sb, $"  {result} = frem {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name is "rem.wrapping" or "rem")
-        {
-            string op = IsFloatLLVMType(llvmType) ? "frem" : (IsSignedLLVMType(llvmType) ? "srem" : "urem");
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        // Unary arithmetic
-        else if (name == "neg")
-        {
-            if (IsFloatLLVMType(llvmType))
-                EmitLine(sb, $"  {result} = fneg {llvmType} {args[0]}");
-            else
-                EmitLine(sb, $"  {result} = sub {llvmType} 0, {args[0]}");
-        }
-        else if (name == "abs")
-        {
-            if (IsFloatLLVMType(llvmType))
-                EmitLine(sb, $"  {result} = call {llvmType} @llvm.fabs.{llvmType}({llvmType} {args[0]})");
-            else
-                EmitLine(sb, $"  {result} = call {llvmType} @llvm.abs.{llvmType}({llvmType} {args[0]}, i1 false)");
-        }
-        // Bitwise operations
-        else if (name == "and")
-        {
-            EmitLine(sb, $"  {result} = and {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "or")
-        {
-            EmitLine(sb, $"  {result} = or {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "xor")
-        {
-            EmitLine(sb, $"  {result} = xor {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "not")
-        {
-            EmitLine(sb, $"  {result} = xor {llvmType} {args[0]}, -1");
-        }
-        // Shift operations
-        else if (name == "shl")
-        {
-            EmitLine(sb, $"  {result} = shl {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "lshr")
-        {
-            EmitLine(sb, $"  {result} = lshr {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "ashr")
-        {
-            EmitLine(sb, $"  {result} = ashr {llvmType} {args[0]}, {args[1]}");
-        }
-        // Integer comparisons
-        else if (name == "icmp.eq")
-        {
-            EmitLine(sb, $"  {result} = icmp eq {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ne")
-        {
-            EmitLine(sb, $"  {result} = icmp ne {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.slt")
-        {
-            EmitLine(sb, $"  {result} = icmp slt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.sle")
-        {
-            EmitLine(sb, $"  {result} = icmp sle {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.sgt")
-        {
-            EmitLine(sb, $"  {result} = icmp sgt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.sge")
-        {
-            EmitLine(sb, $"  {result} = icmp sge {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ult")
-        {
-            EmitLine(sb, $"  {result} = icmp ult {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ule")
-        {
-            EmitLine(sb, $"  {result} = icmp ule {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ugt")
-        {
-            EmitLine(sb, $"  {result} = icmp ugt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.uge")
-        {
-            EmitLine(sb, $"  {result} = icmp uge {llvmType} {args[0]}, {args[1]}");
-        }
-        // Float comparisons
-        else if (name == "fcmp.oeq")
-        {
-            EmitLine(sb, $"  {result} = fcmp oeq {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.one")
-        {
-            EmitLine(sb, $"  {result} = fcmp one {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.olt")
-        {
-            EmitLine(sb, $"  {result} = fcmp olt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.ole")
-        {
-            EmitLine(sb, $"  {result} = fcmp ole {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.ogt")
-        {
-            EmitLine(sb, $"  {result} = fcmp ogt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.oge")
-        {
-            EmitLine(sb, $"  {result} = fcmp oge {llvmType} {args[0]}, {args[1]}");
-        }
-        // Type conversions
-        else if (name == "sext")
+        // Type conversions: sext, zext, trunc, bitcast, sitofp, etc.
+        else if (LlvmConversionInstructions.Contains(name))
         {
             string fromType = llvmTypeArgs[0];
             string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = sext {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "zext")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = zext {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "trunc")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = trunc {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "bitcast")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = bitcast {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fpext")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = fpext {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fptrunc")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = fptrunc {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "sitofp")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = sitofp {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "uitofp")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = uitofp {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fptosi")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = fptosi {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fptoui")
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = fptoui {fromType} {args[0]} to {toType}");
+            EmitLine(sb, $"  {result} = {name} {fromType} {args[0]} to {toType}");
         }
         // Memory operations
         else if (name == "load")
@@ -1197,138 +1048,31 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  store volatile {llvmType} {args[0]}, ptr {args[1]}");
             return args[0];
         }
-        // Bit query operations
-        else if (name == "bitwidth")
+        // @llvm.* intrinsic function calls (1-arg with i1 false flag)
+        else if (LlvmIntrinsic1ArgWithFlag.Contains(name))
         {
-            int bitWidth = GetTypeBitWidth(llvmType);
-            return bitWidth.ToString();
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.{name}.{llvmType}({llvmType} {args[0]}, i1 false)");
         }
-        else if (name == "min.value")
-        {
-            if (IsFloatLLVMType(llvmType))
-            {
-                // Negative infinity for float types
-                EmitLine(sb, $"  {result} = fcmp ord {llvmType} 0.0, 0.0"); // placeholder
-            }
-            else
-            {
-                int bits = GetTypeBitWidth(llvmType);
-                // Minimum signed integer: -(2^(bits-1))
-                string minVal = bits == 1 ? "0" : $"{(long)(-Math.Pow(2, bits - 1))}";
-                return minVal;
-            }
-        }
-        // Bit manipulation
-        else if (name == "ctlz")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ctlz.{llvmType}({llvmType} {args[0]}, i1 false)");
-        }
-        else if (name == "cttz")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.cttz.{llvmType}({llvmType} {args[0]}, i1 false)");
-        }
-        else if (name == "ctpop")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ctpop.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "bitreverse")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.bitreverse.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "bswap")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.bswap.{llvmType}({llvmType} {args[0]})");
-        }
-        // Overflow-detecting operations
-        else if (name == "add.overflow")
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            string intrinsicName = llvmType.StartsWith("i") ? $"llvm.sadd.with.overflow.{llvmType}" : throw new NotImplementedException();
-            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "sub.overflow")
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            string intrinsicName = $"llvm.ssub.with.overflow.{llvmType}";
-            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "mul.overflow")
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            string intrinsicName = $"llvm.smul.with.overflow.{llvmType}";
-            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        // Saturating arithmetic
-        else if (name == "add.saturate")
-        {
-            string intrinsicName = IsSignedLLVMType(llvmType)
-                ? $"llvm.sadd.sat.{llvmType}"
-                : $"llvm.uadd.sat.{llvmType}";
-            EmitLine(sb, $"  {result} = call {llvmType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "sub.saturate")
-        {
-            string intrinsicName = IsSignedLLVMType(llvmType)
-                ? $"llvm.ssub.sat.{llvmType}"
-                : $"llvm.usub.sat.{llvmType}";
-            EmitLine(sb, $"  {result} = call {llvmType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "mul.saturate")
-        {
-            EmitLine(sb, $"  {result} = mul {llvmType} {args[0]}, {args[1]}");
-        }
-        // Float math
-        else if (name == "sqrt")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.sqrt.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "fabs")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.fabs.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "floor")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.floor.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "ceil")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ceil.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "round")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.round.{llvmType}({llvmType} {args[0]})");
-        }
+        // trunc.float → @llvm.trunc (name collision with trunc instruction)
         else if (name == "trunc.float")
         {
             EmitLine(sb, $"  {result} = call {llvmType} @llvm.trunc.{llvmType}({llvmType} {args[0]})");
         }
-        else if (name == "sin")
+        // @llvm.* intrinsic function calls (1-arg)
+        else if (LlvmIntrinsic1Arg.Contains(name))
         {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.sin.{llvmType}({llvmType} {args[0]})");
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.{name}.{llvmType}({llvmType} {args[0]})");
         }
-        else if (name == "cos")
+        // @llvm.* intrinsic function calls (2-arg)
+        else if (LlvmIntrinsic2Arg.Contains(name))
         {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.cos.{llvmType}({llvmType} {args[0]})");
+            EmitLine(sb, $"  {result} = call {llvmType} @llvm.{name}.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
         }
-        else if (name == "exp")
+        // @llvm.* overflow intrinsics returning { type, i1 }
+        else if (LlvmOverflowIntrinsics.Contains(name))
         {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.exp.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "log")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.log.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "log10")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.log10.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "pow")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.pow.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "copysign")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.copysign.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
+            string overflowType = $"{{ {llvmType}, i1 }}";
+            EmitLine(sb, $"  {result} = call {overflowType} @llvm.{name}.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
         }
         // Atomic operations
         else if (name == "atomic.load")
@@ -1340,38 +1084,18 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  store atomic {llvmType} {args[0]}, ptr {args[1]} seq_cst, align {GetTypeBitWidth(llvmType) / 8}");
             return args[0];
         }
-        else if (name == "atomic.add")
-        {
-            EmitLine(sb, $"  {result} = atomicrmw add ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
-        else if (name == "atomic.sub")
-        {
-            EmitLine(sb, $"  {result} = atomicrmw sub ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
-        else if (name == "atomic.and")
-        {
-            EmitLine(sb, $"  {result} = atomicrmw and ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
-        else if (name == "atomic.or")
-        {
-            EmitLine(sb, $"  {result} = atomicrmw or ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
-        else if (name == "atomic.xor")
-        {
-            EmitLine(sb, $"  {result} = atomicrmw xor ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
-        else if (name == "atomic.xchg")
-        {
-            EmitLine(sb, $"  {result} = atomicrmw xchg ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
         else if (name == "atomic.cmpxchg")
         {
-            string pairType = $"{{ {llvmType}, i1 }}";
             EmitLine(sb, $"  {result} = cmpxchg ptr {args[0]}, {llvmType} {args[1]}, {llvmType} {args[2]} seq_cst seq_cst");
+        }
+        else if (name.StartsWith("atomic."))
+        {
+            string atomicOp = name["atomic.".Length..];
+            EmitLine(sb, $"  {result} = atomicrmw {atomicOp} ptr {args[0]}, {llvmType} {args[1]} seq_cst");
         }
         else
         {
-            throw new NotImplementedException($"LLVM intrinsic not implemented: {name}");
+            throw new NotImplementedException($"LLVM instruction not implemented: {name}");
         }
 
         return result;
@@ -1465,8 +1189,8 @@ public partial class LLVMCodeGenerator
             return GetLLVMType(type);
         }
 
-        // Fall back to MapIntrinsicTypeToLLVM for raw type names
-        return MapIntrinsicTypeToLLVM(typeExpr.Name);
+        // Fall back: return the name as-is (assumes it's already an LLVM type name)
+        return typeExpr.Name;
     }
 
     /// <summary>
@@ -1509,7 +1233,6 @@ public partial class LLVMCodeGenerator
             BinaryExpression binary => GetExpressionType(binary.Left), // Use left operand type
             UnaryExpression unary => GetExpressionType(unary.Operand),
             CallExpression call => GetCallReturnType(call),
-            IntrinsicCallExpression intrinsic => GetIntrinsicReturnType(intrinsic),
             GenericMethodCallExpression generic => GetGenericMethodCallReturnType(generic),
             _ => null
         };
@@ -1529,36 +1252,6 @@ public partial class LLVMCodeGenerator
 
         var routine = _registry.LookupRoutine(funcName);
         return routine?.ReturnType;
-    }
-
-    /// <summary>
-    /// Gets the return type of an intrinsic call expression.
-    /// </summary>
-    private TypeInfo? GetIntrinsicReturnType(IntrinsicCallExpression intrinsic)
-    {
-        // The return type is encoded in the type argument
-        // e.g., @intrinsic.add<i64> returns i64
-        if (intrinsic.TypeArguments.Count > 0)
-        {
-            string typeArg = intrinsic.TypeArguments[0];
-            // Map intrinsic type names to registry type names
-            string typeName = typeArg.ToLowerInvariant() switch
-            {
-                "i8" => "i8",
-                "i16" => "i16",
-                "i32" => "i32",
-                "i64" => "i64",
-                "i128" => "i128",
-                "half" => "F16",
-                "float" => "F32",
-                "double" => "F64",
-                "fp128" => "F128",
-                "i1" => "Bool",
-                _ => typeArg
-            };
-            return _registry.LookupType(typeName);
-        }
-        return null;
     }
 
     /// <summary>
@@ -1614,394 +1307,6 @@ public partial class LLVMCodeGenerator
 
     #endregion
 
-    #region Intrinsic Calls
-
-    /// <summary>
-    /// Generates code for an intrinsic call expression.
-    /// Intrinsics map directly to LLVM IR instructions.
-    /// </summary>
-    /// <param name="sb">StringBuilder to emit code to.</param>
-    /// <param name="intrinsic">The intrinsic call expression.</param>
-    /// <returns>The temporary variable holding the result.</returns>
-    private string EmitIntrinsicCall(StringBuilder sb, IntrinsicCallExpression intrinsic)
-    {
-        // Evaluate all arguments first
-        var args = new List<string>();
-        foreach (var arg in intrinsic.Arguments)
-        {
-            args.Add(EmitExpression(sb, arg));
-        }
-
-        // Get the LLVM type from type arguments
-        if (intrinsic.TypeArguments.Count == 0)
-        {
-            throw new InvalidOperationException($"Intrinsic call to '{intrinsic.IntrinsicName}' requires type arguments");
-        }
-        string llvmType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-
-        string result = NextTemp();
-
-        // Map intrinsic name to LLVM instruction
-        string name = intrinsic.IntrinsicName;
-
-        // Arithmetic operations
-        if (name == "add.wrapping" || name == "add")
-        {
-            string op = IsFloatLLVMType(llvmType) ? "fadd" : "add";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "sub.wrapping" || name == "sub")
-        {
-            string op = IsFloatLLVMType(llvmType) ? "fsub" : "sub";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "mul.wrapping" || name == "mul")
-        {
-            string op = IsFloatLLVMType(llvmType) ? "fmul" : "mul";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "div.wrapping" || name == "div")
-        {
-            // For floats, always fdiv; for ints this is tricky - assume signed
-            string op = IsFloatLLVMType(llvmType) ? "fdiv" : "sdiv";
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "sdiv")
-        {
-            EmitLine(sb, $"  {result} = sdiv {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "udiv")
-        {
-            EmitLine(sb, $"  {result} = udiv {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "srem")
-        {
-            EmitLine(sb, $"  {result} = srem {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "urem")
-        {
-            EmitLine(sb, $"  {result} = urem {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "frem")
-        {
-            EmitLine(sb, $"  {result} = frem {llvmType} {args[0]}, {args[1]}");
-        }
-        // Bitwise operations
-        else if (name == "and")
-        {
-            EmitLine(sb, $"  {result} = and {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "or")
-        {
-            EmitLine(sb, $"  {result} = or {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "xor")
-        {
-            EmitLine(sb, $"  {result} = xor {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "not")
-        {
-            EmitLine(sb, $"  {result} = xor {llvmType} {args[0]}, -1");
-        }
-        // Shift operations
-        else if (name == "shl")
-        {
-            EmitLine(sb, $"  {result} = shl {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "lshr")
-        {
-            EmitLine(sb, $"  {result} = lshr {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "ashr")
-        {
-            EmitLine(sb, $"  {result} = ashr {llvmType} {args[0]}, {args[1]}");
-        }
-        // Integer comparisons
-        else if (name == "icmp.eq")
-        {
-            EmitLine(sb, $"  {result} = icmp eq {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ne")
-        {
-            EmitLine(sb, $"  {result} = icmp ne {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.slt")
-        {
-            EmitLine(sb, $"  {result} = icmp slt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.sle")
-        {
-            EmitLine(sb, $"  {result} = icmp sle {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.sgt")
-        {
-            EmitLine(sb, $"  {result} = icmp sgt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.sge")
-        {
-            EmitLine(sb, $"  {result} = icmp sge {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ult")
-        {
-            EmitLine(sb, $"  {result} = icmp ult {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ule")
-        {
-            EmitLine(sb, $"  {result} = icmp ule {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.ugt")
-        {
-            EmitLine(sb, $"  {result} = icmp ugt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "icmp.uge")
-        {
-            EmitLine(sb, $"  {result} = icmp uge {llvmType} {args[0]}, {args[1]}");
-        }
-        // Float comparisons
-        else if (name == "fcmp.oeq")
-        {
-            EmitLine(sb, $"  {result} = fcmp oeq {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.one")
-        {
-            EmitLine(sb, $"  {result} = fcmp one {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.olt")
-        {
-            EmitLine(sb, $"  {result} = fcmp olt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.ole")
-        {
-            EmitLine(sb, $"  {result} = fcmp ole {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.ogt")
-        {
-            EmitLine(sb, $"  {result} = fcmp ogt {llvmType} {args[0]}, {args[1]}");
-        }
-        else if (name == "fcmp.oge")
-        {
-            EmitLine(sb, $"  {result} = fcmp oge {llvmType} {args[0]}, {args[1]}");
-        }
-        // Type conversions
-        else if (name == "sext")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = sext {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "zext")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = zext {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "trunc")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = trunc {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "bitcast")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = bitcast {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fpext")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = fpext {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fptrunc")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = fptrunc {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "sitofp")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = sitofp {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "uitofp")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = uitofp {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fptosi")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = fptosi {fromType} {args[0]} to {toType}");
-        }
-        else if (name == "fptoui")
-        {
-            string fromType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[0]);
-            string toType = MapIntrinsicTypeToLLVM(intrinsic.TypeArguments[1]);
-            EmitLine(sb, $"  {result} = fptoui {fromType} {args[0]} to {toType}");
-        }
-        // Memory operations
-        else if (name == "load")
-        {
-            EmitLine(sb, $"  {result} = load {llvmType}, ptr {args[0]}");
-        }
-        else if (name == "store")
-        {
-            // Store doesn't return a value
-            EmitLine(sb, $"  store {llvmType} {args[0]}, ptr {args[1]}");
-            return args[0]; // Return stored value for chaining
-        }
-        // Bit operations
-        else if (name == "bitwidth")
-        {
-            // Return the bit width of the type as a constant
-            int bitWidth = GetTypeBitWidth(llvmType);
-            return bitWidth.ToString();
-        }
-        else if (name == "ctlz")
-        {
-            // Count leading zeros
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ctlz.{llvmType}({llvmType} {args[0]}, i1 false)");
-        }
-        else if (name == "cttz")
-        {
-            // Count trailing zeros
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.cttz.{llvmType}({llvmType} {args[0]}, i1 false)");
-        }
-        else if (name == "ctpop")
-        {
-            // Population count (count 1 bits)
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.ctpop.{llvmType}({llvmType} {args[0]})");
-        }
-        // Overflow-detecting operations
-        else if (name == "add.overflow")
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            string intrinsicName = llvmType.StartsWith("i") ? $"llvm.sadd.with.overflow.{llvmType}" : throw new NotImplementedException();
-            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "sub.overflow")
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            string intrinsicName = $"llvm.ssub.with.overflow.{llvmType}";
-            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "mul.overflow")
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            string intrinsicName = $"llvm.smul.with.overflow.{llvmType}";
-            EmitLine(sb, $"  {result} = call {overflowType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        // Saturating arithmetic
-        else if (name == "add.saturate")
-        {
-            string intrinsicName = IsSignedLLVMType(llvmType)
-                ? $"llvm.sadd.sat.{llvmType}"
-                : $"llvm.uadd.sat.{llvmType}";
-            EmitLine(sb, $"  {result} = call {llvmType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "sub.saturate")
-        {
-            string intrinsicName = IsSignedLLVMType(llvmType)
-                ? $"llvm.ssub.sat.{llvmType}"
-                : $"llvm.usub.sat.{llvmType}";
-            EmitLine(sb, $"  {result} = call {llvmType} @{intrinsicName}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        else if (name == "mul.saturate")
-        {
-            // LLVM doesn't have a direct mul.sat intrinsic, so we implement it manually
-            // For now, use wrapping multiplication (TODO: implement proper saturation)
-            EmitLine(sb, $"  {result} = mul {llvmType} {args[0]}, {args[1]}");
-        }
-        // Remainder
-        else if (name is "rem.wrapping" or "rem")
-        {
-            string op = IsFloatLLVMType(llvmType) ? "frem" : (IsSignedLLVMType(llvmType) ? "srem" : "urem");
-            EmitLine(sb, $"  {result} = {op} {llvmType} {args[0]}, {args[1]}");
-        }
-        // Absolute value
-        else if (name == "abs")
-        {
-            if (IsFloatLLVMType(llvmType))
-            {
-                EmitLine(sb, $"  {result} = call {llvmType} @llvm.fabs.{llvmType}({llvmType} {args[0]})");
-            }
-            else
-            {
-                EmitLine(sb, $"  {result} = call {llvmType} @llvm.abs.{llvmType}({llvmType} {args[0]}, i1 false)");
-            }
-        }
-        // Bit manipulation
-        else if (name == "bitreverse")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.bitreverse.{llvmType}({llvmType} {args[0]})");
-        }
-        else if (name == "bswap")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.bswap.{llvmType}({llvmType} {args[0]})");
-        }
-        else
-        {
-            throw new NotImplementedException($"Intrinsic not implemented: @intrinsic.{name}");
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Maps an intrinsic type argument to the corresponding LLVM type.
-    /// </summary>
-    private static string MapIntrinsicTypeToLLVM(string intrinsicType)
-    {
-        return intrinsicType.ToLowerInvariant() switch
-        {
-            // Standard integer types
-            "i1" => "i1",
-            "i8" => "i8",
-            "i16" => "i16",
-            "i32" => "i32",
-            "i64" => "i64",
-            "i128" => "i128",
-
-            // Pointer-sized types
-            "iptr" or "uptr" => "i64", // TODO: Make platform-dependent
-
-            // Floating-point types
-            "half" => "half",
-            "float" => "float",
-            "double" => "double",
-            "fp128" => "fp128",
-
-            // Pointer type
-            "ptr" => "ptr",
-
-            // Default: return as-is
-            _ => intrinsicType
-        };
-    }
-
-    /// <summary>
-    /// Checks if an LLVM type is a floating-point type.
-    /// </summary>
-    private static bool IsFloatLLVMType(string llvmType)
-    {
-        return llvmType is "half" or "float" or "double" or "fp128";
-    }
-
-    /// <summary>
-    /// Checks if an LLVM type is a signed integer type.
-    /// For intrinsics, we assume i* types are signed unless specified.
-    /// </summary>
-    private static bool IsSignedLLVMType(string llvmType)
-    {
-        // By convention, i* types are treated as signed
-        // u* types would be unsigned, but LLVM doesn't distinguish at the type level
-        return llvmType.StartsWith("i");
-    }
-
     /// <summary>
     /// Gets the bit width of an LLVM type.
     /// </summary>
@@ -2023,8 +1328,6 @@ public partial class LLVMCodeGenerator
             _ => throw new InvalidOperationException($"Unknown LLVM type for bitwidth: {llvmType}")
         };
     }
-
-    #endregion
 
     #region Additional Expression Types
 
@@ -2169,64 +1472,6 @@ public partial class LLVMCodeGenerator
         }
 
         throw new NotImplementedException("Tuple literal code generation not yet implemented");
-    }
-
-    #endregion
-
-    #region Native Calls
-
-    /// <summary>
-    /// Generates code for a native function call (@native.*).
-    /// Native calls are direct C ABI calls to external functions.
-    /// Argument types are inferred from the expressions at the call site.
-    /// </summary>
-    /// <param name="sb">StringBuilder to emit code to.</param>
-    /// <param name="native">The native call expression.</param>
-    /// <returns>The temporary variable holding the result (or "undef" for void).</returns>
-    private string EmitNativeCall(StringBuilder sb, NativeCallExpression native)
-    {
-        string funcName = native.FunctionName;
-
-        // Evaluate all arguments and collect their types
-        var argValues = new List<string>();
-        var argTypes = new List<string>();
-
-        foreach (var arg in native.Arguments)
-        {
-            string value = EmitExpression(sb, arg);
-            argValues.Add(value);
-
-            TypeInfo? argType = GetExpressionType(arg);
-            if (argType == null)
-            {
-                throw new InvalidOperationException($"Cannot determine type for argument in native call to '{funcName}'");
-            }
-            argTypes.Add(GetLLVMType(argType));
-        }
-
-        // Ensure the native function is declared with the inferred signature
-        string returnType = "ptr"; // Default return type for native functions
-        DeclareNativeFunction(funcName, argTypes, returnType);
-
-        // Emit the call
-        string result = NextTemp();
-        string args = BuildCallArgs(argTypes, argValues);
-        EmitLine(sb, $"  {result} = call {returnType} @{funcName}({args})");
-        return result;
-    }
-
-    /// <summary>
-    /// Declares a native function with the given signature if not already declared.
-    /// </summary>
-    private void DeclareNativeFunction(string funcName, List<string> argTypes, string returnType)
-    {
-        if (!_declaredNativeFunctions.Add(funcName))
-        {
-            return;
-        }
-
-        string argList = string.Join(", ", argTypes);
-        EmitLine(_functionDeclarations, $"declare {returnType} @{funcName}({argList})");
     }
 
     #endregion

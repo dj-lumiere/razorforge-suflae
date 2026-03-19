@@ -21,7 +21,10 @@ public partial class LLVMCodeGenerator
             // Intrinsic types map directly to LLVM
             IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic),
 
-            // Single-member-variable record wrappers → unwrap to underlying intrinsic
+            // Records with @llvm annotation → use backend type directly
+            RecordTypeInfo { HasDirectBackendType: true } record => record.LlvmType,
+
+            // Legacy single-member-variable wrappers → unwrap to underlying intrinsic
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetLLVMType(record.UnderlyingIntrinsic!),
 
@@ -189,6 +192,8 @@ public partial class LLVMCodeGenerator
         return type switch
         {
             IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic),
+            RecordTypeInfo { HasDirectBackendType: true } record =>
+                GetTypeSizeFromLlvmType(record.BackendType!),
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetTypeSize(record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record),
@@ -221,6 +226,28 @@ public partial class LLVMCodeGenerator
             "@intrinsic.f128" => 16,
             "@intrinsic.ptr" => 8,
             _ => 8
+        };
+    }
+
+    /// <summary>
+    /// Gets the size in bytes for an LLVM type string (from @llvm annotation).
+    /// </summary>
+    private static int GetTypeSizeFromLlvmType(string llvmType)
+    {
+        return llvmType switch
+        {
+            "i1" => 1,
+            "i8" => 1,
+            "i16" => 2,
+            "i32" => 4,
+            "i64" => 8,
+            "i128" => 16,
+            "half" => 2,
+            "float" => 4,
+            "double" => 8,
+            "fp128" => 16,
+            "ptr" => 8,
+            _ => throw new InvalidOperationException($"Unknown LLVM type for size calculation: {llvmType}")
         };
     }
 

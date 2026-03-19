@@ -75,8 +75,8 @@ public partial class LLVMCodeGenerator
     /// <param name="record">The record type info.</param>
     private void GenerateRecordType(RecordTypeInfo record)
     {
-        // Single-member-variable wrappers don't need struct types
-        if (record.IsSingleMemberVariableWrapper)
+        // Backend-annotated and single-member-variable wrappers don't need struct types
+        if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
         {
             return;
         }
@@ -454,10 +454,26 @@ public partial class LLVMCodeGenerator
                 "@intrinsic.ptr" => "null",
                 _ => "0"
             },
+            RecordTypeInfo { HasDirectBackendType: true } record =>
+                GetZeroValueForLlvmType(record.BackendType!),
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetZeroValue(record.UnderlyingIntrinsic!),
             EntityTypeInfo or ResidentTypeInfo => "null",
             _ => "zeroinitializer"
+        };
+    }
+
+    /// <summary>
+    /// Gets the zero value for an LLVM type string (from @llvm annotation).
+    /// </summary>
+    private static string GetZeroValueForLlvmType(string llvmType)
+    {
+        return llvmType switch
+        {
+            "i1" => "false",
+            "half" or "float" or "double" or "fp128" => "0.0",
+            "ptr" => "null",
+            _ => "0"
         };
     }
 
