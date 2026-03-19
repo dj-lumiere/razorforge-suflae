@@ -106,6 +106,18 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>
     public bool IsSynthesized { get; init; }
 
+    /// <summary>The async status of this routine (None, Suspended, Threaded).</summary>
+    public AsyncStatus AsyncStatus { get; init; } = AsyncStatus.None;
+
+    /// <summary>Whether this routine is a suspended (cooperative async) routine.</summary>
+    public bool IsSuspended => AsyncStatus == AsyncStatus.Suspended;
+
+    /// <summary>Whether this routine is a threaded (OS-thread) routine.</summary>
+    public bool IsThreaded => AsyncStatus == AsyncStatus.Threaded;
+
+    /// <summary>Whether this routine is any kind of async routine.</summary>
+    public bool IsAsync => AsyncStatus != AsyncStatus.None;
+
     /// <summary>
     /// For generic definitions, the original generic routine this was resolved from.
     /// </summary>
@@ -178,7 +190,8 @@ public sealed class RoutineInfo
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,
             IsSynthesized = IsSynthesized,
-            Storage = Storage
+            Storage = Storage,
+            AsyncStatus = AsyncStatus
         };
     }
 

@@ -598,6 +598,48 @@ public enum SemanticDiagnosticCode
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
     LambdaCaptureWithoutGiven = 610,
 
+    /// <summary>Using target must have __enter__/__exit__ for resource management.</summary>
+    UsingTargetMissingEnterExit = 612,
+
+    /// <summary>Using-bound token cannot escape the using block scope.</summary>
+    UsingTokenScopeEscape = 613,
+
+    /// <summary>Using-bound resource cannot escape the using block scope.</summary>
+    UsingResourceScopeEscape = 614,
+
+    /// <summary>Variable is a deadref after steal or ownership transfer — cannot be used.</summary>
+    UseAfterSteal = 615,
+
+    /// <summary>Partial access on entity (e.g., entity.field.view()) is not allowed.</summary>
+    PartialAccessOnEntity = 616,
+
+    /// <summary>Cannot downgrade token permission (e.g., .view() on Hijacked/Seized).</summary>
+    TokenDowngradeProhibited = 618,
+
+    /// <summary>Same entity cannot be hijacked multiple times in one call.</summary>
+    HijackDuplicateInCall = 620,
+
+    /// <summary>Cannot hijack an already-hijacked token.</summary>
+    ReHijackingProhibited = 621,
+
+    /// <summary>Migratable operation on collection during iteration is not allowed.</summary>
+    MigratableDuringIteration = 625,
+
+    /// <summary>Seized[T] cannot be copied or aliased.</summary>
+    SeizedCopyNotAllowed = 626,
+
+    /// <summary>Snatched[T] method calls require danger! block.</summary>
+    SnatchedRequiresDanger = 627,
+
+    /// <summary>.snatch() on Shared/Tracked requires danger! block.</summary>
+    SnatchRequiresDanger = 628,
+
+    /// <summary>inspect!() only valid with MultiRead lock policy.</summary>
+    InspectRequiresMultiRead = 629,
+
+    /// <summary>ReadOnly lock policy does not support seize!() or inspect!().</summary>
+    ReadOnlyRejectsLocking = 630,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MODIFICATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -727,6 +769,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot modify secret member variable in a 'with' expression.</summary>
     WithSecretMemberProhibited = 778,
 
+    /// <summary>Annotation arguments must be compile-time constant literals or identifiers.</summary>
+    AnnotationArgNotLiteral = 784,
+
     /// <summary>ValueTuple can only contain value types (records, primitives, choices).</summary>
     ValueTupleContainmentViolation = 779,
 
@@ -751,6 +796,27 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Data? / Maybe&lt;Data&gt; is not allowed — Data already holds None natively.</summary>
     NullableDataProhibited = 806,
+
+    /// <summary>Suflae cannot use C interop directly.</summary>
+    SuflaeNoCInterop = 810,
+
+    /// <summary>Only Level 3 expressions (identifiers, literals, member access, calls) allowed in f-text.</summary>
+    FTextExpressionLevelRestriction = 815,
+
+    /// <summary>Lazy Sequence[T] cannot escape the scope of the token it was created from.</summary>
+    SequenceScopeEscape = 820,
+
+    /// <summary>'emit' statement only allowed in generator routines.</summary>
+    EmitOutsideGenerator = 825,
+
+    /// <summary>Generator routine must return Sequence[T] type.</summary>
+    GeneratorReturnType = 826,
+
+    /// <summary>Suflae untyped parameter defaults to Data.</summary>
+    SuflaeImplicitDataType = 830,
+
+    /// <summary>Suflae type inference falls back to Data.</summary>
+    SuflaeDataFallback = 831,
 
     /// <summary>Routine cannot directly return Maybe&lt;T&gt;/Result&lt;T&gt;/Lookup&lt;T&gt; — use failable routines (!) instead.</summary>
     ErrorHandlingTypeAsReturnType = 807,
@@ -786,6 +852,18 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Waitfor expression used outside of suspended/threaded routine.</summary>
     WaitforOutsideSuspendedRoutine = 902,
+
+    /// <summary>Non-leaf waitfor requires 'within' timeout clause.</summary>
+    WaitforRequiresTimeout = 905,
+
+    /// <summary>Dangerous external routine called without danger! block.</summary>
+    DangerousExternalCallOutsideDanger = 910,
+
+    /// <summary>Channel send() makes source variable a deadref.</summary>
+    ChannelSendOwnershipTransfer = 915,
+
+    /// <summary>Resident .lock!<Policy>() can only be called at global initialization time.</summary>
+    ResidentLockTimingRestriction = 920,
 }
 
 public static class SemanticDiagnosticCodeExtensions

@@ -547,6 +547,16 @@ public sealed partial class SemanticAnalyzer
                 $"Const generic '{constraint.ParameterName}' requires type '{requiredTypeName}', got '{typeArg.Name}'.",
                 location);
         }
+
+        // #65: Choice const generic values must use fully-qualified names (e.g., Mode.DEBUG not bare DEBUG)
+        if (requiredType.Category == TypeCategory.Choice && !typeArg.Name.Contains('.'))
+        {
+            ReportError(
+                SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                $"Choice const generic '{constraint.ParameterName}' requires fully-qualified case name " +
+                $"(e.g., '{requiredTypeName}.{typeArg.Name}'), not bare '{typeArg.Name}'.",
+                location);
+        }
     }
 
     /// <summary>

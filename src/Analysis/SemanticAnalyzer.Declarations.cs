@@ -478,6 +478,16 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // #149: Invalid visibility combination (e.g., contradictory modifiers)
+        // Visibility is a single enum, but check for annotations that conflict with visibility
+        if (routine.Visibility == VisibilityModifier.Secret && ownerType == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidVisibilityCombination,
+                "Top-level routines cannot be 'secret'. Use 'core' for module-internal visibility.",
+                routine.Location);
+        }
+
         // The AST already stores names without the '!' suffix
         // (e.g., "get!" is parsed as Name="get", IsFailable=true)
         ModificationCategory declaredModification = routine.Annotations.Contains(item: "readonly")
@@ -500,7 +510,8 @@ public sealed partial class SemanticAnalyzer
             DeclaredModification = declaredModification,
             ModificationCategory = declaredModification,
             IsDangerous = routine.IsDangerous,
-            Storage = routine.Storage
+            Storage = routine.Storage,
+            AsyncStatus = routine.Async
         };
 
         // Check for duplicate routine definitions (#150)
@@ -679,6 +690,16 @@ public sealed partial class SemanticAnalyzer
 
     private void CollectExternalDeclaration(ExternalDeclaration external)
     {
+        // #123: Suflae cannot use C interop directly
+        if (_registry.Language == Language.Suflae)
+        {
+            ReportError(
+                SemanticDiagnosticCode.SuflaeNoCInterop,
+                $"Suflae does not support C interop. External declaration '{external.Name}' is not allowed. " +
+                "Use RazorForge for native interop.",
+                external.Location);
+        }
+
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             Kind = RoutineKind.External,
@@ -1499,8 +1520,18 @@ public sealed partial class SemanticAnalyzer
         {
             if (param.Type == null)
             {
-                // Type inference required - handle later
-                parameters.Add(item: new ParameterInfo(name: param.Name, type: ErrorTypeInfo.Instance));
+                // #36: Suflae untyped parameters default to Data
+                if (_registry.Language == Language.Suflae)
+                {
+                    TypeSymbol dataType = _registry.LookupType(name: "Data") ?? ErrorTypeInfo.Instance;
+                    parameters.Add(item: new ParameterInfo(name: param.Name, type: dataType));
+                }
+                else
+                {
+                    // Type inference required - handle later
+                    parameters.Add(item: new ParameterInfo(name: param.Name, type: ErrorTypeInfo.Instance));
+                }
+
                 continue;
             }
 

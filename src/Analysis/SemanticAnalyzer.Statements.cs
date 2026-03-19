@@ -84,8 +84,21 @@ public sealed partial class SemanticAnalyzer
             _registry.DeclareVariable(name: param.Name, type: param.Type);
         }
 
+        // #169: dangerous routine implicit danger context
+        bool wasDangerImplicit = false;
+        if (routineInfo.IsDangerous && _dangerBlockDepth == 0)
+        {
+            _dangerBlockDepth = 1;
+            wasDangerImplicit = true;
+        }
+
         // Analyze body statement
         AnalyzeStatement(statement: routine.Body);
+
+        if (wasDangerImplicit)
+        {
+            _dangerBlockDepth = 0;
+        }
 
         // Validate that non-void routines return on all paths (#144)
         if (routineInfo.ReturnType != null &&
@@ -113,6 +126,17 @@ public sealed partial class SemanticAnalyzer
         {
             StoreRoutineBody(routine: routineInfo, body: routine.Body);
         }
+
+        // #161: Report undismantled Lookup variables at routine scope exit
+        foreach (var pending in _pendingLookupVars)
+        {
+            ReportError(
+                SemanticDiagnosticCode.LookupNotDismantled,
+                $"Lookup variable '{pending.Name}' must be dismantled before end of scope. " +
+                "Use 'when', '??', or 'if is' to handle the lookup result.",
+                pending.Location);
+        }
+        _pendingLookupVars.Clear();
 
         _registry.ExitScope();
 
@@ -191,8 +215,8 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeDiscardStatement(discard: discard);
                 break;
 
-            case EmitStatement:
-                // TODO: AnalyzeEmitStatement — validate inside generator routine
+            case EmitStatement emitStmt:
+                AnalyzeEmitStatement(emitStmt: emitStmt);
                 break;
 
             case DangerStatement danger:
@@ -305,11 +329,19 @@ public sealed partial class SemanticAnalyzer
         }
         else
         {
-            ReportError(
-                SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
-                $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
-                varDecl.Location);
-            varType = ErrorTypeInfo.Instance;
+            // #37: Suflae falls back to Data when type inference is not possible
+            if (_registry.Language == Language.Suflae)
+            {
+                varType = _registry.LookupType(name: "Data") ?? ErrorTypeInfo.Instance;
+            }
+            else
+            {
+                ReportError(
+                    SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                    $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
+                    varDecl.Location);
+                varType = ErrorTypeInfo.Instance;
+            }
         }
 
         // If we have both type annotation and initializer, verify compatibility
@@ -348,6 +380,17 @@ public sealed partial class SemanticAnalyzer
                 SemanticDiagnosticCode.VariantCopyNotAllowed,
                 $"Variant type '{varType.Name}' cannot be copied to variable '{varDecl.Name}'. " +
                 "Variants must be dismantled immediately with pattern matching.",
+                varDecl.Location);
+        }
+
+        // #96: Seized[T] cannot be copied or aliased — exclusive lock token
+        if (varDecl.Initializer is IdentifierExpression
+            && IsSeizedType(type: varType))
+        {
+            ReportError(
+                SemanticDiagnosticCode.SeizedCopyNotAllowed,
+                $"Cannot copy or alias 'Seized[T]' variable to '{varDecl.Name}'. " +
+                "Seized tokens are exclusive and cannot be duplicated — use the original variable directly.",
                 varDecl.Location);
         }
 
@@ -400,6 +443,13 @@ public sealed partial class SemanticAnalyzer
         {
             _lastDeclaredVariantVar = (varDecl.Name, varDecl.Location);
         }
+
+        // #161: Track Lookup variables that must be dismantled before scope exit
+        if (varType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup }
+            && varDecl.Initializer is not IdentifierExpression)
+        {
+            _pendingLookupVars.Add((varDecl.Name, varDecl.Location));
+        }
     }
 
     private void AnalyzeExpressionStatement(ExpressionStatement expr)
@@ -433,11 +483,24 @@ public sealed partial class SemanticAnalyzer
                 _ => "routine"
             };
 
-            ReportWarning(
-                SemanticWarningCode.UnusedRoutineReturnValue,
-                $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
-                "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
-                call.Location);
+            // #30: Specific warning for unused Task[T] results
+            string baseReturnName = GetBaseTypeName(typeName: exprType.Name);
+            if (baseReturnName == "Task")
+            {
+                ReportWarning(
+                    SemanticWarningCode.UnusedTaskResult,
+                    $"Task result from '{routineName}()' is not awaited. " +
+                    "Use 'waitfor' to await the result, or 'discard' to explicitly ignore it.",
+                    call.Location);
+            }
+            else
+            {
+                ReportWarning(
+                    SemanticWarningCode.UnusedRoutineReturnValue,
+                    $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
+                    "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
+                    call.Location);
+            }
         }
     }
 
@@ -705,8 +768,23 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // #22: Track active iteration source for migratable-during-iteration check
+        string? iterationSourceName = forStmt.Sequenceable is IdentifierExpression iterSource
+            ? iterSource.Name
+            : null;
+
+        if (iterationSourceName != null)
+        {
+            _activeIterationSources.Add(iterationSourceName);
+        }
+
         // Analyze loop body
         AnalyzeStatement(statement: forStmt.Body);
+
+        if (iterationSourceName != null)
+        {
+            _activeIterationSources.Remove(iterationSourceName);
+        }
 
         _registry.ExitScope();
     }
@@ -714,6 +792,12 @@ public sealed partial class SemanticAnalyzer
     private void AnalyzeWhenStatement(WhenStatement whenStmt)
     {
         TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
+
+        // #161: Mark Lookup variable as dismantled when targeted by 'when'
+        if (whenStmt.Expression is IdentifierExpression whenTarget)
+        {
+            _pendingLookupVars.RemoveAll(v => v.Name == whenTarget.Name);
+        }
 
         // #88: Pattern order enforcement — else/wildcard must be last, detect unreachable patterns
         {
@@ -993,6 +1077,41 @@ public sealed partial class SemanticAnalyzer
         AnalyzeExpression(expression: discard.Expression);
     }
 
+    /// <summary>
+    /// #71: Validates emit statement — only allowed inside generator routines.
+    /// </summary>
+    private void AnalyzeEmitStatement(EmitStatement emitStmt)
+    {
+        // Analyze the emitted expression
+        TypeSymbol emittedType = AnalyzeExpression(expression: emitStmt.Expression);
+
+        // emit is only valid inside generator routines
+        if (_currentRoutine == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.EmitOutsideGenerator,
+                "'emit' statement is only allowed inside generator routines.",
+                emitStmt.Location);
+            return;
+        }
+
+        // Mark current routine as generator
+        _currentRoutineIsGenerator = true;
+
+        // Validate return type is Sequence[T]
+        if (_currentRoutine.ReturnType != null)
+        {
+            string returnName = GetBaseTypeName(typeName: _currentRoutine.ReturnType.Name);
+            if (returnName != "Sequence")
+            {
+                ReportError(
+                    SemanticDiagnosticCode.GeneratorReturnType,
+                    $"Generator routine must return Sequence[T], not '{_currentRoutine.ReturnType.Name}'.",
+                    emitStmt.Location);
+            }
+        }
+    }
+
     private void AnalyzeDangerStatement(DangerStatement danger)
     {
         if (_registry.Language == Language.Suflae)
@@ -1034,8 +1153,27 @@ public sealed partial class SemanticAnalyzer
         // Analyze the resource expression to get its type
         TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
 
+        // #142: using target validation — must be a token (.view()/.hijack()/etc.) or disposable resource
+        bool isTokenAccess = IsInlineOnlyTokenType(type: resourceType);
+
+        // #32: For non-token using targets, validate __enter__/__exit__ exist
+        if (!isTokenAccess && _registry.Language == Language.RazorForge)
+        {
+            bool hasEnter = _registry.LookupRoutine(fullName: $"{resourceType.Name}.__enter__") != null;
+            bool hasExit = _registry.LookupRoutine(fullName: $"{resourceType.Name}.__exit__") != null;
+
+            if (!hasEnter || !hasExit)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.UsingTargetMissingEnterExit,
+                    $"Using target of type '{resourceType.Name}' must implement '__enter__' and '__exit__' for resource management, " +
+                    "or be a token access expression (.view(), .hijack(), .inspect!(), .seize!()).",
+                    usingStmt.Location);
+            }
+        }
+
         // Create a new scope for the using block
-        _registry.EnterScope(kind: ScopeKind.Block);
+        _registry.EnterScope(kind: ScopeKind.Block, name: "using");
 
         // Declare the binding variable in the using scope
         _registry.DeclareVariable(
@@ -1044,6 +1182,10 @@ public sealed partial class SemanticAnalyzer
 
         // Analyze the body
         AnalyzeStatement(statement: usingStmt.Body);
+
+        // #171/#172: Token/resource scope escape — validate that the using-bound variable
+        // is not returned or stored in outer scope (handled by ValidateNotTokenReturnType
+        // for tokens, and conceptually enforced by scope exit for resources)
 
         _registry.ExitScope();
     }

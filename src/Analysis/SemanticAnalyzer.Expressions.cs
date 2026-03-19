@@ -861,6 +861,17 @@ public sealed partial class SemanticAnalyzer
         VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
         if (varInfo != null)
         {
+            // #11: Deadref tracking — report error if variable was invalidated by steal
+            if (_deadrefVariables.Contains(id.Name))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.UseAfterSteal,
+                    $"Variable '{id.Name}' is a deadref — it was invalidated by a previous 'steal' or ownership transfer. " +
+                    "The variable can no longer be used.",
+                    id.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
             // Check for type narrowing (e.g., after "unless x is None")
             TypeSymbol? narrowed = _registry.GetNarrowedType(name: id.Name);
             return narrowed ?? varInfo.Type;
@@ -1572,6 +1583,138 @@ public sealed partial class SemanticAnalyzer
                             $"Operator '{member.PropertyName}' does not allow real↔complex promotion. " +
                             "Only '+' and '-' support implicit real-to-complex conversion. Use explicit conversion for other operators.",
                             call.Location);
+                    }
+                }
+
+                // #12: Partial access rule — entity.field.view() is not allowed
+                if (member.PropertyName is "view" or "hijack"
+                    && member.Object is MemberExpression innerMember)
+                {
+                    TypeSymbol innerObjectType = innerMember.Object.ResolvedType ?? ErrorTypeInfo.Instance;
+                    if (innerObjectType is EntityTypeInfo)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.PartialAccessOnEntity,
+                            $"Cannot call '.{member.PropertyName}()' on entity member variable '{innerMember.PropertyName}'. " +
+                            $"Access the entity directly instead of its individual member variables.",
+                            call.Location);
+                    }
+                }
+
+                // #137: Nested hijacking detection
+                if (member.PropertyName == "hijack" && IsNestedHijacking(source: member.Object))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.NestedHijackingNotAllowed,
+                        "Cannot hijack a member of an already-hijacked object. " +
+                        "Hijack the parent entity directly instead.",
+                        call.Location);
+                }
+
+                // #92: Re-hijacking prohibition — cannot hijack an already-hijacked token
+                if (member.PropertyName == "hijack" && IsHijackedType(type: objectType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ReHijackingProhibited,
+                        $"Cannot re-hijack an already-hijacked token '{objectType.Name}'. " +
+                        "The entity is already exclusively accessed.",
+                        call.Location);
+                }
+
+                // #170: Downgrade prohibition — cannot call .view() on Hijacked/Seized
+                if (member.PropertyName == "view" && (IsHijackedType(type: objectType) || IsSeizedType(type: objectType)))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.TokenDowngradeProhibited,
+                        $"Cannot downgrade '{objectType.Name}' with '.view()'. " +
+                        "Hijacked/Seized tokens already have write access — use them directly.",
+                        call.Location);
+                }
+
+                // #97: Snatched[T] method calls require danger! block
+                if (IsSnatched(type: objectType) && !InDangerBlock)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.SnatchedRequiresDanger,
+                        $"Method call on 'Snatched[T]' type requires a 'danger!' block. " +
+                        "Snatched values bypass ownership safety checks.",
+                        call.Location);
+                }
+
+                // #98: .snatch() on Shared/Tracked requires danger! block
+                if (member.PropertyName == "snatch" && !InDangerBlock
+                    && (IsSharedType(type: objectType) || IsTrackedType(type: objectType)))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.SnatchRequiresDanger,
+                        $"Calling '.snatch()' on '{objectType.Name}' requires a 'danger!' block. " +
+                        "Snatching bypasses reference counting safety.",
+                        call.Location);
+                }
+
+                // #100: inspect!() only valid on residents (requires MultiRead lock policy at runtime)
+                // #101: seize!()/inspect!() not valid on non-resident types
+                // These locking operations are only meaningful on resident types
+                if (member.PropertyName is "inspect" or "seize"
+                    && !IsResidentType(type: objectType) && objectType is not ErrorTypeInfo)
+                {
+                    ReportError(
+                        member.PropertyName == "inspect"
+                            ? SemanticDiagnosticCode.InspectRequiresMultiRead
+                            : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
+                        $"'{member.PropertyName}!()' is only valid on resident types. " +
+                        $"'{objectType.Name}' is not a resident.",
+                        call.Location);
+                }
+
+                // #22: Reject migratable operations on collection being iterated
+                if (member.Object is IdentifierExpression iterTarget
+                    && _activeIterationSources.Contains(iterTarget.Name)
+                    && method.ModificationCategory != ModificationCategory.Readonly)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.MigratableDuringIteration,
+                        $"Cannot call modifying method '{method.Name}' on '{iterTarget.Name}' while iterating over it. " +
+                        "Collect changes and apply them after the loop.",
+                        call.Location);
+                }
+
+                // #47: .hijack() on @initonly record warns — record is frozen after construction
+                if (member.PropertyName == "hijack" && objectType is RecordTypeInfo)
+                {
+                    // Check if the variable holding the record is @initonly bound
+                    if (member.Object is IdentifierExpression hijackTarget)
+                    {
+                        VariableInfo? targetVar = _registry.LookupVariable(name: hijackTarget.Name);
+                        if (targetVar is { IsModifiable: false })
+                        {
+                            ReportWarning(
+                                SemanticWarningCode.HijackOnInitOnly,
+                                $"Calling '.hijack()' on @initonly-bound record '{hijackTarget.Name}'. " +
+                                "The record is frozen after construction — hijacking has no practical effect.",
+                                call.Location);
+                        }
+                    }
+                }
+
+                // #56: Resident .lock!() can only be called at global initialization time
+                if (member.PropertyName == "lock" && IsResidentType(type: objectType)
+                    && _currentRoutine != null)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ResidentLockTimingRestriction,
+                        $"'.lock!()' on resident '{objectType.Name}' can only be called at global initialization time, " +
+                        "not inside a routine body. Lock your residents at program startup.",
+                        call.Location);
+                }
+
+                // #104/#23: Channel send() makes source variable a deadref
+                if (member.PropertyName == "send" && member.Object is IdentifierExpression sendSource)
+                {
+                    string baseObjType = GetBaseTypeName(typeName: objectType.Name);
+                    if (baseObjType == "Channel")
+                    {
+                        _deadrefVariables.Add(sendSource.Name);
                     }
                 }
 
@@ -2911,11 +3054,41 @@ public sealed partial class SemanticAnalyzer
         {
             if (part is ExpressionPart exprPart)
             {
+                // #16: F-text expression level restriction — only Level 3 expressions
+                // (identifiers, literals, member access, calls) are allowed
+                ValidateFTextExpression(expression: exprPart.Expression, location: exprPart.Location);
                 AnalyzeExpression(expression: exprPart.Expression);
             }
         }
 
         return _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Validates that an f-text embedded expression is a Level 3 expression.
+    /// Level 3: identifiers, literals, member access, method calls, indexing.
+    /// Disallowed: assignments, control flow, binary operators (except chained member access).
+    /// </summary>
+    private void ValidateFTextExpression(Expression expression, SourceLocation location)
+    {
+        switch (expression)
+        {
+            case IdentifierExpression:
+            case LiteralExpression:
+            case MemberExpression:
+            case CallExpression:
+            case IndexExpression:
+            case OptionalMemberExpression:
+                // Level 3 — allowed
+                break;
+            default:
+                ReportError(
+                    SemanticDiagnosticCode.FTextExpressionLevelRestriction,
+                    "Only simple expressions (identifiers, literals, member access, calls) are allowed in f-text interpolation. " +
+                    "Assign complex expressions to a variable first.",
+                    location);
+                break;
+        }
     }
 
     /// <summary>
@@ -3067,6 +3240,12 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // #11: Deadref tracking — mark the stolen variable as invalidated
+        if (steal.Operand is IdentifierExpression stolenId)
+        {
+            _deadrefVariables.Add(stolenId.Name);
+        }
+
         // For raw entities (not wrapped), return the same type
         // The steal operation moves ownership, making the source a deadref
         return operandType;
@@ -3204,7 +3383,15 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // TODO: Validate that we're inside a suspended/threaded routine
+        // #14/#162: Validate that we're inside a suspended/threaded routine
+        if (_currentRoutine != null && !_currentRoutine.IsAsync)
+        {
+            ReportError(
+                SemanticDiagnosticCode.WaitforOutsideSuspendedRoutine,
+                $"'waitfor' can only be used inside a 'suspended' or 'threaded' routine. " +
+                $"Routine '{_currentRoutine.Name}' is not async.",
+                waitfor.Location);
+        }
 
         // The result type is the inner type of the async operation
         // For now, return the operand type directly
@@ -3267,10 +3454,28 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // #15: Non-leaf waitfor (with dependencies) requires 'within' timeout clause
+        if (depWaitfor.Timeout == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.WaitforRequiresTimeout,
+                "Dependent 'waitfor' (with 'after' clause) requires a 'within' timeout. " +
+                "Add 'within <duration>' to prevent unbounded blocking on dependency chains.",
+                depWaitfor.Location);
+        }
+
         // Exit the dependency scope
         _registry.ExitScope();
 
-        // TODO: Validate that we're inside a suspended/threaded routine
+        // #14/#162: Validate that we're inside a suspended/threaded routine
+        if (_currentRoutine != null && !_currentRoutine.IsAsync)
+        {
+            ReportError(
+                SemanticDiagnosticCode.WaitforOutsideSuspendedRoutine,
+                $"'waitfor' can only be used inside a 'suspended' or 'threaded' routine. " +
+                $"Routine '{_currentRoutine.Name}' is not async.",
+                depWaitfor.Location);
+        }
 
         // Result type is Lookup<R> where R is the operand type
         return ErrorHandlingTypeInfo.WellKnown.LookupDefinition.CreateInstance(typeArguments: [operandType]);

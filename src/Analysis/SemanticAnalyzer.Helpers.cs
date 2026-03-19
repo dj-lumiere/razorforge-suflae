@@ -964,6 +964,38 @@ public sealed partial class SemanticAnalyzer
         return type.Name == "Hijacked";
     }
 
+    /// <summary>
+    /// Checks if a type is a Seized&lt;T&gt; token type.
+    /// </summary>
+    private static bool IsSeizedType(TypeSymbol type)
+    {
+        return type.Name == "Seized";
+    }
+
+    /// <summary>
+    /// Checks if a type is a Shared&lt;T&gt; handle type.
+    /// </summary>
+    private static bool IsSharedType(TypeSymbol type)
+    {
+        return type.Name == "Shared";
+    }
+
+    /// <summary>
+    /// Checks if a type is a Tracked&lt;T&gt; handle type.
+    /// </summary>
+    private static bool IsTrackedType(TypeSymbol type)
+    {
+        return type.Name == "Tracked";
+    }
+
+    /// <summary>
+    /// Checks if a type is a resident type.
+    /// </summary>
+    private static bool IsResidentType(TypeSymbol type)
+    {
+        return type is ResidentTypeInfo;
+    }
+
     #endregion
 
     #region Wrapper Type Forwarding

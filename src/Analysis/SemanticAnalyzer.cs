@@ -74,6 +74,18 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Tracks the last variant variable declared, for immediate dismantling check (#58).</summary>
     private (string Name, SourceLocation Location)? _lastDeclaredVariantVar;
 
+    /// <summary>Tracks Lookup variables that must be dismantled before scope exit (#161).</summary>
+    private readonly List<(string Name, SourceLocation Location)> _pendingLookupVars = [];
+
+    /// <summary>Tracks variables invalidated by steal/ownership transfer (#11).</summary>
+    private readonly HashSet<string> _deadrefVariables = [];
+
+    /// <summary>Tracks the current for-loop iteration variable names for migratable check (#22).</summary>
+    private readonly HashSet<string> _activeIterationSources = [];
+
+    /// <summary>Whether the current routine is a generator (uses emit).</summary>
+    private bool _currentRoutineIsGenerator;
+
     #endregion
 
     #region Constructor
