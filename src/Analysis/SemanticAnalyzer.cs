@@ -86,6 +86,12 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Whether the current routine is a generator (uses emit).</summary>
     private bool _currentRoutineIsGenerator;
 
+    /// <summary>Tracks lock policy per variable for lock policy validation (#19).</summary>
+    private readonly Dictionary<string, string> _variableLockPolicies = [];
+
+    /// <summary>Temporary: last share[Policy]() call info, propagated in variable declaration (#19).</summary>
+    private (string SourceVar, string Policy)? _lastSharePolicy;
+
     #endregion
 
     #region Constructor

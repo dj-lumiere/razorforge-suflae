@@ -438,6 +438,13 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
+        // #19: Propagate lock policy from share[Policy]() to the declared variable
+        if (_lastSharePolicy != null && varDecl.Initializer is GenericMethodCallExpression { MethodName: "share" })
+        {
+            _variableLockPolicies[varDecl.Name] = _lastSharePolicy.Value.Policy;
+            _lastSharePolicy = null;
+        }
+
         // #58: Track variant variable declaration for immediate dismantling check
         if (varType is VariantTypeInfo && varDecl.Initializer is not IdentifierExpression)
         {

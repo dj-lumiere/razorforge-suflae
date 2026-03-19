@@ -1652,19 +1652,51 @@ public sealed partial class SemanticAnalyzer
                         call.Location);
                 }
 
-                // #100: inspect!() only valid on residents (requires MultiRead lock policy at runtime)
-                // #101: seize!()/inspect!() not valid on non-resident types
-                // These locking operations are only meaningful on resident types
+                // #100/#101: inspect!/seize! only valid on locked residents or Shared entity handles
                 if (member.PropertyName is "inspect" or "seize"
-                    && !IsResidentType(type: objectType) && objectType is not ErrorTypeInfo)
+                    && !IsResidentType(type: objectType) && !IsSharedType(type: objectType)
+                    && objectType is not ErrorTypeInfo)
                 {
                     ReportError(
                         member.PropertyName == "inspect"
                             ? SemanticDiagnosticCode.InspectRequiresMultiRead
                             : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                        $"'{member.PropertyName}!()' is only valid on resident types. " +
-                        $"'{objectType.Name}' is not a resident.",
+                        $"'{member.PropertyName}!()' is only valid on locked residents or Shared handles. " +
+                        $"'{objectType.Name}' is neither.",
                         call.Location);
+                }
+
+                // #19: Lock policy validation — inspect!/seize! must match the lock policy
+                if (member.PropertyName is "inspect" or "seize"
+                    && member.Object is IdentifierExpression lockPolicyTarget
+                    && _variableLockPolicies.TryGetValue(lockPolicyTarget.Name, out string? policy))
+                {
+                    if (member.PropertyName == "inspect" && policy == "Exclusive")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.InspectRequiresMultiRead,
+                            $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses Exclusive lock policy. " +
+                            "Exclusive locks do not support concurrent readers. Use 'seize!()' instead.",
+                            call.Location);
+                    }
+
+                    if (member.PropertyName == "seize" && policy == "ReadOnly")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ReadOnlyRejectsLocking,
+                            $"Cannot use 'seize!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
+                            "ReadOnly does not support exclusive write access. Use 'inspect!()' instead.",
+                            call.Location);
+                    }
+
+                    if (member.PropertyName == "inspect" && policy == "ReadOnly")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ReadOnlyRejectsLocking,
+                            $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
+                            "ReadOnly data does not need locking — use '.view()' instead.",
+                            call.Location);
+                    }
                 }
 
                 // #22: Reject migratable operations on collection being iterated
@@ -2874,6 +2906,21 @@ public sealed partial class SemanticAnalyzer
         foreach (TypeExpression typeArg in generic.TypeArguments)
         {
             typeArgs.Add(item: ResolveType(typeExpr: typeArg));
+        }
+
+        // #19: Track lock policy from lock![Policy]() on residents
+        if (generic.MethodName == "lock" && generic.IsMemoryOperation
+            && typeArgs.Count > 0 && generic.Object is IdentifierExpression lockTarget)
+        {
+            _variableLockPolicies[lockTarget.Name] = typeArgs[0].Name;
+        }
+
+        // #19: Track lock policy from share[Policy]() on entities — stored temporarily
+        // on the source variable; propagated to the declared variable in AnalyzeVariableDeclaration
+        if (generic.MethodName == "share" && typeArgs.Count > 0
+            && generic.Object is IdentifierExpression shareTarget)
+        {
+            _lastSharePolicy = (shareTarget.Name, typeArgs[0].Name);
         }
 
         // Look up the method
