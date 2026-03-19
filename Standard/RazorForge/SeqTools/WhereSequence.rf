@@ -1,0 +1,33 @@
+# RazorForge WhereSequence[T] - Lazy filtering
+# where(predicate) keeps matching items, where_not(predicate) keeps non-matching
+
+module SeqTools
+
+entity WhereSequence[T] obeys Sequenceable[T]
+  secret source: Sequenceable[T]
+  secret predicate: Routine[(T,), Bool]
+  secret inverted: Bool
+
+routine WhereSequence[T].__seq__() -> WhereEmitter[T]
+  return WhereEmitter[T](source: me.source.__seq__(), predicate: me.predicate, inverted: me.inverted)
+
+entity WhereEmitter[T] obeys SequenceEmitter[T]
+  secret source: SequenceEmitter[T]
+  secret predicate: Routine[(T,), Bool]
+  secret inverted: Bool
+
+emitting routine WhereEmitter[T].__next__() -> T
+  loop
+    var item = me.source.__next__()
+    var matches = me.predicate(item)
+    if me.inverted
+      matches = not matches
+    if matches
+      emit item
+      return
+
+routine Sequenceable[T].where(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
+  return WhereSequence[T](source: me, predicate: predicate, inverted: false)
+
+routine Sequenceable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
+  return WhereSequence[T](source: me, predicate: predicate, inverted: true)

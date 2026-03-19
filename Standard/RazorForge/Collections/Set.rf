@@ -20,7 +20,7 @@ preset SET_INITIAL_BUCKETS: UAddr = 16uaddr
 # Load factor threshold for rehashing (as percentage)
 preset SET_LOAD_FACTOR: UAddr = 75uaddr
 
-entity Set[T]
+entity Set[T] obeys Sequenceable[T]
 needs T obeys Hashable, Comparable
   secret buckets: List[SortedSet[T]]
   secret count: UAddr

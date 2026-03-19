@@ -4,7 +4,7 @@
 
 module Collections
 
-entity List[T]
+entity List[T] obeys Sequenceable[T]
   secret data: Snatched[T]       # Pointer to heap-allocated array
   secret count: U64              # Current number of elements
   secret capacity: U64           # Total allocated capacity
