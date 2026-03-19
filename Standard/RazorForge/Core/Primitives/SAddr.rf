@@ -8,9 +8,10 @@
 # TODO: Add "namespace Core" once tuple destructuring is implemented in codegen
 # Currently blocked by functions using var (result, overflow) = add_overflow[SAddr](...)
 module Core
-# Core SAddr type definition - maps to LLVM iptr/isize
+# Core SAddr type definition - maps to LLVM i64 (64-bit target)
+@llvm("i64")
 record SAddr obeys SignedIntegral, Ordered, ConstCompatible
-  value: @intrinsic.iptr
+  pass
 
 # ============================================================================
 # Creators

@@ -2,8 +2,9 @@
 # Maps directly to LLVM i128 type using compiler intrinsics
 module Core
 # Core U128 type definition - maps to LLVM i128
+@llvm("i128")
 record U128 obeys UnsignedIntegral, Ordered, ConstCompatible
-  value: @intrinsic.i128
+  pass
 
 # Constants for U128 limits
 preset U128_MIN: U128 = 0_u128

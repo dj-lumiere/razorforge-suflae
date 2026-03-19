@@ -2,8 +2,9 @@
 # Maps directly to LLVM i32 type using compiler intrinsics
 module Core
 # Core U32 type definition - maps to LLVM i32
+@llvm("i32")
 record U32 obeys UnsignedIntegral, Ordered, ConstCompatible
-  value: @intrinsic.i32
+  pass
 
 # Constants for U32 limits
 preset U32_MIN: U32 = 0_u32

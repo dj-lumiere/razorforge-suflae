@@ -798,68 +798,6 @@ public record GenericMemberExpression(
     }
 }
 
-/// <summary>
-/// Expression for builder intrinsic function calls.
-/// Intrinsics map directly to low-level operations and are only available in danger! blocks.
-/// </summary>
-/// <param name="IntrinsicName">Name of the intrinsic operation (e.g., "load", "add.wrapping", "icmp.slt")</param>
-/// <param name="TypeArguments">Type parameters for the intrinsic (e.g., &lt;T&gt; or &lt;T, U&gt;)</param>
-/// <param name="Arguments">Arguments passed to the intrinsic</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Examples:
-/// <list type="bullet">
-/// <item>@intrinsic.load&lt;s32&gt;(addr) - Load s32 from memory address</item>
-/// <item>@intrinsic.add.wrapping&lt;i32&gt;(a, b) - Wrapping addition</item>
-/// <item>@intrinsic.icmp.slt&lt;i64&gt;(x, y) - Signed less than comparison</item>
-/// <item>@intrinsic.bitcast&lt;f32, u32&gt;(value) - Type punning (reinterpret bits)</item>
-/// </list>
-/// All intrinsics must be called within danger! blocks and are validated at build time.
-/// </remarks>
-public record IntrinsicCallExpression(
-    string IntrinsicName,
-    List<string> TypeArguments,
-    List<Expression> Arguments,
-    SourceLocation Location) : Expression(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitIntrinsicCallExpression(node: this);
-    }
-}
-
-/// <summary>
-/// Expression for native function calls via FFI.
-/// Native calls invoke C library functions and are only available in danger! blocks.
-/// </summary>
-/// <param name="FunctionName">Name of the native function to call (e.g., "rf_bigint_new", "malloc", "free")</param>
-/// <param name="Arguments">Arguments passed to the native function</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Examples:
-/// <list type="bullet">
-/// <item>@native.rf_bigint_new() - Create a new LibTomMath integer</item>
-/// <item>@native.rf_bigint_add(result, a, b) - Add two arbitrary precision integers</item>
-/// <item>@native.malloc(size) - Allocate memory</item>
-/// <item>@native.free(ptr) - Free memory</item>
-/// </list>
-/// All native calls must be called within danger! blocks.
-/// The builder will emit external function declarations for these calls.
-/// </remarks>
-public record NativeCallExpression(
-    string FunctionName,
-    List<TypeExpression>? TypeArguments,
-    List<Expression> Arguments,
-    SourceLocation Location) : Expression(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitNativeCallExpression(node: this);
-    }
-}
-
 #endregion
 
 #region Ownership Transfer Expressions

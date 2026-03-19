@@ -53,8 +53,6 @@ public sealed partial class SemanticAnalyzer
             NamedArgumentExpression named => AnalyzeExpression(expression: named.Value),
             GenericMethodCallExpression generic => AnalyzeGenericMethodCallExpression(generic: generic),
             GenericMemberExpression genericMember => AnalyzeGenericMemberExpression(genericMember: genericMember),
-            IntrinsicCallExpression intrinsic => AnalyzeIntrinsicCallExpression(intrinsic: intrinsic),
-            NativeCallExpression native => AnalyzeNativeCallExpression(native: native),
             IsPatternExpression isPat => AnalyzeIsPatternExpression(isPat: isPat),
             FlagsTestExpression flagsTest => AnalyzeFlagsTestExpression(flagsTest: flagsTest),
             StealExpression steal => AnalyzeStealExpression(steal: steal),
@@ -2329,20 +2327,6 @@ public sealed partial class SemanticAnalyzer
                 CollectIdentifiersRecursive(expression: genericMember.Object, identifiers: identifiers);
                 break;
 
-            case IntrinsicCallExpression intrinsic:
-                foreach (Expression arg in intrinsic.Arguments)
-                {
-                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
-                }
-                break;
-
-            case NativeCallExpression native:
-                foreach (Expression arg in native.Arguments)
-                {
-                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
-                }
-                break;
-
             case TypeConversionExpression conv:
                 CollectIdentifiersRecursive(expression: conv.Expression, identifiers: identifiers);
                 break;
@@ -3014,56 +2998,6 @@ public sealed partial class SemanticAnalyzer
         // Look up the member with type arguments
         // TODO: Implement proper generic member resolution
 
-        return ErrorTypeInfo.Instance;
-    }
-
-    private TypeSymbol AnalyzeIntrinsicCallExpression(IntrinsicCallExpression intrinsic)
-    {
-        // Intrinsic calls require being in a danger block
-        if (!InDangerBlock)
-        {
-            ReportError(
-                SemanticDiagnosticCode.IntrinsicOutsideDanger,
-                $"Intrinsic call '@intrinsic.{intrinsic.IntrinsicName}' can only be used inside a danger block.",
-                intrinsic.Location);
-        }
-
-        foreach (Expression arg in intrinsic.Arguments)
-        {
-            AnalyzeExpression(expression: arg);
-        }
-
-        // Return type depends on the specific intrinsic
-        // For now, return based on type arguments if available
-        if (intrinsic.TypeArguments.Count > 0)
-        {
-            TypeSymbol? type = _registry.LookupType(name: intrinsic.TypeArguments[0]);
-            if (type != null)
-            {
-                return type;
-            }
-        }
-
-        return ErrorTypeInfo.Instance;
-    }
-
-    private TypeSymbol AnalyzeNativeCallExpression(NativeCallExpression native)
-    {
-        // Native calls require being in a danger block
-        if (!InDangerBlock)
-        {
-            ReportError(
-                SemanticDiagnosticCode.NativeOutsideDanger,
-                $"Native call '@native.{native.FunctionName}' can only be used inside a danger block.",
-                native.Location);
-        }
-
-        foreach (Expression arg in native.Arguments)
-        {
-            AnalyzeExpression(expression: arg);
-        }
-
-        // Native calls return platform-dependent types
         return ErrorTypeInfo.Instance;
     }
 

@@ -19,6 +19,16 @@ public sealed class RecordTypeInfo : TypeInfo
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
 
     /// <summary>
+    /// Backend type from @llvm("type") annotation. Null if not a backend-annotated type.
+    /// </summary>
+    public string? BackendType { get; init; }
+
+    /// <summary>
+    /// Whether this record has a direct backend type mapping (via @llvm annotation).
+    /// </summary>
+    public bool HasDirectBackendType => BackendType != null;
+
+    /// <summary>
     /// Whether this is a single-member-variable record that wraps an intrinsic type.
     /// These records can be treated as their underlying LLVM type for operations.
     /// Examples: s32, bool, f64, uaddr
@@ -34,6 +44,7 @@ public sealed class RecordTypeInfo : TypeInfo
 
     /// <summary>
     /// The LLVM type representation for this record.
+    /// For @llvm-annotated records, uses the backend type directly.
     /// For single-member-variable wrappers, this is the intrinsic type (e.g., "i32").
     /// For multi-member-variable records, this is a struct type.
     /// </summary>
@@ -41,6 +52,11 @@ public sealed class RecordTypeInfo : TypeInfo
     {
         get
         {
+            if (BackendType != null)
+            {
+                return BackendType;
+            }
+
             if (UnderlyingIntrinsic != null)
             {
                 return UnderlyingIntrinsic.LlvmType;

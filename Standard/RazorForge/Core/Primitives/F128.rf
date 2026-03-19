@@ -3,8 +3,9 @@
 module Core
 # Core F128 type definition - maps to LLVM fp128
 
+@llvm("fp128")
 record F128 obeys Numeric, Ordered
-  secret value: @intrinsic.fp128
+  pass
 
 # IEEE 754 quadruple precision constants
 preset F128_EPSILON: F128 = 1.925929944387235853055977942584927319e-34_f128

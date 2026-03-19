@@ -12,9 +12,9 @@ namespace Compiler.Parser;
 public partial class Parser
 {
     /// <summary>
-    /// Parses attributes like @crash_only, @inline, @[readonly, inline], etc.
+    /// Parses annotations like @crash_only, @inline, @llvm("i32"), @[readonly, inline], etc.
     /// Annotations are prefixed with @ and followed by an identifier, optionally with arguments.
-    /// Also supports compound attributes: @[attr1, attr2, attr3]
+    /// Also supports compound annotations: @[attr1, attr2, attr3]
     /// </summary>
     private List<string> ParseAnnotations()
     {
@@ -276,14 +276,14 @@ public partial class Parser
     ///   - Parse indented block
     /// </remarks>
     /// <param name="visibility">Access modifier for the routine.</param>
-    /// <param name="attributes">List of attributes applied to the routine.</param>
+    /// <param name="annotations">List of annotations applied to the routine.</param>
     /// <param name="storage">Storage class modifier (default: None, can be Common for type-level static).</param>
     /// <param name="asyncStatus">Async status of the routine.</param>
     /// <param name="isDangerous">Whether the routine is marked as dangerous (RF only).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     private RoutineDeclaration ParseRoutineDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open,
-        List<string>? attributes = null,
+        List<string>? annotations = null,
         StorageClass storage = StorageClass.None,
         AsyncStatus asyncStatus = AsyncStatus.None,
         bool isDangerous = false)
@@ -484,7 +484,7 @@ public partial class Parser
             ReturnType: returnType,
             Body: body,
             Visibility: visibility,
-            Annotations: attributes ?? [],
+            Annotations: annotations ?? [],
             Location: location,
             GenericParameters: genericParams,
             GenericConstraints: constraints,
@@ -612,7 +612,7 @@ public partial class Parser
     /// </summary>
     /// <param name="visibility">Access modifier for the record.</param>
     /// <returns>A <see cref="RecordDeclaration"/> AST node.</returns>
-    private RecordDeclaration ParseRecordDeclaration(VisibilityModifier visibility = VisibilityModifier.Open)
+    private RecordDeclaration ParseRecordDeclaration(VisibilityModifier visibility = VisibilityModifier.Open, List<string>? annotations = null)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -712,7 +712,8 @@ public partial class Parser
             Members: members,
             Visibility: visibility,
             Location: location,
-            HasPassBody: hasPass);
+            HasPassBody: hasPass,
+            Annotations: annotations);
     }
 
     /// <summary>
@@ -1113,7 +1114,7 @@ public partial class Parser
                 continue;
             }
 
-            // Parse optional attributes on routine signatures (e.g., @readonly)
+            // Parse optional annotations on routine signatures (e.g., @readonly)
             List<string> methodAnnotations = ParseAnnotations();
 
             // Skip newlines between annotations and routine keyword
@@ -1371,10 +1372,10 @@ public partial class Parser
     /// Supports variadic functions and calling convention specification.
     /// </summary>
     /// <param name="callingConvention">The calling convention (e.g., "C"). Defaults to "C" if null.</param>
-    /// <param name="attributes">Optional attributes applied to the external declaration.</param>
+    /// <param name="annotations">Optional annotations applied to the external declaration.</param>
     /// <param name="isDangerous">Whether the external routine is marked as dangerous.</param>
     /// <returns>An <see cref="ExternalDeclaration"/> AST node.</returns>
-    private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null, List<string>? attributes = null, bool isDangerous = false)
+    private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null, List<string>? annotations = null, bool isDangerous = false)
     {
         if (_language == Language.Suflae)
         {
@@ -1461,7 +1462,7 @@ public partial class Parser
             ReturnType: returnType,
             CallingConvention: effectiveCallingConvention,
             IsVariadic: isVariadic,
-            Annotations: attributes,
+            Annotations: annotations,
             IsDangerous: isDangerous,
             Location: location);
     }
@@ -1504,7 +1505,7 @@ public partial class Parser
                 bool routineDangerous = isDangerous || Match(type: TokenType.Dangerous);
                 Consume(type: TokenType.Routine, errorMessage: "Expected 'routine' inside external block");
                 declarations.Add(item: ParseExternalDeclaration(
-                    callingConvention: callingConvention, attributes: null, isDangerous: routineDangerous));
+                    callingConvention: callingConvention, annotations: null, isDangerous: routineDangerous));
             }
 
             if (Check(type: TokenType.Dedent))

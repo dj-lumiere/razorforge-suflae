@@ -3,8 +3,9 @@
 module Core
 # Core S16 type definition - maps to LLVM i16
 
+@llvm("i16")
 record S16 obeys SignedIntegral, Ordered, ConstCompatible
-  secret value: @intrinsic.i16
+  pass
 
 # Constants for S16 limits
 preset S16_MIN: S16 = -32768_s16

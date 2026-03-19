@@ -255,10 +255,26 @@ public sealed partial class SemanticAnalyzer
             GenericConstraints = record.GenericConstraints,
             Visibility = record.Visibility,
             Location = record.Location,
-            Module = GetCurrentModuleName()
+            Module = GetCurrentModuleName(),
+            BackendType = ExtractLlvmAnnotation(record.Annotations)
         };
 
         TryRegisterType(type: typeInfo, location: record.Location);
+    }
+
+    /// <summary>
+    /// Extracts the LLVM type from an @llvm("type") annotation.
+    /// Returns null if no @llvm annotation is present.
+    /// </summary>
+    private static string? ExtractLlvmAnnotation(List<string>? annotations)
+    {
+        if (annotations == null) return null;
+        foreach (var ann in annotations)
+        {
+            if (ann.StartsWith("llvm(") && ann.EndsWith(")"))
+                return ann[5..^1].Trim('"');
+        }
+        return null;
     }
 
     private void CollectEntityDeclaration(EntityDeclaration entity)

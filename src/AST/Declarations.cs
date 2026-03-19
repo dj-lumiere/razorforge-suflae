@@ -214,7 +214,8 @@ public record RecordDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location,
     List<GenericConstraintDeclaration>? GenericConstraints = null,
-    bool HasPassBody = false) : Declaration(Location: Location)
+    bool HasPassBody = false,
+    List<string>? Annotations = null) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {

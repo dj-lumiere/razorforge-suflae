@@ -2,8 +2,9 @@
 # Maps directly to LLVM i32 type and native machine integers
 module Core
 # Core S32 type definition - maps to LLVM i32
+@llvm("i32")
 record S32 obeys SignedIntegral, Ordered, ConstCompatible
-  secret value: @intrinsic.i32
+  pass
 
 # Constants for S32 limits
 preset S32_MIN: S32 = -2147483648_s32

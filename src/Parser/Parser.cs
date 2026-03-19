@@ -186,7 +186,7 @@ public partial class Parser
     ///   preset       - Build-time constant
     ///
     /// MODIFIERS (optional, parsed before declaration):
-    ///   attributes   - @crash_only, @inline, @intrinsic, etc.
+    ///   annotations   - @crash_only, @inline, @llvm("i32"), etc.
     ///   visibility   - secret, posted, open, external
     ///   storage      - common, global
     ///
@@ -255,15 +255,15 @@ public partial class Parser
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // PARSE MODIFIERS (attributes, visibility, storage class)
+        // PARSE MODIFIERS (annotations, visibility, storage class)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Parse attributes (e.g., @inline, @crash_only, @intrinsic("name"))
-        List<string> attributes = ParseAnnotations();
+        // Parse annotations (e.g., @inline, @crash_only, @llvm("i32"))
+        List<string> annotations = ParseAnnotations();
 
-        // Skip newlines between attributes and the declaration they modify
+        // Skip newlines between annotations and the declaration they modify
         // e.g., @readonly\nroutine foo() should work
-        if (attributes.Count > 0)
+        if (annotations.Count > 0)
         {
             while (Match(type: TokenType.Newline))
             {
@@ -274,10 +274,10 @@ public partial class Parser
         // Parse visibility and storage class modifiers
         var (visibility, storage) = ParseModifiers();
 
-        // Define declaration with attributes (e.g., @config(target: "windows") define CLong as S32)
+        // Define declaration with annotations (e.g., @config(target: "windows") define CLong as S32)
         if (Match(type: TokenType.Define))
         {
-            // TODO: Pass attributes to DefineDeclaration when supported
+            // TODO: Pass annotations to DefineDeclaration when supported
             return ParseDefineDeclaration();
         }
 
@@ -328,7 +328,7 @@ public partial class Parser
             if (Match(type: TokenType.Routine))
             {
                 return ParseExternalDeclaration(
-                    callingConvention: callingConvention, attributes: attributes, isDangerous: isDangerous);
+                    callingConvention: callingConvention, annotations: annotations, isDangerous: isDangerous);
             }
         }
 
@@ -410,7 +410,7 @@ public partial class Parser
                     "'global' can only be used for file-scope static variables",
                     fileName, CurrentToken.Line, CurrentToken.Column, _language);
             }
-            return ParseRoutineDeclaration(visibility: visibility, attributes: attributes, storage: storage, asyncStatus: asyncStatus, isDangerous: isDangerous);
+            return ParseRoutineDeclaration(visibility: visibility, annotations: annotations, storage: storage, asyncStatus: asyncStatus, isDangerous: isDangerous);
         }
 
         // If we consumed 'suspended'/'threaded' but no 'routine' follows, that's an error
@@ -452,7 +452,7 @@ public partial class Parser
 
         if (Match(type: TokenType.Record))
         {
-            return ParseRecordDeclaration(visibility: visibility);
+            return ParseRecordDeclaration(visibility: visibility, annotations: annotations);
         }
 
         // RF-only: Resident declarations (singleton static types)
@@ -493,8 +493,8 @@ public partial class Parser
                 $"({validDeclarations})");
         }
 
-        // If we have attributes but no declaration, that's an error
-        if (attributes.Count > 0)
+        // If we have annotations but no declaration, that's an error
+        if (annotations.Count > 0)
         {
             throw ThrowParseError(GrammarDiagnosticCode.AnnotationsWithoutDeclaration,
                 "Annotations must be followed by a declaration (routine, entity, record, etc.)");

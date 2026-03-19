@@ -3,8 +3,9 @@
 module Core
 # Core F16 type definition - maps to LLVM half
 
+@llvm("half")
 record F16 obeys Numeric, Ordered
-  secret value: @intrinsic.half
+  pass
 
 # IEEE 754 half precision constants
 preset F16_EPSILON: F16 = 9.765625e-4_f16

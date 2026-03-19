@@ -550,7 +550,8 @@ public sealed class StdlibLoader
             Visibility = record.Visibility,
             MemberVariables = memberVariables,
             ImplementedProtocols = protocols,
-            GenericParameters = record.GenericParameters
+            GenericParameters = record.GenericParameters,
+            BackendType = ExtractLlvmAnnotation(record.Annotations)
         };
 
         try
@@ -889,5 +890,20 @@ public sealed class StdlibLoader
 
         // Fallback to current directory
         return Path.Combine(Directory.GetCurrentDirectory(), "Standard");
+    }
+
+    /// <summary>
+    /// Extracts the LLVM type from an @llvm("type") annotation.
+    /// Returns null if no @llvm annotation is present.
+    /// </summary>
+    private static string? ExtractLlvmAnnotation(List<string>? annotations)
+    {
+        if (annotations == null) return null;
+        foreach (var ann in annotations)
+        {
+            if (ann.StartsWith("llvm(") && ann.EndsWith(")"))
+                return ann[5..^1].Trim('"');
+        }
+        return null;
     }
 }

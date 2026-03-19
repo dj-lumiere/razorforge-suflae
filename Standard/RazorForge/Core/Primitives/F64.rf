@@ -3,8 +3,9 @@
 module Core
 # Core F64 type definition - maps to LLVM double
 
+@llvm("double")
 record F64 obeys Numeric, Ordered
-  secret value: @intrinsic.double
+  pass
 
 # IEEE 754 double precision constants
 preset F64_EPSILON: F64 = 2.220446049250313e-16_f64

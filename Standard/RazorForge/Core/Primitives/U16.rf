@@ -2,8 +2,9 @@
 # Maps directly to LLVM i16 type using compiler intrinsics
 module Core
 # Core U16 type definition - maps to LLVM i16
+@llvm("i16")
 record U16 obeys UnsignedIntegral, Ordered, ConstCompatible
-  value: @intrinsic.i16
+  pass
 
 # Constants for U16 limits
 preset U16_MIN: U16 = 0_u16

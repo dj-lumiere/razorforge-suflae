@@ -3,8 +3,9 @@
 module Core
 # Core F32 type definition - maps to LLVM float
 
+@llvm("float")
 record F32 obeys Numeric, Ordered
-  secret value: @intrinsic.float
+  pass
 
 # IEEE 754 single precision constants
 preset F32_EPSILON: F32 = 1.1920929e-7_f32

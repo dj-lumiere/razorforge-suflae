@@ -3,8 +3,9 @@
 module Core
 # Core S8 type definition - maps to LLVM i8
 
+@llvm("i8")
 record S8 obeys SignedIntegral, Ordered, ConstCompatible
-  secret value: @intrinsic.i8
+  pass
 
 # Constants for S8 limits
 preset S8_MIN: S8 = -128_s8

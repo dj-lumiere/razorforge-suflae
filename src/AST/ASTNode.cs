@@ -237,16 +237,6 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the generic member expression</returns>
     T VisitGenericMemberExpression(GenericMemberExpression node);
 
-    /// <summary>Visits an intrinsic call expression node (@intrinsic.* operations)</summary>
-    /// <param name="node">The intrinsic call expression to visit</param>
-    /// <returns>Result of visiting the intrinsic call expression</returns>
-    T VisitIntrinsicCallExpression(IntrinsicCallExpression node);
-
-    /// <summary>Visits a native call expression node (@native.* function calls)</summary>
-    /// <param name="node">The native call expression to visit</param>
-    /// <returns>Result of visiting the native call expression</returns>
-    T VisitNativeCallExpression(NativeCallExpression node);
-
     /// <summary>Visits an is-pattern expression node (pattern matching like 'value is Point (x, y)')</summary>
     /// <param name="node">The is-pattern expression to visit</param>
     /// <returns>Result of visiting the is-pattern expression</returns>

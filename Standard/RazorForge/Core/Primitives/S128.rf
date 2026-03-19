@@ -2,8 +2,9 @@
 # Maps directly to LLVM i128 type using compiler intrinsics
 module Core
 # Core S128 type definition - maps to LLVM i128
+@llvm("i128")
 record S128 obeys SignedIntegral, Ordered, ConstCompatible
-  value: @intrinsic.i128
+  pass
 
 # Constants for S128 limits
 preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128

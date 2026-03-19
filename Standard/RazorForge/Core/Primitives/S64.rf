@@ -4,8 +4,9 @@
 module Core
 
 # Core S64 type definition - maps to LLVM i64
+@llvm("i64")
 record S64 obeys SignedIntegral, Ordered, ConstCompatible
-  secret value: @intrinsic.i64
+  pass
 
 # Constants for S64 limits
 preset S64_MIN: S64 = -9_223_372_036_854_775_808_s64
