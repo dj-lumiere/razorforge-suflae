@@ -1756,6 +1756,67 @@ public sealed partial class SemanticAnalyzer
                 // Return type is Blank if not specified
                 return method.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
+            else
+            {
+                // #78: Method-chain constructor — "42".S32!() → S32.__create__!(from: "42")
+                string propName = member.PropertyName;
+                bool isFailable = propName.EndsWith(value: '!');
+                string potentialTypeName = isFailable ? propName[..^1] : propName;
+
+                TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
+                if (targetType != null)
+                {
+                    // Look up the creator on the target type
+                    string creatorName = isFailable ? "__create__!" : "__create__";
+                    RoutineInfo? creator = _registry.LookupRoutine(fullName: $"{potentialTypeName}.{creatorName}");
+
+                    if (creator != null)
+                    {
+                        // Validate single non-me parameter
+                        var nonMeParams = creator.Parameters
+                            .Where(predicate: p => p.Name != "me")
+                            .ToList();
+
+                        if (nonMeParams.Count != 1)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.MethodChainMultiArg,
+                                $"Method-chain constructor '{potentialTypeName}' requires exactly one non-'me' parameter, " +
+                                $"but '__create__' has {nonMeParams.Count}.",
+                                call.Location);
+                            return ErrorTypeInfo.Instance;
+                        }
+
+                        // Validate no extra args passed in the call
+                        if (call.Arguments.Count > 0)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.MethodChainMultiArg,
+                                $"Method-chain constructor '{potentialTypeName}' takes no additional arguments — " +
+                                "the object itself is the argument.",
+                                call.Location);
+                            return ErrorTypeInfo.Instance;
+                        }
+
+                        // Type-check the object expression against the constructor parameter
+                        if (!IsAssignableTo(source: objectType, target: nonMeParams[0].Type))
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.ArgumentTypeMismatch,
+                                $"Cannot convert '{objectType.Name}' to '{nonMeParams[0].Type.Name}' " +
+                                $"for method-chain constructor '{potentialTypeName}'.",
+                                call.Location);
+                        }
+
+                        if (creator.IsFailable && _currentRoutine != null)
+                        {
+                            _currentRoutine.HasFailableCalls = true;
+                        }
+
+                        return targetType;
+                    }
+                }
+            }
         }
 
         // Analyze callee expression (lambda or other callable)

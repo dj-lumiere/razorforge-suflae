@@ -421,8 +421,10 @@ public partial class Parser
                 else
                 {
                     // Regular parameter: name: Type = default
+                    // Varargs parameter: name...: Type
                     // allowKeywords=true lets us use 'from', 'to', etc. as param names
                     string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name", allowKeywords: true);
+                    bool isVariadic = Match(type: TokenType.DotDotDot);
                     TypeExpression? paramType = null;
                     Expression? defaultValue = null;
 
@@ -439,7 +441,8 @@ public partial class Parser
                     parameters.Add(item: new Parameter(Name: paramName,
                         Type: paramType,
                         DefaultValue: defaultValue,
-                        Location: GetLocation()));
+                        Location: GetLocation(),
+                        IsVariadic: isVariadic));
                 }
             } while (Match(type: TokenType.Comma));
         }

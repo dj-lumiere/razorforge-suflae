@@ -571,4 +571,48 @@ public class ProtocolImplementationTests
     }
 
     #endregion
+
+    #region Multiple Protocol Generic Constraints (#62)
+
+    [Fact]
+    public void Parse_InlineMultipleObeys_Parses()
+    {
+        // routine foo[T obeys Displayable, Comparable](item: T)
+        string source = """
+                        protocol Displayable
+                          @readonly
+                          routine Me.display() -> Text
+
+                        protocol Comparable
+                          @readonly
+                          routine Me.__cmp__(other: Me) -> S32
+
+                        routine foo[T obeys Displayable, Comparable](item: T) -> Text
+                          return item.display()
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_NeedsMultipleObeys_Parses()
+    {
+        // routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
+        string source = """
+                        protocol Displayable
+                          @readonly
+                          routine Me.display() -> Text
+
+                        protocol Comparable
+                          @readonly
+                          routine Me.__cmp__(other: Me) -> S32
+
+                        routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
+                          return item.display()
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    #endregion
 }

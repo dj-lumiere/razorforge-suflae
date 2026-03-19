@@ -674,7 +674,8 @@ public record Parameter(
     string Name,
     TypeExpression? Type,
     Expression? DefaultValue,
-    SourceLocation Location);
+    SourceLocation Location,
+    bool IsVariadic = false);
 
 #endregion
 

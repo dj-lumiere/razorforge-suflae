@@ -501,6 +501,7 @@ public sealed partial class SemanticAnalyzer
             Kind = kind,
             OwnerType = ownerType,
             IsFailable = routine.IsFailable,
+            IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = routine.GenericParameters,
             GenericConstraints = routine.GenericConstraints,
             Visibility = routine.Visibility,
@@ -513,6 +514,30 @@ public sealed partial class SemanticAnalyzer
             Storage = routine.Storage,
             AsyncStatus = routine.Async
         };
+
+        // #74: Validate varargs placement
+        var varargParams = routine.Parameters.Where(predicate: p => p.IsVariadic).ToList();
+        if (varargParams.Count > 1)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VarargsMultiple,
+                "Only one varargs parameter is allowed per routine.",
+                varargParams[1].Location);
+        }
+
+        if (varargParams.Count >= 1)
+        {
+            int varargIndex = routine.Parameters.IndexOf(item: varargParams[0]);
+            bool isFirstNonMe = varargIndex == 0 ||
+                (varargIndex == 1 && routine.Parameters[0].Name == "me");
+            if (!isFirstNonMe)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.VarargsNotFirst,
+                    "Varargs parameter must be the first parameter (or second after 'me').",
+                    varargParams[0].Location);
+            }
+        }
 
         // Check for duplicate routine definitions (#150)
         if (_registry.LookupRoutine(fullName: routineInfo.FullName) != null)
@@ -1536,6 +1561,16 @@ public sealed partial class SemanticAnalyzer
             }
 
             TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+
+            // #74: Varargs parameter gets wrapped as List[T]
+            if (param.IsVariadic)
+            {
+                TypeSymbol? listDef = _registry.LookupType(name: "List");
+                if (listDef != null)
+                {
+                    paramType = _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [paramType]);
+                }
+            }
 
             // Validate that variant types cannot be used as parameter types
             if (paramType is VariantTypeInfo)
