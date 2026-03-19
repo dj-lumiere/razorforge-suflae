@@ -127,33 +127,38 @@ routine S16.__mod__(you: S16) -> S16
   return srem[S16](me, you)
 
 routine S16.__neg__() -> S16
-  return neg[S16](me)
+  return sub[S16](0, me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
 routine S16.__add_wrap__(you: S16) -> S16
-  return add_wrapping[S16](me, you)
+  return add[S16](me, you)
 
 routine S16.__sub_wrap__(you: S16) -> S16
-  return sub_wrapping[S16](me, you)
+  return sub[S16](me, you)
 
 routine S16.__mul_wrap__(you: S16) -> S16
-  return mul_wrapping[S16](me, you)
+  return mul[S16](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
 routine S16.__add_clamp__(you: S16) -> S16
-  return add_clamp[S16](me, you)
+  return sadd_sat[S16](me, you)
 
 routine S16.__sub_clamp__(you: S16) -> S16
-  return sub_clamp[S16](me, you)
+  return ssub_sat[S16](me, you)
 
 routine S16.__mul_clamp__(you: S16) -> S16
-  return mul_clamp[S16](me, you)
+  var wide = mul[S32](sext[S16, S32](me), sext[S16, S32](you))
+  if icmp_sgt[S32](wide, 32767_s32)
+    return S16_MAX
+  if icmp_slt[S32](wide, -32768_s32)
+    return S16_MIN
+  return trunc[S32, S16](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -186,8 +191,8 @@ routine S16.__pow_wrap__!(exp: S16) -> S16
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul_wrapping[S16](result, base)
-    base = mul_wrapping[S16](base, base)
+      result = mul[S16](result, base)
+    base = mul[S16](base, base)
     e = e >> 1
   return result
 
@@ -202,8 +207,8 @@ routine S16.__pow_clamp__!(exp: S16) -> S16
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul_clamp[S16](result, base)
-    base = mul_clamp[S16](base, base)
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
     e = e >> 1
   return result
 
@@ -221,7 +226,7 @@ routine S16.__xor__(you: S16) -> S16
   return xor[S16](me, you)
 
 routine S16.__not__() -> S16
-  return bit_not[S16](me)
+  return xor[S16](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)

@@ -88,19 +88,19 @@ routine F128.__create__(from: UAddr) -> F128
 # ============================================================================
 
 routine F128.__add__(you: F128) -> F128
-  return add_wrapping[F128](me, you)
+  return fadd[F128](me, you)
 
 routine F128.__sub__(you: F128) -> F128
-  return sub_wrapping[F128](me, you)
+  return fsub[F128](me, you)
 
 routine F128.__mul__(you: F128) -> F128
-  return mul_wrapping[F128](me, you)
+  return fmul[F128](me, you)
 
 routine F128.__truediv__(you: F128) -> F128
-  return div_wrapping[F128](me, you)
+  return fdiv[F128](me, you)
 
 routine F128.__neg__() -> F128
-  return sub_wrapping[F128](0.0_f128, me)
+  return fneg[F128](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

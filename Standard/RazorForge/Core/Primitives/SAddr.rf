@@ -104,13 +104,13 @@ routine SAddr.__create__(from: UAddr) -> SAddr
 # ============================================================================
 
 routine SAddr.__add_wrap__(you: SAddr) -> SAddr
-  return add_wrapping[SAddr](me, you)
+  return add[SAddr](me, you)
 
 routine SAddr.__sub_wrap__(you: SAddr) -> SAddr
-  return sub_wrapping[SAddr](me, you)
+  return sub[SAddr](me, you)
 
 routine SAddr.__mul_wrap__(you: SAddr) -> SAddr
-  return mul_wrapping[SAddr](me, you)
+  return mul[SAddr](me, you)
 
 routine SAddr.__floordiv_wrap__(you: SAddr) -> SAddr
   return sdiv[SAddr](me, you)
@@ -163,7 +163,7 @@ routine SAddr.__xor__(you: SAddr) -> SAddr
   return xor[SAddr](me, you)
 
 routine SAddr.__not__() -> SAddr
-  return bit_not[SAddr](me)
+  return xor[SAddr](me, -1)
 
 # ============================================================================
 # Unary Operations
@@ -171,7 +171,7 @@ routine SAddr.__not__() -> SAddr
 
 routine SAddr.__neg__() -> SAddr
   # Note: negation can overflow for MIN_VALUE, but we allow it (wraps)
-  return neg[SAddr](me)
+  return sub[SAddr](0, me)
 
 # ============================================================================
 # Comparison Operations

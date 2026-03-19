@@ -87,19 +87,19 @@ routine F32.__create__(from: UAddr) -> F32
 # ============================================================================
 
 routine F32.__add__(you: F32) -> F32
-  return add_wrapping[F32](me, you)
+  return fadd[F32](me, you)
 
 routine F32.__sub__(you: F32) -> F32
-  return sub_wrapping[F32](me, you)
+  return fsub[F32](me, you)
 
 routine F32.__mul__(you: F32) -> F32
-  return mul_wrapping[F32](me, you)
+  return fmul[F32](me, you)
 
 routine F32.__truediv__(you: F32) -> F32
-  return div_wrapping[F32](me, you)
+  return fdiv[F32](me, you)
 
 routine F32.__neg__() -> F32
-  return sub_wrapping[F32](0.0_f32, me)
+  return fneg[F32](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

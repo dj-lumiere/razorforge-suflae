@@ -89,19 +89,19 @@ routine F16.__create__(from: UAddr) -> F16
 # ============================================================================
 
 routine F16.__add__(you: F16) -> F16
-  return add_wrapping[F16](me, you)
+  return fadd[F16](me, you)
 
 routine F16.__sub__(you: F16) -> F16
-  return sub_wrapping[F16](me, you)
+  return fsub[F16](me, you)
 
 routine F16.__mul__(you: F16) -> F16
-  return mul_wrapping[F16](me, you)
+  return fmul[F16](me, you)
 
 routine F16.__truediv__(you: F16) -> F16
-  return div_wrapping[F16](me, you)
+  return fdiv[F16](me, you)
 
 routine F16.__neg__() -> F16
-  return sub_wrapping[F16](0.0_f16, me)
+  return fneg[F16](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

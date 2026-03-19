@@ -135,26 +135,29 @@ routine U8.__mod__!(you: U8) -> U8
 # ============================================================================
 
 routine U8.__add_wrap__(you: U8) -> U8
-  return add_wrapping[U8](me, you)
+  return add[U8](me, you)
 
 routine U8.__sub_wrap__(you: U8) -> U8
-  return sub_wrapping[U8](me, you)
+  return sub[U8](me, you)
 
 routine U8.__mul_wrap__(you: U8) -> U8
-  return mul_wrapping[U8](me, you)
+  return mul[U8](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
 routine U8.__add_clamp__(you: U8) -> U8
-  return add_clamp[U8](me, you)
+  return uadd_sat[U8](me, you)
 
 routine U8.__sub_clamp__(you: U8) -> U8
-  return sub_clamp[U8](me, you)
+  return usub_sat[U8](me, you)
 
 routine U8.__mul_clamp__(you: U8) -> U8
-  return mul_clamp[U8](me, you)
+  var wide = mul[U16](zext[U8, U16](me), zext[U8, U16](you))
+  if icmp_ugt[U16](wide, 255_u16)
+    return U8_MAX
+  return trunc[U16, U8](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -183,8 +186,8 @@ routine U8.__pow_wrap__!(exp: U8) -> U8
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul_wrapping[U8](result, base)
-    base = mul_wrapping[U8](base, base)
+      result = mul[U8](result, base)
+    base = mul[U8](base, base)
     e = e >> 1
   return result
 
@@ -197,8 +200,8 @@ routine U8.__pow_clamp__!(exp: U8) -> U8
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul_clamp[U8](result, base)
-    base = mul_clamp[U8](base, base)
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
     e = e >> 1
   return result
 
@@ -216,7 +219,7 @@ routine U8.__xor__(you: U8) -> U8
   return xor[U8](me, you)
 
 routine U8.__not__() -> U8
-  return bit_not[U8](me)
+  return xor[U8](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)

@@ -133,26 +133,29 @@ routine U16.__mod__!(you: U16) -> U16
 # ============================================================================
 
 routine U16.__add_wrap__(you: U16) -> U16
-  return add_wrapping[U16](me, you)
+  return add[U16](me, you)
 
 routine U16.__sub_wrap__(you: U16) -> U16
-  return sub_wrapping[U16](me, you)
+  return sub[U16](me, you)
 
 routine U16.__mul_wrap__(you: U16) -> U16
-  return mul_wrapping[U16](me, you)
+  return mul[U16](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
 routine U16.__add_clamp__(you: U16) -> U16
-  return add_clamp[U16](me, you)
+  return uadd_sat[U16](me, you)
 
 routine U16.__sub_clamp__(you: U16) -> U16
-  return sub_clamp[U16](me, you)
+  return usub_sat[U16](me, you)
 
 routine U16.__mul_clamp__(you: U16) -> U16
-  return mul_clamp[U16](me, you)
+  var wide = mul[U32](zext[U16, U32](me), zext[U16, U32](you))
+  if icmp_ugt[U32](wide, 65535_u32)
+    return U16_MAX
+  return trunc[U32, U16](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -181,8 +184,8 @@ routine U16.__pow_wrap__!(exp: U16) -> U16
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul_wrapping[U16](result, base)
-    base = mul_wrapping[U16](base, base)
+      result = mul[U16](result, base)
+    base = mul[U16](base, base)
     e = e >> 1
   return result
 
@@ -195,8 +198,8 @@ routine U16.__pow_clamp__!(exp: U16) -> U16
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul_clamp[U16](result, base)
-    base = mul_clamp[U16](base, base)
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
     e = e >> 1
   return result
 
@@ -214,7 +217,7 @@ routine U16.__xor__(you: U16) -> U16
   return xor[U16](me, you)
 
 routine U16.__not__() -> U16
-  return bit_not[U16](me)
+  return xor[U16](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)

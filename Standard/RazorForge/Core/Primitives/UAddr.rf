@@ -105,13 +105,13 @@ routine UAddr.__create__(from: UAddr) -> UAddr
 # ============================================================================
 
 routine UAddr.__add_wrap__(you: UAddr) -> UAddr
-  return add_wrapping[UAddr](me, you)
+  return add[UAddr](me, you)
 
 routine UAddr.__sub_wrap__(you: UAddr) -> UAddr
-  return sub_wrapping[UAddr](me, you)
+  return sub[UAddr](me, you)
 
 routine UAddr.__mul_wrap__(you: UAddr) -> UAddr
-  return mul_wrapping[UAddr](me, you)
+  return mul[UAddr](me, you)
 
 routine UAddr.__floordiv_wrap__(you: UAddr) -> UAddr
   return udiv[UAddr](me, you)
@@ -155,7 +155,7 @@ routine UAddr.__xor__(you: UAddr) -> UAddr
   return xor[UAddr](me, you)
 
 routine UAddr.__not__() -> UAddr
-  return bit_not[UAddr](me)
+  return xor[UAddr](me, -1)
 
 # ============================================================================
 # Comparison Operations

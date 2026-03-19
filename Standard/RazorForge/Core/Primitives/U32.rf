@@ -131,26 +131,29 @@ routine U32.__mod__!(you: U32) -> U32
 # ============================================================================
 
 routine U32.__add_wrap__(you: U32) -> U32
-  return add_wrapping[U32](me, you)
+  return add[U32](me, you)
 
 routine U32.__sub_wrap__(you: U32) -> U32
-  return sub_wrapping[U32](me, you)
+  return sub[U32](me, you)
 
 routine U32.__mul_wrap__(you: U32) -> U32
-  return mul_wrapping[U32](me, you)
+  return mul[U32](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
 routine U32.__add_clamp__(you: U32) -> U32
-  return add_clamp[U32](me, you)
+  return uadd_sat[U32](me, you)
 
 routine U32.__sub_clamp__(you: U32) -> U32
-  return sub_clamp[U32](me, you)
+  return usub_sat[U32](me, you)
 
 routine U32.__mul_clamp__(you: U32) -> U32
-  return mul_clamp[U32](me, you)
+  var wide = mul[U64](zext[U32, U64](me), zext[U32, U64](you))
+  if icmp_ugt[U64](wide, 4294967295_u64)
+    return U32_MAX
+  return trunc[U64, U32](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -179,8 +182,8 @@ routine U32.__pow_wrap__!(exp: U32) -> U32
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul_wrapping[U32](result, base)
-    base = mul_wrapping[U32](base, base)
+      result = mul[U32](result, base)
+    base = mul[U32](base, base)
     e = e >> 1
   return result
 
@@ -193,8 +196,8 @@ routine U32.__pow_clamp__!(exp: U32) -> U32
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul_clamp[U32](result, base)
-    base = mul_clamp[U32](base, base)
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
     e = e >> 1
   return result
 
@@ -212,7 +215,7 @@ routine U32.__xor__(you: U32) -> U32
   return xor[U32](me, you)
 
 routine U32.__not__() -> U32
-  return bit_not[U32](me)
+  return xor[U32](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)

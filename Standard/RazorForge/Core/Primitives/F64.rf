@@ -85,19 +85,19 @@ routine F64.__create__(from: UAddr) -> F64
 # ============================================================================
 
 routine F64.__add__(you: F64) -> F64
-  return add_wrapping[F64](me, you)
+  return fadd[F64](me, you)
 
 routine F64.__sub__(you: F64) -> F64
-  return sub_wrapping[F64](me, you)
+  return fsub[F64](me, you)
 
 routine F64.__mul__(you: F64) -> F64
-  return mul_wrapping[F64](me, you)
+  return fmul[F64](me, you)
 
 routine F64.__truediv__(you: F64) -> F64
-  return div_wrapping[F64](me, you)
+  return fdiv[F64](me, you)
 
 routine F64.__neg__() -> F64
-  return sub_wrapping[F64](0.0_f64, me)
+  return fneg[F64](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

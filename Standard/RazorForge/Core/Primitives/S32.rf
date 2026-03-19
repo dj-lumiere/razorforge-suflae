@@ -125,33 +125,38 @@ routine S32.__mod__!(you: S32) -> S32
   return srem[S32](me, you)
 
 routine S32.__neg__!() -> S32
-  return neg[S32](me)
+  return sub[S32](0, me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
 routine S32.__add_wrap__(you: S32) -> S32
-  return add_wrapping[S32](me, you)
+  return add[S32](me, you)
 
 routine S32.__sub_wrap__(you: S32) -> S32
-  return sub_wrapping[S32](me, you)
+  return sub[S32](me, you)
 
 routine S32.__mul_wrap__(you: S32) -> S32
-  return mul_wrapping[S32](me, you)
+  return mul[S32](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
 routine S32.__add_clamp__(you: S32) -> S32
-  return add_clamp[S32](me, you)
+  return sadd_sat[S32](me, you)
 
 routine S32.__sub_clamp__(you: S32) -> S32
-  return sub_clamp[S32](me, you)
+  return ssub_sat[S32](me, you)
 
 routine S32.__mul_clamp__(you: S32) -> S32
-  return mul_clamp[S32](me, you)
+  var wide = mul[S64](sext[S32, S64](me), sext[S32, S64](you))
+  if icmp_sgt[S64](wide, 2147483647_s64)
+    return S32_MAX
+  if icmp_slt[S64](wide, -2147483648_s64)
+    return S32_MIN
+  return trunc[S64, S32](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -184,8 +189,8 @@ routine S32.__pow_wrap__!(exp: S32) -> S32
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul_wrapping[S32](result, base)
-    base = mul_wrapping[S32](base, base)
+      result = mul[S32](result, base)
+    base = mul[S32](base, base)
     e = e >> 1
   return result
 
@@ -200,8 +205,8 @@ routine S32.__pow_clamp__!(exp: S32) -> S32
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul_clamp[S32](result, base)
-    base = mul_clamp[S32](base, base)
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
     e = e >> 1
   return result
 
@@ -219,7 +224,7 @@ routine S32.__xor__(you: S32) -> S32
   return xor[S32](me, you)
 
 routine S32.__not__() -> S32
-  return bit_not[S32](me)
+  return xor[S32](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -327,7 +332,7 @@ routine S32.signum() -> S32
 
 routine S32.is_power_of_two() -> Bool
   var is_pos = icmp_sgt[S32](me, 0_s32)
-  var minus_one = sub_wrapping[S32](me, 1_s32)
+  var minus_one = sub[S32](me, 1_s32)
   var anded = bit_and[S32](me, minus_one)
   var is_zero = icmp_eq[S32](anded, 0_s32)
   return is_pos and is_zero
