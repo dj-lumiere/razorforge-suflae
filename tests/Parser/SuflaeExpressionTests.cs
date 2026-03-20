@@ -910,11 +910,11 @@ public class SuflaeExpressionTests
                         """;
 
         var ast = ParseSuflae(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
-            as SyntaxTree.WithExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var withExpr = ((VariableDeclaration)varDecl.Declaration).Initializer
+            as WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
@@ -931,11 +931,11 @@ public class SuflaeExpressionTests
                         """;
 
         var ast = ParseSuflae(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
-            as SyntaxTree.WithExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var withExpr = ((VariableDeclaration)varDecl.Declaration).Initializer
+            as WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
@@ -979,16 +979,16 @@ public class SuflaeExpressionTests
                         """;
 
         var ast = ParseSuflae(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var initializer = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var initializer = ((VariableDeclaration)varDecl.Declaration).Initializer;
 
-        Assert.IsType<SyntaxTree.SliceExpression>(initializer);
-        var slice = (SyntaxTree.SliceExpression)initializer!;
-        Assert.IsType<SyntaxTree.IdentifierExpression>(slice.Object);
-        Assert.IsType<SyntaxTree.LiteralExpression>(slice.Start);
-        Assert.IsType<SyntaxTree.LiteralExpression>(slice.End);
+        Assert.IsType<SliceExpression>(initializer);
+        var slice = (SliceExpression)initializer!;
+        Assert.IsType<IdentifierExpression>(slice.Object);
+        Assert.IsType<LiteralExpression>(slice.Start);
+        Assert.IsType<LiteralExpression>(slice.End);
     }
 
     [Fact]

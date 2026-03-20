@@ -341,16 +341,16 @@ public sealed class StdlibLoader
             {
                 // Look up the registered protocol to get its FullName
                 var registeredProto = registry.LookupType(protocol.Name);
-                if (registeredProto is not SemanticAnalysis.Types.ProtocolTypeInfo)
+                if (registeredProto is not ProtocolTypeInfo)
                 {
                     continue;
                 }
 
-                var parentProtocols = new List<SemanticAnalysis.Types.ProtocolTypeInfo>();
+                var parentProtocols = new List<ProtocolTypeInfo>();
                 foreach (var parentExpr in protocol.ParentProtocols)
                 {
                     var parentType = ResolveSimpleType(registry, parentExpr);
-                    if (parentType is SemanticAnalysis.Types.ProtocolTypeInfo parentProto)
+                    if (parentType is ProtocolTypeInfo parentProto)
                     {
                         parentProtocols.Add(parentProto);
                     }
@@ -459,7 +459,7 @@ public sealed class StdlibLoader
     {
         // Parse method names like "S32.__add__" or "Type.method"
         string routineName = routine.Name;
-        SemanticAnalysis.Types.TypeInfo? ownerType = null;
+        TypeInfo? ownerType = null;
         string methodName = routineName;
 
         int dotIndex = routineName.IndexOf('.');
@@ -476,7 +476,7 @@ public sealed class StdlibLoader
         {
             var paramType = ResolveSimpleType(registry, param.Type);
             parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
-                paramType ?? SemanticAnalysis.Types.ErrorTypeInfo.Instance));
+                paramType ?? ErrorTypeInfo.Instance));
         }
 
         // Resolve return type
@@ -534,7 +534,7 @@ public sealed class StdlibLoader
         }
 
         // Resolve implemented protocols (obeys clause)
-        var protocols = new List<SemanticAnalysis.Types.TypeInfo>();
+        var protocols = new List<TypeInfo>();
         foreach (var protoExpr in record.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -544,7 +544,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new SemanticAnalysis.Types.RecordTypeInfo(record.Name)
+        var typeInfo = new RecordTypeInfo(record.Name)
         {
             Module = moduleName,
             Visibility = record.Visibility,
@@ -594,7 +594,7 @@ public sealed class StdlibLoader
         }
 
         // Resolve implemented protocols (obeys clause)
-        var protocols = new List<SemanticAnalysis.Types.TypeInfo>();
+        var protocols = new List<TypeInfo>();
         foreach (var protoExpr in entity.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -604,7 +604,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new SemanticAnalysis.Types.EntityTypeInfo(entity.Name)
+        var typeInfo = new EntityTypeInfo(entity.Name)
         {
             Module = moduleName,
             Visibility = entity.Visibility,
@@ -647,7 +647,7 @@ public sealed class StdlibLoader
         }
 
         // Resolve implemented protocols (obeys clause)
-        var protocols = new List<SemanticAnalysis.Types.TypeInfo>();
+        var protocols = new List<TypeInfo>();
         foreach (var protoExpr in resident.Protocols)
         {
             var protoType = ResolveSimpleType(registry, protoExpr);
@@ -657,7 +657,7 @@ public sealed class StdlibLoader
             }
         }
 
-        var typeInfo = new SemanticAnalysis.Types.ResidentTypeInfo(resident.Name)
+        var typeInfo = new ResidentTypeInfo(resident.Name)
         {
             Module = moduleName,
             Visibility = resident.Visibility,
@@ -682,16 +682,16 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<SemanticAnalysis.Types.ChoiceCaseInfo>();
+        var cases = new List<ChoiceCaseInfo>();
         foreach (var caseDecl in choice.Cases)
         {
-            cases.Add(new SemanticAnalysis.Types.ChoiceCaseInfo(caseDecl.Name)
+            cases.Add(new ChoiceCaseInfo(caseDecl.Name)
             {
                 Value = null // TODO: Extract from caseDecl.Value expression
             });
         }
 
-        var typeInfo = new SemanticAnalysis.Types.ChoiceTypeInfo(choice.Name)
+        var typeInfo = new ChoiceTypeInfo(choice.Name)
         {
             Module = moduleName, Visibility = choice.Visibility, Cases = cases
         };
@@ -710,13 +710,13 @@ public sealed class StdlibLoader
             return;
         }
 
-        var members = new List<SemanticAnalysis.Types.FlagsMemberInfo>();
+        var members = new List<FlagsMemberInfo>();
         for (int i = 0; i < flags.Members.Count; i++)
         {
-            members.Add(new SemanticAnalysis.Types.FlagsMemberInfo(flags.Members[i], i));
+            members.Add(new FlagsMemberInfo(flags.Members[i], i));
         }
 
-        var typeInfo = new SemanticAnalysis.Types.FlagsTypeInfo(flags.Name)
+        var typeInfo = new FlagsTypeInfo(flags.Name)
         {
             Module = moduleName, Visibility = flags.Visibility, Members = members
         };
@@ -737,24 +737,24 @@ public sealed class StdlibLoader
         }
 
         // Build cases list upfront
-        var cases = new List<SemanticAnalysis.Types.VariantCaseInfo>();
+        var cases = new List<VariantCaseInfo>();
         int tagValue = 0;
         foreach (var caseDecl in variant.Cases)
         {
             // Determine payload type from AssociatedTypes if any
-            SemanticAnalysis.Types.TypeInfo? payloadType = null;
+            TypeInfo? payloadType = null;
             if (caseDecl.AssociatedTypes != null)
             {
                 payloadType = ResolveSimpleType(registry, caseDecl.AssociatedTypes);
             }
 
-            cases.Add(new SemanticAnalysis.Types.VariantCaseInfo(caseDecl.Name)
+            cases.Add(new VariantCaseInfo(caseDecl.Name)
             {
                 PayloadType = payloadType, TagValue = tagValue++
             });
         }
 
-        var typeInfo = new SemanticAnalysis.Types.VariantTypeInfo(variant.Name)
+        var typeInfo = new VariantTypeInfo(variant.Name)
         {
             Module = moduleName,
             Cases = cases,
@@ -777,7 +777,7 @@ public sealed class StdlibLoader
         }
 
         // Build methods list upfront
-        var methods = new List<SemanticAnalysis.Types.ProtocolMethodInfo>();
+        var methods = new List<ProtocolMethodInfo>();
         foreach (var method in protocol.Methods)
         {
             // Strip "!" suffix and "Me." prefix from method name
@@ -792,7 +792,7 @@ public sealed class StdlibLoader
                 ? ResolveSimpleType(registry, method.ReturnType)
                 : null;
 
-            var parameterTypes = new List<SemanticAnalysis.Types.TypeInfo>();
+            var parameterTypes = new List<TypeInfo>();
             var parameterNames = new List<string>();
 
             foreach (var param in method.Parameters)
@@ -802,7 +802,7 @@ public sealed class StdlibLoader
 
                 // Handle the special 'Me' type (protocol self-type)
                 var paramType = param.Type?.Name == "Me"
-                    ? SemanticAnalysis.Types.ProtocolSelfTypeInfo.Instance
+                    ? ProtocolSelfTypeInfo.Instance
                     : ResolveSimpleType(registry, param.Type);
                 if (paramType != null)
                 {
@@ -826,7 +826,7 @@ public sealed class StdlibLoader
             });
         }
 
-        var typeInfo = new SemanticAnalysis.Types.ProtocolTypeInfo(protocol.Name)
+        var typeInfo = new ProtocolTypeInfo(protocol.Name)
         {
             Module = moduleName,
             Visibility = protocol.Visibility,
@@ -841,7 +841,7 @@ public sealed class StdlibLoader
     /// Resolves a simple type expression.
     /// Only handles intrinsic types and direct type references.
     /// </summary>
-    private static SemanticAnalysis.Types.TypeInfo? ResolveSimpleType(TypeRegistry registry,
+    private static TypeInfo? ResolveSimpleType(TypeRegistry registry,
         TypeExpression? typeExpr)
     {
         if (typeExpr == null) return null;

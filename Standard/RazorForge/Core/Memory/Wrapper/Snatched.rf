@@ -21,8 +21,9 @@
 # This is the "escape hatch" for unsafe code - use with extreme caution!
 module Core
 
+@llvm("ptr")
 record Snatched[T]
-  address: @intrinsic.ptr  # Public direct address access
+  pass
 
 dangerous routine T.get_address() -> UAddr
   return rf_address_of[T](me)
@@ -37,7 +38,7 @@ dangerous routine Snatched[T].read() -> T
 
 # Type-safe write (uses T from Snatched[T])
 dangerous routine Snatched[T].write(value: T)
-  store[T](me.address, value)
+  store[T](me, value)
   return
 
 # Volatile read (prevents compiler optimizations)
@@ -46,7 +47,7 @@ dangerous routine Snatched[T].volatile_read() -> T
 
 # Volatile write (prevents compiler optimizations)
 dangerous routine Snatched[T].volatile_write(value: T)
-  store_volatile[T](me.address, value)
+  store_volatile[T](me, value)
   return
 
 # Type-pun read - read as different type U

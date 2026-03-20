@@ -852,22 +852,22 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var varDeclTyped = (SyntaxTree.VariableDeclaration)varDecl.Declaration;
-        var binary = varDeclTyped.Initializer as SyntaxTree.BinaryExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var varDeclTyped = (VariableDeclaration)varDecl.Declaration;
+        var binary = varDeclTyped.Initializer as BinaryExpression;
 
         Assert.NotNull(binary);
         Assert.Equal(BinaryOperator.Subtract, binary!.Operator);
 
         // Left operand should be "3", not "-3"
-        var left = binary.Left as SyntaxTree.LiteralExpression;
+        var left = binary.Left as LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("3", left!.Value);
 
         // Right operand should be "2", not "-2"
-        var right = binary.Right as SyntaxTree.LiteralExpression;
+        var right = binary.Right as LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2", right!.Value);
     }
@@ -886,10 +886,10 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var literal = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.LiteralExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var literal = ((VariableDeclaration)varDecl.Declaration).Initializer as LiteralExpression;
 
         Assert.NotNull(literal);
         Assert.Equal("-2", literal!.Value);
@@ -909,21 +909,21 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var binary = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.BinaryExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var binary = ((VariableDeclaration)varDecl.Declaration).Initializer as BinaryExpression;
 
         Assert.NotNull(binary);
         Assert.Equal(BinaryOperator.Subtract, binary!.Operator);
 
         // Left operand should be "3"
-        var left = binary.Left as SyntaxTree.LiteralExpression;
+        var left = binary.Left as LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("3", left!.Value);
 
         // Right operand should be "2j", NOT "-2j"
-        var right = binary.Right as SyntaxTree.LiteralExpression;
+        var right = binary.Right as LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2j", right!.Value);
     }
@@ -942,21 +942,21 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var binary = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.BinaryExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var binary = ((VariableDeclaration)varDecl.Declaration).Initializer as BinaryExpression;
 
         Assert.NotNull(binary);
         Assert.Equal(BinaryOperator.Subtract, binary!.Operator);
 
         // Left operand should be "-3" (unary minus applied til literal)
-        var left = binary.Left as SyntaxTree.LiteralExpression;
+        var left = binary.Left as LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("-3", left!.Value);
 
         // Right operand should be "2", NOT "-2"
-        var right = binary.Right as SyntaxTree.LiteralExpression;
+        var right = binary.Right as LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2", right!.Value);
     }
@@ -975,21 +975,21 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var binary = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer as SyntaxTree.BinaryExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var binary = ((VariableDeclaration)varDecl.Declaration).Initializer as BinaryExpression;
 
         Assert.NotNull(binary);
         Assert.Equal(BinaryOperator.Add, binary!.Operator);
 
         // Left operand should be "3"
-        var left = binary.Left as SyntaxTree.LiteralExpression;
+        var left = binary.Left as LiteralExpression;
         Assert.NotNull(left);
         Assert.Equal("3", left!.Value);
 
         // Right operand should be "2"
-        var right = binary.Right as SyntaxTree.LiteralExpression;
+        var right = binary.Right as LiteralExpression;
         Assert.NotNull(right);
         Assert.Equal("2", right!.Value);
     }
@@ -1193,11 +1193,11 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
-            as SyntaxTree.WithExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var withExpr = ((VariableDeclaration)varDecl.Declaration).Initializer
+            as WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Equal(expected: 2, actual: withExpr!.Updates.Count);
@@ -1217,11 +1217,11 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
-            as SyntaxTree.WithExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var withExpr = ((VariableDeclaration)varDecl.Declaration).Initializer
+            as WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
@@ -1240,11 +1240,11 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var withExpr = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer
-            as SyntaxTree.WithExpression;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var withExpr = ((VariableDeclaration)varDecl.Declaration).Initializer
+            as WithExpression;
 
         Assert.NotNull(withExpr);
         Assert.Single(withExpr!.Updates);
@@ -1401,16 +1401,16 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var initializer = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var initializer = ((VariableDeclaration)varDecl.Declaration).Initializer;
 
-        Assert.IsType<SyntaxTree.SliceExpression>(initializer);
-        var slice = (SyntaxTree.SliceExpression)initializer!;
-        Assert.IsType<SyntaxTree.IdentifierExpression>(slice.Object);
-        Assert.IsType<SyntaxTree.LiteralExpression>(slice.Start);
-        Assert.IsType<SyntaxTree.LiteralExpression>(slice.End);
+        Assert.IsType<SliceExpression>(initializer);
+        var slice = (SliceExpression)initializer!;
+        Assert.IsType<IdentifierExpression>(slice.Object);
+        Assert.IsType<LiteralExpression>(slice.Start);
+        Assert.IsType<LiteralExpression>(slice.End);
     }
 
     [Fact]
@@ -1448,12 +1448,12 @@ public class ExpressionTests
                         """;
 
         var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<SyntaxTree.RoutineDeclaration>().First();
-        var block = (SyntaxTree.BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<SyntaxTree.DeclarationStatement>().First();
-        var initializer = ((SyntaxTree.VariableDeclaration)varDecl.Declaration).Initializer;
+        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
+        var block = (BlockStatement)routine.Body;
+        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
+        var initializer = ((VariableDeclaration)varDecl.Declaration).Initializer;
 
-        Assert.IsType<SyntaxTree.IndexExpression>(initializer);
+        Assert.IsType<IndexExpression>(initializer);
     }
 
     #endregion

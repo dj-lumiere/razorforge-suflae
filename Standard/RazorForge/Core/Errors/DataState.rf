@@ -1,6 +1,6 @@
 module Core
 
 choice DataState
-  VALID
-  ABSENT
-  ERROR
+  VALID: 1
+  ABSENT: 0
+  ERROR: -1

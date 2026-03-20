@@ -69,6 +69,15 @@ public partial class LLVMCodeGenerator
     /// <summary>The label of the current basic block (for phi node generation).</summary>
     private string _currentBlock = "entry";
 
+    /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
+    private readonly int _pointerBitWidth;
+
+    /// <summary>Alloca address for the emit slot in emitting routines (null outside emitting context).</summary>
+    private string? _emitSlotAddr;
+
+    /// <summary>LLVM type of the emit slot value.</summary>
+    private string? _emitSlotType;
+
     #endregion
 
     #region Constructor
@@ -79,11 +88,13 @@ public partial class LLVMCodeGenerator
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null)
+    /// <param name="pointerBitWidth">Pointer bit width for the target platform (64 for x86_64, 32 for x86).</param>
+    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
     {
         _program = program;
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
+        _pointerBitWidth = pointerBitWidth;
     }
 
     #endregion

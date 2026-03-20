@@ -2022,9 +2022,17 @@ public sealed partial class SemanticAnalyzer
                         MaybeRegisterBuiltin(owner: type, name: "id", returnType: s64Type,
                             existingMethods: existingMethods);
                     if (boolType != null)
+                    {
                         MaybeRegisterBuiltinWithParam(owner: type, name: "__eq__",
                             paramName: "you", paramType: type, returnType: boolType,
                             existingMethods: existingMethods);
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__same__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__notsame__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                    }
                     MaybeRegisterBuiltinFailable(owner: type, name: "copy!", returnType: type,
                         existingMethods: existingMethods);
                     break;
@@ -2034,9 +2042,17 @@ public sealed partial class SemanticAnalyzer
                         MaybeRegisterBuiltin(owner: type, name: "id", returnType: s64Type,
                             existingMethods: existingMethods);
                     if (boolType != null)
+                    {
                         MaybeRegisterBuiltinWithParam(owner: type, name: "__eq__",
                             paramName: "you", paramType: type, returnType: boolType,
                             existingMethods: existingMethods);
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__same__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                        MaybeRegisterBuiltinWithParam(owner: type, name: "__notsame__",
+                            paramName: "you", paramType: type, returnType: boolType,
+                            existingMethods: existingMethods);
+                    }
                     break;
 
                 case TypeCategory.Choice:

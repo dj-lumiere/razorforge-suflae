@@ -37,8 +37,16 @@ public partial class LLVMCodeGenerator
             // Residents → pointer to LLVM struct (same as entity at IR level)
             ResidentTypeInfo => "ptr",
 
+            // Wrappers (Viewed, Hijacked, Snatched, etc.) → all pointers at LLVM level
+            WrapperTypeInfo => "ptr",
+
             // Choices → underlying integer type (S64)
             ChoiceTypeInfo => "i64",
+
+            // Tuples → struct (value) or pointer (reference)
+            TupleTypeInfo { Kind: TupleKind.Value } tuple => GetTupleTypeName(tuple),
+            TupleTypeInfo { Kind: TupleKind.Fixed } tuple => GetTupleTypeName(tuple),
+            TupleTypeInfo => "ptr", // Reference tuples are heap-allocated
 
             // Variants → struct { tag, payload }
             VariantTypeInfo variant => GetVariantTypeName(variant),
@@ -67,7 +75,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Gets the LLVM type for an intrinsic type.
     /// </summary>
-    private static string GetIntrinsicLLVMType(IntrinsicTypeInfo intrinsic)
+    private string GetIntrinsicLLVMType(IntrinsicTypeInfo intrinsic)
     {
         return intrinsic.Name switch
         {
@@ -78,8 +86,8 @@ public partial class LLVMCodeGenerator
             "@intrinsic.i32" => "i32",
             "@intrinsic.i64" => "i64",
             "@intrinsic.i128" => "i128",
-            "@intrinsic.iptr" => "i64", // TODO: Target-dependent (i32 on 32-bit)
-            "@intrinsic.uptr" => "i64", // TODO: Target-dependent
+            "@intrinsic.iptr" => $"i{_pointerBitWidth}",
+            "@intrinsic.uptr" => $"i{_pointerBitWidth}",
 
             // Floating-point types
             "@intrinsic.f16" => "half",
@@ -153,6 +161,35 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Gets the LLVM struct type name for a tuple.
+    /// </summary>
+    private string GetTupleTypeName(TupleTypeInfo tuple)
+    {
+        // Build a name like %Tuple.S32_S64 from element types
+        var parts = new List<string>();
+        foreach (var elemType in tuple.ElementTypes)
+        {
+            parts.Add(MangleTypeName(elemType.Name));
+        }
+        return $"%Tuple.{string.Join("_", parts)}";
+    }
+
+    /// <summary>
+    /// Calculates the size of a tuple type (sum of element sizes with alignment).
+    /// </summary>
+    private int CalculateTupleSize(TupleTypeInfo tuple)
+    {
+        int size = 0;
+        foreach (var elemType in tuple.ElementTypes)
+        {
+            int elemSize = GetTypeSize(elemType);
+            size = AlignTo(size, Math.Min(elemSize, 8));
+            size += elemSize;
+        }
+        return AlignTo(size, 8);
+    }
+
+    /// <summary>
     /// Mangles a type name to be LLVM-compatible.
     /// Replaces brackets, commas, and spaces with underscores.
     /// </summary>
@@ -199,6 +236,8 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo record => CalculateRecordSize(record),
             EntityTypeInfo entity => CalculateEntitySize(entity),
             ResidentTypeInfo resident => CalculateResidentSize(resident),
+            TupleTypeInfo tuple => CalculateTupleSize(tuple),
+            WrapperTypeInfo => 8, // Pointer size
             ChoiceTypeInfo => 8, // i64 tag
             VariantTypeInfo variant => CalculateVariantSize(variant),
             _ => 8 // Default to pointer size
@@ -208,7 +247,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Gets the size in bytes for an intrinsic type.
     /// </summary>
-    private static int GetIntrinsicSize(IntrinsicTypeInfo intrinsic)
+    private int GetIntrinsicSize(IntrinsicTypeInfo intrinsic)
     {
         return intrinsic.Name switch
         {
@@ -218,8 +257,8 @@ public partial class LLVMCodeGenerator
             "@intrinsic.i32" => 4,
             "@intrinsic.i64" => 8,
             "@intrinsic.i128" => 16,
-            "@intrinsic.iptr" => 8,
-            "@intrinsic.uptr" => 8,
+            "@intrinsic.iptr" => _pointerBitWidth / 8,
+            "@intrinsic.uptr" => _pointerBitWidth / 8,
             "@intrinsic.f16" => 2,
             "@intrinsic.f32" => 4,
             "@intrinsic.f64" => 8,

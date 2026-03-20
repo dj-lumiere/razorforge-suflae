@@ -332,7 +332,7 @@ public partial class LLVMCodeGenerator
             LiteralExpression literal => EmitLiteral(sb, literal),
             IdentifierExpression identifier => EmitIdentifier(sb, identifier),
             MemberExpression memberAccess => EmitMemberVariableAccess(sb, memberAccess),
-            OptionalMemberExpression => throw new NotImplementedException("Optional chaining (?.) codegen not yet implemented"),
+            OptionalMemberExpression optMember => EmitOptionalMemberAccess(sb, optMember),
             CreatorExpression constructor => EmitConstructorCall(sb, constructor),
             CallExpression call => EmitCall(sb, call),
             BinaryExpression binary => EmitBinaryOp(sb, binary),
@@ -344,7 +344,9 @@ public partial class LLVMCodeGenerator
             StealExpression steal => EmitSteal(sb, steal),
             TupleLiteralExpression tuple => EmitTupleLiteral(sb, tuple),
             GenericMethodCallExpression generic => EmitGenericMethodCall(sb, generic),
-            InsertedTextExpression => throw new NotImplementedException("Text insertion codegen not yet implemented"),
+            InsertedTextExpression inserted => EmitInsertedText(sb, inserted),
+            ListLiteralExpression list => EmitListLiteral(sb, list),
+            FlagsTestExpression flagsTest => EmitFlagsTest(sb, flagsTest),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
     }
@@ -627,8 +629,7 @@ public partial class LLVMCodeGenerator
             BinaryOperator.IsNot => EmitChoiceIs(sb, binary, "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant("true"),
             BinaryOperator.NotObeys => EmitCompileTimeConstant("false"),
-            BinaryOperator.NoneCoalesce =>
-                throw new NotImplementedException("'??' operator codegen not yet implemented"),
+            BinaryOperator.NoneCoalesce => EmitNoneCoalesce(sb, binary),
             _ => throw new NotImplementedException(
                 $"Binary operator '{binary.Operator}' should have been desugared to a method call")
         };
@@ -822,8 +823,7 @@ public partial class LLVMCodeGenerator
             UnaryOperator.Minus => EmitUnaryMethodCall(sb, unary, "__neg__"),
             UnaryOperator.BitwiseNot => EmitUnaryMethodCall(sb, unary, "__not__"),
             UnaryOperator.Steal => EmitExpression(sb, unary.Operand),
-            UnaryOperator.ForceUnwrap =>
-                throw new NotImplementedException("'!!' (force unwrap) codegen not yet implemented"),
+            UnaryOperator.ForceUnwrap => EmitForceUnwrap(sb, unary),
             _ => throw new NotImplementedException(
                 $"Unary operator '{unary.Operator}' codegen not implemented")
         };
@@ -952,153 +952,79 @@ public partial class LLVMCodeGenerator
         }
         allArgs.AddRange(args);
 
-        return EmitLlvmInstruction(sb, instrName, llvmType, llvmTypeArgs, allArgs);
+        // All LLVM intrinsics use template molds with {holes} for substitution
+        return EmitFromTemplate(sb, instrName, method, llvmTypeArgs, allArgs);
     }
 
-    // Instruction classification tables for table-driven LLVM IR emission.
-    // Each set corresponds to a distinct emit pattern.
-
-    /// <summary>Binary instructions: {result} = {name} {type} {a}, {b}</summary>
-    private static readonly HashSet<string> LlvmBinaryInstructions =
-    [
-        "add", "sub", "mul", "sdiv", "udiv", "srem", "urem",
-        "fadd", "fsub", "fmul", "fdiv", "frem",
-        "and", "or", "xor", "shl", "lshr", "ashr"
-    ];
-
-    /// <summary>Type conversions: {result} = {name} {fromType} {a} to {toType}</summary>
-    private static readonly HashSet<string> LlvmConversionInstructions =
-    [
-        "sext", "zext", "trunc", "bitcast", "fpext", "fptrunc",
-        "sitofp", "uitofp", "fptosi", "fptoui"
-    ];
-
-    /// <summary>1-arg @llvm.* intrinsics: call {type} @llvm.{name}.{type}({type} {a})</summary>
-    private static readonly HashSet<string> LlvmIntrinsic1Arg =
-    [
-        "ctpop", "bitreverse", "bswap", "sqrt", "fabs",
-        "floor", "ceil", "round", "sin", "cos",
-        "exp", "log", "log10"
-    ];
-
-    /// <summary>1-arg @llvm.* intrinsics with extra i1 false flag</summary>
-    private static readonly HashSet<string> LlvmIntrinsic1ArgWithFlag =
-    [
-        "ctlz", "cttz", "abs"
-    ];
-
-    /// <summary>2-arg @llvm.* intrinsics: call {type} @llvm.{name}.{type}({type} {a}, {type} {b})</summary>
-    private static readonly HashSet<string> LlvmIntrinsic2Arg =
-    [
-        "pow", "copysign",
-        "sadd.sat", "uadd.sat", "ssub.sat", "usub.sat"
-    ];
-
-    /// <summary>2-arg @llvm.* overflow intrinsics returning { type, i1 }</summary>
-    private static readonly HashSet<string> LlvmOverflowIntrinsics =
-    [
-        "sadd.with.overflow", "uadd.with.overflow",
-        "ssub.with.overflow", "usub.with.overflow",
-        "smul.with.overflow", "umul.with.overflow"
-    ];
-
     /// <summary>
-    /// Emits a single LLVM instruction. Table-driven — each instruction maps 1:1 to an LLVM
-    /// instruction or @llvm.* intrinsic, with no signed/unsigned/float dispatch.
+    /// Emits LLVM IR from a template mold string with {hole} substitution.
+    /// Supports multi-line templates (for overflow intrinsics, etc.).
     /// </summary>
-    private string EmitLlvmInstruction(StringBuilder sb, string name, string llvmType, List<string> llvmTypeArgs, List<string> args)
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="mold">The template mold string with {holes}.</param>
+    /// <param name="method">The routine info for generic parameter name resolution.</param>
+    /// <param name="llvmTypeArgs">Resolved LLVM type arguments.</param>
+    /// <param name="args">Emitted argument values.</param>
+    /// <returns>The last {result} temp, or args[0] if no {result} in any line.</returns>
+    private string EmitFromTemplate(StringBuilder sb, string mold, RoutineInfo method,
+        List<string> llvmTypeArgs, List<string> args)
     {
-        string result = NextTemp();
+        string[] lines = mold.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        string? lastResult = null;
+        string? prevResult = null;
 
-        // Binary instructions: add, sub, mul, sdiv, fadd, and, shl, etc.
-        if (LlvmBinaryInstructions.Contains(name))
+        foreach (string rawLine in lines)
         {
-            EmitLine(sb, $"  {result} = {name} {llvmType} {args[0]}, {args[1]}");
-        }
-        // Unary instruction: fneg
-        else if (name == "fneg")
-        {
-            EmitLine(sb, $"  {result} = fneg {llvmType} {args[0]}");
-        }
-        // Comparisons: icmp.eq → "icmp eq", fcmp.olt → "fcmp olt"
-        else if (name.StartsWith("icmp.") || name.StartsWith("fcmp."))
-        {
-            string llvmOp = name.Replace('.', ' ');
-            EmitLine(sb, $"  {result} = {llvmOp} {llvmType} {args[0]}, {args[1]}");
-        }
-        // Type conversions: sext, zext, trunc, bitcast, sitofp, etc.
-        else if (LlvmConversionInstructions.Contains(name))
-        {
-            string fromType = llvmTypeArgs[0];
-            string toType = llvmTypeArgs[1];
-            EmitLine(sb, $"  {result} = {name} {fromType} {args[0]} to {toType}");
-        }
-        // Memory operations
-        else if (name == "load")
-        {
-            EmitLine(sb, $"  {result} = load {llvmType}, ptr {args[0]}");
-        }
-        else if (name == "store")
-        {
-            EmitLine(sb, $"  store {llvmType} {args[0]}, ptr {args[1]}");
-            return args[0];
-        }
-        else if (name == "store.volatile")
-        {
-            EmitLine(sb, $"  store volatile {llvmType} {args[0]}, ptr {args[1]}");
-            return args[0];
-        }
-        // @llvm.* intrinsic function calls (1-arg with i1 false flag)
-        else if (LlvmIntrinsic1ArgWithFlag.Contains(name))
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.{name}.{llvmType}({llvmType} {args[0]}, i1 false)");
-        }
-        // trunc.float → @llvm.trunc (name collision with trunc instruction)
-        else if (name == "trunc.float")
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.trunc.{llvmType}({llvmType} {args[0]})");
-        }
-        // @llvm.* intrinsic function calls (1-arg)
-        else if (LlvmIntrinsic1Arg.Contains(name))
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.{name}.{llvmType}({llvmType} {args[0]})");
-        }
-        // @llvm.* intrinsic function calls (2-arg)
-        else if (LlvmIntrinsic2Arg.Contains(name))
-        {
-            EmitLine(sb, $"  {result} = call {llvmType} @llvm.{name}.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        // @llvm.* overflow intrinsics returning { type, i1 }
-        else if (LlvmOverflowIntrinsics.Contains(name))
-        {
-            string overflowType = $"{{ {llvmType}, i1 }}";
-            EmitLine(sb, $"  {result} = call {overflowType} @llvm.{name}.{llvmType}({llvmType} {args[0]}, {llvmType} {args[1]})");
-        }
-        // Atomic operations
-        else if (name == "atomic.load")
-        {
-            EmitLine(sb, $"  {result} = load atomic {llvmType}, ptr {args[0]} seq_cst, align {GetTypeBitWidth(llvmType) / 8}");
-        }
-        else if (name == "atomic.store")
-        {
-            EmitLine(sb, $"  store atomic {llvmType} {args[0]}, ptr {args[1]} seq_cst, align {GetTypeBitWidth(llvmType) / 8}");
-            return args[0];
-        }
-        else if (name == "atomic.cmpxchg")
-        {
-            EmitLine(sb, $"  {result} = cmpxchg ptr {args[0]}, {llvmType} {args[1]}, {llvmType} {args[2]} seq_cst seq_cst");
-        }
-        else if (name.StartsWith("atomic."))
-        {
-            string atomicOp = name["atomic.".Length..];
-            EmitLine(sb, $"  {result} = atomicrmw {atomicOp} ptr {args[0]}, {llvmType} {args[1]} seq_cst");
-        }
-        else
-        {
-            throw new NotImplementedException($"LLVM instruction not implemented: {name}");
+            string line = rawLine.Trim();
+            if (line.Length == 0) continue;
+
+            string currentResult = NextTemp();
+            bool hasResult = line.Contains("{result}");
+
+            // Perform substitutions
+            string substituted = line;
+
+            // {result} → current SSA temp
+            substituted = substituted.Replace("{result}", currentResult);
+
+            // {prev} → previous line's {result}
+            if (prevResult != null)
+                substituted = substituted.Replace("{prev}", prevResult);
+
+            // Named type parameters from GenericParameters: {T}, {From}, {To}, etc.
+            // Must be done before parameter names to avoid collisions (e.g. {T} vs {type})
+            if (method.GenericParameters != null)
+            {
+                for (int i = 0; i < method.GenericParameters.Count && i < llvmTypeArgs.Count; i++)
+                {
+                    string paramName = method.GenericParameters[i];
+                    substituted = substituted.Replace($"{{{paramName}}}", llvmTypeArgs[i]);
+
+                    // {sizeof T} → byte size
+                    substituted = substituted.Replace($"{{sizeof {paramName}}}",
+                        (GetTypeBitWidth(llvmTypeArgs[i]) / 8).ToString());
+                }
+            }
+
+            // Named parameter substitution: {paramName} → args[i]
+            // Parameter names come from method.Parameters, args are positional
+            for (int i = 0; i < method.Parameters.Count && i < args.Count; i++)
+            {
+                string paramName = method.Parameters[i].Name;
+                substituted = substituted.Replace($"{{{paramName}}}", args[i]);
+            }
+
+            EmitLine(sb, $"  {substituted}");
+
+            if (hasResult)
+            {
+                prevResult = currentResult;
+                lastResult = currentResult;
+            }
         }
 
-        return result;
+        // Return last {result} temp, or first arg if no {result} in template
+        return lastResult ?? (args.Count > 0 ? args[0] : "undef");
     }
 
     /// <summary>
@@ -1261,25 +1187,25 @@ public partial class LLVMCodeGenerator
     {
         string? typeName = literal.LiteralType switch
         {
-            Compiler.Lexer.TokenType.S8Literal => "S8",
-            Compiler.Lexer.TokenType.S16Literal => "S16",
-            Compiler.Lexer.TokenType.S32Literal => "S32",
-            Compiler.Lexer.TokenType.S64Literal => "S64",
-            Compiler.Lexer.TokenType.S128Literal => "S128",
-            Compiler.Lexer.TokenType.U8Literal => "U8",
-            Compiler.Lexer.TokenType.U16Literal => "U16",
-            Compiler.Lexer.TokenType.U32Literal => "U32",
-            Compiler.Lexer.TokenType.U64Literal => "U64",
-            Compiler.Lexer.TokenType.U128Literal => "U128",
-            Compiler.Lexer.TokenType.F16Literal => "F16",
-            Compiler.Lexer.TokenType.F32Literal => "F32",
-            Compiler.Lexer.TokenType.F64Literal => "F64",
-            Compiler.Lexer.TokenType.F128Literal => "F128",
-            Compiler.Lexer.TokenType.D32Literal => "D32",
-            Compiler.Lexer.TokenType.D64Literal => "D64",
-            Compiler.Lexer.TokenType.D128Literal => "D128",
-            Compiler.Lexer.TokenType.True or Compiler.Lexer.TokenType.False => "Bool",
-            Compiler.Lexer.TokenType.TextLiteral => "Text",
+            Lexer.TokenType.S8Literal => "S8",
+            Lexer.TokenType.S16Literal => "S16",
+            Lexer.TokenType.S32Literal => "S32",
+            Lexer.TokenType.S64Literal => "S64",
+            Lexer.TokenType.S128Literal => "S128",
+            Lexer.TokenType.U8Literal => "U8",
+            Lexer.TokenType.U16Literal => "U16",
+            Lexer.TokenType.U32Literal => "U32",
+            Lexer.TokenType.U64Literal => "U64",
+            Lexer.TokenType.U128Literal => "U128",
+            Lexer.TokenType.F16Literal => "F16",
+            Lexer.TokenType.F32Literal => "F32",
+            Lexer.TokenType.F64Literal => "F64",
+            Lexer.TokenType.F128Literal => "F128",
+            Lexer.TokenType.D32Literal => "D32",
+            Lexer.TokenType.D64Literal => "D64",
+            Lexer.TokenType.D128Literal => "D128",
+            Lexer.TokenType.True or Lexer.TokenType.False => "Bool",
+            Lexer.TokenType.TextLiteral => "Text",
             _ => null
         };
 
@@ -1310,7 +1236,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Gets the bit width of an LLVM type.
     /// </summary>
-    private static int GetTypeBitWidth(string llvmType)
+    private int GetTypeBitWidth(string llvmType)
     {
         return llvmType switch
         {
@@ -1324,7 +1250,7 @@ public partial class LLVMCodeGenerator
             "float" => 32,
             "double" => 64,
             "fp128" => 128,
-            "ptr" => 64, // TODO: Make platform-dependent
+            "ptr" => _pointerBitWidth,
             _ => throw new InvalidOperationException($"Unknown LLVM type for bitwidth: {llvmType}")
         };
     }
@@ -1376,13 +1302,20 @@ public partial class LLVMCodeGenerator
         string target = EmitExpression(sb, index.Object);
         string indexValue = EmitExpression(sb, index.Index);
 
-        // TODO: Determine element type from target type
-        // For now, assume i32 element type
-        string result = NextTemp();
-        string elemPtr = NextTemp();
+        // Resolve element type from container's generic type arguments
+        TypeInfo? targetType = GetExpressionType(index.Object);
+        string elemType = targetType switch
+        {
+            RecordTypeInfo r when r.TypeArguments.Count > 0 => GetLLVMType(r.TypeArguments[0]),
+            EntityTypeInfo e when e.TypeArguments.Count > 0 => GetLLVMType(e.TypeArguments[0]),
+            _ => throw new InvalidOperationException(
+                $"Cannot determine element type for indexing on type: {targetType?.Name}")
+        };
 
-        EmitLine(sb, $"  {elemPtr} = getelementptr i32, ptr {target}, i64 {indexValue}");
-        EmitLine(sb, $"  {result} = load i32, ptr {elemPtr}");
+        string elemPtr = NextTemp();
+        string result = NextTemp();
+        EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {indexValue}");
+        EmitLine(sb, $"  {result} = load {elemType}, ptr {elemPtr}");
 
         return result;
     }
@@ -1396,11 +1329,30 @@ public partial class LLVMCodeGenerator
         string start = EmitExpression(sb, slice.Start);
         string end = EmitExpression(sb, slice.End);
 
-        // TODO: Emit call to __getslice__ method on target type
-        // For now, return the target as placeholder
-        _ = start;
-        _ = end;
-        return target;
+        TypeInfo? targetType = GetExpressionType(slice.Object);
+        if (targetType == null)
+        {
+            throw new InvalidOperationException("Cannot determine type for slice target");
+        }
+
+        string methodFullName = $"{targetType.Name}.__getslice__";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        var argValues = new List<string> { target, start, end };
+        var argTypes = new List<string> { GetParameterLLVMType(targetType), "i64", "i64" };
+
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(targetType.Name)}___getslice__";
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : GetParameterLLVMType(targetType);
+
+        string result = NextTemp();
+        string args = BuildCallArgs(argTypes, argValues);
+        EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+        return result;
     }
 
     /// <summary>
@@ -1408,12 +1360,39 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitRange(StringBuilder sb, RangeExpression range)
     {
-        // TODO: Implement range expression (create Range struct)
+        // Emit start, end, step expressions
         string start = EmitExpression(sb, range.Start);
-        EmitExpression(sb, range.End);
+        string end = EmitExpression(sb, range.End);
+        string step = range.Step != null ? EmitExpression(sb, range.Step) : "1";
+        string isDescending = range.IsDescending ? "true" : "false";
 
-        // For now, just return the start value
-        return start;
+        // Infer element type from start/end expressions (Range[T] is generic)
+        TypeInfo? elemType = GetExpressionType(range.Start) ?? GetExpressionType(range.End);
+        string elemLlvmType = elemType != null ? GetLLVMType(elemType) : "i64";
+
+        // Try to use registered Range type, fall back to literal struct
+        TypeInfo? rangeType = _registry.LookupType("Range");
+        string structType;
+        if (rangeType is RecordTypeInfo rangeRecord)
+        {
+            structType = GetRecordTypeName(rangeRecord);
+        }
+        else
+        {
+            structType = $"{{ {elemLlvmType}, {elemLlvmType}, {elemLlvmType}, i1 }}";
+        }
+
+        // Build struct via insertvalue chain: { start, end, step, is_descending }
+        string v0 = NextTemp();
+        EmitLine(sb, $"  {v0} = insertvalue {structType} undef, {elemLlvmType} {start}, 0");
+        string v1 = NextTemp();
+        EmitLine(sb, $"  {v1} = insertvalue {structType} {v0}, {elemLlvmType} {end}, 1");
+        string v2 = NextTemp();
+        EmitLine(sb, $"  {v2} = insertvalue {structType} {v1}, {elemLlvmType} {step}, 2");
+        string v3 = NextTemp();
+        EmitLine(sb, $"  {v3} = insertvalue {structType} {v2}, i1 {isDescending}, 3");
+
+        return v3;
     }
 
     /// <summary>
@@ -1459,19 +1438,765 @@ public partial class LLVMCodeGenerator
     /// </remarks>
     private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
     {
-        // TODO: Full implementation needs to:
-        // 1. Check ResolvedType to determine if ValueTuple or Tuple
-        // 2. For ValueTuple: allocate on stack, initialize member variables
-        // 3. For Tuple: allocate on heap via rf_alloc, initialize member variables
-        // 4. Return pointer to the tuple
-
-        // For now, evaluate all elements and return a placeholder
+        // Evaluate all element expressions
+        var elemValues = new List<string>();
+        var elemLLVMTypes = new List<string>();
         foreach (var element in tuple.Elements)
         {
-            EmitExpression(sb, element);
+            elemValues.Add(EmitExpression(sb, element));
+            TypeInfo? elemType = GetExpressionType(element);
+            elemLLVMTypes.Add(elemType != null ? GetLLVMType(elemType) : "i64");
         }
 
-        throw new NotImplementedException("Tuple literal code generation not yet implemented");
+        // Resolve tuple type from semantic analysis
+        TupleTypeInfo? tupleType = tuple.ResolvedType as TupleTypeInfo;
+
+        if (tupleType == null || tupleType.Kind == TupleKind.Value || tupleType.Kind == TupleKind.Fixed)
+        {
+            // ValueTuple / FixedTuple: build struct via insertvalue chain
+            string structType;
+            if (tupleType != null)
+            {
+                structType = GetTupleTypeName(tupleType);
+            }
+            else
+            {
+                // Fall back to anonymous struct type
+                structType = $"{{ {string.Join(", ", elemLLVMTypes)} }}";
+            }
+
+            string result = "undef";
+            for (int i = 0; i < elemValues.Count; i++)
+            {
+                string newResult = NextTemp();
+                EmitLine(sb, $"  {newResult} = insertvalue {structType} {result}, {elemLLVMTypes[i]} {elemValues[i]}, {i}");
+                result = newResult;
+            }
+
+            return result;
+        }
+        else
+        {
+            // Reference Tuple: heap-allocate via rf_alloc, GEP + store each element
+            int size = CalculateTupleSize(tupleType);
+            string structType = GetTupleTypeName(tupleType);
+
+            string rawPtr = NextTemp();
+            EmitLine(sb, $"  {rawPtr} = call ptr @rf_alloc(i64 {size})");
+
+            for (int i = 0; i < elemValues.Count; i++)
+            {
+                string elemPtr = NextTemp();
+                EmitLine(sb, $"  {elemPtr} = getelementptr {structType}, ptr {rawPtr}, i32 0, i32 {i}");
+                EmitLine(sb, $"  store {elemLLVMTypes[i]} {elemValues[i]}, ptr {elemPtr}");
+            }
+
+            return rawPtr;
+        }
+    }
+
+    #endregion
+
+    #region Error Handling Operators
+
+    /// <summary>
+    /// Emits the ?? (none coalesce) operator.
+    /// If the left operand (ErrorHandlingTypeInfo) is VALID, extracts its value.
+    /// Otherwise evaluates and returns the right operand as default.
+    /// </summary>
+    private string EmitNoneCoalesce(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        TypeInfo? leftType = GetExpressionType(binary.Left);
+
+        if (leftType is not ErrorHandlingTypeInfo errorType)
+        {
+            throw new InvalidOperationException("'??' operator requires ErrorHandlingTypeInfo on the left");
+        }
+
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {left}, ptr {allocaPtr}");
+
+        // Extract tag (field 0)
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        // Check tag == 1 (VALID)
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string valLabel = NextLabel("coalesce_val");
+        string rhsLabel = NextLabel("coalesce_rhs");
+        string endLabel = NextLabel("coalesce_end");
+        string leftBlock = _currentBlock;
+
+        EmitLine(sb, $"  br i1 {isValid}, label %{valLabel}, label %{rhsLabel}");
+
+        // Valid path: extract the value from the handle
+        EmitLine(sb, $"{valLabel}:");
+        _currentBlock = valLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        // Determine the value type T
+        TypeInfo valueType = errorType.ValueType;
+        string llvmValueType = GetLLVMType(valueType);
+
+        // Load T from the handle pointer
+        string validValue = NextTemp();
+        EmitLine(sb, $"  {validValue} = load {llvmValueType}, ptr {handleVal}");
+        string valBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // RHS path: evaluate the default expression
+        EmitLine(sb, $"{rhsLabel}:");
+        _currentBlock = rhsLabel;
+        string rhsValue = EmitExpression(sb, binary.Right);
+        string rhsBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge with PHI
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi {llvmValueType} [ {validValue}, %{valBlock} ], [ {rhsValue}, %{rhsBlock} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Emits the !! (force unwrap) operator.
+    /// If the operand (ErrorHandlingTypeInfo) is VALID, extracts its value.
+    /// Otherwise traps (crashes the program).
+    /// </summary>
+    private string EmitForceUnwrap(StringBuilder sb, UnaryExpression unary)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        TypeInfo? operandType = GetExpressionType(unary.Operand);
+
+        if (operandType is not ErrorHandlingTypeInfo errorType)
+        {
+            throw new InvalidOperationException("'!!' operator requires ErrorHandlingTypeInfo operand");
+        }
+
+        // Declare llvm.trap if not already declared
+        if (_declaredNativeFunctions.Add("llvm.trap"))
+        {
+            EmitLine(_functionDeclarations, "declare void @llvm.trap() noreturn nounwind");
+        }
+
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {operand}, ptr {allocaPtr}");
+
+        // Extract tag (field 0)
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        // Check tag == 1 (VALID)
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string okLabel = NextLabel("unwrap_ok");
+        string failLabel = NextLabel("unwrap_fail");
+
+        EmitLine(sb, $"  br i1 {isValid}, label %{okLabel}, label %{failLabel}");
+
+        // Fail path: trap
+        EmitLine(sb, $"{failLabel}:");
+        _currentBlock = failLabel;
+        EmitLine(sb, $"  call void @llvm.trap()");
+        EmitLine(sb, $"  unreachable");
+
+        // OK path: extract the value from the handle
+        EmitLine(sb, $"{okLabel}:");
+        _currentBlock = okLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        // Load T from the handle pointer
+        TypeInfo valueType = errorType.ValueType;
+        string llvmValueType = GetLLVMType(valueType);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = load {llvmValueType}, ptr {handleVal}");
+
+        return result;
+    }
+
+    #endregion
+
+    #region Optional Chaining
+
+    /// <summary>
+    /// Emits optional member access (?.): obj?.field
+    /// If obj is null/none, produces a zero/null value. Otherwise performs normal member access.
+    /// </summary>
+    private string EmitOptionalMemberAccess(StringBuilder sb, OptionalMemberExpression optMember)
+    {
+        string obj = EmitExpression(sb, optMember.Object);
+        TypeInfo? objType = GetExpressionType(optMember.Object);
+
+        if (objType is ErrorHandlingTypeInfo errorType)
+        {
+            return EmitOptionalChainErrorHandling(sb, obj, errorType, optMember.PropertyName);
+        }
+
+        // Entity/Resident (pointer): null check
+        return EmitOptionalChainPointer(sb, obj, objType, optMember.PropertyName);
+    }
+
+    /// <summary>
+    /// Optional chaining on a pointer-based type (entity/resident): null check → member access or zero.
+    /// </summary>
+    private string EmitOptionalChainPointer(StringBuilder sb, string obj, TypeInfo? objType, string propertyName)
+    {
+        string nonNullLabel = NextLabel("optchain_nonnull");
+        string nullLabel = NextLabel("optchain_null");
+        string endLabel = NextLabel("optchain_end");
+        string entryBlock = _currentBlock;
+
+        // Null check
+        string isNull = NextTemp();
+        EmitLine(sb, $"  {isNull} = icmp eq ptr {obj}, null");
+        EmitLine(sb, $"  br i1 {isNull}, label %{nullLabel}, label %{nonNullLabel}");
+
+        // Non-null path: do normal member access
+        EmitLine(sb, $"{nonNullLabel}:");
+        _currentBlock = nonNullLabel;
+        string memberValue = EmitMemberAccessOnType(sb, obj, objType, propertyName);
+        string memberBlock = _currentBlock;
+
+        // Determine result type from member access
+        TypeInfo? resultType = GetMemberTypeFromOwner(objType, propertyName);
+        string llvmResultType = resultType != null ? GetLLVMType(resultType) : "ptr";
+        string zeroValue = resultType != null ? GetZeroValue(resultType) : "null";
+
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Null path: return zero/null
+        EmitLine(sb, $"{nullLabel}:");
+        _currentBlock = nullLabel;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi {llvmResultType} [ {memberValue}, %{memberBlock} ], [ {zeroValue}, %{nullLabel} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Optional chaining on an ErrorHandlingTypeInfo: check VALID → extract value → member access, or zero.
+    /// </summary>
+    private string EmitOptionalChainErrorHandling(StringBuilder sb, string obj, ErrorHandlingTypeInfo errorType, string propertyName)
+    {
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {obj}, ptr {allocaPtr}");
+
+        // Extract tag
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string validLabel = NextLabel("optchain_valid");
+        string invalidLabel = NextLabel("optchain_invalid");
+        string endLabel = NextLabel("optchain_end");
+
+        EmitLine(sb, $"  br i1 {isValid}, label %{validLabel}, label %{invalidLabel}");
+
+        // Valid path: extract value and do member access
+        EmitLine(sb, $"{validLabel}:");
+        _currentBlock = validLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        TypeInfo valueType = errorType.ValueType;
+        string llvmValueType = GetLLVMType(valueType);
+        string innerValue = NextTemp();
+        EmitLine(sb, $"  {innerValue} = load {llvmValueType}, ptr {handleVal}");
+
+        // Now do member access on the extracted value
+        string memberValue = EmitMemberAccessOnType(sb, innerValue, valueType, propertyName);
+        string validBlock = _currentBlock;
+
+        // Determine result type
+        TypeInfo? resultType = GetMemberTypeFromOwner(valueType, propertyName);
+        string llvmResultType = resultType != null ? GetLLVMType(resultType) : "ptr";
+        string zeroValue = resultType != null ? GetZeroValue(resultType) : "null";
+
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Invalid path
+        EmitLine(sb, $"{invalidLabel}:");
+        _currentBlock = invalidLabel;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi {llvmResultType} [ {memberValue}, %{validBlock} ], [ {zeroValue}, %{invalidLabel} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs member access on a value given its type, reusing existing member read logic.
+    /// </summary>
+    private string EmitMemberAccessOnType(StringBuilder sb, string value, TypeInfo? type, string propertyName)
+    {
+        return type switch
+        {
+            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, value, entity, propertyName),
+            RecordTypeInfo record => EmitRecordMemberVariableRead(sb, value, record, propertyName),
+            ResidentTypeInfo resident => EmitResidentMemberVariableRead(sb, value, resident, propertyName),
+            _ => throw new InvalidOperationException($"Cannot access member on type: {type?.Name}")
+        };
+    }
+
+    /// <summary>
+    /// Gets the type of a member variable from the owning type.
+    /// </summary>
+    private TypeInfo? GetMemberTypeFromOwner(TypeInfo? ownerType, string memberName)
+    {
+        IReadOnlyList<MemberVariableInfo>? members = ownerType switch
+        {
+            EntityTypeInfo entity => entity.MemberVariables,
+            RecordTypeInfo record => record.MemberVariables,
+            ResidentTypeInfo resident => resident.MemberVariables,
+            _ => null
+        };
+
+        if (members == null) return null;
+
+        foreach (var m in members)
+        {
+            if (m.Name == memberName) return m.Type;
+        }
+        return null;
+    }
+
+    #endregion
+
+    #region Text Insertion (F-Strings)
+
+    /// <summary>
+    /// Emits an f-string (InsertedTextExpression).
+    /// Concatenates text and expression parts via Text.__create__ and Text.concat calls.
+    /// </summary>
+    private string EmitInsertedText(StringBuilder sb, InsertedTextExpression inserted)
+    {
+        if (inserted.Parts.Count == 0)
+        {
+            return EmitStringLiteral(sb, "");
+        }
+
+        // Convert each part to a ptr (Text value)
+        var partValues = new List<string>();
+        foreach (var part in inserted.Parts)
+        {
+            switch (part)
+            {
+                case TextPart textPart:
+                    partValues.Add(EmitStringLiteral(sb, textPart.Text));
+                    break;
+                case ExpressionPart exprPart:
+                    partValues.Add(EmitInsertedTextPart(sb, exprPart));
+                    break;
+            }
+        }
+
+        if (partValues.Count == 1)
+        {
+            return partValues[0];
+        }
+
+        // Chain concat calls: acc = acc.concat(next)
+        string accumulator = partValues[0];
+        for (int i = 1; i < partValues.Count; i++)
+        {
+            string concatName = "Text.concat";
+            RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
+
+            string mangledConcat = concatMethod != null
+                ? MangleFunctionName(concatMethod)
+                : "Text_concat";
+
+            string concatResult = NextTemp();
+            EmitLine(sb, $"  {concatResult} = call ptr @{mangledConcat}(ptr {accumulator}, ptr {partValues[i]})");
+            accumulator = concatResult;
+        }
+
+        return accumulator;
+    }
+
+    /// <summary>
+    /// Emits a single expression part of an f-string, handling format specifiers.
+    /// </summary>
+    private string EmitInsertedTextPart(StringBuilder sb, ExpressionPart exprPart)
+    {
+        string exprValue = EmitExpression(sb, exprPart.Expression);
+        TypeInfo? exprType = GetExpressionType(exprPart.Expression);
+        string? formatSpec = exprPart.FormatSpec;
+
+        // Handle "=" specifier: emit "name=value" (variable name prefix)
+        if (formatSpec == "=")
+        {
+            // Emit the variable name as a prefix: "varname="
+            string varName = exprPart.Expression is IdentifierExpression id ? id.Name : "expr";
+            string prefix = EmitStringLiteral(sb, $"{varName}=");
+            string valueText = EmitValueToText(sb, exprValue, exprType, null);
+
+            // Concat: prefix + valueText
+            string concatName = "Text.concat";
+            RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
+            string mangledConcat = concatMethod != null
+                ? MangleFunctionName(concatMethod)
+                : "Text_concat";
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @{mangledConcat}(ptr {prefix}, ptr {valueText})");
+            return result;
+        }
+
+        // Handle "!d" specifier: call to_debug() instead of Text.__create__
+        if (formatSpec == "!d" || formatSpec == "d")
+        {
+            string typeName = exprType?.Name ?? "Data";
+            string debugName = $"{typeName}.to_debug";
+            RoutineInfo? debugMethod = _registry.LookupRoutine(debugName);
+
+            string mangledDebug = debugMethod != null
+                ? MangleFunctionName(debugMethod)
+                : $"{MangleTypeName(typeName)}_to_debug";
+
+            string argType = exprType != null ? GetParameterLLVMType(exprType) : "i64";
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @{mangledDebug}({argType} {exprValue})");
+            return result;
+        }
+
+        // For all other format specifiers (D2, E3, b, h, etc.): call rf_format with spec string
+        // If no spec or Text type, use default conversion
+        return EmitValueToText(sb, exprValue, exprType, formatSpec);
+    }
+
+    /// <summary>
+    /// Converts a value to Text, optionally applying a format specifier.
+    /// </summary>
+    private string EmitValueToText(StringBuilder sb, string value, TypeInfo? type, string? formatSpec)
+    {
+        // If already Text, return directly
+        if (type?.Name == "Text")
+        {
+            return value;
+        }
+
+        // If format spec is provided, call rf_format(value, spec_ptr) runtime function
+        if (formatSpec != null)
+        {
+            if (_declaredNativeFunctions.Add("rf_format"))
+            {
+                EmitLine(_functionDeclarations, "declare ptr @rf_format(i64, ptr)");
+            }
+
+            string specPtr = EmitStringLiteral(sb, formatSpec);
+
+            // Bitcast/extend value to i64 for the generic format call
+            string argType = type != null ? GetLLVMType(type) : "i64";
+            string i64Value;
+            if (argType == "i64")
+            {
+                i64Value = value;
+            }
+            else if (argType is "i1" or "i8" or "i16" or "i32")
+            {
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = sext {argType} {value} to i64");
+            }
+            else if (argType is "float")
+            {
+                string dbl = NextTemp();
+                EmitLine(sb, $"  {dbl} = fpext float {value} to double");
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = bitcast double {dbl} to i64");
+            }
+            else if (argType is "double")
+            {
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = bitcast double {value} to i64");
+            }
+            else
+            {
+                // ptr or other: ptrtoint
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = ptrtoint ptr {value} to i64");
+            }
+
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @rf_format(i64 {i64Value}, ptr {specPtr})");
+            return result;
+        }
+
+        // Default: call Text.__create__(from: value)
+        string createName = "Text.__create__";
+        RoutineInfo? createMethod = _registry.LookupRoutine(createName);
+
+        string llvmArgType = type != null ? GetLLVMType(type) : "i64";
+        string mangledName = createMethod != null
+            ? MangleFunctionName(createMethod)
+            : "Text___create__";
+
+        string textResult = NextTemp();
+        EmitLine(sb, $"  {textResult} = call ptr @{mangledName}({llvmArgType} {value})");
+        return textResult;
+    }
+
+    #endregion
+
+    #region List Literals
+
+    /// <summary>
+    /// Emits a list literal expression: [1, 2, 3]
+    /// Allocates a List entity and adds each element via add_last.
+    /// </summary>
+    private string EmitListLiteral(StringBuilder sb, ListLiteralExpression list)
+    {
+        // Determine element type from ResolvedType or first element
+        TypeInfo? listType = list.ResolvedType;
+        TypeInfo? elemType = null;
+
+        if (listType is EntityTypeInfo entity && entity.TypeArguments.Count > 0)
+        {
+            elemType = entity.TypeArguments[0];
+        }
+        else if (list.Elements.Count > 0)
+        {
+            elemType = GetExpressionType(list.Elements[0]);
+        }
+
+        string elemLLVMType = elemType != null ? GetLLVMType(elemType) : "i64";
+
+        // Look up List type and its constructor/add_last method
+        string listTypeName = listType != null ? listType.Name : $"List[{elemType?.Name ?? "S64"}]";
+        string mangledListType = MangleTypeName(listTypeName);
+
+        // Allocate the list via constructor or rf_alloc
+        // Try to find a __create__ or use a fallback allocation
+        string createName = $"{listTypeName}.__create__";
+        RoutineInfo? createMethod = _registry.LookupRoutine(createName);
+
+        string listPtr;
+        if (createMethod != null)
+        {
+            string mangledCreate = MangleFunctionName(createMethod);
+            listPtr = NextTemp();
+            EmitLine(sb, $"  {listPtr} = call ptr @{mangledCreate}()");
+        }
+        else
+        {
+            // Fallback: allocate via rf_alloc with a reasonable default size
+            // List entity needs at least: count (i64) + capacity (i64) + data ptr
+            listPtr = NextTemp();
+            EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+
+            // Initialize count = 0, capacity = element count, data = alloc(n * elem_size)
+            string countPtr = NextTemp();
+            EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+            EmitLine(sb, $"  store i64 0, ptr {countPtr}");
+
+            string capPtr = NextTemp();
+            EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+            long capacity = Math.Max(list.Elements.Count, 4);
+            EmitLine(sb, $"  store i64 {capacity}, ptr {capPtr}");
+
+            int elemSize = elemType != null ? GetTypeSize(elemType) : 8;
+            string dataPtr = NextTemp();
+            EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {capacity * elemSize})");
+            string dataPtrSlot = NextTemp();
+            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+            EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+        }
+
+        // Add each element via add_last or direct store
+        string addLastName = $"{listTypeName}.add_last";
+        RoutineInfo? addLastMethod = _registry.LookupRoutine(addLastName);
+
+        if (addLastMethod != null)
+        {
+            string mangledAddLast = MangleFunctionName(addLastMethod);
+            foreach (var elem in list.Elements)
+            {
+                string elemValue = EmitExpression(sb, elem);
+                EmitLine(sb, $"  call void @{mangledAddLast}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+            }
+        }
+        else
+        {
+            // Fallback: direct store into data buffer
+            // Load data ptr, then GEP + store for each element
+            string dataPtrSlot = NextTemp();
+            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+            string dataBase = NextTemp();
+            EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataPtrSlot}");
+
+            for (int i = 0; i < list.Elements.Count; i++)
+            {
+                string elemValue = EmitExpression(sb, list.Elements[i]);
+                string elemPtr = NextTemp();
+                EmitLine(sb, $"  {elemPtr} = getelementptr {elemLLVMType}, ptr {dataBase}, i64 {i}");
+                EmitLine(sb, $"  store {elemLLVMType} {elemValue}, ptr {elemPtr}");
+            }
+
+            // Update count
+            string countPtr = NextTemp();
+            EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+            EmitLine(sb, $"  store i64 {list.Elements.Count}, ptr {countPtr}");
+        }
+
+        return listPtr;
+    }
+
+    #endregion
+
+    #region Flags Tests
+
+    /// <summary>
+    /// Emits a flags test expression: x is FLAG, x isnot FLAG, x isonly FLAG.
+    /// FlagsTestExpression has Subject, Kind, TestFlags, Connective, and ExcludedFlags.
+    /// </summary>
+    private string EmitFlagsTest(StringBuilder sb, FlagsTestExpression flagsTest)
+    {
+        string subject = EmitExpression(sb, flagsTest.Subject);
+        TypeInfo? subjectType = GetExpressionType(flagsTest.Subject);
+
+        FlagsTypeInfo? flagsType = subjectType as FlagsTypeInfo;
+
+        // Build the combined test mask from TestFlags
+        ulong testMask = 0;
+        foreach (string flagName in flagsTest.TestFlags)
+        {
+            testMask |= ResolveFlagBit(flagName, flagsType);
+        }
+
+        // Build the excluded mask from ExcludedFlags (if present)
+        ulong excludedMask = 0;
+        if (flagsTest.ExcludedFlags != null)
+        {
+            foreach (string flagName in flagsTest.ExcludedFlags)
+            {
+                excludedMask |= ResolveFlagBit(flagName, flagsType);
+            }
+        }
+
+        string maskStr = testMask.ToString();
+
+        return flagsTest.Kind switch
+        {
+            FlagsTestKind.Is => EmitFlagsIsTest(sb, subject, maskStr, flagsTest.Connective, excludedMask),
+            FlagsTestKind.IsNot => EmitFlagsIsNotTest(sb, subject, maskStr),
+            FlagsTestKind.IsOnly => EmitFlagsIsOnlyTest(sb, subject, maskStr),
+            _ => throw new InvalidOperationException($"Unknown flags test kind: {flagsTest.Kind}")
+        };
+    }
+
+    /// <summary>
+    /// Resolves a flag member name to its bit value (1UL &lt;&lt; BitPosition).
+    /// Falls back to 0 if not found.
+    /// </summary>
+    private static ulong ResolveFlagBit(string flagName, FlagsTypeInfo? flagsType)
+    {
+        if (flagsType == null) return 0;
+        foreach (var member in flagsType.Members)
+        {
+            if (member.Name == flagName)
+            {
+                return 1UL << member.BitPosition;
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// x is A and B → (x &amp; mask) == mask (all flags set)
+    /// x is A or B  → (x &amp; mask) != 0 (any flag set)
+    /// x is A and B but C → ((x &amp; mask) == mask) &amp;&amp; ((x &amp; excludedMask) == 0)
+    /// </summary>
+    private string EmitFlagsIsTest(StringBuilder sb, string subject, string mask, FlagsTestConnective connective, ulong excludedMask)
+    {
+        string andResult = NextTemp();
+        EmitLine(sb, $"  {andResult} = and i64 {subject}, {mask}");
+
+        string cmpResult;
+        if (connective == FlagsTestConnective.Or)
+        {
+            // Any flag set: (subject & mask) != 0
+            cmpResult = NextTemp();
+            EmitLine(sb, $"  {cmpResult} = icmp ne i64 {andResult}, 0");
+        }
+        else
+        {
+            // All flags set: (subject & mask) == mask
+            cmpResult = NextTemp();
+            EmitLine(sb, $"  {cmpResult} = icmp eq i64 {andResult}, {mask}");
+        }
+
+        // Handle 'but' exclusion
+        if (excludedMask > 0)
+        {
+            string exclAnd = NextTemp();
+            EmitLine(sb, $"  {exclAnd} = and i64 {subject}, {excludedMask}");
+            string exclCmp = NextTemp();
+            EmitLine(sb, $"  {exclCmp} = icmp eq i64 {exclAnd}, 0");
+            // Combined: cmpResult && exclCmp
+            string combined = NextTemp();
+            EmitLine(sb, $"  {combined} = and i1 {cmpResult}, {exclCmp}");
+            return combined;
+        }
+
+        return cmpResult;
+    }
+
+    /// <summary>
+    /// x isnot A → (x &amp; mask) != mask (flag not fully set)
+    /// </summary>
+    private string EmitFlagsIsNotTest(StringBuilder sb, string subject, string mask)
+    {
+        string andResult = NextTemp();
+        EmitLine(sb, $"  {andResult} = and i64 {subject}, {mask}");
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = icmp ne i64 {andResult}, {mask}");
+        return result;
+    }
+
+    /// <summary>
+    /// x isonly A and B → x == mask (exact match)
+    /// </summary>
+    private string EmitFlagsIsOnlyTest(StringBuilder sb, string subject, string mask)
+    {
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = icmp eq i64 {subject}, {mask}");
+        return result;
     }
 
     #endregion
