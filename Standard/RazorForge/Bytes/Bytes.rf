@@ -1,4 +1,4 @@
-module Bytes
+module Core
 
 # ============================================================================
 # Bytes - UTF-8 unmodifiable text

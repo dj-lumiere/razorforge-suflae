@@ -1,4 +1,4 @@
-module Text
+module Core
 
 # RazorForge Text and Bytes - Unmodifiable text types
 #

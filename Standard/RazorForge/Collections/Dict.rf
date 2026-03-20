@@ -10,10 +10,9 @@
 #   var alice_age = ages["Alice"]
 #   if ages.contains_key("Charlie") { }
 
-import Collections.List
 import Collections.SortedDict
 
-module Collections
+module Core
 
 # Initial number of buckets
 preset DICT_INITIAL_BUCKETS: UAddr = 16uaddr

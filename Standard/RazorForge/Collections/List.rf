@@ -2,7 +2,7 @@
 # Entity type with heap allocation
 # Grows by doubling capacity for O(1) amortized add_last
 
-module Collections
+module Core
 
 entity List[T] obeys Sequenceable[T]
   secret data: Snatched[T]       # Pointer to heap-allocated array

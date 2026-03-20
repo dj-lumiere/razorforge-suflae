@@ -10,10 +10,9 @@
 #   if names.contains("Alice") { }
 #   names.remove("Bob")
 
-import Collections.List
 import Collections.SortedSet
 
-module Collections
+module Core
 
 # Initial number of buckets
 preset SET_INITIAL_BUCKETS: UAddr = 16uaddr
