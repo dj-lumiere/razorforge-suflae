@@ -617,7 +617,7 @@ public partial class LLVMCodeGenerator
     {
         return binary.Operator switch
         {
-            BinaryOperator.And => EmitShortCircuitAnd(sb, binary),
+            BinaryOperator.And => IsFlagsBinaryOp(binary) ? EmitFlagsCombine(sb, binary) : EmitShortCircuitAnd(sb, binary),
             BinaryOperator.Or => EmitShortCircuitOr(sb, binary),
             BinaryOperator.Identical => EmitIdentityComparison(sb, binary, "eq"),
             BinaryOperator.NotIdentical => EmitIdentityComparison(sb, binary, "ne"),
@@ -765,6 +765,26 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {inverted} = xor {llvmType} {right}, -1");
         string result = NextTemp();
         EmitLine(sb, $"  {result} = and {llvmType} {left}, {inverted}");
+        return result;
+    }
+
+    /// <summary>
+    /// Checks whether a binary expression is a flags combination (both operands are FlagsTypeInfo).
+    /// </summary>
+    private bool IsFlagsBinaryOp(BinaryExpression binary)
+    {
+        return GetExpressionType(binary.Left) is FlagsTypeInfo;
+    }
+
+    /// <summary>
+    /// Emits flags combination: left | right (bitwise OR of two flags values).
+    /// </summary>
+    private string EmitFlagsCombine(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = or i64 {left}, {right}");
         return result;
     }
 

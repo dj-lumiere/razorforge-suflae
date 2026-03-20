@@ -576,6 +576,51 @@ public partial class LLVMCodeGenerator
                 case "__notsame__":
                     EmitSynthesizedNotSame(routine, funcName);
                     break;
+                case "all_on":
+                    EmitSynthesizedAllOn(routine, funcName);
+                    break;
+                case "all_off":
+                    EmitSynthesizedAllOff(routine, funcName);
+                    break;
+                case "all_cases":
+                    EmitSynthesizedAllCases(routine, funcName);
+                    break;
+                case "type_name":
+                    EmitSynthesizedTypeName(routine, funcName);
+                    break;
+                case "type_kind":
+                    EmitSynthesizedTypeKind(routine, funcName);
+                    break;
+                case "type_id":
+                    EmitSynthesizedTypeId(routine, funcName);
+                    break;
+                case "module_name":
+                    EmitSynthesizedModuleName(routine, funcName);
+                    break;
+                case "field_count":
+                    EmitSynthesizedFieldCount(routine, funcName);
+                    break;
+                case "is_generic":
+                    EmitSynthesizedIsGeneric(routine, funcName);
+                    break;
+                case "protocols":
+                    EmitSynthesizedProtocols(routine, funcName);
+                    break;
+                case "routine_names":
+                    EmitSynthesizedRoutineNames(routine, funcName);
+                    break;
+                case "annotations":
+                    EmitSynthesizedAnnotations(routine, funcName);
+                    break;
+                case "data_size":
+                    EmitSynthesizedDataSize(routine, funcName);
+                    break;
+                case "align_size":
+                    EmitSynthesizedAlignSize(routine, funcName);
+                    break;
+                case "member_variable_info":
+                    EmitSynthesizedMemberVariableInfo(routine, funcName);
+                    break;
             }
         }
     }
@@ -1259,6 +1304,632 @@ public partial class LLVMCodeGenerator
         EmitLine(_functionDefinitions, "  unreachable");
         EmitLine(_functionDefinitions, "}");
         EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized all_off() routine on flags types.
+    /// Returns 0 (no flags set).
+    /// </summary>
+    private void EmitSynthesizedAllOff(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}() {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, "  ret i64 0");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized all_on() routine on flags types.
+    /// Returns the OR of all member bit positions.
+    /// </summary>
+    private void EmitSynthesizedAllOn(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType is not FlagsTypeInfo flagsType) return;
+
+        ulong mask = 0;
+        foreach (var member in flagsType.Members)
+        {
+            mask |= 1UL << member.BitPosition;
+        }
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}() {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {mask}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized all_cases() routine on flags/choice types.
+    /// Returns a List[Me] containing all cases.
+    /// Layout: { i64 count, i64 capacity, ptr data } where data is an array of i64 values.
+    /// </summary>
+    private void EmitSynthesizedAllCases(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        // Collect all case values as i64 constants
+        var caseValues = new List<long>();
+
+        if (routine.OwnerType is ChoiceTypeInfo choiceType)
+        {
+            foreach (var c in choiceType.Cases)
+            {
+                caseValues.Add(c.ComputedValue);
+            }
+        }
+        else if (routine.OwnerType is FlagsTypeInfo flagsType)
+        {
+            foreach (var member in flagsType.Members)
+            {
+                caseValues.Add((long)(1UL << member.BitPosition));
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        int count = caseValues.Count;
+        int elemSize = 8; // i64
+
+        var sb = _functionDefinitions;
+        EmitLine(sb, $"define ptr @{funcName}() {{");
+        EmitLine(sb, "entry:");
+
+        // Allocate list header: { i64 count, i64 capacity, ptr data }
+        string listPtr = NextTemp();
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+
+        // Allocate data array
+        string dataPtr = NextTemp();
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {count * elemSize})");
+
+        // Store count
+        string countPtr = NextTemp();
+        EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  store i64 {count}, ptr {countPtr}");
+
+        // Store capacity
+        string capPtr = NextTemp();
+        EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  store i64 {count}, ptr {capPtr}");
+
+        // Store data pointer
+        string dataPtrSlot = NextTemp();
+        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+        // Store each case value into the data array
+        for (int i = 0; i < count; i++)
+        {
+            string elemPtr = NextTemp();
+            EmitLine(sb, $"  {elemPtr} = getelementptr i64, ptr {dataPtr}, i64 {i}");
+            EmitLine(sb, $"  store i64 {caseValues[i]}, ptr {elemPtr}");
+        }
+
+        EmitLine(sb, $"  ret ptr {listPtr}");
+        EmitLine(sb, "}");
+        EmitLine(sb, "");
+    }
+
+    #endregion
+
+    #region BuilderService Metadata Routines
+
+    /// <summary>
+    /// Emits the body for a synthesized type_name() routine.
+    /// Returns the type's name as a Text constant.
+    /// </summary>
+    private void EmitSynthesizedTypeName(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        string nameStr = EmitSynthesizedStringLiteral(routine.OwnerType.Name);
+        EmitLine(_functionDefinitions, $"  ret ptr {nameStr}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized type_kind() routine.
+    /// Returns the TypeCategory enum value as a U64 constant.
+    /// </summary>
+    private void EmitSynthesizedTypeKind(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        long kindValue = (long)routine.OwnerType.Category;
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {kindValue}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized type_id() routine.
+    /// Returns a unique build-time FNV-1a hash of the type's full name.
+    /// </summary>
+    private void EmitSynthesizedTypeId(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        ulong hash = ComputeTypeId(routine.OwnerType.FullName);
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {unchecked((long)hash)}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized module_name() routine.
+    /// Returns the module where the type is defined as a Text constant.
+    /// </summary>
+    private void EmitSynthesizedModuleName(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        string moduleName = routine.OwnerType.Module ?? "";
+
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        string moduleStr = EmitSynthesizedStringLiteral(moduleName);
+        EmitLine(_functionDefinitions, $"  ret ptr {moduleStr}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized field_count() routine.
+    /// Returns the number of member variables as a U64 constant.
+    /// </summary>
+    private void EmitSynthesizedFieldCount(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        int count = routine.OwnerType switch
+        {
+            RecordTypeInfo rec => rec.MemberVariables.Count,
+            EntityTypeInfo ent => ent.MemberVariables.Count,
+            ResidentTypeInfo res => res.MemberVariables.Count,
+            _ => 0
+        };
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {count}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized is_generic() routine.
+    /// Returns true if the type has generic parameters.
+    /// </summary>
+    private void EmitSynthesizedIsGeneric(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        string value = routine.OwnerType.IsGenericDefinition ? "true" : "false";
+
+        EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i1 {value}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Computes a unique type ID using FNV-1a hash of the full type name.
+    /// </summary>
+    private static ulong ComputeTypeId(string fullName)
+    {
+        ulong hash = 14695981039346656037UL; // FNV-1a offset basis
+        foreach (byte b in System.Text.Encoding.UTF8.GetBytes(fullName))
+        {
+            hash ^= b;
+            hash *= 1099511628211UL; // FNV-1a prime
+        }
+
+        return hash;
+    }
+
+    /// <summary>
+    /// Emits a List[Text] constant containing the given string values.
+    /// Layout: { i64 count, i64 capacity, ptr data } where data is an array of ptr (Text strings).
+    /// </summary>
+    private void EmitSynthesizedStringList(string funcName, string meType, IReadOnlyList<string> values)
+    {
+        int count = values.Count;
+        var sb = _functionDefinitions;
+
+        EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(sb, "entry:");
+
+        // Allocate list header: { i64 count, i64 capacity, ptr data }
+        string listPtr = NextTemp();
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+
+        // Allocate data array (array of pointers, 8 bytes each)
+        string dataPtr = NextTemp();
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {count * 8})");
+
+        // Store count
+        string countPtr = NextTemp();
+        EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  store i64 {count}, ptr {countPtr}");
+
+        // Store capacity
+        string capPtr = NextTemp();
+        EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  store i64 {count}, ptr {capPtr}");
+
+        // Store data pointer
+        string dataPtrSlot = NextTemp();
+        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+        // Store each string pointer into the data array
+        for (int i = 0; i < count; i++)
+        {
+            string strConst = EmitSynthesizedStringLiteral(values[i]);
+            string elemPtr = NextTemp();
+            EmitLine(sb, $"  {elemPtr} = getelementptr ptr, ptr {dataPtr}, i64 {i}");
+            EmitLine(sb, $"  store ptr {strConst}, ptr {elemPtr}");
+        }
+
+        EmitLine(sb, $"  ret ptr {listPtr}");
+        EmitLine(sb, "}");
+        EmitLine(sb, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized protocols() routine.
+    /// Returns a List[Text] of protocol names this type obeys.
+    /// </summary>
+    private void EmitSynthesizedProtocols(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        IReadOnlyList<TypeInfo>? protocols = routine.OwnerType switch
+        {
+            RecordTypeInfo rec => rec.ImplementedProtocols,
+            EntityTypeInfo ent => ent.ImplementedProtocols,
+            ResidentTypeInfo res => res.ImplementedProtocols,
+            _ => null
+        };
+
+        var names = protocols?.Select(p => p.Name).ToList() ?? [];
+        EmitSynthesizedStringList(funcName, meType, names);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized routine_names() routine.
+    /// Returns a List[Text] of all member routine names for this type.
+    /// </summary>
+    private void EmitSynthesizedRoutineNames(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        var routineNames = _registry.GetMethodsForType(routine.OwnerType)
+            .Select(r => r.Name)
+            .Distinct()
+            .ToList();
+
+        EmitSynthesizedStringList(funcName, meType, routineNames);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized annotations() routine.
+    /// Returns a List[Text] of build-time annotations on this type.
+    /// Currently returns an empty list (type-level annotations not yet tracked on TypeInfo).
+    /// </summary>
+    private void EmitSynthesizedAnnotations(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        // Type-level annotations are not yet tracked on TypeInfo — return empty list
+        EmitSynthesizedStringList(funcName, meType, []);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized data_size() routine.
+    /// Returns the byte size of the type's data layout.
+    /// </summary>
+    private void EmitSynthesizedDataSize(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        long size = ComputeDataSize(routine.OwnerType);
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {size}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized align_size() routine.
+    /// Returns the alignment requirement of the type.
+    /// </summary>
+    private void EmitSynthesizedAlignSize(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        long align = ComputeAlignSize(routine.OwnerType);
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {align}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized member_variable_info() routine.
+    /// Returns a List[FieldInfo] where FieldInfo = { ptr name, ptr type_name, i64 visibility, i64 index }.
+    /// </summary>
+    private void EmitSynthesizedMemberVariableInfo(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
+        {
+            RecordTypeInfo rec => rec.MemberVariables,
+            EntityTypeInfo ent => ent.MemberVariables,
+            ResidentTypeInfo res => res.MemberVariables,
+            _ => null
+        };
+
+        fields ??= [];
+        int count = fields.Count;
+
+        // FieldInfo layout: { ptr name, ptr type_name, i64 visibility, i64 index }
+        // Each element is 32 bytes (8 + 8 + 8 + 8)
+        int elemSize = 32;
+
+        var sb = _functionDefinitions;
+        EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(sb, "entry:");
+
+        // Allocate list header: { i64 count, i64 capacity, ptr data }
+        string listPtr = NextTemp();
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+
+        // Allocate data array
+        string dataPtr = NextTemp();
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {count * elemSize})");
+
+        // Store count
+        string countPtr = NextTemp();
+        EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  store i64 {count}, ptr {countPtr}");
+
+        // Store capacity
+        string capPtr = NextTemp();
+        EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  store i64 {count}, ptr {capPtr}");
+
+        // Store data pointer
+        string dataPtrSlot = NextTemp();
+        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+        // Store each FieldInfo { ptr name, ptr type_name, i64 visibility, i64 index }
+        for (int i = 0; i < count; i++)
+        {
+            var field = fields[i];
+            string nameStr = EmitSynthesizedStringLiteral(field.Name);
+            string typeNameStr = EmitSynthesizedStringLiteral(field.Type.Name);
+            long visibility = (long)field.Visibility;
+
+            // GEP to element i in the data array (each element is { ptr, ptr, i64, i64 })
+            string elemPtr = NextTemp();
+            EmitLine(sb, $"  {elemPtr} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {dataPtr}, i64 {i}");
+
+            // Store name (field 0)
+            string nameSlot = NextTemp();
+            EmitLine(sb, $"  {nameSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 0");
+            EmitLine(sb, $"  store ptr {nameStr}, ptr {nameSlot}");
+
+            // Store type_name (field 1)
+            string typeSlot = NextTemp();
+            EmitLine(sb, $"  {typeSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 1");
+            EmitLine(sb, $"  store ptr {typeNameStr}, ptr {typeSlot}");
+
+            // Store visibility (field 2)
+            string visSlot = NextTemp();
+            EmitLine(sb, $"  {visSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 2");
+            EmitLine(sb, $"  store i64 {visibility}, ptr {visSlot}");
+
+            // Store index (field 3)
+            string idxSlot = NextTemp();
+            EmitLine(sb, $"  {idxSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 3");
+            EmitLine(sb, $"  store i64 {i}, ptr {idxSlot}");
+        }
+
+        EmitLine(sb, $"  ret ptr {listPtr}");
+        EmitLine(sb, "}");
+        EmitLine(sb, "");
+    }
+
+    /// <summary>
+    /// Computes the byte size of a type's data layout using field sizes with alignment padding.
+    /// </summary>
+    private long ComputeDataSize(TypeInfo type)
+    {
+        IReadOnlyList<MemberVariableInfo>? fields = type switch
+        {
+            RecordTypeInfo { HasDirectBackendType: true } rec => null, // Use backend type size
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } => null, // Use underlying size
+            RecordTypeInfo rec => rec.MemberVariables,
+            EntityTypeInfo ent => ent.MemberVariables,
+            ResidentTypeInfo res => res.MemberVariables,
+            _ => null
+        };
+
+        // Simple types with known sizes
+        if (fields == null)
+        {
+            return type switch
+            {
+                RecordTypeInfo { HasDirectBackendType: true } rec => LlvmTypeSizeBytes(rec.LlvmType),
+                RecordTypeInfo { IsSingleMemberVariableWrapper: true } rec => LlvmTypeSizeBytes(rec.LlvmType),
+                ChoiceTypeInfo => 8, // i64
+                FlagsTypeInfo => 8,  // i64
+                _ => _pointerBitWidth / 8 // Default to pointer size
+            };
+        }
+
+        if (fields.Count == 0) return 1; // Empty struct = 1 byte (for addressability)
+
+        // Compute struct layout with alignment padding
+        long offset = 0;
+        long maxAlign = 1;
+
+        foreach (var field in fields)
+        {
+            long fieldSize = GetFieldByteSize(field.Type);
+            long fieldAlign = GetFieldAlignment(field.Type);
+            maxAlign = Math.Max(maxAlign, fieldAlign);
+
+            // Align offset
+            offset = (offset + fieldAlign - 1) / fieldAlign * fieldAlign;
+            offset += fieldSize;
+        }
+
+        // Pad to struct alignment
+        offset = (offset + maxAlign - 1) / maxAlign * maxAlign;
+        return offset;
+    }
+
+    /// <summary>
+    /// Computes the alignment requirement of a type.
+    /// </summary>
+    private long ComputeAlignSize(TypeInfo type)
+    {
+        IReadOnlyList<MemberVariableInfo>? fields = type switch
+        {
+            RecordTypeInfo { HasDirectBackendType: true } => null,
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } => null,
+            RecordTypeInfo rec => rec.MemberVariables,
+            EntityTypeInfo ent => ent.MemberVariables,
+            ResidentTypeInfo res => res.MemberVariables,
+            _ => null
+        };
+
+        if (fields == null)
+        {
+            return type switch
+            {
+                RecordTypeInfo { HasDirectBackendType: true } rec => LlvmTypeAlignment(rec.LlvmType),
+                RecordTypeInfo { IsSingleMemberVariableWrapper: true } rec =>
+                    LlvmTypeAlignment(rec.LlvmType),
+                ChoiceTypeInfo => 8,
+                FlagsTypeInfo => 8,
+                _ => _pointerBitWidth / 8
+            };
+        }
+
+        if (fields.Count == 0) return 1;
+
+        long maxAlign = 1;
+        foreach (var field in fields)
+        {
+            maxAlign = Math.Max(maxAlign, GetFieldAlignment(field.Type));
+        }
+
+        return maxAlign;
+    }
+
+    /// <summary>
+    /// Gets the byte size of a field's type for layout computation.
+    /// </summary>
+    private long GetFieldByteSize(TypeInfo type)
+    {
+        string llvmType = GetLLVMType(type);
+        return LlvmTypeSizeBytes(llvmType);
+    }
+
+    /// <summary>
+    /// Gets the alignment of a field's type for layout computation.
+    /// </summary>
+    private long GetFieldAlignment(TypeInfo type)
+    {
+        string llvmType = GetLLVMType(type);
+        return LlvmTypeAlignment(llvmType);
+    }
+
+    /// <summary>
+    /// Maps an LLVM type string to its byte size.
+    /// </summary>
+    private long LlvmTypeSizeBytes(string llvmType)
+    {
+        return llvmType switch
+        {
+            "i1" => 1,
+            "i8" => 1,
+            "i16" => 2,
+            "i32" => 4,
+            "i64" => 8,
+            "i128" => 16,
+            "half" => 2,
+            "float" => 4,
+            "double" => 8,
+            "fp128" => 16,
+            "ptr" => _pointerBitWidth / 8,
+            _ => _pointerBitWidth / 8 // Default to pointer size for struct/unknown types
+        };
+    }
+
+    /// <summary>
+    /// Maps an LLVM type string to its natural alignment.
+    /// </summary>
+    private long LlvmTypeAlignment(string llvmType)
+    {
+        return llvmType switch
+        {
+            "i1" => 1,
+            "i8" => 1,
+            "i16" => 2,
+            "i32" => 4,
+            "i64" => 8,
+            "i128" => 16,
+            "half" => 2,
+            "float" => 4,
+            "double" => 8,
+            "fp128" => 16,
+            "ptr" => _pointerBitWidth / 8,
+            _ => _pointerBitWidth / 8
+        };
     }
 
     #endregion

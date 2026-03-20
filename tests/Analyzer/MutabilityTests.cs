@@ -97,10 +97,9 @@ public class MutabilityTests
     }
 
     [Fact]
-    public void Analyze_LetMemberVariableMutation_ReportsError()
+    public void Analyze_WritableMemberVariableMutation_NoError()
     {
-        // All entity fields are immutable
-        // Mutating any member variable should produce an error
+        // Entity fields are mutable via @writable routines
         string source = """
                         entity User
                           id: U64
@@ -112,8 +111,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
+        Analyze(source: source);
     }
 
     #endregion

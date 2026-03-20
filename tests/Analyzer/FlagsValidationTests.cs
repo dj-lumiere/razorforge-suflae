@@ -109,6 +109,69 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
 
+    [Fact]
+    public void Flags_AndCombiner_SameType_NoErrors()
+    {
+        string source = """
+                        flags Permissions
+                          READ
+                          WRITE
+                          EXECUTE
+
+                        routine test(a: Permissions, b: Permissions)
+                          var combined = a and b
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
+    }
+
+    [Fact]
+    public void Flags_AndCombiner_DifferentTypes_ReportsError()
+    {
+        string source = """
+                        flags Perms
+                          READ
+                          WRITE
+
+                        flags Roles
+                          ADMIN
+                          USER
+
+                        routine test(p: Perms, r: Roles)
+                          var combined = p and r
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
+    }
+
+    [Fact]
+    public void Flags_AllOnAllOff_NoErrors()
+    {
+        string source = """
+                        flags Permissions
+                          READ
+                          WRITE
+                          EXECUTE
+
+                        routine test()
+                          var all = Permissions.all_on()
+                          var none = Permissions.all_off()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
+    }
+
     #endregion
 
     #region #127: Max 64 members

@@ -1009,6 +1009,14 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
+        // Flags combination: A and B → bitwise OR (combines flags)
+        if (binary.Operator == BinaryOperator.And
+            && leftType is FlagsTypeInfo
+            && leftType.Name == rightType.Name)
+        {
+            return leftType;
+        }
+
         // Handle logical operators (and, or) — require bool operands, return bool
         // These are not desugared because they need short-circuit evaluation
         if (IsLogicalOperator(op: binary.Operator))
