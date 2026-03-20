@@ -393,6 +393,9 @@ public partial class LLVMCodeGenerator
         // Set current function return type for use in EmitReturn
         _currentFunctionReturnType = routine.ReturnType;
 
+        // Track current routine for source_routine() / source_module() injection
+        _currentEmittingRoutine = routine;
+
         // Register parameters as local variables
         foreach (var param in routine.Parameters)
         {
@@ -565,7 +568,10 @@ public partial class LLVMCodeGenerator
                     EmitSynthesizedCopy(routine, funcName);
                     break;
                 case "__create__":
-                    EmitSynthesizedTextCreate(routine, funcName);
+                    if (routine.OwnerType?.Name == "Data")
+                        EmitSynthesizedDataCreate(routine, funcName);
+                    else
+                        EmitSynthesizedTextCreate(routine, funcName);
                     break;
                 case "__create__!":
                     EmitSynthesizedChoiceCreateFromText(routine, funcName);
@@ -620,6 +626,42 @@ public partial class LLVMCodeGenerator
                     break;
                 case "member_variable_info":
                     EmitSynthesizedMemberVariableInfo(routine, funcName);
+                    break;
+                case "all_fields":
+                    EmitSynthesizedAllFields(routine, funcName);
+                    break;
+                case "open_fields":
+                    EmitSynthesizedOpenFields(routine, funcName);
+                    break;
+                // BuilderService platform/build info
+                case "page_size":
+                    EmitSynthesizedBuilderServiceU64(routine, funcName, 4096);
+                    break;
+                case "cache_line":
+                    EmitSynthesizedBuilderServiceU64(routine, funcName, 64);
+                    break;
+                case "word_size":
+                    EmitSynthesizedBuilderServiceU64(routine, funcName, _pointerBitWidth / 8);
+                    break;
+                case "target_os":
+                    EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetOS());
+                    break;
+                case "target_arch":
+                    EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetArch());
+                    break;
+                case "version":
+                    EmitSynthesizedBuilderServiceText(routine, funcName, "0.1.0");
+                    break;
+                case "build_mode":
+#if DEBUG
+                    EmitSynthesizedBuilderServiceText(routine, funcName, "debug");
+#else
+                    EmitSynthesizedBuilderServiceText(routine, funcName, "release");
+#endif
+                    break;
+                case "timestamp":
+                    EmitSynthesizedBuilderServiceText(routine, funcName,
+                        DateTime.UtcNow.ToString("o"));
                     break;
             }
         }
@@ -1282,6 +1324,56 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Emits the body for a synthesized Data.__create__(from: T) routine.
+    /// Boxes a value into a Data entity (type_id, size, data_ptr).
+    /// </summary>
+    private void EmitSynthesizedDataCreate(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null || routine.Parameters.Count == 0) return;
+
+        var paramType = routine.Parameters[0].Type;
+        string paramLlvmType = GetParameterLLVMType(paramType);
+        string paramName = routine.Parameters[0].Name;
+
+        // Data entity layout: { i64 type_id, i64 size, ptr data_ptr } = 24 bytes
+        string dataStructType = GetEntityTypeName((EntityTypeInfo)routine.OwnerType);
+
+        ulong typeId = ComputeTypeId(paramType.FullName);
+        long dataSize = ComputeDataSize(paramType);
+
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}(ptr %me, {paramLlvmType} %{paramName}) {{");
+        EmitLine(_functionDefinitions, "entry:");
+
+        // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
+        string dataPtr = NextTemp();
+        EmitLine(_functionDefinitions, $"  {dataPtr} = call ptr @rf_alloc(i64 24)");
+
+        // Store type_id (compile-time FNV-1a hash)
+        string tidPtr = NextTemp();
+        EmitLine(_functionDefinitions, $"  {tidPtr} = getelementptr {dataStructType}, ptr {dataPtr}, i32 0, i32 0");
+        EmitLine(_functionDefinitions, $"  store i64 {typeId}, ptr {tidPtr}");
+
+        // Store size
+        string sizePtr = NextTemp();
+        EmitLine(_functionDefinitions, $"  {sizePtr} = getelementptr {dataStructType}, ptr {dataPtr}, i32 0, i32 1");
+        EmitLine(_functionDefinitions, $"  store i64 {dataSize}, ptr {sizePtr}");
+
+        // Allocate memory for boxed value and copy
+        string box = NextTemp();
+        EmitLine(_functionDefinitions, $"  {box} = call ptr @rf_alloc(i64 {dataSize})");
+        EmitLine(_functionDefinitions, $"  store {paramLlvmType} %{paramName}, ptr {box}");
+
+        // Store data_ptr
+        string dptrPtr = NextTemp();
+        EmitLine(_functionDefinitions, $"  {dptrPtr} = getelementptr {dataStructType}, ptr {dataPtr}, i32 0, i32 2");
+        EmitLine(_functionDefinitions, $"  store ptr {box}, ptr {dptrPtr}");
+
+        EmitLine(_functionDefinitions, $"  ret ptr {dataPtr}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
     /// Emits the body for a synthesized __create__!(from: Text) on choice types.
     /// For now: traps (full text→tag requires runtime string comparison).
     /// </summary>
@@ -1782,6 +1874,138 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Emits the body for a synthesized all_fields() routine.
+    /// Returns a Dict[Text, Data] with all field names mapped to their boxed values.
+    /// </summary>
+    private void EmitSynthesizedAllFields(RoutineInfo routine, string funcName)
+    {
+        EmitSynthesizedFieldsDict(routine, funcName, openOnly: false);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized open_fields() routine.
+    /// Returns a Dict[Text, Data] with only open (public) field names mapped to their boxed values.
+    /// </summary>
+    private void EmitSynthesizedOpenFields(RoutineInfo routine, string funcName)
+    {
+        EmitSynthesizedFieldsDict(routine, funcName, openOnly: true);
+    }
+
+    /// <summary>
+    /// Shared implementation for all_fields() and open_fields().
+    /// Allocates a Dict[Text, Data], extracts field values from %me, boxes each to Data,
+    /// and inserts into the dict.
+    /// </summary>
+    private void EmitSynthesizedFieldsDict(RoutineInfo routine, string funcName, bool openOnly)
+    {
+        if (routine.OwnerType == null) return;
+
+        var sb = _functionDefinitions;
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        // Get fields for this type
+        IReadOnlyList<MemberVariableInfo> allFields = routine.OwnerType switch
+        {
+            RecordTypeInfo rec => rec.MemberVariables,
+            EntityTypeInfo ent => ent.MemberVariables,
+            ResidentTypeInfo res => res.MemberVariables,
+            _ => []
+        };
+
+        var fields = openOnly
+            ? allFields.Where(f => f.Visibility == VisibilityModifier.Open).ToList()
+            : allFields.ToList();
+
+        // Look up Dict[Text, Data] creator and set method
+        TypeInfo? dictDef = _registry.LookupType("Dict");
+        TypeInfo? textType = _registry.LookupType("Text");
+        TypeInfo? dataType = _registry.LookupType("Data");
+
+        if (dictDef == null || textType == null || dataType == null)
+        {
+            // Dict or Data not available — emit a function that returns null
+            EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
+            EmitLine(sb, "entry:");
+            EmitLine(sb, "  ret ptr null");
+            EmitLine(sb, "}");
+            EmitLine(sb, "");
+            return;
+        }
+
+        TypeInfo dictTextData = _registry.GetOrCreateResolution(
+            genericDef: dictDef, typeArguments: [textType, dataType]);
+
+        // Mangle names for Dict[Text, Data].__create__() and set(key, value)
+        string dictTypeName = MangleTypeName(dictTextData.Name);
+        string dictCreateName = $"{dictTypeName}___create__";
+        string dictSetName = $"{dictTypeName}_set";
+
+        // Data entity struct type for inline boxing
+        string dataStructType = dataType is EntityTypeInfo dataEntity
+            ? GetEntityTypeName(dataEntity)
+            : "%Entity.Data";
+
+        EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(sb, "entry:");
+
+        // Allocate empty dict: %dict = call ptr @Dict_Text_Data_.__create__()
+        string dictPtr = NextTemp();
+        EmitLine(sb, $"  {dictPtr} = call ptr @{dictCreateName}()");
+
+        // Get the owner struct type name for GEP
+        string structType = GetLLVMType(routine.OwnerType);
+
+        // For each field: extract value, inline-box to Data, insert into dict
+        for (int i = 0; i < fields.Count; i++)
+        {
+            var field = fields[i];
+            string fieldLlvmType = GetLLVMType(field.Type);
+            string nameStr = EmitSynthesizedStringLiteral(field.Name);
+
+            // Extract field value from %me
+            string fieldPtr = NextTemp();
+            EmitLine(sb, $"  {fieldPtr} = getelementptr {structType}, {meType} %me, i32 0, i32 {field.Index}");
+            string fieldVal = NextTemp();
+            EmitLine(sb, $"  {fieldVal} = load {fieldLlvmType}, ptr {fieldPtr}");
+
+            // Inline Data boxing (avoids overload collision on Data___create__)
+            ulong fieldTypeId = ComputeTypeId(field.Type.FullName);
+            long fieldDataSize = ComputeDataSize(field.Type);
+
+            // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
+            string boxed = NextTemp();
+            EmitLine(sb, $"  {boxed} = call ptr @rf_alloc(i64 24)");
+
+            // Store type_id
+            string tidSlot = NextTemp();
+            EmitLine(sb, $"  {tidSlot} = getelementptr {dataStructType}, ptr {boxed}, i32 0, i32 0");
+            EmitLine(sb, $"  store i64 {fieldTypeId}, ptr {tidSlot}");
+
+            // Store size
+            string sizeSlot = NextTemp();
+            EmitLine(sb, $"  {sizeSlot} = getelementptr {dataStructType}, ptr {boxed}, i32 0, i32 1");
+            EmitLine(sb, $"  store i64 {fieldDataSize}, ptr {sizeSlot}");
+
+            // Allocate and store boxed value
+            string valBox = NextTemp();
+            EmitLine(sb, $"  {valBox} = call ptr @rf_alloc(i64 {fieldDataSize})");
+            EmitLine(sb, $"  store {fieldLlvmType} {fieldVal}, ptr {valBox}");
+
+            // Store data_ptr
+            string dptrSlot = NextTemp();
+            EmitLine(sb, $"  {dptrSlot} = getelementptr {dataStructType}, ptr {boxed}, i32 0, i32 2");
+            EmitLine(sb, $"  store ptr {valBox}, ptr {dptrSlot}");
+
+            // Insert into dict: call dict.set(name, boxed)
+            EmitLine(sb, $"  call void @{dictSetName}(ptr {dictPtr}, ptr {nameStr}, ptr {boxed})");
+        }
+
+        EmitLine(sb, $"  ret ptr {dictPtr}");
+        EmitLine(sb, "}");
+        EmitLine(sb, "");
+    }
+
+    /// <summary>
     /// Computes the byte size of a type's data layout using field sizes with alignment padding.
     /// </summary>
     private long ComputeDataSize(TypeInfo type)
@@ -1929,6 +2153,75 @@ public partial class LLVMCodeGenerator
             "fp128" => 16,
             "ptr" => _pointerBitWidth / 8,
             _ => _pointerBitWidth / 8
+        };
+    }
+
+    #endregion
+
+    #region BuilderService Platform/Build Info
+
+    /// <summary>
+    /// Emits a BuilderService member routine that returns a U64 constant.
+    /// </summary>
+    private void EmitSynthesizedBuilderServiceU64(RoutineInfo routine, string funcName, long value)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {value}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits a BuilderService member routine that returns a Text constant.
+    /// </summary>
+    private void EmitSynthesizedBuilderServiceText(RoutineInfo routine, string funcName, string value)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        string strConst = EmitSynthesizedStringLiteral(value);
+
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret ptr {strConst}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Detects the target operating system name.
+    /// </summary>
+    private static string DetectTargetOS()
+    {
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.Windows))
+            return "windows";
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.Linux))
+            return "linux";
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.OSX))
+            return "macos";
+        return "unknown";
+    }
+
+    /// <summary>
+    /// Detects the target CPU architecture name.
+    /// </summary>
+    private static string DetectTargetArch()
+    {
+        return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
+        {
+            System.Runtime.InteropServices.Architecture.X64 => "x86_64",
+            System.Runtime.InteropServices.Architecture.X86 => "x86",
+            System.Runtime.InteropServices.Architecture.Arm64 => "aarch64",
+            System.Runtime.InteropServices.Architecture.Arm => "arm",
+            _ => "unknown"
         };
     }
 

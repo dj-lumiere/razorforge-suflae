@@ -2009,6 +2009,13 @@ public sealed partial class SemanticAnalyzer
             ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [fieldInfoType])
             : null;
 
+        // Look up Dict[Text, Data] for all_fields() / open_fields()
+        TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
+        TypeSymbol? dataType = _registry.LookupType(name: "Data");
+        TypeSymbol? dictTextDataType = dictDef != null && textType != null && dataType != null
+            ? _registry.GetOrCreateResolution(genericDef: dictDef, typeArguments: [textType, dataType])
+            : null;
+
         foreach (TypeSymbol type in _registry.GetTypesWithMethods())
         {
             List<RoutineInfo> existingMethods = _registry.GetMethodsForType(type: type)
@@ -2093,6 +2100,18 @@ public sealed partial class SemanticAnalyzer
                 MaybeRegisterBuiltin(owner: type,
                     name: "annotations",
                     returnType: listTextType,
+                    existingMethods: existingMethods);
+            }
+
+            if (dictTextDataType != null)
+            {
+                MaybeRegisterBuiltin(owner: type,
+                    name: "all_fields",
+                    returnType: dictTextDataType,
+                    existingMethods: existingMethods);
+                MaybeRegisterBuiltin(owner: type,
+                    name: "open_fields",
+                    returnType: dictTextDataType,
                     existingMethods: existingMethods);
             }
 
@@ -2256,6 +2275,76 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // Source location standalone routines (injected at call site by codegen)
+        if (textType != null)
+        {
+            foreach (string name in new[] { "source_file", "source_routine", "source_module" })
+            {
+                if (_registry.LookupRoutine(fullName: name) == null)
+                {
+                    _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
+                    {
+                        Kind = RoutineKind.Function,
+                        OwnerType = null,
+                        Parameters = [],
+                        ReturnType = textType,
+                        IsFailable = false,
+                        DeclaredModification = ModificationCategory.Readonly,
+                        ModificationCategory = ModificationCategory.Readonly,
+                        Visibility = VisibilityModifier.Open,
+                        IsSynthesized = true
+                    });
+                }
+            }
+        }
+
+        if (u64Type != null)
+        {
+            foreach (string name in new[] { "source_line", "source_column" })
+            {
+                if (_registry.LookupRoutine(fullName: name) == null)
+                {
+                    _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
+                    {
+                        Kind = RoutineKind.Function,
+                        OwnerType = null,
+                        Parameters = [],
+                        ReturnType = u64Type,
+                        IsFailable = false,
+                        DeclaredModification = ModificationCategory.Readonly,
+                        ModificationCategory = ModificationCategory.Readonly,
+                        Visibility = VisibilityModifier.Open,
+                        IsSynthesized = true
+                    });
+                }
+            }
+        }
+
+        // Synthesize BuilderService record type with platform/build info member routines
+        if (_registry.LookupType(name: "BuilderService") == null && textType != null && u64Type != null)
+        {
+            var builderServiceType = new RecordTypeInfo(name: "BuilderService")
+            {
+                MemberVariables = [],
+                Visibility = VisibilityModifier.Open,
+                Module = "Core"
+            };
+            _registry.RegisterType(type: builderServiceType);
+
+            var bsMethods = new List<RoutineInfo>();
+            foreach (string name in new[] { "target_os", "target_arch", "version", "build_mode", "timestamp" })
+            {
+                MaybeRegisterBuiltin(owner: builderServiceType, name: name,
+                    returnType: textType, existingMethods: bsMethods);
+            }
+
+            foreach (string name in new[] { "page_size", "cache_line", "word_size" })
+            {
+                MaybeRegisterBuiltin(owner: builderServiceType, name: name,
+                    returnType: u64Type, existingMethods: bsMethods);
+            }
+        }
+
         // Auto-register Text.__create__(from: T) for all concrete user types
         // This makes every type structurally satisfy Representable[T]
         if (textType != null)
@@ -2282,6 +2371,50 @@ public sealed partial class SemanticAnalyzer
                     OwnerType = textType,
                     Parameters = [new ParameterInfo(name: "from", type: type)],
                     ReturnType = textType,
+                    IsFailable = false,
+                    DeclaredModification = ModificationCategory.Readonly,
+                    ModificationCategory = ModificationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+        }
+
+        // Auto-register Data.__create__(from: T) for all concrete storable types
+        // This enables type-erased boxing: Data(42), Data(my_entity), etc.
+        if (dataType != null)
+        {
+            List<RoutineInfo> dataCreateMethods = _registry.GetMethodsForType(type: dataType)
+                                                           .Where(predicate: m =>
+                                                                m.Name == "__create__")
+                                                           .ToList();
+
+            foreach (TypeSymbol type in _registry.GetAllTypes())
+            {
+                // Include concrete storable types + intrinsics
+                if (type.Category is not (TypeCategory.Record or TypeCategory.Entity
+                    or TypeCategory.Resident or TypeCategory.Choice or TypeCategory.Flags
+                    or TypeCategory.Intrinsic))
+                    continue;
+
+                // Skip non-boxable types
+                if (type is ErrorHandlingTypeInfo or VariantTypeInfo or WrapperTypeInfo)
+                    continue;
+
+                // Skip Data itself (no boxing Data in Data)
+                if (type.FullName == dataType.FullName)
+                    continue;
+
+                bool alreadyDefined = dataCreateMethods.Any(predicate: m =>
+                    m.Parameters.Count == 1 && m.Parameters[0].Type.FullName == type.FullName);
+                if (alreadyDefined) continue;
+
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: "__create__")
+                {
+                    Kind = RoutineKind.Creator,
+                    OwnerType = dataType,
+                    Parameters = [new ParameterInfo(name: "from", type: type)],
+                    ReturnType = dataType,
                     IsFailable = false,
                     DeclaredModification = ModificationCategory.Readonly,
                     ModificationCategory = ModificationCategory.Readonly,

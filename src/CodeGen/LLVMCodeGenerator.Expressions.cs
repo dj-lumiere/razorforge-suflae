@@ -475,6 +475,10 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
+        // Intercept source location routines — emit constants from call site, no actual call
+        if (call.Callee is IdentifierExpression { Name: var name } && IsSourceLocationRoutine(name))
+            return EmitSourceLocationInline(sb, name, call.Location);
+
         return call.Callee switch
         {
             // Determine if this is a method call (callee is MemberExpression) or standalone function call
@@ -482,6 +486,33 @@ public partial class LLVMCodeGenerator
             IdentifierExpression id => EmitFunctionCall(sb, id.Name, call.Arguments),
             _ => throw new NotImplementedException(
                 $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
+        };
+    }
+
+    /// <summary>
+    /// Returns true if the function name is a source location routine that should be inlined at call site.
+    /// </summary>
+    private static bool IsSourceLocationRoutine(string name) =>
+        name is "source_file" or "source_line" or "source_column" or "source_routine" or "source_module";
+
+    /// <summary>
+    /// Emits a source location routine inline as a constant from the call site location.
+    /// No actual function call is generated — the value is injected directly.
+    /// </summary>
+    private string EmitSourceLocationInline(StringBuilder sb, string routineName, SourceLocation location)
+    {
+        return routineName switch
+        {
+            "source_file" => EmitSynthesizedStringLiteral(location.FileName),
+            "source_line" => $"{location.Line}",
+            "source_column" => $"{location.Column}",
+            "source_routine" => EmitSynthesizedStringLiteral(
+                _currentEmittingRoutine?.Name ?? "<unknown>"),
+            "source_module" => EmitSynthesizedStringLiteral(
+                _currentEmittingRoutine?.OwnerType?.Module
+                ?? _currentEmittingRoutine?.Module
+                ?? "<unknown>"),
+            _ => "undef"
         };
     }
 

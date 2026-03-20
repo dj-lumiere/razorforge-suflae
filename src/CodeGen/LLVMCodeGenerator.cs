@@ -4,6 +4,7 @@ namespace Compiler.CodeGen;
 
 using System.Text;
 using SemanticAnalysis;
+using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
@@ -77,6 +78,9 @@ public partial class LLVMCodeGenerator
 
     /// <summary>LLVM type of the emit slot value.</summary>
     private string? _emitSlotType;
+
+    /// <summary>The routine currently being emitted (for source_routine() / source_module() injection).</summary>
+    private RoutineInfo? _currentEmittingRoutine;
 
     #endregion
 
