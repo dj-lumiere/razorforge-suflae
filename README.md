@@ -22,7 +22,7 @@ entity ConnectionPool
   active_count: S64
   max_connections: S64
 
-routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection?
+routine acquire_connection(pool: Retained[ConnectionPool]) -> Connection?
   # Block access for multiple operations
   using pool.hijack() as p
     # Check capacity with pattern matching
@@ -34,7 +34,7 @@ routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection?
         return conn
       else => return None  # Pool exhausted
 
-routine monitor_pool(weak: Tracked<ConnectionPool>)
+routine monitor_pool(weak: Watched[ConnectionPool])
   # Try to recover weak reference
   when weak.try_recover()
     is None => show("Pool was deallocated")
@@ -185,7 +185,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **Pay Only for What You Use**: No hidden costs, explicit tradeoffs
 - **Danger Blocks**: Opt-in unsafe operations (`danger!`) for zero-overhead code
 - **Five Data Types**: `record`, `resident`, `entity`, `choice`, `variant`
-- **Explicit Concurrency**: `Shared<T, Policy>` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
+- **Explicit Concurrency**: `Shared[T, Policy]` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
 - **Freestanding Mode**: Bare metal programming without runtime
 - **C Subsystem**: Full FFI with C libraries
 
@@ -221,8 +221,8 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 
 ### RazorForge Documentation
 
-- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Theatrical memory management (view, hijack, share, steal)
-- [Concurrency Model](https://razorforge.lumi-dev.xyz/Concurrency-Model) — `Shared<T, Policy>`, threading, message passing
+- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Theatrical memory management (view, hijack, retain, steal)
+- [Concurrency Model](https://razorforge.lumi-dev.xyz/Concurrency-Model) — `Shared[T, Policy]`, threading, message passing
 - [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) — Records, entities, residents, choices, variants, mutants
 - [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types for embedded systems
 - [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) — Unsafe operations and raw memory access
@@ -304,8 +304,8 @@ RazorForge makes memory operations **visible and explicit** through inline token
 ```razorforge
 entity Node
   value: S32,
-  next: Shared<Node>?,
-  prev: Tracked<Node>?  # Weak to prevent cycles
+  next: Retained[Node]?,
+  prev: Watched[Node]?  # Weak to prevent cycles
 
 routine process_node(node: Node)
   # Inline read-only access
@@ -337,7 +337,7 @@ routine start()
   var counter = Counter(value: 0)
 
   # Create thread-safe reference with MultiRead policy
-  var shared = counter.share<MultiRead>()
+  var shared = counter.share[MultiRead]()
 
   # Spawn reader threads - can run concurrently!
   for i in 0 to 5
@@ -493,6 +493,7 @@ RazorForge/
 
 ### Prerequisites
 
+- 64-bit operating system (x86_64 or ARM64)
 - .NET SDK 10.0 or later
 - LLVM 15+ (for code generation)
 - CMake 3.20+ (for native components)
