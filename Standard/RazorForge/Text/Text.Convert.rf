@@ -23,6 +23,18 @@ routine Text.__create__(from: Blank) -> Text
   return "Blank"
 
 # ============================================================================
+# Letter and Byte
+# ============================================================================
+
+routine Text.__create__(from: Letter) -> Text
+  var cstr_result = rf_letter_to_text(from.codepoint())
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: Byte) -> Text
+  var cstr_result = rf_byte_to_hex_text(from.byte_value())
+  return Text(from: CStr(from_ptr: cstr_result))
+
+# ============================================================================
 # Signed Integers
 # ============================================================================
 

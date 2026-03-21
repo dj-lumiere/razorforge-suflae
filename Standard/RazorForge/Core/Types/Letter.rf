@@ -106,9 +106,6 @@ routine Letter.__cmp__(other: Letter) -> ComparisonSign
 # Type conversions
 # ============================================================================
 
-routine Letter.codepoint() -> U32
-  return me.value
-
 routine Letter.to_byte() -> Byte
   # Only valid for ASCII range - truncates
   return Byte(codepoint: U8(me.value & 0x7Fu32))
@@ -161,9 +158,53 @@ routine Letter.is_emoji() -> Bool
      (0x1F1E0u32 <= v <= 0x1F1FFu32)     # Flags
 
 # ============================================================================
-# Codepoint offset
+# Short aliases (spec compatibility)
+# ============================================================================
+
+routine Letter.is_upper() -> Bool
+  return me.is_uppercase()
+
+routine Letter.is_lower() -> Bool
+  return me.is_lowercase()
+
+routine Letter.to_upper() -> Letter
+  return me.to_uppercase()
+
+routine Letter.to_lower() -> Letter
+  return me.to_lowercase()
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+routine Letter.U32() -> U32
+  return me.value
+
+routine Letter.Text() -> Text
+  return Text(from: me)
+
+# ============================================================================
+# Navigation
 # ============================================================================
 
 routine Letter.offset![I obeys Integral](delta: I) -> Letter
   var new_value = SAddr(me.value) + delta.to_saddr()
   return Letter(value: U32(new_value))
+
+routine Letter.skip(n: S32) -> Letter
+  return me.offset!(n)
+
+routine Letter.rewind(n: S32) -> Letter
+  return me.offset!(-n)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine Letter.to_debug() -> Text
+  return "'" + Text(from: me) + "'"
+
+routine Letter.hash() -> U64
+  var v = zext[U32, U64](me.value)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

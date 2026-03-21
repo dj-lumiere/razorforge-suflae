@@ -12,6 +12,8 @@ preset S16_MIN: S16 = -32768_s16
 preset S16_MAX: S16 = 32767_s16
 preset S16_ZERO: S16 = 0_s16
 preset S16_ONE: S16 = 1_s16
+preset S16_BITS: S32 = 16
+preset S16_BYTES: S32 = 2
 
 # ============================================================================
 # Creators
@@ -332,3 +334,80 @@ routine S16.signum() -> S16
     me > 0_s16 => 1_s16
     me < 0_s16 => -1_s16
     else => 0_s16
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine S16.rotate_left(n: S16) -> S16
+  var shift = bit_and[S16](n, 15_s16)
+  return bit_or[S16](shl[S16](me, shift), lshr[S16](me, sub[S16](16_s16, shift)))
+
+routine S16.rotate_right(n: S16) -> S16
+  var shift = bit_and[S16](n, 15_s16)
+  return bit_or[S16](lshr[S16](me, shift), shl[S16](me, sub[S16](16_s16, shift)))
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine S16.S32() -> S32
+  return sext[S16, S32](me)
+
+routine S16.S64() -> S64
+  return sext[S16, S64](me)
+
+routine S16.S128() -> S128
+  return sext[S16, S128](me)
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine S16.S8!() -> S8
+  unless -128_s16 <= me <= 127_s16
+    throw IntegerOverflowError(f"Cannot convert {me} to S8: value out of range")
+  return trunc[S16, S8](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine S16.U16!() -> U16
+  if me < 0_s16
+    throw IntegerOverflowError(f"Cannot convert {me} to U16: value is negative")
+  return bitcast[S16, U16](me)
+
+routine S16.U32!() -> U32
+  if me < 0_s16
+    throw IntegerOverflowError(f"Cannot convert {me} to U32: value is negative")
+  return zext[S16, U32](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine S16.F32() -> F32
+  return sitofp[S16, F32](me)
+
+routine S16.F64() -> F64
+  return sitofp[S16, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine S16.to_debug() -> Text
+  return Text(from: me)
+
+routine S16.hash() -> U64
+  var v = sext[S16, U64](me)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)
+
+routine S16.is_power_of_two() -> Bool
+  var is_pos = icmp_sgt[S16](me, 0_s16)
+  var minus_one = sub[S16](me, 1_s16)
+  var anded = bit_and[S16](me, minus_one)
+  var is_zero = icmp_eq[S16](anded, 0_s16)
+  return is_pos and is_zero

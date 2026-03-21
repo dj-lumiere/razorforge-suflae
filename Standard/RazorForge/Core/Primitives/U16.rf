@@ -11,6 +11,8 @@ preset U16_MIN: U16 = 0_u16
 preset U16_MAX: U16 = 65535_u16
 preset U16_ZERO: U16 = 0_u16
 preset U16_ONE: U16 = 1_u16
+preset U16_BITS: S32 = 16
+preset U16_BYTES: S32 = 2
 
 # ============================================================================
 # Creators
@@ -345,3 +347,69 @@ routine U16.is_even() -> Bool
 
 routine U16.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine U16.rotate_left(n: U16) -> U16
+  var shift = bit_and[U16](n, 15_u16)
+  return bit_or[U16](shl[U16](me, shift), lshr[U16](me, sub[U16](16_u16, shift)))
+
+routine U16.rotate_right(n: U16) -> U16
+  var shift = bit_and[U16](n, 15_u16)
+  return bit_or[U16](lshr[U16](me, shift), shl[U16](me, sub[U16](16_u16, shift)))
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine U16.U32() -> U32
+  return zext[U16, U32](me)
+
+routine U16.U64() -> U64
+  return zext[U16, U64](me)
+
+routine U16.U128() -> U128
+  return zext[U16, U128](me)
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine U16.U8!() -> U8
+  unless me <= 255_u16
+    throw IntegerOverflowError(f"Cannot convert {me} to U8: value out of range")
+  return trunc[U16, U8](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine U16.S32() -> S32
+  return zext[U16, S32](me)
+
+routine U16.S64() -> S64
+  return zext[U16, S64](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine U16.F32() -> F32
+  return uitofp[U16, F32](me)
+
+routine U16.F64() -> F64
+  return uitofp[U16, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine U16.to_debug() -> Text
+  return Text(from: me)
+
+routine U16.hash() -> U64
+  var v = zext[U16, U64](me)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

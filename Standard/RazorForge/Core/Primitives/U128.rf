@@ -11,6 +11,8 @@ preset U128_MIN: U128 = 0_u128
 preset U128_MAX: U128 = 340282366920938463463374607431768211455_u128
 preset U128_ZERO: U128 = 0_u128
 preset U128_ONE: U128 = 1_u128
+preset U128_BITS: S32 = 128
+preset U128_BYTES: S32 = 16
 
 # ============================================================================
 # Creators
@@ -307,3 +309,70 @@ routine U128.high64() -> U64
 
 routine U128.low64() -> U64
   return trunc[U128, U64](me)
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine U128.rotate_left(n: U128) -> U128
+  var shift = bit_and[U128](n, 127_u128)
+  return bit_or[U128](shl[U128](me, shift), lshr[U128](me, sub[U128](128_u128, shift)))
+
+routine U128.rotate_right(n: U128) -> U128
+  var shift = bit_and[U128](n, 127_u128)
+  return bit_or[U128](lshr[U128](me, shift), shl[U128](me, sub[U128](128_u128, shift)))
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine U128.U8!() -> U8
+  unless me <= 255_u128
+    throw IntegerOverflowError(f"Cannot convert {me} to U8: value out of range")
+  return trunc[U128, U8](me)
+
+routine U128.U16!() -> U16
+  unless me <= 65535_u128
+    throw IntegerOverflowError(f"Cannot convert {me} to U16: value out of range")
+  return trunc[U128, U16](me)
+
+routine U128.U32!() -> U32
+  unless me <= 4294967295_u128
+    throw IntegerOverflowError(f"Cannot convert {me} to U32: value out of range")
+  return trunc[U128, U32](me)
+
+routine U128.U64!() -> U64
+  unless me <= 18446744073709551615_u128
+    throw IntegerOverflowError(f"Cannot convert {me} to U64: value out of range")
+  return trunc[U128, U64](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine U128.S128!() -> S128
+  unless me <= 170141183460469231731687303715884105727_u128
+    throw IntegerOverflowError(f"Cannot convert {me} to S128: value out of range")
+  return bitcast[U128, S128](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine U128.F64() -> F64
+  return uitofp[U128, F64](me)
+
+routine U128.F128() -> F128
+  return uitofp[U128, F128](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine U128.to_debug() -> Text
+  return Text(from: me)
+
+routine U128.hash() -> U64
+  var lo = trunc[U128, U64](me)
+  var hi = trunc[U128, U64](lshr[U128](me, 64_u32))
+  return xor[U64](lo, mul[U64](hi, 1099511628211_u64))

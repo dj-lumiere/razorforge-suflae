@@ -11,6 +11,8 @@ preset U32_MIN: U32 = 0_u32
 preset U32_MAX: U32 = 4294967295_u32
 preset U32_ZERO: U32 = 0_u32
 preset U32_ONE: U32 = 1_u32
+preset U32_BITS: S32 = 32
+preset U32_BYTES: S32 = 4
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -310,3 +312,73 @@ routine U32.is_even() -> Bool
 
 routine U32.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine U32.rotate_left(n: U32) -> U32
+  var shift = bit_and[U32](n, 31_u32)
+  return bit_or[U32](shl[U32](me, shift), lshr[U32](me, sub[U32](32_u32, shift)))
+
+routine U32.rotate_right(n: U32) -> U32
+  var shift = bit_and[U32](n, 31_u32)
+  return bit_or[U32](lshr[U32](me, shift), shl[U32](me, sub[U32](32_u32, shift)))
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine U32.U64() -> U64
+  return zext[U32, U64](me)
+
+routine U32.U128() -> U128
+  return zext[U32, U128](me)
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine U32.U8!() -> U8
+  unless me <= 255_u32
+    throw IntegerOverflowError(f"Cannot convert {me} to U8: value out of range")
+  return trunc[U32, U8](me)
+
+routine U32.U16!() -> U16
+  unless me <= 65535_u32
+    throw IntegerOverflowError(f"Cannot convert {me} to U16: value out of range")
+  return trunc[U32, U16](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine U32.S32!() -> S32
+  unless me <= 2147483647_u32
+    throw IntegerOverflowError(f"Cannot convert {me} to S32: value out of range")
+  return bitcast[U32, S32](me)
+
+routine U32.S64() -> S64
+  return zext[U32, S64](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine U32.F32() -> F32
+  return uitofp[U32, F32](me)
+
+routine U32.F64() -> F64
+  return uitofp[U32, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine U32.to_debug() -> Text
+  return Text(from: me)
+
+routine U32.hash() -> U64
+  var v = zext[U32, U64](me)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

@@ -13,6 +13,8 @@ preset S64_MIN: S64 = -9_223_372_036_854_775_808_s64
 preset S64_MAX: S64 = 9_223_372_036_854_775_807_s64
 preset S64_ZERO: S64 = 0_s64
 preset S64_ONE: S64 = 1_s64
+preset S64_BITS: S32 = 64
+preset S64_BYTES: S32 = 8
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -342,3 +344,72 @@ routine S64.is_power_of_two() -> Bool
   var anded = bit_and[S64](me, minus_one)
   var is_zero = icmp_eq[S64](anded, 0_s64)
   return is_pos and is_zero
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine S64.rotate_left(n: S64) -> S64
+  var shift = bit_and[S64](n, 63_s64)
+  return bit_or[S64](shl[S64](me, shift), lshr[S64](me, sub[S64](64_s64, shift)))
+
+routine S64.rotate_right(n: S64) -> S64
+  var shift = bit_and[S64](n, 63_s64)
+  return bit_or[S64](lshr[S64](me, shift), shl[S64](me, sub[S64](64_s64, shift)))
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine S64.S128() -> S128
+  return sext[S64, S128](me)
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine S64.S8!() -> S8
+  unless -128_s64 <= me <= 127_s64
+    throw IntegerOverflowError(f"Cannot convert {me} to S8: value out of range")
+  return trunc[S64, S8](me)
+
+routine S64.S16!() -> S16
+  unless -32768_s64 <= me <= 32767_s64
+    throw IntegerOverflowError(f"Cannot convert {me} to S16: value out of range")
+  return trunc[S64, S16](me)
+
+routine S64.S32!() -> S32
+  unless -2147483648_s64 <= me <= 2147483647_s64
+    throw IntegerOverflowError(f"Cannot convert {me} to S32: value out of range")
+  return trunc[S64, S32](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine S64.U64!() -> U64
+  if me < 0_s64
+    throw IntegerOverflowError(f"Cannot convert {me} to U64: value is negative")
+  return bitcast[S64, U64](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine S64.F32() -> F32
+  return sitofp[S64, F32](me)
+
+routine S64.F64() -> F64
+  return sitofp[S64, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine S64.to_debug() -> Text
+  return Text(from: me)
+
+routine S64.hash() -> U64
+  var v = bitcast[S64, U64](me)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

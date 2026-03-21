@@ -11,6 +11,8 @@ preset U8_MIN: U8 = 0_u8
 preset U8_MAX: U8 = 255_u8
 preset U8_ZERO: U8 = 0_u8
 preset U8_ONE: U8 = 1_u8
+preset U8_BITS: S32 = 8
+preset U8_BYTES: S32 = 1
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -343,3 +345,63 @@ routine U8.is_even() -> Bool
 
 routine U8.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine U8.rotate_left(n: U8) -> U8
+  var shift = bit_and[U8](n, 7_u8)
+  return bit_or[U8](shl[U8](me, shift), lshr[U8](me, sub[U8](8_u8, shift)))
+
+routine U8.rotate_right(n: U8) -> U8
+  var shift = bit_and[U8](n, 7_u8)
+  return bit_or[U8](lshr[U8](me, shift), shl[U8](me, sub[U8](8_u8, shift)))
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine U8.U16() -> U16
+  return zext[U8, U16](me)
+
+routine U8.U32() -> U32
+  return zext[U8, U32](me)
+
+routine U8.U64() -> U64
+  return zext[U8, U64](me)
+
+routine U8.U128() -> U128
+  return zext[U8, U128](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine U8.S16() -> S16
+  return zext[U8, S16](me)
+
+routine U8.S32() -> S32
+  return zext[U8, S32](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine U8.F32() -> F32
+  return uitofp[U8, F32](me)
+
+routine U8.F64() -> F64
+  return uitofp[U8, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine U8.to_debug() -> Text
+  return Text(from: me)
+
+routine U8.hash() -> U64
+  var v = zext[U8, U64](me)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

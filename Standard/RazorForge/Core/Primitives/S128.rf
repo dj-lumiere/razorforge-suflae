@@ -11,6 +11,8 @@ preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s12
 preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727_s128
 preset S128_ZERO: S128 = 0_s128
 preset S128_ONE: S128 = 1_s128
+preset S128_BITS: S32 = 128
+preset S128_BYTES: S32 = 16
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -319,3 +321,74 @@ routine S128.signum() -> S128
     me > 0_s128 => 1_s128
     me < 0_s128 => -1_s128
     else => 0_s128
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine S128.rotate_left(n: S128) -> S128
+  var shift = bit_and[S128](n, 127_s128)
+  return bit_or[S128](shl[S128](me, shift), lshr[S128](me, sub[S128](128_s128, shift)))
+
+routine S128.rotate_right(n: S128) -> S128
+  var shift = bit_and[S128](n, 127_s128)
+  return bit_or[S128](lshr[S128](me, shift), shl[S128](me, sub[S128](128_s128, shift)))
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine S128.S8!() -> S8
+  unless -128_s128 <= me <= 127_s128
+    throw IntegerOverflowError(f"Cannot convert {me} to S8: value out of range")
+  return trunc[S128, S8](me)
+
+routine S128.S16!() -> S16
+  unless -32768_s128 <= me <= 32767_s128
+    throw IntegerOverflowError(f"Cannot convert {me} to S16: value out of range")
+  return trunc[S128, S16](me)
+
+routine S128.S32!() -> S32
+  unless -2147483648_s128 <= me <= 2147483647_s128
+    throw IntegerOverflowError(f"Cannot convert {me} to S32: value out of range")
+  return trunc[S128, S32](me)
+
+routine S128.S64!() -> S64
+  unless -9223372036854775808_s128 <= me <= 9223372036854775807_s128
+    throw IntegerOverflowError(f"Cannot convert {me} to S64: value out of range")
+  return trunc[S128, S64](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine S128.U128!() -> U128
+  if me < 0_s128
+    throw IntegerOverflowError(f"Cannot convert {me} to U128: value is negative")
+  return bitcast[S128, U128](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine S128.F64() -> F64
+  return sitofp[S128, F64](me)
+
+routine S128.F128() -> F128
+  return sitofp[S128, F128](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine S128.to_debug() -> Text
+  return Text(from: me)
+
+routine S128.hash() -> U64
+  var v = bitcast[S128, U128](me)
+  var lo = trunc[U128, U64](v)
+  var hi = trunc[U128, U64](lshr[U128](v, 64_u32))
+  return xor[U64](lo, mul[U64](hi, 1099511628211_u64))
+
+routine S128.is_power_of_two() -> Bool
+  return me > 0_s128 and bit_and[S128](me, sub[S128](me, 1_s128)) == 0_s128

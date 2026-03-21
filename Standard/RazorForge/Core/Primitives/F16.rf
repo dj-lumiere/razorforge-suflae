@@ -19,6 +19,11 @@ preset F16_ONE: F16 = 1.0_f16
 preset F16_PI: F16 = 3.140625_f16
 preset F16_E: F16 = 2.71875_f16
 preset F16_SQRT_2: F16 = 1.414063_f16
+preset F16_NAN: F16 = 0.0_f16 / 0.0_f16
+preset F16_INFINITY: F16 = 1.0_f16 / 0.0_f16
+preset F16_NEG_INFINITY: F16 = -1.0_f16 / 0.0_f16
+preset F16_BITS: S32 = 16
+preset F16_BYTES: S32 = 2
 
 # Convert integers to F16 using LLVM intrinsics
 routine F16.__create__(from: S8) -> F16
@@ -182,3 +187,131 @@ routine F16.to_bits() -> U16
 # Create F16 from U16 bits (type punning)
 routine F16.from_bits(bits: U16) -> F16
   return bitcast[U16, F16](bits)
+
+# ============================================================================
+# Classification
+# ============================================================================
+
+routine F16.is_nan() -> Bool
+  return fcmp_uno[F16](me, me)
+
+routine F16.is_infinite() -> Bool
+  return fcmp_oeq[F16](me.abs(), F16_INFINITY)
+
+routine F16.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
+
+routine F16.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+routine F16.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U16](lshr[U16](bits, 10_u32), 0x1F_u16)
+  return exponent == 0_u16 and not me.is_zero()
+
+# ============================================================================
+# Trigonometric Functions (promote to F32)
+# ============================================================================
+
+routine F16.sin() -> F16
+  return F16(me.F32().sin())
+
+routine F16.cos() -> F16
+  return F16(me.F32().cos())
+
+routine F16.tan() -> F16
+  return F16(me.F32().tan())
+
+routine F16.asin() -> F16
+  return F16(me.F32().asin())
+
+routine F16.acos() -> F16
+  return F16(me.F32().acos())
+
+routine F16.atan() -> F16
+  return F16(me.F32().atan())
+
+routine F16.atan2(x: F16) -> F16
+  return F16(me.F32().atan2(x.F32()))
+
+routine F16.exp() -> F16
+  return F16(me.F32().exp())
+
+routine F16.log() -> F16
+  return F16(me.F32().log())
+
+routine F16.log2() -> F16
+  return F16(me.F32().log2())
+
+routine F16.log10() -> F16
+  return F16(me.F32().log10())
+
+routine F16.pow(exp: F16) -> F16
+  return F16(me.F32().pow(exp.F32()))
+
+# ============================================================================
+# Clamping Arithmetic
+# ============================================================================
+
+routine F16.__add_clamp__(you: F16) -> F16
+  var result = fadd[F16](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F16_MAX else fneg[F16](F16_MAX)
+  return result
+
+routine F16.__sub_clamp__(you: F16) -> F16
+  var result = fsub[F16](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F16_MAX else fneg[F16](F16_MAX)
+  return result
+
+routine F16.__mul_clamp__(you: F16) -> F16
+  var result = fmul[F16](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F16_MAX else fneg[F16](F16_MAX)
+  return result
+
+routine F16.__truediv_clamp__(you: F16) -> F16
+  var result = fdiv[F16](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F16_MAX else fneg[F16](F16_MAX)
+  return result
+
+# ============================================================================
+# Integer Conversions
+# ============================================================================
+
+routine F16.S32!() -> S32
+  return me.F32().S32!()
+
+routine F16.S64!() -> S64
+  return me.F32().S64!()
+
+# ============================================================================
+# Float Precision Conversions
+# ============================================================================
+
+routine F16.F32() -> F32
+  return fpext[F16, F32](me)
+
+routine F16.F64() -> F64
+  return fpext[F16, F64](me)
+
+routine F16.F128() -> F128
+  return fpext[F16, F128](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine F16.to_debug() -> Text
+  return Text(from: me)
+
+routine F16.hash() -> U64
+  var bits = zext[U16, U64](me.to_bits())
+  if me.is_nan()
+    bits = 0x7E00_u64
+  if bits == 0x8000_u64
+    bits = 0_u64
+  var h = xor[U64](bits, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

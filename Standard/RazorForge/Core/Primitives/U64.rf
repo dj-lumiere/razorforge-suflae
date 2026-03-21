@@ -11,6 +11,8 @@ preset U64_MIN: U64 = 0_u64
 preset U64_MAX: U64 = 18_446_744_073_709_551_615_u64
 preset U64_ZERO: U64 = 0_u64
 preset U64_ONE: U64 = 1_u64
+preset U64_BITS: S32 = 64
+preset U64_BYTES: S32 = 8
 
 # ============================================================================
 # Creators
@@ -317,3 +319,56 @@ routine U64.is_even() -> Bool
 
 routine U64.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine U64.U128() -> U128
+  return zext[U64, U128](me)
+
+# ============================================================================
+# Narrowing Conversions
+# ============================================================================
+
+routine U64.U8!() -> U8
+  unless me <= 255_u64
+    throw IntegerOverflowError(f"Cannot convert {me} to U8: value out of range")
+  return trunc[U64, U8](me)
+
+routine U64.U16!() -> U16
+  unless me <= 65535_u64
+    throw IntegerOverflowError(f"Cannot convert {me} to U16: value out of range")
+  return trunc[U64, U16](me)
+
+routine U64.U32!() -> U32
+  unless me <= 4294967295_u64
+    throw IntegerOverflowError(f"Cannot convert {me} to U32: value out of range")
+  return trunc[U64, U32](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine U64.S64!() -> S64
+  unless me <= 9223372036854775807_u64
+    throw IntegerOverflowError(f"Cannot convert {me} to S64: value out of range")
+  return bitcast[U64, S64](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine U64.F64() -> F64
+  return uitofp[U64, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine U64.to_debug() -> Text
+  return Text(from: me)
+
+routine U64.hash() -> U64
+  var h = xor[U64](me, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

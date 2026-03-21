@@ -21,6 +21,11 @@ preset F32_E: F32 = 2.7182817_f32
 preset F32_SQRT_2: F32 = 1.4142135_f32
 preset F32_LN_2: F32 = 0.6931472_f32
 preset F32_LN_10: F32 = 2.3025851_f32
+preset F32_NAN: F32 = 0.0_f32 / 0.0_f32
+preset F32_INFINITY: F32 = 1.0_f32 / 0.0_f32
+preset F32_NEG_INFINITY: F32 = -1.0_f32 / 0.0_f32
+preset F32_BITS: S32 = 32
+preset F32_BYTES: S32 = 4
 
 routine F32.__create__(from: S8) -> F32
   return sitofp[S8, F32](from)
@@ -200,3 +205,122 @@ routine F32.to_bits() -> U32
 # Create F32 from U32 bits (type punning)
 routine F32.from_bits(bits: U32) -> F32
   return bitcast[U32, F32](bits)
+
+# ============================================================================
+# Classification
+# ============================================================================
+
+routine F32.is_nan() -> Bool
+  return fcmp_uno[F32](me, me)
+
+routine F32.is_infinite() -> Bool
+  return fcmp_oeq[F32](me.abs(), F32_INFINITY)
+
+routine F32.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
+
+routine F32.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+routine F32.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U32](lshr[U32](bits, 23_u32), 0xFF_u32)
+  return exponent == 0_u32 and not me.is_zero()
+
+# ============================================================================
+# Trigonometric Functions (additional)
+# ============================================================================
+
+routine F32.tan() -> F32
+  return me.sin() / me.cos()
+
+routine F32.asin() -> F32
+  return rf_asin_f32(me)
+
+routine F32.acos() -> F32
+  return rf_acos_f32(me)
+
+routine F32.atan() -> F32
+  return rf_atan_f32(me)
+
+routine F32.atan2(x: F32) -> F32
+  return rf_atan2_f32(me, x)
+
+routine F32.log2() -> F32
+  return log2[F32](me)
+
+# ============================================================================
+# Clamping Arithmetic
+# ============================================================================
+
+routine F32.__add_clamp__(you: F32) -> F32
+  var result = fadd[F32](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F32_MAX else fneg[F32](F32_MAX)
+  return result
+
+routine F32.__sub_clamp__(you: F32) -> F32
+  var result = fsub[F32](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F32_MAX else fneg[F32](F32_MAX)
+  return result
+
+routine F32.__mul_clamp__(you: F32) -> F32
+  var result = fmul[F32](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F32_MAX else fneg[F32](F32_MAX)
+  return result
+
+routine F32.__truediv_clamp__(you: F32) -> F32
+  var result = fdiv[F32](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F32_MAX else fneg[F32](F32_MAX)
+  return result
+
+routine F32.__pow_clamp__(exp: F32) -> F32
+  var result = pow[F32](me, exp)
+  if result.is_infinite()
+    return if result.is_positive() then F32_MAX else fneg[F32](F32_MAX)
+  return result
+
+# ============================================================================
+# Integer Conversions
+# ============================================================================
+
+routine F32.S32!() -> S32
+  return fptosi[F32, S32](me)
+
+routine F32.S64!() -> S64
+  return fptosi[F32, S64](me)
+
+routine F32.U32!() -> U32
+  return fptoui[F32, U32](me)
+
+# ============================================================================
+# Float Precision Conversions
+# ============================================================================
+
+routine F32.F16() -> F16
+  return fptrunc[F32, F16](me)
+
+routine F32.F64() -> F64
+  return fpext[F32, F64](me)
+
+routine F32.F128() -> F128
+  return fpext[F32, F128](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine F32.to_debug() -> Text
+  return Text(from: me)
+
+routine F32.hash() -> U64
+  var bits = zext[U32, U64](me.to_bits())
+  if me.is_nan()
+    bits = 0x7FC00000_u64
+  if bits == 0x80000000_u64
+    bits = 0_u64
+  var h = xor[U64](bits, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

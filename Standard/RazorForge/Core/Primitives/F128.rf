@@ -21,6 +21,11 @@ preset F128_E: F128 = 2.718281828459045235360287471352662498_f128
 preset F128_SQRT_2: F128 = 1.414213562373095048801688724209698079_f128
 preset F128_LN_2: F128 = 0.693147180559945309417232121458176568_f128
 preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
+preset F128_NAN: F128 = 0.0_f128 / 0.0_f128
+preset F128_INFINITY: F128 = 1.0_f128 / 0.0_f128
+preset F128_NEG_INFINITY: F128 = -1.0_f128 / 0.0_f128
+preset F128_BITS: S32 = 128
+preset F128_BYTES: S32 = 16
 
 # Convert integers to F128 using LLVM intrinsics (lossless for all integer sizes)
 routine F128.__create__(from: S8) -> F128
@@ -262,3 +267,98 @@ routine F128.to_bits() -> U128
 # Create F128 from U128 bits (type punning)
 routine F128.from_bits(bits: U128) -> F128
   return bitcast[U128, F128](bits)
+
+# ============================================================================
+# Classification
+# ============================================================================
+
+routine F128.is_nan() -> Bool
+  return fcmp_uno[F128](me, me)
+
+routine F128.is_infinite() -> Bool
+  return fcmp_oeq[F128](me.abs(), F128_INFINITY)
+
+routine F128.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
+
+routine F128.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+routine F128.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
+  var exponent = bit_and[U64](lshr[U64](hi, 48_u32), 0x7FFF_u64)
+  return exponent == 0_u64 and not me.is_zero()
+
+# ============================================================================
+# Clamping Arithmetic
+# ============================================================================
+
+routine F128.__add_clamp__(you: F128) -> F128
+  var result = fadd[F128](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+  return result
+
+routine F128.__sub_clamp__(you: F128) -> F128
+  var result = fsub[F128](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+  return result
+
+routine F128.__mul_clamp__(you: F128) -> F128
+  var result = fmul[F128](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+  return result
+
+routine F128.__truediv_clamp__(you: F128) -> F128
+  var result = fdiv[F128](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+  return result
+
+routine F128.__pow_clamp__(exp: F128) -> F128
+  var result = rf_f128_pow(me, exp)
+  if result.is_infinite()
+    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+  return result
+
+# ============================================================================
+# Integer Conversions
+# ============================================================================
+
+routine F128.S64!() -> S64
+  return me.F64!().S64!()
+
+routine F128.S128!() -> S128
+  return me.F64!().S128!()
+
+# ============================================================================
+# Float Precision Conversions
+# ============================================================================
+
+routine F128.F32() -> F32
+  return fptrunc[F128, F32](me)
+
+routine F128.F64() -> F64
+  return fptrunc[F128, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine F128.to_debug() -> Text
+  return Text(from: me)
+
+routine F128.hash() -> U64
+  var bits = me.to_bits()
+  var lo = trunc[U128, U64](bits)
+  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
+  if me.is_nan()
+    lo = 0_u64
+    hi = 0x7FFF800000000000_u64
+  if bits == zext[U64, U128](0x8000000000000000_u64) << 64
+    lo = 0_u64
+    hi = 0_u64
+  return xor[U64](lo, mul[U64](hi, 1099511628211_u64))

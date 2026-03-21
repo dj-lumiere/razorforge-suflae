@@ -25,7 +25,7 @@ preset BYTE_TAB: Byte = Byte(value: 0x09)
 # Comparison operations
 # ============================================================================
 
-routine Letter.byte_value() -> U8
+routine Byte.byte_value() -> U8
   return me.value
 
 routine Byte.__eq__(other: Byte) -> Bool
@@ -69,3 +69,40 @@ routine Byte.hex_value!() -> U8
     0x41u8 <= v <= 0x46u8 => return v - 0x37u8   # A-F (10-15)
     0x61u8 <= v <= 0x66u8 => return v - 0x57u8   # a-f (10-15)
     else => throw InvalidHexDigitError()
+
+# ============================================================================
+# Additional classification
+# ============================================================================
+
+routine Byte.is_ascii_letter() -> Bool
+  var v = me.value
+  return (0x41u8 <= v <= 0x5Au8) or (0x61u8 <= v <= 0x7Au8)
+
+routine Byte.is_ascii_digit() -> Bool
+  return me.is_digit()
+
+routine Byte.is_ascii_whitespace() -> Bool
+  var v = me.value
+  return v == 0x20u8 or v == 0x09u8 or v == 0x0Au8 or v == 0x0Du8
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+routine Byte.U8() -> U8
+  return me.value
+
+routine Byte.Text() -> Text
+  return Text(from: me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine Byte.to_debug() -> Text
+  return "b'" + Text(from: me) + "'"
+
+routine Byte.hash() -> U64
+  var v = zext[U8, U64](me.value)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)

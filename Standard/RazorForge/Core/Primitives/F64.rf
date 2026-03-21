@@ -14,7 +14,10 @@ preset F64_MAX: F64 = 1.7976931348623157e+308_f64
 preset F64_ZERO: F64 = 0.0_f64
 preset F64_ONE: F64 = 1.0_f64
 preset F64_NAN: F64 = 0.0_f64 / 0.0_f64  # TODO: Proper NaN constant
-preset F64_INFINITY: F64 = 1.0_f64 / 0.0_f64  # TODO: Proper infinity constant
+preset F64_INFINITY: F64 = 1.0_f64 / 0.0_f64
+preset F64_NEG_INFINITY: F64 = -1.0_f64 / 0.0_f64
+preset F64_BITS: S32 = 64
+preset F64_BYTES: S32 = 8
 
 # ============================================================================
 # Creators
@@ -181,10 +184,22 @@ routine F64.is_negative() -> Bool
 routine F64.is_zero() -> Bool
   return me == 0.0_f64
 
-# TODO: Implement NaN/Infinity checks when we have proper constants
+routine F64.is_nan() -> Bool
+  return fcmp_uno[F64](me, me)
+
+routine F64.is_infinite() -> Bool
+  return fcmp_oeq[F64](me.abs(), F64_INFINITY)
+
 routine F64.is_finite() -> Bool
-  # Placeholder - needs proper implementation
-  return true
+  return not me.is_nan() and not me.is_infinite()
+
+routine F64.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+routine F64.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U64](lshr[U64](bits, 52_u32), 0x7FF_u64)
+  return exponent == 0_u64 and not me.is_zero()
 
 routine F64.signum() -> F64
   return when
@@ -199,3 +214,97 @@ routine F64.to_bits() -> U64
 # Create F64 from U64 bits (type punning)
 routine F64.from_bits(bits: U64) -> F64
   return bitcast[U64, F64](bits)
+
+# ============================================================================
+# Trigonometric Functions (additional)
+# ============================================================================
+
+routine F64.tan() -> F64
+  return me.sin() / me.cos()
+
+routine F64.asin() -> F64
+  return rf_asin_f64(me)
+
+routine F64.acos() -> F64
+  return rf_acos_f64(me)
+
+routine F64.atan() -> F64
+  return rf_atan_f64(me)
+
+routine F64.atan2(x: F64) -> F64
+  return rf_atan2_f64(me, x)
+
+routine F64.log2() -> F64
+  return log2[F64](me)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^, /^)
+# ============================================================================
+
+routine F64.__add_clamp__(you: F64) -> F64
+  var result = fadd[F64](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F64_MAX else fneg[F64](F64_MAX)
+  return result
+
+routine F64.__sub_clamp__(you: F64) -> F64
+  var result = fsub[F64](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F64_MAX else fneg[F64](F64_MAX)
+  return result
+
+routine F64.__mul_clamp__(you: F64) -> F64
+  var result = fmul[F64](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F64_MAX else fneg[F64](F64_MAX)
+  return result
+
+routine F64.__truediv_clamp__(you: F64) -> F64
+  var result = fdiv[F64](me, you)
+  if result.is_infinite()
+    return if result.is_positive() then F64_MAX else fneg[F64](F64_MAX)
+  return result
+
+routine F64.__pow_clamp__(exp: F64) -> F64
+  var result = pow[F64](me, exp)
+  if result.is_infinite()
+    return if result.is_positive() then F64_MAX else fneg[F64](F64_MAX)
+  return result
+
+# ============================================================================
+# Integer Conversions
+# ============================================================================
+
+routine F64.S32!() -> S32
+  return fptosi[F64, S32](me)
+
+routine F64.S64!() -> S64
+  return fptosi[F64, S64](me)
+
+routine F64.U64!() -> U64
+  return fptoui[F64, U64](me)
+
+# ============================================================================
+# Float Precision Conversions
+# ============================================================================
+
+routine F64.F32() -> F32
+  return fptrunc[F64, F32](me)
+
+routine F64.F128() -> F128
+  return fpext[F64, F128](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine F64.to_debug() -> Text
+  return Text(from: me)
+
+routine F64.hash() -> U64
+  var bits = me.to_bits()
+  if me.is_nan()
+    bits = 0x7FF8000000000000_u64
+  if bits == 0x8000000000000000_u64
+    bits = 0_u64
+  return xor[U64](bits, lshr[U64](bits, 32_u32))

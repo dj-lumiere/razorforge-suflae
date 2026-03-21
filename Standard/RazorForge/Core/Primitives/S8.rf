@@ -12,6 +12,8 @@ preset S8_MIN: S8 = -128_s8
 preset S8_MAX: S8 = 127_s8
 preset S8_ZERO: S8 = 0_s8
 preset S8_ONE: S8 = 1_s8
+preset S8_BITS: S32 = 8
+preset S8_BYTES: S32 = 1
 
 # ============================================================================
 # Creators
@@ -366,3 +368,62 @@ routine S8.signum() -> S8
     me > 0_s8 => 1_s8
     me < 0_s8 => -1_s8
     else => 0_s8
+
+# ============================================================================
+# Rotate Operations
+# ============================================================================
+
+routine S8.rotate_left(n: S8) -> S8
+  var shift = bit_and[S8](n, 7_s8)
+  return bit_or[S8](shl[S8](me, shift), lshr[S8](me, sub[S8](8_s8, shift)))
+
+routine S8.rotate_right(n: S8) -> S8
+  var shift = bit_and[S8](n, 7_s8)
+  return bit_or[S8](lshr[S8](me, shift), shl[S8](me, sub[S8](8_s8, shift)))
+
+# ============================================================================
+# Widening Conversions
+# ============================================================================
+
+routine S8.S16() -> S16
+  return sext[S8, S16](me)
+
+routine S8.S32() -> S32
+  return sext[S8, S32](me)
+
+routine S8.S64() -> S64
+  return sext[S8, S64](me)
+
+routine S8.S128() -> S128
+  return sext[S8, S128](me)
+
+# ============================================================================
+# Cross-family Conversions
+# ============================================================================
+
+routine S8.U8!() -> U8
+  if me < 0_s8
+    throw IntegerOverflowError(f"Cannot convert {me} to U8: value is negative")
+  return bitcast[S8, U8](me)
+
+# ============================================================================
+# Float Conversions
+# ============================================================================
+
+routine S8.F32() -> F32
+  return sitofp[S8, F32](me)
+
+routine S8.F64() -> F64
+  return sitofp[S8, F64](me)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine S8.to_debug() -> Text
+  return Text(from: me)
+
+routine S8.hash() -> U64
+  var v = sext[S8, U64](me)
+  var h = xor[U64](v, 14695981039346656037_u64)
+  return mul[U64](h, 1099511628211_u64)
