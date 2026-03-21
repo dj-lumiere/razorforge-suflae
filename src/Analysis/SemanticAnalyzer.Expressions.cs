@@ -1428,6 +1428,16 @@ public sealed partial class SemanticAnalyzer
 
                 AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
 
+                // C29: Dispatch inference for varargs calls
+                call.ResolvedDispatch = InferDispatchStrategy(routine, call);
+                if (call.ResolvedDispatch == DispatchStrategy.Runtime && _registry.Language == Language.RazorForge)
+                {
+                    ReportError(SemanticDiagnosticCode.RuntimeDispatchNotSupported,
+                        $"Runtime dispatch is not supported in RazorForge. " +
+                        $"All varargs arguments to '{routine.Name}' must be the same concrete type.",
+                        call.Location);
+                }
+
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
@@ -1492,6 +1502,17 @@ public sealed partial class SemanticAnalyzer
 
                 ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
                 AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
+
+                // C29: Dispatch inference for varargs calls
+                call.ResolvedDispatch = InferDispatchStrategy(routine, call);
+                if (call.ResolvedDispatch == DispatchStrategy.Runtime && _registry.Language == Language.RazorForge)
+                {
+                    ReportError(SemanticDiagnosticCode.RuntimeDispatchNotSupported,
+                        $"Runtime dispatch is not supported in RazorForge. " +
+                        $"All varargs arguments to '{routine.Name}' must be the same concrete type.",
+                        call.Location);
+                }
+
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
                 return routine.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
@@ -1573,6 +1594,16 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
+
+                // C29: Dispatch inference for varargs calls
+                call.ResolvedDispatch = InferDispatchStrategy(method, call);
+                if (call.ResolvedDispatch == DispatchStrategy.Runtime && _registry.Language == Language.RazorForge)
+                {
+                    ReportError(SemanticDiagnosticCode.RuntimeDispatchNotSupported,
+                        $"Runtime dispatch is not supported in RazorForge. " +
+                        $"All varargs arguments to '{method.Name}' must be the same concrete type.",
+                        call.Location);
+                }
 
                 // #68: Real-to-Complex promotion — only __add__/__sub__ allow float↔complex cross-type
                 if (IsOperatorDunder(name: member.PropertyName)
@@ -1838,6 +1869,50 @@ public sealed partial class SemanticAnalyzer
         ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
         return calleeType;
+    }
+
+    /// <summary>
+    /// Infers dispatch strategy for a call site with protocol-constrained varargs.
+    /// Returns null for non-varargs routines (always buildtime, no annotation needed).
+    /// </summary>
+    private DispatchStrategy? InferDispatchStrategy(RoutineInfo routine, CallExpression call)
+    {
+        if (!routine.IsVariadic)
+            return null;
+
+        // Find the varargs parameter
+        ParameterInfo? varargsParam = routine.Parameters.FirstOrDefault(p => p.IsVariadicParam);
+        if (varargsParam == null)
+            return null;
+
+        // Unwrap List[T] to get element type T
+        TypeSymbol paramType = varargsParam.Type;
+        if (paramType is not { IsGenericResolution: true, TypeArguments: [var elementType, ..] })
+            return null;
+
+        // Only protocol-constrained varargs need dispatch inference
+        // Generic-constrained (GenericParameterTypeInfo) and concrete types are always buildtime
+        if (elementType is not ProtocolTypeInfo)
+            return DispatchStrategy.Buildtime;
+
+        // Collect resolved types of all varargs arguments
+        int varargsIndex = varargsParam.Index;
+        var varargsArgTypes = new List<TypeSymbol>();
+        for (int i = varargsIndex; i < call.Arguments.Count; i++)
+        {
+            TypeSymbol? argType = call.Arguments[i].ResolvedType;
+            if (argType != null && argType is not ErrorTypeInfo)
+                varargsArgTypes.Add(argType);
+        }
+
+        if (varargsArgTypes.Count == 0)
+            return DispatchStrategy.Buildtime;
+
+        // All same concrete type → buildtime; mixed → runtime
+        TypeSymbol firstType = varargsArgTypes[0];
+        bool allSame = varargsArgTypes.All(t => t.Name == firstType.Name);
+
+        return allSame ? DispatchStrategy.Buildtime : DispatchStrategy.Runtime;
     }
 
     private TypeSymbol AnalyzeMemberExpression(MemberExpression member)

@@ -325,6 +325,12 @@ public record CallExpression(
     public string? Name => Callee is IdentifierExpression id
         ? id.Name
         : null;
+
+    /// <summary>
+    /// The resolved dispatch strategy for this call, set by the semantic analyzer.
+    /// Null for non-varargs calls. Buildtime or Runtime for protocol-constrained varargs.
+    /// </summary>
+    public SemanticAnalysis.Enums.DispatchStrategy? ResolvedDispatch { get; set; }
 }
 
 /// <summary>

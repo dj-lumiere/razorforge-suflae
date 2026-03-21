@@ -536,6 +536,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine with 2+ parameters requires named arguments at call site.</summary>
     NamedArgumentRequired = 510,
 
+    /// <summary>Runtime dispatch not supported in RazorForge — mixed-type protocol varargs require all arguments to be the same concrete type.</summary>
+    RuntimeDispatchNotSupported = 511,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════

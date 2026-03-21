@@ -1562,13 +1562,19 @@ public sealed partial class SemanticAnalyzer
                 {
                     TypeSymbol dataType =
                         _registry.LookupType(name: "Data") ?? ErrorTypeInfo.Instance;
-                    parameters.Add(item: new ParameterInfo(name: param.Name, type: dataType));
+                    parameters.Add(item: new ParameterInfo(name: param.Name, type: dataType)
+                    {
+                        IsVariadicParam = param.IsVariadic
+                    });
                 }
                 else
                 {
                     // Type inference required - handle later
                     parameters.Add(item: new ParameterInfo(name: param.Name,
-                        type: ErrorTypeInfo.Instance));
+                        type: ErrorTypeInfo.Instance)
+                    {
+                        IsVariadicParam = param.IsVariadic
+                    });
                 }
 
                 continue;
@@ -1629,14 +1635,16 @@ public sealed partial class SemanticAnalyzer
 
                 parameters.Add(item: new ParameterInfo(name: param.Name, type: genericParamType)
                 {
-                    DefaultValue = param.DefaultValue
+                    DefaultValue = param.DefaultValue,
+                    IsVariadicParam = param.IsVariadic
                 });
             }
             else
             {
                 parameters.Add(item: new ParameterInfo(name: param.Name, type: paramType)
                 {
-                    DefaultValue = param.DefaultValue
+                    DefaultValue = param.DefaultValue,
+                    IsVariadicParam = param.IsVariadic
                 });
             }
         }

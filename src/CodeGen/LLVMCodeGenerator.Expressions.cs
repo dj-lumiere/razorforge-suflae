@@ -475,6 +475,15 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
+        // C29: Safety guard — semantic analyzer already errors on runtime dispatch in RF mode,
+        // but if we somehow reach codegen with Runtime dispatch, trap instead of emitting bad code
+        if (call.ResolvedDispatch == SemanticAnalysis.Enums.DispatchStrategy.Runtime)
+        {
+            EmitLine(sb, "  call void @llvm.trap()");
+            EmitLine(sb, "  unreachable");
+            return "undef";
+        }
+
         // Intercept source location routines — emit constants from call site, no actual call
         if (call.Callee is IdentifierExpression { Name: var name } && IsSourceLocationRoutine(name))
             return EmitSourceLocationInline(sb, name, call.Location);

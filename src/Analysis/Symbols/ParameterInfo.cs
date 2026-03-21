@@ -23,6 +23,9 @@ public sealed class ParameterInfo
     /// <summary>The index of this parameter in the parameter list.</summary>
     public int Index { get; init; }
 
+    /// <summary>Whether this parameter was declared as variadic (values...). Preserved after List[T] wrapping.</summary>
+    public bool IsVariadicParam { get; init; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ParameterInfo"/> class.
     /// </summary>
@@ -44,7 +47,8 @@ public sealed class ParameterInfo
         return new ParameterInfo(name: Name, type: newType)
         {
             DefaultValue = DefaultValue,
-            Index = Index
+            Index = Index,
+            IsVariadicParam = IsVariadicParam
         };
     }
 }
