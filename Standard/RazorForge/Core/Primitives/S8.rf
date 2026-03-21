@@ -1,0 +1,368 @@
+# RazorForge S8 (signed 8-bit integer) native type implementation
+# Maps directly to LLVM i8 type using compiler intrinsics
+module Core
+# Core S8 type definition - maps to LLVM i8
+
+@llvm("i8")
+record S8 obeys SignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for S8 limits
+preset S8_MIN: S8 = -128_s8
+preset S8_MAX: S8 = 127_s8
+preset S8_ZERO: S8 = 0_s8
+preset S8_ONE: S8 = 1_s8
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine S8.__create__(from: S8) -> S8
+  return from
+
+# From S16 - crashes if value out of S8 range
+routine S8.__create__!(from: S16) -> S8
+  if not (S8_MIN <= from <= S8_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[S16, S8](from)
+
+# From S32 - crashes if value out of S8 range
+routine S8.__create__!(from: S32) -> S8
+  if not (S8_MIN <= from <= S8_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[S32, S8](from)
+
+# From S64 - crashes if value out of S8 range
+routine S8.__create__!(from: S64) -> S8
+  if not (S8_MIN <= from <= S8_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[S64, S8](from)
+
+# From S128 - crashes if value out of S8 range
+routine S8.__create__!(from: S128) -> S8
+  if not (S8_MIN <= from <= S8_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[S128, S8](from)
+
+# From U8 - crashes if value > S8_MAX (bit 7 set)
+routine S8.__create__!(from: U8) -> S8
+  if from > 127_u8
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return bitcast[U8, S8](from)
+
+# From U16 - crashes if value > S8_MAX
+routine S8.__create__!(from: U16) -> S8
+  if from > 127_u16
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[U16, S8](from)
+
+# From U32 - crashes if value > S8_MAX
+routine S8.__create__!(from: U32) -> S8
+  if from > 127_u32
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[U32, S8](from)
+
+# From U64 - crashes if value > S8_MAX
+routine S8.__create__!(from: U64) -> S8
+  if from > 127_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[U64, S8](from)
+
+# From U128 - crashes if value > S8_MAX
+routine S8.__create__!(from: U128) -> S8
+  if from > 127_u128
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[U128, S8](from)
+
+# From floating point - truncates fractional part and crashes if overflow
+routine S8.__create__!(from: F16) -> S8
+  return from.S32!().S8!()
+
+routine S8.__create__!(from: F32) -> S8
+  return from.S32!().S8!()
+
+routine S8.__create__!(from: F64) -> S8
+  return from.S32!().S8!()
+
+routine S8.__create__!(from: F128) -> S8
+  return from.S32!().S8!()
+
+# From decimal - truncates fractional part and crashes if overflow
+routine S8.__create__!(from: D32) -> S8
+  return from.S32!().S8!()
+
+routine S8.__create__!(from: D64) -> S8
+  return from.S32!().S8!()
+
+routine S8.__create__!(from: D128) -> S8
+  return from.S32!().S8!()
+
+# From SAddr - crashes if value out of S8 range
+routine S8.__create__!(from: SAddr) -> S8
+  var val_s64 = from.S64!()
+  if not (-128_s64 <= val_s64 <= 127_s64)
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[SAddr, S8](from)
+
+# From UAddr - crashes if value out of S8 range
+routine S8.__create__!(from: UAddr) -> S8
+  var val_u64 = from.U64!()
+  if val_u64 > 127_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+  return trunc[UAddr, S8](from)
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+routine S8.__add__!(you: S8) -> S8
+  return add[S8](me, you)
+
+routine S8.__sub__!(you: S8) -> S8
+  return sub[S8](me, you)
+
+routine S8.__mul__!(you: S8) -> S8
+  return mul[S8](me, you)
+
+routine S8.__floordiv__!(you: S8) -> S8
+  if you == 0
+    throw DivisionByZeroError()
+  return sdiv[S8](me, you)
+
+routine S8.__mod__!(you: S8) -> S8
+  return srem[S8](me, you)
+
+routine S8.__neg__!() -> S8
+  return sub[S8](0, me)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+routine S8.__add_wrap__(you: S8) -> S8
+  return add[S8](me, you)
+
+routine S8.__sub_wrap__(you: S8) -> S8
+  return sub[S8](me, you)
+
+routine S8.__mul_wrap__(you: S8) -> S8
+  return mul[S8](me, you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+routine S8.__add_clamp__(you: S8) -> S8
+  return sadd_sat[S8](me, you)
+
+routine S8.__sub_clamp__(you: S8) -> S8
+  return ssub_sat[S8](me, you)
+
+routine S8.__mul_clamp__(you: S8) -> S8
+  var wide = mul[S16](sext[S8, S16](me), sext[S8, S16](you))
+  if icmp_sgt[S16](wide, 127_s16)
+    return S8_MAX
+  if icmp_slt[S16](wide, -128_s16)
+    return S8_MIN
+  return trunc[S16, S8](wide)
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+# Power operator (**) - can overflow
+routine S8.__pow__!(exp: S8) -> S8
+  var result: S8 = 1
+  var base: S8 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul[S8](result, base)
+    base = mul[S8](base, base)
+    e = e >> 1
+  return result
+
+# Wrapping power (**%)
+routine S8.__pow_wrap__!(exp: S8) -> S8
+  var result: S8 = 1
+  var base: S8 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul[S8](result, base)
+    base = mul[S8](base, base)
+    e = e >> 1
+  return result
+
+# Clamping power (**^)
+routine S8.__pow_clamp__!(exp: S8) -> S8
+  var result: S8 = 1
+  var base: S8 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
+    e = e >> 1
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+routine S8.__and__(you: S8) -> S8
+  return bit_and[S8](me, you)
+
+routine S8.__or__(you: S8) -> S8
+  return bit_or[S8](me, you)
+
+routine S8.__xor__(you: S8) -> S8
+  return xor[S8](me, you)
+
+routine S8.__not__() -> S8
+  return xor[S8](me, -1)
+
+# ============================================================================
+# Shift Operations (<<, >>, <<<, >>>)
+# ============================================================================
+
+# Arithmetic left shift (<<) - sign preserving
+routine S8.__ashl__(bits: U32) -> S8
+  return shl[S8](me, bits)
+
+# Arithmetic right shift (>>) - preserves sign, always safe
+routine S8.__ashr__(bits: U32) -> S8
+  return ashr[S8](me, bits)
+
+# Logical left shift (<<<) - same as << but explicit
+routine S8.__lshl__(bits: U32) -> S8
+  return shl[S8](me, bits)
+
+# Logical right shift (>>>) - fills with zeros, ignores sign
+routine S8.__lshr__(bits: U32) -> S8
+  return lshr[S8](me, bits)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine S8.__eq__(you: S8) -> Bool
+  return icmp_eq[S8](me, you)
+
+routine S8.__cmp__(you: S8) -> ComparisonSign
+  if icmp_slt[S8](me, you)
+    return ME_SMALL
+  if icmp_sgt[S8](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine S8.abs() -> S8
+  return abs[S8](me)
+
+routine S8.min(you: S8) -> S8
+  return if me <= you then me else you
+
+routine S8.max(you: S8) -> S8
+  return if me >= you then me else you
+
+routine S8.clamp(min_val: S8, max_val: S8) -> S8
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+routine S8.count_ones() -> S8
+  return ctpop[S8](me)
+
+routine S8.count_zeros() -> S8
+  return 8_s8 - me.count_ones()
+
+routine S8.leading_zeros() -> S8
+  return ctlz[S8](me)
+
+routine S8.trailing_zeros() -> S8
+  return cttz[S8](me)
+
+routine S8.leading_ones() -> S8
+  return me.__not__().leading_zeros()
+
+routine S8.trailing_ones() -> S8
+  return me.__not__().trailing_zeros()
+
+routine S8.reverse_bits() -> S8
+  return bitreverse[S8](me)
+
+# ============================================================================
+# Type Conversions (creator syntax)
+# ============================================================================
+
+# Bitcast to unsigned
+routine U8(from: S8) -> U8
+  return bitcast[S8, U8](from)
+
+# Sign-extend to larger types
+routine S16(from: S8) -> S16
+  return sext[S8, S16](from)
+
+routine S32(from: S8) -> S32
+  return sext[S8, S32](from)
+
+routine S64(from: S8) -> S64
+  return sext[S8, S64](from)
+
+routine S128(from: S8) -> S128
+  return sext[S8, S128](from)
+
+# Convert to floating point
+routine F32(from: S8) -> F32
+  return sitofp[S8, F32](from)
+
+routine F64(from: S8) -> F64
+  return sitofp[S8, F64](from)
+
+# Convert to boolean
+routine Bool(from: S8) -> Bool
+  return icmp_ne[S8](from, 0_s8)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine S8.is_positive() -> Bool
+  return me > 0_s8
+
+routine S8.is_negative() -> Bool
+  return me < 0_s8
+
+routine S8.is_zero() -> Bool
+  return me == 0_s8
+
+routine S8.is_even() -> Bool
+  var result = bit_and[S8](me, 1_s8)
+  return icmp_eq[S8](result, 0_s8)
+
+routine S8.is_odd() -> Bool
+  return not me.is_even()
+
+routine S8.signum() -> S8
+  return when
+    me > 0_s8 => 1_s8
+    me < 0_s8 => -1_s8
+    else => 0_s8

@@ -14,22 +14,6 @@ typedef uintptr_t uaddr;
 typedef size_t rf_size_t;
 
 /*
- * Stack allocation using alloca equivalent
- * In LLVM, this will be replaced with alloca instruction
- */
-uaddr stack_alloc(uaddr bytes)
-{
-    // In real implementation, this would be LLVM's alloca instruction
-    // For testing purposes, we use malloc but this should be stack allocation
-    void* ptr = malloc(bytes);
-    if (!ptr)
-    {
-        return 0;
-    }
-    return (uaddr)ptr;
-}
-
-/*
  * Heap allocation with error handling
  */
 uaddr heap_alloc(uaddr bytes)
@@ -296,6 +280,25 @@ void debug_print_slice_info(uaddr address, uaddr bytes, uaddr length, const char
 {
     printf("Slice<%s> @ 0x%zx: %zu elements, %zu bytes\n",
            type_name, (size_t)address, (size_t)length, (size_t)bytes);
+}
+
+/*
+ * Compiler-generated function name aliases
+ * These match the names used in generated LLVM IR
+ */
+uaddr claim_dynamic(uaddr bytes)
+{
+    return heap_alloc(bytes);
+}
+
+void release_dynamic(uaddr address)
+{
+    heap_free(address);
+}
+
+uaddr resize_dynamic(uaddr address, uaddr new_bytes)
+{
+    return heap_realloc(address, new_bytes);
 }
 
 /*

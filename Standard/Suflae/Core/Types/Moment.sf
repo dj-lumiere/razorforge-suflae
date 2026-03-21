@@ -1,0 +1,95 @@
+# Suflae Moment - Point in time with nanosecond precision
+
+module Core
+
+import RazorForge/Core.Moment
+
+record Moment
+  secret value: RazorForge/Core.Moment
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine Moment.__create__(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer) -> Moment
+  return Moment(value: RazorForge/Core.Moment.__create__(year.value, month.value, day.value, hour.value, minute.value, second.value))
+
+routine Moment.epoch() -> Moment
+  return Moment(value: RazorForge/Core.Moment.epoch())
+
+routine Moment.from_timestamp(seconds: Integer) -> Moment
+  return Moment(value: RazorForge/Core.Moment.from_timestamp(seconds.value))
+
+routine Moment.now() -> Moment
+  return Moment(value: RazorForge/Core.Moment.now())
+
+# ============================================================================
+# Date accessors
+# ============================================================================
+
+routine Moment.year() -> Integer
+  return Integer(value: me.value.year())
+
+routine Moment.month() -> Integer
+  return Integer(value: me.value.month())
+
+routine Moment.day() -> Integer
+  return Integer(value: me.value.day())
+
+routine Moment.day_of_week() -> Integer
+  return Integer(value: me.value.day_of_week())
+
+# ============================================================================
+# Time accessors
+# ============================================================================
+
+routine Moment.hour() -> Integer
+  return Integer(value: me.value.hour())
+
+routine Moment.minute() -> Integer
+  return Integer(value: me.value.minute())
+
+routine Moment.second() -> Integer
+  return Integer(value: me.value.second())
+
+routine Moment.millisecond() -> Integer
+  return Integer(value: me.value.millisecond())
+
+routine Moment.microsecond() -> Integer
+  return Integer(value: me.value.microsecond())
+
+routine Moment.nanosecond() -> Integer
+  return Integer(value: me.value.nanosecond())
+
+# ============================================================================
+# Conversion
+# ============================================================================
+
+routine Moment.timestamp() -> Integer
+  return Integer(value: me.value.timestamp())
+
+routine Moment.timestamp_ms() -> Integer
+  return Integer(value: me.value.timestamp_ms())
+
+# ============================================================================
+# Arithmetic with Duration
+# ============================================================================
+
+routine Moment.add_duration(duration: Duration) -> Moment
+  return Moment(value: me.value.add_duration(duration.value))
+
+routine Moment.subtract_duration(duration: Duration) -> Moment
+  return Moment(value: me.value.subtract_duration(duration.value))
+
+routine Moment.elapsed_since(earlier: Moment) -> Duration
+  return Duration(value: me.value.elapsed_since(earlier.value))
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+routine Moment.__eq__(you: Moment) -> Bool
+  return me.value.__eq__(you.value)
+
+routine Moment.__cmp__(you: Moment) -> ComparisonSign
+  return me.value.__cmp__(you.value)

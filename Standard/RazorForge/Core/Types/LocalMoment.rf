@@ -1,0 +1,184 @@
+module Core
+
+# LocalMoment - A point in time with a UTC offset
+#
+# Combines a Moment (UTC time) with a Duration offset to represent
+# a local/timezone-aware point in time. The offset is the difference
+# between local time and UTC (e.g., UTC+5:30 → offset = 5h + 30m).
+#
+# Usage:
+#   var utc_now = Moment.now()
+#   var tokyo = LocalMoment(utc_now, 9h)             # UTC+9
+#   var nyc = LocalMoment(utc_now, 0s - 5h)          # UTC-5
+#   var custom = LocalMoment(year: 2026, month: 2, day: 12, hour: 14, minute: 30, second: 0, offset: 9h)
+
+# ============================================================================
+# Record definition
+# ============================================================================
+
+record LocalMoment obeys Ordered
+  secret moment: Moment       # The UTC moment
+  secret offset: Duration     # UTC offset (positive = east of UTC)
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+# Create from a UTC Moment and an offset
+routine LocalMoment.__create__(moment: Moment, offset: Duration) -> LocalMoment
+  return LocalMoment(moment: moment, offset: offset)
+
+# Create from civil date components in local time + offset
+# The components describe the local time, and the offset is used to
+# convert back to UTC internally.
+routine LocalMoment.from_local(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment
+  var local_moment = Moment.__create__(year, month, day, hour, minute, second)
+  var utc_moment = local_moment.subtract_duration(offset)
+  return LocalMoment(moment: utc_moment, offset: offset)
+
+# Create a LocalMoment at UTC (zero offset) from the current time
+routine LocalMoment.now_utc() -> LocalMoment
+  return LocalMoment(moment: Moment.now(), offset: Duration.zero())
+
+# ============================================================================
+# Core accessors
+# ============================================================================
+
+# Get the underlying UTC moment
+@readonly
+routine LocalMoment.to_moment() -> Moment
+  return me.moment
+
+# Get the UTC offset
+@readonly
+routine LocalMoment.utc_offset() -> Duration
+  return me.offset
+
+# Get the moment adjusted to local time (for date/time component extraction)
+@readonly
+routine LocalMoment.local_moment() -> Moment
+  return me.moment.add_duration(me.offset)
+
+# ============================================================================
+# Date accessors (in local time)
+# ============================================================================
+
+@readonly
+routine LocalMoment.year() -> S64
+  return me.local_moment().year()
+
+@readonly
+routine LocalMoment.month() -> S64
+  return me.local_moment().month()
+
+@readonly
+routine LocalMoment.day() -> S64
+  return me.local_moment().day()
+
+@readonly
+routine LocalMoment.day_of_week() -> S64
+  return me.local_moment().day_of_week()
+
+# ============================================================================
+# Time accessors (in local time)
+# ============================================================================
+
+@readonly
+routine LocalMoment.hour() -> S64
+  return me.local_moment().hour()
+
+@readonly
+routine LocalMoment.minute() -> S64
+  return me.local_moment().minute()
+
+@readonly
+routine LocalMoment.second() -> S64
+  return me.local_moment().second()
+
+@readonly
+routine LocalMoment.millisecond() -> S64
+  return me.local_moment().millisecond()
+
+@readonly
+routine LocalMoment.microsecond() -> S64
+  return me.local_moment().microsecond()
+
+@readonly
+routine LocalMoment.nanosecond() -> S64
+  return me.local_moment().nanosecond()
+
+# ============================================================================
+# Conversion
+# ============================================================================
+
+# Unix timestamp in seconds (always UTC)
+@readonly
+routine LocalMoment.timestamp() -> S64
+  return me.moment.timestamp()
+
+# Unix timestamp in milliseconds (always UTC)
+@readonly
+routine LocalMoment.timestamp_ms() -> S64
+  return me.moment.timestamp_ms()
+
+# Convert to a different offset (same instant, different local representation)
+@readonly
+routine LocalMoment.to_offset(new_offset: Duration) -> LocalMoment
+  return LocalMoment(moment: me.moment, offset: new_offset)
+
+# Convert to UTC (zero offset)
+@readonly
+routine LocalMoment.to_utc() -> LocalMoment
+  return LocalMoment(moment: me.moment, offset: Duration.zero())
+
+# ============================================================================
+# Arithmetic with Duration
+# ============================================================================
+
+@readonly
+routine LocalMoment.add_duration(duration: Duration) -> LocalMoment
+  return LocalMoment(moment: me.moment.add_duration(duration), offset: me.offset)
+
+@readonly
+routine LocalMoment.subtract_duration(duration: Duration) -> LocalMoment
+  return LocalMoment(moment: me.moment.subtract_duration(duration), offset: me.offset)
+
+# LocalMoment - LocalMoment -> Duration (always based on UTC moments)
+@readonly
+routine LocalMoment.elapsed_since(earlier: LocalMoment) -> Duration
+  return me.moment.elapsed_since(earlier.moment)
+
+# ============================================================================
+# Comparison operators (compare UTC moments, offset is irrelevant)
+# ============================================================================
+
+@readonly
+routine LocalMoment.__eq__(you: LocalMoment) -> Bool
+  return me.moment.__eq__(you.moment)
+
+@readonly
+routine LocalMoment.__cmp__(you: LocalMoment) -> ComparisonSign
+  return me.moment.__cmp__(you.moment)
+
+# ============================================================================
+# Text representation
+# ============================================================================
+
+routine Text.__create__(from: LocalMoment) -> Text
+  var local = from.local_moment()
+  var y = local.year()
+  var mo = local.month()
+  var d = local.day()
+  var h = local.hour()
+  var mi = local.minute()
+  var s = local.second()
+
+  var off = from.utc_offset()
+  var off_hours = off.total_hours()
+  var off_minutes = (off.total_minutes() % 60_s64).abs()
+
+  if off.is_zero()
+    return f"{y}-{mo}-{d} {h}:{mi}:{s}Z"
+
+  var sign = if off.is_negative() then "-" else "+"
+  return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours.abs()}:{off_minutes}"

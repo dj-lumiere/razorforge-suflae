@@ -1,4 +1,0 @@
-record Maybe<T> {
-    private is_valid: bool
-    private handle: DataHandle
-}

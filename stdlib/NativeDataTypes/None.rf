@@ -1,5 +1,0 @@
-record None {
-    routine to_text(me) -> Text<letter32> {
-        return "None"
-    }
-}

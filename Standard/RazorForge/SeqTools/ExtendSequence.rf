@@ -1,0 +1,30 @@
+# RazorForge ExtendSequence[T] - Lazy sequence concatenation
+# extend(with:) yields all elements from the first source, then all from the second
+
+module SeqTools
+
+entity ExtendSequence[T] obeys Sequenceable[T]
+  secret first: Sequenceable[T]
+  secret second: Sequenceable[T]
+
+routine ExtendSequence[T].__seq__() -> ExtendEmitter[T]
+  return ExtendEmitter[T](first: me.first.__seq__(), second: me.second.__seq__(), in_second: false)
+
+entity ExtendEmitter[T] obeys SequenceEmitter[T]
+  secret first: SequenceEmitter[T]
+  secret second: SequenceEmitter[T]
+  secret in_second: Bool
+
+emitting routine ExtendEmitter[T].__next__() -> T
+  if not me.in_second
+    var result = me.first.try_next()
+    when result
+      is None => me.in_second = true
+      else item =>
+        emit item
+        return
+  emit me.second.__next__()
+  return
+
+routine Sequenceable[T].extend(other: Sequenceable[T]) -> ExtendSequence[T]
+  return ExtendSequence[T](first: me, second: other)

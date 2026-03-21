@@ -1,4 +1,0 @@
-record bool {
-    private value: LlvmI1
-    
-}

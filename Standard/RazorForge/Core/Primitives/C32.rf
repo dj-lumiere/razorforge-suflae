@@ -1,0 +1,204 @@
+# RazorForge C32 (single precision complex number) type implementation
+# Record of two F32 values (real and imaginary parts)
+module Core
+
+### Complex number with single precision (2x F32) components
+###
+### C32 is suited for graphics, games, and signal processing where
+### memory footprint matters more than precision.
+### Not @intrinsic — implemented as a record of two F32 member variables.
+###
+### Example:
+###   var z = C32(real: 3.0_f32, imag: 4.0_f32)
+###   var w = z.conjugate()
+###   var r = z.abs()  # 5.0
+record C32 obeys Numeric, Equatable
+  real: F32
+  imag: F32
+
+# Complex constants
+preset C32_ZERO: C32 = C32(real: 0.0_f32, imag: 0.0_f32)
+preset C32_ONE: C32 = C32(real: 1.0_f32, imag: 0.0_f32)
+preset C32_I: C32 = C32(real: 0.0_f32, imag: 1.0_f32)
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Create a C32 from a real F32 value (imaginary part is zero)
+routine C32.__create__(from: F32) -> C32
+  return C32(real: from, imag: 0.0_f32)
+
+### Create a C32 from a C64 by truncating both components (F64 -> F32)
+routine C32.__create__(from: C64) -> C32
+  return C32(real: F32(from.real), imag: F32(from.imag))
+
+### Create a C32 from a C128 by truncating both components (F128 -> F32)
+routine C32.__create__(from: C128) -> C32
+  return C32(real: F32(from.real), imag: F32(from.imag))
+
+### Create a C32 from polar coordinates (magnitude and angle)
+###
+### Args:
+###   r: The magnitude (distance from origin)
+###   theta: The angle in radians
+###
+### Example:
+###   var z = C32.from_polar(r: 5.0_f32, theta: 0.9273_f32)
+routine C32.from_polar(r: F32, theta: F32) -> C32
+  return C32(real: r * theta.cos(), imag: r * theta.sin())
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Complex addition: (a+bi) + (c+di) = (a+c) + (b+d)i
+routine C32.__add__(you: C32) -> C32
+  return C32(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Complex subtraction: (a+bi) - (c+di) = (a-c) + (b-d)i
+routine C32.__sub__(you: C32) -> C32
+  return C32(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+routine C32.__mul__(you: C32) -> C32
+  return C32(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
+
+### Complex division: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
+routine C32.__truediv__(you: C32) -> C32
+  var d = you.real * you.real + you.imag * you.imag
+  return C32(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
+
+### Complex negation: -(a+bi) = (-a) + (-b)i
+routine C32.__neg__() -> C32
+  return C32(real: -me.real, imag: -me.imag)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Component-wise equality (no ordering — complex numbers have no total order)
+routine C32.__eq__(you: C32) -> Bool
+  return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Magnitude: |z| = sqrt(real² + imag²)
+###
+### Example:
+###   C32(real: 3.0_f32, imag: 4.0_f32).abs()  # 5.0
+routine C32.abs() -> F32
+  return (me.real * me.real + me.imag * me.imag).sqrt()
+
+### Complex conjugate: flip the sign of the imaginary part
+###
+### Example:
+###   C32(real: 3.0_f32, imag: 4.0_f32).conjugate()  # C32(real: 3.0, imag: -4.0)
+routine C32.conjugate() -> C32
+  return C32(real: me.real, imag: -me.imag)
+
+### Squared magnitude: real² + imag² (avoids the sqrt in abs)
+routine C32.norm() -> F32
+  return me.real * me.real + me.imag * me.imag
+
+# ============================================================================
+# Trigonometric (sinh/cosh computed from exp since F32 lacks native versions)
+# ============================================================================
+
+### Complex sine: sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)
+routine C32.sin() -> C32
+  var ep = me.imag.exp()
+  var em = (-me.imag).exp()
+  var ch = (ep + em) / 2.0_f32
+  var sh = (ep - em) / 2.0_f32
+  return C32(real: me.real.sin() * ch, imag: me.real.cos() * sh)
+
+### Complex cosine: cos(a+bi) = cos(a)cosh(b) - i·sin(a)sinh(b)
+routine C32.cos() -> C32
+  var ep = me.imag.exp()
+  var em = (-me.imag).exp()
+  var ch = (ep + em) / 2.0_f32
+  var sh = (ep - em) / 2.0_f32
+  return C32(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
+
+### Complex tangent: sin(2a)/d + i·sinh(2b)/d where d = cos(2a) + cosh(2b)
+routine C32.tan() -> C32
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var ep = b2.exp()
+  var em = (-b2).exp()
+  var d = a2.cos() + (ep + em) / 2.0_f32
+  return C32(real: a2.sin() / d, imag: (ep - em) / 2.0_f32 / d)
+
+# ============================================================================
+# Hyperbolic (sinh/cosh computed from exp since F32 lacks native versions)
+# ============================================================================
+
+### Complex hyperbolic sine: sinh(a+bi) = sinh(a)cos(b) + i·cosh(a)sin(b)
+routine C32.sinh() -> C32
+  var ep = me.real.exp()
+  var em = (-me.real).exp()
+  var sh = (ep - em) / 2.0_f32
+  var ch = (ep + em) / 2.0_f32
+  return C32(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
+
+### Complex hyperbolic cosine: cosh(a+bi) = cosh(a)cos(b) + i·sinh(a)sin(b)
+routine C32.cosh() -> C32
+  var ep = me.real.exp()
+  var em = (-me.real).exp()
+  var sh = (ep - em) / 2.0_f32
+  var ch = (ep + em) / 2.0_f32
+  return C32(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
+
+### Complex hyperbolic tangent: sinh(2a)/d + i·sin(2b)/d where d = cosh(2a) + cos(2b)
+routine C32.tanh() -> C32
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var ep = a2.exp()
+  var em = (-a2).exp()
+  var d = (ep + em) / 2.0_f32 + b2.cos()
+  return C32(real: (ep - em) / 2.0_f32 / d, imag: b2.sin() / d)
+
+# ============================================================================
+# Exponential and Square Root
+# ============================================================================
+
+### Complex exponential: exp(a+bi) = exp(a)(cos(b) + i·sin(b))
+routine C32.exp() -> C32
+  var ea = me.real.exp()
+  return C32(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Complex square root (principal branch)
+###
+### Uses the algebraic formula (no atan2 required):
+###   sqrt(z) = sqrt((|z|+a)/2) + i·sign(b)·sqrt((|z|-a)/2)
+###
+### Example:
+###   C32(real: 3.0_f32, imag: 4.0_f32).sqrt()  # C32(real: 2.0, imag: 1.0)
+routine C32.sqrt() -> C32
+  var r = me.abs()
+  if r == 0.0_f32
+    return C32_ZERO
+  var rp = ((r + me.real) / 2.0_f32).sqrt()
+  var ip = ((r - me.real) / 2.0_f32).sqrt()
+  if me.imag < 0.0_f32
+    ip = -ip
+  return C32(real: rp, imag: ip)
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### True if both components are zero
+routine C32.is_zero() -> Bool
+  return me.real == 0.0_f32 and me.imag == 0.0_f32
+
+### True if the imaginary part is zero (purely real number)
+routine C32.is_real() -> Bool
+  return me.imag == 0.0_f32
+
+### True if the real part is zero (purely imaginary number)
+routine C32.is_imaginary() -> Bool
+  return me.real == 0.0_f32

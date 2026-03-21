@@ -1,627 +1,3610 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+﻿namespace SemanticAnalysis;
 
-namespace Compilers.Shared.Analysis;
+using Enums;
+using Results;
+using Native;
+using Symbols;
+using Types;
+using Compiler.Lexer;
+using SyntaxTree;
+using Diagnostics;
+using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
-/// Partial class containing expression visitors (literal, binary, unary, member, etc.).
+/// Phase 3: Expression analysis.
 /// </summary>
-public partial class SemanticAnalyzer
+public sealed partial class SemanticAnalyzer
 {
+    #region Expression Analysis
+
     /// <summary>
-    /// Visits a literal expression and infers its type.
+    /// Analyzes an expression and returns its resolved type.
+    /// Also sets the ResolvedType property on the expression.
     /// </summary>
-    /// <param name="node">Literal expression node</param>
-    /// <returns>TypeInfo representing the literal type</returns>
-    public object? VisitLiteralExpression(LiteralExpression node)
+    /// <param name="expression">The expression to analyze.</param>
+    /// <param name="expectedType">Optional expected type for contextual inference (e.g., return type, parameter type).</param>
+    /// <returns>The resolved type of the expression.</returns>
+    private TypeSymbol AnalyzeExpression(Expression expression, TypeSymbol? expectedType = null)
     {
-        // Use the explicit LiteralType from the token to determine the type
-        // This is more accurate than inferring from C# runtime type
-        return node.LiteralType switch
+        TypeSymbol resultType = expression switch
         {
-            // Explicitly typed integer literals (same for both languages)
-            TokenType.S8Literal => new TypeInfo(Name: "s8", IsReference: false),
-            TokenType.S16Literal => new TypeInfo(Name: "s16", IsReference: false),
-            TokenType.S32Literal => new TypeInfo(Name: "s32", IsReference: false),
-            TokenType.S64Literal => new TypeInfo(Name: "s64", IsReference: false),
-            TokenType.S128Literal => new TypeInfo(Name: "s128", IsReference: false),
-            TokenType.SyssintLiteral => new TypeInfo(Name: "saddr", IsReference: false),
-            TokenType.U8Literal => new TypeInfo(Name: "u8", IsReference: false),
-            TokenType.U16Literal => new TypeInfo(Name: "u16", IsReference: false),
-            TokenType.U32Literal => new TypeInfo(Name: "u32", IsReference: false),
-            TokenType.U64Literal => new TypeInfo(Name: "u64", IsReference: false),
-            TokenType.U128Literal => new TypeInfo(Name: "u128", IsReference: false),
-            TokenType.SysuintLiteral => new TypeInfo(Name: "uaddr", IsReference: false),
-
-            // Untyped integer: RazorForge defaults to s64, Suflae defaults to Integer (arbitrary precision)
-            TokenType.Integer => new TypeInfo(Name: _language == Language.Suflae
-                    ? "Integer"
-                    : "s64",
-                IsReference: false),
-
-            // Explicitly typed floating-point literals (same for both languages)
-            TokenType.F16Literal => new TypeInfo(Name: "f16", IsReference: false),
-            TokenType.F32Literal => new TypeInfo(Name: "f32", IsReference: false),
-            TokenType.F64Literal => new TypeInfo(Name: "f64", IsReference: false),
-            TokenType.F128Literal => new TypeInfo(Name: "f128", IsReference: false),
-            TokenType.D32Literal => new TypeInfo(Name: "d32", IsReference: false),
-            TokenType.D64Literal => new TypeInfo(Name: "d64", IsReference: false),
-            TokenType.D128Literal => new TypeInfo(Name: "d128", IsReference: false),
-
-            // Untyped decimal: RazorForge defaults to f64, Suflae defaults to Decimal (arbitrary precision)
-            TokenType.Decimal => new TypeInfo(Name: _language == Language.Suflae
-                    ? "Decimal"
-                    : "f64",
-                IsReference: false),
-
-            // Text literals: RazorForge has Text<letter>/Text<letter8>/Text<letter16>, Suflae has Text (UTF-8) and Bytes (no Text16)
-            TokenType.TextLiteral or TokenType.FormattedText or TokenType.RawText
-                or TokenType.RawFormattedText => new TypeInfo(Name: _language == Language.Suflae
-                        ? "Text"
-                        : "Text<letter>",
-                    IsReference: false),
-            TokenType.Text8Literal or TokenType.Text8FormattedText or TokenType.Text8RawText
-                or TokenType.Text8RawFormattedText => new TypeInfo(
-                    Name: _language == Language.Suflae
-                        ? "Bytes"
-                        : "Text<letter8>",
-                    IsReference: false),
-            // Text16 literals: Only supported in RazorForge, not in Suflae
-            TokenType.Text16Literal or TokenType.Text16FormattedText or TokenType.Text16RawText
-                or TokenType.Text16RawFormattedText => HandleText16Literal(node: node),
-
-            // Suflae-only bytes literals (b"", br"", bf"", brf"")
-            TokenType.BytesLiteral or TokenType.BytesRawLiteral or TokenType.BytesFormatted
-                or TokenType.BytesRawFormatted => HandleBytesLiteral(node: node),
-
-            // Duration literals - all produce Duration type
-            TokenType.WeekLiteral or TokenType.DayLiteral or TokenType.HourLiteral
-                or TokenType.MinuteLiteral or TokenType.SecondLiteral
-                or TokenType.MillisecondLiteral or TokenType.MicrosecondLiteral
-                or TokenType.NanosecondLiteral => new TypeInfo(Name: "Duration",
-                    IsReference: false),
-
-            // Memory size literals - all produce MemorySize type
-            TokenType.ByteLiteral or TokenType.KilobyteLiteral or TokenType.KibibyteLiteral
-                or TokenType.KilobitLiteral or TokenType.KibibitLiteral
-                or TokenType.MegabyteLiteral or TokenType.MebibyteLiteral
-                or TokenType.MegabitLiteral or TokenType.MebibitLiteral
-                or TokenType.GigabyteLiteral or TokenType.GibibyteLiteral
-                or TokenType.GigabitLiteral or TokenType.GibibitLiteral
-                or TokenType.TerabyteLiteral or TokenType.TebibyteLiteral
-                or TokenType.TerabitLiteral or TokenType.TebibitLiteral
-                or TokenType.PetabyteLiteral or TokenType.PebibyteLiteral
-                or TokenType.PetabitLiteral
-                or TokenType.PebibitLiteral =>
-                new TypeInfo(Name: "MemorySize", IsReference: false),
-
-            // Boolean and none literals (same for both languages)
-            TokenType.True or TokenType.False => new TypeInfo(Name: "Bool", IsReference: false),
-            TokenType.None => new TypeInfo(Name: "none", IsReference: false),
-            _ => InferLiteralType(value: node.Value) // Fallback to runtime type inference
+            LiteralExpression literal => AnalyzeLiteralExpression(literal: literal, expectedType: expectedType),
+            IdentifierExpression id => AnalyzeIdentifierExpression(id: id),
+            CompoundAssignmentExpression compound => AnalyzeCompoundAssignment(compound: compound),
+            BinaryExpression binary => AnalyzeBinaryExpression(binary: binary),
+            UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
+            CallExpression call => AnalyzeCallExpression(call: call),
+            MemberExpression member => AnalyzeMemberExpression(member: member),
+            OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(optMember: optMember),
+            IndexExpression index => AnalyzeIndexExpression(index: index),
+            SliceExpression slice => AnalyzeSliceExpression(slice: slice),
+            ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
+            LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda),
+            RangeExpression range => AnalyzeRangeExpression(range: range),
+            CreatorExpression creator => AnalyzeCreatorExpression(creator: creator),
+            ListLiteralExpression list => AnalyzeListLiteralExpression(list: list),
+            SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set),
+            DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict),
+            TupleLiteralExpression tuple => AnalyzeTupleLiteralExpression(tuple: tuple),
+            TypeConversionExpression conv => AnalyzeTypeConversionExpression(conv: conv),
+            ChainedComparisonExpression chain => AnalyzeChainedComparisonExpression(chain: chain),
+            BlockExpression block => AnalyzeBlockExpression(block: block),
+            WithExpression with => AnalyzeWithExpression(with: with),
+            NamedArgumentExpression named => AnalyzeExpression(expression: named.Value),
+            GenericMethodCallExpression generic => AnalyzeGenericMethodCallExpression(generic: generic),
+            GenericMemberExpression genericMember => AnalyzeGenericMemberExpression(genericMember: genericMember),
+            IsPatternExpression isPat => AnalyzeIsPatternExpression(isPat: isPat),
+            FlagsTestExpression flagsTest => AnalyzeFlagsTestExpression(flagsTest: flagsTest),
+            StealExpression steal => AnalyzeStealExpression(steal: steal),
+            BackIndexExpression back => AnalyzeBackIndexExpression(back: back),
+            TypeExpression typeExpr => ResolveType(typeExpr: typeExpr),
+            WhenExpression whenExpr => AnalyzeWhenExpression(when: whenExpr),
+            WaitforExpression waitfor => AnalyzeWaitforExpression(waitfor: waitfor),
+            DependentWaitforExpression depWaitfor => AnalyzeDependentWaitforExpression(depWaitfor: depWaitfor),
+            InsertedTextExpression insertedText => AnalyzeInsertedTextExpression(insertedText: insertedText),
+            _ => HandleUnknownExpression(expression: expression)
         };
+
+        // Set the resolved type directly (no conversion needed)
+        expression.ResolvedType = resultType;
+        return resultType;
     }
 
-    /// <summary>
-    /// Visits a list literal expression [1, 2, 3] and infers its type.
-    /// </summary>
-    public object? VisitListLiteralExpression(ListLiteralExpression node)
+    private TypeSymbol AnalyzeLiteralExpression(LiteralExpression literal, TypeSymbol? expectedType = null)
     {
-        TypeInfo? elementType = null;
-
-        // Analyze each element and infer element type from first element
-        foreach (Expression element in node.Elements)
+        // Map token type to the corresponding type (PascalCase)
+        string? typeName = literal.LiteralType switch
         {
-            var type = element.Accept(visitor: this) as TypeInfo;
-            if (elementType == null && type != null)
-            {
-                elementType = type;
-            }
-            // TODO: Check that all elements have compatible types
-        }
+            // Signed integers
+            TokenType.S8Literal => "S8",
+            TokenType.S16Literal => "S16",
+            TokenType.S32Literal => "S32",
+            TokenType.S64Literal => "S64",
+            TokenType.S128Literal => "S128",
+            TokenType.SAddrLiteral => "SAddr",
 
-        // Use explicit type annotation if provided
-        if (node.ElementType != null)
-        {
-            elementType = ResolveType(typeExpr: node.ElementType);
-        }
+            // Unsigned integers
+            TokenType.U8Literal => "U8",
+            TokenType.U16Literal => "U16",
+            TokenType.U32Literal => "U32",
+            TokenType.U64Literal => "U64",
+            TokenType.U128Literal => "U128",
+            TokenType.UAddrLiteral => "UAddr",
 
-        string typeName = elementType?.Name ?? "unknown";
-        return new TypeInfo(Name: "List",
-            IsReference: true,
-            GenericArguments: [new TypeInfo(Name: typeName, IsReference: false)]);
-    }
+            // Floating-point
+            TokenType.F16Literal => "F16",
+            TokenType.F32Literal => "F32",
+            TokenType.F64Literal => "F64",
+            TokenType.F128Literal => "F128",
 
-    /// <summary>
-    /// Visits a set literal expression {1, 2, 3} and infers its type.
-    /// </summary>
-    public object? VisitSetLiteralExpression(SetLiteralExpression node)
-    {
-        TypeInfo? elementType = null;
+            // Decimal floating-point
+            TokenType.D32Literal => "D32",
+            TokenType.D64Literal => "D64",
+            TokenType.D128Literal => "D128",
 
-        foreach (Expression element in node.Elements)
-        {
-            var type = element.Accept(visitor: this) as TypeInfo;
-            if (elementType == null && type != null)
-            {
-                elementType = type;
-            }
-        }
+            // RazorForge uses fixed-width types (S64, F64) for unsuffixed literals
+            // Suflae uses arbitrary precision types (Integer, Decimal)
+            TokenType.Integer => _registry.Language == Language.Suflae ? "Integer" : "S64",
+            TokenType.Decimal => _registry.Language == Language.Suflae ? "Decimal" : "F64",
 
-        if (node.ElementType != null)
-        {
-            elementType = ResolveType(typeExpr: node.ElementType);
-        }
+            // Boolean
+            TokenType.True or TokenType.False => "Bool",
 
-        string typeName = elementType?.Name ?? "unknown";
-        return new TypeInfo(Name: "Set",
-            IsReference: true,
-            GenericArguments: [new TypeInfo(Name: typeName, IsReference: false)]);
-    }
+            // Text and characters
+            TokenType.TextLiteral => "Text",
+            TokenType.BytesLiteral => "Bytes",
+            TokenType.BytesRawLiteral => "Bytes",
+            TokenType.ByteLetterLiteral => "Byte",
+            TokenType.LetterLiteral => "Letter",
 
-    /// <summary>
-    /// Visits a dict literal expression {k: v} and infers its type.
-    /// </summary>
-    public object? VisitDictLiteralExpression(DictLiteralExpression node)
-    {
-        TypeInfo? keyType = null;
-        TypeInfo? valueType = null;
+            // byte size literals (all map to ByteSize type)
+            TokenType.ByteLiteral or
+            TokenType.KilobyteLiteral or TokenType.KibibyteLiteral or
+            TokenType.MegabyteLiteral or TokenType.MebibyteLiteral or
+            TokenType.GigabyteLiteral or TokenType.GibibyteLiteral => "ByteSize",
 
-        foreach ((Expression key, Expression value) in node.Pairs)
-        {
-            var kt = key.Accept(visitor: this) as TypeInfo;
-            var vt = value.Accept(visitor: this) as TypeInfo;
-            if (keyType == null && kt != null)
-            {
-                keyType = kt;
-            }
+            // Duration literals (all map to Duration type)
+            TokenType.WeekLiteral or TokenType.DayLiteral or
+            TokenType.HourLiteral or TokenType.MinuteLiteral or
+            TokenType.SecondLiteral or TokenType.MillisecondLiteral or
+            TokenType.MicrosecondLiteral or TokenType.NanosecondLiteral => "Duration",
 
-            if (valueType == null && vt != null)
-            {
-                valueType = vt;
-            }
-        }
+            // Complex/Imaginary literals
+            TokenType.J32Literal => "C32",
+            TokenType.J64Literal => "C64",
+            TokenType.J128Literal => "C128",
+            TokenType.JnLiteral => "Complex",
 
-        if (node.KeyType != null)
-        {
-            keyType = ResolveType(typeExpr: node.KeyType);
-        }
-
-        if (node.ValueType != null)
-        {
-            valueType = ResolveType(typeExpr: node.ValueType);
-        }
-
-        string keyTypeName = keyType?.Name ?? "unknown";
-        string valueTypeName = valueType?.Name ?? "unknown";
-        return new TypeInfo(Name: "Dict",
-            IsReference: true,
-            GenericArguments:
-            [
-                new TypeInfo(Name: keyTypeName, IsReference: false),
-                new TypeInfo(Name: valueTypeName, IsReference: false)
-            ]);
-    }
-
-    /// <summary>
-    /// Visits an identifier expression and looks up its type in the symbol table.
-    /// </summary>
-    /// <param name="node">Identifier expression node</param>
-    /// <returns>TypeInfo of the identifier</returns>
-    public object? VisitIdentifierExpression(IdentifierExpression node)
-    {
-        Symbol? symbol = _symbolTable.Lookup(name: node.Name);
-        if (symbol == null)
-        {
-            AddError(message: $"Undefined identifier '{node.Name}'", location: node.Location);
-            return null;
-        }
-
-        // CRITICAL: Check if this source variable is invalidated by a scoped access statement
-        if (IsSourceInvalidated(sourceName: node.Name))
-        {
-            string? accessType = GetInvalidationAccessType(sourceName: node.Name);
-            AddError(
-                message:
-                $"Cannot access '{node.Name}' while it is being accessed via {accessType} statement. " +
-                $"The source is temporarily unavailable while the scoped token exists. " +
-                $"Access the data through the scoped token instead.",
-                location: node.Location);
-        }
-
-        return symbol.Type;
-    }
-
-    /// <summary>
-    /// Visits a binary expression and validates operand types.
-    /// </summary>
-    /// <param name="node">Binary expression node</param>
-    /// <returns>TypeInfo of the result</returns>
-    public object? VisitBinaryExpression(BinaryExpression node)
-    {
-        var leftType = node.Left.Accept(visitor: this) as TypeInfo;
-        var rightType = node.Right.Accept(visitor: this) as TypeInfo;
-
-        // Check for mixed-type arithmetic (REJECTED per user requirement)
-        if (leftType != null && rightType != null && IsArithmeticOperator(op: node.Operator))
-        {
-            if (!AreTypesCompatible(left: leftType, right: rightType))
-            {
-                AddError(
-                    message:
-                    $"Mixed-type arithmetic is not allowed. Cannot perform {node.Operator} between {leftType.Name} and {rightType.Name}. Use explicit type conversion with {rightType.Name}!(x) or x.{rightType.Name}!().",
-                    location: node.Location);
-                return null;
-            }
-        }
-
-        // Comparison operators return Bool
-        if (IsComparisonOperator(op: node.Operator))
-        {
-            return new TypeInfo(Name: "Bool", IsReference: false);
-        }
-
-        // Logical operators return Bool
-        if (IsLogicalOperator(op: node.Operator))
-        {
-            return new TypeInfo(Name: "Bool", IsReference: false);
-        }
-
-        // Return the common type (they should be the same if we reach here)
-        return leftType ?? rightType;
-    }
-
-    private bool IsArithmeticOperator(BinaryOperator op)
-    {
-        return op switch
-        {
-            BinaryOperator.Add or BinaryOperator.Subtract or BinaryOperator.Multiply
-                or BinaryOperator.TrueDivide or BinaryOperator.Divide or BinaryOperator.Modulo
-                or BinaryOperator.Power or BinaryOperator.AddWrap or BinaryOperator.SubtractWrap
-                or BinaryOperator.MultiplyWrap or BinaryOperator.DivideWrap
-                or BinaryOperator.ModuloWrap or BinaryOperator.PowerWrap
-                or BinaryOperator.AddSaturate or BinaryOperator.SubtractSaturate
-                or BinaryOperator.MultiplySaturate or BinaryOperator.DivideSaturate
-                or BinaryOperator.ModuloSaturate or BinaryOperator.PowerSaturate
-                or BinaryOperator.AddUnchecked or BinaryOperator.SubtractUnchecked
-                or BinaryOperator.MultiplyUnchecked or BinaryOperator.DivideUnchecked
-                or BinaryOperator.ModuloUnchecked or BinaryOperator.PowerUnchecked
-                or BinaryOperator.AddChecked or BinaryOperator.SubtractChecked
-                or BinaryOperator.MultiplyChecked or BinaryOperator.DivideChecked
-                or BinaryOperator.ModuloChecked or BinaryOperator.PowerChecked => true,
-            _ => false
+            // Unknown literal type - error
+            _ => null
         };
+
+        // Report error for unknown literal types
+        if (typeName == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.UnknownLiteralType,
+                $"Unknown literal type '{literal.LiteralType}'.",
+                literal.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Contextual type inference for unsuffixed integer literals
+        // If expected type is a fixed-width integer type and literal is Integer or S64 (default unsuffixed),
+        // infer to expected type
+        if (expectedType != null &&
+            (literal.LiteralType == TokenType.Integer || literal.LiteralType == TokenType.S64Literal) &&
+            IsFixedWidthIntegerType(expectedType))
+        {
+            // Check if the literal value fits in the expected type
+            if (LiteralFitsInType(literal, expectedType))
+            {
+                typeName = expectedType.Name;
+            }
+        }
+
+        // Parse and validate deferred numeric types using native libraries
+        if (literal.Value is string rawValue)
+        {
+            ParsedLiteral? parsed = ParseDeferredLiteral(literal: literal, rawValue: rawValue);
+            if (parsed != null)
+            {
+                _parsedLiterals[literal.Location] = parsed;
+            }
+        }
+
+        TypeSymbol? type = LookupTypeWithImports(name: typeName);
+        if (type == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.LiteralTypeNotDefined,
+                $"Type '{typeName}' is not defined.",
+                literal.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        return type;
     }
 
-    private bool IsComparisonOperator(BinaryOperator op)
+    /// <summary>
+    /// Checks if a type is a fixed-width integer type (S8-S128, U8-U128, SAddr, UAddr).
+    /// </summary>
+    // TODO: remove this
+    private static bool IsFixedWidthIntegerType(TypeSymbol type)
     {
-        return op switch
-        {
-            BinaryOperator.Equal or BinaryOperator.NotEqual or BinaryOperator.Less
-                or BinaryOperator.LessEqual or BinaryOperator.Greater
-                or BinaryOperator.GreaterEqual or BinaryOperator.In or BinaryOperator.NotIn
-                or BinaryOperator.Is or BinaryOperator.IsNot or BinaryOperator.From
-                or BinaryOperator.NotFrom or BinaryOperator.Follows
-                or BinaryOperator.NotFollows => true,
-            _ => false
-        };
+        return type.Name is "S8" or "S16" or "S32" or "S64" or "S128"
+            or "U8" or "U16" or "U32" or "U64" or "U128"
+            or "SAddr" or "UAddr";
     }
 
-    private bool IsLogicalOperator(BinaryOperator op)
+    /// <summary>
+    /// Checks if an integer literal value fits within the range of the target type.
+    /// </summary>
+    private static bool LiteralFitsInType(LiteralExpression literal, TypeSymbol targetType)
     {
-        return op switch
+        // Get the numeric value from the literal
+        if (literal.Value is not long value)
         {
-            BinaryOperator.And or BinaryOperator.Or => true,
-            _ => false
-        };
-    }
-
-    private bool AreTypesCompatible(TypeInfo left, TypeInfo right)
-    {
-        // If either type is a generic parameter, they are compatible
-        // (concrete type checking happens at instantiation time)
-        if (left.IsGenericParameter || right.IsGenericParameter)
-        {
+            // TODO: For string-stored values (large numbers), we'd need more sophisticated checking
+            // For now, allow inference and let runtime handle overflow
             return true;
         }
 
-        // Types are compatible if they are exactly the same
-        return left.Name == right.Name && left.IsReference == right.IsReference;
+        return targetType.Name switch
+        {
+            "S8" => value is >= sbyte.MinValue and <= sbyte.MaxValue,
+            "S16" => value is >= short.MinValue and <= short.MaxValue,
+            "S32" => value is >= int.MinValue and <= int.MaxValue,
+            "S64" => true, // Any long fits in S64
+            "S128" => true, // Any long fits in S128
+            "U8" => value is >= 0 and <= byte.MaxValue,
+            "U16" => value is >= 0 and <= ushort.MaxValue,
+            "U32" => value is >= 0 and <= uint.MaxValue,
+            "U64" => value >= 0, // Any non-negative long fits in U64
+            "U128" => value >= 0,
+            "SAddr" or "UAddr" => true, // System-dependent, allow for now
+            _ => false
+        };
     }
 
     /// <summary>
-    /// Visits a unary expression and validates the operand type.
+    /// Parses a deferred numeric literal using native libraries or managed parsing.
+    /// Called for all numeric, duration, and byte size literals stored as strings.
     /// </summary>
-    /// <param name="node">Unary expression node</param>
-    /// <returns>TypeInfo of the result</returns>
-    public object? VisitUnaryExpression(UnaryExpression node)
+    /// <param name="literal">The literal expression.</param>
+    /// <param name="rawValue">The raw string value to parse.</param>
+    /// <returns>The parsed literal, or null if parsing failed.</returns>
+    private ParsedLiteral? ParseDeferredLiteral(LiteralExpression literal, string rawValue)
     {
-        var operandType = node.Operand.Accept(visitor: this) as TypeInfo;
-        // TODO: Check unary operator compatibility
+        try
+        {
+            return literal.LiteralType switch
+            {
+                // Fixed-width signed integers
+                TokenType.S8Literal => ParseSignedIntLiteral(literal, rawValue, "S8", sbyte.MinValue, sbyte.MaxValue),
+                TokenType.S16Literal => ParseSignedIntLiteral(literal, rawValue, "S16", short.MinValue, short.MaxValue),
+                TokenType.S32Literal => ParseSignedIntLiteral(literal, rawValue, "S32", int.MinValue, int.MaxValue),
+                TokenType.S64Literal => ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
+                TokenType.S128Literal => ParseS128Literal(literal, rawValue),
+                TokenType.SAddrLiteral => ParseSignedIntLiteral(literal, rawValue, "SAddr", long.MinValue, long.MaxValue),
+
+                // Fixed-width unsigned integers
+                TokenType.U8Literal => ParseUnsignedIntLiteral(literal, rawValue, "U8", byte.MaxValue),
+                TokenType.U16Literal => ParseUnsignedIntLiteral(literal, rawValue, "U16", ushort.MaxValue),
+                TokenType.U32Literal => ParseUnsignedIntLiteral(literal, rawValue, "U32", uint.MaxValue),
+                TokenType.U64Literal => ParseUnsignedIntLiteral(literal, rawValue, "U64", ulong.MaxValue),
+                TokenType.U128Literal => ParseU128Literal(literal, rawValue),
+                TokenType.UAddrLiteral => ParseUnsignedIntLiteral(literal, rawValue, "UAddr", ulong.MaxValue),
+
+                // Fixed-width floats (F16, F32, F64 use .NET native types; F128 uses native library)
+                TokenType.F16Literal => ParseF16Literal(literal, rawValue),
+                TokenType.F32Literal => ParseF32Literal(literal, rawValue),
+                TokenType.F64Literal => ParseF64Literal(literal, rawValue),
+                TokenType.F128Literal => ParseF128Literal(literal: literal, rawValue: rawValue),
+
+                // Decimal floating-point (all use native library)
+                TokenType.D32Literal => ParseD32Literal(literal: literal, rawValue: rawValue),
+                TokenType.D64Literal => ParseD64Literal(literal: literal, rawValue: rawValue),
+                TokenType.D128Literal => ParseD128Literal(literal: literal, rawValue: rawValue),
+
+                // RazorForge uses fixed-width types (S64, F64) for unsuffixed literals
+                // Suflae uses arbitrary precision types (Integer, Decimal)
+                TokenType.Integer => _registry.Language == Language.Suflae
+                    ? ParseIntegerLiteral(literal: literal, rawValue: rawValue)
+                    : ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
+                TokenType.Decimal => _registry.Language == Language.Suflae
+                    ? ParseDecimalLiteral(literal: literal, rawValue: rawValue)
+                    : ParseF64Literal(literal, rawValue),
+
+                // Imaginary literals for complex numbers
+                TokenType.J32Literal => ParseJ32Literal(literal, rawValue),
+                TokenType.J64Literal => ParseJ64Literal(literal, rawValue),
+                TokenType.J128Literal => ParseJ128Literal(literal, rawValue),
+                TokenType.JnLiteral => ParseJnLiteral(literal, rawValue),
+
+                // Duration literals
+                TokenType.NanosecondLiteral => ParseDurationLiteral(literal, rawValue, "ns", 1L),
+                TokenType.MicrosecondLiteral => ParseDurationLiteral(literal, rawValue, "us", 1_000L),
+                TokenType.MillisecondLiteral => ParseDurationLiteral(literal, rawValue, "ms", 1_000_000L),
+                TokenType.SecondLiteral => ParseDurationLiteral(literal, rawValue, "s", 1_000_000_000L),
+                TokenType.MinuteLiteral => ParseDurationLiteral(literal, rawValue, "m", 60_000_000_000L),
+                TokenType.HourLiteral => ParseDurationLiteral(literal, rawValue, "h", 3_600_000_000_000L),
+                TokenType.DayLiteral => ParseDurationLiteral(literal, rawValue, "d", 86_400_000_000_000L),
+                TokenType.WeekLiteral => ParseDurationLiteral(literal, rawValue, "w", 604_800_000_000_000L),
+
+                // byte size literals
+                TokenType.ByteLiteral => ParseByteSizeLiteral(literal, rawValue, "b", 1UL),
+                TokenType.KilobyteLiteral => ParseByteSizeLiteral(literal, rawValue, "kb", 1_000UL),
+                TokenType.KibibyteLiteral => ParseByteSizeLiteral(literal, rawValue, "kib", 1_024UL),
+                TokenType.MegabyteLiteral => ParseByteSizeLiteral(literal, rawValue, "mb", 1_000_000UL),
+                TokenType.MebibyteLiteral => ParseByteSizeLiteral(literal, rawValue, "mib", 1_048_576UL),
+                TokenType.GigabyteLiteral => ParseByteSizeLiteral(literal, rawValue, "gb", 1_000_000_000UL),
+                TokenType.GibibyteLiteral => ParseByteSizeLiteral(literal, rawValue, "gib", 1_073_741_824UL),
+
+                _ => null
+            };
+        }
+        catch (Exception ex)
+        {
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Failed to parse numeric literal '{rawValue}': {ex.Message}", literal.Location);
+            return null;
+        }
+    }
+
+    private ParsedLiteral ParseF128Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: rawValue);
+        return new ParsedF128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
+    }
+
+    private ParsedLiteral ParseD32Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.D32 result = NumericLiteralParser.ParseD32(str: rawValue);
+        return new ParsedD32(Location: literal.Location, Value: result.Value);
+    }
+
+    private ParsedLiteral ParseD64Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.D64 result = NumericLiteralParser.ParseD64(str: rawValue);
+        return new ParsedD64(Location: literal.Location, Value: result.Value);
+    }
+
+    private ParsedLiteral ParseD128Literal(LiteralExpression literal, string rawValue)
+    {
+        NumericLiteralParser.D128 result = NumericLiteralParser.ParseD128(str: rawValue);
+        return new ParsedD128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
+    }
+
+    private ParsedLiteral ParseIntegerLiteral(LiteralExpression literal, string rawValue)
+    {
+        (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: rawValue);
+        if (bytes.Length == 0)
+        {
+            ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid Integer literal: '{rawValue}'", literal.Location);
+            return new ParsedInteger(Location: literal.Location, Limbs: [], Sign: 0, Exponent: 0);
+        }
+
+        return new ParsedInteger(Location: literal.Location, Limbs: bytes, Sign: sign, Exponent: 0);
+    }
+
+    private ParsedLiteral ParseDecimalLiteral(LiteralExpression literal, string rawValue)
+    {
+        (string value, int sign, int exponent, int significantDigits, bool isInteger) =
+            NumericLiteralParser.ParseDecimalInfo(str: rawValue);
+
+        if (string.IsNullOrEmpty(value: value))
+        {
+            ReportError(SemanticDiagnosticCode.InvalidDecimalLiteral, $"Invalid Decimal literal: '{rawValue}'", literal.Location);
+            return new ParsedDecimal(Location: literal.Location, StringValue: rawValue, Sign: 0, Exponent: 0, SignificantDigits: 0, IsInteger: false);
+        }
+
+        return new ParsedDecimal(Location: literal.Location, StringValue: value, Sign: sign, Exponent: exponent, SignificantDigits: significantDigits, IsInteger: isInteger);
+    }
+
+    #region Fixed-Width Numeric Literal Parsing
+
+    /// <summary>
+    /// Parses a signed integer literal (S8-S64, SAddr) with overflow validation.
+    /// </summary>
+    private ParsedLiteral? ParseSignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, long minValue, long maxValue)
+    {
+        // Extract numeric part by removing the type suffix (e.g., "1s32" -> "1")
+        string numericPart = ExtractNumericPart(rawValue, typeName.ToLowerInvariant());
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!TryParseSignedInteger(cleanedValue, out long value))
+        {
+            ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid {typeName} literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        if (value >= minValue && value <= maxValue)
+        {
+            return new ParsedSignedInt(Location: literal.Location,
+                TypeName: typeName,
+                Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.IntegerLiteralOverflow,
+            $"{typeName} literal '{rawValue}' overflows. Valid range: {minValue} to {maxValue}.",
+            literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses an S128 literal with Int128 overflow validation.
+    /// </summary>
+    private ParsedLiteral? ParseS128Literal(LiteralExpression literal, string rawValue)
+    {
+        string numericPart = ExtractNumericPart(rawValue, "s128");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (Int128.TryParse(cleanedValue, out Int128 value))
+        {
+            return new ParsedSignedInt(Location: literal.Location, TypeName: "S128", Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid S128 literal: '{rawValue}'", literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses an unsigned integer literal (U8-U64, UAddr) with overflow validation.
+    /// </summary>
+    private ParsedLiteral? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, ulong maxValue)
+    {
+        // Extract numeric part by removing the type suffix (e.g., "1u32" -> "1")
+        string numericPart = ExtractNumericPart(rawValue, typeName.ToLowerInvariant());
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!TryParseUnsignedInteger(cleanedValue, out ulong value))
+        {
+            ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid {typeName} literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        if (value <= maxValue)
+        {
+            return new ParsedUnsignedInt(Location: literal.Location,
+                TypeName: typeName,
+                Value: (UInt128)value);
+        }
+
+        ReportError(SemanticDiagnosticCode.IntegerLiteralOverflow,
+            $"{typeName} literal '{rawValue}' overflows. Valid range: 0 to {maxValue}.",
+            literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses a U128 literal with UInt128 overflow validation.
+    /// </summary>
+    private ParsedLiteral? ParseU128Literal(LiteralExpression literal, string rawValue)
+    {
+        string numericPart = ExtractNumericPart(rawValue, "u128");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (UInt128.TryParse(cleanedValue, out UInt128 value))
+        {
+            return new ParsedUnsignedInt(Location: literal.Location,
+                TypeName: "U128",
+                Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid U128 literal: '{rawValue}'", literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses an F16 (half-precision) floating-point literal using .NET Half type.
+    /// </summary>
+    private ParsedLiteral? ParseF16Literal(LiteralExpression literal, string rawValue)
+    {
+        string numericPart = ExtractNumericPart(rawValue, "f16");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!Half.TryParse(cleanedValue, out Half value))
+        {
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid F16 literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        if (!Half.IsInfinity(value))
+        {
+            return new ParsedFloat(Location: literal.Location,
+                TypeName: "F16",
+                Value: (double)value);
+        }
+
+        ReportError(SemanticDiagnosticCode.FloatLiteralOverflow,
+            $"F16 literal '{rawValue}' overflows the representable range.",
+            literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses an F32 (single-precision) floating-point literal using .NET float type.
+    /// </summary>
+    private ParsedLiteral? ParseF32Literal(LiteralExpression literal, string rawValue)
+    {
+        string numericPart = ExtractNumericPart(rawValue, "f32");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!float.TryParse(cleanedValue, out float value))
+        {
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid F32 literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        if (!float.IsInfinity(value))
+        {
+            return new ParsedFloat(Location: literal.Location, TypeName: "F32", Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.FloatLiteralOverflow,
+            $"F32 literal '{rawValue}' overflows the representable range.",
+            literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses an F64 (double-precision) floating-point literal using .NET double type.
+    /// </summary>
+    private ParsedLiteral? ParseF64Literal(LiteralExpression literal, string rawValue)
+    {
+        string numericPart = ExtractNumericPart(rawValue, "f64");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!double.TryParse(cleanedValue, out double value))
+        {
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid F64 literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        if (!double.IsInfinity(value))
+        {
+            return new ParsedFloat(Location: literal.Location, TypeName: "F64", Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.FloatLiteralOverflow,
+            $"F64 literal '{rawValue}' overflows the representable range.",
+            literal.Location);
+        return null;
+    }
+
+    #endregion
+
+    #region Duration Literal Parsing
+
+    /// <summary>
+    /// Parses a duration literal and converts to nanoseconds.
+    /// </summary>
+    private ParsedLiteral? ParseDurationLiteral(LiteralExpression literal, string rawValue, string unit, long multiplier)
+    {
+        // Extract numeric part (remove unit suffix)
+        string numericPart = ExtractNumericPart(rawValue, unit);
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!TryParseSignedInteger(cleanedValue, out long value))
+        {
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid duration literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        // Check for overflow when multiplying
+        try
+        {
+            checked
+            {
+                long nanoseconds = value * multiplier;
+                return new ParsedDuration(Location: literal.Location, Nanoseconds: nanoseconds, OriginalUnit: unit);
+            }
+        }
+        catch (OverflowException)
+        {
+            ReportError(SemanticDiagnosticCode.DurationLiteralOverflow,
+                $"Duration literal '{rawValue}' overflows the maximum representable duration.",
+                literal.Location);
+            return null;
+        }
+    }
+
+    #endregion
+
+    #region ByteSize Literal Parsing
+
+    /// <summary>
+    /// Parses a ByteSize literal and converts to ByteSize.
+    /// </summary>
+    private ParsedLiteral? ParseByteSizeLiteral(LiteralExpression literal, string rawValue, string unit, ulong multiplier)
+    {
+        // Extract numeric part (remove unit suffix)
+        string numericPart = ExtractNumericPart(rawValue, unit);
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (!TryParseUnsignedInteger(cleanedValue, out ulong value))
+        {
+            ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid byte size literal: '{rawValue}'", literal.Location);
+            return null;
+        }
+
+        // Check for overflow when multiplying
+        try
+        {
+            checked
+            {
+                ulong bytes = value * multiplier;
+                return new ParsedByteSize(Location: literal.Location, Bytes: bytes, OriginalUnit: unit);
+            }
+        }
+        catch (OverflowException)
+        {
+            ReportError(SemanticDiagnosticCode.ByteSizeLiteralOverflow,
+                $"ByteSize literal '{rawValue}' overflows the maximum representable size.",
+                literal.Location);
+            return null;
+        }
+    }
+
+    #endregion
+
+    #region Imaginary Literal Parsing
+
+    /// <summary>
+    /// Parses a J32 (F32-based) imaginary literal.
+    /// </summary>
+    private ParsedLiteral? ParseJ32Literal(LiteralExpression literal, string rawValue)
+    {
+        // Remove 'j32' suffix
+        string numericPart = RemoveImaginarySuffix(rawValue, "j32");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (float.TryParse(cleanedValue, out float value))
+        {
+            return new ParsedJ32(Location: literal.Location, Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.ImaginaryLiteralParseFailed, $"Invalid J32 literal: '{rawValue}'", literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses a J64 (F64-based) imaginary literal.
+    /// </summary>
+    private ParsedLiteral? ParseJ64Literal(LiteralExpression literal, string rawValue)
+    {
+        // Remove 'j64' or 'j' suffix
+        string numericPart = rawValue.EndsWith("j64", StringComparison.OrdinalIgnoreCase)
+            ? RemoveImaginarySuffix(rawValue, "j64")
+            : RemoveImaginarySuffix(rawValue, "j");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        if (double.TryParse(cleanedValue, out double value))
+        {
+            return new ParsedJ64(Location: literal.Location, Value: value);
+        }
+
+        ReportError(SemanticDiagnosticCode.ImaginaryLiteralParseFailed, $"Invalid J64 literal: '{rawValue}'", literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses a J128 (F128-based) imaginary literal using native library.
+    /// </summary>
+    private ParsedLiteral? ParseJ128Literal(LiteralExpression literal, string rawValue)
+    {
+        // Remove 'j128' suffix
+        string numericPart = RemoveImaginarySuffix(rawValue, "j128");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        try
+        {
+            NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: cleanedValue);
+            return new ParsedJ128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
+        }
+        catch (Exception ex)
+        {
+            ReportError(SemanticDiagnosticCode.ImaginaryLiteralParseFailed, $"Invalid J128 literal: '{rawValue}': {ex.Message}", literal.Location);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses a Jn (arbitrary-precision Decimal-based) imaginary literal using native library.
+    /// </summary>
+    private ParsedLiteral? ParseJnLiteral(LiteralExpression literal, string rawValue)
+    {
+        // Remove 'jn' suffix
+        string numericPart = RemoveImaginarySuffix(rawValue, "jn");
+        string cleanedValue = CleanNumericLiteral(numericPart);
+
+        try
+        {
+            (string value, int sign, int exponent, int significantDigits, bool _) =
+                NumericLiteralParser.ParseDecimalInfo(str: cleanedValue);
+
+            if (string.IsNullOrEmpty(value))
+            {
+                ReportError(SemanticDiagnosticCode.ImaginaryLiteralParseFailed, $"Invalid Jn literal: '{rawValue}'", literal.Location);
+                return null;
+            }
+
+            return new ParsedJn(Location: literal.Location, StringValue: value, Sign: sign, Exponent: exponent, SignificantDigits: significantDigits);
+        }
+        catch (Exception ex)
+        {
+            ReportError(SemanticDiagnosticCode.ImaginaryLiteralParseFailed, $"Invalid Jn literal: '{rawValue}': {ex.Message}", literal.Location);
+            return null;
+        }
+    }
+
+    #endregion
+
+    #region Literal Parsing Helpers
+
+    /// <summary>
+    /// Cleans a numeric literal by removing underscores.
+    /// </summary>
+    private static string CleanNumericLiteral(string value)
+    {
+        return value.Replace("_", "");
+    }
+
+    /// <summary>
+    /// Extracts the numeric part from a literal by removing the unit suffix.
+    /// </summary>
+    private static string ExtractNumericPart(string rawValue, string suffix)
+    {
+        if (rawValue.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return rawValue[..^suffix.Length];
+        }
+        return rawValue;
+    }
+
+    /// <summary>
+    /// Removes the imaginary suffix from a literal value.
+    /// </summary>
+    private static string RemoveImaginarySuffix(string rawValue, string suffix)
+    {
+        if (rawValue.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return rawValue[..^suffix.Length];
+        }
+        return rawValue;
+    }
+
+    /// <summary>
+    /// Tries to parse a signed integer, handling hex (0x), octal (0o), and binary (0b) prefixes.
+    /// </summary>
+    private static bool TryParseSignedInteger(string value, out long result)
+    {
+        result = 0;
+        if (string.IsNullOrEmpty(value)) return false;
+
+        // Handle negative sign
+        bool negative = value.StartsWith('-');
+        string numPart = negative ? value[1..] : value;
+
+        // Handle base prefixes
+        if (numPart.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            if (long.TryParse(numPart[2..], System.Globalization.NumberStyles.HexNumber, null, out long hexVal))
+            {
+                result = negative ? -hexVal : hexVal;
+                return true;
+            }
+            return false;
+        }
+
+        if (numPart.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                long octalVal = Convert.ToInt64(numPart[2..], 8);
+                result = negative ? -octalVal : octalVal;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        if (numPart.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                long binaryVal = Convert.ToInt64(numPart[2..], 2);
+                result = negative ? -binaryVal : binaryVal;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // Decimal
+        return long.TryParse(value, out result);
+    }
+
+    /// <summary>
+    /// Tries to parse an unsigned integer, handling hex (0x), octal (0o), and binary (0b) prefixes.
+    /// </summary>
+    private static bool TryParseUnsignedInteger(string value, out ulong result)
+    {
+        result = 0;
+        if (string.IsNullOrEmpty(value)) return false;
+
+        // Handle base prefixes
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return ulong.TryParse(value[2..], System.Globalization.NumberStyles.HexNumber, null, out result);
+        }
+
+        if (value.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                result = Convert.ToUInt64(value[2..], 8);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        if (value.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                result = Convert.ToUInt64(value[2..], 2);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // Decimal
+        return ulong.TryParse(value, out result);
+    }
+
+    #endregion
+
+    private TypeSymbol AnalyzeIdentifierExpression(IdentifierExpression id)
+    {
+        // Special identifiers
+        if (id.Name == "me")
+        {
+            // First check if we're inside a type body
+            if (_currentType != null)
+            {
+                return _currentType;
+            }
+
+            // For extension methods (routine Type.method), check the routine's owner type
+            if (_currentRoutine?.OwnerType != null)
+            {
+                // Re-lookup to get the updated type with resolved protocols/member variables
+                TypeSymbol? ownerType = _registry.LookupType(name: _currentRoutine.OwnerType.Name);
+                if (ownerType != null)
+                {
+                    return ownerType;
+                }
+            }
+
+            ReportError(SemanticDiagnosticCode.MeOutsideTypeMethod, "'me' can only be used inside a type method.", id.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        if (id.Name == "None")
+        {
+            // None represents Maybe.None - return a generic Maybe type
+            return ErrorHandlingTypeInfo.WellKnown.MaybeDefinition;
+        }
+
+        // Try to look up as variable first
+        VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+        if (varInfo != null)
+        {
+            // #11: Deadref tracking — report error if variable was invalidated by steal
+            if (_deadrefVariables.Contains(id.Name))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.UseAfterSteal,
+                    $"Variable '{id.Name}' is a deadref — it was invalidated by a previous 'steal' or ownership transfer. " +
+                    "The variable can no longer be used.",
+                    id.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            // Check for type narrowing (e.g., after "unless x is None")
+            TypeSymbol? narrowed = _registry.GetNarrowedType(name: id.Name);
+            return narrowed ?? varInfo.Type;
+        }
+
+        // Try to look up as choice case (SCREAMING_SNAKE_CASE identifiers like ME_SMALL, SAME)
+        var choiceCase = _registry.LookupChoiceCase(caseName: id.Name);
+        if (choiceCase.HasValue)
+        {
+            return choiceCase.Value.ChoiceType;
+        }
+
+        // Try to look up as routine (function reference)
+        RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
+        if (routine != null)
+        {
+            // Return the function type for first-class function references
+            return GetRoutineType(routine);
+        }
+
+        // Try to look up as type (for static access)
+        TypeSymbol? type = LookupTypeWithImports(name: id.Name);
+        if (type != null)
+        {
+            return type;
+        }
+
+        ReportError(SemanticDiagnosticCode.UnknownIdentifier, $"Unknown identifier '{id.Name}'.", id.Location);
+        return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
+    /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
+    /// in the parser (e.g., a + b → a.__add__(b)). This method only handles operators that
+    /// are NOT desugared:
+    /// - Assignment (=)
+    /// - Logical operators (and, or) — require short-circuit evaluation
+    /// - Identity operators (===, !==)
+    /// - Membership/type operators (in, notin, is, isnot, obeys, disobeys)
+    /// - None coalescing (??) — requires short-circuit evaluation
+    /// </summary>
+    private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
+    {
+        TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
+        TypeSymbol rightType = AnalyzeExpression(expression: binary.Right);
+
+        // Handle assignment operator
+        if (binary.Operator == BinaryOperator.Assign)
+        {
+            return AnalyzeAssignmentExpression(target: binary.Left, value: binary.Right, targetType: leftType, valueType: rightType, location: binary.Location);
+        }
+
+        // Handle flags removal operator (but) — removes flags from a value
+        if (binary.Operator == BinaryOperator.But)
+        {
+            if (leftType is not FlagsTypeInfo)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsTypeMismatch,
+                    $"'but' operator requires a flags type on the left side, but got '{leftType.Name}'.",
+                    binary.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            if (rightType is not FlagsTypeInfo)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsTypeMismatch,
+                    $"'but' operator requires a flags type on the right side, but got '{rightType.Name}'.",
+                    binary.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            if (leftType.Name != rightType.Name)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsTypeMismatch,
+                    $"'but' operator requires both operands to be the same flags type, but got '{leftType.Name}' and '{rightType.Name}'.",
+                    binary.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            return leftType;
+        }
+
+        // #128: 'or' cannot be used to combine flags outside of is/isnot/isonly tests
+        if (binary.Operator == BinaryOperator.Or && (leftType is FlagsTypeInfo || rightType is FlagsTypeInfo))
+        {
+            ReportError(
+                SemanticDiagnosticCode.FlagsOrInAssignment,
+                "Cannot use 'or' to combine flags values. Use 'is FLAG_A or FLAG_B' for testing, " +
+                "or separate flag assignments.",
+                binary.Location);
+            return leftType;
+        }
+
+        // Check for operator prohibitions on choice and flags types
+        // Choices do not support ANY overloadable operators — use 'is' for case matching
+        // Flags do not support arithmetic/comparison/bitwise operators — use 'is'/'isnot'/'but'
+        {
+            string? operatorMethod = binary.Operator.GetMethodName();
+            if (operatorMethod != null)
+            {
+                if (leftType is ChoiceTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                        $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with choice type '{leftType.Name}'. Use 'is' for case matching.",
+                        binary.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+
+                if (leftType is FlagsTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                        $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but' for flag operations.",
+                        binary.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+            }
+        }
+
+        // #117: Fixed-width numeric types must match exactly (S32 + S64 = error)
+        // System types (SAddr/UAddr) are exempt
+        if (leftType.Name != rightType.Name
+            && IsFixedWidthNumericType(type: leftType)
+            && IsFixedWidthNumericType(type: rightType)
+            && !IsLogicalOperator(op: binary.Operator)
+            && !IsComparisonOperator(op: binary.Operator))
+        {
+            ReportError(
+                SemanticDiagnosticCode.FixedWidthTypeMismatch,
+                $"Fixed-width type mismatch: '{leftType.Name}' and '{rightType.Name}'. Explicit conversion required.",
+                binary.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Flags combination: A and B → bitwise OR (combines flags)
+        if (binary.Operator == BinaryOperator.And
+            && leftType is FlagsTypeInfo
+            && leftType.Name == rightType.Name)
+        {
+            return leftType;
+        }
+
+        // Handle logical operators (and, or) — require bool operands, return bool
+        // These are not desugared because they need short-circuit evaluation
+        if (IsLogicalOperator(op: binary.Operator))
+        {
+            if (!IsBoolType(type: leftType) || !IsBoolType(type: rightType))
+            {
+                ReportError(SemanticDiagnosticCode.LogicalOperatorRequiresBool, $"Logical operator '{binary.Operator.ToStringRepresentation()}' requires boolean operands.", binary.Location);
+            }
+
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // Handle comparison operators — all return Bool
+        // Includes overloadable (==, !=, <, <=, >, >=, in, notin) and non-overloadable (===, !==, is, isnot, obeys, disobeys)
+        if (IsComparisonOperator(op: binary.Operator))
+        {
+            ValidateComparisonOperands(left: leftType, right: rightType, op: binary.Operator, location: binary.Location);
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // Handle none coalescing operator (??)
+        // Not desugared because it needs short-circuit evaluation
+        if (binary.Operator == BinaryOperator.NoneCoalesce)
+        {
+            // Returns the non-optional type (right operand provides the default)
+            return rightType;
+        }
+
+        // Default: return left type
+        // This handles any edge cases that might slip through
+        return leftType;
+    }
+
+    /// <summary>
+    /// Analyzes an assignment expression (target = value).
+    /// Validates mutability, member variable access, and type compatibility.
+    /// </summary>
+    /// <param name="target">The assignment target expression.</param>
+    /// <param name="value">The value being assigned.</param>
+    /// <param name="targetType">The resolved type of the target.</param>
+    /// <param name="valueType">The resolved type of the value.</param>
+    /// <param name="location">Source location for error reporting.</param>
+    /// <returns>The type of the assignment expression (same as target type).</returns>
+    private TypeSymbol AnalyzeAssignmentExpression(
+        Expression target,
+        Expression value,
+        TypeSymbol targetType,
+        TypeSymbol valueType,
+        SourceLocation location)
+    {
+        // #173: Tuple assignment destructuring — (a, b) = (b, a)
+        if (target is TupleLiteralExpression tupleLhs)
+        {
+            // Verify all elements of the LHS tuple are assignable targets
+            foreach (Expression element in tupleLhs.Elements)
+            {
+                if (!IsAssignableTarget(target: element))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.InvalidAssignmentTarget,
+                        "All elements of tuple destructuring must be assignable targets (variables, member accesses, or indices).",
+                        element.Location);
+                }
+
+                // Check modifiability for identifier elements
+                if (element is IdentifierExpression elemId)
+                {
+                    VariableInfo? varInfo = _registry.LookupVariable(name: elemId.Name);
+                    if (varInfo is { IsModifiable: false })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.AssignmentToImmutable,
+                            $"Cannot assign to preset variable '{elemId.Name}'.",
+                            location);
+                    }
+                }
+            }
+
+            // Check that RHS is a tuple with matching arity
+            if (valueType is TupleTypeInfo tupleType)
+            {
+                if (tupleLhs.Elements.Count != tupleType.ElementTypes.Count)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.DestructuringArityMismatch,
+                        $"Tuple destructuring has {tupleLhs.Elements.Count} targets but the value has {tupleType.ElementTypes.Count} elements.",
+                        location);
+                }
+            }
+
+            return targetType;
+        }
+
+        // Check if target is assignable (variable, member variable, or index)
+        if (!IsAssignableTarget(target: target))
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidAssignmentTarget,
+                "Invalid assignment target.",
+                target.Location);
+            return targetType;
+        }
+
+        // Check modifiability for variable assignments
+        if (target is IdentifierExpression id)
+        {
+            VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+            if (varInfo is { IsModifiable: false })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.AssignmentToImmutable,
+                    $"Cannot assign to preset variable '{id.Name}'.",
+                    location);
+            }
+        }
+
+        // Validate member variable write access (setter visibility)
+        if (target is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+            ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: location);
+
+            // Check if we're in a @readonly method trying to modify 'me'
+            if (_currentRoutine is { IsReadOnly: true } &&
+                member.Object is IdentifierExpression { Name: "me" })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow modifications.",
+                    location);
+            }
+        }
+
+        // Check modifiability for index assignments
+        if (target is IndexExpression index)
+        {
+            // The object being indexed must be modifiable
+            if (index.Object is IdentifierExpression indexedVar)
+            {
+                VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);
+                if (varInfo is { IsModifiable: false })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.AssignmentToImmutable,
+                        $"Cannot assign to index of preset variable '{indexedVar.Name}'.",
+                        location);
+                }
+            }
+        }
+
+        // RazorForge: Entity bare assignment prohibition
+        // `b = a` where `a` is a bare identifier of entity type is a build error
+        if (_registry.Language == Language.RazorForge
+            && value is IdentifierExpression
+            && valueType is EntityTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BareEntityAssignment,
+                $"Cannot directly assign entity of type '{valueType.Name}'. " +
+                "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
+                location);
+        }
+
+        // Check type compatibility
+        if (!IsAssignableTo(source: valueType, target: targetType))
+        {
+            ReportError(
+                SemanticDiagnosticCode.AssignmentTypeMismatch,
+                $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
+                location);
+        }
+
+        // Variant reassignment prohibition: variants cannot be reassigned
+        // Variants must be dismantled immediately with pattern matching
+        if (valueType is VariantTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantReassignmentNotAllowed,
+                $"Variant type '{valueType.Name}' cannot be reassigned. " +
+                "Variants must be dismantled immediately with pattern matching.",
+                location);
+        }
+
+        // #42: ??= narrowing — `a ??= b` is expanded to `a = a ?? b`
+        // When assigning `target = target ?? default` where target is Maybe[T],
+        // narrow the variable to T after the coalescing assignment.
+        if (target is IdentifierExpression narrowId
+            && value is BinaryExpression { Operator: BinaryOperator.NoneCoalesce }
+            && targetType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } maybeType)
+        {
+            _registry.NarrowVariable(name: narrowId.Name, narrowedType: maybeType.ValueType);
+        }
+
+        // Assignment expression returns the target type
+        return targetType;
+    }
+
+    /// <summary>
+    /// Analyzes a compound assignment expression (e.g., a += b).
+    /// Dispatch order: (0) verify target is var, (1) try in-place dunder (__iadd__) → Blank,
+    /// (2) fallback to create-and-assign (__add__) for non-entity types, (3) error if neither.
+    /// </summary>
+    private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound)
+    {
+        TypeSymbol targetType = AnalyzeExpression(expression: compound.Target);
+        TypeSymbol valueType = AnalyzeExpression(expression: compound.Value);
+
+        // Step 0: Verify target is assignable and modifiable
+        if (!IsAssignableTarget(target: compound.Target))
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidAssignmentTarget,
+                "Invalid compound assignment target.",
+                compound.Target.Location);
+            return targetType;
+        }
+
+        if (compound.Target is IdentifierExpression id)
+        {
+            VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+            if (varInfo is { IsModifiable: false })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.AssignmentToImmutable,
+                    $"Cannot assign to preset variable '{id.Name}'.",
+                    compound.Location);
+            }
+        }
+
+        if (compound.Target is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+            ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: compound.Location);
+
+            if (_currentRoutine is { IsReadOnly: true } &&
+                member.Object is IdentifierExpression { Name: "me" })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
+                    "Use @writable or @migratable to allow modifications.",
+                    compound.Location);
+            }
+        }
+
+        if (compound.Target is IndexExpression index)
+        {
+            if (index.Object is IdentifierExpression indexedVar)
+            {
+                VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);
+                if (varInfo is { IsModifiable: false })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.AssignmentToImmutable,
+                        $"Cannot assign to index of preset variable '{indexedVar.Name}'.",
+                        compound.Location);
+                }
+            }
+        }
+
+        // #67: Cannot use compound assignment on read-only token (Viewed or Inspected)
+        if (targetType is WrapperTypeInfo { IsReadOnly: true } readOnlyWrapper)
+        {
+            ReportError(
+                SemanticDiagnosticCode.CompoundAssignmentOnReadOnlyToken,
+                $"Cannot use compound assignment on read-only token '{readOnlyWrapper.Name}'. " +
+                "Read-only tokens (Viewed, Inspected) do not allow modifications.",
+                compound.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Don't try dispatch on error types (prevent cascade)
+        if (targetType.Category == TypeCategory.Error)
+        {
+            return targetType;
+        }
+
+        // Choice types cannot use compound assignment — choices do not support operators
+        if (targetType is ChoiceTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with choice type '{targetType.Name}'. " +
+                "Choice types do not support operators. Use 'is' for case matching.",
+                compound.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // #134: Flags types cannot use arithmetic or compound assignment operators
+        if (targetType is FlagsTypeInfo)
+        {
+            ReportError(
+                SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with flags type '{targetType.Name}'. " +
+                "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
+                compound.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        string? inPlaceMethod = compound.Operator.GetInPlaceMethodName();
+        string? regularMethod = compound.Operator.GetMethodName();
+        bool isEntity = targetType is EntityTypeInfo;
+
+        // Step 1: Try in-place dunder (__iadd__, etc.)
+        if (inPlaceMethod != null)
+        {
+            RoutineInfo? inPlaceRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
+            if (inPlaceRoutine != null)
+            {
+                // In-place method found — returns Blank (modifies in-place)
+                return _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
+        }
+
+        // Step 2: Fallback to create-and-assign (NOT for entities — bare assignment prohibited)
+        if (!isEntity && regularMethod != null)
+        {
+            RoutineInfo? regularRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{regularMethod}");
+            if (regularRoutine != null)
+            {
+                // Create-and-assign: a = a.__add__(b) — returns target type
+                TypeSymbol returnType = regularRoutine.ReturnType ?? targetType;
+                if (!IsAssignableTo(source: returnType, target: targetType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.AssignmentTypeMismatch,
+                        $"Compound assignment: return type '{returnType.Name}' of '{regularMethod}' " +
+                        $"is not assignable to target type '{targetType.Name}'.",
+                        compound.Location);
+                }
+                return targetType;
+            }
+        }
+
+        // Step 3: Error — neither in-place nor fallback available
+        string opSymbol = compound.Operator.ToStringRepresentation();
+        if (isEntity)
+        {
+            ReportError(
+                SemanticDiagnosticCode.CompoundAssignmentNotSupported,
+                $"Entity type '{targetType.Name}' requires in-place operator '{inPlaceMethod}' for " +
+                $"compound assignment '{opSymbol}='. Define '{inPlaceMethod}' or use explicit method calls.",
+                compound.Location);
+        }
+        else
+        {
+            ReportError(
+                SemanticDiagnosticCode.CompoundAssignmentNotSupported,
+                $"Type '{targetType.Name}' does not support compound assignment '{opSymbol}='. " +
+                $"Define '{inPlaceMethod}' or '{regularMethod}' to enable this operation.",
+                compound.Location);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeUnaryExpression(UnaryExpression unary)
+    {
+        TypeSymbol operandType = AnalyzeExpression(expression: unary.Operand);
+
+        switch (unary.Operator)
+        {
+            case UnaryOperator.Not:
+                if (!IsBoolType(type: operandType))
+                {
+                    ReportError(SemanticDiagnosticCode.LogicalNotRequiresBool, "Logical 'not' operator requires a boolean operand.", unary.Location);
+                }
+
+                return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+
+            case UnaryOperator.Minus:
+                if (!IsNumericType(type: operandType))
+                {
+                    ReportError(SemanticDiagnosticCode.NegationRequiresNumeric, "Negation operator requires a numeric operand.", unary.Location);
+                }
+
+                return operandType;
+
+            case UnaryOperator.BitwiseNot:
+                if (!IsIntegerType(type: operandType))
+                {
+                    ReportError(SemanticDiagnosticCode.BitwiseNotRequiresInteger, "Bitwise 'not' operator requires an integer operand.", unary.Location);
+                }
+
+                return operandType;
+
+            default:
+                return operandType;
+        }
+    }
+
+    private TypeSymbol AnalyzeCallExpression(CallExpression call)
+    {
+        // Get the callee type/routine
+        if (call.Callee is IdentifierExpression id)
+        {
+            RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
+            if (routine != null)
+            {
+                // Track failable calls for error handling variant generation
+                if (routine.IsFailable && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
+                // Validate routine access
+                ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
+
+                AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
+
+                // C29: Dispatch inference for varargs calls
+                call.ResolvedDispatch = InferDispatchStrategy(routine, call);
+                if (call.ResolvedDispatch == DispatchStrategy.Runtime && _registry.Language == Language.RazorForge)
+                {
+                    ReportError(SemanticDiagnosticCode.RuntimeDispatchNotSupported,
+                        $"Runtime dispatch is not supported in RazorForge. " +
+                        $"All varargs arguments to '{routine.Name}' must be the same concrete type.",
+                        call.Location);
+                }
+
+                // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+                // Return type is Blank if not specified (routines without explicit return type return Blank)
+                return routine.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
+
+            // Could be a type creator
+            TypeSymbol? type = LookupTypeWithImports(name: id.Name);
+            if (type != null)
+            {
+                // Creator call - analyze arguments and validate
+                var argTypes = new List<TypeSymbol>();
+                foreach (Expression arg in call.Arguments)
+                {
+                    argTypes.Add(item: AnalyzeExpression(expression: arg));
+                }
+
+                // #115: Data boxing restrictions — certain types cannot be boxed to Data
+                if (id.Name == "Data" && argTypes.Count > 0)
+                {
+                    TypeSymbol argType = argTypes[0];
+                    if (argType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup }
+                        or VariantTypeInfo
+                        or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
+                        || (argType is WrapperTypeInfo wrapper
+                            && wrapper.InnerType != null
+                            && wrapper.Name is "Hijacked" or "Seized"))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.DataBoxingProhibited,
+                            $"Type '{argType.Name}' cannot be boxed to Data. " +
+                            "Result, Lookup, variants, and access tokens (Viewed, Hijacked, Inspected, Seized) cannot be stored in Data.",
+                            call.Location);
+                    }
+
+                    // #116: Nested Data flattening — Data(Data(x)) should warn
+                    if (argType.Name == "Data")
+                    {
+                        ReportWarning(
+                            SemanticWarningCode.NestedDataWrapping,
+                            "Nested Data wrapping is redundant. Data(Data(x)) should be flattened to Data(x).",
+                            call.Location);
+                    }
+                }
+
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+                return type;
+            }
+
+            // Try module-prefixed routine lookup (e.g., Core.normalize_duration)
+            // This is done after type creator check to avoid shadowing type creators
+            // with identically-named convenience functions (e.g., "routine U32(from: U8)")
+            routine = LookupRoutineWithImports(name: id.Name);
+            if (routine != null)
+            {
+                // Track failable calls for error handling variant generation
+                if (routine.IsFailable && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
+                ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
+                AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
+
+                // C29: Dispatch inference for varargs calls
+                call.ResolvedDispatch = InferDispatchStrategy(routine, call);
+                if (call.ResolvedDispatch == DispatchStrategy.Runtime && _registry.Language == Language.RazorForge)
+                {
+                    ReportError(SemanticDiagnosticCode.RuntimeDispatchNotSupported,
+                        $"Runtime dispatch is not supported in RazorForge. " +
+                        $"All varargs arguments to '{routine.Name}' must be the same concrete type.",
+                        call.Location);
+                }
+
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+                return routine.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
+        }
+
+        if (call.Callee is MemberExpression member)
+        {
+            TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+            // Choice types cannot use any operator dunders
+            if (objectType is ChoiceTypeInfo && IsOperatorDunder(name: member.PropertyName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                    $"Operator '{member.PropertyName}' cannot be used with choice type '{objectType.Name}'. " +
+                    "Choice types do not support operators. Use 'is' for case matching and regular methods for additional behavior.",
+                    call.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            // #134/#135: Flags types cannot use any operator dunders
+            if (objectType is FlagsTypeInfo && IsOperatorDunder(name: member.PropertyName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                    $"Operator '{member.PropertyName}' cannot be used with flags type '{objectType.Name}'. " +
+                    "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
+                    call.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
+            if (method != null)
+            {
+                // Track failable calls for error handling variant generation
+                if (method.IsFailable && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
+                // #151: Static/instance mismatch — common routine called on instance
+                if (method.IsCommon && member.Object is IdentifierExpression instanceId
+                    && LookupTypeWithImports(name: instanceId.Name) == null)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.CommonRoutineMismatch,
+                        $"Common routine '{method.Name}' must be called on the type '{objectType.Name}', not on an instance.",
+                        call.Location);
+                }
+
+                // Validate method access
+                ValidateRoutineAccess(routine: method, accessLocation: call.Location);
+
+                // @readonly enforcement: cannot call modifying methods on 'me'
+                if (_currentRoutine is { IsReadOnly: true } &&
+                    member.Object is IdentifierExpression { Name: "me" } &&
+                    !method.IsReadOnly)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                        $"Cannot call non-readonly method '{method.Name}' on 'me' in a @readonly method. " +
+                        "Mark the called method @readonly or use @writable/@migratable.",
+                        call.Location);
+                }
+
+                // Preset enforcement: cannot call modifying methods on preset variables
+                if (member.Object is IdentifierExpression letTarget &&
+                    method.ModificationCategory != ModificationCategory.Readonly)
+                {
+                    VariableInfo? targetVar = _registry.LookupVariable(name: letTarget.Name);
+                    if (targetVar is { IsModifiable: false })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ModifyingCallOnImmutable,
+                            $"Cannot call modifying method '{method.Name}' on preset variable '{letTarget.Name}'.",
+                            call.Location);
+                    }
+                }
+
+                AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
+
+                // C29: Dispatch inference for varargs calls
+                call.ResolvedDispatch = InferDispatchStrategy(method, call);
+                if (call.ResolvedDispatch == DispatchStrategy.Runtime && _registry.Language == Language.RazorForge)
+                {
+                    ReportError(SemanticDiagnosticCode.RuntimeDispatchNotSupported,
+                        $"Runtime dispatch is not supported in RazorForge. " +
+                        $"All varargs arguments to '{method.Name}' must be the same concrete type.",
+                        call.Location);
+                }
+
+                // #68: Real-to-Complex promotion — only __add__/__sub__ allow float↔complex cross-type
+                if (IsOperatorDunder(name: member.PropertyName)
+                    && member.PropertyName is not ("__add__" or "__sub__" or "__iadd__" or "__isub__")
+                    && call.Arguments.Count > 0
+                    && method.Parameters.Count > 0)
+                {
+                    TypeSymbol argType = method.Parameters[0].Type;
+                    if ((IsFloatType(type: objectType) && IsComplexType(type: argType))
+                        || (IsComplexType(type: objectType) && IsFloatType(type: argType)))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.RealComplexPromotionInvalid,
+                            $"Operator '{member.PropertyName}' does not allow real↔complex promotion. " +
+                            "Only '+' and '-' support implicit real-to-complex conversion. Use explicit conversion for other operators.",
+                            call.Location);
+                    }
+                }
+
+                // #12: Partial access rule — entity.field.view() is not allowed
+                if (member.PropertyName is "view" or "hijack"
+                    && member.Object is MemberExpression innerMember)
+                {
+                    TypeSymbol innerObjectType = innerMember.Object.ResolvedType ?? ErrorTypeInfo.Instance;
+                    if (innerObjectType is EntityTypeInfo)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.PartialAccessOnEntity,
+                            $"Cannot call '.{member.PropertyName}()' on entity member variable '{innerMember.PropertyName}'. " +
+                            $"Access the entity directly instead of its individual member variables.",
+                            call.Location);
+                    }
+                }
+
+                // #137: Nested hijacking detection
+                if (member.PropertyName == "hijack" && IsNestedHijacking(source: member.Object))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.NestedHijackingNotAllowed,
+                        "Cannot hijack a member of an already-hijacked object. " +
+                        "Hijack the parent entity directly instead.",
+                        call.Location);
+                }
+
+                // #92: Re-hijacking prohibition — cannot hijack an already-hijacked token
+                if (member.PropertyName == "hijack" && IsHijackedType(type: objectType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ReHijackingProhibited,
+                        $"Cannot re-hijack an already-hijacked token '{objectType.Name}'. " +
+                        "The entity is already exclusively accessed.",
+                        call.Location);
+                }
+
+                // #170: Downgrade prohibition — cannot call .view() on Hijacked/Seized
+                if (member.PropertyName == "view" && (IsHijackedType(type: objectType) || IsSeizedType(type: objectType)))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.TokenDowngradeProhibited,
+                        $"Cannot downgrade '{objectType.Name}' with '.view()'. " +
+                        "Hijacked/Seized tokens already have write access — use them directly.",
+                        call.Location);
+                }
+
+                // #97: Snatched[T] method calls require danger! block
+                if (IsSnatched(type: objectType) && !InDangerBlock)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.SnatchedRequiresDanger,
+                        $"Method call on 'Snatched[T]' type requires a 'danger!' block. " +
+                        "Snatched values bypass ownership safety checks.",
+                        call.Location);
+                }
+
+                // #98: .snatch() on Shared/Tracked requires danger! block
+                if (member.PropertyName == "snatch" && !InDangerBlock
+                    && (IsSharedType(type: objectType) || IsTrackedType(type: objectType)))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.SnatchRequiresDanger,
+                        $"Calling '.snatch()' on '{objectType.Name}' requires a 'danger!' block. " +
+                        "Snatching bypasses reference counting safety.",
+                        call.Location);
+                }
+
+                // #100/#101: inspect!/seize! only valid on locked residents or Shared entity handles
+                if (member.PropertyName is "inspect" or "seize"
+                    && !IsResidentType(type: objectType) && !IsSharedType(type: objectType)
+                    && objectType is not ErrorTypeInfo)
+                {
+                    ReportError(
+                        member.PropertyName == "inspect"
+                            ? SemanticDiagnosticCode.InspectRequiresMultiRead
+                            : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
+                        $"'{member.PropertyName}!()' is only valid on locked residents or Shared handles. " +
+                        $"'{objectType.Name}' is neither.",
+                        call.Location);
+                }
+
+                // #19: Lock policy validation — inspect!/seize! must match the lock policy
+                if (member.PropertyName is "inspect" or "seize"
+                    && member.Object is IdentifierExpression lockPolicyTarget
+                    && _variableLockPolicies.TryGetValue(lockPolicyTarget.Name, out string? policy))
+                {
+                    if (member.PropertyName == "inspect" && policy == "Exclusive")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.InspectRequiresMultiRead,
+                            $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses Exclusive lock policy. " +
+                            "Exclusive locks do not support concurrent readers. Use 'seize!()' instead.",
+                            call.Location);
+                    }
+
+                    if (member.PropertyName == "seize" && policy == "ReadOnly")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ReadOnlyRejectsLocking,
+                            $"Cannot use 'seize!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
+                            "ReadOnly does not support exclusive write access. Use 'inspect!()' instead.",
+                            call.Location);
+                    }
+
+                    if (member.PropertyName == "inspect" && policy == "ReadOnly")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ReadOnlyRejectsLocking,
+                            $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
+                            "ReadOnly data does not need locking — use '.view()' instead.",
+                            call.Location);
+                    }
+                }
+
+                // #22: Reject migratable operations on collection being iterated
+                if (member.Object is IdentifierExpression iterTarget
+                    && _activeIterationSources.Contains(iterTarget.Name)
+                    && method.ModificationCategory != ModificationCategory.Readonly)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.MigratableDuringIteration,
+                        $"Cannot call modifying method '{method.Name}' on '{iterTarget.Name}' while iterating over it. " +
+                        "Collect changes and apply them after the loop.",
+                        call.Location);
+                }
+
+                // #47: .hijack() on @initonly record warns — record is frozen after construction
+                if (member.PropertyName == "hijack" && objectType is RecordTypeInfo)
+                {
+                    // Check if the variable holding the record is @initonly bound
+                    if (member.Object is IdentifierExpression hijackTarget)
+                    {
+                        VariableInfo? targetVar = _registry.LookupVariable(name: hijackTarget.Name);
+                        if (targetVar is { IsModifiable: false })
+                        {
+                            ReportWarning(
+                                SemanticWarningCode.HijackOnInitOnly,
+                                $"Calling '.hijack()' on @initonly-bound record '{hijackTarget.Name}'. " +
+                                "The record is frozen after construction — hijacking has no practical effect.",
+                                call.Location);
+                        }
+                    }
+                }
+
+                // #56: Resident .lock!() can only be called at global initialization time
+                if (member.PropertyName == "lock" && IsResidentType(type: objectType)
+                    && _currentRoutine != null)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ResidentLockTimingRestriction,
+                        $"'.lock!()' on resident '{objectType.Name}' can only be called at global initialization time, " +
+                        "not inside a routine body. Lock your residents at program startup.",
+                        call.Location);
+                }
+
+                // #104/#23: Channel send() makes source variable a deadref
+                if (member.PropertyName == "send" && member.Object is IdentifierExpression sendSource)
+                {
+                    string baseObjType = GetBaseTypeName(typeName: objectType.Name);
+                    if (baseObjType == "Channel")
+                    {
+                        _deadrefVariables.Add(sendSource.Name);
+                    }
+                }
+
+                // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
+                ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+                // Return type is Blank if not specified
+                return method.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
+            else
+            {
+                // #78: Method-chain constructor — "42".S32!() → S32.__create__!(from: "42")
+                string propName = member.PropertyName;
+                bool isFailable = propName.EndsWith(value: '!');
+                string potentialTypeName = isFailable ? propName[..^1] : propName;
+
+                TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
+                if (targetType != null)
+                {
+                    // Look up the creator on the target type
+                    string creatorName = isFailable ? "__create__!" : "__create__";
+                    RoutineInfo? creator = _registry.LookupRoutine(fullName: $"{potentialTypeName}.{creatorName}");
+
+                    if (creator != null)
+                    {
+                        // Validate single non-me parameter
+                        var nonMeParams = creator.Parameters
+                            .Where(predicate: p => p.Name != "me")
+                            .ToList();
+
+                        if (nonMeParams.Count != 1)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.MethodChainMultiArg,
+                                $"Method-chain constructor '{potentialTypeName}' requires exactly one non-'me' parameter, " +
+                                $"but '__create__' has {nonMeParams.Count}.",
+                                call.Location);
+                            return ErrorTypeInfo.Instance;
+                        }
+
+                        // Validate no extra args passed in the call
+                        if (call.Arguments.Count > 0)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.MethodChainMultiArg,
+                                $"Method-chain constructor '{potentialTypeName}' takes no additional arguments — " +
+                                "the object itself is the argument.",
+                                call.Location);
+                            return ErrorTypeInfo.Instance;
+                        }
+
+                        // Type-check the object expression against the constructor parameter
+                        if (!IsAssignableTo(source: objectType, target: nonMeParams[0].Type))
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.ArgumentTypeMismatch,
+                                $"Cannot convert '{objectType.Name}' to '{nonMeParams[0].Type.Name}' " +
+                                $"for method-chain constructor '{potentialTypeName}'.",
+                                call.Location);
+                        }
+
+                        if (creator.IsFailable && _currentRoutine != null)
+                        {
+                            _currentRoutine.HasFailableCalls = true;
+                        }
+
+                        return targetType;
+                    }
+                }
+            }
+        }
+
+        // Analyze callee expression (lambda or other callable)
+        TypeSymbol calleeType = AnalyzeExpression(expression: call.Callee);
+
+        // Analyze arguments
+        foreach (Expression arg in call.Arguments)
+        {
+            AnalyzeExpression(expression: arg);
+        }
+
+        // Validate exclusive token uniqueness for dynamic calls too
+        ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+        return calleeType;
+    }
+
+    /// <summary>
+    /// Infers dispatch strategy for a call site with protocol-constrained varargs.
+    /// Returns null for non-varargs routines (always buildtime, no annotation needed).
+    /// </summary>
+    private DispatchStrategy? InferDispatchStrategy(RoutineInfo routine, CallExpression call)
+    {
+        if (!routine.IsVariadic)
+            return null;
+
+        // Find the varargs parameter
+        ParameterInfo? varargsParam = routine.Parameters.FirstOrDefault(p => p.IsVariadicParam);
+        if (varargsParam == null)
+            return null;
+
+        // Unwrap List[T] to get element type T
+        TypeSymbol paramType = varargsParam.Type;
+        if (paramType is not { IsGenericResolution: true, TypeArguments: [var elementType, ..] })
+            return null;
+
+        // Only protocol-constrained varargs need dispatch inference
+        // Generic-constrained (GenericParameterTypeInfo) and concrete types are always buildtime
+        if (elementType is not ProtocolTypeInfo)
+            return DispatchStrategy.Buildtime;
+
+        // Collect resolved types of all varargs arguments
+        int varargsIndex = varargsParam.Index;
+        var varargsArgTypes = new List<TypeSymbol>();
+        for (int i = varargsIndex; i < call.Arguments.Count; i++)
+        {
+            TypeSymbol? argType = call.Arguments[i].ResolvedType;
+            if (argType != null && argType is not ErrorTypeInfo)
+                varargsArgTypes.Add(argType);
+        }
+
+        if (varargsArgTypes.Count == 0)
+            return DispatchStrategy.Buildtime;
+
+        // All same concrete type → buildtime; mixed → runtime
+        TypeSymbol firstType = varargsArgTypes[0];
+        bool allSame = varargsArgTypes.All(t => t.Name == firstType.Name);
+
+        return allSame ? DispatchStrategy.Buildtime : DispatchStrategy.Runtime;
+    }
+
+    private TypeSymbol AnalyzeMemberExpression(MemberExpression member)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+        // Look up the member variable/property on the type
+        if (objectType is RecordTypeInfo record)
+        {
+            MemberVariableInfo? memberVariable = record.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
+            {
+                // Validate member variable access (read access)
+                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
+                return memberVariable.Type;
+            }
+        }
+        else if (objectType is EntityTypeInfo entity)
+        {
+            MemberVariableInfo? memberVariable = entity.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
+            {
+                // Validate member variable access (read access)
+                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
+                return memberVariable.Type;
+            }
+        }
+        else if (objectType is ResidentTypeInfo resident)
+        {
+            // #54: Residents cannot use .share() or .track() — they have program lifetime
+            if (member.PropertyName is "share" or "track")
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ResidentShareTrackProhibited,
+                    $"Residents cannot use '.{member.PropertyName}()' — they have program lifetime.",
+                    member.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            MemberVariableInfo? memberVariable = resident.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
+            {
+                // Validate member variable access (read access)
+                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
+                return memberVariable.Type;
+            }
+        }
+        // Wrapper type forwarding: Viewed<T>, Hijacked<T>, Shared<T>, etc.
+        else if (IsWrapperType(type: objectType))
+        {
+            // Try to forward member variable access to the inner type
+            MemberVariableInfo? innerMemberVariable = LookupMemberVariableOnWrapperInnerType(wrapperType: objectType, memberVariableName: member.PropertyName);
+            if (innerMemberVariable != null)
+            {
+                // Validate member variable access on the inner type
+                ValidateMemberVariableAccess(memberVariable: innerMemberVariable, isWrite: false, accessLocation: member.Location);
+                return innerMemberVariable.Type;
+            }
+
+            // Try to forward method access to the inner type
+            RoutineInfo? innerMethod = LookupMethodOnWrapperInnerType(wrapperType: objectType, methodName: member.PropertyName);
+            if (innerMethod != null)
+            {
+                // Validate read-only wrapper restrictions
+                ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType, method: innerMethod, location: member.Location);
+                // Validate method access
+                ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
+                // Return type is Blank if not specified
+                return innerMethod.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+            }
+        }
+
+        // Could be a method reference - use LookupMethod which handles generic resolutions
+        RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: member.PropertyName);
+        if (method != null)
+        {
+            // Validate method access
+            ValidateRoutineAccess(routine: method, accessLocation: member.Location);
+
+            // For generic resolutions, substitute type parameters in return type
+            TypeSymbol? returnType = method.ReturnType;
+            if (returnType != null && objectType is { IsGenericResolution: true, TypeArguments: not null })
+            {
+                returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
+            }
+
+            return returnType ?? ErrorTypeInfo.Instance;
+        }
+
+        ReportError(SemanticDiagnosticCode.MemberNotFound, $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.", member.Location);
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeOptionalMemberExpression(OptionalMemberExpression optMember)
+    {
+        // Analyze the object expression to get its type
+        TypeSymbol objectType = AnalyzeExpression(expression: optMember.Object);
+
+        // Delegate to regular member analysis for the property lookup
+        // The result is wrapped in Maybe[T] since the access may produce none
+        var regularMember = new MemberExpression(Object: optMember.Object, PropertyName: optMember.PropertyName, Location: optMember.Location);
+        TypeSymbol memberType = AnalyzeMemberExpression(member: regularMember);
+
+        return memberType;
+    }
+
+    private TypeSymbol AnalyzeIndexExpression(IndexExpression index)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
+        AnalyzeExpression(expression: index.Index);
+
+        // Look for __getitem__ method
+        RoutineInfo? getItem = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getitem__");
+        if (getItem?.ReturnType != null)
+        {
+            return getItem.ReturnType;
+        }
+
+        // For generic types like List<T>, return the element type
+        if (objectType.TypeArguments is { Count: > 0 })
+        {
+            return objectType.TypeArguments[0];
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeSliceExpression(SliceExpression slice)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: slice.Object);
+        AnalyzeExpression(expression: slice.Start);
+        AnalyzeExpression(expression: slice.End);
+
+        // Look for __getslice__ method
+        RoutineInfo? getSlice = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getslice__");
+        if (getSlice?.ReturnType != null)
+        {
+            return getSlice.ReturnType;
+        }
+
+        // For generic types like List<T>, return the element type
+        if (objectType.TypeArguments is { Count: > 0 })
+        {
+            return objectType.TypeArguments[0];
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond)
+    {
+        // #145: Track nesting depth for deep conditional warning
+        _conditionalNestingDepth++;
+        if (_conditionalNestingDepth > 2)
+        {
+            ReportWarning(
+                SemanticWarningCode.NestedConditionalExpression,
+                "Deeply nested conditional expression. Consider using 'when' for readability.",
+                cond.Location);
+        }
+
+        TypeSymbol conditionType = AnalyzeExpression(expression: cond.Condition);
+
+        if (!IsBoolType(type: conditionType))
+        {
+            ReportError(SemanticDiagnosticCode.ConditionalNotBool, $"Conditional expression requires a boolean condition, got '{conditionType.Name}'.", cond.Condition.Location);
+        }
+
+        TypeSymbol trueType = AnalyzeExpression(expression: cond.TrueExpression);
+        TypeSymbol falseType = AnalyzeExpression(expression: cond.FalseExpression);
+
+        // Both branches must be compatible
+        if (!IsAssignableTo(source: trueType, target: falseType) && !IsAssignableTo(source: falseType, target: trueType))
+        {
+            ReportError(SemanticDiagnosticCode.ConditionalBranchTypeMismatch, $"Conditional expression branches have incompatible types: '{trueType.Name}' and '{falseType.Name}'.", cond.Location);
+        }
+
+        _conditionalNestingDepth--;
+
+        // Return the common type (for now, use the true branch type)
+        return trueType;
+    }
+
+    private TypeSymbol AnalyzeLambdaExpression(LambdaExpression lambda)
+    {
+        // Collect variables from enclosing scope that might be captured
+        var enclosingScopeVariables = _registry.GetAllVariablesInScope();
+        // Collect only local (function-level) variables — these require 'given' to capture
+        var localScopeVariables = _registry.GetLocalScopeVariables();
+
+        _registry.EnterScope(kind: ScopeKind.Function, name: "lambda");
+
+        // Register lambda parameters and collect their types
+        var parameterNames = new HashSet<string>();
+        var parameterTypes = new List<TypeSymbol>();
+        foreach (Parameter param in lambda.Parameters)
+        {
+            TypeSymbol paramType = param.Type != null
+                ? ResolveType(typeExpr: param.Type)
+                : ErrorTypeInfo.Instance;
+
+            _registry.DeclareVariable(name: param.Name, type: paramType);
+            parameterNames.Add(item: param.Name);
+            parameterTypes.Add(paramType);
+        }
+
+        // Analyze body and get return type
+        TypeSymbol returnType = AnalyzeExpression(expression: lambda.Body);
+
+        // Validate captured variables (RazorForge only)
+        // Lambda bodies can reference variables from enclosing scope - these are captures
+        ValidateLambdaCaptures(
+            lambda: lambda,
+            enclosingScopeVariables: enclosingScopeVariables,
+            localScopeVariables: localScopeVariables,
+            parameterNames: parameterNames);
+
+        _registry.ExitScope();
+
+        // Create a proper function type: (ParamTypes) -> ReturnType
+        return _registry.GetOrCreateRoutineType(
+            parameterTypes: parameterTypes,
+            returnType: returnType,
+            isFailable: false);
+    }
+
+    /// <summary>
+    /// Validates that lambda captures don't include forbidden types and that all
+    /// local-scope captures are declared in the 'given' clause (RazorForge only).
+    /// </summary>
+    /// <param name="lambda">The lambda expression being analyzed.</param>
+    /// <param name="enclosingScopeVariables">All variables available in the enclosing scope.</param>
+    /// <param name="localScopeVariables">Variables from local (function-level) scopes only — require 'given'.</param>
+    /// <param name="parameterNames">Names of lambda parameters (not captures).</param>
+    private void ValidateLambdaCaptures(
+        LambdaExpression lambda,
+        IReadOnlyDictionary<string, VariableInfo> enclosingScopeVariables,
+        IReadOnlyDictionary<string, VariableInfo> localScopeVariables,
+        HashSet<string> parameterNames)
+    {
+        // Find all identifier expressions in the lambda body
+        var identifiers = CollectIdentifiers(expression: lambda.Body);
+
+        // Build set of given captures for quick lookup
+        var givenNames = lambda.Captures != null
+            ? new HashSet<string>(collection: lambda.Captures)
+            : null;
+
+        foreach (IdentifierExpression id in identifiers)
+        {
+            // Skip if it's a parameter (not a capture)
+            if (parameterNames.Contains(item: id.Name))
+            {
+                continue;
+            }
+
+            // Skip special identifiers
+            if (id.Name is "me" or "none")
+            {
+                continue;
+            }
+
+            // Check if this identifier refers to a captured variable
+            if (enclosingScopeVariables.TryGetValue(key: id.Name, out VariableInfo? varInfo))
+            {
+                // Validate that the captured type is allowed
+                ValidateCapturedType(varName: id.Name, varType: varInfo.Type, location: id.Location);
+
+                // Check 'given' clause enforcement for local captures (RazorForge only)
+                if (_registry.Language == Language.RazorForge
+                    && localScopeVariables.ContainsKey(key: id.Name)
+                    && !varInfo.IsPreset)
+                {
+                    if (givenNames == null)
+                    {
+                        // No 'given' clause — implicit capture of local variable
+                        ReportError(
+                            SemanticDiagnosticCode.LambdaCaptureWithoutGiven,
+                            $"Lambda captures local variable '{id.Name}' without declaring it in 'given' clause. " +
+                            "All local captures must be explicit via 'given'.",
+                            id.Location);
+                    }
+                    else if (!givenNames.Contains(item: id.Name))
+                    {
+                        // Has 'given' clause but this variable isn't in it
+                        ReportError(
+                            SemanticDiagnosticCode.LambdaCaptureWithoutGiven,
+                            $"Lambda captures local variable '{id.Name}' but it is not listed in the 'given' clause.",
+                            id.Location);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates that a captured variable's type is allowed in lambda captures.
+    /// </summary>
+    /// <param name="varName">Name of the captured variable.</param>
+    /// <param name="varType">Type of the captured variable.</param>
+    /// <param name="location">Source location for error reporting.</param>
+    private void ValidateCapturedType(string varName, TypeSymbol varType, SourceLocation location)
+    {
+        // Check for memory tokens (scope-bound, cannot be captured)
+        if (IsMemoryToken(type: varType))
+        {
+            string tokenKind = GetMemoryTokenKind(type: varType);
+            ReportError(
+                SemanticDiagnosticCode.LambdaCaptureToken,
+                $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
+                $"scope-bound tokens cannot escape their scope. " +
+                $"Use a handle type (Shared[T] or Tracked[T]) instead.",
+                location);
+            return;
+        }
+
+        // Check for raw entities (must use handles for capture)
+        if (IsRawEntityType(type: varType))
+        {
+            ReportError(
+                SemanticDiagnosticCode.LambdaCaptureRawEntity,
+                $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
+                $"raw entities cannot be captured. " +
+                $"Wrap in a handle type (Shared[T] or Tracked[T]) before capturing.",
+                location);
+        }
+    }
+
+    /// <summary>
+    /// Checks if a type is a raw entity (not wrapped in a handle or token).
+    /// </summary>
+    private bool IsRawEntityType(TypeSymbol type)
+    {
+        // Raw entities are entity types that are not wrapped
+        return type.Category == TypeCategory.Entity
+            && !IsMemoryToken(type: type)
+            && !IsStealableHandle(type: type)
+            && !IsSnatched(type: type);
+    }
+
+    /// <summary>
+    /// Collects all identifier expressions in an expression tree.
+    /// </summary>
+    private static List<IdentifierExpression> CollectIdentifiers(Expression expression)
+    {
+        var identifiers = new List<IdentifierExpression>();
+        CollectIdentifiersRecursive(expression: expression, identifiers: identifiers);
+        return identifiers;
+    }
+
+    /// <summary>
+    /// Recursively collects identifier expressions.
+    /// </summary>
+    private static void CollectIdentifiersRecursive(Expression expression, List<IdentifierExpression> identifiers)
+    {
+        switch (expression)
+        {
+            case IdentifierExpression id:
+                identifiers.Add(item: id);
+                break;
+
+            case CompoundAssignmentExpression compound:
+                CollectIdentifiersRecursive(expression: compound.Target, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: compound.Value, identifiers: identifiers);
+                break;
+
+            case BinaryExpression binary:
+                CollectIdentifiersRecursive(expression: binary.Left, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: binary.Right, identifiers: identifiers);
+                break;
+
+            case UnaryExpression unary:
+                CollectIdentifiersRecursive(expression: unary.Operand, identifiers: identifiers);
+                break;
+
+            case StealExpression steal:
+                CollectIdentifiersRecursive(expression: steal.Operand, identifiers: identifiers);
+                break;
+
+            case BackIndexExpression back:
+                CollectIdentifiersRecursive(expression: back.Operand, identifiers: identifiers);
+                break;
+
+            case CallExpression call:
+                CollectIdentifiersRecursive(expression: call.Callee, identifiers: identifiers);
+                foreach (Expression arg in call.Arguments)
+                {
+                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
+                }
+                break;
+
+            case MemberExpression member:
+                CollectIdentifiersRecursive(expression: member.Object, identifiers: identifiers);
+                break;
+
+            case IndexExpression index:
+                CollectIdentifiersRecursive(expression: index.Object, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: index.Index, identifiers: identifiers);
+                break;
+
+            case SliceExpression slice:
+                CollectIdentifiersRecursive(expression: slice.Object, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: slice.Start, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: slice.End, identifiers: identifiers);
+                break;
+
+            case ConditionalExpression cond:
+                CollectIdentifiersRecursive(expression: cond.Condition, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: cond.TrueExpression, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: cond.FalseExpression, identifiers: identifiers);
+                break;
+
+            case LambdaExpression:
+                // Don't descend into nested lambdas - they have their own capture context
+                break;
+
+            case RangeExpression range:
+                CollectIdentifiersRecursive(expression: range.Start, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: range.End, identifiers: identifiers);
+                if (range.Step != null)
+                {
+                    CollectIdentifiersRecursive(expression: range.Step, identifiers: identifiers);
+                }
+                break;
+
+            case CreatorExpression creator:
+                foreach ((_, Expression value) in creator.MemberVariables)
+                {
+                    CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
+                }
+                break;
+
+            case ListLiteralExpression list:
+                foreach (Expression elem in list.Elements)
+                {
+                    CollectIdentifiersRecursive(expression: elem, identifiers: identifiers);
+                }
+                break;
+
+            case SetLiteralExpression set:
+                foreach (Expression elem in set.Elements)
+                {
+                    CollectIdentifiersRecursive(expression: elem, identifiers: identifiers);
+                }
+                break;
+
+            case DictLiteralExpression dict:
+                foreach ((Expression key, Expression value) in dict.Pairs)
+                {
+                    CollectIdentifiersRecursive(expression: key, identifiers: identifiers);
+                    CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
+                }
+                break;
+
+            case TupleLiteralExpression tuple:
+                foreach (Expression elem in tuple.Elements)
+                {
+                    CollectIdentifiersRecursive(expression: elem, identifiers: identifiers);
+                }
+                break;
+
+            case BlockExpression block:
+                CollectIdentifiersRecursive(expression: block.Value, identifiers: identifiers);
+                break;
+
+            case WithExpression with:
+                CollectIdentifiersRecursive(expression: with.Base, identifiers: identifiers);
+                foreach ((_, Expression? index, Expression value) in with.Updates)
+                {
+                    if (index != null)
+                    {
+                        CollectIdentifiersRecursive(expression: index, identifiers: identifiers);
+                    }
+                    CollectIdentifiersRecursive(expression: value, identifiers: identifiers);
+                }
+                break;
+
+            case IsPatternExpression isPat:
+                CollectIdentifiersRecursive(expression: isPat.Expression, identifiers: identifiers);
+                break;
+
+            case NamedArgumentExpression named:
+                CollectIdentifiersRecursive(expression: named.Value, identifiers: identifiers);
+                break;
+
+            case GenericMethodCallExpression generic:
+                CollectIdentifiersRecursive(expression: generic.Object, identifiers: identifiers);
+                foreach (Expression arg in generic.Arguments)
+                {
+                    CollectIdentifiersRecursive(expression: arg, identifiers: identifiers);
+                }
+                break;
+
+            case GenericMemberExpression genericMember:
+                CollectIdentifiersRecursive(expression: genericMember.Object, identifiers: identifiers);
+                break;
+
+            case TypeConversionExpression conv:
+                CollectIdentifiersRecursive(expression: conv.Expression, identifiers: identifiers);
+                break;
+
+            case ChainedComparisonExpression chain:
+                foreach (Expression operand in chain.Operands)
+                {
+                    CollectIdentifiersRecursive(expression: operand, identifiers: identifiers);
+                }
+                break;
+
+            // Literal expressions and type expressions have no identifiers to collect
+            case LiteralExpression:
+            case TypeExpression:
+                break;
+        }
+    }
+
+    private TypeSymbol AnalyzeRangeExpression(RangeExpression range)
+    {
+        TypeSymbol startType = AnalyzeExpression(expression: range.Start);
+        TypeSymbol endType = AnalyzeExpression(expression: range.End);
+
+        if (range.Step != null)
+        {
+            AnalyzeExpression(expression: range.Step);
+        }
+
+        // #119: BackIndex (^n) cannot be used in Range expressions — only in subscript/slice context
+        if (range.Start is BackIndexExpression)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BackIndexOutsideSubscript,
+                "BackIndex (^n) cannot be used in Range expressions. Use it in subscript [^n] or slice [a to b] context instead.",
+                range.Start.Location);
+        }
+
+        if (range.End is BackIndexExpression)
+        {
+            ReportError(
+                SemanticDiagnosticCode.BackIndexOutsideSubscript,
+                "BackIndex (^n) cannot be used in Range expressions. Use it in subscript [^n] or slice [a to b] context instead.",
+                range.End.Location);
+        }
+
+        // Range types must be compatible
+        if (!IsNumericType(type: startType) || !IsNumericType(type: endType))
+        {
+            ReportError(SemanticDiagnosticCode.RangeBoundsNotNumeric, "Range bounds must be numeric types.", range.Location);
+        }
+
+        // Return Range type
+        return _registry.LookupType(name: "Range") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeCreatorExpression(CreatorExpression creator)
+    {
+        TypeSymbol? type = LookupTypeWithImports(name: creator.TypeName);
+        if (type == null)
+        {
+            ReportError(SemanticDiagnosticCode.UnknownType, $"Unknown type '{creator.TypeName}'.", creator.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Handle generic type arguments
+        if (creator.TypeArguments is { Count: > 0 })
+        {
+            var typeArgs = new List<TypeSymbol>();
+            foreach (TypeExpression typeArg in creator.TypeArguments)
+            {
+                typeArgs.Add(item: ResolveType(typeExpr: typeArg));
+            }
+
+            ValidateGenericConstraints(genericDef: type, typeArgs: typeArgs, location: creator.Location);
+            type = _registry.GetOrCreateResolution(genericDef: type, typeArguments: typeArgs);
+        }
+
+        // Validate member variable initializers
+        ValidateCreatorMemberVariables(type: type, memberVariables: creator.MemberVariables, location: creator.Location);
+
+        return type;
+    }
+
+    /// <summary>
+    /// Validates creator member variable initializers:
+    /// - Each provided member variable exists on the type
+    /// - Value types are assignable to member variable types
+    /// - No duplicate member variable assignments
+    /// - All required member variables are provided
+    /// </summary>
+    private void ValidateCreatorMemberVariables(
+        TypeSymbol type,
+        List<(string Name, Expression Value)> memberVariables,
+        SourceLocation location)
+    {
+        // Get the type's member variables
+        IReadOnlyList<MemberVariableInfo>? typeMemberVariables = type switch
+        {
+            RecordTypeInfo record => record.MemberVariables,
+            EntityTypeInfo entity => entity.MemberVariables,
+            ResidentTypeInfo resident => resident.MemberVariables,
+            _ => null
+        };
+
+        if (typeMemberVariables == null)
+        {
+            if (memberVariables.Count > 0)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.TypeNotMemberVariableInitializable,
+                    $"Type '{type.Name}' does not support member variable initialization.",
+                    location);
+            }
+            return;
+        }
+
+        // Build a lookup for expected member variables
+        var memberVariableLookup = new Dictionary<string, MemberVariableInfo>();
+        foreach (MemberVariableInfo memberVariable in typeMemberVariables)
+        {
+            memberVariableLookup[memberVariable.Name] = memberVariable;
+        }
+
+        // Track which member variables have been provided (to detect duplicates and missing member variables)
+        var providedMemberVariables = new HashSet<string>();
+
+        // Validate each provided member variable
+        foreach ((string memberVariableName, Expression value) in memberVariables)
+        {
+            // Check for duplicates
+            if (!providedMemberVariables.Add(memberVariableName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.DuplicateMemberVariableInitializer,
+                    $"Duplicate member variable initializer for '{memberVariableName}'.",
+                    value.Location);
+                continue;
+            }
+
+            // Check if member variable exists
+            if (!memberVariableLookup.TryGetValue(memberVariableName, out MemberVariableInfo? expectedMemberVariable))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MemberVariableNotFound,
+                    $"Type '{type.Name}' does not have a member variable named '{memberVariableName}'.",
+                    value.Location);
+                AnalyzeExpression(expression: value); // Still analyze the value
+                continue;
+            }
+
+            // Analyze value with expected type for contextual inference
+            TypeSymbol memberVariableType = expectedMemberVariable.Type;
+
+            // For generic resolutions, substitute type parameters in member variable type
+            if (type is { IsGenericResolution: true, TypeArguments: not null })
+            {
+                memberVariableType = SubstituteTypeParameters(type: memberVariableType, genericType: type);
+            }
+
+            TypeSymbol valueType = AnalyzeExpression(expression: value, expectedType: memberVariableType);
+
+            // Check type compatibility
+            if (!IsAssignableTo(source: valueType, target: memberVariableType))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MemberVariableTypeMismatch,
+                    $"Cannot assign '{valueType.Name}' to member variable '{memberVariableName}' of type '{memberVariableType.Name}'.",
+                    value.Location);
+            }
+        }
+
+        // Check for missing required member variables (member variables without default values)
+        foreach (MemberVariableInfo memberVariable in typeMemberVariables)
+        {
+            if (!providedMemberVariables.Contains(memberVariable.Name) && !memberVariable.HasDefaultValue)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.MissingRequiredMemberVariable,
+                    $"Missing required member variable '{memberVariable.Name}' in creator for '{type.Name}'.",
+                    location);
+            }
+        }
+    }
+
+    private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list)
+    {
+        TypeSymbol? elementType = null;
+
+        if (list.ElementType != null)
+        {
+            elementType = ResolveType(typeExpr: list.ElementType);
+        }
+        else if (list.Elements.Count > 0)
+        {
+            // Infer from first element
+            elementType = AnalyzeExpression(expression: list.Elements[0]);
+
+            // Validate all elements have compatible types
+            for (int i = 1; i < list.Elements.Count; i++)
+            {
+                TypeSymbol elemType = AnalyzeExpression(expression: list.Elements[i]);
+                if (!IsAssignableTo(source: elemType, target: elementType))
+                {
+                    ReportError(SemanticDiagnosticCode.ListElementTypeMismatch, $"List element type mismatch: expected '{elementType.Name}', got '{elemType.Name}'.", list.Elements[i].Location);
+                }
+            }
+        }
+        else
+        {
+            ReportError(SemanticDiagnosticCode.EmptyListNoTypeAnnotation, "Cannot infer element type from empty list literal without type annotation.", list.Location);
+            elementType = ErrorTypeInfo.Instance;
+        }
+
+        // Return List<T> type
+        TypeSymbol? listDef = _registry.LookupType(name: "List");
+        if (listDef != null && elementType != null)
+        {
+            return _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [elementType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeSetLiteralExpression(SetLiteralExpression set)
+    {
+        TypeSymbol? elementType = null;
+
+        if (set.ElementType != null)
+        {
+            elementType = ResolveType(typeExpr: set.ElementType);
+        }
+        else if (set.Elements.Count > 0)
+        {
+            elementType = AnalyzeExpression(expression: set.Elements[0]);
+        }
+        else
+        {
+            ReportError(SemanticDiagnosticCode.EmptySetNoTypeAnnotation, "Cannot infer element type from empty set literal without type annotation.", set.Location);
+            elementType = ErrorTypeInfo.Instance;
+        }
+
+        // Analyze all elements
+        foreach (Expression elem in set.Elements)
+        {
+            AnalyzeExpression(expression: elem);
+        }
+
+        // Return Set<T> type
+        TypeSymbol? setDef = _registry.LookupType(name: "Set");
+        if (setDef != null && elementType != null)
+        {
+            return _registry.GetOrCreateResolution(genericDef: setDef, typeArguments: [elementType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict)
+    {
+        TypeSymbol? keyType = null;
+        TypeSymbol? valueType = null;
+
+        if (dict is { KeyType: not null, ValueType: not null })
+        {
+            keyType = ResolveType(typeExpr: dict.KeyType);
+            valueType = ResolveType(typeExpr: dict.ValueType);
+        }
+        else if (dict.Pairs.Count > 0)
+        {
+            keyType = AnalyzeExpression(expression: dict.Pairs[0].Key);
+            valueType = AnalyzeExpression(expression: dict.Pairs[0].Value);
+        }
+        else
+        {
+            ReportError(SemanticDiagnosticCode.EmptyDictNoTypeAnnotation, "Cannot infer types from empty dict literal without type annotation.", dict.Location);
+            keyType = ErrorTypeInfo.Instance;
+            valueType = ErrorTypeInfo.Instance;
+        }
+
+        // Analyze all pairs
+        foreach ((Expression Key, Expression Value) pair in dict.Pairs)
+        {
+            AnalyzeExpression(expression: pair.Key);
+            AnalyzeExpression(expression: pair.Value);
+        }
+
+        // Return Dict<K, V> type
+        TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
+        if (dictDef != null && keyType != null && valueType != null)
+        {
+            return _registry.GetOrCreateResolution(genericDef: dictDef, typeArguments: [keyType, valueType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeTupleLiteralExpression(TupleLiteralExpression tuple)
+    {
+        // Analyze all element expressions
+        var elementTypes = new List<TypeSymbol>();
+        foreach (Expression element in tuple.Elements)
+        {
+            TypeSymbol elementType = AnalyzeExpression(expression: element);
+            elementTypes.Add(item: elementType);
+        }
+
+        // Empty tuples are not allowed - use Blank instead
+        if (elementTypes.Count == 0)
+        {
+            ReportError(
+                SemanticDiagnosticCode.UnknownType,
+                "Empty tuples are not allowed. Use 'Blank' for the unit type.",
+                tuple.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Determine tuple kind based on element types:
+        // ValueTuple: all elements are value types (Record, Choice, Variant, ValueTuple)
+        // FixedTuple: all elements are resident-compatible (records + residents, no entities)
+        // Tuple: any element is an entity or other reference type
+        bool allValueTypes = elementTypes.All(predicate: TypeRegistry.IsValueType);
+        if (allValueTypes)
+        {
+            // #111: Validate ValueTuple containment — no entities, variants, or tokens
+            foreach (TypeSymbol et in elementTypes)
+            {
+                if (et is VariantTypeInfo or EntityTypeInfo or ResidentTypeInfo or WrapperTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ValueTupleContainmentViolation,
+                        $"ValueTuple cannot contain type '{et.Name}'. Only value types (records, choices, primitives) are allowed.",
+                        tuple.Location);
+                }
+            }
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
+        }
+
+        bool allResidentCompatible = elementTypes.All(predicate: TypeRegistry.IsResidentCompatible);
+        if (allResidentCompatible)
+        {
+            // #112: Validate FixedTuple containment — no entities or tokens
+            foreach (TypeSymbol et in elementTypes)
+            {
+                if (et is EntityTypeInfo or VariantTypeInfo or WrapperTypeInfo)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.FixedTupleContainmentViolation,
+                        $"FixedTuple cannot contain type '{et.Name}'. Only records, choices, residents, and other FixedTuples are allowed.",
+                        tuple.Location);
+                }
+            }
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Fixed);
+        }
+
+        return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Reference);
+    }
+
+    private TypeSymbol AnalyzeTypeConversionExpression(TypeConversionExpression conv)
+    {
+        AnalyzeExpression(expression: conv.Expression);
+
+        TypeSymbol? targetType = LookupTypeWithImports(name: conv.TargetType);
+        if (targetType == null)
+        {
+            ReportError(SemanticDiagnosticCode.UnknownConversionTargetType, $"Unknown conversion target type '{conv.TargetType}'.", conv.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        return targetType;
+    }
+
+    private TypeSymbol AnalyzeChainedComparisonExpression(ChainedComparisonExpression chain)
+    {
+        // Validate that operators don't mix ascending and descending
+        ValidateComparisonChain(chain: chain, location: chain.Location);
+
+        // Analyze all operands and validate comparisons between consecutive pairs
+        var operandTypes = new List<TypeSymbol>();
+        foreach (Expression operand in chain.Operands)
+        {
+            operandTypes.Add(item: AnalyzeExpression(expression: operand));
+        }
+
+        // Validate each comparison pair
+        for (int i = 0; i < chain.Operators.Count; i++)
+        {
+            ValidateComparisonOperands(
+                left: operandTypes[i],
+                right: operandTypes[i + 1],
+                op: chain.Operators[i],
+                location: chain.Location);
+        }
+
+        // Chained comparisons always return bool
+        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeBlockExpression(BlockExpression block)
+    {
+        // Block expression evaluates to its contained value expression
+        return AnalyzeExpression(expression: block.Value);
+    }
+
+    private TypeSymbol AnalyzeWithExpression(WithExpression with)
+    {
+        TypeSymbol baseType = AnalyzeExpression(expression: with.Base);
+
+        // 'with' expressions are only valid on record types
+        if (baseType.Category != TypeCategory.Record)
+        {
+            ReportError(SemanticDiagnosticCode.WithExpressionNotRecord, $"'with' expression requires a record type, got '{baseType.Name}'.", with.Location);
+        }
+
+        // Analyze update expressions
+        foreach ((List<string>? fieldPath, Expression? index, Expression value) in with.Updates)
+        {
+            // Analyze index expression if present
+            if (index != null)
+            {
+                AnalyzeExpression(expression: index);
+            }
+            AnalyzeExpression(expression: value);
+
+            // #45: Cannot modify secret member variables in 'with' expression
+            if (fieldPath is { Count: > 0 } && baseType is RecordTypeInfo recordType)
+            {
+                MemberVariableInfo? memberInfo = recordType.LookupMemberVariable(memberVariableName: fieldPath[0]);
+                if (memberInfo is { Visibility: VisibilityModifier.Secret })
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.WithSecretMemberProhibited,
+                        $"Cannot modify secret member variable '{fieldPath[0]}' in 'with' expression.",
+                        with.Location);
+                }
+            }
+        }
+
+        // Returns the same type as the base
+        return baseType;
+    }
+
+    /// <summary>
+    /// Analyzes a when expression (pattern matching expression).
+    /// Returns the common type of all branch results.
+    /// </summary>
+    private TypeSymbol AnalyzeWhenExpression(WhenExpression when)
+    {
+        // Analyze the matched expression
+        TypeSymbol matchedType = AnalyzeExpression(expression: when.Expression);
+
+        // #88: Pattern order enforcement — else/wildcard must be last
+        {
+            bool seenElse = false;
+            foreach (WhenClause clause in when.Clauses)
+            {
+                if (seenElse)
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.PatternOrderViolation,
+                        "Unreachable pattern after 'else' or wildcard.",
+                        clause.Pattern.Location);
+                }
+
+                if (clause.Pattern is ElsePattern or WildcardPattern)
+                {
+                    seenElse = true;
+                }
+            }
+        }
+
+        // #130/#148: Duplicate pattern detection
+        {
+            var seenPatterns = new HashSet<string>();
+            foreach (WhenClause clause in when.Clauses)
+            {
+                string? patternKey = GetPatternKey(pattern: clause.Pattern);
+                if (patternKey != null && !seenPatterns.Add(item: patternKey))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.DuplicatePattern,
+                        $"Duplicate pattern: {patternKey}.",
+                        clause.Pattern.Location);
+                }
+            }
+        }
+
+        TypeSymbol? resultType = null;
+        bool hasElse = false;
+
+        foreach (WhenClause clause in when.Clauses)
+        {
+            _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
+
+            // Analyze the pattern
+            AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
+
+            // Check for else clause
+            if (clause.Pattern is WildcardPattern or ElsePattern)
+            {
+                hasElse = true;
+            }
+
+            // When expressions require expression bodies that return values
+            // The Body is a Statement, but for expressions it should typically be an ExpressionStatement
+            if (clause.Body is ExpressionStatement exprStmt)
+            {
+                TypeSymbol branchType = AnalyzeExpression(expression: exprStmt.Expression);
+
+                if (resultType == null)
+                {
+                    resultType = branchType;
+                }
+                else if (!IsAssignableTo(source: branchType, target: resultType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.WhenBranchTypeMismatch,
+                        $"When expression branches have incompatible types: '{resultType.Name}' and '{branchType.Name}'.",
+                        clause.Body.Location);
+                }
+            }
+            else if (clause.Body is ReturnStatement ret && ret.Value != null)
+            {
+                // Allow return statements in when expressions
+                TypeSymbol branchType = AnalyzeExpression(expression: ret.Value);
+
+                if (resultType == null)
+                {
+                    resultType = branchType;
+                }
+            }
+            else if (clause.Body is BlockStatement block)
+            {
+                // For block statements in when expressions, we need to validate 'becomes' usage
+                // and extract the result type from the becomes statement
+                BecomesStatement? becomesStmt = null;
+                int statementCount = 0;
+
+                foreach (Statement stmt in block.Statements)
+                {
+                    AnalyzeStatement(statement: stmt);
+                    statementCount++;
+
+                    if (stmt is BecomesStatement becomes)
+                    {
+                        becomesStmt = becomes;
+                    }
+                }
+
+                if (becomesStmt != null)
+                {
+                    // Found a becomes statement - check if it's a single-statement block
+                    if (statementCount == 1)
+                    {
+                        // Block contains only 'becomes expr' - should use => syntax instead
+                        ReportError(
+                            SemanticDiagnosticCode.SingleExpressionBranchUsesBecomes,
+                            "Single-expression when branch should use '=>' syntax instead of block with 'becomes'.",
+                            becomesStmt.Location);
+                    }
+
+                    // Extract the result type from the becomes expression (already analyzed via AnalyzeStatement)
+                    TypeSymbol branchType = becomesStmt.Value.ResolvedType ?? ErrorTypeInfo.Instance;
+
+                    if (resultType == null)
+                    {
+                        resultType = branchType;
+                    }
+                    else if (!IsAssignableTo(source: branchType, target: resultType))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.WhenBranchTypeMismatch,
+                            $"When expression branches have incompatible types: '{resultType.Name}' and '{branchType.Name}'.",
+                            becomesStmt.Location);
+                    }
+                }
+                else if (statementCount > 0)
+                {
+                    // Multi-statement block without 'becomes' in a when expression
+                    ReportError(
+                        SemanticDiagnosticCode.WhenExpressionBlockMissingBecomes,
+                        "Multi-statement block in when expression requires 'becomes' to specify the result value.",
+                        block.Location);
+                }
+            }
+            else
+            {
+                // Analyze as regular statement
+                AnalyzeStatement(statement: clause.Body);
+            }
+
+            _registry.ExitScope();
+        }
+
+        // Check exhaustiveness — when expressions MUST produce a value for all inputs
+        if (!hasElse)
+        {
+            ExhaustivenessResult exhaustiveness = CheckExhaustiveness(
+                clauses: when.Clauses,
+                matchedType: matchedType);
+
+            if (!exhaustiveness.IsExhaustive)
+            {
+                string missing = exhaustiveness.MissingCases.Count > 0
+                    ? $" Missing cases: {string.Join(separator: ", ", values: exhaustiveness.MissingCases)}."
+                    : "";
+                ReportError(
+                    SemanticDiagnosticCode.NonExhaustiveMatch,
+                    $"When expression is not exhaustive — all possible values must be handled.{missing}",
+                    when.Location);
+            }
+        }
+
+        return resultType ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeGenericMethodCallExpression(GenericMethodCallExpression generic)
+    {
+        TypeSymbol objectType = AnalyzeExpression(expression: generic.Object);
+
+        // Resolve type arguments
+        var typeArgs = new List<TypeSymbol>();
+        foreach (TypeExpression typeArg in generic.TypeArguments)
+        {
+            typeArgs.Add(item: ResolveType(typeExpr: typeArg));
+        }
+
+        // #19: Track lock policy from lock![Policy]() on residents
+        if (generic.MethodName == "lock" && generic.IsMemoryOperation
+            && typeArgs.Count > 0 && generic.Object is IdentifierExpression lockTarget)
+        {
+            _variableLockPolicies[lockTarget.Name] = typeArgs[0].Name;
+        }
+
+        // #19: Track lock policy from share[Policy]() on entities — stored temporarily
+        // on the source variable; propagated to the declared variable in AnalyzeVariableDeclaration
+        if (generic.MethodName == "share" && typeArgs.Count > 0
+            && generic.Object is IdentifierExpression shareTarget)
+        {
+            _lastSharePolicy = (shareTarget.Name, typeArgs[0].Name);
+        }
+
+        // Look up the method
+        RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{generic.MethodName}");
+        if (method?.ReturnType != null)
+        {
+            // Substitute type arguments in return type
+            return method.ReturnType;
+        }
+
+        // Analyze arguments
+        foreach (Expression arg in generic.Arguments)
+        {
+            AnalyzeExpression(expression: arg);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeGenericMemberExpression(GenericMemberExpression genericMember)
+    {
+        AnalyzeExpression(expression: genericMember.Object);
+
+        // Resolve type arguments
+        foreach (TypeExpression typeArg in genericMember.TypeArguments)
+        {
+            ResolveType(typeExpr: typeArg);
+        }
+
+        // Look up the member with type arguments
+        // TODO: Implement proper generic member resolution
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeIsPatternExpression(IsPatternExpression isPat)
+    {
+        TypeSymbol exprType = AnalyzeExpression(expression: isPat.Expression);
+
+        // Analyze the pattern (may bind variables)
+        AnalyzePattern(pattern: isPat.Pattern, matchedType: exprType);
+
+        // 'is' expressions always return bool
+        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeFlagsTestExpression(FlagsTestExpression flagsTest)
+    {
+        TypeSymbol subjectType = AnalyzeExpression(expression: flagsTest.Subject);
+
+        if (subjectType.Category == TypeCategory.Error)
+        {
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        if (subjectType is not FlagsTypeInfo flagsType)
+        {
+            ReportError(
+                SemanticDiagnosticCode.FlagsTypeMismatch,
+                $"Flags test operators (is/isnot/isonly) require a flags type, but got '{subjectType.Name}'.",
+                flagsTest.Location);
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // #133: isonly rejects 'or' and 'but'
+        if (flagsTest.Kind == FlagsTestKind.IsOnly)
+        {
+            if (flagsTest.Connective == FlagsTestConnective.Or)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                    "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
+                    flagsTest.Location);
+            }
+
+            if (flagsTest.ExcludedFlags is { Count: > 0 })
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                    "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
+                    flagsTest.Location);
+            }
+        }
+
+        // Validate each flag name exists in the type
+        foreach (string flagName in flagsTest.TestFlags)
+        {
+            if (flagsType.Members.All(m => m.Name != flagName))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.FlagsMemberNotFound,
+                    $"Flags type '{flagsType.Name}' does not have a member named '{flagName}'.",
+                    flagsTest.Location);
+            }
+        }
+
+        // Validate excluded flags too
+        if (flagsTest.ExcludedFlags != null)
+        {
+            foreach (string flagName in flagsTest.ExcludedFlags)
+            {
+                if (flagsType.Members.All(m => m.Name != flagName))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.FlagsMemberNotFound,
+                        $"Flags type '{flagsType.Name}' does not have a member named '{flagName}'.",
+                        flagsTest.Location);
+                }
+            }
+        }
+
+        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol HandleUnknownExpression(Expression expression)
+    {
+        ReportWarning(SemanticWarningCode.UnknownExpressionType, $"Unknown expression type: {expression.GetType().Name}", expression.Location);
+        return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Analyzes an inserted text expression (f-string).
+    /// Validates all embedded expressions and returns Text type.
+    /// </summary>
+    private TypeSymbol AnalyzeInsertedTextExpression(InsertedTextExpression insertedText)
+    {
+        foreach (InsertedTextPart part in insertedText.Parts)
+        {
+            if (part is ExpressionPart exprPart)
+            {
+                // #16: F-text expression level restriction — only Level 3 expressions
+                // (identifiers, literals, member access, calls) are allowed
+                ValidateFTextExpression(expression: exprPart.Expression, location: exprPart.Location);
+                AnalyzeExpression(expression: exprPart.Expression);
+            }
+        }
+
+        return _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Validates that an f-text embedded expression is a Level 3 expression.
+    /// Level 3: identifiers, literals, member access, method calls, indexing.
+    /// Disallowed: assignments, control flow, binary operators (except chained member access).
+    /// </summary>
+    private void ValidateFTextExpression(Expression expression, SourceLocation location)
+    {
+        switch (expression)
+        {
+            case IdentifierExpression:
+            case LiteralExpression:
+            case MemberExpression:
+            case CallExpression:
+            case IndexExpression:
+            case OptionalMemberExpression:
+                // Level 3 — allowed
+                break;
+            default:
+                ReportError(
+                    SemanticDiagnosticCode.FTextExpressionLevelRestriction,
+                    "Only simple expressions (identifiers, literals, member access, calls) are allowed in f-text interpolation. " +
+                    "Assign complex expressions to a variable first.",
+                    location);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Substitutes type parameters in a type based on a generic resolution.
+    /// For example, if genericType is List&lt;S32&gt; and type is T, returns S32.
+    /// </summary>
+    /// <param name="type">The type that may contain type parameters.</param>
+    /// <param name="genericType">The resolved generic type providing type argument bindings.</param>
+    /// <returns>The substituted type.</returns>
+    private TypeSymbol SubstituteTypeParameters(TypeSymbol type, TypeSymbol genericType)
+    {
+        if (genericType.TypeArguments == null || genericType.TypeArguments.Count == 0)
+        {
+            return type;
+        }
+
+        // Get the generic definition to find type parameter names
+        TypeSymbol? genericDef = GetGenericDefinition(resolution: genericType);
+        if (genericDef == null)
+        {
+            return type;
+        }
+
+        // Build a mapping from type parameter names to actual types
+        IReadOnlyList<string>? typeParamNames = genericDef.GenericParameters;
+        if (typeParamNames == null || typeParamNames.Count != genericType.TypeArguments.Count)
+        {
+            return type;
+        }
+
+        var substitutions = new Dictionary<string, TypeSymbol>();
+        for (int i = 0; i < typeParamNames.Count; i++)
+        {
+            substitutions[typeParamNames[i]] = genericType.TypeArguments[i];
+        }
+
+        return SubstituteWithMapping(type: type, substitutions: substitutions);
+    }
+
+    /// <summary>
+    /// Gets the generic definition from a resolution.
+    /// </summary>
+    private TypeSymbol? GetGenericDefinition(TypeSymbol resolution)
+    {
+        if (!resolution.IsGenericResolution)
+        {
+            return null;
+        }
+
+        // Extract base name (e.g., "List" from "List[S32]")
+        string baseName = GetBaseTypeName(typeName: resolution.Name);
+        return _registry.LookupType(name: baseName);
+    }
+
+    /// <summary>
+    /// Substitutes type parameters using a mapping.
+    /// </summary>
+    private TypeSymbol SubstituteWithMapping(TypeSymbol type, Dictionary<string, TypeSymbol> substitutions)
+    {
+        // Direct type parameter replacement
+        if (substitutions.TryGetValue(type.Name, out TypeSymbol? replacement))
+        {
+            return replacement;
+        }
+
+        // For generic resolutions, recursively substitute in type arguments
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            var substitutedArgs = new List<TypeSymbol>();
+            bool anyChanged = false;
+
+            foreach (TypeSymbol arg in type.TypeArguments)
+            {
+                TypeSymbol substitutedArg = SubstituteWithMapping(type: arg, substitutions: substitutions);
+                substitutedArgs.Add(substitutedArg);
+                if (!ReferenceEquals(substitutedArg, arg))
+                {
+                    anyChanged = true;
+                }
+            }
+
+            if (anyChanged)
+            {
+                // Create a new resolution with substituted arguments
+                TypeSymbol? baseDef = GetGenericDefinition(resolution: type);
+                if (baseDef != null)
+                {
+                    return _registry.GetOrCreateResolution(genericDef: baseDef, typeArguments: substitutedArgs);
+                }
+            }
+        }
+
+        return type;
+    }
+
+    /// <summary>
+    /// Analyzes a steal expression (RazorForge only).
+    /// Validates that the operand can be stolen and returns the stolen type.
+    /// </summary>
+    /// <param name="steal">The steal expression to analyze.</param>
+    /// <returns>The type of the stolen value.</returns>
+    /// <remarks>
+    /// Stealable types:
+    /// - Raw entities (direct entity references)
+    /// - Shared[T] (shared ownership handle)
+    /// - Tracked[T] (reference-counted handle)
+    ///
+    /// Non-stealable types (build error):
+    /// - Viewed[T] (read-only token, scope-bound)
+    /// - Hijacked[T] (exclusive token, scope-bound)
+    /// - Inspected[T] (thread-safe read token, scope-bound)
+    /// - Seized[T] (thread-safe exclusive token, scope-bound)
+    /// - Snatched[T] (internal ownership, not for user code)
+    /// </remarks>
+    private TypeSymbol AnalyzeStealExpression(StealExpression steal)
+    {
+        // Analyze the operand
+        TypeSymbol operandType = AnalyzeExpression(expression: steal.Operand);
+
+        // Check if the type is a memory token (cannot be stolen)
+        if (IsMemoryToken(type: operandType))
+        {
+            string tokenKind = GetMemoryTokenKind(type: operandType);
+            ReportError(
+                SemanticDiagnosticCode.StealScopeBoundToken,
+                $"Cannot steal '{tokenKind}' - scope-bound tokens cannot be stolen. " +
+                $"Only raw entities, Shared[T], and Tracked[T] can be stolen.",
+                steal.Location);
+            return operandType;
+        }
+
+        // Check for Snatched[T] (internal ownership, not for user code)
+        if (IsSnatched(type: operandType))
+        {
+            ReportError(
+                SemanticDiagnosticCode.StealSnatched,
+                "Cannot steal 'Snatched[T]' - internal ownership type cannot be stolen.",
+                steal.Location);
+            return operandType;
+        }
+
+        // For Shared[T] or Tracked[T], return the inner type
+        if (IsStealableHandle(type: operandType))
+        {
+            // Unwrap the handle to get the inner type
+            if (operandType.TypeArguments is { Count: > 0 })
+            {
+                return operandType.TypeArguments[0];
+            }
+        }
+
+        // #11: Deadref tracking — mark the stolen variable as invalidated
+        if (steal.Operand is IdentifierExpression stolenId)
+        {
+            _deadrefVariables.Add(stolenId.Name);
+        }
+
+        // For raw entities (not wrapped), return the same type
+        // The steal operation moves ownership, making the source a deadref
         return operandType;
     }
 
     /// <summary>
-    /// Visits a member access expression and validates the member exists.
+    /// Checks if a type is a memory token (Viewed, Hijacked, Inspected, Seized).
+    /// Memory tokens are scope-bound and cannot be stolen.
     /// </summary>
-    /// <param name="node">Member expression node</param>
-    /// <returns>TypeInfo of the member</returns>
-    public object? VisitMemberExpression(MemberExpression node)
+    private static bool IsMemoryToken(TypeSymbol type)
     {
-        var objectType = node.Object.Accept(visitor: this) as TypeInfo;
-
-        if (objectType == null)
-        {
-            return null;
-        }
-
-        // Check if accessing field through a wrapper type that allows transparent access
-        // Hijacked<T>, Viewed<T>, Retained<T> all allow direct field access on inner type T
-        if (IsTransparentWrapperType(typeName: objectType.Name,
-                innerType: out string? innerTypeName))
-        {
-            // Unwrap to get the inner type and check member on that type
-            // For now, we'll return a generic TypeInfo - full field validation would need type lookup
-            // TODO: Look up field type from type definition of innerTypeName
-            return new TypeInfo(Name: "unknown", IsReference: false);
-        }
-
-        // TODO: Check if member exists on objectType directly
-        return null;
+        return type.Name is "Viewed" or "Hijacked" or "Inspected" or "Seized"
+            || (type.Name.StartsWith(value: "Viewed[") ||
+                type.Name.StartsWith(value: "Hijacked[") ||
+                type.Name.StartsWith(value: "Inspected[") ||
+                type.Name.StartsWith(value: "Seized["));
     }
 
     /// <summary>
-    /// Checks if a type is a transparent wrapper that allows direct field access.
-    /// Transparent wrappers: Hijacked&lt;T&gt;, Viewed&lt;T&gt;, Retained&lt;T&gt;, Observed&lt;T&gt;, Seized&lt;T&gt;
-    /// Note: Snatched&lt;T&gt; requires explicit .reveal_as&lt;U&gt;() - not transparent
+    /// Gets the kind of memory token for error messages.
     /// </summary>
-    private bool IsTransparentWrapperType(string typeName, out string? innerType)
+    private static string GetMemoryTokenKind(TypeSymbol type)
     {
-        // Match patterns: Hijacked<T>, Viewed<T>, Retained<T>, Observed<T>, Seized<T>
-        foreach (string wrapperPrefix in new[]
-                 {
-                     "Hijacked<",
-                     "Viewed<",
-                     "Retained<",
-                     "Observed<",
-                     "Seized<"
-                 })
+        if (type.Name.StartsWith(value: "Viewed")) return "Viewed[T]";
+        if (type.Name.StartsWith(value: "Hijacked")) return "Hijacked[T]";
+        if (type.Name.StartsWith(value: "Inspected")) return "Inspected[T]";
+        if (type.Name.StartsWith(value: "Seized")) return "Seized[T]";
+        return type.Name;
+    }
+
+    /// <summary>
+    /// Checks if a type is Snatched[T] (internal ownership type).
+    /// </summary>
+    private static bool IsSnatched(TypeSymbol type)
+    {
+        return type.Name == "Snatched" || type.Name.StartsWith(value: "Snatched[");
+    }
+
+    /// <summary>
+    /// Checks if a type is a stealable handle (Shared[T] or Tracked[T]).
+    /// </summary>
+    private static bool IsStealableHandle(TypeSymbol type)
+    {
+        return type.Name is "Shared" or "Tracked"
+            || type.Name.StartsWith(value: "Shared[")
+            || type.Name.StartsWith(value: "Tracked[");
+    }
+
+    /// <summary>
+    /// Analyzes a backindex expression (^n = index from end).
+    /// Validates that the operand is a non-negative integer type.
+    /// </summary>
+    /// <param name="back">The back index expression to analyze.</param>
+    /// <returns>The BackIndex type.</returns>
+    /// <remarks>
+    /// BackIndex expressions create indices that count from the end of a sequence:
+    /// - ^1 = last element
+    /// - ^2 = second to last element
+    /// - ^0 = one past the end (valid for slicing, not indexing)
+    ///
+    /// Used with IndexExpression for end-relative indexing: list[^1], text[^3]
+    /// </remarks>
+    private TypeSymbol AnalyzeBackIndexExpression(BackIndexExpression back)
+    {
+        // Analyze the operand
+        TypeSymbol operandType = AnalyzeExpression(expression: back.Operand);
+
+        // Validate that the operand is an integer type
+        if (!IsIntegerType(type: operandType))
         {
-            if (typeName.StartsWith(value: wrapperPrefix) && typeName.EndsWith(value: ">"))
+            ReportError(
+                SemanticDiagnosticCode.BackIndexRequiresInteger,
+                $"BackIndex operator '^' requires an integer operand, got '{operandType.Name}'.",
+                back.Location);
+        }
+
+        // Return a BackIndex type (or UAddr as the underlying representation)
+        // BackIndex is conceptually a wrapper around an offset from the end
+        TypeSymbol? backIndexType = _registry.LookupType(name: "BackIndex");
+        if (backIndexType != null)
+        {
+            return backIndexType;
+        }
+
+        // Fallback: return UAddr as the index representation
+        return _registry.LookupType(name: "UAddr") ?? operandType;
+    }
+
+    /// <summary>
+    /// Creates a RoutineTypeInfo from a RoutineInfo for first-class function references.
+    /// </summary>
+    /// <param name="routine">The routine to create a type for.</param>
+    /// <returns>The function type representing this routine's signature.</returns>
+    private RoutineTypeInfo GetRoutineType(RoutineInfo routine)
+    {
+        // Extract parameter types from ParameterInfo
+        List<TypeSymbol> parameterTypes = routine.Parameters
+            .Select(selector: p => p.Type)
+            .ToList();
+
+        // Get return type (null means Blank/void)
+        TypeSymbol? returnType = routine.ReturnType;
+
+        // Create or retrieve the cached function type
+        return _registry.GetOrCreateRoutineType(
+            parameterTypes: parameterTypes,
+            returnType: returnType,
+            isFailable: routine.IsFailable);
+    }
+
+    /// <summary>
+    /// Analyzes a waitfor expression (async/concurrency).
+    /// Waits for an async operation to complete, optionally with a timeout.
+    /// </summary>
+    /// <param name="waitfor">The waitfor expression to analyze.</param>
+    /// <returns>The type of the awaited value.</returns>
+    private TypeSymbol AnalyzeWaitforExpression(WaitforExpression waitfor)
+    {
+        // Analyze the operand (the async operation to wait for)
+        TypeSymbol operandType = AnalyzeExpression(expression: waitfor.Operand);
+
+        // Analyze optional timeout expression
+        if (waitfor.Timeout != null)
+        {
+            TypeSymbol timeoutType = AnalyzeExpression(expression: waitfor.Timeout);
+
+            // Validate that timeout is a Duration type
+            TypeSymbol? durationType = _registry.LookupType(name: "Duration");
+            if (durationType != null && !IsAssignableTo(source: timeoutType, target: durationType))
             {
-                // Extract inner type T from Wrapper<T>
-                innerType = typeName.Substring(startIndex: wrapperPrefix.Length,
-                    length: typeName.Length - wrapperPrefix.Length - 1);
-                return true;
+                ReportError(
+                    SemanticDiagnosticCode.WaitforTimeoutNotDuration,
+                    $"Waitfor 'within' clause requires a Duration, got '{timeoutType.Name}'.",
+                    waitfor.Timeout.Location);
             }
         }
 
-        innerType = null;
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if a type is a read-only wrapper that does not allow mutation.
-    /// Read-only wrappers: Viewed&lt;T>, Observed&lt;T>
-    /// </summary>
-    private bool IsReadOnlyWrapperType(string typeName)
-    {
-        return typeName.StartsWith(value: "Viewed<") || typeName.StartsWith(value: "Observed<");
-    }
-
-    /// <summary>
-    /// Visits an index expression and validates the indexing operation.
-    /// </summary>
-    /// <param name="node">Index expression node</param>
-    /// <returns>TypeInfo of the indexed element</returns>
-    public object? VisitIndexExpression(IndexExpression node)
-    {
-        var objectType = node.Object.Accept(visitor: this) as TypeInfo;
-        var indexType = node.Index.Accept(visitor: this) as TypeInfo;
-        // TODO: Check indexing compatibility
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a conditional (ternary) expression and validates all branches.
-    /// </summary>
-    /// <param name="node">Conditional expression node</param>
-    /// <returns>TypeInfo of the result</returns>
-    public object? VisitConditionalExpression(ConditionalExpression node)
-    {
-        var conditionType = node.Condition.Accept(visitor: this) as TypeInfo;
-        var trueType = node.TrueExpression.Accept(visitor: this) as TypeInfo;
-        var falseType = node.FalseExpression.Accept(visitor: this) as TypeInfo;
-
-        if (conditionType != null && conditionType.Name != "Bool")
+        // #14/#162: Validate that we're inside a suspended/threaded routine
+        if (_currentRoutine != null && !_currentRoutine.IsAsync)
         {
-            AddError(message: $"Conditional expression condition must be boolean",
-                location: node.Location);
+            ReportError(
+                SemanticDiagnosticCode.WaitforOutsideSuspendedRoutine,
+                $"'waitfor' can only be used inside a 'suspended' or 'threaded' routine. " +
+                $"Routine '{_currentRoutine.Name}' is not async.",
+                waitfor.Location);
         }
 
-        // TODO: Return common type of true/false branches
-        return trueType;
+        // The result type is the inner type of the async operation
+        // For now, return the operand type directly
+        return operandType;
     }
 
     /// <summary>
-    /// Visits a block expression and returns the type of its value expression.
+    /// Analyzes a dependent waitfor expression (task dependency graph).
+    /// Syntax: after dep1 [as val1], dep2 [as val2] waitfor expr [within timeout]
     /// </summary>
-    /// <param name="node">Block expression node</param>
-    /// <returns>TypeInfo of the block's value expression</returns>
-    public object? VisitBlockExpression(BlockExpression node)
+    /// <param name="depWaitfor">The dependent waitfor expression to analyze.</param>
+    /// <returns>Lookup&lt;T&gt; where T is the result type of the awaited operation.</returns>
+    private TypeSymbol AnalyzeDependentWaitforExpression(DependentWaitforExpression depWaitfor)
     {
-        // A block expression evaluates to its inner expression
-        return node.Value.Accept(visitor: this);
-    }
+        // Create a new scope for the dependency bindings
+        _registry.EnterScope(kind: ScopeKind.Block, name: "waitfor_deps");
 
-    /// <summary>
-    /// Visits a lambda expression and validates parameter and return types.
-    /// </summary>
-    /// <param name="node">Lambda expression node</param>
-    /// <returns>TypeInfo representing the function type</returns>
-    public object? VisitLambdaExpression(LambdaExpression node)
-    {
-        // Enter scope for lambda parameters
-        _symbolTable.EnterScope();
-
-        try
+        // Analyze each dependency
+        foreach (TaskDependency dep in depWaitfor.Dependencies)
         {
-            foreach (Parameter param in node.Parameters)
+            TypeSymbol depType = AnalyzeExpression(expression: dep.DependencyExpr);
+
+            // Dependency must be Lookup<T> type
+            if (depType is not ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup } lookupType)
             {
-                TypeInfo? paramType = ResolveType(typeExpr: param.Type);
-                var paramSymbol = new VariableSymbol(Name: param.Name,
-                    Type: paramType,
-                    IsMutable: false,
-                    Visibility: VisibilityModifier.Private);
-                _symbolTable.TryDeclare(symbol: paramSymbol);
-            }
+                ReportError(
+                    SemanticDiagnosticCode.DependencyNotLookupType,
+                    $"Task dependency must be a Lookup[T] type, got '{depType.Name}'.",
+                    dep.Location);
 
-            return node.Body.Accept(visitor: this);
-        }
-        finally
-        {
-            _symbolTable.ExitScope();
-        }
-    }
-
-    /// <summary>
-    /// Visits a chained comparison expression (e.g., a &lt; b &lt; c).
-    /// </summary>
-    /// <param name="node">Chained comparison expression node</param>
-    /// <returns>TypeInfo of bool</returns>
-    public object? VisitChainedComparisonExpression(ChainedComparisonExpression node)
-    {
-        // Check that all operands are comparable
-        TypeInfo? prevType = null;
-
-        foreach (Expression operand in node.Operands)
-        {
-            var operandType = operand.Accept(visitor: this) as TypeInfo;
-
-            if (prevType != null && operandType != null)
-            {
-                // TODO: Check if types are comparable
-                if (!AreComparable(type1: prevType, type2: operandType))
+                // If there's a binding, still declare it (as error type) to prevent cascading errors
+                if (dep.BindingName != null)
                 {
-                    AddError(message: $"Cannot compare {prevType.Name} with {operandType.Name}",
-                        location: node.Location);
+                    _registry.DeclareVariable(name: dep.BindingName, type: ErrorTypeInfo.Instance);
                 }
             }
-
-            prevType = operandType;
-        }
-
-        // Chained comparisons always return boolean
-        return new TypeInfo(Name: "Bool", IsReference: false);
-    }
-
-    /// <summary>
-    /// Visits a range expression and validates the start and end values.
-    /// </summary>
-    /// <param name="node">Range expression node</param>
-    /// <returns>TypeInfo representing the range type</returns>
-    public object? VisitRangeExpression(RangeExpression node)
-    {
-        // Check start and end are numeric
-        var startType = node.Start.Accept(visitor: this) as TypeInfo;
-        var endType = node.End.Accept(visitor: this) as TypeInfo;
-
-        if (startType != null && !IsNumericType(type: startType))
-        {
-            AddError(message: $"Range start must be numeric, got {startType.Name}",
-                location: node.Location);
-        }
-
-        if (endType != null && !IsNumericType(type: endType))
-        {
-            AddError(message: $"Range end must be numeric, got {endType.Name}",
-                location: node.Location);
-        }
-
-        // Check step if present
-        if (node.Step != null)
-        {
-            var stepType = node.Step.Accept(visitor: this) as TypeInfo;
-            if (stepType != null && !IsNumericType(type: stepType))
+            else if (dep.BindingName != null)
             {
-                AddError(message: $"Range step must be numeric, got {stepType.Name}",
-                    location: node.Location);
+                // Introduce the binding variable with the unwrapped type T from Lookup<T>
+                _registry.DeclareVariable(name: dep.BindingName, type: lookupType.ValueType);
             }
         }
 
-        // Range expressions return a Range<T> type
-        return new TypeInfo(Name: "Range", IsReference: false);
-    }
+        // Analyze the operand expression (with dependency bindings in scope)
+        TypeSymbol operandType = AnalyzeExpression(expression: depWaitfor.Operand);
 
-    /// <summary>
-    /// Visits a type expression and resolves it to a TypeInfo.
-    /// </summary>
-    /// <param name="node">Type expression node</param>
-    /// <returns>TypeInfo</returns>
-    public object? VisitTypeExpression(TypeExpression node)
-    {
-        // Type expressions are handled during semantic analysis
-        return null;
-    }
-
-    /// <summary>
-    /// Visits a type conversion expression and validates the conversion.
-    /// </summary>
-    /// <param name="node">Type conversion expression node</param>
-    /// <returns>TypeInfo of the target type</returns>
-    public object? VisitTypeConversionExpression(TypeConversionExpression node)
-    {
-        // Analyze the source expression
-        var sourceType = node.Expression.Accept(visitor: this) as TypeInfo;
-
-        // Validate the target type exists
-        string targetTypeName = node.TargetType;
-        if (!IsValidType(typeName: targetTypeName))
+        // Analyze optional timeout expression
+        if (depWaitfor.Timeout != null)
         {
-            _errors.Add(item: new SemanticError(Message: $"Unknown type: {targetTypeName}",
-                Location: node.Location));
-            return null;
+            TypeSymbol timeoutType = AnalyzeExpression(expression: depWaitfor.Timeout);
+
+            // Validate that timeout is a Duration type
+            TypeSymbol? durationType = _registry.LookupType(name: "Duration");
+            if (durationType != null && !IsAssignableTo(source: timeoutType, target: durationType))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.WaitforTimeoutNotDuration,
+                    $"Waitfor 'within' clause requires a Duration, got '{timeoutType.Name}'.",
+                    depWaitfor.Timeout.Location);
+            }
         }
 
-        // Check if the conversion is valid
-        if (!IsValidConversion(sourceType: sourceType?.Name ?? "unknown",
-                targetType: targetTypeName))
+        // #15: Non-leaf waitfor (with dependencies) requires 'within' timeout clause
+        if (depWaitfor.Timeout == null)
         {
-            _errors.Add(item: new SemanticError(
-                Message:
-                $"Cannot convert from {sourceType?.Name ?? "unknown"} to {targetTypeName}",
-                Location: node.Location));
-            return null;
+            ReportError(
+                SemanticDiagnosticCode.WaitforRequiresTimeout,
+                "Dependent 'waitfor' (with 'after' clause) requires a 'within' timeout. " +
+                "Add 'within <duration>' to prevent unbounded blocking on dependency chains.",
+                depWaitfor.Location);
         }
 
-        // Return the target type
-        return new TypeInfo(Name: targetTypeName,
-            IsReference: IsUnsignedType(typeName: targetTypeName));
-    }
+        // Exit the dependency scope
+        _registry.ExitScope();
 
-    /// <summary>
-    /// Visits a named argument expression (name: value).
-    /// Named arguments allow explicit specification of which parameter receives which value.
-    /// </summary>
-    public object? VisitNamedArgumentExpression(NamedArgumentExpression node)
-    {
-        // Type check the value expression
-        return node.Value.Accept(visitor: this);
-    }
-
-    /// <summary>
-    /// Visits a struct literal expression (Type { field: value, ... }).
-    /// Verifies the type exists and all fields are properly initialized.
-    /// </summary>
-    public object? VisitStructLiteralExpression(StructLiteralExpression node)
-    {
-        // Type check all field value expressions
-        foreach ((string Name, Expression Value) field in node.Fields)
+        // #14/#162: Validate that we're inside a suspended/threaded routine
+        if (_currentRoutine != null && !_currentRoutine.IsAsync)
         {
-            field.Value.Accept(visitor: this);
+            ReportError(
+                SemanticDiagnosticCode.WaitforOutsideSuspendedRoutine,
+                $"'waitfor' can only be used inside a 'suspended' or 'threaded' routine. " +
+                $"Routine '{_currentRoutine.Name}' is not async.",
+                depWaitfor.Location);
         }
 
-        // TODO: Verify struct type exists and fields match
-        return null;
+        // Result type is Lookup<R> where R is the operand type
+        return ErrorHandlingTypeInfo.WellKnown.LookupDefinition.CreateInstance(typeArguments: [operandType]);
     }
+
+    #endregion
 }

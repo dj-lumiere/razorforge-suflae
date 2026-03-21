@@ -1,0 +1,11 @@
+# ChoiceType - Marker protocol for all choice types
+# Every choice implicitly conforms to this protocol
+# Provides: Diagnosable (-> Representable), Hashable, plus choice-specific routines
+module Core
+
+protocol ChoiceType obeys Diagnosable, Hashable
+  @[readonly, innate, generated]
+  routine S64.__create__(from: Me) -> S64
+
+  @[readonly, innate, generated]
+  routine Me.all_cases() -> List[Me]

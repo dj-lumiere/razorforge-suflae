@@ -1,0 +1,8 @@
+# Suflae Complex - Arbitrary precision complex type
+
+module Core
+
+import RazorForge/Numeric.Complex
+
+entity Complex
+  secret value: RazorForge/Numeric.Complex

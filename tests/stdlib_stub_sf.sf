@@ -1,0 +1,32 @@
+# Suflae stdlib integration stub
+# Tests that all stdlib modules can be loaded together
+# Core module types are auto-imported, so we only import non-Core modules
+
+# Numerics module
+import Numeric.S8
+import Numeric.S16
+import Numeric.S32
+import Numeric.S64
+import Numeric.S128
+import Numeric.SAddr
+import Numeric.U8
+import Numeric.U16
+import Numeric.U32
+import Numeric.U64
+import Numeric.U128
+import Numeric.UAddr
+import Numeric.F16
+import Numeric.F32
+import Numeric.F64
+import Numeric.F128
+import Numeric.D32
+import Numeric.D64
+import Numeric.D128
+import Numeric.C32
+import Numeric.C64
+import Numeric.C128
+
+module StdlibStub
+
+routine stdlib_stub_test() -> Bool
+  return true

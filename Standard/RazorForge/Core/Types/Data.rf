@@ -1,0 +1,9 @@
+# Data - Universal type-erased box
+# Holds any storable value with runtime type information
+# Cannot box: Result, Lookup, variants, access tokens
+module Core
+
+entity Data
+  secret type_id: U64
+  secret size: U64
+  secret data_ptr: UAddr

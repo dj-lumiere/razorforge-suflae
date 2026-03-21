@@ -1,0 +1,221 @@
+# RazorForge FixedList[T, N] - Fixed-capacity list
+# Resident type with fixed capacity N at compile time
+# O(1) add_last/remove_last at end, O(1) random access
+# No heap allocation - storage is inline
+#
+# Usage:
+#   var buffer: FixedList[U8, 16] = FixedList()
+#   buffer.add_last!(42)
+#   buffer.add_last!(13)
+#   var first = buffer[0]
+#   if buffer.is_full() { }
+
+module Collections
+
+# Fixed-capacity list with reference semantics
+# N elements of T stored inline, count tracks active elements
+resident FixedList[T, N]
+needs N is UAddr
+  secret count: UAddr    # Current number of elements (0 to N)
+  # N elements of T stored inline by compiler
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine FixedList[T, N].__create__() -> FixedList[T, N]
+  return FixedList[T, N](count: 0uaddr)
+
+# ============================================================================
+# Core Operations
+# ============================================================================
+
+routine FixedList[T, N].count() -> UAddr
+  return me.count
+
+routine FixedList[T, N].capacity() -> UAddr
+  return N
+
+routine FixedList[T, N].is_empty() -> Bool
+  return me.count == 0uaddr
+
+routine FixedList[T, N].is_full() -> Bool
+  return me.count == N
+
+routine FixedList[T, N].remaining() -> UAddr
+  return N - me.count
+
+routine FixedList[T, N].add_last!(value: T)
+  # Append element to end - O(1)
+  # Throws if full
+  if me.count >= N
+    throw IndexOutOfBoundsError(index: me.count, count: N)
+  me[me.count] = value
+  me.count = me.count + 1uaddr
+  return
+
+routine FixedList[T, N].remove_last!() -> T
+  # Remove and return last element - O(1)
+  if me.is_empty()
+    absent
+  me.count = me.count - 1uaddr
+  return me[me.count]
+
+routine FixedList[T, N].clear()
+  me.count = 0uaddr
+  return
+
+# ============================================================================
+# Indexing with Integral (forward index)
+# ============================================================================
+
+routine FixedList[T, N].__getitem__![I](index: I) -> T
+needs I obeys Integral
+  var idx = index.UAddr()
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
+  return me[idx]
+
+routine FixedList[T, N].__setitem__![I](index: I, value: T)
+needs I obeys Integral
+  var idx = index.UAddr()
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
+  me[idx] = value
+  return
+
+# ============================================================================
+# Indexing with BackIndex (backward index using ^)
+# ============================================================================
+
+routine FixedList[T, N].__getitem__![I](index: BackIndex[I]) -> T
+needs I obeys Integral
+  var idx = index.resolve(me.count)
+  return me[idx]
+
+routine FixedList[T, N].__setitem__![I](index: BackIndex[I], value: T)
+needs I obeys Integral
+  var idx = index.resolve(me.count)
+  me[idx] = value
+  return
+
+# ============================================================================
+# Add/Remove at index (O(n) operations)
+# ============================================================================
+
+routine FixedList[T, N].add_at![I](index: I, value: T)
+needs I obeys Integral
+  # Insert at index, shifting elements right - O(n)
+  var idx = index.UAddr()
+  if idx > me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
+  if me.is_full()
+    throw IndexOutOfBoundsError(index: me.count, count: N)
+
+  # Shift elements right
+  var i = me.count
+  while i > idx
+    me[i] = me[i - 1uaddr]
+    i = i - 1uaddr
+  me[idx] = value
+  me.count = me.count + 1uaddr
+  return
+
+routine FixedList[T, N].remove_at![I](index: I) -> T
+needs I obeys Integral
+  # Remove at index, shifting elements left - O(n)
+  var idx = index.UAddr()
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
+
+  var value = me[idx]
+
+  # Shift elements left
+  var i = idx
+  while i < me.count - 1uaddr
+    me[i] = me[i + 1uaddr]
+    i = i + 1uaddr
+  me.count = me.count - 1uaddr
+
+  return value
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+routine FixedList[T, N].iter() -> FixedListIterator[T, N]
+  return FixedListIterator[T, N](list: me, index: 0uaddr)
+
+record FixedListIterator[T, N]
+  list: FixedList[T, N]
+  index: UAddr
+
+routine FixedListIterator[T, N].next!() -> T
+  if me.index >= me.list.count()
+    absent
+  var value = me.list[me.index]
+  me.index = me.index + 1uaddr
+  return value
+
+# ============================================================================
+# Utility Operations
+# ============================================================================
+
+routine FixedList[T, N].first!() -> T
+  if me.is_empty()
+    absent
+  return me[0uaddr]
+
+routine FixedList[T, N].last!() -> T
+  if me.is_empty()
+    absent
+  return me[me.count - 1uaddr]
+
+routine FixedList[T, N].first_or_default(default_value: T) -> T
+  if me.is_empty()
+    return default_value
+  return me[0uaddr]
+
+routine FixedList[T, N].last_or_default(default_value: T) -> T
+  if me.is_empty()
+    return default_value
+  return me[me.count - 1uaddr]
+
+routine FixedList[T, N].contains(value: T) -> Bool
+  var i = 0uaddr
+  while i < me.count
+    if me[i] == value
+      return true
+    i = i + 1uaddr
+  return false
+
+routine FixedList[T, N].index_of!(value: T) -> UAddr
+  var i = 0uaddr
+  while i < me.count
+    if me[i] == value
+      return i
+    i = i + 1uaddr
+  absent
+
+routine FixedList[T, N].fill(value: T)
+  # Fill to capacity with value
+  var i = 0uaddr
+  while i < N
+    me[i] = value
+    i = i + 1uaddr
+  me.count = N
+  return
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine FixedList[T, N].__eq__(other: FixedList[T, N]) -> Bool
+  if me.count != other.count
+    return false
+  var i = 0uaddr
+  while i < me.count
+    if me[i] != other[i]
+      return false
+    i = i + 1uaddr
+  return true

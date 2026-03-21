@@ -1,71 +1,72 @@
 #pragma once
-#include <stdint>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
 
-using rf_i8 = int8_t;
-using rf_i16 = int16_t;
-using rf_i32 = int32_t;
-using rf_i64 = int64_t;
-// llvm i128 to rf_i128
-using rf_isys = intptr_t;
+// ==========================================
+// 1. RazorForge Primitives (Fixed Width)
+// ==========================================
+// These MUST match exact bit widths.
+typedef int8_t rf_S8;
+typedef int16_t rf_S16;
+typedef int32_t rf_S32;
+typedef int64_t rf_S64;
+// typedef __int128_t rf_S128; // Uncomment if compiler supports it
 
-using rf_u8 = uint8_t;
-using rf_u16 = uint16_t;
-using rf_u32 = uint32_t;
-using rf_u64 = uint64_t;
-// llvm u128 to rf_u128
-using rf_usys = uintptr_t;
+typedef uint8_t rf_U8;
+typedef uint16_t rf_U16;
+typedef uint32_t rf_U32;
+typedef uint64_t rf_U64;
+// typedef __uint128_t rf_U128; // Uncomment if compiler supports it
 
-// llvm half to rf_f16
-using rf_f32 = float;
-using rf_f64 = double;
-// llvm float128 to rf_f128
+// ==========================================
+// 2. System & Data Types
+// ==========================================
+typedef intptr_t rf_SAddr;   // Signed Pointer-Sized
+typedef uintptr_t rf_UAddr;  // Unsigned Pointer-Sized
 
-using rf_bool = bool;
-using rf_cptr = void*;
-using rf_ccptr = const void*;
-using rf_cshort = short;
-using rf_cushort = unsigned short;
-using rf_cint = int;
-using rf_cuint = unsigned int;
-using rf_clong = long;
-using rf_culong = unsigned long;
-using rf_cll = long long;
-using rf_cull = unsigned long long;
+typedef uint8_t rf_Byte;      // 'Byte' is raw 8-bit data
+typedef uint32_t rf_Letter;   // 'Letter' is 32-bit Unicode codepoint
 
-using rf_cchar = char;
-using rf_cstr = char*;
-using rf_ccstr = const char*;
-using rf_cwchar = wchar_t;
-using rf_cwstr = wchar_t*;
-using rf_ccwstr = const wchar_t*;
-using rf_cchar16 = char16_t;
-using rf_cchar16str = char16_t*;
-using rf_ccchar16str = const char16_t*;
-using rf_cchar32 = char32_t;
-using rf_cchar32str = char32_t*;
-using rf_ccchar32str = const char32_t*;
+typedef bool rf_Bool;         // Standard boolean
 
-using rf_cvoid = void;
-#define rf_null nullptr
-#define rf_true true
-#define rf_false false
+// ==========================================
+// 3. C Interop Types (Platform Dependent)
+// ==========================================
+// These map to the C compiler's native types.
+typedef void rf_CVoid;
+#define rf_CNull    NULL
 
-using rf_MemorySlice = struct
-{
-    rf_usys len;
-    rf_u8* data;
-};
+typedef char rf_CChar;              // Ambiguous sign
+typedef char* rf_CStr;
 
-using rf_Variant = struct
-{
-    rf_u32 tag;
-    rf_MemorySlice data;
-};
+typedef int rf_CInt;
+typedef unsigned int rf_CUInt;
 
-using rf_Enum = rf_u32;
-using rf_None = struct
-{
-};
-using rf_FnPtr = void*;
+typedef long rf_CLong;              // 32-bit on Win64, 64-bit on Linux64
+typedef unsigned long rf_CULong;
 
-using suflae_Object = void*;
+typedef wchar_t rf_CWChar;
+
+// ==========================================
+// 4. The Raw Pointer Wrapper
+// ==========================================
+// Since Snatched<T> is just a raw pointer at runtime:
+#define rf_Snatched(T) T*
+
+// Variant (tagged union)
+typedef struct rf_Variant {
+    rf_U32 tag;
+    rf_UAddr data;
+} rf_Variant;
+
+// Other types
+typedef rf_S64 rf_Choice;
+typedef void* rf_RoutineReference;
+
+// Note: None is NOT a runtime type. In RazorForge, None represents the absence
+// of a value and is encoded via discriminant fields (is_valid, state) in wrapper
+// types like Maybe<T>, Result<T>, and Lookup<T>. There is no rf_None type.
+typedef void* suflae_Object;

@@ -1,0 +1,6 @@
+# ClampingAddable - Protocol for types that support clamping addition (+^)
+module Core
+
+protocol ClampingAddable
+  @readonly
+  routine Me.__add_clamp__(you: Me) -> Me

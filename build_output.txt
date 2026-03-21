@@ -1,0 +1,34 @@
+  복원할 프로젝트를 확인하는 중...
+  복원할 모든 프로젝트가 최신 상태입니다.
+  Building RazorForge Native Libraries...
+  Configuring with CMake...
+  -- Found LibBF
+  -- Found Intel Decimal Floating-Point Math Library
+  -- Found LibTomMath sources
+  -- Found MAPM sources
+  -- 
+  -- RazorForge Native Configuration:
+  --   LibBF (f128 + transcendentals): TRUE
+  --   Intel Decimal (d32/d64/d128):   TRUE
+  --   LibTomMath (bigint):            TRUE
+  --   MAPM (bigdecimal):              TRUE
+  --   Platform: Windows
+  -- 
+  -- Configuring done (0.2s)
+  -- Generating done (0.1s)
+  -- Build files have been written to: L:/programming/RiderProjects/RazorForge/native/build
+  Building libraries...
+  ninja: no work to do.
+  Copying libraries to project directories...
+  지정된 경로를 찾을 수 없습니다.
+  지정된 경로를 찾을 수 없습니다.
+  지정된 경로를 찾을 수 없습니다.
+  지정된 경로를 찾을 수 없습니다.
+  Native libraries built successfully!
+  RazorForge -> L:\programming\RiderProjects\RazorForge\bin\Debug\net10.0\RazorForge.dll
+
+빌드했습니다.
+    경고 0개
+    오류 0개
+
+경과 시간: 00:00:02.65

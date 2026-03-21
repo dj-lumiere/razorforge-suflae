@@ -1,0 +1,274 @@
+module Numerics
+
+# RazorForge Integer - Arbitrary precision integer type
+# Powered by LibTomMath (https://github.com/libtom/libtommath)
+# License: Public Domain (Unlicense)
+
+import Text.Text
+
+# Opaque handle to LibTomMath mp_int structure
+# The actual memory is managed by the native runtime
+entity Integer obeys Integral, Divisible, Negatable, Ordered
+  secret handle: UAddr
+
+# ============================================================================
+# Lifecycle Management
+# ============================================================================
+
+# Create a new Integer initialized to zero
+routine Integer.__create__() -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  return int
+
+# Create Integer from S64
+routine Integer.__create__(value: S64) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  rf_bigint_set_i64(int.handle, value)
+  return int
+
+# Create Integer from U64
+routine Integer.__create__(value: U64) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  rf_bigint_set_u64(int.handle, value)
+  return int
+
+# Create Integer from string with base (2-36)
+routine Integer.__create__!(text: Text, radix: S32 = 10) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
+  if result != 0
+    throw ValueError(f"Invalid integer string: {text}")
+  return int
+
+# Destructor - frees the LibTomMath structure
+routine Integer.__destroy__()
+  rf_bigint_clear(me.handle)
+  return
+
+# Copy creator
+routine Integer.__copy__(other: Integer) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  rf_bigint_copy(int.handle, other.handle)
+  return int
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+routine Integer.__add__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_add(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__sub__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_sub(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__mul__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_mul(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__floordiv__(other: Integer) -> Integer
+  var quotient = Integer(handle: rf_bigint_new())
+  var remainder = Integer(handle: rf_bigint_new())
+  rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
+  rf_bigint_clear(remainder.handle)
+  return quotient
+
+routine Integer.__rem__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_mod(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__neg__() -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_neg(result.handle, me.handle)
+  return result
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine Integer.__eq__(you: Integer) -> Bool
+  return rf_bigint_cmp(me.handle, other.handle) == 0
+
+routine Integer.__cmp__(you: Integer) -> CompareSign
+  var comparison_value = rf_bigint_cmp(me.handle, other.handle)
+  if comparison_value < 0
+    return LEFT_SMALL
+  elseif comparison_value > 0
+    return RIGHT_SMALL
+  else
+    return EQUAL
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+routine Integer.__and__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_and(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__or__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_or(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__xor__(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_xor(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.__shl__(bits: S32) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_shl(result.handle, me.handle, bits)
+  return result
+
+routine Integer.__shr__(bits: S32) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_shr(result.handle, me.handle, bits)
+  return result
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine Integer.abs() -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_abs(result.handle, me.handle)
+  return result
+
+routine Integer.__pow__(exp: U32) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_pow(result.handle, me.handle, exp)
+  return result
+
+routine Integer.sqrt() -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_sqrt(result.handle, me.handle)
+  return result
+
+routine Integer.gcd(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_gcd(result.handle, me.handle, other.handle)
+  return result
+
+routine Integer.lcm(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new())
+  rf_bigint_lcm(result.handle, me.handle, other.handle)
+  return result
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine Integer.is_zero() -> Bool
+  return rf_bigint_is_zero(me.handle) != 0
+
+routine Integer.is_negative() -> Bool
+  return rf_bigint_is_neg(me.handle) != 0
+
+routine Integer.is_positive() -> Bool
+  return not me.is_zero() and not me.is_negative()
+
+routine Integer.signum() -> S32
+  return when
+    me.is_positive() => 1
+    me.is_negative() => -1
+    else => 0
+
+# ============================================================================
+# Conversions
+# ============================================================================
+
+# Convert to S64 (may overflow/truncate for large values)
+routine S64.__create__!(from: Integer) -> S64
+  return rf_bigint_get_i64(from.handle)
+
+# Convert to U64 (may overflow/truncate for large values)
+routine U64.__create__!(from: Integer) -> U64
+  return rf_bigint_get_u64(from.handle)
+
+# Convert to string with specified radix (2-36)
+routine Integer.to_text(radix: S32 = 10) -> Text
+  var CStr = rf_bigint_get_str(me.handle, radix)
+  var text = Text.from_cstr(CStr)
+  rf_free(CStr)
+  return text
+
+# ============================================================================
+# Factory Methods
+# ============================================================================
+
+# Parse from decimal string - returns None on failure
+routine Integer.__create__!(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
+  if result != 0
+    rf_bigint_clear(int.handle)
+    throw ParseError("Invalid integer form")
+  return int
+
+# Parse from binary string (without 0b prefix) - returns None on failure
+routine Integer.from_binary!(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
+  if result != 0
+    rf_bigint_clear(int.handle)
+    throw ParseError("Invalid integer form")
+  return int
+
+# Parse from hexadecimal string (without 0x prefix) - returns None on failure
+routine Integer.from_hex!(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new())
+  var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
+  if result != 0
+    rf_bigint_clear(int.handle)
+    throw ParseError("Invalid integer form")
+  return int
+
+# Zero constant
+routine Integer.zero() -> Integer
+  return Integer(0_s64)
+
+# One constant
+routine Integer.one() -> Integer
+  return Integer(1_s64)
+
+# ============================================================================
+# Examples
+# ============================================================================
+
+# Factorial of large numbers
+routine factorial(n: Integer) -> Integer
+  if n.is_zero() or n == Integer.one()
+    return Integer.one()
+
+  var result = Integer.one()
+  var i = Integer(2_s64)
+
+  while i <= n
+    result = result * i
+    i = i + Integer.one()
+
+  return result
+
+# Fibonacci with arbitrary precision
+routine fibonacci_big(n: S64) -> Integer
+  if n <= 1
+    return Integer(n)
+
+  var a = Integer.zero()
+  var b = Integer.one()
+
+  var i: S64 = 2
+  while i <= n
+    var temp = a + b
+    a = b
+    b = temp
+    i = i + 1
+
+  return b

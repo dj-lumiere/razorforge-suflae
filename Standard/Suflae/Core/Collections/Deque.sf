@@ -1,0 +1,74 @@
+# Suflae Deque - Double-ended queue
+
+module Core
+
+import RazorForge/Collections.Deque
+
+entity Deque[T]
+  secret value: RazorForge/Collections.Deque[T]
+
+# Core operations
+routine Deque[T].count() -> Integer
+  return Integer(value: me.value.count())
+
+routine Deque[T].capacity() -> Integer
+  return Integer(value: me.value.capacity())
+
+routine Deque[T].is_empty() -> Bool
+  return me.value.is_empty()
+
+# Adding elements
+routine Deque[T].add_last(item: T)
+  me.value.add_last(item)
+  return
+
+routine Deque[T].add_first(item: T)
+  me.value.add_first(item)
+  return
+
+# Removing elements
+routine Deque[T].remove_last!() -> T
+  return me.value.remove_last!()
+
+routine Deque[T].remove_first!() -> T
+  return me.value.remove_first!()
+
+routine Deque[T].clear()
+  me.value.clear()
+  return
+
+# Peeking
+routine Deque[T].first!() -> T
+  return me.value.first!()
+
+routine Deque[T].last!() -> T
+  return me.value.last!()
+
+# Indexing
+routine Deque[T].__getitem__!(index: Integer) -> T
+  return me.value.__getitem__!(index.value)
+
+routine Deque[T].__setitem__!(index: Integer, item: T)
+  me.value.__setitem__!(index.value, item)
+  return
+
+# Rotation
+routine Deque[T].rotate_left(n: Integer)
+  me.value.rotate_left(n.value)
+  return
+
+routine Deque[T].rotate_right(n: Integer)
+  me.value.rotate_right(n.value)
+  return
+
+# Utility
+routine Deque[T].reserve(new_capacity: Integer)
+  me.value.reserve(new_capacity.value)
+  return
+
+routine Deque[T].contains(item: T) -> Bool
+  return me.value.contains(item)
+
+# Comparison
+routine Deque[T].__eq__(other: Deque[T]) -> Bool
+  return me.value.__eq__(other.value)

@@ -1,0 +1,25 @@
+module Core
+
+# MemoryError - Error types for memory operations
+
+record MemoryAllocationError obeys Crashable
+  requested_bytes: UAddr
+
+routine MemoryAllocationError.crash_message() -> Text
+  return f"Failed to allocate {me.requested_bytes} bytes"
+
+record MemoryBoundsError obeys Crashable
+  offset: UAddr
+  size: UAddr
+  allocated: UAddr
+
+routine MemoryBoundsError.crash_message() -> Text
+  return f"Memory access at offset {me.offset} with size {me.size} exceeds allocated {me.allocated} bytes"
+
+record SliceBoundsError obeys Crashable
+  offset: UAddr
+  length: UAddr
+  allocated: UAddr
+
+routine SliceBoundsError.crash_message() -> Text
+  return f"Slice from {me.offset} with length {me.length} exceeds allocated {me.allocated} bytes"

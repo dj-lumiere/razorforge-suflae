@@ -1,0 +1,849 @@
+﻿namespace SemanticAnalysis;
+
+using Enums;
+using Scopes;
+using Types;
+using SyntaxTree;
+using Compiler.Lexer;
+using Diagnostics;
+using TypeSymbol = Types.TypeInfo;
+
+/// <summary>
+/// Pattern analysis for when/is expressions.
+/// </summary>
+public sealed partial class SemanticAnalyzer
+{
+    #region Pattern Analysis
+
+    /// <summary>
+    /// Declares a pattern binding variable, checking for shadowing of variables in outer scopes.
+    /// </summary>
+    private void DeclarePatternVariable(string name, TypeSymbol type, SourceLocation location)
+    {
+        // Check if this name exists in a parent scope (shadowing)
+        Scope? parent = _registry.CurrentScope.Parent;
+        if (parent?.LookupVariable(name: name) != null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.IdentifierShadowing,
+                $"Pattern variable '{name}' shadows an existing variable in an outer scope.",
+                location);
+        }
+
+        // Still declare the variable even if shadowing, to avoid cascading errors
+        _registry.DeclareVariable(
+            name: name,
+            type: type);
+    }
+
+    private void AnalyzePattern(Pattern pattern, TypeSymbol matchedType)
+    {
+        switch (pattern)
+        {
+            case LiteralPattern:
+                // Literal patterns don't bind variables
+                // TODO: REALLY?
+                break;
+
+            case IdentifierPattern id:
+                // Bind the matched value to the identifier
+                DeclarePatternVariable(
+                    name: id.Name,
+                    type: matchedType,
+                    location: id.Location);
+                break;
+
+            case TypePattern typePat:
+                // None is a keyword, not a registered type — handle it directly
+                if (typePat.Type.Name == "None")
+                {
+                    if (matchedType is not ErrorTypeInfo
+                        && matchedType.Category != TypeCategory.ErrorHandling)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.PatternTypeMismatch,
+                            $"Type pattern 'is None' can never match a value of type '{matchedType.Name}'.",
+                            typePat.Location);
+                    }
+
+                    break;
+                }
+
+                // Choice case pattern: 'is NORTH' or 'is Direction.NORTH'
+                // When the matched type is a choice, check if the identifier is a case name
+                // before attempting type resolution (which would fail for case names).
+                if (matchedType is ChoiceTypeInfo choiceForIs)
+                {
+                    string? choiceCaseName = ExtractChoiceCaseFromTypePattern(
+                        typePat: typePat, choice: choiceForIs);
+                    if (choiceCaseName != null)
+                    {
+                        // Valid choice case match via 'is' — no type resolution needed
+                        if (typePat.VariableName != null)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Choice case patterns cannot bind variables.",
+                                typePat.Location);
+                        }
+
+                        if (typePat.Bindings is { Count: > 0 })
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Choice case patterns cannot destructure.",
+                                typePat.Location);
+                        }
+
+                        break;
+                    }
+
+                    // Not a valid case name — report specific error
+                    ReportError(
+                        SemanticDiagnosticCode.ChoiceCaseNotFound,
+                        $"Choice type '{choiceForIs.Name}' does not have a case named '{typePat.Type.Name}'.",
+                        typePat.Location);
+                    break;
+                }
+
+                // Flags member pattern: 'is READ' when matched type is a flags type.
+                // Single-flag tests are parsed as TypePattern by the parser.
+                if (matchedType is FlagsTypeInfo flagsForIs)
+                {
+                    string flagName = typePat.Type.Name;
+                    if (flagsForIs.Members.Any(m => m.Name == flagName))
+                    {
+                        if (typePat.VariableName != null)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Flags member patterns cannot bind variables.",
+                                typePat.Location);
+                        }
+
+                        if (typePat.Bindings is { Count: > 0 })
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.PatternTypeMismatch,
+                                "Flags member patterns cannot destructure.",
+                                typePat.Location);
+                        }
+
+                        break;
+                    }
+
+                    ReportError(
+                        SemanticDiagnosticCode.FlagsMemberNotFound,
+                        $"Flags type '{flagsForIs.Name}' does not have a member named '{flagName}'.",
+                        typePat.Location);
+                    break;
+                }
+
+                TypeSymbol patternType = ResolveType(typeExpr: typePat.Type);
+
+                // Check type compatibility between matched type and pattern type
+                if (patternType is not ErrorTypeInfo
+                    && matchedType is not ErrorTypeInfo
+                    && !IsTypePatternCompatible(matchedType: matchedType, patternType: patternType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.PatternTypeMismatch,
+                        $"Type pattern 'is {patternType.Name}' can never match a value of type '{matchedType.Name}'.",
+                        typePat.Location);
+                }
+
+                if (typePat.VariableName != null)
+                {
+                    DeclarePatternVariable(
+                        name: typePat.VariableName,
+                        type: patternType,
+                        location: typePat.Location);
+                }
+
+                // Process destructuring bindings if present
+                if (typePat.Bindings is { Count: > 0 })
+                {
+                    foreach (DestructuringBinding binding in typePat.Bindings)
+                    {
+                        TypeSymbol memberVariableType = LookupMemberVariableType(type: patternType, memberVariableName: binding.MemberVariableName);
+
+                        if (binding.NestedPattern != null)
+                        {
+                            AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
+                        }
+                        else if (binding.BindingName != null)
+                        {
+                            DeclarePatternVariable(
+                                name: binding.BindingName,
+                                type: memberVariableType,
+                                location: binding.Location);
+                        }
+                    }
+                }
+
+                break;
+
+            case WildcardPattern:
+                // Wildcards don't bind variables
+                break;
+
+            case VariantPattern variant:
+                // Handle variant case matching - look up case from matched type
+                AnalyzeVariantPattern(pattern: variant, matchedType: matchedType);
+                break;
+
+            case GuardPattern guard:
+                // First analyze the inner pattern
+                AnalyzePattern(pattern: guard.InnerPattern, matchedType: matchedType);
+                // Then analyze the guard expression (must be bool)
+                TypeSymbol guardType = AnalyzeExpression(expression: guard.Guard);
+                if (!IsBoolType(type: guardType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.PatternGuardNotBool,
+                        "Guard expression must be boolean.",
+                        guard.Guard.Location);
+                }
+
+                break;
+
+            case ElsePattern elsePat:
+                if (elsePat.VariableName != null)
+                {
+                    DeclarePatternVariable(
+                        name: elsePat.VariableName,
+                        type: matchedType,
+                        location: elsePat.Location);
+                }
+
+                break;
+
+            case NonePattern:
+            case CrashablePattern:
+                // These don't bind variables directly
+                break;
+
+            case DestructuringPattern destruct:
+                AnalyzeDestructuringPattern(pattern: destruct, sourceType: matchedType);
+                break;
+
+            case TypeDestructuringPattern typeDestruct:
+                AnalyzeTypeDestructuringPattern(pattern: typeDestruct);
+                break;
+
+            case ExpressionPattern exprPat:
+                TypeSymbol exprType = AnalyzeExpression(expression: exprPat.Expression);
+                if (!IsBoolType(type: exprType))
+                {
+                    ReportError(
+                        SemanticDiagnosticCode.ExpressionPatternNotBool,
+                        "Expression pattern must be boolean.",
+                        exprPat.Location);
+                }
+
+                break;
+
+            case FlagsPattern flagsPat:
+                if (matchedType is not FlagsTypeInfo flagsTypeForPat)
+                {
+                    if (matchedType.Category != TypeCategory.Error)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsTypeMismatch,
+                            $"Flags pattern requires a flags type, but got '{matchedType.Name}'.",
+                            flagsPat.Location);
+                    }
+                    break;
+                }
+
+                // Validate each flag name exists
+                foreach (string flagName in flagsPat.FlagNames)
+                {
+                    if (flagsTypeForPat.Members.All(m => m.Name != flagName))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsMemberNotFound,
+                            $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
+                            flagsPat.Location);
+                    }
+                }
+
+                // Validate excluded flags
+                if (flagsPat.ExcludedFlags != null)
+                {
+                    foreach (string flagName in flagsPat.ExcludedFlags)
+                    {
+                        if (flagsTypeForPat.Members.All(m => m.Name != flagName))
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.FlagsMemberNotFound,
+                                $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
+                                flagsPat.Location);
+                        }
+                    }
+                }
+
+                // #133: isonly rejects 'or' and 'but'
+                if (flagsPat.IsExact)
+                {
+                    if (flagsPat.Connective == FlagsTestConnective.Or)
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                            "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
+                            flagsPat.Location);
+                    }
+
+                    if (flagsPat.ExcludedFlags is { Count: > 0 })
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                            "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
+                            flagsPat.Location);
+                    }
+                }
+
+                break;
+
+            case ComparisonPattern cmp when matchedType is ChoiceTypeInfo:
+                // Choice types must use 'is CASE_NAME', not '== CASE_NAME'
+                ReportError(
+                    SemanticDiagnosticCode.PatternTypeMismatch,
+                    "Use 'is' instead of comparison operators for choice case matching.",
+                    cmp.Location);
+                break;
+        }
+    }
+
+    private void AnalyzeDestructuringPattern(DestructuringPattern pattern, TypeSymbol sourceType)
+    {
+        foreach (DestructuringBinding binding in pattern.Bindings)
+        {
+            TypeSymbol memberVariableType = ErrorTypeInfo.Instance;
+
+            // Get member variable type from source type
+            if (binding.MemberVariableName != null && sourceType is RecordTypeInfo record)
+            {
+                memberVariableType = record.LookupMemberVariable(memberVariableName: binding.MemberVariableName)?.Type ?? ErrorTypeInfo.Instance;
+            }
+            else if (binding.MemberVariableName != null && sourceType is EntityTypeInfo entity)
+            {
+                memberVariableType = entity.LookupMemberVariable(memberVariableName: binding.MemberVariableName)?.Type ?? ErrorTypeInfo.Instance;
+            }
+
+            if (binding.NestedPattern != null)
+            {
+                // Handle nested destructuring
+                AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
+            }
+            else if (binding.BindingName != null)
+            {
+                DeclarePatternVariable(
+                    name: binding.BindingName,
+                    type: memberVariableType,
+                    location: binding.Location);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Analyzes a variant pattern, looking up the case type from the matched variant/mutant type.
+    /// </summary>
+    /// <param name="pattern">The variant pattern to analyze.</param>
+    /// <param name="matchedType">The type being matched against.</param>
+    private void AnalyzeVariantPattern(VariantPattern pattern, TypeSymbol matchedType)
+    {
+        // Get the cases from the matched type
+        IReadOnlyList<VariantCaseInfo>? cases = matchedType switch
+        {
+            VariantTypeInfo variant => variant.Cases,
+            _ => null
+        };
+
+        if (cases == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantPatternOnNonVariant,
+                $"Cannot match variant pattern against non-variant type '{matchedType.Name}'.",
+                pattern.Location);
+            // Still declare bindings with error type to avoid cascading errors
+            DeclareBindingsWithErrorType(bindings: pattern.Bindings);
+            return;
+        }
+
+        // Find the matching case
+        VariantCaseInfo? matchedCase = cases.FirstOrDefault(c => c.Name == pattern.CaseName);
+        if (matchedCase == null)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantCaseNotFound,
+                $"Variant type '{matchedType.Name}' does not have a case named '{pattern.CaseName}'.",
+                pattern.Location);
+            DeclareBindingsWithErrorType(bindings: pattern.Bindings);
+            return;
+        }
+
+        // Bind the payload if present
+        if (pattern.Bindings is not { Count: > 0 })
+        {
+            return;
+        }
+
+        if (!matchedCase.HasPayload)
+        {
+            ReportError(
+                SemanticDiagnosticCode.VariantCaseNoPayload,
+                $"Variant case '{pattern.CaseName}' has no payload to destructure.",
+                pattern.Location);
+            return;
+        }
+
+        // Variant cases have a single payload type
+        TypeSymbol payloadType = matchedCase.PayloadType!;
+
+        // For a single binding without member variable name, bind directly to the payload
+        if (pattern.Bindings.Count == 1 && pattern.Bindings[0].MemberVariableName == null)
+        {
+            DestructuringBinding binding = pattern.Bindings[0];
+            if (binding.NestedPattern != null)
+            {
+                AnalyzePattern(pattern: binding.NestedPattern, matchedType: payloadType);
+            }
+            else if (binding.BindingName != null)
+            {
+                DeclarePatternVariable(
+                    name: binding.BindingName,
+                    type: payloadType,
+                    location: binding.Location);
+            }
+        }
+        else
+        {
+            // Multiple bindings - payload must be a record/entity type
+            foreach (DestructuringBinding binding in pattern.Bindings)
+            {
+                TypeSymbol memberVariableType = LookupMemberVariableType(type: payloadType, memberVariableName: binding.MemberVariableName);
+
+                if (binding.NestedPattern != null)
+                {
+                    AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
+                }
+                else if (binding.BindingName != null)
+                {
+                    DeclarePatternVariable(
+                        name: binding.BindingName,
+                        type: memberVariableType,
+                        location: binding.Location);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Analyzes a type destructuring pattern, looking up member variable types from the target type.
+    /// </summary>
+    /// <param name="pattern">The type destructuring pattern to analyze.</param>
+    private void AnalyzeTypeDestructuringPattern(TypeDestructuringPattern pattern)
+    {
+        TypeSymbol targetType = ResolveType(typeExpr: pattern.Type);
+
+        foreach (DestructuringBinding binding in pattern.Bindings)
+        {
+            TypeSymbol memberVariableType = LookupMemberVariableType(type: targetType, memberVariableName: binding.MemberVariableName);
+
+            if (binding.NestedPattern != null)
+            {
+                AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
+            }
+            else if (binding.BindingName != null)
+            {
+                DeclarePatternVariable(
+                    name: binding.BindingName,
+                    type: memberVariableType,
+                    location: binding.Location);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Looks up a member variable type from a type. Returns ErrorTypeInfo if not found.
+    /// </summary>
+    private TypeSymbol LookupMemberVariableType(TypeSymbol type, string? memberVariableName)
+    {
+        if (memberVariableName == null)
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
+        return type switch
+        {
+            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
+            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
+            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
+            _ => ErrorTypeInfo.Instance
+        };
+    }
+
+    /// <summary>
+    /// Declares bindings with error type to prevent cascading errors.
+    /// </summary>
+    private void DeclareBindingsWithErrorType(List<DestructuringBinding>? bindings)
+    {
+        if (bindings == null)
+        {
+            return;
+        }
+
+        foreach (DestructuringBinding binding in bindings)
+        {
+            if (binding.BindingName != null)
+            {
+                _registry.DeclareVariable(
+                    name: binding.BindingName,
+                    type: ErrorTypeInfo.Instance);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks if a type pattern can potentially match a value of the given matched type.
+    /// Returns true if the match is possible, false if provably impossible.
+    /// </summary>
+    private bool IsTypePatternCompatible(TypeSymbol matchedType, TypeSymbol patternType)
+    {
+        // Same type - always compatible
+        if (matchedType.Name == patternType.Name)
+        {
+            return true;
+        }
+
+        // If either is a type parameter, we can't know at analysis time
+        if (matchedType.Category == TypeCategory.TypeParameter
+            || patternType.Category == TypeCategory.TypeParameter)
+        {
+            return true;
+        }
+
+        // If matched type is a protocol, any concrete type could conform
+        if (matchedType.Category == TypeCategory.Protocol)
+        {
+            return true;
+        }
+
+        // If pattern type is a protocol, check if matched type implements it
+        if (patternType.Category == TypeCategory.Protocol)
+        {
+            return ImplementsProtocol(type: matchedType, protocolName: patternType.Name);
+        }
+
+        // Error handling types (Maybe<T>, Result<T>, Lookup<T>) - allow matching inner types
+        if (matchedType.Category == TypeCategory.ErrorHandling)
+        {
+            return true;
+        }
+
+        // IsAssignableTo in either direction covers subtyping
+        if (IsAssignableTo(source: matchedType, target: patternType)
+            || IsAssignableTo(source: patternType, target: matchedType))
+        {
+            return true;
+        }
+
+        // Provably incompatible
+        return false;
+    }
+
+    #endregion
+
+    #region Exhaustiveness Checking
+
+    /// <summary>
+    /// Result of exhaustiveness analysis.
+    /// </summary>
+    private readonly record struct ExhaustivenessResult(bool IsExhaustive, List<string> MissingCases);
+
+    /// <summary>
+    /// Checks whether the given when clauses exhaustively cover all cases of the matched type.
+    /// </summary>
+    private ExhaustivenessResult CheckExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        TypeSymbol matchedType)
+    {
+        // If any clause is a catch-all pattern, it's always exhaustive
+        foreach (WhenClause clause in clauses)
+        {
+            if (clause.Pattern is WildcardPattern or ElsePattern or IdentifierPattern)
+            {
+                return new ExhaustivenessResult(IsExhaustive: true, MissingCases: []);
+            }
+        }
+
+        return matchedType switch
+        {
+            ChoiceTypeInfo choice => CheckChoiceExhaustiveness(clauses: clauses, choice: choice),
+            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses, cases: variant.Cases,
+                typeName: variant.Name),
+            ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses, ehType: eh),
+            // #129: Flags when always requires else — too many combinations to exhaustively check
+            FlagsTypeInfo => new ExhaustivenessResult(IsExhaustive: false, MissingCases: ["else"]),
+            _ when matchedType.Name == "Bool" => CheckBoolExhaustiveness(clauses: clauses),
+            _ => new ExhaustivenessResult(IsExhaustive: false, MissingCases: [])
+        };
+    }
+
+    /// <summary>
+    /// Checks whether all cases of a choice type are covered by 'is' TypePatterns.
+    /// </summary>
+    private static ExhaustivenessResult CheckChoiceExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        ChoiceTypeInfo choice)
+    {
+        var coveredCases = new HashSet<string>();
+
+        foreach (WhenClause clause in clauses)
+        {
+            string? caseName = ExtractChoiceCaseName(pattern: clause.Pattern);
+            if (caseName != null)
+            {
+                coveredCases.Add(item: caseName);
+            }
+        }
+
+        var missingCases = choice.Cases
+            .Where(predicate: c => !coveredCases.Contains(c.Name))
+            .Select(selector: c => c.Name)
+            .ToList();
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missingCases.Count == 0,
+            MissingCases: missingCases);
+    }
+
+    /// <summary>
+    /// Extracts the choice case name from a TypePattern ('is' keyword).
+    /// Returns null if the pattern is not a choice case match.
+    /// Choice matching only supports the 'is' syntax — '==' is not valid for choices.
+    /// </summary>
+    private static string? ExtractChoiceCaseName(Pattern pattern)
+    {
+        // TypePattern: is ACTIVE or is Status.ACTIVE
+        if (pattern is TypePattern typePat)
+        {
+            string name = typePat.Type.Name;
+
+            // Qualified: Direction.NORTH → extract "NORTH"
+            if (name.Contains(value: '.'))
+            {
+                return name[(name.LastIndexOf(value: '.') + 1)..];
+            }
+
+            // Shorthand: NORTH — caller validates against case list
+            return name;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts the choice case name from a TypePattern when the matched type is a choice.
+    /// Handles both shorthand (NORTH) and qualified (Direction.NORTH) forms.
+    /// Returns null if the pattern doesn't match any case.
+    /// </summary>
+    private static string? ExtractChoiceCaseFromTypePattern(TypePattern typePat, ChoiceTypeInfo choice)
+    {
+        string name = typePat.Type.Name;
+
+        // Qualified form: Direction.NORTH → extract "NORTH" if prefix matches choice name
+        if (name.Contains(value: '.'))
+        {
+            int dotIndex = name.LastIndexOf(value: '.');
+            string prefix = name[..dotIndex];
+            string casePart = name[(dotIndex + 1)..];
+
+            if (prefix == choice.Name && choice.Cases.Any(predicate: c => c.Name == casePart))
+            {
+                return casePart;
+            }
+
+            return null;
+        }
+
+        // Shorthand form: NORTH → match directly against choice cases
+        if (choice.Cases.Any(predicate: c => c.Name == name))
+        {
+            return name;
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Checks whether all cases of a variant/mutant type are covered.
+    /// The parser creates TypePattern for variant case matching (is Shape.CIRCLE or is CIRCLE),
+    /// not VariantPattern (which is defined in the AST but never created by the parser).
+    /// </summary>
+    private static ExhaustivenessResult CheckVariantExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        IReadOnlyList<VariantCaseInfo> cases,
+        string typeName)
+    {
+        var coveredCases = new HashSet<string>();
+
+        foreach (WhenClause clause in clauses)
+        {
+            string? caseName = ExtractVariantCaseName(pattern: clause.Pattern, typeName: typeName);
+            if (caseName != null)
+            {
+                coveredCases.Add(item: caseName);
+            }
+        }
+
+        var missingCases = cases
+            .Where(predicate: c => !coveredCases.Contains(c.Name))
+            .Select(selector: c => c.Name)
+            .ToList();
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missingCases.Count == 0,
+            MissingCases: missingCases);
+    }
+
+    /// <summary>
+    /// Extracts the variant case name from a pattern.
+    /// Handles TypePattern with dotted names (is Shape.CIRCLE) or bare names (is CIRCLE),
+    /// as well as VariantPattern (if ever created).
+    /// </summary>
+    private static string? ExtractVariantCaseName(Pattern pattern, string typeName)
+    {
+        switch (pattern)
+        {
+            case TypePattern typePat:
+            {
+                string name = typePat.Type.Name;
+
+                // Dotted form: "Shape.CIRCLE" → extract "CIRCLE"
+                if (name.StartsWith(value: typeName + ".", comparisonType: StringComparison.Ordinal))
+                {
+                    return name[(typeName.Length + 1)..];
+                }
+
+                // Bare form: "CIRCLE" — matches if it's a known case name
+                // (caller will validate against the case list)
+                if (!name.Contains(value: '.'))
+                {
+                    return name;
+                }
+
+                return null;
+            }
+            case VariantPattern variant:
+                return variant.CaseName;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether Maybe/Result/Lookup error handling types are exhaustively matched.
+    /// </summary>
+    private ExhaustivenessResult CheckErrorHandlingExhaustiveness(
+        IReadOnlyList<WhenClause> clauses,
+        ErrorHandlingTypeInfo ehType)
+    {
+        bool hasNone = false;
+        bool hasCrashableCatchAll = false;
+        bool hasValue = false;
+
+        foreach (WhenClause clause in clauses)
+        {
+            if (IsNonePattern(pattern: clause.Pattern))
+            {
+                hasNone = true;
+            }
+            else if (IsCrashableCatchAll(pattern: clause.Pattern))
+            {
+                // Only generic 'is Crashable e' counts as catch-all, not specific error types (#89)
+                hasCrashableCatchAll = true;
+            }
+            else if (clause.Pattern is not (NonePattern or CrashablePattern))
+            {
+                // Any other pattern (type check, literal, etc.) counts as value arm
+                hasValue = true;
+            }
+        }
+
+        var missing = new List<string>();
+
+        switch (ehType.Kind)
+        {
+            case ErrorHandlingKind.Maybe:
+                if (!hasNone) missing.Add(item: "None");
+                if (!hasValue) missing.Add(item: "value");
+                break;
+            case ErrorHandlingKind.Result:
+                if (!hasCrashableCatchAll) missing.Add(item: "Crashable");
+                if (!hasValue) missing.Add(item: "value");
+                break;
+            case ErrorHandlingKind.Lookup:
+                if (!hasNone) missing.Add(item: "None");
+                if (!hasCrashableCatchAll) missing.Add(item: "Crashable");
+                if (!hasValue) missing.Add(item: "value");
+                break;
+        }
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missing.Count == 0,
+            MissingCases: missing);
+    }
+
+    /// <summary>
+    /// Checks whether both true and false are covered by literal patterns.
+    /// </summary>
+    private static ExhaustivenessResult CheckBoolExhaustiveness(IReadOnlyList<WhenClause> clauses)
+    {
+        bool hasTrue = false;
+        bool hasFalse = false;
+
+        foreach (WhenClause clause in clauses)
+        {
+            if (clause.Pattern is LiteralPattern { LiteralType: TokenType.True })
+            {
+                hasTrue = true;
+            }
+            else if (clause.Pattern is LiteralPattern { LiteralType: TokenType.False })
+            {
+                hasFalse = true;
+            }
+        }
+
+        var missing = new List<string>();
+        if (!hasTrue) missing.Add(item: "true");
+        if (!hasFalse) missing.Add(item: "false");
+
+        return new ExhaustivenessResult(
+            IsExhaustive: missing.Count == 0,
+            MissingCases: missing);
+    }
+
+    /// <summary>
+    /// Produces a string key from a pattern for duplicate detection.
+    /// Returns null for patterns that cannot be meaningfully compared (identifiers, wildcards, else).
+    /// </summary>
+    private static string? GetPatternKey(Pattern pattern)
+    {
+        return pattern switch
+        {
+            LiteralPattern lit => $"literal:{lit.Value}",
+            TypePattern tp => $"type:{tp.Type.Name}",
+            VariantPattern vp => $"variant:{vp.CaseName}",
+            NonePattern => "none",
+            CrashablePattern => "crashable",
+            FlagsPattern fp => $"flags:{string.Join(separator: "|", values: fp.FlagNames.OrderBy(keySelector: n => n))}",
+            // Identifier, wildcard, else, guard, expression patterns are not deduplicated
+            _ => null
+        };
+    }
+
+    #endregion
+}

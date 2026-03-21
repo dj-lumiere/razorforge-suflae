@@ -1,0 +1,6 @@
+# RazorForge Complex - Arbitrary precision complex number type
+module Numerics
+
+entity Complex obeys Numeric, Equatable
+  secret real: Decimal
+  secret imag: Decimal

@@ -1,0 +1,5 @@
+module Core
+
+record Result[T]
+  secret state: DataState
+  secret handle: Snatched[T]

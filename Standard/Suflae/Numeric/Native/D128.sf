@@ -1,0 +1,124 @@
+module Numerics
+
+# Suflae D128 - Decimal128 floating point (opt-in native type)
+
+import RazorForge/Core.D128
+
+record D128
+  secret value: RazorForge/Core.D128
+
+# Arithmetic operators
+routine D128.__add__(you: D128) -> D128
+  return D128(value: me.value.__add__(you.value))
+
+routine D128.__sub__(you: D128) -> D128
+  return D128(value: me.value.__sub__(you.value))
+
+routine D128.__mul__(you: D128) -> D128
+  return D128(value: me.value.__mul__(you.value))
+
+routine D128.__truediv__(you: D128) -> D128
+  return D128(value: me.value.__truediv__(you.value))
+
+routine D128.__neg__() -> D128
+  return D128(value: me.value.__neg__())
+
+# Comparison
+routine D128.__eq__(you: D128) -> Bool
+  return me.value.__eq__(you.value)
+
+routine D128.__cmp__(you: D128) -> ComparisonSign
+  return me.value.__cmp__(you.value)
+
+# Math operations
+routine D128.abs() -> D128
+  return D128(value: me.value.abs())
+
+routine D128.floor() -> D128
+  return D128(value: me.value.floor())
+
+routine D128.ceil() -> D128
+  return D128(value: me.value.ceil())
+
+routine D128.round() -> D128
+  return D128(value: me.value.round())
+
+routine D128.trunc() -> D128
+  return D128(value: me.value.trunc())
+
+# Utility methods
+routine D128.min(you: D128) -> D128
+  return D128(value: me.value.min(you.value))
+
+routine D128.max(you: D128) -> D128
+  return D128(value: me.value.max(you.value))
+
+routine D128.is_positive() -> Bool
+  return me.value.is_positive()
+
+routine D128.is_negative() -> Bool
+  return me.value.is_negative()
+
+routine D128.is_zero() -> Bool
+  return me.value.is_zero()
+
+# String conversion
+routine D128.to_text() -> Text
+  return me.value.to_text()
+
+# ============================================================================
+# Factory creators (__create__ pattern)
+# ============================================================================
+
+# From signed integers
+routine D128.__create__(from: S8) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: S16) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: S32) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: S64) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: S128) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+# From unsigned integers
+routine D128.__create__(from: U8) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: U16) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: U32) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: U64) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: U128) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+# From binary floating point
+routine D128.__create__(from: F32) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: F64) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+# From other decimal types (widening)
+routine D128.__create__(from: D32) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: D64) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+# From arbitrary precision
+routine D128.__create__(from: Integer) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))
+
+routine D128.__create__(from: Decimal) -> D128
+  return D128(value: RazorForge/Core.D128.__create__(from.value))

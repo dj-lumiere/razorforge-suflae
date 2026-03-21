@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>name</key>
+        <string>Suflae</string>
+        <key>uuid</key>
+        <string>F9C8E8E1-2345-6789-ABCD-EF1234567890</string>
+        <key>contactEmailRot13</key>
+        <string>contact@suflae.dev</string>
+        <key>description</key>
+        <string>Suflae language syntax highlighting</string>
+        <key>contactName</key>
+        <string>Suflae Team</string>
+    </dict>
+</plist>

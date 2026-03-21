@@ -1,0 +1,319 @@
+# RazorForge U64 (unsigned 64-bit integer) native type implementation
+# Maps directly to LLVM i64 type using compiler intrinsics
+module Core
+# Core U64 type definition - maps to LLVM i64
+@llvm("i64")
+record U64 obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for U64 limits
+preset U64_MIN: U64 = 0_u64
+preset U64_MAX: U64 = 18_446_744_073_709_551_615_u64
+preset U64_ZERO: U64 = 0_u64
+preset U64_ONE: U64 = 1_u64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+# From S8 - crashes if value is negative
+routine U64.__create__!(from: S8) -> U64
+  if from < 0_s8
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return sext[S8, U64](from)
+
+# From S16 - crashes if value is negative
+routine U64.__create__!(from: S16) -> U64
+  if from < 0_s16
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return sext[S16, U64](from)
+
+# From S32 - crashes if value is negative
+routine U64.__create__!(from: S32) -> U64
+  if from < 0_s32
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return sext[S32, U64](from)
+
+# From S64 - crashes if value is negative
+routine U64.__create__!(from: S64) -> U64
+  if from < 0_s64
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return bitcast[S64, U64](from)
+
+# From S128 - crashes if value out of U64 range
+routine U64.__create__!(from: S128) -> U64
+  if not (0_s128 <= from <= 18446744073709551615_s128)
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return trunc[S128, U64](from)
+
+# From U8 - always fits, no check needed
+routine U64.__create__!(from: U8) -> U64
+  return zext[U8, U64](from)
+
+# From U16 - always fits, no check needed
+routine U64.__create__!(from: U16) -> U64
+  return zext[U16, U64](from)
+
+# From U32 - always fits, no check needed
+routine U64.__create__!(from: U32) -> U64
+  return zext[U32, U64](from)
+
+routine U64.__create__(from: U64) -> U64
+  return from
+
+# From U128 - crashes if value > U64_MAX
+routine U64.__create__!(from: U128) -> U64
+  if from > 18446744073709551615_u128
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return trunc[U128, U64](from)
+
+# From floating point - truncates
+routine U64.__create__!(from: F16) -> U64
+  return from.F32().U64!()
+
+routine U64.__create__!(from: F32) -> U64
+  return fptoui[F32, U64](from)
+
+routine U64.__create__!(from: F64) -> U64
+  return fptoui[F64, U64](from)
+
+routine U64.__create__!(from: F128) -> U64
+  return from.F64!().U64!()
+
+# From decimal - truncates fractional part and can overflow
+routine U64.__create__!(from: D32) -> U64
+  return from.S64!().U64!()
+
+routine U64.__create__!(from: D64) -> U64
+  return from.S64!().U64!()
+
+routine U64.__create__!(from: D128) -> U64
+  return from.S64!().U64!()
+
+# From SAddr - crashes if value is negative
+routine U64.__create__!(from: SAddr) -> U64
+  var val_s64 = from.S64!()
+  if val_s64 < 0_s64
+    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+  return zext[SAddr, U64](from)
+
+# From UAddr - always fits (zero extends from 32 or 64-bit)
+routine U64.__create__!(from: UAddr) -> U64
+  return zext[UAddr, U64](from)
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+routine U64.__add__!(you: U64) -> U64
+  return add[U64](me, you)
+
+routine U64.__sub__!(you: U64) -> U64
+  return sub[U64](me, you)
+
+routine U64.__mul__!(you: U64) -> U64
+  return mul[U64](me, you)
+
+routine U64.__floordiv__!(you: U64) -> U64
+  return udiv[U64](me, you)
+
+routine U64.__mod__!(you: U64) -> U64
+  if you == 0
+    throw DivisionByZeroError()
+  return urem[U64](me, you)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+routine U64.__add_wrap__(you: U64) -> U64
+  return add[U64](me, you)
+
+routine U64.__sub_wrap__(you: U64) -> U64
+  return sub[U64](me, you)
+
+routine U64.__mul_wrap__(you: U64) -> U64
+  return mul[U64](me, you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+routine U64.__add_clamp__(you: U64) -> U64
+  return uadd_sat[U64](me, you)
+
+routine U64.__sub_clamp__(you: U64) -> U64
+  return usub_sat[U64](me, you)
+
+routine U64.__mul_clamp__(you: U64) -> U64
+  var wide = mul[U128](zext[U64, U128](me), zext[U64, U128](you))
+  if icmp_ugt[U128](wide, 18446744073709551615_u128)
+    return U64_MAX
+  return trunc[U128, U64](wide)
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+# Power operator (**) - can overflow
+routine U64.__pow__!(exp: U64) -> U64
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = mul[U64](result, base)
+    base = mul[U64](base, base)
+    e = e >> 1
+  return result
+
+# Wrapping power (**%)
+routine U64.__pow_wrap__!(exp: U64) -> U64
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = mul[U64](result, base)
+    base = mul[U64](base, base)
+    e = e >> 1
+  return result
+
+# Clamping power (**^)
+routine U64.__pow_clamp__!(exp: U64) -> U64
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
+    e = e >> 1
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+routine U64.__and__(you: U64) -> U64
+  return bit_and[U64](me, you)
+
+routine U64.__or__(you: U64) -> U64
+  return bit_or[U64](me, you)
+
+routine U64.__xor__(you: U64) -> U64
+  return xor[U64](me, you)
+
+routine U64.__not__() -> U64
+  return xor[U64](me, -1)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# For unsigned types, arithmetic and logical shifts behave identically
+# ============================================================================
+
+# Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
+routine U64.__ashl__(bits: U32) -> U64
+  return shl[U64](me, bits)
+
+# Arithmetic right shift (>>) - for unsigned, same as logical
+routine U64.__ashr__(bits: U32) -> U64
+  return lshr[U64](me, bits)
+
+# Logical left shift (<<<) - same as <<
+routine U64.__lshl__(bits: U32) -> U64
+  return shl[U64](me, bits)
+
+# Logical right shift (>>>) - fills with zeros
+routine U64.__lshr__(bits: U32) -> U64
+  return lshr[U64](me, bits)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine U64.__eq__(you: U64) -> Bool
+  return icmp_eq[U64](me, you)
+
+routine U64.__cmp__(you: U64) -> ComparisonSign
+  if icmp_ult[U64](me, you)
+    return ME_SMALL
+  if icmp_ugt[U64](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine U64.min(you: U64) -> U64
+  return if me <= you then me else you
+
+routine U64.max(you: U64) -> U64
+  return if me >= you then me else you
+
+routine U64.clamp(min_val: U64, max_val: U64) -> U64
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+routine U64.count_ones() -> U64
+  return ctpop[U64](me)
+
+routine U64.count_zeros() -> U64
+  return 64_u64 - me.count_ones()
+
+routine U64.leading_zeros() -> U64
+  return ctlz[U64](me)
+
+routine U64.trailing_zeros() -> U64
+  return cttz[U64](me)
+
+routine U64.leading_ones() -> U64
+  return me.__not__().leading_zeros()
+
+routine U64.trailing_ones() -> U64
+  return me.__not__().trailing_zeros()
+
+routine U64.reverse_bits() -> U64
+  return bitreverse[U64](me)
+
+routine U64.swap_bytes() -> U64
+  return bswap[U64](me)
+
+routine U64.is_power_of_two() -> Bool
+  return me != 0_u64 and (me & (me - 1_u64)) == 0_u64
+
+# Rotate left
+routine U64.rotate_left(bits: U32) -> U64
+  var left = shl[U64](me, bits)
+  var right = lshr[U64](me, 64_u32 - bits)
+  return bit_or[U64](left, right)
+
+# Rotate right
+routine U64.rotate_right(bits: U32) -> U64
+  var right = lshr[U64](me, bits)
+  var left = shl[U64](me, 64_u32 - bits)
+  return bit_or[U64](right, left)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine U64.is_zero() -> Bool
+  return me == 0_u64
+
+routine U64.is_even() -> Bool
+  var result = bit_and[U64](me, 1_u64)
+  return icmp_eq[U64](result, 0_u64)
+
+routine U64.is_odd() -> Bool
+  return not me.is_even()

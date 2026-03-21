@@ -1,0 +1,6 @@
+# FixedIntegral - Bundle protocol for fixed-width integer operations
+# Extends Integral with Invertible (bitwise NOT) and overflow handling
+module Core
+
+protocol FixedIntegral obeys Integral, Invertible, WrappingArithmetic, ClampingArithmetic
+  pass

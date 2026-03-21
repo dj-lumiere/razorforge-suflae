@@ -1,0 +1,344 @@
+# RazorForge S64 (signed 64-bit integer) native type implementation
+# Maps directly to LLVM i64 type using compiler intrinsics
+
+module Core
+
+# Core S64 type definition - maps to LLVM i64
+@llvm("i64")
+record S64 obeys SignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for S64 limits
+preset S64_MIN: S64 = -9_223_372_036_854_775_808_s64
+preset S64_MAX: S64 = 9_223_372_036_854_775_807_s64
+preset S64_ZERO: S64 = 0_s64
+preset S64_ONE: S64 = 1_s64
+
+# ============================================================================
+# Checked Creators (crash on overflow)
+# ============================================================================
+
+# From S8 - always fits, no check needed
+routine S64.__create__!(from: S8) -> S64
+  return sext[S8, S64](from)
+
+# From S16 - always fits, no check needed
+routine S64.__create__!(from: S16) -> S64
+  return sext[S16, S64](from)
+
+# From S32 - always fits, no check needed
+routine S64.__create__!(from: S32) -> S64
+  return sext[S32, S64](from)
+
+routine S64.__create__(from: S64) -> S64
+  return from
+
+# From S128 - crashes if value out of S64 range
+routine S64.__create__!(from: S128) -> S64
+  if not (S64_MIN <= from <= S64_MAX)
+    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+  return trunc[S128, S64](from)
+
+# From U8 - always fits, no check needed
+routine S64.__create__!(from: U8) -> S64
+  return zext[U8, S64](from)
+
+# From U16 - always fits, no check needed
+routine S64.__create__!(from: U16) -> S64
+  return zext[U16, S64](from)
+
+# From U32 - always fits, no check needed
+routine S64.__create__!(from: U32) -> S64
+  return zext[U32, S64](from)
+
+# From U64 - crashes if value > S64_MAX (bit 63 set)
+routine S64.__create__!(from: U64) -> S64
+  if from > 9223372036854775807_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+  return bitcast[U64, S64](from)
+
+# From U128 - crashes if value > S64_MAX
+routine S64.__create__!(from: U128) -> S64
+  if from > 9223372036854775807_u128
+    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+  return trunc[U128, S64](from)
+
+# From floating point - truncates
+routine S64.__create__!(from: F16) -> S64
+  return from.F32().S64!()
+
+routine S64.__create__!(from: F32) -> S64
+  return fptosi[F32, S64](from)
+
+routine S64.__create__!(from: F64) -> S64
+  return fptosi[F64, S64](from)
+
+routine S64.__create__!(from: F128) -> S64
+  return from.F64!().S64!()
+
+# From decimal - truncates fractional part and can overflow
+routine S64.__create__!(from: D32) -> S64
+  var bits = bitcast[D32, U32](from)
+  return d32_to_s64(bits)
+
+routine S64.__create__!(from: D64) -> S64
+  var bits = bitcast[D64, U64](from)
+  return d64_to_s64(bits)
+
+routine S64.__create__!(from: D128) -> S64
+  return d128_to_s64(from.low, from.high)
+
+# From SAddr - always fits (sign extends from 32 or 64-bit)
+routine S64.__create__!(from: SAddr) -> S64
+  return sext[SAddr, S64](from)
+
+# From UAddr - crashes if value > S64_MAX
+routine S64.__create__!(from: UAddr) -> S64
+  var val_u64 = from.U64!()
+  if val_u64 > 9223372036854775807_u64
+    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+  return zext[UAddr, S64](from)
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+# Addition
+routine S64.__add__!(you: S64) -> S64
+  return add[S64](me, you)
+
+# Subtraction
+routine S64.__sub__!(you: S64) -> S64
+  return sub[S64](me, you)
+
+# Multiplication
+routine S64.__mul__!(you: S64) -> S64
+  return mul[S64](me, you)
+
+# Division
+routine S64.__floordiv__!(you: S64) -> S64
+  if you == 0
+    throw DivisionByZeroError()
+  return div_wrapping[S64](me, you)
+
+# Remainder
+routine S64.__mod__!(you: S64) -> S64
+  return rem_wrapping[S64](me, you)
+
+# Negation
+routine S64.__neg__!() -> S64
+  return sub[S64](0_s64, me)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+routine S64.__add_wrap__(you: S64) -> S64
+  return add[S64](me, you)
+
+routine S64.__sub_wrap__(you: S64) -> S64
+  return sub[S64](me, you)
+
+routine S64.__mul_wrap__(you: S64) -> S64
+  return mul[S64](me, you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+routine S64.__add_clamp__(you: S64) -> S64
+  return sadd_sat[S64](me, you)
+
+routine S64.__sub_clamp__(you: S64) -> S64
+  return ssub_sat[S64](me, you)
+
+routine S64.__mul_clamp__(you: S64) -> S64
+  var wide = mul[S128](sext[S64, S128](me), sext[S64, S128](you))
+  if icmp_sgt[S128](wide, 9223372036854775807_s128)
+    return S64_MAX
+  if icmp_slt[S128](wide, -9223372036854775808_s128)
+    return S64_MIN
+  return trunc[S128, S64](wide)
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+# Power operator (**) - can overflow
+routine S64.__pow__!(exp: S64) -> S64
+  var result: S64 = 1
+  var base: S64 = me
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while exp > 0
+    if (exp & 1) == 1
+      result = mul[S64](result, base)
+    base = mul[S64](base, base)
+    exp = exp >> 1
+  return result
+
+# Wrapping power (**%)
+routine S64.__pow_wrap__!(exp: S64) -> S64
+  var result: S64 = 1
+  var base: S64 = me
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while exp > 0
+    if (exp & 1) == 1
+      result = mul[S64](result, base)
+    base = mul[S64](base, base)
+    exp = exp >> 1
+  return result
+
+# Clamping power (**^)
+routine S64.__pow_clamp__!(exp: S64) -> S64
+  var result: S64 = 1
+  var base: S64 = me
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while exp > 0
+    if (exp & 1) == 1
+      result = result.__mul_clamp__(base)
+    base = base.__mul_clamp__(base)
+    exp = exp >> 1
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+routine S64.__and__(you: S64) -> S64
+  return bit_and[S64](me, you)
+
+routine S64.__or__(you: S64) -> S64
+  return bit_or[S64](me, you)
+
+routine S64.__xor__(you: S64) -> S64
+  return xor[S64](me, you)
+
+routine S64.__not__() -> S64
+  return xor[S64](me, -1)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# ============================================================================
+
+# Arithmetic left shift (<<) - sign preserving
+routine S64.__ashl__(bits: U32) -> S64
+  return shl[S64](me, bits)
+
+# Arithmetic right shift (>>) - preserves sign, always safe
+routine S64.__ashr__(bits: U32) -> S64
+  return ashr[S64](me, bits)
+
+# Logical left shift (<<<) - same as << but explicit
+routine S64.__lshl__(bits: U32) -> S64
+  return shl[S64](me, bits)
+
+# Logical right shift (>>>) - fills with zeros, ignores sign
+routine S64.__lshr__(bits: U32) -> S64
+  return lshr[S64](me, bits)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine S64.__eq__(you: S64) -> Bool
+  return icmp_eq[S64](me, you)
+
+routine S64.__cmp__(you: S64) -> ComparisonSign
+  if icmp_slt[S64](me, you)
+    return ME_SMALL
+  if icmp_sgt[S64](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine S64.abs() -> S64
+  return abs[S64](me)
+
+routine S64.min(you: S64) -> S64
+  if me <= you
+    return me
+  else
+    return you
+
+routine S64.max(you: S64) -> S64
+  if me >= you
+    return me
+  else
+    return you
+
+routine S64.clamp(min_val: S64, max_val: S64) -> S64
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+routine S64.count_ones() -> S64
+  return ctpop[S64](me)
+
+routine S64.count_zeros() -> S64
+  return 64_s64 - me.count_ones()
+
+routine S64.leading_zeros() -> S64
+  return ctlz[S64](me)
+
+routine S64.trailing_zeros() -> S64
+  return cttz[S64](me)
+
+routine S64.leading_ones() -> S64
+  return me.__not__().leading_zeros()
+
+routine S64.trailing_ones() -> S64
+  return me.__not__().trailing_zeros()
+
+routine S64.reverse_bits() -> S64
+  return bitreverse[S64](me)
+
+routine S64.swap_bytes() -> S64
+  return bswap[S64](me)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine S64.is_positive() -> Bool
+  return me > 0_s64
+
+routine S64.is_negative() -> Bool
+  return me < 0_s64
+
+routine S64.is_zero() -> Bool
+  return me == 0_s64
+
+routine S64.is_even() -> Bool
+  var result = bit_and[S64](me, 1_s64)
+  return icmp_eq[S64](result, 0_s64)
+
+routine S64.is_odd() -> Bool
+  return not me.is_even()
+
+routine S64.signum() -> S64
+  return when
+    me > 0_s64 => 1_s64
+    me < 0_s64 => -1_s64
+    else => 0_s64
+
+# Power of 2 check
+routine S64.is_power_of_two() -> Bool
+  var is_pos = icmp_sgt[S64](me, 0_s64)
+  var minus_one = sub[S64](me, 1_s64)
+  var anded = bit_and[S64](me, minus_one)
+  var is_zero = icmp_eq[S64](anded, 0_s64)
+  return is_pos and is_zero

@@ -1,0 +1,169 @@
+# RazorForge Letter - Unicode codepoint (UTF-32 code unit)
+#
+# Represents a full Unicode codepoint (U+0000 to U+10FFFF).
+# In UTF-32, every character is exactly 4 bytes, providing O(1) indexing.
+#
+# This is the recommended type for text editing and manipulation
+# because character boundaries are trivial to find.
+#
+# For I/O and storage, convert to Bytes (UTF-8).
+# For Windows API interop, use CWStr with Text[letter16].
+#
+# For legacy 32-bit encodings, use List[U32] instead.
+module Core
+
+record Letter obeys ConstCompatible
+  secret value: U32
+
+# Unicode constants
+preset LETTER_NULL: Letter = Letter(value: 0x0000)
+preset LETTER_SPACE: Letter = Letter(value: 0x0020)
+preset LETTER_NEWLINE: Letter = Letter(value: 0x000A)
+preset LETTER_TAB: Letter = Letter(value: 0x0009)
+preset LETTER_REPLACEMENT: Letter = Letter(value: 0xFFFD)
+preset LETTER_MAX_UNICODE: Letter = Letter(value: 0x10FFFF)
+
+# Surrogate range (invalid for standalone codepoints)
+preset LETTER_SURROGATE_START: U32 = 0xD800
+preset LETTER_SURROGATE_END: U32 = 0xDFFF
+
+# ============================================================================
+# Letter protocol implementation
+# ============================================================================
+
+routine Letter.codepoint() -> U32
+  return me.value
+
+routine Letter.is_valid() -> Bool
+  var cp = me.value
+  # Valid if within Unicode range and not a surrogate
+  return cp <= 0x10FFFFu32 and not (LETTER_SURROGATE_START <= cp <= LETTER_SURROGATE_END)
+
+routine Letter.is_ascii() -> Bool
+  return me.value <= 0x007Fu32
+
+routine Letter.is_alphabetic() -> Bool
+  var v = me.value
+  return (0x0041u32 <= v <= 0x005Au32) or    # A-Z
+     (0x0061u32 <= v <= 0x007Au32) or    # a-z
+     (0x00C0u32 <= v <= 0x00FFu32) or    # Latin Extended
+     (0x0100u32 <= v <= 0x017Fu32) or    # Latin Extended-A
+     (0x0180u32 <= v <= 0x024Fu32)       # Latin Extended-B
+
+routine Letter.is_numeric() -> Bool
+  var v = me.value
+  return 0x0030u32 <= v <= 0x0039u32  # 0-9
+
+routine Letter.is_alphanumeric() -> Bool
+  return me.is_alphabetic() or me.is_numeric()
+
+routine Letter.is_uppercase() -> Bool
+  var v = me.value
+  return 0x0041u32 <= v <= 0x005Au32  # A-Z (ASCII only)
+
+routine Letter.is_lowercase() -> Bool
+  var v = me.value
+  return 0x0061u32 <= v <= 0x007Au32  # a-z (ASCII only)
+
+routine Letter.is_whitespace() -> Bool
+  var v = me.value
+  return v == 0x0020u32 or    # Space
+     v == 0x0009u32 or    # Tab
+     v == 0x000Au32 or    # Line feed
+     v == 0x000Du32 or    # Carriage return
+     v == 0x000Cu32 or    # Form feed
+     v == 0x00A0u32 or    # Non-breaking space
+     v == 0x2000u32 or    # En quad
+     v == 0x2001u32 or    # Em quad
+     v == 0x2002u32 or    # En space
+     v == 0x2003u32       # Em space
+
+routine Letter.is_control() -> Bool
+  var v = me.value
+  return (v <= 0x001Fu32) or (0x007Fu32 <= v <= 0x009Fu32)
+
+routine Letter.to_uppercase() -> Letter
+  if me.is_lowercase()
+    return Letter(value: me.value - 32u32)
+  return me
+
+routine Letter.to_lowercase() -> Letter
+  if me.is_uppercase()
+    return Letter(value: me.value + 32u32)
+  return me
+
+# ============================================================================
+# Comparison operations
+# ============================================================================
+
+routine Letter.__eq__(other: Letter) -> Bool
+  return me.value == other.value
+
+routine Letter.__cmp__(other: Letter) -> ComparisonSign
+  return me.value <=> other.value
+
+# ============================================================================
+# Type conversions
+# ============================================================================
+
+routine Letter.codepoint() -> U32
+  return me.value
+
+routine Letter.to_byte() -> Byte
+  # Only valid for ASCII range - truncates
+  return Byte(codepoint: U8(me.value & 0x7Fu32))
+
+# ============================================================================
+# Utility methods
+# ============================================================================
+
+routine Letter.is_digit() -> Bool
+  return me.is_numeric()
+
+routine Letter.is_letter() -> Bool
+  return me.is_alphabetic()
+
+routine Letter.digit_value() -> S32
+  if me.is_numeric()
+    return S32(me.value - 0x0030u32)
+  return -1s32
+
+routine Letter.is_printable() -> Bool
+  return me.is_valid() and not me.is_control()
+
+routine Letter.is_bmp() -> Bool
+  # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
+  return me.value <= 0xFFFFu32 and not (LETTER_SURROGATE_START <= me.value <= LETTER_SURROGATE_END)
+
+routine Letter.is_supplementary() -> Bool
+  # Supplementary planes: U+10000 to U+10FFFF
+  return 0x10000u32 <= me.value <= 0x10FFFFu32
+
+routine Letter.is_cjk() -> Bool
+  var v = me.value
+  return (0x4E00u32 <= v <= 0x9FFFu32) or    # CJK Unified Ideographs
+     (0x3400u32 <= v <= 0x4DBFu32) or    # CJK Extension A
+     (0x20000u32 <= v <= 0x2A6DFu32) or  # CJK Extension B
+     (0x2A700u32 <= v <= 0x2B73Fu32)     # CJK Extension C
+
+routine Letter.is_latin() -> Bool
+  var v = me.value
+  return (0x0000u32 <= v <= 0x007Fu32) or    # Basic Latin
+     (0x0080u32 <= v <= 0x00FFu32) or    # Latin-1 Supplement
+     (0x0100u32 <= v <= 0x017Fu32) or    # Latin Extended-A
+     (0x0180u32 <= v <= 0x024Fu32)       # Latin Extended-B
+
+routine Letter.is_emoji() -> Bool
+  var v = me.value
+  return (0x1F600u32 <= v <= 0x1F64Fu32) or  # Emoticons
+     (0x1F300u32 <= v <= 0x1F5FFu32) or  # Misc Symbols and Pictographs
+     (0x1F680u32 <= v <= 0x1F6FFu32) or  # Transport and Map
+     (0x1F1E0u32 <= v <= 0x1F1FFu32)     # Flags
+
+# ============================================================================
+# Codepoint offset
+# ============================================================================
+
+routine Letter.offset![I obeys Integral](delta: I) -> Letter
+  var new_value = SAddr(me.value) + delta.to_saddr()
+  return Letter(value: U32(new_value))

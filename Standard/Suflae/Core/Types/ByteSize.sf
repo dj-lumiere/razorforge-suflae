@@ -1,0 +1,96 @@
+# Suflae ByteSize - Byte size measurement type
+
+module Core
+
+import RazorForge/Core.ByteSize
+
+record ByteSize
+  secret value: RazorForge/Core.ByteSize
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine ByteSize.__create__(bytes: Integer) -> ByteSize
+  return ByteSize(value: RazorForge/Core.ByteSize.__create__(bytes.value))
+
+# Factory methods for larger sizes (no literal support)
+routine ByteSize.terabytes(n: Integer) -> ByteSize
+  return ByteSize(value: RazorForge/Core.ByteSize.terabytes(n.value))
+
+routine ByteSize.tebibytes(n: Integer) -> ByteSize
+  return ByteSize(value: RazorForge/Core.ByteSize.tebibytes(n.value))
+
+routine ByteSize.petabytes(n: Integer) -> ByteSize
+  return ByteSize(value: RazorForge/Core.ByteSize.petabytes(n.value))
+
+routine ByteSize.pebibytes(n: Integer) -> ByteSize
+  return ByteSize(value: RazorForge/Core.ByteSize.pebibytes(n.value))
+
+# ============================================================================
+# Size accessors
+# ============================================================================
+
+routine ByteSize.byte_size() -> Integer
+  return Integer(value: me.value.byte_size())
+
+routine ByteSize.bit_size() -> Integer
+  return Integer(value: me.value.bit_size())
+
+# ============================================================================
+# Binary unit conversions (powers of 1024)
+# ============================================================================
+
+routine ByteSize.kib_size() -> Decimal
+  return Decimal(from: me.value.kib_size())
+
+routine ByteSize.mib_size() -> Decimal
+  return Decimal(from: me.value.mib_size())
+
+routine ByteSize.gib_size() -> Decimal
+  return Decimal(from: me.value.gib_size())
+
+# ============================================================================
+# Decimal unit conversions (powers of 1000)
+# ============================================================================
+
+routine ByteSize.kb_size() -> Decimal
+  return Decimal(from: me.value.kb_size())
+
+routine ByteSize.mb_size() -> Decimal
+  return Decimal(from: me.value.mb_size())
+
+routine ByteSize.gb_size() -> Decimal
+  return Decimal(from: me.value.gb_size())
+
+# ============================================================================
+# Arithmetic operators
+# ============================================================================
+
+routine ByteSize.__add__(you: ByteSize) -> ByteSize
+  return ByteSize(value: me.value.__add__(you.value))
+
+routine ByteSize.__sub__(you: ByteSize) -> ByteSize
+  return ByteSize(value: me.value.__sub__(you.value))
+
+routine ByteSize.__mul__(factor: Integer) -> ByteSize
+  return ByteSize(value: me.value.__mul__(factor.value))
+
+routine ByteSize.__floordiv__(you: ByteSize) -> Integer
+  return Integer(value: me.value.__floordiv__(you.value))
+
+routine ByteSize.div_by(divisor: Integer) -> ByteSize
+  return ByteSize(value: me.value.div_by(divisor.value))
+
+routine ByteSize.__mod__(you: ByteSize) -> ByteSize
+  return ByteSize(value: me.value.__mod__(you.value))
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+routine ByteSize.__eq__(you: ByteSize) -> Bool
+  return me.value.__eq__(you.value)
+
+routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
+  return me.value.__cmp__(you.value)

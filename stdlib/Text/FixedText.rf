@@ -1,3 +1,0 @@
-resident FixedText<T, N> {
-    private letters: FixedList<T, N>
-}

@@ -1,1261 +1,2263 @@
-using System.Numerics;
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+﻿namespace Compiler.CodeGen;
 
-namespace Compilers.Shared.CodeGen;
+using System.Text;
+using SemanticAnalysis.Symbols;
+using SemanticAnalysis.Types;
+using SyntaxTree;
 
+/// <summary>
+/// Expression code generation: allocation, member variable access, method calls, operators.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
-    /// <summary>
-    /// Visits a variable declaration node in the AST and generates the associated LLVM IR code.
-    /// This process includes determining the type of the variable, handling optional initialization,
-    /// and updating the symbol table with relevant type information.
-    /// </summary>
-    /// <param name="node">The variable declaration node to process. Contains variable name,
-    /// type (if specified), and optional initializer expression.</param>
-    /// <returns>A string representing the LLVM IR code for the variable declaration.</returns>
-    public string VisitVariableDeclaration(VariableDeclaration node)
-    {
-        string type;
-        string? initValue = null;
+    #region Entity Allocation
 
-        if (node.Type != null)
+    /// <summary>
+    /// Generates code to allocate a new entity instance.
+    /// Entity allocation:
+    /// 1. Call rf_alloc(size) to get heap memory
+    /// 2. Initialize all member variables to zero/default values
+    /// 3. Return pointer to the entity
+    /// </summary>
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="entity">The entity type to allocate.</param>
+    /// <param name="memberVariableValues">Optional field initializer values (in member variable order).</param>
+    /// <returns>The temporary variable holding the entity pointer.</returns>
+    private string EmitEntityAllocation(StringBuilder sb, EntityTypeInfo entity, List<string>? memberVariableValues = null)
+    {
+        string typeName = GetEntityTypeName(entity);
+        int size = CalculateEntitySize(entity);
+
+        // Allocate memory
+        string rawPtr = NextTemp();
+        EmitLine(sb, $"  {rawPtr} = call ptr @rf_alloc(i64 {size})");
+
+        // Initialize member variables
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
-            // Explicit type annotation
-            type = MapTypeToLLVM(rfType: node.Type.Name);
-        }
-        else if (node.Initializer != null)
-        {
-            // Infer type from initializer - visit first to get the type
-            initValue = node.Initializer.Accept(visitor: this);
-            // For call expressions and other complex expressions, the type is tracked in _tempTypes
-            // after visiting. Use the tracked type if available, otherwise fall back to GetTypeInfo.
-            if (_tempTypes.TryGetValue(key: initValue, value: out TypeInfo? trackedType))
+            var memberVariable = entity.MemberVariables[i];
+            string memberVariableType = GetLLVMType(memberVariable.Type);
+
+            // Get member variable pointer using GEP
+            string memberVariablePtr = NextTemp();
+            EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {rawPtr}, i32 0, i32 {i}");
+
+            // Get value to store
+            string value;
+            if (memberVariableValues != null && i < memberVariableValues.Count)
             {
-                type = trackedType.LLVMType;
+                value = memberVariableValues[i];
             }
             else
             {
-                TypeInfo inferredType = GetTypeInfo(expr: node.Initializer);
-                type = inferredType.LLVMType;
-            }
-        }
-        else
-        {
-            // No type and no initializer - default to i32
-            type = "i32";
-        }
-
-        string varName = $"%{node.Name}";
-        _symbolTypes[key: node.Name] = type;
-
-        // Track RazorForge type for the variable
-        if (node.Type != null)
-        {
-            _symbolRfTypes[key: node.Name] = node.Type.Name;
-        }
-
-        if (node.Initializer != null)
-        {
-            // If we already visited the initializer for type inference, use that value
-            if (initValue == null)
-            {
-                initValue = node.Initializer.Accept(visitor: this);
+                value = GetZeroValue(memberVariable.Type);
             }
 
-            // Track RazorForge type from initializer if not already set
-            if (!_symbolRfTypes.ContainsKey(key: node.Name) && initValue != null &&
-                _tempTypes.TryGetValue(key: initValue, value: out TypeInfo? initTypeInfo))
-            {
-                _symbolRfTypes[key: node.Name] = initTypeInfo.RazorForgeType;
-            }
-
-            _output.AppendLine(handler: $"  {varName} = alloca {type}");
-            _output.AppendLine(handler: $"  store {type} {initValue}, {type}* {varName}");
-        }
-        else
-        {
-            _output.AppendLine(handler: $"  {varName} = alloca {type}");
+            // Store the value
+            EmitLine(sb, $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
         }
 
-        return "";
+        return rawPtr;
     }
 
     /// <summary>
-    /// Generates LLVM IR for binary expressions with comprehensive operator and type support.
-    /// Handles arithmetic, comparison, logical, and bitwise operations with proper type management.
+    /// Generates code for a constructor call expression.
     /// </summary>
-    /// <param name="node">Binary expression AST node containing operator and operands</param>
-    /// <returns>LLVM IR temporary variable containing the result of the binary operation</returns>
-    /// <remarks>
-    /// This method provides comprehensive binary operation support including:
-    /// <list type="bullet">
-    /// <item><strong>Math Library Integration</strong>: Automatic routing to specialized libraries for precision types</item>
-    /// <item><strong>Overflow Handling</strong>: Support for wrap, saturate, checked, and unchecked variants</item>
-    /// <item><strong>Type-Aware Operations</strong>: Correct signed/unsigned and integer/float operation selection</item>
-    /// <item><strong>Comparison Operations</strong>: Proper handling of different comparison result types</item>
-    /// </list>
-    ///
-    /// <strong>Operation Categories:</strong>
-    /// <list type="bullet">
-    /// <item>Arithmetic: +, -, *, /, % with overflow variants</item>
-    /// <item>Comparison: ==, !=, &lt;, &lt;=, &gt;, &gt;= returning i1 boolean results</item>
-    /// <item>Logical: &amp;&amp;, || with short-circuit evaluation support</item>
-    /// <item>Bitwise: &amp;, |, ^, &lt;&lt;, &gt;&gt; for integer types</item>
-    /// </list>
-    /// </remarks>
-    public string VisitBinaryExpression(BinaryExpression node)
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="expr">The constructor call expression.</param>
+    /// <returns>The temporary variable holding the result.</returns>
+    private string EmitConstructorCall(StringBuilder sb, CreatorExpression expr)
     {
-        // Handle NoneCoalesce (??) specially - it requires short-circuit evaluation
-        if (node.Operator == BinaryOperator.NoneCoalesce)
+        // Look up the type
+        TypeInfo? type = _registry.LookupType(expr.TypeName);
+        if (type == null)
         {
-            return GenerateNoneCoalesce(node: node);
+            throw new InvalidOperationException($"Unknown type in constructor: {expr.TypeName}");
         }
 
-        string left = node.Left.Accept(visitor: this);
-        string right = node.Right.Accept(visitor: this);
-        string result = GetNextTemp();
-
-        // Get operand type information (assume both operands have same type)
-        TypeInfo leftTypeInfo = GetTypeInfo(expr: node.Left);
-        string operandType = leftTypeInfo.LLVMType;
-
-        string op = node.Operator switch
+        return type switch
         {
-            // Regular arithmetic
-            BinaryOperator.Add => "add",
-            BinaryOperator.Subtract => "sub",
-            BinaryOperator.Multiply => "mul",
-            BinaryOperator.Divide => GetIntegerDivisionOp(
-                typeInfo: leftTypeInfo), // sdiv/udiv based on signed/unsigned
-            BinaryOperator.TrueDivide => "fdiv", // / (true division) - floats only
-            BinaryOperator.Modulo => GetModuloOp(
-                typeInfo: leftTypeInfo), // srem/urem for integers, frem for floats
-
-            // Overflow-handling variants (for now, use LLVM intrinsics will be added later)
-            BinaryOperator.AddWrap => "add", // Wrapping is default behavior
-            BinaryOperator.SubtractWrap => "sub",
-            BinaryOperator.MultiplyWrap => "mul",
-            BinaryOperator.DivideWrap => GetIntegerDivisionOp(typeInfo: leftTypeInfo),
-            BinaryOperator.ModuloWrap => GetModuloOp(typeInfo: leftTypeInfo),
-
-            BinaryOperator.AddSaturate => "", // Handled separately with intrinsics
-            BinaryOperator.SubtractSaturate => "", // Handled separately with intrinsics
-            BinaryOperator.MultiplySaturate => "", // Handled separately with intrinsics
-
-            BinaryOperator.AddChecked => "", // Handled separately with overflow intrinsics
-            BinaryOperator.SubtractChecked => "", // Handled separately with overflow intrinsics
-            BinaryOperator.MultiplyChecked => "", // Handled separately with overflow intrinsics
-
-            BinaryOperator.AddUnchecked => "add", // Regular operations, no overflow checks
-            BinaryOperator.SubtractUnchecked => "sub",
-            BinaryOperator.MultiplyUnchecked => "mul",
-            BinaryOperator.DivideUnchecked => GetIntegerDivisionOp(typeInfo: leftTypeInfo),
-            BinaryOperator.ModuloUnchecked => GetModuloOp(typeInfo: leftTypeInfo),
-
-            // Comparisons
-            BinaryOperator.Less => "icmp slt",
-            BinaryOperator.Greater => "icmp sgt",
-            BinaryOperator.Equal => "icmp eq",
-            BinaryOperator.NotEqual => "icmp ne",
-
-            // Bitwise operations
-            BinaryOperator.BitwiseAnd => "and",
-            BinaryOperator.BitwiseOr => "or",
-            BinaryOperator.BitwiseXor => "xor",
-
-            // Shift operations
-            BinaryOperator.LeftShift => "shl",
-            BinaryOperator.RightShift => "", // Handled separately (ashr/lshr based on signedness)
-            BinaryOperator.LogicalLeftShift => "shl",
-            BinaryOperator.LogicalRightShift => "lshr",
-            BinaryOperator.LeftShiftChecked => "", // Handled separately with overflow check
-
-            _ => "add"
+            EntityTypeInfo entity => EmitEntityConstruction(sb, entity, expr),
+            RecordTypeInfo record => EmitRecordConstruction(sb, record, expr),
+            _ => throw new InvalidOperationException($"Cannot construct type: {type.Category}")
         };
+    }
 
-        // Handle special overflow operations with LLVM intrinsics
-        if (string.IsNullOrEmpty(value: op))
+    /// <summary>
+    /// Generates code to construct an entity with member variable values.
+    /// </summary>
+    private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity, CreatorExpression expr)
+    {
+        // Evaluate all member variable value expressions first
+        var memberVariableValues = new List<string>();
+        foreach (var (_, fieldExpr) in expr.MemberVariables)
         {
-            // Handle saturating and checked operations
-            switch (node.Operator)
-            {
-                case BinaryOperator.AddSaturate:
-                case BinaryOperator.SubtractSaturate:
-                case BinaryOperator.MultiplySaturate:
-                    return GenerateSaturatingArithmetic(op: node.Operator,
-                        left: left,
-                        right: right,
-                        result: result,
-                        typeInfo: leftTypeInfo,
-                        llvmType: operandType);
-
-                case BinaryOperator.AddChecked:
-                case BinaryOperator.SubtractChecked:
-                case BinaryOperator.MultiplyChecked:
-                    return GenerateCheckedArithmetic(op: node.Operator,
-                        left: left,
-                        right: right,
-                        result: result,
-                        typeInfo: leftTypeInfo,
-                        llvmType: operandType);
-
-                case BinaryOperator.RightShift:
-                    // Use ashr for signed, lshr for unsigned
-                    string shiftOp = leftTypeInfo.IsUnsigned
-                        ? "lshr"
-                        : "ashr";
-                    _output.AppendLine(
-                        handler: $"  {result} = {shiftOp} {operandType} {left}, {right}");
-                    _tempTypes[key: result] = leftTypeInfo;
-                    return result;
-
-                case BinaryOperator.LeftShiftChecked:
-                    // TODO: Implement overflow-checked left shift (returns Maybe<T>)
-                    // For now, generate regular shl with a comment
-                    _output.AppendLine(
-                        handler: $"  ; TODO: Checked left shift - should return Maybe<T>");
-                    _output.AppendLine(handler: $"  {result} = shl {operandType} {left}, {right}");
-                    _tempTypes[key: result] = leftTypeInfo;
-                    return result;
-
-                default:
-                    throw new NotSupportedException(
-                        message: $"Operator {node.Operator} is not properly configured");
-            }
+            string value = EmitExpression(sb, fieldExpr);
+            memberVariableValues.Add(value);
         }
 
-        // Get right operand type info for type matching
-        TypeInfo rightTypeInfo = GetTypeInfo(expr: node.Right);
+        // Allocate and initialize
+        return EmitEntityAllocation(sb, entity, memberVariableValues);
+    }
 
-        // Handle type mismatch - truncate or extend as needed
-        string rightOperand = right;
-        if (rightTypeInfo.LLVMType != operandType && !rightTypeInfo.IsFloatingPoint &&
-            !leftTypeInfo.IsFloatingPoint)
+    /// <summary>
+    /// Generates code to construct a record (value type).
+    /// </summary>
+    private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record, CreatorExpression expr)
+    {
+        // Backend-annotated or single-member-variable wrapper: just return the inner value
+        if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) && expr.MemberVariables.Count <= 1)
         {
-            // Need to convert right operand to match left operand type
-            int leftBits = GetIntegerBitWidth(llvmType: operandType);
-            int rightBits = GetIntegerBitWidth(llvmType: rightTypeInfo.LLVMType);
-
-            if (rightBits > leftBits)
-            {
-                // Truncate right operand to match left
-                string truncTemp = GetNextTemp();
-                _output.AppendLine(
-                    handler:
-                    $"  {truncTemp} = trunc {rightTypeInfo.LLVMType} {right} to {operandType}");
-                rightOperand = truncTemp;
-            }
-            else if (rightBits < leftBits)
-            {
-                // Extend right operand to match left
-                string extTemp = GetNextTemp();
-                string extOp = rightTypeInfo.IsUnsigned
-                    ? "zext"
-                    : "sext";
-                _output.AppendLine(
-                    handler:
-                    $"  {extTemp} = {extOp} {rightTypeInfo.LLVMType} {right} to {operandType}");
-                rightOperand = extTemp;
-            }
+            return EmitExpression(sb, expr.MemberVariables[0].Value);
         }
 
-        // Generate the operation with proper type
-        if (op.StartsWith(value: "icmp"))
+        // Multi-member-variable record: build struct value
+        string typeName = GetRecordTypeName(record);
+
+        // Start with undef and insert each member variable
+        string result = "undef";
+        for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
-            // Comparison operations return i1
-            _output.AppendLine(handler: $"  {result} = {op} {operandType} {left}, {rightOperand}");
-            _tempTypes[key: result] = new TypeInfo(LLVMType: "i1",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "bool");
-        }
-        else
-        {
-            // Arithmetic operations maintain operand type
-            _output.AppendLine(handler: $"  {result} = {op} {operandType} {left}, {rightOperand}");
-            _tempTypes[key: result] = leftTypeInfo; // Result has same type as operands
+            string value = EmitExpression(sb, expr.MemberVariables[i].Value);
+            string memberVariableType = GetLLVMType(record.MemberVariables[i].Type);
+
+            string newResult = NextTemp();
+            EmitLine(sb, $"  {newResult} = insertvalue {typeName} {result}, {memberVariableType} {value}, {i}");
+            result = newResult;
         }
 
         return result;
     }
 
-    /// <summary>
-    /// Generates LLVM IR for saturating arithmetic operations using LLVM intrinsics.
-    /// </summary>
-    private string GenerateSaturatingArithmetic(BinaryOperator op, string left, string right,
-        string result, TypeInfo typeInfo, string llvmType)
-    {
-        string intrinsicName = op switch
-        {
-            BinaryOperator.AddSaturate => typeInfo.IsUnsigned
-                ? "llvm.uadd.sat"
-                : "llvm.sadd.sat",
-            BinaryOperator.SubtractSaturate => typeInfo.IsUnsigned
-                ? "llvm.usub.sat"
-                : "llvm.ssub.sat",
-            BinaryOperator.MultiplySaturate => GenerateSaturatingMultiply(left: left,
-                right: right,
-                result: result,
-                typeInfo: typeInfo,
-                llvmType: llvmType),
-            _ => throw new NotSupportedException(
-                message: $"Saturating operation {op} not supported")
-        };
+    #endregion
 
-        // For multiply, the implementation is handled separately
-        if (op == BinaryOperator.MultiplySaturate)
+    #region Field Access
+
+    /// <summary>
+    /// Generates code to read a member variable from an entity/record.
+    /// For entities: GEP + load
+    /// For records: extractvalue
+    /// </summary>
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="expr">The member access expression.</param>
+    /// <returns>The temporary variable holding the member variable value.</returns>
+    private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
+    {
+        // Evaluate the target expression
+        string target = EmitExpression(sb, expr.Object);
+
+        // Get the target type
+        TypeInfo? targetType = GetExpressionType(expr.Object);
+        if (targetType == null)
         {
+            throw new InvalidOperationException("Cannot determine type of member variable access target");
+        }
+
+        return targetType switch
+        {
+            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, target, entity, expr.PropertyName),
+            RecordTypeInfo record => EmitRecordMemberVariableRead(sb, target, record, expr.PropertyName),
+            ResidentTypeInfo resident => EmitResidentMemberVariableRead(sb, target, resident, expr.PropertyName),
+            _ => throw new InvalidOperationException($"Cannot access member variable on type: {targetType.Category}")
+        };
+    }
+
+    /// <summary>
+    /// Generates code to read a member variable from an entity (pointer type).
+    /// Uses GEP to get member variable address, then load.
+    /// </summary>
+    private string EmitEntityMemberVariableRead(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName)
+    {
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
+        {
+            if (entity.MemberVariables[i].Name == memberVariableName)
+            {
+                memberVariableIndex = i;
+                memberVariable = entity.MemberVariables[i];
+                break;
+            }
+        }
+
+        if (memberVariableIndex < 0 || memberVariable == null)
+        {
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on entity '{entity.Name}'");
+        }
+
+        string typeName = GetEntityTypeName(entity);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
+
+        // GEP to get member variable pointer
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
+
+        // Load the member variable value
+        string value = NextTemp();
+        EmitLine(sb, $"  {value} = load {memberVariableType}, ptr {memberVariablePtr}");
+
+        return value;
+    }
+
+    /// <summary>
+    /// Generates code to read a member variable from a record (value type).
+    /// Uses extractvalue instruction.
+    /// </summary>
+    private string EmitRecordMemberVariableRead(StringBuilder sb, string recordValue, RecordTypeInfo record, string memberVariableName)
+    {
+        // Backend-annotated or single-member-variable wrapper: the value IS the field
+        if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
+        {
+            return recordValue;
+        }
+
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < record.MemberVariables.Count; i++)
+        {
+            if (record.MemberVariables[i].Name == memberVariableName)
+            {
+                memberVariableIndex = i;
+                memberVariable = record.MemberVariables[i];
+                break;
+            }
+        }
+
+        if (memberVariableIndex < 0 || memberVariable == null)
+        {
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on record '{record.Name}'");
+        }
+
+        string typeName = GetRecordTypeName(record);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
+
+        // Extract the member variable value
+        string value = NextTemp();
+        EmitLine(sb, $"  {value} = extractvalue {typeName} {recordValue}, {memberVariableIndex}");
+
+        return value;
+    }
+
+    /// <summary>
+    /// Generates code to read a member variable from a resident (like entity).
+    /// </summary>
+    private string EmitResidentMemberVariableRead(StringBuilder sb, string residentPtr, ResidentTypeInfo resident, string memberVariableName)
+    {
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < resident.MemberVariables.Count; i++)
+        {
+            if (resident.MemberVariables[i].Name == memberVariableName)
+            {
+                memberVariableIndex = i;
+                memberVariable = resident.MemberVariables[i];
+                break;
+            }
+        }
+
+        if (memberVariableIndex < 0 || memberVariable == null)
+        {
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on resident '{resident.Name}'");
+        }
+
+        string typeName = GetResidentTypeName(resident);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
+
+        // GEP to get member variable pointer
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {residentPtr}, i32 0, i32 {memberVariableIndex}");
+
+        // Load the member variable value
+        string value = NextTemp();
+        EmitLine(sb, $"  {value} = load {memberVariableType}, ptr {memberVariablePtr}");
+
+        return value;
+    }
+
+    #endregion
+
+    #region Field Write
+
+    /// <summary>
+    /// Generates code to write a member variable on an entity.
+    /// </summary>
+    private void EmitEntityMemberVariableWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName, string value)
+    {
+        // Find member variable index
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
+        {
+            if (entity.MemberVariables[i].Name == memberVariableName)
+            {
+                memberVariableIndex = i;
+                memberVariable = entity.MemberVariables[i];
+                break;
+            }
+        }
+
+        if (memberVariableIndex < 0 || memberVariable == null)
+        {
+            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on entity '{entity.Name}'");
+        }
+
+        string typeName = GetEntityTypeName(entity);
+        string memberVariableType = GetLLVMType(memberVariable.Type);
+
+        // GEP to get member variable pointer
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
+
+        // Store the value
+        EmitLine(sb, $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
+    }
+
+    #endregion
+
+    #region Expression Dispatch
+
+    /// <summary>
+    /// Main expression dispatch - generates code for any expression type.
+    /// </summary>
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="expr">The expression to generate code for.</param>
+    /// <returns>The temporary variable holding the expression result.</returns>
+    private string EmitExpression(StringBuilder sb, Expression expr)
+    {
+        return expr switch
+        {
+            LiteralExpression literal => EmitLiteral(sb, literal),
+            IdentifierExpression identifier => EmitIdentifier(sb, identifier),
+            MemberExpression memberAccess => EmitMemberVariableAccess(sb, memberAccess),
+            OptionalMemberExpression optMember => EmitOptionalMemberAccess(sb, optMember),
+            CreatorExpression constructor => EmitConstructorCall(sb, constructor),
+            CallExpression call => EmitCall(sb, call),
+            BinaryExpression binary => EmitBinaryOp(sb, binary),
+            UnaryExpression unary => EmitUnaryOp(sb, unary),
+            ConditionalExpression cond => EmitConditional(sb, cond),
+            IndexExpression index => EmitIndexAccess(sb, index),
+            SliceExpression slice => EmitSliceAccess(sb, slice),
+            RangeExpression range => EmitRange(sb, range),
+            StealExpression steal => EmitSteal(sb, steal),
+            TupleLiteralExpression tuple => EmitTupleLiteral(sb, tuple),
+            GenericMethodCallExpression generic => EmitGenericMethodCall(sb, generic),
+            InsertedTextExpression inserted => EmitInsertedText(sb, inserted),
+            ListLiteralExpression list => EmitListLiteral(sb, list),
+            FlagsTestExpression flagsTest => EmitFlagsTest(sb, flagsTest),
+            _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
+        };
+    }
+
+    /// <summary>
+    /// Generates code for a literal expression.
+    /// </summary>
+    private string EmitLiteral(StringBuilder sb, LiteralExpression literal)
+    {
+        return literal.Value switch
+        {
+            int i => i.ToString(),
+            long l => l.ToString(),
+            double d => d.ToString("G17"),
+            float f => f.ToString("G9"),
+            bool b => b ? "true" : "false",
+            string s => EmitStringLiteral(sb, s),
+            null => "null",
+            _ => literal.Value.ToString() ?? "0"
+        };
+    }
+
+    /// <summary>
+    /// Generates code for a string literal.
+    /// Emits a global constant and returns a pointer to it.
+    /// </summary>
+    private string EmitStringLiteral(StringBuilder sb, string value)
+    {
+        // Check if we've already emitted this string
+        if (_stringConstants.TryGetValue(value, out string? existingName))
+        {
+            return existingName;
+        }
+
+        // Generate a unique name for this string constant
+        string constName = $"@.str.{_stringCounter++}";
+        _stringConstants[value] = constName;
+
+        // Escape the string for LLVM IR
+        string escaped = EscapeStringForLLVM(value);
+        int byteLength = Encoding.UTF8.GetByteCount(value) + 1; // +1 for null terminator
+
+        // Emit global constant (null-terminated for C interop)
+        EmitLine(_globalDeclarations, $"{constName} = private unnamed_addr constant [{byteLength} x i8] c\"{escaped}\\00\"");
+
+        return constName;
+    }
+
+    /// <summary>
+    /// Escapes a string for use in LLVM IR.
+    /// </summary>
+    private static string EscapeStringForLLVM(string value)
+    {
+        var sb = new StringBuilder();
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '"':
+                    sb.Append("\\22");
+                    break;
+                case '\\':
+                    sb.Append("\\5C");
+                    break;
+                case '\n':
+                    sb.Append("\\0A");
+                    break;
+                case '\r':
+                    sb.Append("\\0D");
+                    break;
+                case '\t':
+                    sb.Append("\\09");
+                    break;
+                default:
+                {
+                    if (c < 32 || c > 126)
+                    {
+                        // Non-printable or non-ASCII: encode as hex bytes
+                        byte[] bytes = Encoding.UTF8.GetBytes(c.ToString());
+                        foreach (byte b in bytes)
+                        {
+                            sb.Append($"\\{b:X2}");
+                        }
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+
+                    break;
+                }
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Generates code for an identifier expression (variable reference).
+    /// </summary>
+    private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
+    {
+        // Check if this is a choice case (e.g., ME_SMALL, NORTH)
+        var choiceCase = _registry.LookupChoiceCase(identifier.Name);
+        if (choiceCase != null)
+        {
+            return choiceCase.Value.CaseInfo.ComputedValue.ToString();
+        }
+
+        // Look up the variable in local variables first
+        if (!_localVariables.TryGetValue(identifier.Name, out var varType))
+        {
+            // Fallback for unknown identifiers (shouldn't happen after semantic analysis)
+            return $"%{identifier.Name}";
+        }
+
+        // Variables are stored in allocas (%name.addr), need to load them
+        string llvmType = GetLLVMType(varType);
+        string tmp = NextTemp();
+        EmitLine(sb, $"  {tmp} = load {llvmType}, ptr %{identifier.Name}.addr");
+        return tmp;
+    }
+
+    /// <summary>
+    /// Generates code for a function/method call.
+    /// Handles both standalone function calls and method calls on objects.
+    /// </summary>
+    private string EmitCall(StringBuilder sb, CallExpression call)
+    {
+        // C29: Safety guard — semantic analyzer already errors on runtime dispatch in RF mode,
+        // but if we somehow reach codegen with Runtime dispatch, trap instead of emitting bad code
+        if (call.ResolvedDispatch == SemanticAnalysis.Enums.DispatchStrategy.Runtime)
+        {
+            EmitLine(sb, "  call void @llvm.trap()");
+            EmitLine(sb, "  unreachable");
+            return "undef";
+        }
+
+        // Intercept source location routines — emit constants from call site, no actual call
+        if (call.Callee is IdentifierExpression { Name: var name } && IsSourceLocationRoutine(name))
+            return EmitSourceLocationInline(sb, name, call.Location);
+
+        return call.Callee switch
+        {
+            // Determine if this is a method call (callee is MemberExpression) or standalone function call
+            MemberExpression member => EmitMethodCall(sb, member, call.Arguments),
+            IdentifierExpression id => EmitFunctionCall(sb, id.Name, call.Arguments),
+            _ => throw new NotImplementedException(
+                $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
+        };
+    }
+
+    /// <summary>
+    /// Returns true if the function name is a source location routine that should be inlined at call site.
+    /// </summary>
+    private static bool IsSourceLocationRoutine(string name) =>
+        name is "source_file" or "source_line" or "source_column" or "source_routine" or "source_module";
+
+    /// <summary>
+    /// Emits a source location routine inline as a constant from the call site location.
+    /// No actual function call is generated — the value is injected directly.
+    /// </summary>
+    private string EmitSourceLocationInline(StringBuilder sb, string routineName, SourceLocation location)
+    {
+        return routineName switch
+        {
+            "source_file" => EmitSynthesizedStringLiteral(location.FileName),
+            "source_line" => $"{location.Line}",
+            "source_column" => $"{location.Column}",
+            "source_routine" => EmitSynthesizedStringLiteral(
+                _currentEmittingRoutine?.Name ?? "<unknown>"),
+            "source_module" => EmitSynthesizedStringLiteral(
+                _currentEmittingRoutine?.OwnerType?.Module
+                ?? _currentEmittingRoutine?.Module
+                ?? "<unknown>"),
+            _ => "undef"
+        };
+    }
+
+    /// <summary>
+    /// Generates code for a standalone function call.
+    /// </summary>
+    private string EmitFunctionCall(StringBuilder sb, string functionName, List<Expression> arguments)
+    {
+        // Look up the routine
+        RoutineInfo? routine = _registry.LookupRoutine(functionName);
+
+        // Evaluate all arguments
+        var argValues = new List<string>();
+        var argTypes = new List<string>();
+
+        foreach (var arg in arguments)
+        {
+            string value = EmitExpression(sb, arg);
+            argValues.Add(value);
+
+            TypeInfo? argType = GetExpressionType(arg);
+            if (argType == null)
+            {
+                throw new InvalidOperationException($"Cannot determine type for argument in function call to '{functionName}'");
+            }
+            argTypes.Add(GetLLVMType(argType));
+        }
+
+        // Build the call
+        string mangledName = routine != null
+            ? MangleFunctionName(routine)
+            : functionName;
+
+        string returnType = routine?.ReturnType != null
+            ? GetLLVMType(routine.ReturnType)
+            : "void";
+
+        if (returnType == "void")
+        {
+            // Void return - no result
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  call void @{mangledName}({args})");
+            return "undef"; // No meaningful return value
+        }
+        else
+        {
+            // Has return value
+            string result = NextTemp();
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
             return result;
         }
-
-        // Generate intrinsic call for add/subtract
-        _output.AppendLine(
-            handler:
-            $"  {result} = call {llvmType} @{intrinsicName}.{llvmType}({llvmType} {left}, {llvmType} {right})");
-        _tempTypes[key: result] = typeInfo;
-        return result;
     }
 
     /// <summary>
-    /// Generates saturating multiply using manual overflow detection.
-    /// LLVM doesn't provide a direct saturating multiply intrinsic, so we use overflow detection.
+    /// Generates code for a method call on an object.
+    /// The object becomes the implicit 'me' parameter.
     /// </summary>
-    private string GenerateSaturatingMultiply(string left, string right, string result,
-        TypeInfo typeInfo, string llvmType)
+    private string EmitMethodCall(StringBuilder sb, MemberExpression member, List<Expression> arguments)
     {
-        string overflowTemp = GetNextTemp();
-        string structTemp = GetNextTemp();
-        string valueTemp = GetNextTemp();
-        string didOverflowTemp = GetNextTemp();
-        string maxValueTemp = GetNextTemp();
-        string minValueTemp = GetNextTemp();
-        string saturatedTemp = GetNextTemp();
+        // Evaluate the receiver (becomes 'me' parameter)
+        string receiver = EmitExpression(sb, member.Object);
+        TypeInfo? receiverType = GetExpressionType(member.Object);
 
-        string intrinsicName = typeInfo.IsUnsigned
-            ? "llvm.umul.with.overflow"
-            : "llvm.smul.with.overflow";
-
-        // Call overflow intrinsic
-        _output.AppendLine(
-            handler:
-            $"  {structTemp} = call {{{llvmType}, i1}} @{intrinsicName}.{llvmType}({llvmType} {left}, {llvmType} {right})");
-        _output.AppendLine(
-            handler: $"  {valueTemp} = extractvalue {{{llvmType}, i1}} {structTemp}, 0");
-        _output.AppendLine(
-            handler: $"  {didOverflowTemp} = extractvalue {{{llvmType}, i1}} {structTemp}, 1");
-
-        // Get max/min values for saturation
-        (string maxValue, string minValue) =
-            GetSaturationBounds(typeInfo: typeInfo, llvmType: llvmType);
-
-        // Determine saturation value based on sign of operands if overflow occurred
-        if (typeInfo.IsUnsigned)
+        if (receiverType == null)
         {
-            // For unsigned: saturate to max value on overflow
-            _output.AppendLine(
-                handler:
-                $"  {saturatedTemp} = select i1 {didOverflowTemp}, {llvmType} {maxValue}, {llvmType} {valueTemp}");
+            throw new InvalidOperationException("Cannot determine receiver type for method call");
+        }
+
+        // Look up the method
+        string methodFullName = $"{receiverType.Name}.{member.PropertyName}";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        // Build argument list: receiver first, then explicit arguments
+        var argValues = new List<string> { receiver };
+        var argTypes = new List<string> { GetParameterLLVMType(receiverType) };
+
+        foreach (var arg in arguments)
+        {
+            string value = EmitExpression(sb, arg);
+            argValues.Add(value);
+
+            TypeInfo? argType = GetExpressionType(arg);
+            if (argType == null)
+            {
+                throw new InvalidOperationException($"Cannot determine type for argument in method call to '{member.PropertyName}'");
+            }
+            argTypes.Add(GetLLVMType(argType));
+        }
+
+        // Build the call
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(receiverType.Name)}_{member.PropertyName}";
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : "void";
+
+        if (returnType == "void")
+        {
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  call void @{mangledName}({args})");
+            return "undef";
         }
         else
         {
-            // For signed: need to check if result should be min or max
-            // If both operands have same sign, overflow goes to max/min in same direction
-            string leftSignTemp = GetNextTemp();
-            string rightSignTemp = GetNextTemp();
-            string sameSigns = GetNextTemp();
-            string satValue = GetNextTemp();
-
-            _output.AppendLine(handler: $"  {leftSignTemp} = icmp slt {llvmType} {left}, 0");
-            _output.AppendLine(handler: $"  {rightSignTemp} = icmp slt {llvmType} {right}, 0");
-            _output.AppendLine(
-                handler: $"  {sameSigns} = icmp eq i1 {leftSignTemp}, {rightSignTemp}");
-
-            // If same signs: both positive -> max, both negative -> max (negative * negative = positive)
-            // If different signs: result should be min (negative)
-            _output.AppendLine(
-                handler:
-                $"  {satValue} = select i1 {sameSigns}, {llvmType} {maxValue}, {llvmType} {minValue}");
-            _output.AppendLine(
-                handler:
-                $"  {saturatedTemp} = select i1 {didOverflowTemp}, {llvmType} {satValue}, {llvmType} {valueTemp}");
+            string result = NextTemp();
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+            return result;
         }
-
-        _output.AppendLine(
-            handler: $"  {result} = add {llvmType} {saturatedTemp}, 0  ; final saturated result");
-        _tempTypes[key: result] = typeInfo;
-        return result;
     }
 
     /// <summary>
-    /// Generates LLVM IR for checked arithmetic operations that trap on overflow.
+    /// Builds a comma-separated argument list for a call instruction.
     /// </summary>
-    private string GenerateCheckedArithmetic(BinaryOperator op, string left, string right,
-        string result, TypeInfo typeInfo, string llvmType)
+    private static string BuildCallArgs(List<string> types, List<string> values)
     {
-        string intrinsicName = op switch
-        {
-            BinaryOperator.AddChecked => typeInfo.IsUnsigned
-                ? "llvm.uadd.with.overflow"
-                : "llvm.sadd.with.overflow",
-            BinaryOperator.SubtractChecked => typeInfo.IsUnsigned
-                ? "llvm.usub.with.overflow"
-                : "llvm.ssub.with.overflow",
-            BinaryOperator.MultiplyChecked => typeInfo.IsUnsigned
-                ? "llvm.umul.with.overflow"
-                : "llvm.smul.with.overflow",
-            _ => throw new NotSupportedException(message: $"Checked operation {op} not supported")
-        };
-
-        string structTemp = GetNextTemp();
-        string valueTemp = GetNextTemp();
-        string didOverflowTemp = GetNextTemp();
-        string trapLabel = GetNextLabel();
-        string continueLabel = GetNextLabel();
-
-        // Call overflow intrinsic which returns {result, overflow_flag}
-        _output.AppendLine(
-            handler:
-            $"  {structTemp} = call {{{llvmType}, i1}} @{intrinsicName}.{llvmType}({llvmType} {left}, {llvmType} {right})");
-        _output.AppendLine(
-            handler: $"  {valueTemp} = extractvalue {{{llvmType}, i1}} {structTemp}, 0");
-        _output.AppendLine(
-            handler: $"  {didOverflowTemp} = extractvalue {{{llvmType}, i1}} {structTemp}, 1");
-
-        // Branch on overflow flag
-        _output.AppendLine(
-            handler: $"  br i1 {didOverflowTemp}, label %{trapLabel}, label %{continueLabel}");
-
-        // Trap block - call panic/abort on overflow
-        _output.AppendLine(handler: $"{trapLabel}:");
-        _output.AppendLine(
-            value:
-            $"  call void @rf_crash(ptr getelementptr inbounds ([20 x i8], [20 x i8]* @.str_overflow, i32 0, i32 0))");
-        _output.AppendLine(value: $"  unreachable");
-
-        // Continue block - normal execution
-        _output.AppendLine(handler: $"{continueLabel}:");
-        _output.AppendLine(
-            handler: $"  {result} = add {llvmType} {valueTemp}, 0  ; propagate result");
-
-        _tempTypes[key: result] = typeInfo;
-        return result;
-    }
-
-    /// <summary>
-    /// Gets the saturation bounds (max and min values) for a given type.
-    /// </summary>
-    private (string maxValue, string minValue) GetSaturationBounds(TypeInfo typeInfo,
-        string llvmType)
-    {
-        if (typeInfo.IsUnsigned)
-        {
-            // Unsigned: min = 0, max = 2^bits - 1
-            int bits = GetTypeBitWidth(llvmType: llvmType);
-            string maxValue = bits switch
-            {
-                8 => "255",
-                16 => "65535",
-                32 => "4294967295",
-                64 => "18446744073709551615",
-                128 => "340282366920938463463374607431768211455",
-                _ => "0"
-            };
-            return (maxValue, "0");
-        }
-        else
-        {
-            // Signed: min = -2^(bits-1), max = 2^(bits-1) - 1
-            int bits = GetTypeBitWidth(llvmType: llvmType);
-            (string maxValue, string minValue) = bits switch
-            {
-                8 => ("127", "-128"),
-                16 => ("32767", "-32768"),
-                32 => ("2147483647", "-2147483648"),
-                64 => ("9223372036854775807", "-9223372036854775808"),
-                128 => ("170141183460469231731687303715884105727",
-                    "-170141183460469231731687303715884105728"),
-                _ => ("0", "0")
-            };
-            return (maxValue, minValue);
-        }
-    }
-    // Map TokenType to LLVM type
-    private string GetLLVMType(TokenType tokenType)
-    {
-        return tokenType switch
-        {
-            TokenType.S8Literal => "i8",
-            TokenType.S16Literal => "i16",
-            TokenType.S32Literal => "i32",
-            TokenType.S64Literal => "i64",
-            TokenType.S128Literal => "i128",
-            TokenType.U8Literal => "i8", // LLVM doesn't distinguish signed/unsigned at IR level
-            TokenType.U16Literal => "i16",
-            TokenType.U32Literal => "i32",
-            TokenType.U64Literal => "i64",
-            TokenType.U128Literal => "i128",
-            TokenType.F16Literal => "half",
-            TokenType.F32Literal => "float",
-            TokenType.F64Literal => "double",
-            TokenType.F128Literal => "fp128", // IEEE 754 quad precision
-            TokenType.Integer => "i128", // TODO: should be language dependent, Razorforge: s64, Suflae: Integer
-            TokenType.Decimal => "double", // TODO: should be language dependent, Razorforge: f64, Suflae: Decimal
-            TokenType.True => "i1",
-            TokenType.False => "i1",
-            // Text/String types - all return pointer to i8 (C-style strings)
-            TokenType.TextLiteral or TokenType.Text8Literal or TokenType.Text16Literal
-                or TokenType.FormattedText or TokenType.Text8FormattedText
-                or TokenType.Text16FormattedText or TokenType.RawText or TokenType.Text8RawText
-                or TokenType.Text16RawText or TokenType.RawFormattedText
-                or TokenType.Text8RawFormattedText or TokenType.Text16RawFormattedText => "i8*",
-            _ => "i32" // Default fallback
-        };
-    }
-
-    // Identifier expression
-    public string VisitIdentifierExpression(IdentifierExpression node)
-    {
-        // Handle special built-in values
-        if (node.Name == "None")
-        {
-            // None is represented as null pointer for Maybe<T> types
-            // When used in a return statement, the return type will be i8* (pointer)
-            // so we return null constant
-            string nextWord = GetNextTemp();
-            _tempTypes[key: nextWord] = new TypeInfo(LLVMType: "i8*",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "None");
-            // Return null as the None value - it will be used directly in inttoptr or ret
-            return "null";
-        }
-
-        string type = _symbolTypes.ContainsKey(key: node.Name)
-            ? _symbolTypes[key: node.Name]
-            : "i32";
-
-        // If this is a function parameter, it's already a value - no load needed
-        if (_functionParameters.Contains(item: node.Name))
-        {
-            return $"%{node.Name}";
-        }
-
-        // For local variables, we need to load from the stack
-        string temp = GetNextTemp();
-        _output.AppendLine(handler: $"  {temp} = load {type}, {type}* %{node.Name}");
-
-        // Track the type of this temp so it can be used correctly in function calls
-        // Use stored RazorForge type if available, otherwise use variable name as fallback
-        string rfType = _symbolRfTypes.TryGetValue(key: node.Name, value: out string? storedRfType)
-            ? storedRfType
-            : node.Name;
-        _tempTypes[key: temp] = new TypeInfo(LLVMType: type,
-            IsUnsigned: type.StartsWith(value: "u"),
-            IsFloatingPoint: type.StartsWith(value: "f") || type.StartsWith(value: "double"),
-            RazorForgeType: rfType);
-        return temp;
-    }
-
-    // Function call expression
-    public string VisitCallExpression(CallExpression node)
-    {
-        string result = GetNextTemp();
-
-        // Check if this is a standalone danger zone function call (address_of!, invalidate!)
-        if (node.Callee is IdentifierExpression identifierExpr)
-        {
-            string dangerfunctionName = identifierExpr.Name;
-            if (IsNonGenericDangerZoneFunction(functionName: dangerfunctionName))
-            {
-                return HandleNonGenericDangerZoneFunction(node: node,
-                    functionName: dangerfunctionName,
-                    resultTemp: result);
-            }
-
-            // Check for non-generic CompilerService intrinsics (source location)
-            if (IsSourceLocationIntrinsic(functionName: dangerfunctionName))
-            {
-                return HandleSourceLocationIntrinsic(node: node,
-                    functionName: dangerfunctionName,
-                    resultTemp: result);
-            }
-
-            // Check for error intrinsics (verify!, breach!, stop!)
-            if (IsErrorIntrinsic(functionName: dangerfunctionName))
-            {
-                return HandleErrorIntrinsic(node: node,
-                    functionName: dangerfunctionName,
-                    resultTemp: result);
-            }
-        }
-
-        // Check for special handlers BEFORE visiting arguments to avoid double-visiting
-        if (node.Callee is MemberExpression memberExprEarly)
-        {
-            string objectNameEarly = memberExprEarly.Object switch
-            {
-                IdentifierExpression idExpr => idExpr.Name,
-                _ => "unknown"
-            };
-
-            // Check if this is an external function call from imported module
-            string externalFuncName = $"{objectNameEarly}.{memberExprEarly.PropertyName}";
-            if (TryHandleExternalFunctionCall(funcName: externalFuncName,
-                    arguments: node.Arguments,
-                    resultTemp: result,
-                    result: out string? externalResult))
-            {
-                return externalResult!;
-            }
-
-            // Check if this is a call to an imported module function (including generic)
-            if (TryHandleImportedModuleFunctionCall(moduleName: objectNameEarly,
-                    functionName: memberExprEarly.PropertyName,
-                    arguments: node.Arguments,
-                    resultTemp: result,
-                    result: out string? importedResult))
-            {
-                return importedResult!;
-            }
-
-            // Special handling for Error type
-            if (objectNameEarly == "Error")
-            {
-                return HandleErrorCall(methodName: memberExprEarly.PropertyName,
-                    arguments: node.Arguments,
-                    resultTemp: result);
-            }
-        }
-
-        // Check for type constructor calls BEFORE visiting arguments
-        if (node.Callee is IdentifierExpression identifierEarly)
-        {
-            string sanitizedNameEarly = SanitizeFunctionName(name: identifierEarly.Name);
-            if (IsTypeConstructorCall(sanitizedName: sanitizedNameEarly))
-            {
-                return HandleTypeConstructorCall(functionName: sanitizedNameEarly,
-                    arguments: node.Arguments,
-                    resultTemp: result);
-            }
-
-            // Check for Crashable error type constructors (e.g., DivisionByZeroError())
-            // These return a string pointer to the error message for use in safe variants
-            if (IsCrashableErrorType(typeName: identifierEarly.Name))
-            {
-                return HandleCrashableErrorConstructor(errorTypeName: identifierEarly.Name,
-                    resultTemp: result);
-            }
-
-            // Check for external function calls by identifier (e.g., rf_console_get_letters)
-            // This handles direct calls to external C functions inside module function bodies
-            if (TryHandleExternalFunctionCall(funcName: identifierEarly.Name,
-                    arguments: node.Arguments,
-                    resultTemp: result,
-                    result: out string? externalResult))
-            {
-                return externalResult!;
-            }
-
-            // Check for record constructor calls like letter8(value: codepoint)
-            if (IsRecordConstructorCall(typeName: identifierEarly.Name))
-            {
-                return HandleRecordConstructorCall(typeName: identifierEarly.Name,
-                    arguments: node.Arguments,
-                    resultTemp: result);
-            }
-        }
-
-        var args = new List<string>();
-        foreach (Expression arg in node.Arguments)
-        {
-            string argValue = arg.Accept(visitor: this);
-            // Determine argument type - check if it's a tracked temp, otherwise infer from expression
-            string argType = "i32"; // default
-            if (_tempTypes.TryGetValue(key: argValue, value: out TypeInfo? argTypeInfo))
-            {
-                argType = argTypeInfo.LLVMType;
-            }
-            else if (arg is LiteralExpression literal && literal.Value is string)
-            {
-                argType = "i8*"; // String literals produce pointers
-            }
-
-            args.Add(item: $"{argType} {argValue}");
-        }
-
-        string argList = string.Join(separator: ", ", values: args);
-
-        // Special handling for built-in functions
-        if (node.Callee is IdentifierExpression id)
-        {
-            if (id.Name == "show")
-            {
-                if (args.Count > 0)
-                {
-                    _output.AppendLine(
-                        handler:
-                        $"  {result} = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str_int_fmt, i32 0, i32 0), {argList})");
-                }
-
-                return result;
-            }
-        }
-
-        // Get function name without generating extra instructions
-        string functionName;
-        if (node.Callee is IdentifierExpression identifier)
-        {
-            functionName = identifier.Name;
-
-            // Check if this is a danger zone function that should use specialized handling
-            if (IsNonGenericDangerZoneFunction(functionName: functionName))
-            {
-                return HandleNonGenericDangerZoneFunction(node: node,
-                    functionName: functionName,
-                    resultTemp: result);
-            }
-        }
-        else if (node.Callee is MemberExpression memberExpr)
-        {
-            // Handle member expression calls like Console.show, Error.from_text
-            string objectName = memberExpr.Object switch
-            {
-                IdentifierExpression idExpr => idExpr.Name,
-                _ => "unknown"
-            };
-
-            // Already handled Console and Error above, so this is for other member calls
-            // For other member calls, convert to mangled name: Object.method -> Object_method
-            functionName = $"{objectName}_{memberExpr.PropertyName}";
-        }
-        else
-        {
-            // For more complex expressions, we'd need to handle them differently
-            functionName = "unknown_function";
-        }
-
-        string sanitizedFunctionName = SanitizeFunctionName(name: functionName);
-        _output.AppendLine(handler: $"  {result} = call i32 @{sanitizedFunctionName}({argList})");
-        return result;
-    }
-    public string VisitUnaryExpression(UnaryExpression node)
-    {
-        // Special case: negative integer literals should be handled directly
-        // to avoid type issues (e.g., -2147483648 should be i32, not i64)
-        if (node.Operator == UnaryOperator.Minus && node.Operand is LiteralExpression lit)
-        {
-            // Check if this is an integer literal that we can negate directly
-            if (lit.Value is long longVal)
-            {
-                long negated = -longVal;
-                // Check if negated value fits in i32 (s32 range)
-                if (negated >= int.MinValue && negated <= int.MaxValue)
-                {
-                    // Return as i32 literal
-                    _tempTypes[key: negated.ToString()] = new TypeInfo(LLVMType: "i32",
-                        IsUnsigned: false,
-                        IsFloatingPoint: false,
-                        RazorForgeType: "s32");
-                    return negated.ToString();
-                }
-
-                return negated.ToString();
-            }
-            else if (lit.Value is int intVal)
-            {
-                return (-intVal).ToString();
-            }
-            else if (lit.Value is double doubleVal)
-            {
-                return (-doubleVal).ToString(format: "G");
-            }
-            else if (lit.Value is float floatVal)
-            {
-                return (-floatVal).ToString(format: "G");
-            }
-        }
-
-        string operand = node.Operand.Accept(visitor: this);
-        TypeInfo operandType = GetTypeInfo(expr: node.Operand);
-        string llvmType = operandType.LLVMType;
-
-        switch (node.Operator)
-        {
-            case UnaryOperator.Plus:
-                // Unary plus is a no-op, just return the operand
-                return operand;
-
-            case UnaryOperator.Minus:
-                // Negation: 0 - operand for integers, fneg for floats
-                string result = GetNextTemp();
-                if (operandType.IsFloatingPoint)
-                {
-                    _output.AppendLine(handler: $"  {result} = fneg {llvmType} {operand}");
-                }
-                else
-                {
-                    _output.AppendLine(handler: $"  {result} = sub {llvmType} 0, {operand}");
-                }
-
-                _tempTypes[key: result] = operandType;
-                return result;
-
-            case UnaryOperator.Not:
-                // Logical NOT: xor with 1 for i1 (bool)
-                string notResult = GetNextTemp();
-                _output.AppendLine(handler: $"  {notResult} = xor i1 {operand}, 1");
-                _tempTypes[key: notResult] = new TypeInfo(LLVMType: "i1",
-                    IsUnsigned: false,
-                    IsFloatingPoint: false,
-                    RazorForgeType: "bool");
-                return notResult;
-
-            case UnaryOperator.BitwiseNot:
-                // Bitwise NOT: xor with -1 (all 1s)
-                string bitwiseResult = GetNextTemp();
-                _output.AppendLine(handler: $"  {bitwiseResult} = xor {llvmType} {operand}, -1");
-                _tempTypes[key: bitwiseResult] = operandType;
-                return bitwiseResult;
-
-            default:
-                return operand;
-        }
-    }
-    public string VisitMemberExpression(MemberExpression node)
-    {
-        string? objectName = node.Object switch
-        {
-            IdentifierExpression idExpr => idExpr.Name,
-            _ => null
-        };
-
-        // Check if this is a record field access
-        if (objectName != null)
-        {
-            // First, try to get the record type from _symbolRfTypes
-            string? recordType = null;
-            if (_symbolRfTypes.TryGetValue(key: objectName, value: out string? rfType))
-            {
-                recordType = rfType;
-            }
-            // Also try from _symbolTypes (for LLVM types like %Point)
-            else if (_symbolTypes.TryGetValue(key: objectName, value: out string? llvmType) &&
-                     llvmType.StartsWith(value: "%"))
-            {
-                recordType = llvmType[1..]; // Remove % prefix
-            }
-
-            // If we have a record type, look up the field
-            if (recordType != null && _recordFields.TryGetValue(key: recordType,
-                    value: out List<(string Name, string Type)>? fields))
-            {
-                // Find the field index
-                int fieldIndex = -1;
-                string fieldType = "i32";
-                for (int i = 0; i < fields.Count; i++)
-                {
-                    if (fields[index: i].Name == node.PropertyName)
-                    {
-                        fieldIndex = i;
-                        fieldType = fields[index: i].Type;
-                        break;
-                    }
-                }
-
-                if (fieldIndex >= 0)
-                {
-                    // Generate getelementptr and load for field access
-                    string result = GetNextTemp();
-                    string fieldPtr = GetNextTemp();
-                    _output.AppendLine(
-                        handler:
-                        $"  {fieldPtr} = getelementptr inbounds %{recordType}, ptr %{objectName}, i32 0, i32 {fieldIndex}");
-                    _output.AppendLine(handler: $"  {result} = load {fieldType}, ptr {fieldPtr}");
-                    _tempTypes[key: result] = new TypeInfo(LLVMType: fieldType,
-                        IsUnsigned: false,
-                        IsFloatingPoint: false,
-                        RazorForgeType: "");
-                    return result;
-                }
-            }
-        }
-
-        // Not a record field access - handle other cases
-        return "";
-    }
-    public string VisitIndexExpression(IndexExpression node)
-    {
-        return "";
-    }
-    public string VisitConditionalExpression(ConditionalExpression node)
-    {
-        return "";
-    }
-
-    public string VisitBlockExpression(BlockExpression node)
-    {
-        // A block expression evaluates to its inner expression
-        return node.Value.Accept(visitor: this);
-    }
-
-    public string VisitRangeExpression(RangeExpression node)
-    {
-        // For now, generate a simple record representation
-        // In a real implementation, this would create a Range<T> object
-        string start = node.Start.Accept(visitor: this);
-        string end = node.End.Accept(visitor: this);
-        string rangeOp = node.IsDescending
-            ? "downto"
-            : "to";
-
-        if (node.Step != null)
-        {
-            string step = node.Step.Accept(visitor: this);
-            // Generate code for range with step
-            _output.AppendLine(handler: $"; Range from {start} {rangeOp} {end} by {step}");
-        }
-        else
-        {
-            // Generate code for range without step (default step 1 or -1 for descending)
-            _output.AppendLine(handler: $"; Range from {start} {rangeOp} {end}");
-        }
-
-        return start; // Placeholder
-    }
-
-    public string VisitChainedComparisonExpression(ChainedComparisonExpression node)
-    {
-        // Desugar chained comparison: a < b < c becomes (a < b) and (b < c)
-        // with single evaluation of b
-        if (node.Operands.Count < 2 || node.Operators.Count < 1)
+        if (types.Count != values.Count || types.Count == 0)
         {
             return "";
         }
-
-        string result = GetNextTemp();
-        var tempVars = new List<string>();
-
-        // Evaluate all operands once and store in temporaries
-        for (int i = 0; i < node.Operands.Count; i++)
-        {
-            if (i == 0)
-            {
-                // First operand doesn't need temporary storage for first comparison
-                tempVars.Add(item: node.Operands[index: i]
-                                       .Accept(visitor: this));
-            }
-            else if (i == node.Operands.Count - 1)
-            {
-                // Last operand doesn't need temporary storage
-                tempVars.Add(item: node.Operands[index: i]
-                                       .Accept(visitor: this));
-            }
-            else
-            {
-                // Middle operands need temporary storage to avoid multiple evaluation
-                string temp = GetNextTemp();
-                string operandValue = node.Operands[index: i]
-                                          .Accept(visitor: this);
-                _output.AppendLine(
-                    handler: $"  {temp} = add i32 {operandValue}, 0  ; store for reuse");
-                tempVars.Add(item: temp);
-            }
-        }
-
-        // Generate comparisons: (temp0 op0 temp1) and (temp1 op1 temp2) and ...
-        var compResults = new List<string>();
-        for (int i = 0; i < node.Operators.Count; i++)
-        {
-            string compResult = GetNextTemp();
-            string left = tempVars[index: i];
-            string right = tempVars[index: i + 1];
-            string op = node.Operators[index: i] switch
-            {
-                BinaryOperator.Less => "icmp slt",
-                BinaryOperator.LessEqual => "icmp sle",
-                BinaryOperator.Greater => "icmp sgt",
-                BinaryOperator.GreaterEqual => "icmp sge",
-                BinaryOperator.Equal => "icmp eq",
-                BinaryOperator.NotEqual => "icmp ne",
-                _ => "icmp eq"
-            };
-
-            _output.AppendLine(handler: $"  {compResult} = {op} i32 {left}, {right}");
-            compResults.Add(item: compResult);
-        }
-
-        // Combine all comparisons with AND
-        if (compResults.Count == 1)
-        {
-            return compResults[index: 0];
-        }
-
-        string finalResult = compResults[index: 0];
-        for (int i = 1; i < compResults.Count; i++)
-        {
-            string temp = GetNextTemp();
-            _output.AppendLine(
-                handler: $"  {temp} = and i1 {finalResult}, {compResults[index: i]}");
-            finalResult = temp;
-        }
-
-        return finalResult;
+        return string.Join(", ", types.Select((t, i) => $"{t} {values[i]}"));
     }
-    public string VisitTypeExpression(TypeExpression node)
-    {
-        return "";
-    }
+
     /// <summary>
-    /// Generates LLVM IR for the none coalescing operator (??).
-    /// Returns the left value if it's valid (not None/Error), otherwise returns the right value.
-    /// Works with Maybe, Result, and Lookup types.
+    /// Generates code for a binary operation.
+    /// Only handles operators that are NOT desugared to method calls by the parser.
+    /// Arithmetic/comparison/bitwise operators are desugared to __add__, __eq__, etc.
     /// </summary>
-    private string GenerateNoneCoalesce(BinaryExpression node)
+    private string EmitBinaryOp(StringBuilder sb, BinaryExpression binary)
     {
-        // Evaluate the left side first
-        string left = node.Left.Accept(visitor: this);
-        TypeInfo leftTypeInfo = GetTypeInfo(expr: node.Left);
-        string leftTypeName = leftTypeInfo.RazorForgeType ?? "";
-
-        // Generate unique labels for branching
-        string validLabel = $"coalesce_valid_{_labelCounter}";
-        string invalidLabel = $"coalesce_invalid_{_labelCounter}";
-        string endLabel = $"coalesce_end_{_labelCounter}";
-        _labelCounter++;
-
-        // Determine how to check validity based on the type
-        string isValidTemp = GetNextTemp();
-
-        if (leftTypeName.StartsWith(value: "Maybe") || leftTypeName.StartsWith(value: "Result"))
+        return binary.Operator switch
         {
-            // Maybe and Result have is_valid: bool as first field
-            // Load the is_valid field (index 0)
-            string isValidPtr = GetNextTemp();
-            _output.AppendLine(
-                handler:
-                $"  {isValidPtr} = getelementptr inbounds {{i1, i8*}}, {{i1, i8*}}* {left}, i32 0, i32 0");
-            _output.AppendLine(handler: $"  {isValidTemp} = load i1, i1* {isValidPtr}");
-        }
-        else if (leftTypeName.StartsWith(value: "Lookup"))
-        {
-            // Lookup has state: DataState as first field where VALID = 0
-            string statePtr = GetNextTemp();
-            string stateVal = GetNextTemp();
-            _output.AppendLine(
-                handler:
-                $"  {statePtr} = getelementptr inbounds {{i32, i8*}}, {{i32, i8*}}* {left}, i32 0, i32 0");
-            _output.AppendLine(handler: $"  {stateVal} = load i32, i32* {statePtr}");
-            _output.AppendLine(handler: $"  {isValidTemp} = icmp eq i32 {stateVal}, 0");
-        }
-        else
-        {
-            // For non-wrapper types (null pointer check), treat as pointer comparison
-            _output.AppendLine(handler: $"  {isValidTemp} = icmp ne i8* {left}, null");
-        }
+            BinaryOperator.And => IsFlagsBinaryOp(binary) ? EmitFlagsCombine(sb, binary) : EmitShortCircuitAnd(sb, binary),
+            BinaryOperator.Or => EmitShortCircuitOr(sb, binary),
+            BinaryOperator.Identical => EmitIdentityComparison(sb, binary, "eq"),
+            BinaryOperator.NotIdentical => EmitIdentityComparison(sb, binary, "ne"),
+            BinaryOperator.Assign => EmitBinaryAssign(sb, binary),
+            BinaryOperator.But => EmitBitClear(sb, binary),
+            BinaryOperator.In => EmitContainsCall(sb, binary, "__contains__"),
+            BinaryOperator.NotIn => EmitContainsCall(sb, binary, "__notcontains__"),
+            BinaryOperator.Is => EmitChoiceIs(sb, binary, "eq"),
+            BinaryOperator.IsNot => EmitChoiceIs(sb, binary, "ne"),
+            BinaryOperator.Obeys => EmitCompileTimeConstant("true"),
+            BinaryOperator.NotObeys => EmitCompileTimeConstant("false"),
+            BinaryOperator.NoneCoalesce => EmitNoneCoalesce(sb, binary),
+            _ => throw new NotImplementedException(
+                $"Binary operator '{binary.Operator}' should have been desugared to a method call")
+        };
+    }
 
-        // Branch based on validity
-        _output.AppendLine(
-            handler: $"  br i1 {isValidTemp}, label %{validLabel}, label %{invalidLabel}");
+    /// <summary>
+    /// Emits choice case comparison (is / isnot).
+    /// Left operand is a choice value (i64 tag), right operand is a choice case identifier.
+    /// </summary>
+    private string EmitChoiceIs(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb, binary.Left);
 
-        // Valid case - extract the value from the wrapper
-        _output.AppendLine(handler: $"{validLabel}:");
-        string validValue;
-        if (leftTypeName.StartsWith(value: "Maybe") || leftTypeName.StartsWith(value: "Result") ||
-            leftTypeName.StartsWith(value: "Lookup"))
+        // Try to resolve RHS as a known choice case identifier
+        if (binary.Right is IdentifierExpression id)
         {
-            // Extract handle from wrapper (index 1)
-            string handlePtr = GetNextTemp();
-            validValue = GetNextTemp();
-            string structType = leftTypeName.StartsWith(value: "Lookup")
-                ? "{i32, i8*}"
-                : "{i1, i8*}";
-            _output.AppendLine(
-                handler:
-                $"  {handlePtr} = getelementptr inbounds {structType}, {structType}* {left}, i32 0, i32 1");
-            _output.AppendLine(handler: $"  {validValue} = load i8*, i8** {handlePtr}");
-        }
-        else
-        {
-            validValue = left;
+            var choiceCase = _registry.LookupChoiceCase(id.Name);
+            if (choiceCase != null)
+            {
+                string result = NextTemp();
+                EmitLine(sb, $"  {result} = icmp {cmpOp} i64 {left}, {choiceCase.Value.CaseInfo.ComputedValue}");
+                return result;
+            }
         }
 
-        _output.AppendLine(handler: $"  br label %{endLabel}");
+        // Fallback: evaluate RHS as an expression (e.g., qualified access Direction.NORTH)
+        string right = EmitExpression(sb, binary.Right);
+        string fallbackResult = NextTemp();
+        EmitLine(sb, $"  {fallbackResult} = icmp {cmpOp} i64 {left}, {right}");
+        return fallbackResult;
+    }
 
-        // Invalid case - evaluate the right side
-        _output.AppendLine(handler: $"{invalidLabel}:");
-        string invalidValue = node.Right.Accept(visitor: this);
-        _output.AppendLine(handler: $"  br label %{endLabel}");
+    /// <summary>
+    /// Emits short-circuit AND: evaluate left, branch, phi merge.
+    /// </summary>
+    private string EmitShortCircuitAnd(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
 
-        // Merge point with phi
-        _output.AppendLine(handler: $"{endLabel}:");
-        string result = GetNextTemp();
-        TypeInfo rightTypeInfo = GetTypeInfo(expr: node.Right);
-        string resultType = rightTypeInfo.LLVMType;
-        _output.AppendLine(
-            handler:
-            $"  {result} = phi {resultType} [{validValue}, %{validLabel}], [{invalidValue}, %{invalidLabel}]");
+        string rhsLabel = NextLabel("and_rhs");
+        string endLabel = NextLabel("and_end");
+        string leftBlock = _currentBlock;
 
-        _tempTypes[key: result] = rightTypeInfo;
+        EmitLine(sb, $"  br i1 {left}, label %{rhsLabel}, label %{endLabel}");
+
+        EmitLine(sb, $"{rhsLabel}:");
+        _currentBlock = rhsLabel;
+        string right = EmitExpression(sb, binary.Right);
+        string rightBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi i1 [ false, %{leftBlock} ], [ {right}, %{rightBlock} ]");
         return result;
     }
 
     /// <summary>
-    /// Visits a literal expression node and generates the corresponding LLVM IR code.
-    /// Handles various literal types such as integers, floating-point numbers, booleans, and strings.
+    /// Emits short-circuit OR: evaluate left, branch, phi merge.
     /// </summary>
-    /// <param name="node">The literal expression node to process, containing the value and type information.</param>
-    /// <returns>A string representation of the generated LLVM IR code for the given literal expression.</returns>
-    public string VisitLiteralExpression(LiteralExpression node)
+    private string EmitShortCircuitOr(StringBuilder sb, BinaryExpression binary)
     {
-        if (node.Value is int intVal)
+        string left = EmitExpression(sb, binary.Left);
+
+        string rhsLabel = NextLabel("or_rhs");
+        string endLabel = NextLabel("or_end");
+        string leftBlock = _currentBlock;
+
+        EmitLine(sb, $"  br i1 {left}, label %{endLabel}, label %{rhsLabel}");
+
+        EmitLine(sb, $"{rhsLabel}:");
+        _currentBlock = rhsLabel;
+        string right = EmitExpression(sb, binary.Right);
+        string rightBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi i1 [ true, %{leftBlock} ], [ {right}, %{rightBlock} ]");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits identity comparison (=== / !==) using pointer comparison.
+    /// </summary>
+    private string EmitIdentityComparison(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = icmp {cmpOp} ptr {left}, {right}");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits assignment as an expression (evaluates right, stores into left's alloca).
+    /// </summary>
+    private string EmitBinaryAssign(StringBuilder sb, BinaryExpression binary)
+    {
+        string value = EmitExpression(sb, binary.Right);
+
+        if (binary.Left is IdentifierExpression id)
         {
-            return intVal.ToString();
+            EmitVariableAssignment(sb, id.Name, value);
         }
-        else if (node.Value is long longVal)
+        else if (binary.Left is MemberExpression member)
         {
-            return longVal.ToString();
+            EmitMemberVariableAssignment(sb, member, value);
         }
-        else if (node.Value is byte byteVal)
+        else
         {
-            return byteVal.ToString();
+            throw new NotImplementedException(
+                $"Assignment target not implemented for expression type: {binary.Left.GetType().Name}");
         }
-        else if (node.Value is sbyte sbyteVal)
+
+        return value;
+    }
+
+    /// <summary>
+    /// Emits bit clear: left &amp; ~right (flags 'but' operator).
+    /// </summary>
+    private string EmitBitClear(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+
+        TypeInfo? type = GetExpressionType(binary.Left);
+        string llvmType = type != null ? GetLLVMType(type) : "i64";
+
+        string inverted = NextTemp();
+        EmitLine(sb, $"  {inverted} = xor {llvmType} {right}, -1");
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = and {llvmType} {left}, {inverted}");
+        return result;
+    }
+
+    /// <summary>
+    /// Checks whether a binary expression is a flags combination (both operands are FlagsTypeInfo).
+    /// </summary>
+    private bool IsFlagsBinaryOp(BinaryExpression binary)
+    {
+        return GetExpressionType(binary.Left) is FlagsTypeInfo;
+    }
+
+    /// <summary>
+    /// Emits flags combination: left | right (bitwise OR of two flags values).
+    /// </summary>
+    private string EmitFlagsCombine(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = or i64 {left}, {right}");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits 'in' / 'notin' by calling the right operand's __contains__ / __notcontains__ method.
+    /// </summary>
+    private string EmitContainsCall(StringBuilder sb, BinaryExpression binary, string methodName)
+    {
+        // 'x in collection' → collection.__contains__(x)
+        string collection = EmitExpression(sb, binary.Right);
+        string element = EmitExpression(sb, binary.Left);
+
+        TypeInfo? collectionType = GetExpressionType(binary.Right);
+        if (collectionType == null)
         {
-            return sbyteVal.ToString();
+            throw new InvalidOperationException("Cannot determine collection type for 'in'/'notin' operator");
         }
-        else if (node.Value is short shortVal)
+
+        string methodFullName = $"{collectionType.Name}.{methodName}";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        var argValues = new List<string> { collection, element };
+        var argTypes = new List<string> { GetParameterLLVMType(collectionType) };
+
+        TypeInfo? elemType = GetExpressionType(binary.Left);
+        argTypes.Add(elemType != null ? GetLLVMType(elemType) : "i64");
+
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(collectionType.Name)}_{methodName}";
+
+        string result = NextTemp();
+        string args = BuildCallArgs(argTypes, argValues);
+        EmitLine(sb, $"  {result} = call i1 @{mangledName}({args})");
+        return result;
+    }
+
+    /// <summary>
+    /// Returns a compile-time constant value.
+    /// </summary>
+    private static string EmitCompileTimeConstant(string value)
+    {
+        return value;
+    }
+
+    /// <summary>
+    /// Generates code for a unary operation.
+    /// Minus and BitwiseNot are emitted as method calls to __neg__ / __not__
+    /// so the stdlib bodies (which call LLVM intrinsics) do the actual work.
+    /// </summary>
+    private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
+    {
+        return unary.Operator switch
         {
-            return shortVal.ToString();
+            UnaryOperator.Not => EmitLogicalNot(sb, unary),
+            UnaryOperator.Minus => EmitUnaryMethodCall(sb, unary, "__neg__"),
+            UnaryOperator.BitwiseNot => EmitUnaryMethodCall(sb, unary, "__not__"),
+            UnaryOperator.Steal => EmitExpression(sb, unary.Operand),
+            UnaryOperator.ForceUnwrap => EmitForceUnwrap(sb, unary),
+            _ => throw new NotImplementedException(
+                $"Unary operator '{unary.Operator}' codegen not implemented")
+        };
+    }
+
+    /// <summary>
+    /// Emits logical not: xor i1 %val, true.
+    /// </summary>
+    private string EmitLogicalNot(StringBuilder sb, UnaryExpression unary)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = xor i1 {operand}, true");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits a unary operator as a method call (e.g., -x → x.__neg__(), ~x → x.__not__()).
+    /// </summary>
+    private string EmitUnaryMethodCall(StringBuilder sb, UnaryExpression unary, string methodName)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        TypeInfo? operandType = GetExpressionType(unary.Operand);
+
+        if (operandType == null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot determine operand type for unary operator '{unary.Operator}'");
         }
-        else if (node.Value is ushort ushortVal)
+
+        string methodFullName = $"{operandType.Name}.{methodName}";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        // Build call: receiver (me) is the only argument
+        var argValues = new List<string> { operand };
+        var argTypes = new List<string> { GetParameterLLVMType(operandType) };
+
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(operandType.Name)}_{methodName}";
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : GetLLVMType(operandType);
+
+        string result = NextTemp();
+        string args = BuildCallArgs(argTypes, argValues);
+        EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+        return result;
+    }
+
+    #region Generic Method Calls (C21)
+
+    /// <summary>
+    /// Generates code for a generic method call expression.
+    /// Handles LLVM intrinsic routines (CallingConvention == "llvm") by emitting
+    /// LLVM IR instructions directly, and regular generic calls by resolving type
+    /// arguments and calling the mangled function.
+    /// </summary>
+    private string EmitGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic)
+    {
+        // Resolve the receiver type and look up the method
+        TypeInfo? receiverType = GetExpressionType(generic.Object);
+
+        // Try method lookup: "Type.MethodName" for methods, or standalone "MethodName"
+        string methodFullName = receiverType != null
+            ? $"{receiverType.Name}.{generic.MethodName}"
+            : generic.MethodName;
+
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName)
+                              ?? _registry.LookupRoutine(generic.MethodName);
+
+        // If this is an LLVM intrinsic, emit directly as LLVM IR
+        if (method is { CallingConvention: "llvm" })
         {
-            return ushortVal.ToString();
+            return EmitLlvmIntrinsicGenericCall(sb, generic, method);
         }
-        else if (node.Value is uint uintVal)
+
+        // Otherwise, emit as a regular generic method call
+        return EmitRegularGenericMethodCall(sb, generic, method, receiverType);
+    }
+
+    /// <summary>
+    /// Emits an LLVM intrinsic generic call by resolving type arguments to LLVM types
+    /// and delegating to EmitLlvmInstruction.
+    /// </summary>
+    private string EmitLlvmIntrinsicGenericCall(StringBuilder sb, GenericMethodCallExpression generic, RoutineInfo method)
+    {
+        // Evaluate all arguments
+        var args = new List<string>();
+        foreach (var arg in generic.Arguments)
         {
-            return uintVal.ToString();
+            args.Add(EmitExpression(sb, arg));
         }
-        else if (node.Value is ulong ulongVal)
+
+        // Also evaluate the receiver if this is a method call (it becomes 'me')
+        string? receiver = null;
+        if (generic.Object is not IdentifierExpression)
         {
-            return ulongVal.ToString();
+            receiver = EmitExpression(sb, generic.Object);
         }
-        else if (node.Value is float floatVal)
+
+        // Resolve type arguments to LLVM types
+        var llvmTypeArgs = new List<string>();
+        foreach (var typeArg in generic.TypeArguments)
         {
-            return floatVal.ToString(format: "G");
+            llvmTypeArgs.Add(ResolveTypeExpressionToLLVM(typeArg));
         }
-        else if (node.Value is double doubleVal)
+
+        if (llvmTypeArgs.Count == 0)
         {
-            return doubleVal.ToString(format: "G");
+            throw new InvalidOperationException(
+                $"LLVM intrinsic call to '{generic.MethodName}' requires type arguments");
         }
-        else if (node.Value is decimal decimalVal)
+
+        string llvmType = llvmTypeArgs[0];
+
+        // Get the LLVM instruction name (may differ from routine name via @llvm_ir annotation)
+        string instrName = GetLlvmIrName(method);
+
+        // Build full arg list: receiver first if method call, then explicit args
+        var allArgs = new List<string>();
+        if (receiver != null)
         {
-            return decimalVal.ToString(format: "G");
+            allArgs.Add(receiver);
         }
-        else if (node.Value is BigInteger bigIntVal)
+        allArgs.AddRange(args);
+
+        // All LLVM intrinsics use template molds with {holes} for substitution
+        return EmitFromTemplate(sb, instrName, method, llvmTypeArgs, allArgs);
+    }
+
+    /// <summary>
+    /// Emits LLVM IR from a template mold string with {hole} substitution.
+    /// Supports multi-line templates (for overflow intrinsics, etc.).
+    /// </summary>
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="mold">The template mold string with {holes}.</param>
+    /// <param name="method">The routine info for generic parameter name resolution.</param>
+    /// <param name="llvmTypeArgs">Resolved LLVM type arguments.</param>
+    /// <param name="args">Emitted argument values.</param>
+    /// <returns>The last {result} temp, or args[0] if no {result} in any line.</returns>
+    private string EmitFromTemplate(StringBuilder sb, string mold, RoutineInfo method,
+        List<string> llvmTypeArgs, List<string> args)
+    {
+        string[] lines = mold.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        string? lastResult = null;
+        string? prevResult = null;
+
+        foreach (string rawLine in lines)
         {
-            return bigIntVal.ToString();
-        }
-        else if (node.Value is Half halfVal)
-        {
-            return ((float)halfVal).ToString(format: "G");
-        }
-        else if (node.Value is bool boolVal)
-        {
-            return boolVal
-                ? "1"
-                : "0";
-        }
-        else if (node.Value is string strVal)
-        {
-            string strConst = $"@.str{_tempCounter++}";
-            int len = strVal.Length + 1;
-            // Store string constant for later emission instead of inserting immediately
-            if (_stringConstants == null)
+            string line = rawLine.Trim();
+            if (line.Length == 0) continue;
+
+            string currentResult = NextTemp();
+            bool hasResult = line.Contains("{result}");
+
+            // Perform substitutions
+            string substituted = line;
+
+            // {result} → current SSA temp
+            substituted = substituted.Replace("{result}", currentResult);
+
+            // {prev} → previous line's {result}
+            if (prevResult != null)
+                substituted = substituted.Replace("{prev}", prevResult);
+
+            // Named type parameters from GenericParameters: {T}, {From}, {To}, etc.
+            // Must be done before parameter names to avoid collisions (e.g. {T} vs {type})
+            if (method.GenericParameters != null)
             {
-                _stringConstants = new List<string>();
+                for (int i = 0; i < method.GenericParameters.Count && i < llvmTypeArgs.Count; i++)
+                {
+                    string paramName = method.GenericParameters[i];
+                    substituted = substituted.Replace($"{{{paramName}}}", llvmTypeArgs[i]);
+
+                    // {sizeof T} → byte size
+                    substituted = substituted.Replace($"{{sizeof {paramName}}}",
+                        (GetTypeBitWidth(llvmTypeArgs[i]) / 8).ToString());
+                }
             }
 
-            _stringConstants.Add(
-                item:
-                $"{strConst} = private unnamed_addr constant [{len} x i8] c\"{strVal}\\00\", align 1");
-            string temp = GetNextTemp();
-            _output.AppendLine(
-                handler:
-                $"  {temp} = getelementptr [{len} x i8], [{len} x i8]* {strConst}, i32 0, i32 0");
-            // Register the temp as a string pointer type
-            _tempTypes[key: temp] = new TypeInfo(LLVMType: "i8*",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "Text");
-            return temp;
+            // Named parameter substitution: {paramName} → args[i]
+            // Parameter names come from method.Parameters, args are positional
+            for (int i = 0; i < method.Parameters.Count && i < args.Count; i++)
+            {
+                string paramName = method.Parameters[i].Name;
+                substituted = substituted.Replace($"{{{paramName}}}", args[i]);
+            }
+
+            EmitLine(sb, $"  {substituted}");
+
+            if (hasResult)
+            {
+                prevResult = currentResult;
+                lastResult = currentResult;
+            }
         }
 
-        return "0";
+        // Return last {result} temp, or first arg if no {result} in template
+        return lastResult ?? (args.Count > 0 ? args[0] : "undef");
     }
 
     /// <summary>
-    /// Visits a list literal expression in the abstract syntax tree (AST) and generates the corresponding LLVM IR code.
-    /// This method handles the initialization of a list and its corresponding elements.
+    /// Emits a regular (non-LLVM-intrinsic) generic method call.
     /// </summary>
-    /// <param name="node">The list literal expression node containing the list elements, their inferred type, and location information.</param>
-    /// <returns>A string representing the generated LLVM IR code for the list literal expression.</returns>
-    public string VisitListLiteralExpression(ListLiteralExpression node)
+    private string EmitRegularGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic,
+        RoutineInfo? method, TypeInfo? receiverType)
     {
-        // TODO: Generate actual List allocation and initialization
-        // For now, just generate a comment placeholder
-        _output.AppendLine(handler: $"  ; List literal with {node.Elements.Count} elements");
-        return "null"; // Placeholder
-    }
+        // Evaluate the receiver
+        string receiver = EmitExpression(sb, generic.Object);
 
-    /// <summary>
-    /// Visits a set literal expression in the abstract syntax tree (AST) and generates the corresponding LLVM IR code.
-    /// Handles the allocation and initialization of a set with the specified elements.
-    /// </summary>
-    /// <param name="node">The set literal expression node containing the elements, optional element type, and source location.</param>
-    /// <returns>
-    /// The generated LLVM IR code string representing the set literal initialization.
-    /// </returns>
-    public string VisitSetLiteralExpression(SetLiteralExpression node)
-    {
-        // TODO: Generate actual Set allocation and initialization
-        _output.AppendLine(handler: $"  ; Set literal with {node.Elements.Count} elements");
-        return "null"; // Placeholder
-    }
-    /// <summary>
-    /// Processes a dictionary literal expression during AST traversal and generates the corresponding LLVM IR code.
-    /// </summary>
-    /// <param name="node">The dictionary literal expression node containing key-value pairs and optional type information.</param>
-    /// <returns>A string representing the generated LLVM IR code for the dictionary literal expression.</returns>
-    public string VisitDictLiteralExpression(DictLiteralExpression node)
-    {
-        // TODO: Generate actual Dict allocation and initialization
-        _output.AppendLine(handler: $"  ; Dict literal with {node.Pairs.Count} pairs");
-        return "null"; // Placeholder
-    }
+        // Build argument list: receiver first (becomes 'me'), then explicit arguments
+        var argValues = new List<string> { receiver };
+        var argTypes = new List<string> { receiverType != null ? GetParameterLLVMType(receiverType) : "ptr" };
 
-    // Memory slice expression visitor methods
-    public string VisitSliceConstructorExpression(SliceConstructorExpression node)
-    {
-        string sizeTemp = node.SizeExpression.Accept(visitor: this);
-        string resultTemp = GetNextTemp();
-
-        if (node.SliceType == "DynamicSlice")
+        foreach (var arg in generic.Arguments)
         {
-            // Generate LLVM IR for heap slice construction
-            _output.AppendLine(handler: $"  {resultTemp} = call ptr @heap_alloc(i64 {sizeTemp})");
-        }
-        else if (node.SliceType == "TemporarySlice")
-        {
-            // Generate LLVM IR for stack slice construction
-            _output.AppendLine(handler: $"  {resultTemp} = call ptr @stack_alloc(i64 {sizeTemp})");
+            string value = EmitExpression(sb, arg);
+            argValues.Add(value);
+
+            TypeInfo? argType = GetExpressionType(arg);
+            if (argType == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot determine type for argument in generic method call to '{generic.MethodName}'");
+            }
+            argTypes.Add(GetLLVMType(argType));
         }
 
-        // Store slice type information for later use
-        _tempTypes[key: resultTemp] = new TypeInfo(LLVMType: "ptr",
-            IsUnsigned: false,
-            IsFloatingPoint: false,
-            RazorForgeType: node.SliceType);
-        return resultTemp;
+        // Build the call
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : receiverType != null
+                ? $"{MangleTypeName(receiverType.Name)}_{generic.MethodName}"
+                : generic.MethodName;
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : "void";
+
+        if (returnType == "void")
+        {
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  call void @{mangledName}({args})");
+            return "undef";
+        }
+        else
+        {
+            string result = NextTemp();
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+            return result;
+        }
     }
+
+    /// <summary>
+    /// Gets the LLVM IR instruction name for a routine, checking for @llvm_ir("name") annotation.
+    /// Falls back to the routine name if no annotation is present.
+    /// </summary>
+    private static string GetLlvmIrName(RoutineInfo routine)
+    {
+        foreach (var annotation in routine.Annotations)
+        {
+            if (annotation.StartsWith("llvm_ir("))
+            {
+                // Extract: llvm_ir("name") → name
+                int start = annotation.IndexOf('"') + 1;
+                int end = annotation.LastIndexOf('"');
+                if (start > 0 && end > start)
+                {
+                    return annotation[start..end];
+                }
+            }
+        }
+
+        return routine.Name;
+    }
+
+    /// <summary>
+    /// Resolves a TypeExpression (AST node) to its LLVM type string.
+    /// </summary>
+    private string ResolveTypeExpressionToLLVM(TypeExpression typeExpr)
+    {
+        // Look up the type in the registry
+        TypeInfo? type = _registry.LookupType(typeExpr.Name);
+        if (type != null)
+        {
+            return GetLLVMType(type);
+        }
+
+        // Fall back: return the name as-is (assumes it's already an LLVM type name)
+        return typeExpr.Name;
+    }
+
+    /// <summary>
+    /// Gets the return type of a generic method call expression.
+    /// </summary>
+    private TypeInfo? GetGenericMethodCallReturnType(GenericMethodCallExpression generic)
+    {
+        TypeInfo? receiverType = GetExpressionType(generic.Object);
+
+        string methodFullName = receiverType != null
+            ? $"{receiverType.Name}.{generic.MethodName}"
+            : generic.MethodName;
+
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName)
+                              ?? _registry.LookupRoutine(generic.MethodName);
+
+        return method?.ReturnType;
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Gets the type of an expression (from semantic analysis metadata).
+    /// </summary>
+    private TypeInfo? GetExpressionType(Expression expr)
+    {
+        // First, check if the semantic analyzer has already resolved the type
+        if (expr.ResolvedType != null)
+        {
+            return expr.ResolvedType;
+        }
+
+        // Fall back to inferring from the expression structure
+        return expr switch
+        {
+            LiteralExpression literal => GetLiteralType(literal),
+            IdentifierExpression id => _localVariables.TryGetValue(id.Name, out var varType) ? varType : _registry.LookupVariable(id.Name)?.Type,
+            MemberExpression member => GetMemberType(member),
+            CreatorExpression ctor => _registry.LookupType(ctor.TypeName),
+            BinaryExpression binary => GetExpressionType(binary.Left), // Use left operand type
+            UnaryExpression unary => GetExpressionType(unary.Operand),
+            CallExpression call => GetCallReturnType(call),
+            GenericMethodCallExpression generic => GetGenericMethodCallReturnType(generic),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Gets the return type of a call expression.
+    /// </summary>
+    private TypeInfo? GetCallReturnType(CallExpression call)
+    {
+        string funcName = call.Callee switch
+        {
+            IdentifierExpression id => id.Name,
+            MemberExpression member => member.PropertyName,
+            _ => null
+        } ?? string.Empty;
+
+        var routine = _registry.LookupRoutine(funcName);
+        return routine?.ReturnType;
+    }
+
+    /// <summary>
+    /// Gets the type of a literal expression from its token type.
+    /// </summary>
+    private TypeInfo? GetLiteralType(LiteralExpression literal)
+    {
+        string? typeName = literal.LiteralType switch
+        {
+            Lexer.TokenType.S8Literal => "S8",
+            Lexer.TokenType.S16Literal => "S16",
+            Lexer.TokenType.S32Literal => "S32",
+            Lexer.TokenType.S64Literal => "S64",
+            Lexer.TokenType.S128Literal => "S128",
+            Lexer.TokenType.U8Literal => "U8",
+            Lexer.TokenType.U16Literal => "U16",
+            Lexer.TokenType.U32Literal => "U32",
+            Lexer.TokenType.U64Literal => "U64",
+            Lexer.TokenType.U128Literal => "U128",
+            Lexer.TokenType.F16Literal => "F16",
+            Lexer.TokenType.F32Literal => "F32",
+            Lexer.TokenType.F64Literal => "F64",
+            Lexer.TokenType.F128Literal => "F128",
+            Lexer.TokenType.D32Literal => "D32",
+            Lexer.TokenType.D64Literal => "D64",
+            Lexer.TokenType.D128Literal => "D128",
+            Lexer.TokenType.True or Lexer.TokenType.False => "Bool",
+            Lexer.TokenType.TextLiteral => "Text",
+            _ => null
+        };
+
+        return typeName != null ? _registry.LookupType(typeName) : null;
+    }
+
+    /// <summary>
+    /// Gets the type of a member access expression.
+    /// </summary>
+    private TypeInfo? GetMemberType(MemberExpression member)
+    {
+        TypeInfo? targetType = GetExpressionType(member.Object);
+        if (targetType == null) return null;
+
+        MemberVariableInfo? memberVariable = targetType switch
+        {
+            EntityTypeInfo e => e.LookupMemberVariable(member.PropertyName),
+            RecordTypeInfo r => r.LookupMemberVariable(member.PropertyName),
+            ResidentTypeInfo res => res.LookupMemberVariable(member.PropertyName),
+            _ => null
+        };
+
+        return memberVariable?.Type;
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Gets the bit width of an LLVM type.
+    /// </summary>
+    private int GetTypeBitWidth(string llvmType)
+    {
+        return llvmType switch
+        {
+            "i1" => 1,
+            "i8" => 8,
+            "i16" => 16,
+            "i32" => 32,
+            "i64" => 64,
+            "i128" => 128,
+            "half" => 16,
+            "float" => 32,
+            "double" => 64,
+            "fp128" => 128,
+            "ptr" => _pointerBitWidth,
+            _ => throw new InvalidOperationException($"Unknown LLVM type for bitwidth: {llvmType}")
+        };
+    }
+
+    #region Additional Expression Types
+
+    /// <summary>
+    /// Generates code for a conditional (ternary) expression.
+    /// </summary>
+    private string EmitConditional(StringBuilder sb, ConditionalExpression cond)
+    {
+        string condition = EmitExpression(sb, cond.Condition);
+
+        string thenLabel = NextLabel("cond_then");
+        string elseLabel = NextLabel("cond_else");
+        string endLabel = NextLabel("cond_end");
+
+        EmitLine(sb, $"  br i1 {condition}, label %{thenLabel}, label %{elseLabel}");
+
+        // Then branch
+        EmitLine(sb, $"{thenLabel}:");
+        string thenValue = EmitExpression(sb, cond.TrueExpression);
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Else branch
+        EmitLine(sb, $"{elseLabel}:");
+        string elseValue = EmitExpression(sb, cond.FalseExpression);
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge with phi
+        EmitLine(sb, $"{endLabel}:");
+        string result = NextTemp();
+        TypeInfo? resultType = GetExpressionType(cond.TrueExpression);
+        if (resultType == null)
+        {
+            throw new InvalidOperationException("Cannot determine type for conditional expression");
+        }
+        string llvmType = GetLLVMType(resultType);
+        EmitLine(sb, $"  {result} = phi {llvmType} [ {thenValue}, %{thenLabel} ], [ {elseValue}, %{elseLabel} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Generates code for an index access expression (e.g., list[i]).
+    /// </summary>
+    private string EmitIndexAccess(StringBuilder sb, IndexExpression index)
+    {
+        string target = EmitExpression(sb, index.Object);
+        string indexValue = EmitExpression(sb, index.Index);
+
+        // Resolve element type from container's generic type arguments
+        TypeInfo? targetType = GetExpressionType(index.Object);
+        string elemType = targetType switch
+        {
+            RecordTypeInfo r when r.TypeArguments.Count > 0 => GetLLVMType(r.TypeArguments[0]),
+            EntityTypeInfo e when e.TypeArguments.Count > 0 => GetLLVMType(e.TypeArguments[0]),
+            _ => throw new InvalidOperationException(
+                $"Cannot determine element type for indexing on type: {targetType?.Name}")
+        };
+
+        string elemPtr = NextTemp();
+        string result = NextTemp();
+        EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {indexValue}");
+        EmitLine(sb, $"  {result} = load {elemType}, ptr {elemPtr}");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Generates code for a slice expression: obj[start to end] → __getslice__(start, end)
+    /// </summary>
+    private string EmitSliceAccess(StringBuilder sb, SliceExpression slice)
+    {
+        string target = EmitExpression(sb, slice.Object);
+        string start = EmitExpression(sb, slice.Start);
+        string end = EmitExpression(sb, slice.End);
+
+        TypeInfo? targetType = GetExpressionType(slice.Object);
+        if (targetType == null)
+        {
+            throw new InvalidOperationException("Cannot determine type for slice target");
+        }
+
+        string methodFullName = $"{targetType.Name}.__getslice__";
+        RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        var argValues = new List<string> { target, start, end };
+        var argTypes = new List<string> { GetParameterLLVMType(targetType), "i64", "i64" };
+
+        string mangledName = method != null
+            ? MangleFunctionName(method)
+            : $"{MangleTypeName(targetType.Name)}___getslice__";
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(method.ReturnType)
+            : GetParameterLLVMType(targetType);
+
+        string result = NextTemp();
+        string args = BuildCallArgs(argTypes, argValues);
+        EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+        return result;
+    }
+
+    /// <summary>
+    /// Generates code for a range expression.
+    /// </summary>
+    private string EmitRange(StringBuilder sb, RangeExpression range)
+    {
+        // Emit start, end, step expressions
+        string start = EmitExpression(sb, range.Start);
+        string end = EmitExpression(sb, range.End);
+        string step = range.Step != null ? EmitExpression(sb, range.Step) : "1";
+        string isDescending = range.IsDescending ? "true" : "false";
+
+        // Infer element type from start/end expressions (Range[T] is generic)
+        TypeInfo? elemType = GetExpressionType(range.Start) ?? GetExpressionType(range.End);
+        string elemLlvmType = elemType != null ? GetLLVMType(elemType) : "i64";
+
+        // Try to use registered Range type, fall back to literal struct
+        TypeInfo? rangeType = _registry.LookupType("Range");
+        string structType;
+        if (rangeType is RecordTypeInfo rangeRecord)
+        {
+            structType = GetRecordTypeName(rangeRecord);
+        }
+        else
+        {
+            structType = $"{{ {elemLlvmType}, {elemLlvmType}, {elemLlvmType}, i1 }}";
+        }
+
+        // Build struct via insertvalue chain: { start, end, step, is_descending }
+        string v0 = NextTemp();
+        EmitLine(sb, $"  {v0} = insertvalue {structType} undef, {elemLlvmType} {start}, 0");
+        string v1 = NextTemp();
+        EmitLine(sb, $"  {v1} = insertvalue {structType} {v0}, {elemLlvmType} {end}, 1");
+        string v2 = NextTemp();
+        EmitLine(sb, $"  {v2} = insertvalue {structType} {v1}, {elemLlvmType} {step}, 2");
+        string v3 = NextTemp();
+        EmitLine(sb, $"  {v3} = insertvalue {structType} {v2}, i1 {isDescending}, 3");
+
+        return v3;
+    }
+
+    /// <summary>
+    /// Generates code for a steal expression (ownership transfer).
+    /// </summary>
+    /// <remarks>
+    /// The steal keyword transfers ownership from the source to the destination.
+    /// At runtime, this is essentially a pass-through - the ownership tracking
+    /// is handled at compile time by the semantic analyzer, which marks the
+    /// source as a deadref after the steal.
+    ///
+    /// Stealable types:
+    /// - Raw entities (ownership transferred)
+    /// - Shared[T] (reference count transferred)
+    /// - Tracked[T] (weak reference transferred)
+    ///
+    /// Non-stealable types (caught by semantic analyzer):
+    /// - Scope-bound tokens (Viewed, Hijacked, Inspected, Seized)
+    /// - Snatched[T] (internal ownership type)
+    /// </remarks>
+    private string EmitSteal(StringBuilder sb, StealExpression steal)
+    {
+        // Steal just evaluates the operand and passes the value through.
+        // The semantic analyzer has already validated that:
+        // 1. The operand is a stealable type
+        // 2. The source will be marked as deadref after this point
+        return EmitExpression(sb, steal.Operand);
+    }
+
+    /// <summary>
+    /// Generates code for a tuple literal expression.
+    /// Creates a ValueTuple (for pure value types) or Tuple (for mixed/reference types).
+    /// </summary>
+    /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <param name="tuple">The tuple literal expression.</param>
+    /// <returns>The temporary variable holding the tuple pointer.</returns>
+    /// <remarks>
+    /// Tuple layout:
+    /// - ValueTuple: stack-allocated struct with member variables item0, item1, ...
+    /// - Tuple: heap-allocated entity with member variables item0, item1, ...
+    ///
+    /// The semantic analyzer determines which type to use based on element types.
+    /// </remarks>
+    private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
+    {
+        // Evaluate all element expressions
+        var elemValues = new List<string>();
+        var elemLLVMTypes = new List<string>();
+        foreach (var element in tuple.Elements)
+        {
+            elemValues.Add(EmitExpression(sb, element));
+            TypeInfo? elemType = GetExpressionType(element);
+            elemLLVMTypes.Add(elemType != null ? GetLLVMType(elemType) : "i64");
+        }
+
+        // Resolve tuple type from semantic analysis
+        TupleTypeInfo? tupleType = tuple.ResolvedType as TupleTypeInfo;
+
+        if (tupleType == null || tupleType.Kind == TupleKind.Value || tupleType.Kind == TupleKind.Fixed)
+        {
+            // ValueTuple / FixedTuple: build struct via insertvalue chain
+            string structType;
+            if (tupleType != null)
+            {
+                structType = GetTupleTypeName(tupleType);
+            }
+            else
+            {
+                // Fall back to anonymous struct type
+                structType = $"{{ {string.Join(", ", elemLLVMTypes)} }}";
+            }
+
+            string result = "undef";
+            for (int i = 0; i < elemValues.Count; i++)
+            {
+                string newResult = NextTemp();
+                EmitLine(sb, $"  {newResult} = insertvalue {structType} {result}, {elemLLVMTypes[i]} {elemValues[i]}, {i}");
+                result = newResult;
+            }
+
+            return result;
+        }
+        else
+        {
+            // Reference Tuple: heap-allocate via rf_alloc, GEP + store each element
+            int size = CalculateTupleSize(tupleType);
+            string structType = GetTupleTypeName(tupleType);
+
+            string rawPtr = NextTemp();
+            EmitLine(sb, $"  {rawPtr} = call ptr @rf_alloc(i64 {size})");
+
+            for (int i = 0; i < elemValues.Count; i++)
+            {
+                string elemPtr = NextTemp();
+                EmitLine(sb, $"  {elemPtr} = getelementptr {structType}, ptr {rawPtr}, i32 0, i32 {i}");
+                EmitLine(sb, $"  store {elemLLVMTypes[i]} {elemValues[i]}, ptr {elemPtr}");
+            }
+
+            return rawPtr;
+        }
+    }
+
+    #endregion
+
+    #region Error Handling Operators
+
+    /// <summary>
+    /// Emits the ?? (none coalesce) operator.
+    /// If the left operand (ErrorHandlingTypeInfo) is VALID, extracts its value.
+    /// Otherwise evaluates and returns the right operand as default.
+    /// </summary>
+    private string EmitNoneCoalesce(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb, binary.Left);
+        TypeInfo? leftType = GetExpressionType(binary.Left);
+
+        if (leftType is not ErrorHandlingTypeInfo errorType)
+        {
+            throw new InvalidOperationException("'??' operator requires ErrorHandlingTypeInfo on the left");
+        }
+
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {left}, ptr {allocaPtr}");
+
+        // Extract tag (field 0)
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        // Check tag == 1 (VALID)
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string valLabel = NextLabel("coalesce_val");
+        string rhsLabel = NextLabel("coalesce_rhs");
+        string endLabel = NextLabel("coalesce_end");
+        string leftBlock = _currentBlock;
+
+        EmitLine(sb, $"  br i1 {isValid}, label %{valLabel}, label %{rhsLabel}");
+
+        // Valid path: extract the value from the handle
+        EmitLine(sb, $"{valLabel}:");
+        _currentBlock = valLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        // Determine the value type T
+        TypeInfo valueType = errorType.ValueType;
+        string llvmValueType = GetLLVMType(valueType);
+
+        // Load T from the handle pointer
+        string validValue = NextTemp();
+        EmitLine(sb, $"  {validValue} = load {llvmValueType}, ptr {handleVal}");
+        string valBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // RHS path: evaluate the default expression
+        EmitLine(sb, $"{rhsLabel}:");
+        _currentBlock = rhsLabel;
+        string rhsValue = EmitExpression(sb, binary.Right);
+        string rhsBlock = _currentBlock;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge with PHI
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi {llvmValueType} [ {validValue}, %{valBlock} ], [ {rhsValue}, %{rhsBlock} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Emits the !! (force unwrap) operator.
+    /// If the operand (ErrorHandlingTypeInfo) is VALID, extracts its value.
+    /// Otherwise traps (crashes the program).
+    /// </summary>
+    private string EmitForceUnwrap(StringBuilder sb, UnaryExpression unary)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        TypeInfo? operandType = GetExpressionType(unary.Operand);
+
+        if (operandType is not ErrorHandlingTypeInfo errorType)
+        {
+            throw new InvalidOperationException("'!!' operator requires ErrorHandlingTypeInfo operand");
+        }
+
+        // Declare llvm.trap if not already declared
+        if (_declaredNativeFunctions.Add("llvm.trap"))
+        {
+            EmitLine(_functionDeclarations, "declare void @llvm.trap() noreturn nounwind");
+        }
+
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {operand}, ptr {allocaPtr}");
+
+        // Extract tag (field 0)
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        // Check tag == 1 (VALID)
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string okLabel = NextLabel("unwrap_ok");
+        string failLabel = NextLabel("unwrap_fail");
+
+        EmitLine(sb, $"  br i1 {isValid}, label %{okLabel}, label %{failLabel}");
+
+        // Fail path: trap
+        EmitLine(sb, $"{failLabel}:");
+        _currentBlock = failLabel;
+        EmitLine(sb, $"  call void @llvm.trap()");
+        EmitLine(sb, $"  unreachable");
+
+        // OK path: extract the value from the handle
+        EmitLine(sb, $"{okLabel}:");
+        _currentBlock = okLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        // Load T from the handle pointer
+        TypeInfo valueType = errorType.ValueType;
+        string llvmValueType = GetLLVMType(valueType);
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = load {llvmValueType}, ptr {handleVal}");
+
+        return result;
+    }
+
+    #endregion
+
+    #region Optional Chaining
+
+    /// <summary>
+    /// Emits optional member access (?.): obj?.field
+    /// If obj is null/none, produces a zero/null value. Otherwise performs normal member access.
+    /// </summary>
+    private string EmitOptionalMemberAccess(StringBuilder sb, OptionalMemberExpression optMember)
+    {
+        string obj = EmitExpression(sb, optMember.Object);
+        TypeInfo? objType = GetExpressionType(optMember.Object);
+
+        if (objType is ErrorHandlingTypeInfo errorType)
+        {
+            return EmitOptionalChainErrorHandling(sb, obj, errorType, optMember.PropertyName);
+        }
+
+        // Entity/Resident (pointer): null check
+        return EmitOptionalChainPointer(sb, obj, objType, optMember.PropertyName);
+    }
+
+    /// <summary>
+    /// Optional chaining on a pointer-based type (entity/resident): null check → member access or zero.
+    /// </summary>
+    private string EmitOptionalChainPointer(StringBuilder sb, string obj, TypeInfo? objType, string propertyName)
+    {
+        string nonNullLabel = NextLabel("optchain_nonnull");
+        string nullLabel = NextLabel("optchain_null");
+        string endLabel = NextLabel("optchain_end");
+        string entryBlock = _currentBlock;
+
+        // Null check
+        string isNull = NextTemp();
+        EmitLine(sb, $"  {isNull} = icmp eq ptr {obj}, null");
+        EmitLine(sb, $"  br i1 {isNull}, label %{nullLabel}, label %{nonNullLabel}");
+
+        // Non-null path: do normal member access
+        EmitLine(sb, $"{nonNullLabel}:");
+        _currentBlock = nonNullLabel;
+        string memberValue = EmitMemberAccessOnType(sb, obj, objType, propertyName);
+        string memberBlock = _currentBlock;
+
+        // Determine result type from member access
+        TypeInfo? resultType = GetMemberTypeFromOwner(objType, propertyName);
+        string llvmResultType = resultType != null ? GetLLVMType(resultType) : "ptr";
+        string zeroValue = resultType != null ? GetZeroValue(resultType) : "null";
+
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Null path: return zero/null
+        EmitLine(sb, $"{nullLabel}:");
+        _currentBlock = nullLabel;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi {llvmResultType} [ {memberValue}, %{memberBlock} ], [ {zeroValue}, %{nullLabel} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Optional chaining on an ErrorHandlingTypeInfo: check VALID → extract value → member access, or zero.
+    /// </summary>
+    private string EmitOptionalChainErrorHandling(StringBuilder sb, string obj, ErrorHandlingTypeInfo errorType, string propertyName)
+    {
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {obj}, ptr {allocaPtr}");
+
+        // Extract tag
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string validLabel = NextLabel("optchain_valid");
+        string invalidLabel = NextLabel("optchain_invalid");
+        string endLabel = NextLabel("optchain_end");
+
+        EmitLine(sb, $"  br i1 {isValid}, label %{validLabel}, label %{invalidLabel}");
+
+        // Valid path: extract value and do member access
+        EmitLine(sb, $"{validLabel}:");
+        _currentBlock = validLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        TypeInfo valueType = errorType.ValueType;
+        string llvmValueType = GetLLVMType(valueType);
+        string innerValue = NextTemp();
+        EmitLine(sb, $"  {innerValue} = load {llvmValueType}, ptr {handleVal}");
+
+        // Now do member access on the extracted value
+        string memberValue = EmitMemberAccessOnType(sb, innerValue, valueType, propertyName);
+        string validBlock = _currentBlock;
+
+        // Determine result type
+        TypeInfo? resultType = GetMemberTypeFromOwner(valueType, propertyName);
+        string llvmResultType = resultType != null ? GetLLVMType(resultType) : "ptr";
+        string zeroValue = resultType != null ? GetZeroValue(resultType) : "null";
+
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Invalid path
+        EmitLine(sb, $"{invalidLabel}:");
+        _currentBlock = invalidLabel;
+        EmitLine(sb, $"  br label %{endLabel}");
+
+        // Merge
+        EmitLine(sb, $"{endLabel}:");
+        _currentBlock = endLabel;
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = phi {llvmResultType} [ {memberValue}, %{validBlock} ], [ {zeroValue}, %{invalidLabel} ]");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs member access on a value given its type, reusing existing member read logic.
+    /// </summary>
+    private string EmitMemberAccessOnType(StringBuilder sb, string value, TypeInfo? type, string propertyName)
+    {
+        return type switch
+        {
+            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, value, entity, propertyName),
+            RecordTypeInfo record => EmitRecordMemberVariableRead(sb, value, record, propertyName),
+            ResidentTypeInfo resident => EmitResidentMemberVariableRead(sb, value, resident, propertyName),
+            _ => throw new InvalidOperationException($"Cannot access member on type: {type?.Name}")
+        };
+    }
+
+    /// <summary>
+    /// Gets the type of a member variable from the owning type.
+    /// </summary>
+    private TypeInfo? GetMemberTypeFromOwner(TypeInfo? ownerType, string memberName)
+    {
+        IReadOnlyList<MemberVariableInfo>? members = ownerType switch
+        {
+            EntityTypeInfo entity => entity.MemberVariables,
+            RecordTypeInfo record => record.MemberVariables,
+            ResidentTypeInfo resident => resident.MemberVariables,
+            _ => null
+        };
+
+        if (members == null) return null;
+
+        foreach (var m in members)
+        {
+            if (m.Name == memberName) return m.Type;
+        }
+        return null;
+    }
+
+    #endregion
+
+    #region Text Insertion (F-Strings)
+
+    /// <summary>
+    /// Emits an f-string (InsertedTextExpression).
+    /// Concatenates text and expression parts via Text.__create__ and Text.concat calls.
+    /// </summary>
+    private string EmitInsertedText(StringBuilder sb, InsertedTextExpression inserted)
+    {
+        if (inserted.Parts.Count == 0)
+        {
+            return EmitStringLiteral(sb, "");
+        }
+
+        // Convert each part to a ptr (Text value)
+        var partValues = new List<string>();
+        foreach (var part in inserted.Parts)
+        {
+            switch (part)
+            {
+                case TextPart textPart:
+                    partValues.Add(EmitStringLiteral(sb, textPart.Text));
+                    break;
+                case ExpressionPart exprPart:
+                    partValues.Add(EmitInsertedTextPart(sb, exprPart));
+                    break;
+            }
+        }
+
+        if (partValues.Count == 1)
+        {
+            return partValues[0];
+        }
+
+        // Chain concat calls: acc = acc.concat(next)
+        string accumulator = partValues[0];
+        for (int i = 1; i < partValues.Count; i++)
+        {
+            string concatName = "Text.concat";
+            RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
+
+            string mangledConcat = concatMethod != null
+                ? MangleFunctionName(concatMethod)
+                : "Text_concat";
+
+            string concatResult = NextTemp();
+            EmitLine(sb, $"  {concatResult} = call ptr @{mangledConcat}(ptr {accumulator}, ptr {partValues[i]})");
+            accumulator = concatResult;
+        }
+
+        return accumulator;
+    }
+
+    /// <summary>
+    /// Emits a single expression part of an f-string, handling format specifiers.
+    /// </summary>
+    private string EmitInsertedTextPart(StringBuilder sb, ExpressionPart exprPart)
+    {
+        string exprValue = EmitExpression(sb, exprPart.Expression);
+        TypeInfo? exprType = GetExpressionType(exprPart.Expression);
+        string? formatSpec = exprPart.FormatSpec;
+
+        // Handle "=" specifier: emit "name=value" (variable name prefix)
+        if (formatSpec == "=")
+        {
+            // Emit the variable name as a prefix: "varname="
+            string varName = exprPart.Expression is IdentifierExpression id ? id.Name : "expr";
+            string prefix = EmitStringLiteral(sb, $"{varName}=");
+            string valueText = EmitValueToText(sb, exprValue, exprType, null);
+
+            // Concat: prefix + valueText
+            string concatName = "Text.concat";
+            RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
+            string mangledConcat = concatMethod != null
+                ? MangleFunctionName(concatMethod)
+                : "Text_concat";
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @{mangledConcat}(ptr {prefix}, ptr {valueText})");
+            return result;
+        }
+
+        // Handle "!d" specifier: call to_debug() instead of Text.__create__
+        if (formatSpec == "!d" || formatSpec == "d")
+        {
+            string typeName = exprType?.Name ?? "Data";
+            string debugName = $"{typeName}.to_debug";
+            RoutineInfo? debugMethod = _registry.LookupRoutine(debugName);
+
+            string mangledDebug = debugMethod != null
+                ? MangleFunctionName(debugMethod)
+                : $"{MangleTypeName(typeName)}_to_debug";
+
+            string argType = exprType != null ? GetParameterLLVMType(exprType) : "i64";
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @{mangledDebug}({argType} {exprValue})");
+            return result;
+        }
+
+        // For all other format specifiers (D2, E3, b, h, etc.): call rf_format with spec string
+        // If no spec or Text type, use default conversion
+        return EmitValueToText(sb, exprValue, exprType, formatSpec);
+    }
+
+    /// <summary>
+    /// Converts a value to Text, optionally applying a format specifier.
+    /// </summary>
+    private string EmitValueToText(StringBuilder sb, string value, TypeInfo? type, string? formatSpec)
+    {
+        // If already Text, return directly
+        if (type?.Name == "Text")
+        {
+            return value;
+        }
+
+        // If format spec is provided, call rf_format(value, spec_ptr) runtime function
+        if (formatSpec != null)
+        {
+            if (_declaredNativeFunctions.Add("rf_format"))
+            {
+                EmitLine(_functionDeclarations, "declare ptr @rf_format(i64, ptr)");
+            }
+
+            string specPtr = EmitStringLiteral(sb, formatSpec);
+
+            // Bitcast/extend value to i64 for the generic format call
+            string argType = type != null ? GetLLVMType(type) : "i64";
+            string i64Value;
+            if (argType == "i64")
+            {
+                i64Value = value;
+            }
+            else if (argType is "i1" or "i8" or "i16" or "i32")
+            {
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = sext {argType} {value} to i64");
+            }
+            else if (argType is "float")
+            {
+                string dbl = NextTemp();
+                EmitLine(sb, $"  {dbl} = fpext float {value} to double");
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = bitcast double {dbl} to i64");
+            }
+            else if (argType is "double")
+            {
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = bitcast double {value} to i64");
+            }
+            else
+            {
+                // ptr or other: ptrtoint
+                i64Value = NextTemp();
+                EmitLine(sb, $"  {i64Value} = ptrtoint ptr {value} to i64");
+            }
+
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @rf_format(i64 {i64Value}, ptr {specPtr})");
+            return result;
+        }
+
+        // Default: call Text.__create__(from: value)
+        string createName = "Text.__create__";
+        RoutineInfo? createMethod = _registry.LookupRoutine(createName);
+
+        string llvmArgType = type != null ? GetLLVMType(type) : "i64";
+        string mangledName = createMethod != null
+            ? MangleFunctionName(createMethod)
+            : "Text___create__";
+
+        string textResult = NextTemp();
+        EmitLine(sb, $"  {textResult} = call ptr @{mangledName}({llvmArgType} {value})");
+        return textResult;
+    }
+
+    #endregion
+
+    #region List Literals
+
+    /// <summary>
+    /// Emits a list literal expression: [1, 2, 3]
+    /// Allocates a List entity and adds each element via add_last.
+    /// </summary>
+    private string EmitListLiteral(StringBuilder sb, ListLiteralExpression list)
+    {
+        // Determine element type from ResolvedType or first element
+        TypeInfo? listType = list.ResolvedType;
+        TypeInfo? elemType = null;
+
+        if (listType is EntityTypeInfo entity && entity.TypeArguments.Count > 0)
+        {
+            elemType = entity.TypeArguments[0];
+        }
+        else if (list.Elements.Count > 0)
+        {
+            elemType = GetExpressionType(list.Elements[0]);
+        }
+
+        string elemLLVMType = elemType != null ? GetLLVMType(elemType) : "i64";
+
+        // Look up List type and its constructor/add_last method
+        string listTypeName = listType != null ? listType.Name : $"List[{elemType?.Name ?? "S64"}]";
+        string mangledListType = MangleTypeName(listTypeName);
+
+        // Allocate the list via constructor or rf_alloc
+        // Try to find a __create__ or use a fallback allocation
+        string createName = $"{listTypeName}.__create__";
+        RoutineInfo? createMethod = _registry.LookupRoutine(createName);
+
+        string listPtr;
+        if (createMethod != null)
+        {
+            string mangledCreate = MangleFunctionName(createMethod);
+            listPtr = NextTemp();
+            EmitLine(sb, $"  {listPtr} = call ptr @{mangledCreate}()");
+        }
+        else
+        {
+            // Fallback: allocate via rf_alloc with a reasonable default size
+            // List entity needs at least: count (i64) + capacity (i64) + data ptr
+            listPtr = NextTemp();
+            EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+
+            // Initialize count = 0, capacity = element count, data = alloc(n * elem_size)
+            string countPtr = NextTemp();
+            EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+            EmitLine(sb, $"  store i64 0, ptr {countPtr}");
+
+            string capPtr = NextTemp();
+            EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+            long capacity = Math.Max(list.Elements.Count, 4);
+            EmitLine(sb, $"  store i64 {capacity}, ptr {capPtr}");
+
+            int elemSize = elemType != null ? GetTypeSize(elemType) : 8;
+            string dataPtr = NextTemp();
+            EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {capacity * elemSize})");
+            string dataPtrSlot = NextTemp();
+            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+            EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+        }
+
+        // Add each element via add_last or direct store
+        string addLastName = $"{listTypeName}.add_last";
+        RoutineInfo? addLastMethod = _registry.LookupRoutine(addLastName);
+
+        if (addLastMethod != null)
+        {
+            string mangledAddLast = MangleFunctionName(addLastMethod);
+            foreach (var elem in list.Elements)
+            {
+                string elemValue = EmitExpression(sb, elem);
+                EmitLine(sb, $"  call void @{mangledAddLast}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+            }
+        }
+        else
+        {
+            // Fallback: direct store into data buffer
+            // Load data ptr, then GEP + store for each element
+            string dataPtrSlot = NextTemp();
+            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+            string dataBase = NextTemp();
+            EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataPtrSlot}");
+
+            for (int i = 0; i < list.Elements.Count; i++)
+            {
+                string elemValue = EmitExpression(sb, list.Elements[i]);
+                string elemPtr = NextTemp();
+                EmitLine(sb, $"  {elemPtr} = getelementptr {elemLLVMType}, ptr {dataBase}, i64 {i}");
+                EmitLine(sb, $"  store {elemLLVMType} {elemValue}, ptr {elemPtr}");
+            }
+
+            // Update count
+            string countPtr = NextTemp();
+            EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+            EmitLine(sb, $"  store i64 {list.Elements.Count}, ptr {countPtr}");
+        }
+
+        return listPtr;
+    }
+
+    #endregion
+
+    #region Flags Tests
+
+    /// <summary>
+    /// Emits a flags test expression: x is FLAG, x isnot FLAG, x isonly FLAG.
+    /// FlagsTestExpression has Subject, Kind, TestFlags, Connective, and ExcludedFlags.
+    /// </summary>
+    private string EmitFlagsTest(StringBuilder sb, FlagsTestExpression flagsTest)
+    {
+        string subject = EmitExpression(sb, flagsTest.Subject);
+        TypeInfo? subjectType = GetExpressionType(flagsTest.Subject);
+
+        FlagsTypeInfo? flagsType = subjectType as FlagsTypeInfo;
+
+        // Build the combined test mask from TestFlags
+        ulong testMask = 0;
+        foreach (string flagName in flagsTest.TestFlags)
+        {
+            testMask |= ResolveFlagBit(flagName, flagsType);
+        }
+
+        // Build the excluded mask from ExcludedFlags (if present)
+        ulong excludedMask = 0;
+        if (flagsTest.ExcludedFlags != null)
+        {
+            foreach (string flagName in flagsTest.ExcludedFlags)
+            {
+                excludedMask |= ResolveFlagBit(flagName, flagsType);
+            }
+        }
+
+        string maskStr = testMask.ToString();
+
+        return flagsTest.Kind switch
+        {
+            FlagsTestKind.Is => EmitFlagsIsTest(sb, subject, maskStr, flagsTest.Connective, excludedMask),
+            FlagsTestKind.IsNot => EmitFlagsIsNotTest(sb, subject, maskStr),
+            FlagsTestKind.IsOnly => EmitFlagsIsOnlyTest(sb, subject, maskStr),
+            _ => throw new InvalidOperationException($"Unknown flags test kind: {flagsTest.Kind}")
+        };
+    }
+
+    /// <summary>
+    /// Resolves a flag member name to its bit value (1UL &lt;&lt; BitPosition).
+    /// Falls back to 0 if not found.
+    /// </summary>
+    private static ulong ResolveFlagBit(string flagName, FlagsTypeInfo? flagsType)
+    {
+        if (flagsType == null) return 0;
+        foreach (var member in flagsType.Members)
+        {
+            if (member.Name == flagName)
+            {
+                return 1UL << member.BitPosition;
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// x is A and B → (x &amp; mask) == mask (all flags set)
+    /// x is A or B  → (x &amp; mask) != 0 (any flag set)
+    /// x is A and B but C → ((x &amp; mask) == mask) &amp;&amp; ((x &amp; excludedMask) == 0)
+    /// </summary>
+    private string EmitFlagsIsTest(StringBuilder sb, string subject, string mask, FlagsTestConnective connective, ulong excludedMask)
+    {
+        string andResult = NextTemp();
+        EmitLine(sb, $"  {andResult} = and i64 {subject}, {mask}");
+
+        string cmpResult;
+        if (connective == FlagsTestConnective.Or)
+        {
+            // Any flag set: (subject & mask) != 0
+            cmpResult = NextTemp();
+            EmitLine(sb, $"  {cmpResult} = icmp ne i64 {andResult}, 0");
+        }
+        else
+        {
+            // All flags set: (subject & mask) == mask
+            cmpResult = NextTemp();
+            EmitLine(sb, $"  {cmpResult} = icmp eq i64 {andResult}, {mask}");
+        }
+
+        // Handle 'but' exclusion
+        if (excludedMask > 0)
+        {
+            string exclAnd = NextTemp();
+            EmitLine(sb, $"  {exclAnd} = and i64 {subject}, {excludedMask}");
+            string exclCmp = NextTemp();
+            EmitLine(sb, $"  {exclCmp} = icmp eq i64 {exclAnd}, 0");
+            // Combined: cmpResult && exclCmp
+            string combined = NextTemp();
+            EmitLine(sb, $"  {combined} = and i1 {cmpResult}, {exclCmp}");
+            return combined;
+        }
+
+        return cmpResult;
+    }
+
+    /// <summary>
+    /// x isnot A → (x &amp; mask) != mask (flag not fully set)
+    /// </summary>
+    private string EmitFlagsIsNotTest(StringBuilder sb, string subject, string mask)
+    {
+        string andResult = NextTemp();
+        EmitLine(sb, $"  {andResult} = and i64 {subject}, {mask}");
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = icmp ne i64 {andResult}, {mask}");
+        return result;
+    }
+
+    /// <summary>
+    /// x isonly A and B → x == mask (exact match)
+    /// </summary>
+    private string EmitFlagsIsOnlyTest(StringBuilder sb, string subject, string mask)
+    {
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = icmp eq i64 {subject}, {mask}");
+        return result;
+    }
+
+    #endregion
 }

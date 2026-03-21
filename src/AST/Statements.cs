@@ -1,6 +1,6 @@
-using Compilers.Shared.Lexer;
+using Compiler.Lexer;
 
-namespace Compilers.Shared.AST;
+namespace SyntaxTree;
 
 #region Base Statement Types
 
@@ -59,7 +59,7 @@ public record ExpressionStatement(Expression Expression, SourceLocation Location
 /// This allows declarations to be used in contexts that expect statements:
 /// <list type="bullet">
 /// <item>Variable declarations inside function bodies: var x = 5</item>
-/// <item>Local declarations inside blocks: let y = computeValue()</item>
+/// <item>Internal declarations inside blocks: var y = computeValue()</item>
 /// <item>Nested function definitions inside other functions</item>
 /// </list>
 /// </remarks>
@@ -84,7 +84,7 @@ public record DeclarationStatement(Declaration Declaration, SourceLocation Locat
 /// Supports various assignment targets:
 /// <list type="bullet">
 /// <item>Variables: x = 42</item>
-/// <item>Object properties: obj.field = value</item>
+/// <item>Object properties: obj.memberVar = value</item>
 /// <item>Array elements: arr[index] = item</item>
 /// <item>Chained assignments: a.b.c = value</item>
 /// </list>
@@ -96,6 +96,34 @@ public record AssignmentStatement(Expression Target, Expression Value, SourceLoc
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitAssignmentStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Record/entity destructuring statement: var (memberVar, memberVar2) = expression
+/// Unpacks record/entity member variables into multiple variables based on member variable names.
+/// Destructuring only works when ALL member variables of the type are public.
+/// </summary>
+/// <param name="Pattern">The destructuring pattern with member variable bindings</param>
+/// <param name="Initializer">Expression that evaluates to a record/entity value</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>var (center, radius) = circle - member variable name matches binding name</item>
+/// <item>var (center: c, radius: r) = circle - aliased destructuring</item>
+/// <item>var ((x, y), radius) = circle - nested destructuring</item>
+/// </list>
+/// </remarks>
+public record DestructuringStatement(
+    DestructuringPattern Pattern,
+    Expression Initializer,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitDestructuringStatement(node: this);
     }
 }
 
@@ -130,7 +158,41 @@ public record ReturnStatement(Expression? Value, SourceLocation Location)
 }
 
 /// <summary>
-/// Statement that fails the current function with an error, returning it via Result<T>.
+/// Becomes statement that produces a block result value without exiting the function.
+/// Used in multi-statement when/if branches to explicitly indicate the branch's result.
+/// </summary>
+/// <param name="Value">Expression whose value becomes the block result</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// The becomes statement solves the "stray value" problem in indentation-based blocks:
+/// <code>
+/// var num = when result
+///   is Crashable e
+///     show(f"Error: {e.crash_message()}")
+///     becomes 0  # Explicit: this block produces 0
+///   else value
+///     show(f"Success: {value}")
+///     becomes value
+/// </code>
+/// Rules:
+/// <list type="bullet">
+/// <item>Required when a multi-statement block needs to produce a value</item>
+/// <item>Single-expression branches can use => syntax instead</item>
+/// <item>CE if a block has statements followed by a trailing value without becomes</item>
+/// </list>
+/// </remarks>
+public record BecomesStatement(Expression Value, SourceLocation Location)
+    : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitBecomesStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Statement that fails the current function with an error, returning it via Result[T].
 /// Used in RazorForge and Suflae for recoverable errors that should be handled by the caller.
 /// </summary>
 /// <param name="Error">Expression that evaluates to a Crashable error type</param>
@@ -138,14 +200,12 @@ public record ReturnStatement(Expression? Value, SourceLocation Location)
 /// <remarks>
 /// The throw statement is used for expected throwures that should be handled:
 /// <code>
-/// routine divide!(a: s32, b: s32) -> s32 {
-///     if b == 0 {
-///         throw DivisionError(message: "Division by zero")
-///     }
-///     return a / b
-/// }
+/// routine divide!(a: s32, b: s32) -> s32
+///   if b == 0
+///     throw DivisionError(message: "Division by zero")
+///   return a // b
 /// </code>
-/// Compiler generates safe variants: try_divide() -> s32?, check_divide() -> Result<s32>
+/// Builder generates safe variants: try_divide() -> s32?, check_divide() -> Result[s32]
 /// </remarks>
 public record ThrowStatement(Expression Error, SourceLocation Location)
     : Statement(Location: Location)
@@ -158,24 +218,21 @@ public record ThrowStatement(Expression Error, SourceLocation Location)
 }
 
 /// <summary>
-/// Statement indicating that a value is not found/absent, triggering Lookup<T> generation.
+/// Statement indicating that a value is not found/absent, triggering Lookup[T] generation.
 /// Used when a search operation finds no matching value (distinct from an error condition).
 /// </summary>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// The absent statement is used to indicate "not found" in search/lookup operations:
 /// <code>
-/// routine get_user!(id: u64) -> User {
-///     unless database.connected() {
-///         throw DatabaseError(message: "Not connected")
-///     }
-///     unless database.has(id) {
-///         absent  // Value not found
-///     }
-///     return database.get(id)
-/// }
+/// routine get_user!(id: u64) -> User
+///   unless database.connected()
+///     throw DatabaseError(message: "Not connected")
+///   unless database.has(id)
+///     absent  # Value not found
+///   return database.get(id)
 /// </code>
-/// Compiler generates: try_get_user() -> User?, find_get_user() -> Lookup<User>
+/// Builder generates: try_get_user() -> User?, lookup_get_user() -> Lookup[User]
 /// Pattern matching: is Crashable e / is None / else user
 /// </remarks>
 public record AbsentStatement(SourceLocation Location) : Statement(Location: Location)
@@ -184,6 +241,81 @@ public record AbsentStatement(SourceLocation Location) : Statement(Location: Loc
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitAbsentStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Pass statement that acts as an empty placeholder in records, protocols, or other bodies.
+/// Used when a body is syntactically required but no operations are needed.
+/// </summary>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// The pass statement serves as a no-op placeholder:
+/// <list type="bullet">
+/// <item>Empty record bodies: record Empty { pass }</item>
+/// <item>Empty protocol bodies: protocol Marker { pass }</item>
+/// <item>Placeholder for future implementation</item>
+/// </list>
+/// </remarks>
+public record PassStatement(SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitPassStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Statement that explicitly discards the result of an expression.
+/// Used when a routine returns a value but the caller intentionally ignores it.
+/// </summary>
+/// <param name="Expression">The expression whose result is discarded</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// The discard statement prevents warnings about unused return values:
+/// <code>
+/// # Without discard - build warning: unused return value
+/// process_data()
+///
+/// # With discard - explicitly ignore return value
+/// discard process_data()
+/// </code>
+/// Benefits:
+/// <list type="bullet">
+/// <item>Explicit intent - Makes it clear the return value is intentionally ignored</item>
+/// <item>Prevents bugs - Catches cases where return values are accidentally ignored</item>
+/// <item>Clean code - No need for dummy variables like var _ = process_data()</item>
+/// </list>
+/// </remarks>
+public record DiscardStatement(Expression Expression, SourceLocation Location)
+    : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitDiscardStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Emit statement that yields a value from a generator routine.
+/// Analogous to Python's yield or Rust's yield — produces the next value in an iterator.
+/// </summary>
+/// <example>
+/// <code>
+/// emit value
+/// </code>
+/// </example>
+/// <param name="Expression">The expression whose value is yielded</param>
+/// <param name="Location">Source location information</param>
+public record EmitStatement(Expression Expression, SourceLocation Location)
+    : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitEmitStatement(node: this);
     }
 }
 
@@ -202,10 +334,10 @@ public record AbsentStatement(SourceLocation Location) : Statement(Location: Loc
 /// <remarks>
 /// Supports both simple and complex branching:
 /// <list type="bullet">
-/// <item>Simple if: if (x > 0) print("positive")</item>
-/// <item>If-else: if (x > 0) print("positive") else print("not positive")</item>
-/// <item>Nested conditions: if (x > 0) if (x < 10) print("single digit")</item>
-/// <item>Block statements: if (condition) { multiple; statements; }</item>
+/// <item>Simple if: if (x > 0) show("positive")</item>
+/// <item>If-else: if (x > 0) show("positive") else show("not positive")</item>
+/// <item>Nested conditions: if (x > 0) if (x &lt; 10) show("single digit")</item>
+/// <item>Block statements: if (condition) { multiple \n statements }</item>
 /// </list>
 /// </remarks>
 public record IfStatement(
@@ -242,10 +374,14 @@ public record IfStatement(
 /// <item>Supports break and continue statements for flow control</item>
 /// <item>Infinite loops possible if condition never becomes false</item>
 /// <item>Body can be single statement or block statement</item>
+/// <item>Python-style else: else branch executes if loop completes without break</item>
 /// </list>
 /// </remarks>
-public record WhileStatement(Expression Condition, Statement Body, SourceLocation Location)
-    : Statement(Location: Location)
+public record WhileStatement(
+    Expression Condition,
+    Statement Body,
+    Statement? ElseBranch,
+    SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -255,11 +391,11 @@ public record WhileStatement(Expression Condition, Statement Body, SourceLocatio
 }
 
 /// <summary>
-/// Iterator loop statement that executes a body for each element in an iterable collection.
+/// SequenceEmitter loop statement that executes a body for each element in an iterable collection.
 /// Represents for-in loops that automatically handle iteration over collections.
 /// </summary>
 /// <param name="Variable">Loop variable name that receives each element value</param>
-/// <param name="Iterable">Expression that evaluates to an iterable collection (arrays, ranges, strings)</param>
+/// <param name="Sequenceable">Expression that evaluates to an iterable collection (arrays, ranges, strings)</param>
 /// <param name="Body">Statement to execute for each iteration with the loop variable bound</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -269,12 +405,16 @@ public record WhileStatement(Expression Condition, Statement Body, SourceLocatio
 /// <item>Ranges: for i in (0 to 10)</item>
 /// <item>Strings: for char in "hello"</item>
 /// <item>Custom iterables implementing iteration protocols</item>
+/// <item>Tuple destructuring: for (index, item) in items.enumerate()</item>
+/// <item>Python-style else: else branch executes if loop completes without break</item>
 /// </list>
 /// </remarks>
 public record ForStatement(
-    string Variable,
-    Expression Iterable,
+    string? Variable,
+    DestructuringPattern? VariablePattern,
+    Expression Sequenceable,
     Statement Body,
+    Statement? ElseBranch,
     SourceLocation Location) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -321,7 +461,7 @@ public record BlockStatement(List<Statement> Statements, SourceLocation Location
 /// <list type="bullet">
 /// <item>Structural matching: when value { Point(x, y) => ... }</item>
 /// <item>Guard conditions: when x { n if n > 0 => ... }</item>
-/// <item>Exhaustiveness checking: compiler ensures all cases are covered</item>
+/// <item>Exhaustiveness checking: builder ensures all cases are covered</item>
 /// <item>Variable binding: patterns can extract and bind values</item>
 /// </list>
 /// </remarks>
@@ -358,7 +498,7 @@ public record WhenClause(Pattern Pattern, Statement Body, SourceLocation Locatio
 /// Break statement behavior:
 /// <list type="bullet">
 /// <item>Exits innermost loop only (while, for, when with iteration)</item>
-/// <item>Compile-time error if used outside loop context</item>
+/// <item>Build-time error if used outside loop context</item>
 /// <item>Skips any remaining loop iterations</item>
 /// <item>Continues execution after loop construct</item>
 /// </list>
@@ -382,7 +522,7 @@ public record BreakStatement(SourceLocation Location) : Statement(Location: Loca
 /// <list type="bullet">
 /// <item>Skips remaining statements in current loop iteration</item>
 /// <item>Returns to loop condition evaluation (while) or next element (for)</item>
-/// <item>Compile-time error if used outside loop context</item>
+/// <item>Build-time error if used outside loop context</item>
 /// <item>Does not exit the loop, only skips current iteration</item>
 /// </list>
 /// </remarks>
@@ -416,7 +556,7 @@ public record ContinueStatement(SourceLocation Location) : Statement(Location: L
 public abstract record Pattern(SourceLocation Location);
 
 /// <summary>
-/// Pattern that matches exact literal values like numbers, strings, or booleans.
+/// Pattern that matches exact literal values like numbers, texts, or booleans.
 /// Used for precise value comparison in pattern matching constructs.
 /// </summary>
 /// <param name="Value">The exact value to match against (42, "hello", true, etc.)</param>
@@ -435,7 +575,7 @@ public record LiteralPattern(object Value, TokenType LiteralType, SourceLocation
 /// <param name="Name">Variable name to bind the matched value to</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Example: when someValue { x => print(x) } binds someValue to x.
+/// Example: when someValue { x => show(x) } binds someValue to x.
 /// </remarks>
 public record IdentifierPattern(string Name, SourceLocation Location)
     : Pattern(Location: Location);
@@ -447,14 +587,45 @@ public record IdentifierPattern(string Name, SourceLocation Location)
 /// <param name="Type">Type expression specifying the type to match</param>
 /// <param name="VariableName">Optional variable name to bind the typed value to</param>
 /// <param name="Location">Source location information</param>
+/// <param name="Bindings">Optional list of bindings for destructuring (e.g., CIRCLE (x, y) or CIRCLE ((x, y), radius))</param>
 /// <remarks>
 /// Examples:
 /// <list type="bullet">
-/// <item>when obj { String => ... } matches any string</item>
-/// <item>when obj { Point p => ... } matches Point and binds to p</item>
+/// <item>when obj { is Text => ... } matches any text</item>
+/// <item>when obj { is Point p => ... } matches Point and binds to p</item>
+/// <item>when obj { is Message.TEXT content => ... } matches variant case with binding</item>
+/// <item>when obj { is CIRCLE (x, y) => ... } matches variant case with destructuring</item>
+/// <item>when obj { is CIRCLE ((x, y), radius) => ... } matches with nested destructuring</item>
 /// </list>
 /// </remarks>
-public record TypePattern(TypeExpression Type, string? VariableName, SourceLocation Location)
+public record TypePattern(TypeExpression Type, string? VariableName, List<DestructuringBinding>? Bindings, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern that matches when a value is NOT a specific type.
+/// Used for negated type checking in when clauses: when value { isnot Text => ... }
+/// </summary>
+/// <param name="Type">The type to check against (negated — matches if NOT this type)</param>
+/// <param name="Location">Source location information</param>
+public record NegatedTypePattern(TypeExpression Type, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern that matches flag combinations in when clauses.
+/// Used for both 'is' flags patterns (has flags) and 'isonly' patterns (exact match).
+/// Examples: is READ and WRITE => ..., isonly READ and WRITE => ..., is READ or WRITE => ...
+/// </summary>
+/// <param name="FlagNames">List of flag member names to test</param>
+/// <param name="Connective">How the flags are combined: And (all required) or Or (any required)</param>
+/// <param name="ExcludedFlags">Optional flags to exclude with 'but' (only valid with And connective)</param>
+/// <param name="IsExact">True for isonly (exact match), false for is (has flags)</param>
+/// <param name="Location">Source location information</param>
+public record FlagsPattern(
+    List<string> FlagNames,
+    FlagsTestConnective Connective,
+    List<string>? ExcludedFlags,
+    bool IsExact,
+    SourceLocation Location)
     : Pattern(Location: Location);
 
 /// <summary>
@@ -479,6 +650,180 @@ public record WildcardPattern(SourceLocation Location) : Pattern(Location: Locat
 /// <param name="Location">Source location information</param>
 public record ExpressionPattern(Expression Expression, SourceLocation Location)
     : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for comparison-based matching in when clauses.
+/// Compares the when subject against a value using the specified operator.
+/// </summary>
+/// <param name="Operator">The comparison operator (==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==)</param>
+/// <param name="Value">The expression to compare the when subject against</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>== 42 => ... (value equality for literals)</item>
+/// <item>!= 0 => ... (value inequality)</item>
+/// <item>&lt; 0 => ... (numeric comparison)</item>
+/// <item>&gt;= 65 => ... (numeric comparison)</item>
+/// <item>=== current_user => ... (reference equality)</item>
+/// <item>!== current_user => ... (reference inequality)</item>
+/// <item>== true => ... (boolean matching)</item>
+/// </list>
+/// </remarks>
+public record ComparisonPattern(
+    TokenType Operator,
+    Expression Value,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for matching variant cases with optional destructuring.
+/// Supports both qualified (Variant.CASE) and unqualified (CASE) syntax.
+/// </summary>
+/// <param name="VariantType">Optional type qualifier (e.g., "Message" in Message.TEXT)</param>
+/// <param name="CaseName">The variant case name (e.g., "TEXT", "NUMBER")</param>
+/// <param name="Bindings">Optional member variable bindings for destructuring the case data</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is TEXT content => ... (unqualified, binds data to 'content')</item>
+/// <item>is Message.TEXT content => ... (qualified, explicit type)</item>
+/// <item>is CIRCLE (center, radius) => ... (destructuring)</item>
+/// <item>is Shape.RECTANGLE (top_left: corner, size: s) => ... (aliased destructuring)</item>
+/// </list>
+/// </remarks>
+public record VariantPattern(
+    string? VariantType,
+    string CaseName,
+    List<DestructuringBinding>? Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Represents a single binding in destructuring patterns.
+/// Supports both direct member-variable-name binding and aliased binding.
+/// </summary>
+/// <param name="MemberVariableName">The member variable name to extract (null for positional binding)</param>
+/// <param name="BindingName">The variable name to bind the value to</param>
+/// <param name="NestedPattern">Optional nested pattern for deep destructuring</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>(center, radius) - member variable name matches binding name</item>
+/// <item>(center: c, radius: r) - explicit alias</item>
+/// <item>((x, y), radius) - nested destructuring</item>
+/// </list>
+/// </remarks>
+public record DestructuringBinding(
+    string? MemberVariableName,
+    string? BindingName,
+    Pattern? NestedPattern,
+    SourceLocation Location);
+
+/// <summary>
+/// Pattern that adds a guard condition to another pattern.
+/// Matches when both the inner pattern matches and the guard evaluates to true.
+/// </summary>
+/// <param name="InnerPattern">The pattern to match first</param>
+/// <param name="Guard">Boolean expression that must be true for the pattern to match</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is s32 n where n > 0 => ... (type with guard)</item>
+/// <item>is NetworkError e where e.code == 404 => ... (error type with guard)</item>
+/// </list>
+/// </remarks>
+public record GuardPattern(Pattern InnerPattern, Expression Guard, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for matching the None/absent value in Maybe, Result, or Lookup types.
+/// </summary>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is None => ... (matches Maybe.None or Lookup.None)</item>
+/// </list>
+/// </remarks>
+public record NonePattern(SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for matching Crashable errors in Result or Lookup types.
+/// Optionally binds the error to a variable for inspection.
+/// </summary>
+/// <param name="ErrorType">Optional specific error type to match (null matches any Crashable)</param>
+/// <param name="VariableName">Optional variable name to bind the error to</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>is Crashable e => ... (matches any error)</item>
+/// <item>is FileNotFoundError e => ... (matches specific error type)</item>
+/// <item>is Crashable => ... (matches error without binding)</item>
+/// </list>
+/// </remarks>
+public record CrashablePattern(
+    TypeExpression? ErrorType,
+    string? VariableName,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Else pattern that matches any remaining value and optionally binds it.
+/// Must be the last pattern in a when statement.
+/// </summary>
+/// <param name="VariableName">Optional variable name to bind the matched value to</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>else => ... (catch-all without binding)</item>
+/// <item>else user => ... (catch-all with binding)</item>
+/// </list>
+/// </remarks>
+public record ElsePattern(string? VariableName, SourceLocation Location)
+    : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for destructuring records and similar types.
+/// Used in var bindings and pattern matching for extracting member variables.
+/// </summary>
+/// <param name="Bindings">List of member variable bindings to extract</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>var (center, radius) = circle</item>
+/// <item>var (x, y) = point</item>
+/// <item>var ((x, y), radius) = circle (nested)</item>
+/// </list>
+/// </remarks>
+public record DestructuringPattern(
+    List<DestructuringBinding> Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// Pattern for type checking with simultaneous destructuring.
+/// Used in is expressions like: value is Point (x, y)
+/// </summary>
+/// <param name="Type">The type to check and destructure</param>
+/// <param name="Bindings">List of member variable bindings to extract from the matched value</param>
+/// <param name="Location">Source location information</param>
+/// <remarks>
+/// Examples:
+/// <list type="bullet">
+/// <item>value is Point (x, y) - positional, member variable names match binding names</item>
+/// <item>value is Point (x: a, y: b) - named, member variable 'x' binds to 'a', 'y' binds to 'b'</item>
+/// <item>value is Line ((x: x1, y: y1), (x: x2, y: y2)) - nested destructuring</item>
+/// <item>value is Rectangle (topLeft, _) - partial destructuring with wildcard</item>
+/// </list>
+/// Destructuring is only allowed when ALL member variables of the type are public.
+/// </remarks>
+public record TypeDestructuringPattern(
+    TypeExpression Type,
+    List<DestructuringBinding> Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
 
 #endregion
 
@@ -511,146 +856,33 @@ public record DangerStatement(BlockStatement Body, SourceLocation Location)
     }
 }
 
-/// <summary>
-/// Represents a mayhem block statement for ultimate unsafe operations.
-/// Mayhem blocks enable the most dangerous features like runtime method replacement and code execution.
-/// </summary>
-/// <remarks>
-/// A mayhem block provides access to the Reality Bender's Metamorph module
-/// which can modify program structure at runtime. Should almost never be used.
-/// </remarks>
-public record MayhemStatement(BlockStatement Body, SourceLocation Location)
-    : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitMayhemStatement(node: this);
-    }
-}
-
-/// <summary>
-/// Represents a viewing block statement for scoped read-only access.
-/// Syntax: viewing &lt;expression&gt; as &lt;handle&gt; { &lt;body&gt; }
-/// </summary>
-/// <param name="Source">The expression to view (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the Viewed&lt;T&gt; handle</param>
-/// <param name="Body">The block statement to execute with read-only access</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Viewing semantics:
-/// <list type="bullet">
-/// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle provides read-only access (Viewed&lt;T&gt;)</item>
-/// <item>Handle is copyable - can pass to multiple functions</item>
-/// <item>Source is automatically restored when scope exits</item>
-/// <item>Prevents aliasing: can't hijack the source while viewing</item>
-/// </list>
-/// </remarks>
-public record ViewingStatement(
-    Expression Source,
-    string Handle,
-    BlockStatement Body,
-    SourceLocation Location) : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitViewingStatement(node: this);
-    }
-}
-
-/// <summary>
-/// Represents a hijacking block statement for scoped exclusive access (single-threaded).
-/// Syntax: hijacking &lt;expression&gt; as &lt;handle&gt; { &lt;body&gt; }
-/// </summary>
-/// <param name="Source">The expression to hijack (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the Hijacked&lt;T&gt; handle</param>
-/// <param name="Body">The block statement to execute with exclusive access</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Hijacking semantics:
-/// <list type="bullet">
-/// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle provides exclusive read/write access (Hijacked&lt;T&gt;)</item>
-/// <item>Handle is NOT copyable - unique access only</item>
-/// <item>Source is automatically restored when scope exits</item>
-/// <item>Prevents aliasing: can't view or hijack the source while hijacking</item>
-/// </list>
-/// </remarks>
-public record HijackingStatement(
-    Expression Source,
-    string Handle,
-    BlockStatement Body,
-    SourceLocation Location) : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitHijackingStatement(node: this);
-    }
-}
-
-/// <summary>
-/// Represents an observing block statement for thread-safe scoped read access.
-/// Syntax: observing &lt;handle&gt; from &lt;expression&gt;: { &lt;body&gt; }
-/// </summary>
-/// <param name="Source">The Shared expression to observe (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the thread-safe read handle (Observed&lt;T&gt;)</param>
-/// <param name="Body">The block statement to execute with read access</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Observing semantics (for Shared with MultiReadLock policy):
-/// <list type="bullet">
-/// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle acquires read lock on Shared&lt;T, MultiReadLock&gt;, producing Observed&lt;T&gt;</item>
-/// <item>Multiple observing handles can coexist</item>
-/// <item>Source is automatically restored when scope exits</item>
-/// <item>Blocks seizing attempts until released</item>
-/// </list>
-/// </remarks>
-public record ObservingStatement(
-    Expression Source,
-    string Handle,
-    BlockStatement Body,
-    SourceLocation Location) : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitObservingStatement(node: this);
-    }
-}
-
-/// <summary>
-/// Represents a seizing block statement for thread-safe scoped exclusive access.
-/// Syntax: seizing &lt;handle&gt; from &lt;expression&gt;: { &lt;body&gt; }
-/// </summary>
-/// <param name="Source">The Shared expression to seize (will be temporarily stolen)</param>
-/// <param name="Handle">The variable name for the thread-safe exclusive handle (Seized&lt;T&gt;)</param>
-/// <param name="Body">The block statement to execute with exclusive access</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Seizing semantics (for Shared&lt;T, Policy&gt;):
-/// <list type="bullet">
-/// <item>Source becomes deadref during scope (temporarily stolen)</item>
-/// <item>Handle acquires exclusive lock on Shared&lt;T, Policy&gt;, producing Seized&lt;T&gt;</item>
-/// <item>Blocks all other access (observing and seizing) until released</item>
-/// <item>Handle is NOT copyable - unique access only</item>
-/// <item>Source is automatically restored when scope exits</item>
-/// </list>
-/// </remarks>
-public record SeizingStatement(
-    Expression Source,
-    string Handle,
-    BlockStatement Body,
-    SourceLocation Location) : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitSeizingStatement(node: this);
-    }
-}
-
 #endregion
+
+/// <summary>
+/// Represents a scoped resource management block (using expr as name).
+/// Resource lifetime is tied to the indented body; cleanup occurs at block exit.
+/// </summary>
+/// <remarks>
+/// <para>Syntax: <c>using open("file.txt") as file</c></para>
+/// <para>The resource expression must return an object that implements a disposable/closeable protocol.</para>
+/// <para>Example:</para>
+/// <code>
+/// using open("file.txt") as file
+///   var content = file.read_all()
+///   process(content)
+///   # file is automatically closed at block exit
+/// </code>
+/// </remarks>
+public record UsingStatement(
+    Expression Resource,
+    string Name,
+    Statement Body,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitUsingStatement(node: this);
+    }
+}
+

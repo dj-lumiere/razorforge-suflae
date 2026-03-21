@@ -1,334 +1,366 @@
-using Compilers.Shared.AST;
-using Compilers.Shared.Lexer;
+﻿namespace Compiler.CodeGen;
 
-namespace Compilers.Shared.CodeGen;
+using SemanticAnalysis.Types;
 
 /// <summary>
-/// Partial class containing type information and type helper methods.
-/// Handles type mappings between RazorForge and LLVM types.
+/// Type mapping: RazorForge/Suflae types → LLVM IR types.
 /// </summary>
 public partial class LLVMCodeGenerator
 {
-    // Type information including signedness and RazorForge type
-    private record TypeInfo(
-        string LLVMType,
-        bool IsUnsigned,
-        bool IsFloatingPoint,
-        string RazorForgeType = "");
+    #region Type Mapping
 
-    // Get LLVM type for an expression
-    private string GetExpressionType(Expression expr)
+    /// <summary>
+    /// Gets the LLVM type name for a TypeInfo.
+    /// </summary>
+    /// <param name="type">The type to convert.</param>
+    /// <returns>The LLVM type string.</returns>
+    private string GetLLVMType(TypeInfo type)
     {
-        return GetTypeInfo(expr: expr)
-           .LLVMType;
-    }
-
-    // Get complete type information for an expression
-    private TypeInfo GetTypeInfo(Expression expr)
-    {
-        if (expr is LiteralExpression literal)
+        return type switch
         {
-            string llvmType = GetLLVMType(tokenType: literal.LiteralType);
-            bool isUnsigned = IsUnsignedTokenType(tokenType: literal.LiteralType);
-            bool isFloatingPoint = IsFloatingPointTokenType(tokenType: literal.LiteralType);
-            string razorForgeType = GetRazorForgeTypeFromToken(tokenType: literal.LiteralType);
-            return new TypeInfo(LLVMType: llvmType,
-                IsUnsigned: isUnsigned,
-                IsFloatingPoint: isFloatingPoint,
-                RazorForgeType: razorForgeType);
-        }
+            // Intrinsic types map directly to LLVM
+            IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic),
 
-        // For binary expressions, get the type from the left operand (result type matches left operand)
-        if (expr is BinaryExpression binaryExpr)
-        {
-            return GetTypeInfo(expr: binaryExpr.Left);
-        }
+            // Records with @llvm annotation → use backend type directly
+            RecordTypeInfo { HasDirectBackendType: true } record => record.LlvmType,
 
-        // For unary expressions, get the type from the operand
-        if (expr is UnaryExpression unaryExpr)
-        {
-            return GetTypeInfo(expr: unaryExpr.Operand);
-        }
+            // Legacy single-member-variable wrappers → unwrap to underlying intrinsic
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
+                GetLLVMType(record.UnderlyingIntrinsic!),
 
-        // For identifier expressions (variables/parameters), look up the stored type
-        if (expr is IdentifierExpression identExpr)
-        {
-            if (_symbolTypes.TryGetValue(key: identExpr.Name, value: out string? llvmType))
-            {
-                return GetTypeInfo(typeName: llvmType);
-            }
-        }
+            // Multi-member-variable records → LLVM struct type
+            RecordTypeInfo record => GetRecordTypeName(record),
 
-        // Default to signed i32 for unknown expressions (safer default for function params)
-        return new TypeInfo(LLVMType: "i32",
-            IsUnsigned: false,
-            IsFloatingPoint: false,
-            RazorForgeType: "s32");
-    }
+            // Entities → pointer to LLVM struct
+            EntityTypeInfo => "ptr",
 
-    // Get type info for a temporary variable or literal value
-    private TypeInfo GetValueTypeInfo(string value)
-    {
-        if (_tempTypes.TryGetValue(key: value, value: out TypeInfo? typeInfo))
-        {
-            return typeInfo;
-        }
+            // Residents → pointer to LLVM struct (same as entity at IR level)
+            ResidentTypeInfo => "ptr",
 
-        // Handle LLVM null constant - it's a pointer type
-        if (value == "null")
-        {
-            return new TypeInfo(LLVMType: "i8*",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "None");
-        }
+            // Wrappers (Viewed, Hijacked, Snatched, etc.) → all pointers at LLVM level
+            WrapperTypeInfo => "ptr",
 
-        // If it's not a temp variable, it might be a literal value
-        // Try to infer type from the value itself (this is a simplified approach)
-        if (int.TryParse(s: value, result: out _))
-        {
-            // It's a numeric literal, assume i32 for now
-            return new TypeInfo(LLVMType: "i32",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i32");
-        }
+            // Choices → underlying integer type (S64)
+            ChoiceTypeInfo => "i64",
 
-        // Default fallback
-        return new TypeInfo(LLVMType: "i32",
-            IsUnsigned: false,
-            IsFloatingPoint: false,
-            RazorForgeType: "i32");
-    }
+            // Tuples → struct (value) or pointer (reference)
+            TupleTypeInfo { Kind: TupleKind.Value } tuple => GetTupleTypeName(tuple),
+            TupleTypeInfo { Kind: TupleKind.Fixed } tuple => GetTupleTypeName(tuple),
+            TupleTypeInfo => "ptr", // Reference tuples are heap-allocated
 
-    // Get type info from string type name
-    private TypeInfo GetTypeInfo(string typeName)
-    {
-        return typeName switch
-        {
-            // Signed integers
-            "i8" => new TypeInfo(LLVMType: "i8",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i8"),
-            "i16" => new TypeInfo(LLVMType: "i16",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i16"),
-            "i32" => new TypeInfo(LLVMType: "i32",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i32"),
-            "i64" => new TypeInfo(LLVMType: "i64",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i64"),
-            "i128" => new TypeInfo(LLVMType: "i128",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i128"),
+            // Variants → struct { tag, payload }
+            VariantTypeInfo variant => GetVariantTypeName(variant),
 
-            // Unsigned integers
-            "u8" => new TypeInfo(LLVMType: "i8",
-                IsUnsigned: true,
-                IsFloatingPoint: false,
-                RazorForgeType: "u8"),
-            "u16" => new TypeInfo(LLVMType: "i16",
-                IsUnsigned: true,
-                IsFloatingPoint: false,
-                RazorForgeType: "u16"),
-            "u32" => new TypeInfo(LLVMType: "i32",
-                IsUnsigned: true,
-                IsFloatingPoint: false,
-                RazorForgeType: "u32"),
-            "u64" => new TypeInfo(LLVMType: "i64",
-                IsUnsigned: true,
-                IsFloatingPoint: false,
-                RazorForgeType: "u64"),
-            "u128" => new TypeInfo(LLVMType: "i128",
-                IsUnsigned: true,
-                IsFloatingPoint: false,
-                RazorForgeType: "u128"),
+            // Error handling types → struct { tag, payload }
+            ErrorHandlingTypeInfo errorHandling => GetErrorHandlingTypeName(errorHandling),
 
-            // System-dependent integers
-            "isys" => new TypeInfo(LLVMType: "i64",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "isys"), // intptr_t - typically i64 on 64-bit systems
-            "usys" => new TypeInfo(LLVMType: "i64",
-                IsUnsigned: true,
-                IsFloatingPoint: false,
-                RazorForgeType: "usys"), // uintptr_t - typically i64 on 64-bit systems
+            // Protocols → not directly representable (used for constraints only)
+            ProtocolTypeInfo => throw new InvalidOperationException(
+                "Protocol types cannot be used directly in codegen"),
 
-            // Floating point types
-            "f16" => new TypeInfo(LLVMType: "half",
-                IsUnsigned: false,
-                IsFloatingPoint: true,
-                RazorForgeType: "f16"),
-            "f32" => new TypeInfo(LLVMType: "float",
-                IsUnsigned: false,
-                IsFloatingPoint: true,
-                RazorForgeType: "f32"),
-            "f64" => new TypeInfo(LLVMType: "double",
-                IsUnsigned: false,
-                IsFloatingPoint: true,
-                RazorForgeType: "f64"),
-            "f128" => new TypeInfo(LLVMType: "fp128",
-                IsUnsigned: false,
-                IsFloatingPoint: true,
-                RazorForgeType: "f128"),
+            // Generic parameters should be resolved by this point
+            GenericParameterTypeInfo param => throw new InvalidOperationException(
+                $"Unresolved generic parameter '{param.Name}' in codegen"),
 
-            // Boolean
-            "bool" => new TypeInfo(LLVMType: "i1",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "bool"),
+            // Error placeholder
+            ErrorTypeInfo => throw new InvalidOperationException(
+                "Error type found in codegen - semantic analysis should have caught this"),
 
-            // Math library types
-            "d32" => new TypeInfo(LLVMType: "i32",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "d32"),
-            "d64" => new TypeInfo(LLVMType: "i64",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "d64"),
-            "d128" => new TypeInfo(LLVMType: "{i64, i64}",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "d128"),
-            "bigint" => new TypeInfo(LLVMType: "i8*",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "bigint"),
-            "decimal" => new TypeInfo(LLVMType: "i8*",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "decimal"),
-
-            _ => new TypeInfo(LLVMType: "i32",
-                IsUnsigned: false,
-                IsFloatingPoint: false,
-                RazorForgeType: "i32")
+            // Unknown
+            _ => throw new InvalidOperationException(
+                $"Unknown type category: {type.Category}")
         };
     }
 
-    // Get RazorForge type name from token type
-    private string GetRazorForgeTypeFromToken(TokenType tokenType)
+    /// <summary>
+    /// Gets the LLVM type for an intrinsic type.
+    /// </summary>
+    private string GetIntrinsicLLVMType(IntrinsicTypeInfo intrinsic)
     {
-        return tokenType switch
+        return intrinsic.Name switch
         {
-            // Integer literals
-            TokenType.S8Literal => "s8",
-            TokenType.S16Literal => "s16",
-            TokenType.S32Literal => "s32",
-            TokenType.S64Literal => "s64",
-            TokenType.S128Literal => "s128",
-            TokenType.U8Literal => "u8",
-            TokenType.U16Literal => "u16",
-            TokenType.U32Literal => "u32",
-            TokenType.U64Literal => "u64",
-            TokenType.U128Literal => "u128",
+            // Integer types
+            "@intrinsic.i1" => "i1",
+            "@intrinsic.i8" => "i8",
+            "@intrinsic.i16" => "i16",
+            "@intrinsic.i32" => "i32",
+            "@intrinsic.i64" => "i64",
+            "@intrinsic.i128" => "i128",
+            "@intrinsic.iptr" => $"i{_pointerBitWidth}",
+            "@intrinsic.uptr" => $"i{_pointerBitWidth}",
 
-            // Floating point literals
-            TokenType.F16Literal => "f16",
-            TokenType.F32Literal => "f32",
-            TokenType.F64Literal => "f64",
-            TokenType.F128Literal => "f128",
+            // Floating-point types
+            "@intrinsic.f16" => "half",
+            "@intrinsic.f32" => "float",
+            "@intrinsic.f64" => "double",
+            "@intrinsic.f128" => "fp128",
 
-            // Decimal literals (IEEE 754)
-            TokenType.D32Literal => "d32",
-            TokenType.D64Literal => "d64",
-            TokenType.D128Literal => "d128",
+            // Pointer type
+            "@intrinsic.ptr" => "ptr",
 
-            // Arbitrary precision types
-            TokenType.Integer => "bigint", // Suflae arbitrary precision integer
-            TokenType.Decimal => "decimal", // Suflae arbitrary precision decimal
+            // Void (for function returns)
+            "@intrinsic.void" => "void",
 
-            // Default types
-            _ => "i32"
+            _ => throw new InvalidOperationException($"Unknown intrinsic type: {intrinsic.Name}")
         };
     }
 
-    // Check if token type is unsigned
-    private bool IsUnsignedTokenType(TokenType tokenType)
+    /// <summary>
+    /// Gets the LLVM struct type name for a record.
+    /// </summary>
+    private static string GetRecordTypeName(RecordTypeInfo record)
     {
-        return tokenType switch
+        // Mangle the name to be LLVM-compatible
+        string mangledName = MangleTypeName(record.Name);
+        return $"%Record.{mangledName}";
+    }
+
+    /// <summary>
+    /// Gets the LLVM struct type name for an entity.
+    /// </summary>
+    private static string GetEntityTypeName(EntityTypeInfo entity)
+    {
+        string mangledName = MangleTypeName(entity.Name);
+        return $"%Entity.{mangledName}";
+    }
+
+    /// <summary>
+    /// Gets the LLVM struct type name for a resident.
+    /// </summary>
+    private static string GetResidentTypeName(ResidentTypeInfo resident)
+    {
+        string mangledName = MangleTypeName(resident.Name);
+        return $"%Resident.{mangledName}";
+    }
+
+    /// <summary>
+    /// Gets the LLVM struct type name for a variant.
+    /// </summary>
+    private static string GetVariantTypeName(VariantTypeInfo variant)
+    {
+        string mangledName = MangleTypeName(variant.Name);
+        return $"%Variant.{mangledName}";
+    }
+
+    /// <summary>
+    /// Gets the LLVM struct type name for an error handling type.
+    /// </summary>
+    private static string GetErrorHandlingTypeName(ErrorHandlingTypeInfo errorType)
+    {
+        string mangledName = MangleTypeName(errorType.Name);
+        return $"%ErrorHandling.{mangledName}";
+    }
+
+    /// <summary>
+    /// Gets the LLVM struct type name for a choice.
+    /// </summary>
+    private static string GetChoiceTypeName(ChoiceTypeInfo choice)
+    {
+        string mangledName = MangleTypeName(choice.Name);
+        return $"%Choice.{mangledName}";
+    }
+
+    /// <summary>
+    /// Gets the LLVM struct type name for a tuple.
+    /// </summary>
+    private string GetTupleTypeName(TupleTypeInfo tuple)
+    {
+        // Build a name like %Tuple.S32_S64 from element types
+        var parts = new List<string>();
+        foreach (var elemType in tuple.ElementTypes)
         {
-            TokenType.U8Literal or TokenType.U16Literal or TokenType.U32Literal
-                or TokenType.U64Literal or TokenType.U128Literal => true,
-            _ => false
-        };
-    }
-
-    // Check if token type is floating point
-    private bool IsFloatingPointTokenType(TokenType tokenType)
-    {
-        return tokenType switch
-        {
-            TokenType.F16Literal or TokenType.F32Literal or TokenType.F64Literal
-                or TokenType.F128Literal or TokenType.Decimal => true,
-            _ => false
-        };
-    }
-
-    // Get appropriate division operation based on type
-    private string GetDivisionOp(string llvmType)
-    {
-        return IsFloatingPointType(llvmType: llvmType)
-            ? "fdiv"
-            : "sdiv";
-    }
-
-    // Get true division operation (always floating point)
-    private string GetTrueDivisionOp(string llvmType)
-    {
-        return "fdiv";
-    }
-
-    // Get appropriate modulo operation based on type
-    private string GetModuloOp(TypeInfo typeInfo)
-    {
-        if (typeInfo.IsFloatingPoint)
-        {
-            return "frem";
+            parts.Add(MangleTypeName(elemType.Name));
         }
-
-        return typeInfo.IsUnsigned
-            ? "urem"
-            : "srem";
+        return $"%Tuple.{string.Join("_", parts)}";
     }
 
-    // Get appropriate integer division operation (signed vs unsigned)
-    private string GetIntegerDivisionOp(TypeInfo typeInfo)
+    /// <summary>
+    /// Calculates the size of a tuple type (sum of element sizes with alignment).
+    /// </summary>
+    private int CalculateTupleSize(TupleTypeInfo tuple)
     {
-        return typeInfo.IsUnsigned
-            ? "udiv"
-            : "sdiv";
+        int size = 0;
+        foreach (var elemType in tuple.ElementTypes)
+        {
+            int elemSize = GetTypeSize(elemType);
+            size = AlignTo(size, Math.Min(elemSize, 8));
+            size += elemSize;
+        }
+        return AlignTo(size, 8);
     }
 
-    // Get bit width of an LLVM integer type
-    private int GetIntegerBitWidth(string llvmType)
+    /// <summary>
+    /// Mangles a type name to be LLVM-compatible.
+    /// Replaces brackets, commas, and spaces with underscores.
+    /// </summary>
+    private static string MangleTypeName(string name)
+    {
+        return name
+            .Replace("[", "_")
+            .Replace("]", "_")
+            .Replace(", ", "_")
+            .Replace(",", "_")
+            .Replace(" ", "_");
+    }
+
+    /// <summary>
+    /// Gets the LLVM type for a function parameter or return type.
+    /// For entities, this returns ptr (all entities are pointers).
+    /// For records, this returns the struct type (passed by value).
+    /// </summary>
+    private string GetParameterLLVMType(TypeInfo type)
+    {
+        return type switch
+        {
+            // Entities are always passed as pointers
+            EntityTypeInfo => "ptr",
+            ResidentTypeInfo => "ptr",
+
+            // Other types use normal mapping
+            _ => GetLLVMType(type)
+        };
+    }
+
+    /// <summary>
+    /// Gets the size in bytes for a type (for allocation).
+    /// </summary>
+    private int GetTypeSize(TypeInfo type)
+    {
+        return type switch
+        {
+            IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic),
+            RecordTypeInfo { HasDirectBackendType: true } record =>
+                GetTypeSizeFromLlvmType(record.BackendType!),
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
+                GetTypeSize(record.UnderlyingIntrinsic!),
+            RecordTypeInfo record => CalculateRecordSize(record),
+            EntityTypeInfo entity => CalculateEntitySize(entity),
+            ResidentTypeInfo resident => CalculateResidentSize(resident),
+            TupleTypeInfo tuple => CalculateTupleSize(tuple),
+            WrapperTypeInfo => 8, // Pointer size
+            ChoiceTypeInfo => 8, // i64 tag
+            VariantTypeInfo variant => CalculateVariantSize(variant),
+            _ => 8 // Default to pointer size
+        };
+    }
+
+    /// <summary>
+    /// Gets the size in bytes for an intrinsic type.
+    /// </summary>
+    private int GetIntrinsicSize(IntrinsicTypeInfo intrinsic)
+    {
+        return intrinsic.Name switch
+        {
+            "@intrinsic.i1" => 1,
+            "@intrinsic.i8" => 1,
+            "@intrinsic.i16" => 2,
+            "@intrinsic.i32" => 4,
+            "@intrinsic.i64" => 8,
+            "@intrinsic.i128" => 16,
+            "@intrinsic.iptr" => _pointerBitWidth / 8,
+            "@intrinsic.uptr" => _pointerBitWidth / 8,
+            "@intrinsic.f16" => 2,
+            "@intrinsic.f32" => 4,
+            "@intrinsic.f64" => 8,
+            "@intrinsic.f128" => 16,
+            "@intrinsic.ptr" => 8,
+            _ => 8
+        };
+    }
+
+    /// <summary>
+    /// Gets the size in bytes for an LLVM type string (from @llvm annotation).
+    /// </summary>
+    private static int GetTypeSizeFromLlvmType(string llvmType)
     {
         return llvmType switch
         {
             "i1" => 1,
-            "i8" => 8,
-            "i16" => 16,
-            "i32" => 32,
-            "i64" => 64,
-            "i128" => 128,
-            _ => 32 // Default to 32-bit
+            "i8" => 1,
+            "i16" => 2,
+            "i32" => 4,
+            "i64" => 8,
+            "i128" => 16,
+            "half" => 2,
+            "float" => 4,
+            "double" => 8,
+            "fp128" => 16,
+            "ptr" => 8,
+            _ => throw new InvalidOperationException($"Unknown LLVM type for size calculation: {llvmType}")
         };
     }
 
-    // Check if LLVM type is floating point
-    private bool IsFloatingPointType(string llvmType)
+    /// <summary>
+    /// Calculates the size of a record type (sum of member variable sizes with alignment).
+    /// </summary>
+    private int CalculateRecordSize(RecordTypeInfo record)
     {
-        return llvmType switch
+        int size = 0;
+        foreach (var memberVariable in record.MemberVariables)
         {
-            "half" or "float" or "double" or "fp128" => true,
-            _ => false
-        };
+            int memberVariableSize = GetTypeSize(memberVariable.Type);
+            // Align to member variable size (simplified - real alignment is more complex)
+            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            size += memberVariableSize;
+        }
+        return AlignTo(size, 8); // Align struct to 8 bytes
     }
+
+    /// <summary>
+    /// Calculates the size of an entity type.
+    /// </summary>
+    private int CalculateEntitySize(EntityTypeInfo entity)
+    {
+        int size = 0;
+        foreach (var memberVariable in entity.MemberVariables)
+        {
+            int memberVariableSize = GetTypeSize(memberVariable.Type);
+            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            size += memberVariableSize;
+        }
+        return AlignTo(size, 8);
+    }
+
+    /// <summary>
+    /// Calculates the size of a resident type.
+    /// </summary>
+    private int CalculateResidentSize(ResidentTypeInfo resident)
+    {
+        int size = 0;
+        foreach (var memberVariable in resident.MemberVariables)
+        {
+            int memberVariableSize = GetTypeSize(memberVariable.Type);
+            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            size += memberVariableSize;
+        }
+        return AlignTo(size, 8);
+    }
+
+    /// <summary>
+    /// Calculates the size of a variant type (tag + max payload).
+    /// </summary>
+    private int CalculateVariantSize(VariantTypeInfo variant)
+    {
+        int maxPayloadSize = 0;
+        foreach (var variantCase in variant.Cases)
+        {
+            if (variantCase.PayloadType != null)
+            {
+                int payloadSize = GetTypeSize(variantCase.PayloadType);
+                maxPayloadSize = Math.Max(maxPayloadSize, payloadSize);
+            }
+        }
+        // Tag (i32 = 4 bytes) + padding + payload
+        return AlignTo(4, 8) + AlignTo(maxPayloadSize, 8);
+    }
+
+    /// <summary>
+    /// Aligns a size to a given alignment.
+    /// </summary>
+    private static int AlignTo(int size, int alignment)
+    {
+        return (size + alignment - 1) / alignment * alignment;
+    }
+
+    #endregion
 }

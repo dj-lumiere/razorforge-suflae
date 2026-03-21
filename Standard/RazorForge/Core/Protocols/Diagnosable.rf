@@ -1,0 +1,6 @@
+# Diagnosable - Protocol for types that provide debug text representation
+module Core
+
+protocol Diagnosable obeys Representable
+  @[readonly, generated]
+  routine Me.to_debug() -> Text

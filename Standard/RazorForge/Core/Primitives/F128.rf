@@ -1,0 +1,264 @@
+# RazorForge F128 (quadruple precision floating point) native type implementation
+# Maps directly to LLVM fp128 type using compiler intrinsics
+module Core
+# Core F128 type definition - maps to LLVM fp128
+
+@llvm("fp128")
+record F128 obeys Numeric, Ordered
+  pass
+
+# IEEE 754 quadruple precision constants
+preset F128_EPSILON: F128 = 1.925929944387235853055977942584927319e-34_f128
+preset F128_MIN: F128 = -1.189731495357231765085759326628007016e+4932_f128
+preset F128_MAX: F128 = 1.189731495357231765085759326628007016e+4932_f128
+preset F128_MIN_POSITIVE: F128 = 3.362103143112093506262677817321752602e-4932_f128
+preset F128_ZERO: F128 = 0.0_f128
+preset F128_ONE: F128 = 1.0_f128
+
+# Mathematical constants with quadruple precision
+preset F128_PI: F128 = 3.141592653589793238462643383279502884_f128
+preset F128_E: F128 = 2.718281828459045235360287471352662498_f128
+preset F128_SQRT_2: F128 = 1.414213562373095048801688724209698079_f128
+preset F128_LN_2: F128 = 0.693147180559945309417232121458176568_f128
+preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
+
+# Convert integers to F128 using LLVM intrinsics (lossless for all integer sizes)
+routine F128.__create__(from: S8) -> F128
+  return sitofp[S8, F128](from)
+
+routine F128.__create__(from: S16) -> F128
+  return sitofp[S16, F128](from)
+
+routine F128.__create__(from: S32) -> F128
+  return sitofp[S32, F128](from)
+
+routine F128.__create__(from: S64) -> F128
+  return sitofp[S64, F128](from)
+
+routine F128.__create__(from: S128) -> F128
+  return sitofp[S128, F128](from)
+
+routine F128.__create__(from: U8) -> F128
+  return uitofp[U8, F128](from)
+
+routine F128.__create__(from: U16) -> F128
+  return uitofp[U16, F128](from)
+
+routine F128.__create__(from: U32) -> F128
+  return uitofp[U32, F128](from)
+
+routine F128.__create__(from: U64) -> F128
+  return uitofp[U64, F128](from)
+
+routine F128.__create__(from: U128) -> F128
+  return uitofp[U128, F128](from)
+
+# Extend from smaller float types using LLVM intrinsics (lossless widening)
+routine F128.__create__(from: F16) -> F128
+  return fpext[F16, F128](from)
+
+routine F128.__create__(from: F32) -> F128
+  return fpext[F32, F128](from)
+
+routine F128.__create__(from: F64) -> F128
+  return fpext[F64, F128](from)
+
+routine F128.__create__(from: F128) -> F128
+  return from
+
+# Convert from decimal types via native runtime (no LLVM intrinsic for decimal)
+routine F128.__create__(from: D32) -> F128
+  return rf_d32_to_f128(from.to_bits())
+
+routine F128.__create__(from: D64) -> F128
+  return rf_d64_to_f128(from.to_bits())
+
+routine F128.__create__(from: D128) -> F128
+  return rf_d128_to_f128(from.low_bits(), from.high_bits())
+
+# From SAddr - convert to float using LLVM intrinsic
+routine F128.__create__(from: SAddr) -> F128
+  return sitofp[SAddr, F128](from)
+
+# From UAddr - convert to float using LLVM intrinsic
+routine F128.__create__(from: UAddr) -> F128
+  return uitofp[UAddr, F128](from)
+
+# ============================================================================
+# Arithmetic Operations (IEEE 754 semantics)
+# ============================================================================
+
+routine F128.__add__(you: F128) -> F128
+  return fadd[F128](me, you)
+
+routine F128.__sub__(you: F128) -> F128
+  return fsub[F128](me, you)
+
+routine F128.__mul__(you: F128) -> F128
+  return fmul[F128](me, you)
+
+routine F128.__truediv__(you: F128) -> F128
+  return fdiv[F128](me, you)
+
+routine F128.__neg__() -> F128
+  return fneg[F128](me)
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+routine F128.__eq__(you: F128) -> Bool
+  return fcmp_oeq[F128](me, you)
+
+routine F128.__cmp__(you: F128) -> ComparisonSign
+  if fcmp_olt[F128](me, you)
+    return ME_SMALL
+  if fcmp_ogt[F128](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+routine F128.sqrt() -> F128
+  return sqrt[F128](me)
+
+routine F128.abs() -> F128
+  return fabs[F128](me)
+
+routine F128.floor() -> F128
+  return floor[F128](me)
+
+routine F128.ceil() -> F128
+  return ceil[F128](me)
+
+routine F128.round() -> F128
+  return round[F128](me)
+
+routine F128.trunc() -> F128
+  return trunc_float[F128](me)
+
+# ============================================================================
+# Trigonometric Functions (via LibBF native runtime)
+# ============================================================================
+
+routine F128.sin() -> F128
+  return rf_f128_sin(me)
+
+routine F128.cos() -> F128
+  return rf_f128_cos(me)
+
+routine F128.tan() -> F128
+  return rf_f128_tan(me)
+
+routine F128.asin() -> F128
+  return rf_f128_asin(me)
+
+routine F128.acos() -> F128
+  return rf_f128_acos(me)
+
+routine F128.atan() -> F128
+  return rf_f128_atan(me)
+
+routine F128.atan2(x: F128) -> F128
+  return rf_f128_atan2(me, x)
+
+# ============================================================================
+# Hyperbolic Functions (via LibBF native runtime)
+# ============================================================================
+
+routine F128.sinh() -> F128
+  return rf_f128_sinh(me)
+
+routine F128.cosh() -> F128
+  return rf_f128_cosh(me)
+
+routine F128.tanh() -> F128
+  return rf_f128_tanh(me)
+
+routine F128.asinh() -> F128
+  return rf_f128_asinh(me)
+
+routine F128.acosh() -> F128
+  return rf_f128_acosh(me)
+
+routine F128.atanh() -> F128
+  return rf_f128_atanh(me)
+
+# ============================================================================
+# Exponential and Logarithmic Functions (via LibBF native runtime)
+# ============================================================================
+
+routine F128.exp() -> F128
+  return rf_f128_exp(me)
+
+routine F128.exp2() -> F128
+  return rf_f128_exp2(me)
+
+routine F128.expm1() -> F128
+  return rf_f128_expm1(me)
+
+routine F128.log() -> F128
+  return rf_f128_log(me)
+
+routine F128.log2() -> F128
+  return rf_f128_log2(me)
+
+routine F128.log10() -> F128
+  return rf_f128_log10(me)
+
+routine F128.log1p() -> F128
+  return rf_f128_log1p(me)
+
+# ============================================================================
+# Power Functions (via LibBF native runtime)
+# ============================================================================
+
+routine F128.pow(exp: F128) -> F128
+  return rf_f128_pow(me, exp)
+
+routine F128.cbrt() -> F128
+  return rf_f128_cbrt(me)
+
+routine F128.hypot(y: F128) -> F128
+  return rf_f128_hypot(me, y)
+
+routine F128.copysign(sign: F128) -> F128
+  return rf_f128_copysign(me, sign)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine F128.min(you: F128) -> F128
+  return if me <= you then me else you
+
+routine F128.max(you: F128) -> F128
+  return if me >= you then me else you
+
+routine F128.clamp(min_val: F128, max_val: F128) -> F128
+  return me.min(max_val).max(min_val)
+
+routine F128.is_positive() -> Bool
+  return me > 0.0_f128
+
+routine F128.is_negative() -> Bool
+  return me < 0.0_f128
+
+routine F128.is_zero() -> Bool
+  return me == 0.0_f128
+
+routine F128.signum() -> F128
+  return when
+    me > 0.0_f128 => 1.0_f128
+    me < 0.0_f128 => -1.0_f128
+    else => 0.0_f128
+
+# Reinterpret bits as U128 (type punning)
+routine F128.to_bits() -> U128
+  return bitcast[F128, U128](me)
+
+# Create F128 from U128 bits (type punning)
+routine F128.from_bits(bits: U128) -> F128
+  return bitcast[U128, F128](bits)

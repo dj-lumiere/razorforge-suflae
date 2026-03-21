@@ -1,0 +1,56 @@
+# RazorForge Tracked[T] - Weak reference to Shared[T]
+# Single-threaded weak references
+module Core
+
+record Tracked[T]
+  secret controller: Snatched[SingleShareController]
+  secret data: Snatched[T]
+
+# Create weak reference from Shared[T]
+routine Shared[T].track() -> Tracked[T]
+  danger!
+    me.controller.increase_weak_count!()
+    return me
+
+# Check if the tracked data is still alive
+routine Tracked[T].is_alive() -> Bool
+  danger!
+    return me.controller.strong_count() > 0
+
+# Clone the weak reference
+routine Tracked[T].track() -> Tracked[T]
+  danger!
+    me.controller.increase_weak_count!()
+    return me
+
+# Recover strong Shared[T] from weak Tracked[T]
+# Absent if the referenced data has been deallocated
+routine Tracked[T].recover!() -> Shared[T]
+  danger!
+    if me.controller.strong_count() == 0
+      absent
+    me.controller.increase_strong_count!()
+    return Shared[T](
+      controller: me.controller,
+      data: me.data
+    )
+
+# Release the weak reference
+routine Tracked[T].release!()
+  danger!
+    me.controller.decrease_weak_count!()
+
+    # If both strong and weak counts are 0, deallocate controller
+    when me.controller.strong_count() == 0 and me.controller.weak_count() == 0
+      == true => me.controller.invalidate!()
+      == false => pass
+  return
+
+# Get reference counts for debugging
+routine Tracked[T].strong_count() -> S32
+  danger!
+    return me.controller.strong_count()
+
+routine Tracked[T].weak_count() -> S32
+  danger!
+    return me.controller.weak_count()

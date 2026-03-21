@@ -1,0 +1,439 @@
+# Native C FFI routine declarations for all stdlib types
+# These declare external C functions implemented in the RazorForge native runtime
+# Companion to LLVMIntrinsics.rf which declares LLVM-level intrinsics
+module Core
+
+# ============================================================================
+# Memory Management
+# ============================================================================
+
+dangerous external("C") routine rf_alloc(size: U64) -> UAddr
+dangerous external("C") routine rf_free(ptr: UAddr)
+dangerous external("C") routine rf_memcpy(dest: UAddr, src: UAddr, size: U64)
+dangerous external("C") routine rf_memset(dest: UAddr, value: U8, size: U64)
+dangerous external("C") routine rf_address_of[T](target: T)
+dangerous external("C") routine rf_read_as[T](dest: UAddr)
+dangerous external("C") routine rf_volatile_read_as[T](dest: UAddr)
+dangerous external("C") routine rf_invalidate[T](dest: UAddr)
+
+# ============================================================================
+# D32 (Decimal32) - Intel DFP Library
+# All functions operate on U32 BID-encoded bits
+# ============================================================================
+
+# Construction from integer types
+external("C") routine rf_d32_from_s32(value: S32) -> U32
+external("C") routine rf_d32_from_s64(value: S64) -> U32
+external("C") routine rf_d32_from_u32(value: U32) -> U32
+external("C") routine rf_d32_from_u64(value: U64) -> U32
+
+# Arithmetic (U32 bits in, U32 bits out)
+external("C") routine rf_d32_add(a: U32, b: U32) -> U32
+external("C") routine rf_d32_sub(a: U32, b: U32) -> U32
+external("C") routine rf_d32_mul(a: U32, b: U32) -> U32
+external("C") routine rf_d32_div(a: U32, b: U32) -> U32
+
+# Comparison (returns S32: negative/zero/positive)
+external("C") routine rf_d32_cmp(a: U32, b: U32) -> S32
+
+# Math operations (U32 bits in, U32 bits out)
+external("C") routine rf_d32_sqrt(value: U32) -> U32
+external("C") routine rf_d32_abs(value: U32) -> U32
+external("C") routine rf_d32_ceil(value: U32) -> U32
+external("C") routine rf_d32_floor(value: U32) -> U32
+external("C") routine rf_d32_round(value: U32) -> U32
+external("C") routine rf_d32_trunc(value: U32) -> U32
+
+# Conversion to other decimal sizes
+external("C") routine rf_d32_to_d64(value: U32) -> U64
+external("C") routine rf_d32_to_d128(value: U32) -> D128
+
+# Conversion to binary floating point
+external("C") routine rf_d32_to_f32(value: U32) -> F32
+external("C") routine rf_d32_to_f64(value: U32) -> F64
+external("C") routine rf_d32_to_f128(value: U32) -> F128
+
+# Conversion from binary floating point to D32
+external("C") routine rf_f32_to_d32(value: F32) -> U32
+external("C") routine rf_f64_to_d32(value: F64) -> U32
+
+# String conversion
+external("C") routine rf_D32_to_string(bits: U32) -> UAddr
+external("C") routine rf_D32_from_string(cstr: CStr) -> U32
+
+# ============================================================================
+# D64 (Decimal64) - Intel DFP Library
+# All functions operate on U64 BID-encoded bits
+# ============================================================================
+
+# Construction from integer types
+external("C") routine rf_d64_from_s32(value: S32) -> U64
+external("C") routine rf_d64_from_s64(value: S64) -> U64
+external("C") routine rf_d64_from_u32(value: U32) -> U64
+external("C") routine rf_d64_from_u64(value: U64) -> U64
+
+# Arithmetic (U64 bits in, U64 bits out)
+external("C") routine rf_d64_add(a: U64, b: U64) -> U64
+external("C") routine rf_d64_sub(a: U64, b: U64) -> U64
+external("C") routine rf_d64_mul(a: U64, b: U64) -> U64
+external("C") routine rf_d64_div(a: U64, b: U64) -> U64
+
+# Comparison (returns S32: negative/zero/positive)
+external("C") routine rf_d64_cmp(a: U64, b: U64) -> S32
+
+# Math operations (U64 bits in, U64 bits out)
+external("C") routine rf_d64_sqrt(value: U64) -> U64
+external("C") routine rf_d64_abs(value: U64) -> U64
+external("C") routine rf_d64_ceil(value: U64) -> U64
+external("C") routine rf_d64_floor(value: U64) -> U64
+external("C") routine rf_d64_round(value: U64) -> U64
+external("C") routine rf_d64_trunc(value: U64) -> U64
+
+# Conversion to other decimal sizes
+external("C") routine rf_d64_to_d32(value: U64) -> U32
+external("C") routine rf_d64_to_d128(value: U64) -> D128
+
+# Conversion to binary floating point
+external("C") routine rf_d64_to_f32(value: U64) -> F32
+external("C") routine rf_d64_to_f64(value: U64) -> F64
+external("C") routine rf_d64_to_f128(value: U64) -> F128
+
+# Conversion from binary floating point to D64
+external("C") routine rf_f32_to_d64(value: F32) -> U64
+external("C") routine rf_f64_to_d64(value: F64) -> U64
+
+# String conversion
+external("C") routine rf_D64_to_string(bits: U64) -> UAddr
+external("C") routine rf_D64_from_string(cstr: CStr) -> U64
+
+# ============================================================================
+# D128 (Decimal128) - Intel DFP Library
+# D128 is stored as two U64 member variables (low, high)
+# Functions take (low: U64, high: U64) pairs and return D128
+# ============================================================================
+
+# Construction from integer types
+external("C") routine rf_d128_from_s32(value: S32) -> D128
+external("C") routine rf_d128_from_s64(value: S64) -> D128
+external("C") routine rf_d128_from_u32(value: U32) -> D128
+external("C") routine rf_d128_from_u64(value: U64) -> D128
+
+# Arithmetic (U64 pairs in, D128 out)
+external("C") routine rf_d128_add(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
+external("C") routine rf_d128_sub(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
+external("C") routine rf_d128_mul(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
+external("C") routine rf_d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
+
+# Comparison (returns S32: negative/zero/positive)
+external("C") routine rf_d128_cmp(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+
+# Math operations (U64 pair in, D128 out)
+external("C") routine rf_d128_sqrt(low: U64, high: U64) -> D128
+external("C") routine rf_d128_abs(low: U64, high: U64) -> D128
+external("C") routine rf_d128_ceil(low: U64, high: U64) -> D128
+external("C") routine rf_d128_floor(low: U64, high: U64) -> D128
+external("C") routine rf_d128_round(low: U64, high: U64) -> D128
+external("C") routine rf_d128_trunc(low: U64, high: U64) -> D128
+
+# Trigonometric functions (via F128 conversion + LibBF)
+external("C") routine rf_d128_sin(low: U64, high: U64) -> D128
+external("C") routine rf_d128_cos(low: U64, high: U64) -> D128
+external("C") routine rf_d128_tan(low: U64, high: U64) -> D128
+external("C") routine rf_d128_asin(low: U64, high: U64) -> D128
+external("C") routine rf_d128_acos(low: U64, high: U64) -> D128
+external("C") routine rf_d128_atan(low: U64, high: U64) -> D128
+external("C") routine rf_d128_atan2(y_low: U64, y_high: U64, x_low: U64, x_high: U64) -> D128
+
+# Hyperbolic functions
+external("C") routine rf_d128_sinh(low: U64, high: U64) -> D128
+external("C") routine rf_d128_cosh(low: U64, high: U64) -> D128
+external("C") routine rf_d128_tanh(low: U64, high: U64) -> D128
+
+# Exponential and logarithmic functions
+external("C") routine rf_d128_exp(low: U64, high: U64) -> D128
+external("C") routine rf_d128_exp2(low: U64, high: U64) -> D128
+external("C") routine rf_d128_log(low: U64, high: U64) -> D128
+external("C") routine rf_d128_log2(low: U64, high: U64) -> D128
+external("C") routine rf_d128_log10(low: U64, high: U64) -> D128
+
+# Power functions
+external("C") routine rf_d128_pow(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64) -> D128
+external("C") routine rf_d128_cbrt(low: U64, high: U64) -> D128
+external("C") routine rf_d128_hypot(x_low: U64, x_high: U64, y_low: U64, y_high: U64) -> D128
+
+# Conversion to other decimal sizes
+external("C") routine rf_d128_to_d32(low: U64, high: U64) -> U32
+external("C") routine rf_d128_to_d64(low: U64, high: U64) -> U64
+
+# Conversion to binary floating point
+external("C") routine rf_d128_to_f32(low: U64, high: U64) -> F32
+external("C") routine rf_d128_to_f64(low: U64, high: U64) -> F64
+external("C") routine rf_d128_to_f128(low: U64, high: U64) -> F128
+
+# Conversion from binary floating point to D128
+external("C") routine rf_f32_to_d128(value: F32) -> D128
+external("C") routine rf_f64_to_d128(value: F64) -> D128
+
+# String conversion
+external("C") routine rf_D128_to_string(low: U64, high: U64) -> UAddr
+external("C") routine rf_D128_from_string(cstr: CStr) -> D128
+
+# ============================================================================
+# Decimal-to-integer conversion (non-rf_ prefixed C functions)
+# Used by S32.rf and S64.rf for D32/D64/D128 -> integer conversion
+# ============================================================================
+
+external("C") routine d32_to_s32(bits: U32) -> S32
+external("C") routine d64_to_s32(bits: U64) -> S32
+external("C") routine d128_to_s32(low: U64, high: U64) -> S32
+
+external("C") routine d32_to_s64(bits: U32) -> S64
+external("C") routine d64_to_s64(bits: U64) -> S64
+external("C") routine d128_to_s64(low: U64, high: U64) -> S64
+
+# ============================================================================
+# F128 (Quadruple Precision) - LibBF Runtime
+# All functions operate on F128 values directly
+# ============================================================================
+
+# Trigonometric functions
+external("C") routine rf_f128_sin(value: F128) -> F128
+external("C") routine rf_f128_cos(value: F128) -> F128
+external("C") routine rf_f128_tan(value: F128) -> F128
+external("C") routine rf_f128_asin(value: F128) -> F128
+external("C") routine rf_f128_acos(value: F128) -> F128
+external("C") routine rf_f128_atan(value: F128) -> F128
+external("C") routine rf_f128_atan2(y: F128, x: F128) -> F128
+
+# Hyperbolic functions
+external("C") routine rf_f128_sinh(value: F128) -> F128
+external("C") routine rf_f128_cosh(value: F128) -> F128
+external("C") routine rf_f128_tanh(value: F128) -> F128
+external("C") routine rf_f128_asinh(value: F128) -> F128
+external("C") routine rf_f128_acosh(value: F128) -> F128
+external("C") routine rf_f128_atanh(value: F128) -> F128
+
+# Exponential and logarithmic functions
+external("C") routine rf_f128_exp(value: F128) -> F128
+external("C") routine rf_f128_exp2(value: F128) -> F128
+external("C") routine rf_f128_expm1(value: F128) -> F128
+external("C") routine rf_f128_log(value: F128) -> F128
+external("C") routine rf_f128_log2(value: F128) -> F128
+external("C") routine rf_f128_log10(value: F128) -> F128
+external("C") routine rf_f128_log1p(value: F128) -> F128
+
+# Power functions
+external("C") routine rf_f128_pow(base: F128, exp: F128) -> F128
+external("C") routine rf_f128_cbrt(value: F128) -> F128
+external("C") routine rf_f128_hypot(x: F128, y: F128) -> F128
+external("C") routine rf_f128_copysign(value: F128, sign: F128) -> F128
+
+# ============================================================================
+# Moment - System Clock
+# ============================================================================
+
+external("C") routine rf_moment_now() -> Moment
+
+# ============================================================================
+# C String Operations (CStr / char*)
+# ============================================================================
+
+external("C") routine rf_strlen(ptr: UAddr) -> UAddr
+external("C") routine rf_strcmp(a: UAddr, b: UAddr) -> S32
+external("C") routine rf_strcpy(dest: UAddr, src: UAddr)
+external("C") routine rf_cstr_len(ptr: CStr) -> UAddr
+
+# ============================================================================
+# Wide C String Operations (CWStr / wchar_t*)
+# ============================================================================
+
+external("C") routine rf_wcslen(ptr: UAddr) -> UAddr
+external("C") routine rf_wcscmp(a: UAddr, b: UAddr) -> S32
+external("C") routine rf_wcscpy(dest: UAddr, src: UAddr)
+
+# ============================================================================
+# Console I/O
+# ============================================================================
+
+# Output (stdout and stderr)
+external("C") routine rf_console_print(ptr: UAddr, len: U64)
+external("C") routine rf_console_alert(ptr: UAddr, len: U64)
+
+# Input (returns heap-allocated C string pointer)
+external("C") routine rf_console_get_line() -> UAddr
+external("C") routine rf_console_get_word() -> UAddr
+external("C") routine rf_console_get_all() -> UAddr
+external("C") routine rf_console_get_letters(count: UAddr) -> UAddr
+external("C") routine rf_console_get_bytes(count: UAddr) -> UAddr
+
+# Control
+external("C") routine rf_console_flush()
+external("C") routine rf_console_clear()
+
+# ============================================================================
+# Integer (Arbitrary Precision) - LibTomMath
+# All functions use opaque handles (UAddr) to mp_int structures
+# ============================================================================
+
+# Lifecycle
+external("C") routine rf_bigint_new() -> UAddr
+external("C") routine rf_bigint_clear(handle: UAddr)
+external("C") routine rf_bigint_copy(dest: UAddr, src: UAddr)
+
+# Initialization from values
+external("C") routine rf_bigint_set_i64(handle: UAddr, value: S64)
+external("C") routine rf_bigint_set_u64(handle: UAddr, value: U64)
+external("C") routine rf_bigint_set_str(handle: UAddr, str: UAddr, radix: S32) -> S32
+
+# Extraction to values
+external("C") routine rf_bigint_get_i64(handle: UAddr) -> S64
+external("C") routine rf_bigint_get_u64(handle: UAddr) -> U64
+external("C") routine rf_bigint_get_str(handle: UAddr, radix: S32) -> UAddr
+
+# Arithmetic (result = op(a, b) or result = op(a))
+external("C") routine rf_bigint_add(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_sub(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_mul(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_div(quotient: UAddr, remainder: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_mod(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_neg(result: UAddr, a: UAddr)
+
+# Comparison
+external("C") routine rf_bigint_cmp(a: UAddr, b: UAddr) -> S32
+
+# Bitwise operations
+external("C") routine rf_bigint_and(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_or(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_xor(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_shl(result: UAddr, a: UAddr, bits: S32)
+external("C") routine rf_bigint_shr(result: UAddr, a: UAddr, bits: S32)
+
+# Math operations
+external("C") routine rf_bigint_abs(result: UAddr, a: UAddr)
+external("C") routine rf_bigint_pow(result: UAddr, base: UAddr, exp: U32)
+external("C") routine rf_bigint_sqrt(result: UAddr, a: UAddr)
+external("C") routine rf_bigint_gcd(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_lcm(result: UAddr, a: UAddr, b: UAddr)
+
+# Query functions
+external("C") routine rf_bigint_is_zero(handle: UAddr) -> S32
+external("C") routine rf_bigint_is_neg(handle: UAddr) -> S32
+
+# ============================================================================
+# Decimal (Arbitrary Precision) - MAPM Library
+# All functions use opaque handles (UAddr) to M_APM structures
+# ============================================================================
+
+# Lifecycle
+external("C") routine rf_bigdec_new() -> UAddr
+external("C") routine rf_bigdec_free(handle: UAddr)
+external("C") routine rf_bigdec_copy(src: UAddr) -> UAddr
+
+# Initialization from values
+external("C") routine rf_bigdec_set_i64(handle: UAddr, value: S64)
+external("C") routine rf_bigdec_set_f64(handle: UAddr, value: F64)
+external("C") routine rf_bigdec_set_str(handle: UAddr, str: UAddr)
+
+# Extraction to values
+external("C") routine rf_bigdec_get_i64(handle: UAddr) -> S64
+external("C") routine rf_bigdec_get_f64(handle: UAddr) -> F64
+external("C") routine rf_bigdec_get_str(handle: UAddr, decimal_places: S32) -> UAddr
+
+# Arithmetic
+external("C") routine rf_bigdec_add(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigdec_sub(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigdec_mul(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigdec_div(result: UAddr, precision: S32, a: UAddr, b: UAddr)
+external("C") routine rf_bigdec_neg(result: UAddr, a: UAddr)
+
+# Comparison
+external("C") routine rf_bigdec_cmp(a: UAddr, b: UAddr) -> S32
+
+# Math operations (with precision)
+external("C") routine rf_bigdec_abs(result: UAddr, a: UAddr)
+external("C") routine rf_bigdec_sqrt(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_pow(result: UAddr, precision: S32, base: UAddr, exp: UAddr)
+external("C") routine rf_bigdec_exp(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_log(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_log10(result: UAddr, precision: S32, a: UAddr)
+
+# Trigonometric functions (with precision)
+external("C") routine rf_bigdec_sin(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_cos(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_tan(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_asin(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_acos(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_atan(result: UAddr, precision: S32, a: UAddr)
+
+# Hyperbolic functions (with precision)
+external("C") routine rf_bigdec_sinh(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_cosh(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_tanh(result: UAddr, precision: S32, a: UAddr)
+
+# Rounding operations
+external("C") routine rf_bigdec_ceil(result: UAddr, a: UAddr)
+external("C") routine rf_bigdec_floor(result: UAddr, a: UAddr)
+external("C") routine rf_bigdec_round(result: UAddr, decimal_places: S32, a: UAddr)
+external("C") routine rf_bigdec_trunc(result: UAddr, decimal_places: S32, a: UAddr)
+
+# Query functions
+external("C") routine rf_bigdec_is_zero(handle: UAddr) -> S32
+external("C") routine rf_bigdec_is_neg(handle: UAddr) -> S32
+
+# Constants (computed with precision)
+external("C") routine rf_bigdec_pi(result: UAddr, precision: S32)
+external("C") routine rf_bigdec_e(result: UAddr, precision: S32)
+
+# ============================================================================
+# Text Parsing (CStr -> primitive values)
+# Native C functions that parse null-terminated UTF-8 strings
+# ============================================================================
+
+# Signed integers
+external("C") routine rf_parse_S8(cstr: CStr) -> S8
+external("C") routine rf_parse_S16(cstr: CStr) -> S16
+external("C") routine rf_parse_S32(cstr: CStr) -> S32
+external("C") routine rf_parse_S64(cstr: CStr) -> S64
+external("C") routine rf_parse_S128(cstr: CStr) -> S128
+external("C") routine rf_parse_SAddr(cstr: CStr) -> SAddr
+
+# Unsigned integers
+external("C") routine rf_parse_U8(cstr: CStr) -> U8
+external("C") routine rf_parse_U16(cstr: CStr) -> U16
+external("C") routine rf_parse_U32(cstr: CStr) -> U32
+external("C") routine rf_parse_U64(cstr: CStr) -> U64
+external("C") routine rf_parse_U128(cstr: CStr) -> U128
+external("C") routine rf_parse_UAddr(cstr: CStr) -> UAddr
+
+# Binary floating point
+external("C") routine rf_parse_F16(cstr: CStr) -> F16
+external("C") routine rf_parse_F32(cstr: CStr) -> F32
+external("C") routine rf_parse_F64(cstr: CStr) -> F64
+external("C") routine rf_parse_F128(cstr: CStr) -> F128
+
+# ============================================================================
+# Text Formatting (primitive values -> heap-allocated CStr pointer)
+# Returns UAddr to heap-allocated null-terminated UTF-8 string
+# ============================================================================
+
+# Signed integers
+external("C") routine rf_format_S8(value: S8) -> UAddr
+external("C") routine rf_format_S16(value: S16) -> UAddr
+external("C") routine rf_format_S32(value: S32) -> UAddr
+external("C") routine rf_format_S64(value: S64) -> UAddr
+external("C") routine rf_format_S128(value: S128) -> UAddr
+external("C") routine rf_format_SAddr(value: SAddr) -> UAddr
+
+# Unsigned integers
+external("C") routine rf_format_U8(value: U8) -> UAddr
+external("C") routine rf_format_U16(value: U16) -> UAddr
+external("C") routine rf_format_U32(value: U32) -> UAddr
+external("C") routine rf_format_U64(value: U64) -> UAddr
+external("C") routine rf_format_U128(value: U128) -> UAddr
+external("C") routine rf_format_UAddr(value: UAddr) -> UAddr
+
+# Binary floating point
+external("C") routine rf_format_F16(value: F16) -> UAddr
+external("C") routine rf_format_F32(value: F32) -> UAddr
+external("C") routine rf_format_F64(value: F64) -> UAddr
+external("C") routine rf_format_F128(value: F128) -> UAddr

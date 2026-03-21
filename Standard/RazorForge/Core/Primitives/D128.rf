@@ -1,0 +1,258 @@
+# RazorForge D128 (decimal128 floating point) native type implementation
+# IEEE 754-2008 decimal floating point with 34 significant digits
+# Uses Intel DFP library via external("C") routines
+
+module Core
+
+# Core D128 type definition - stored as 128-bit value in BID encoding
+# Uses two U64 member variables (low and high) to represent the 128-bit value
+record D128 obeys Numeric, Ordered
+  secret low: U64
+  secret high: U64
+
+# Constants for D128
+preset D128_ZERO: D128 = 0.0_d128
+preset D128_ONE: D128 = 1.0_d128
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine D128.__create__(from: S8) -> D128
+  return rf_d128_from_s32(S32(from))
+
+routine D128.__create__(from: S16) -> D128
+  return rf_d128_from_s32(S32(from))
+
+routine D128.__create__(from: S32) -> D128
+  return rf_d128_from_s32(from)
+
+routine D128.__create__(from: S64) -> D128
+  return rf_d128_from_s64(from)
+
+routine D128.__create__(from: S128) -> D128
+  # Convert through S64 - may lose precision
+  return from.S64!().D128()
+
+routine D128.__create__(from: U8) -> D128
+  return rf_d128_from_u32(U32(from))
+
+routine D128.__create__(from: U16) -> D128
+  return rf_d128_from_u32(U32(from))
+
+routine D128.__create__(from: U32) -> D128
+  return rf_d128_from_u32(from)
+
+routine D128.__create__(from: U64) -> D128
+  return rf_d128_from_u64(from)
+
+routine D128.__create__(from: U128) -> D128
+  # Convert through U64 - may lose precision
+  return from.U64!().D128()
+
+routine D128.__create__(from: F16) -> D128
+  return from.F32().D128()
+
+routine D128.__create__(from: F32) -> D128
+  return rf_f32_to_d128(from)
+
+routine D128.__create__(from: F64) -> D128
+  return rf_f64_to_d128(from)
+
+routine D128.__create__(from: F128) -> D128
+  return from.F64!().D128()
+
+routine D128.__create__(from: D32) -> D128
+  var bits = from.to_bits()
+  return rf_d32_to_d128(bits)
+
+routine D128.__create__(from: D64) -> D128
+  var bits = from.to_bits()
+  return rf_d64_to_d128(bits)
+
+routine D128.__create__(from: D128) -> D128
+  return from
+
+# From SAddr - convert through S64
+routine D128.__create__(from: SAddr) -> D128
+  return from.S64().D128()
+
+# From UAddr - convert through U64
+routine D128.__create__(from: UAddr) -> D128
+  return from.U64().D128()
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+routine D128.__add__(you: D128) -> D128
+  return rf_d128_add(me.low, me.high, you.low, you.high)
+
+routine D128.__sub__(you: D128) -> D128
+  return rf_d128_sub(me.low, me.high, you.low, you.high)
+
+routine D128.__mul__(you: D128) -> D128
+  return rf_d128_mul(me.low, me.high, you.low, you.high)
+
+routine D128.__truediv__(you: D128) -> D128
+  return rf_d128_div(me.low, me.high, you.low, you.high)
+
+routine D128.__neg__() -> D128
+  var zero = D128_ZERO
+  return rf_d128_sub(zero.low, zero.high, me.low, me.high)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine D128.__eq__(you: D128) -> Bool
+  return rf_d128_cmp(me.low, me.high, you.low, you.high) == 0
+
+routine D128.__cmp__(you: D128) -> ComparisonSign
+  var cmp = rf_d128_cmp(me.low, me.high, you.low, you.high)
+  if cmp < 0
+    return ME_SMALL
+  if cmp > 0
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine D128.sqrt() -> D128
+  return rf_d128_sqrt(me.low, me.high)
+
+routine D128.abs() -> D128
+  return rf_d128_abs(me.low, me.high)
+
+routine D128.ceil() -> D128
+  return rf_d128_ceil(me.low, me.high)
+
+routine D128.floor() -> D128
+  return rf_d128_floor(me.low, me.high)
+
+routine D128.round() -> D128
+  return rf_d128_round(me.low, me.high)
+
+routine D128.trunc() -> D128
+  return rf_d128_trunc(me.low, me.high)
+
+# ============================================================================
+# Trigonometric Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+routine D128.sin() -> D128
+  return rf_d128_sin(me.low, me.high)
+
+routine D128.cos() -> D128
+  return rf_d128_cos(me.low, me.high)
+
+routine D128.tan() -> D128
+  return rf_d128_tan(me.low, me.high)
+
+routine D128.asin() -> D128
+  return rf_d128_asin(me.low, me.high)
+
+routine D128.acos() -> D128
+  return rf_d128_acos(me.low, me.high)
+
+routine D128.atan() -> D128
+  return rf_d128_atan(me.low, me.high)
+
+routine D128.atan2(x: D128) -> D128
+  return rf_d128_atan2(me.low, me.high, x.low, x.high)
+
+# ============================================================================
+# Hyperbolic Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+routine D128.sinh() -> D128
+  return rf_d128_sinh(me.low, me.high)
+
+routine D128.cosh() -> D128
+  return rf_d128_cosh(me.low, me.high)
+
+routine D128.tanh() -> D128
+  return rf_d128_tanh(me.low, me.high)
+
+# ============================================================================
+# Exponential and Logarithmic Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+routine D128.exp() -> D128
+  return rf_d128_exp(me.low, me.high)
+
+routine D128.exp2() -> D128
+  return rf_d128_exp2(me.low, me.high)
+
+routine D128.log() -> D128
+  return rf_d128_log(me.low, me.high)
+
+routine D128.log2() -> D128
+  return rf_d128_log2(me.low, me.high)
+
+routine D128.log10() -> D128
+  return rf_d128_log10(me.low, me.high)
+
+# ============================================================================
+# Power Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+routine D128.pow(exp: D128) -> D128
+  return rf_d128_pow(me.low, me.high, exp.low, exp.high)
+
+routine D128.cbrt() -> D128
+  return rf_d128_cbrt(me.low, me.high)
+
+routine D128.hypot(y: D128) -> D128
+  return rf_d128_hypot(me.low, me.high, y.low, y.high)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine D128.min(you: D128) -> D128
+  return if rf_d128_cmp(me.low, me.high, you.low, you.high) <= 0 then me else you
+
+routine D128.max(you: D128) -> D128
+  return if rf_d128_cmp(me.low, me.high, you.low, you.high) >= 0 then me else you
+
+routine D128.clamp(min_val: D128, max_val: D128) -> D128
+  return me.min(max_val).max(min_val)
+
+routine D128.is_positive() -> Bool
+  var zero = D128_ZERO
+  return rf_d128_cmp(me.low, me.high, zero.low, zero.high) > 0
+
+routine D128.is_negative() -> Bool
+  var zero = D128_ZERO
+  return rf_d128_cmp(me.low, me.high, zero.low, zero.high) < 0
+
+routine D128.is_zero() -> Bool
+  var zero = D128_ZERO
+  return rf_d128_cmp(me.low, me.high, zero.low, zero.high) == 0
+
+routine D128.signum() -> D128
+  var zero = D128_ZERO
+  var one = D128_ONE
+  return when
+    rf_d128_cmp(me.low, me.high, zero.low, zero.high) > 0 => one
+    rf_d128_cmp(me.low, me.high, zero.low, zero.high) < 0 => rf_d128_sub(zero.low, zero.high, one.low, one.high)
+    else => zero
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+# Get low 64 bits
+routine D128.low_bits() -> U64
+  return me.low
+
+# Get high 64 bits
+routine D128.high_bits() -> U64
+  return me.high
+
+# Create D128 from low and high U64 bits
+routine D128.from_bits(low: U64, high: U64) -> D128
+  return D128(low: low, high: high)

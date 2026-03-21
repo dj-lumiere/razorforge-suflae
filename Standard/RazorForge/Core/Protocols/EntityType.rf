@@ -1,0 +1,7 @@
+# EntityType - Marker protocol for all entity types
+# Every entity implicitly conforms to this protocol
+# Provides: Diagnosable (-> Representable), Equatable, Identifiable
+module Core
+
+protocol EntityType obeys Diagnosable, Equatable, Identifiable
+  pass

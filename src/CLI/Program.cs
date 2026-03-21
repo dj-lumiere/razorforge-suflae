@@ -1,409 +1,479 @@
-using Compilers.Shared.Parser;
-using Compilers.Shared.Lexer;
-using Compilers.Shared.Analysis;
-using Compilers.Shared.CodeGen;
-using Compilers.RazorForge.Parser;
-using Compilers.Suflae.Parser;
-using Compilers.Shared.AST;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
+using Compiler.Parser;
+using SyntaxTree;
+using SemanticAnalysis;
+using SemanticAnalysis.Enums;
+using SemanticAnalysis.Results;
+using Compiler.CodeGen;
 
-namespace Compilers;
+namespace Builder;
 
+/// <summary>
+/// Minimal CLI for testing the lexer and parser during the overhaul.
+/// Analysis and CodeGen will be added back once the new type system is implemented.
+/// </summary>
 internal class Program
 {
-    public static void Main(string[] args)
+    /// <summary>
+    /// Entry point for the RazorForge builder CLI.
+    /// Dispatches to the appropriate command handler based on the first argument.
+    /// Returns 0 on success or 1 on error.
+    /// </summary>
+    public static int Main(string[] args)
     {
         if (args.Length == 0)
         {
             PrintUsage();
-            return;
+            return 0;
         }
 
-        string command = args[0]
-           .ToLowerInvariant();
+        string command = args[0].ToLowerInvariant().TrimStart('-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command == "compile" || command == "run" || command == "compileandrun" ||
-                         command == "check" || command == "lsp";
+        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "validate-stdlib" || command == "help";
 
         if (!isCommand)
         {
-            // Old behavior: just a file path, compile it
-            CompileFile(sourceFile: args[0], executeAfter: false,
-                programArgs: Array.Empty<string>());
+            // Default behavior: parse the file
+            return ParseFile(sourceFile: args[0]);
         }
-        else if (command == "lsp")
+
+        switch (command)
         {
-            Console.WriteLine(value: "Language Server not yet implemented.");
-            Console.WriteLine(
-                value: "This would start the RazorForge Language Server Protocol implementation.");
-        }
-        else
-        {
-            // New behavior: command + file
-            if (args.Length < 2)
+            case "parse":
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Error: parse command requires a file path");
+                    return 1;
+                }
+                return ParseFile(sourceFile: args[1]);
+
+            case "tokenize":
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Error: tokenize command requires a file path");
+                    return 1;
+                }
+                return TokenizeFile(sourceFile: args[1]);
+
+            case "codegen":
+            case "emit":
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Error: codegen command requires a file path");
+                    return 1;
+                }
+                return GenerateCode(sourceFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
+
+            case "validate-stdlib":
             {
+                string lang = args.Length >= 2 ? args[1].ToLowerInvariant() : "rf";
+                Language stdlibLang = lang == "sf" || lang == "suflae" ? Language.Suflae : Language.RazorForge;
+                return ValidateStdlib(stdlibLang);
+            }
+
+            case "help":
                 PrintUsage();
-                return;
-            }
+                return 0;
 
-            string sourceFile = args[1];
-            string[] programArgs = args.Length > 2
-                ? args[2..]
-                : Array.Empty<string>();
-
-            switch (command)
-            {
-                case "compile":
-                    CompileFile(sourceFile: sourceFile, executeAfter: false,
-                        programArgs: programArgs, noMain: false);
-                    break;
-                case "run":
-                case "compileandrun":
-                    CompileFile(sourceFile: sourceFile, executeAfter: true,
-                        programArgs: programArgs, noMain: false);
-                    break;
-                case "check":
-                    // Check mode: parse and analyze only, no executable generation required
-                    // Useful for libraries, modules, or files without main()
-                    CompileFile(sourceFile: sourceFile, executeAfter: false,
-                        programArgs: programArgs, noMain: true);
-                    break;
-                default:
-                    PrintUsage();
-                    break;
-            }
+            default:
+                PrintUsage();
+                return 1;
         }
     }
 
+    /// <summary>
+    /// Prints the CLI usage instructions to standard output.
+    /// </summary>
     private static void PrintUsage()
     {
-        Console.WriteLine(value: "Usage:");
-        Console.WriteLine(
-            value: "  RazorForge <source-file>                          - Compile file (legacy)");
-        Console.WriteLine(
-            value: "  RazorForge compile <source-file>                  - Compile file");
-        Console.WriteLine(
-            value:
-            "  RazorForge run <source-file> [args...]            - Compile and run file with optional arguments");
-        Console.WriteLine(
-            value:
-            "  RazorForge compileandrun <source-file> [args...]  - Compile and run file with optional arguments");
-        Console.WriteLine(
-            value: "  RazorForge check <source-file>                    - Check file (no main required)");
-        Console.WriteLine(
-            value: "  RazorForge lsp                                    - Start language server");
+        Console.WriteLine("RazorForge Builder");
         Console.WriteLine();
-        Console.WriteLine(
-            value: "  <source-file>: .rf file for RazorForge or .sf file for Suflae");
-        Console.WriteLine(
-            value: "  [args...]:     Optional arguments to pass to the compiled program");
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  RazorForge <source-file>                    - Parse file and show AST summary");
+        Console.WriteLine("  RazorForge parse <source-file>              - Parse file and show AST summary");
+        Console.WriteLine("  RazorForge tokenize <source-file>           - Tokenize file and show tokens");
+        Console.WriteLine("  RazorForge codegen <source-file> [out.ll]   - Generate LLVM IR");
+        Console.WriteLine("  RazorForge validate-stdlib [rf|sf]           - Validate stdlib routine bodies");
+        Console.WriteLine("  RazorForge help                             - Show this help");
+        Console.WriteLine();
+        Console.WriteLine("  <source-file>: .rf file for RazorForge or .sf file for Suflae");
     }
 
-    private static void CompileFile(string sourceFile, bool executeAfter, string[] programArgs, bool noMain = false)
+    /// <summary>Returns true if the given file path has a <c>.sf</c> extension (Suflae source file).</summary>
+    private static bool IsSuflaeFile(string path) => path.EndsWith(".sf", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Tokenizes the given source file and prints each token with its position and text to standard output.
+    /// Returns 0 on success or 1 if the file is not found or tokenization fails.
+    /// </summary>
+    private static int TokenizeFile(string sourceFile)
     {
-        if (!File.Exists(path: sourceFile))
+        if (!File.Exists(sourceFile))
         {
-            Console.WriteLine(value: $"Error: File '{sourceFile}' not found.");
-            return;
+            Console.WriteLine($"Error: File '{sourceFile}' not found.");
+            return 1;
         }
 
-        string code = File.ReadAllText(path: sourceFile);
-        Language language = sourceFile.EndsWith(value: ".sf")
-            ? Language.Suflae
-            : Language.RazorForge;
-        LanguageMode mode = language == Language.Suflae
-            ? LanguageMode.Suflae
-            : LanguageMode.Normal;
+        string code = File.ReadAllText(sourceFile);
+        bool isSuflae = IsSuflaeFile(sourceFile);
 
-        Console.WriteLine(value: $"Compiling {sourceFile} as {language} ({mode})...");
+        Console.WriteLine($"Tokenizing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
         Console.WriteLine();
 
         try
         {
-            // Tokenize the code
-            Console.WriteLine(value: "=== TOKENIZATION ===");
-            List<Token> tokens = Tokenizer.Tokenize(source: code, language: language);
-            Console.WriteLine(value: $"Generated {tokens.Count} tokens");
-            // DEBUG: Print tokens
-            if (sourceFile.Contains(value: "test_tokens"))
-            {
-                Console.WriteLine(value: "=== TOKENS ===");
-                foreach (Token tok in tokens)
-                {
-                    Console.WriteLine(value: $"  {tok.Line}:{tok.Column} {tok.Type} '{tok.Text}'");
-                }
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+            var tokenizer = new Tokenizer(code, sourceFile, language);
+            List<Token> tokens = tokenizer.Tokenize();
 
-                Console.WriteLine(value: "=== END TOKENS ===");
+            Console.WriteLine($"Generated {tokens.Count} tokens:");
+            Console.WriteLine();
+
+            foreach (Token tok in tokens)
+            {
+                Console.WriteLine($"  {tok.Line,4}:{tok.Column,-3} {tok.Type,-25} '{EscapeString(tok.Text)}'");
             }
-
-            // Parse the code
-            Console.WriteLine(value: "=== PARSING ===");
-            BaseParser parser = language == Language.Suflae
-                ? (BaseParser)new SuflaeParser(tokens: tokens, fileName: sourceFile)
-                : new RazorForgeParser(tokens: tokens, fileName: sourceFile);
-            Shared.AST.Program ast = parser.Parse();
-            Console.WriteLine(
-                value: $"Successfully parsed! AST contains {ast.Declarations.Count} declarations");
-
-            // Semantic analysis
-            Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
-            var analyzer =
-                new SemanticAnalyzer(language: language, mode: mode, fileName: sourceFile);
-            List<SemanticError> semanticErrors = analyzer.Analyze(program: ast);
-
-            if (semanticErrors.Count > 0)
-            {
-                Console.WriteLine(value: $"Found {semanticErrors.Count} semantic errors:");
-                foreach (SemanticError error in semanticErrors.Take(count: 10))
-                {
-                    string location = error.FileName != null
-                        ? $"[{error.FileName}:{error.Location.Line}:{error.Location.Column}]"
-                        : $"[{error.Location.Line}:{error.Location.Column}]";
-                    Console.WriteLine(value: $"Semantic error{location}: {error.Message}");
-                }
-
-                if (semanticErrors.Count > 10)
-                {
-                    Console.WriteLine(value: $"  ... and {semanticErrors.Count - 10} more errors");
-                }
-
-                Console.WriteLine();
-
-                // Don't continue if there are semantic errors
-                if (!executeAfter)
-                {
-                    return;
-                }
-            }
-            else
-            {
-                Console.WriteLine(value: "No semantic errors found!");
-            }
-
-            // Generate function variants (try_, check_, find_)
-            Console.WriteLine(value: "=== FUNCTION VARIANT GENERATION ===");
-            var variantGenerator = new FunctionVariantGenerator();
-            variantGenerator.GenerateVariants(program: ast);
-
-            if (variantGenerator.GeneratedVariants.Count > 0)
-            {
-                Console.WriteLine(
-                    value:
-                    $"Generated {variantGenerator.GeneratedVariants.Count} function variants:");
-                foreach (FunctionDeclaration variant in variantGenerator.GeneratedVariants)
-                {
-                    Console.WriteLine(value: $"  - {variant.Name}()");
-                }
-
-                // Add generated variants to the AST
-                var updatedDeclarations = new List<IAstNode>(collection: ast.Declarations);
-                updatedDeclarations.AddRange(
-                    collection: variantGenerator.GeneratedVariants.Cast<IAstNode>());
-                ast = new Compilers.Shared.AST.Program(Declarations: updatedDeclarations,
-                    Location: ast.Location);
-            }
-            else
-            {
-                Console.WriteLine(
-                    value: "No function variants generated (no throw/absent detected)");
-            }
-
-            // Code generation
-            Console.WriteLine(value: "=== CODE GENERATION ===");
-
-            // Generate readable output
-            var simpleCodeGen = new SimpleCodeGenerator(language: language, mode: mode);
-            simpleCodeGen.Generate(program: ast);
-            string outputFile = Path.ChangeExtension(path: sourceFile, extension: ".out");
-            File.WriteAllText(path: outputFile, contents: simpleCodeGen.GetGeneratedCode());
-            Console.WriteLine(value: $"Simple code written to: {outputFile}");
-
-            // Generate LLVM IR
-            var llvmCodeGen = new LLVMCodeGenerator(language: language, mode: mode);
-            llvmCodeGen.SourceFileName = sourceFile;
-            llvmCodeGen.Generate(program: ast);
-            string llvmFile = Path.ChangeExtension(path: sourceFile, extension: ".ll");
-            File.WriteAllText(path: llvmFile, contents: llvmCodeGen.GetGeneratedCode());
-            Console.WriteLine(value: $"LLVM IR written to: {llvmFile}");
-
-            // In noMain mode (check command), skip executable generation
-            if (noMain)
-            {
-                Console.WriteLine();
-                Console.WriteLine(value: "✅ Check successful! (no-main mode, executable not generated)");
-            }
-            else
-            {
-                // Complete bootstrap pipeline: compile to executable
-                Console.WriteLine(value: "=== EXECUTABLE GENERATION ===");
-                string? executablePath = GenerateExecutable(llvmFile: llvmFile);
-                if (executablePath != null)
-                {
-                    Console.WriteLine(value: $"Executable generated: {executablePath}");
-
-                    // If run command, execute the generated executable
-                    if (executeAfter)
-                    {
-                        Console.WriteLine();
-                        Console.WriteLine(value: "=== RUNNING PROGRAM ===");
-                        Console.WriteLine();
-
-                        RunExecutable(executablePath: executablePath, programArgs: programArgs);
-                    }
-                }
-                else
-                {
-                    Console.WriteLine(
-                        value: "Note: LLVM tools not available. Skipping executable generation.");
-                    Console.WriteLine(
-                        value: "To generate executables, install LLVM and ensure 'clang' is in PATH.");
-
-                    if (executeAfter)
-                    {
-                        Console.WriteLine();
-                        Console.WriteLine(value: "Cannot run program without executable.");
-                    }
-                }
-
-                Console.WriteLine();
-                Console.WriteLine(value: "✅ Compilation successful!");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(value: $"❌ Compilation failed: {ex.Message}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine(value: $"   Inner: {ex.InnerException.Message}");
-            }
-        }
-    }
-
-    private static string? GenerateExecutable(string llvmFile)
-    {
-        try
-        {
-            string executablePath = Path.ChangeExtension(path: llvmFile, extension: ".exe");
-
-            // Find the RazorForge runtime C source files
-            string? projectRoot = FindProjectRoot(startPath: llvmFile);
-            string runtimeSources = "";
-            if (projectRoot != null)
-            {
-                string runtimeDir = Path.Combine(path1: projectRoot, path2: "native", path3: "runtime");
-                string memoryC = Path.Combine(path1: runtimeDir, path2: "memory.c");
-                string stacktraceC = Path.Combine(path1: runtimeDir, path2: "stacktrace.c");
-
-                if (File.Exists(path: memoryC) && File.Exists(path: stacktraceC))
-                {
-                    runtimeSources = $"\"{memoryC}\" \"{stacktraceC}\"";
-                }
-            }
-
-            // Use clang to compile LLVM IR to executable
-            // On Windows, we need to link with legacy_stdio_definitions for printf/scanf
-            // On Unix-like systems, libc is linked automatically
-            string linkerFlags = OperatingSystem.IsWindows()
-                ? "-Wno-override-module -llegacy_stdio_definitions"
-                : "-Wno-override-module";
-
-            var clangProcess = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "clang",
-                Arguments = $"\"{llvmFile}\" {runtimeSources} -o \"{executablePath}\" {linkerFlags}",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using var process = System.Diagnostics.Process.Start(startInfo: clangProcess);
-            if (process == null)
-            {
-                return null;
-            }
-
-            process.WaitForExit();
-
-            if (process.ExitCode == 0 && File.Exists(path: executablePath))
-            {
-                return executablePath;
-            }
-            else
-            {
-                string error = process.StandardError.ReadToEnd();
-                if (!string.IsNullOrEmpty(value: error))
-                {
-                    Console.WriteLine(value: $"Clang error: {error}");
-                }
-
-                return null;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(value: $"Error during executable generation: {ex.Message}");
-            return null;
-        }
-    }
-
-    private static void RunExecutable(string executablePath, string[] programArgs)
-    {
-        try
-        {
-            var runProcess = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = executablePath,
-                Arguments =
-                    string.Join(separator: " ",
-                        values: programArgs.Select(selector: arg => $"\"{arg}\"")),
-                UseShellExecute = false,
-                RedirectStandardOutput = false, // Let output go directly to console
-                RedirectStandardError = false,
-                RedirectStandardInput = false,
-                CreateNoWindow = false
-            };
-
-            using var process = System.Diagnostics.Process.Start(startInfo: runProcess);
-            if (process == null)
-            {
-                Console.WriteLine(value: "Failed to start executable.");
-                return;
-            }
-
-            process.WaitForExit();
 
             Console.WriteLine();
-            Console.WriteLine(value: $"Program exited with code: {process.ExitCode}");
+            Console.WriteLine("Tokenization successful!");
+            return 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine(value: $"Error running executable: {ex.Message}");
+            Console.WriteLine($"Tokenization failed: {ex.Message}");
+            return 1;
         }
     }
 
-    private static string? FindProjectRoot(string startPath)
+    /// <summary>
+    /// Tokenizes and parses the given source file, then prints a summary of the resulting AST
+    /// along with any warnings. Returns 0 on success or 1 if the file is not found or parsing fails.
+    /// </summary>
+    private static int ParseFile(string sourceFile)
     {
-        // Walk up the directory tree looking for RazorForge.csproj or native/runtime directory
-        string? directory = Path.GetDirectoryName(path: startPath);
-        while (directory != null)
+        if (!File.Exists(sourceFile))
         {
-            // Check for RazorForge.csproj
-            if (File.Exists(path: Path.Combine(path1: directory, path2: "RazorForge.csproj")))
-            {
-                return directory;
-            }
-
-            // Check for native/runtime directory
-            string runtimeDir = Path.Combine(path1: directory, path2: "native", path3: "runtime");
-            if (Directory.Exists(path: runtimeDir))
-            {
-                return directory;
-            }
-
-            directory = Path.GetDirectoryName(path: directory);
+            Console.WriteLine($"Error: File '{sourceFile}' not found.");
+            return 1;
         }
 
-        return null;
+        string code = File.ReadAllText(sourceFile);
+        bool isSuflae = IsSuflaeFile(sourceFile);
+
+        Console.WriteLine($"Parsing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+        Console.WriteLine();
+
+        try
+        {
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+
+            // Tokenize
+            Console.WriteLine("=== TOKENIZATION ===");
+            var tokenizer = new Tokenizer(code, sourceFile, language);
+            List<Token> tokens = tokenizer.Tokenize();
+            Console.WriteLine($"Generated {tokens.Count} tokens");
+
+            // Parse
+            Console.WriteLine();
+            Console.WriteLine("=== PARSING ===");
+            var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
+            SyntaxTree.Program ast = parser.Parse();
+            IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
+
+            Console.WriteLine($"Successfully parsed! AST contains {ast.Declarations.Count} declarations");
+
+            // Show warnings if any
+            if (warnings.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== WARNINGS ({warnings.Count}) ===");
+                foreach (var warning in warnings)
+                {
+                    Console.WriteLine($"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                }
+            }
+
+            // Show AST summary
+            Console.WriteLine();
+            Console.WriteLine("=== AST SUMMARY ===");
+            foreach (var decl in ast.Declarations)
+            {
+                PrintDeclarationSummary(decl, indent: 0);
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Parsing successful!");
+            return 0;
+        }
+        catch (GrammarException ex)
+        {
+            Console.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Runs the semantic analyzer over the standard library routine bodies for the given language
+    /// and reports any errors found. Returns 0 if all bodies are valid, or 1 if errors were found.
+    /// </summary>
+    private static int ValidateStdlib(Language language)
+    {
+        try
+        {
+            string langName = language == Language.Suflae ? "Suflae" : "RazorForge";
+            Console.WriteLine($"Validating {langName} stdlib routine bodies...");
+            Console.WriteLine();
+
+            var analyzer = new SemanticAnalyzer(language);
+            var stdlibErrors = analyzer.ValidateStdlibBodies();
+
+            if (stdlibErrors.Count == 0)
+            {
+                Console.WriteLine("All stdlib routine bodies validated successfully!");
+                return 0;
+            }
+
+            // Group errors by file
+            var errorsByFile = new Dictionary<string, List<SemanticError>>();
+            foreach (var error in stdlibErrors)
+            {
+                string file = error.Location.FileName;
+                if (!errorsByFile.TryGetValue(file, out var list))
+                {
+                    list = [];
+                    errorsByFile[file] = list;
+                }
+                list.Add(error);
+            }
+
+            Console.WriteLine($"=== STDLIB VALIDATION ERRORS ({stdlibErrors.Count} errors in {errorsByFile.Count} files) ===");
+            Console.WriteLine();
+
+            foreach (var (file, errors) in errorsByFile.OrderBy(kvp => kvp.Key))
+            {
+                Console.WriteLine($"  {Path.GetFileName(file)} ({errors.Count} errors):");
+                foreach (var error in errors)
+                {
+                    Console.WriteLine($"    {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+            }
+
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Stdlib validation failed: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Runs the full compiler pipeline (tokenize → parse → semantic analysis → LLVM IR generation)
+    /// on the given source file and writes the resulting IR to <paramref name="outputFile"/>,
+    /// or to a default <c>.ll</c> file if no output path is specified.
+    /// Returns 0 on success or 1 if any stage fails.
+    /// </summary>
+    private static int GenerateCode(string sourceFile, string? outputFile)
+    {
+        if (!File.Exists(sourceFile))
+        {
+            Console.WriteLine($"Error: File '{sourceFile}' not found.");
+            return 1;
+        }
+
+        string code = File.ReadAllText(sourceFile);
+        bool isSuflae = IsSuflaeFile(sourceFile);
+
+        Console.WriteLine($"Building {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+        Console.WriteLine();
+
+        try
+        {
+            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+
+            // Tokenize
+            Console.WriteLine("=== TOKENIZATION ===");
+            var tokenizer = new Tokenizer(code, sourceFile, language);
+            List<Token> tokens = tokenizer.Tokenize();
+            Console.WriteLine($"Generated {tokens.Count} tokens");
+
+            // Parse
+            Console.WriteLine();
+            Console.WriteLine("=== PARSING ===");
+            var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
+            SyntaxTree.Program ast = parser.Parse();
+            IReadOnlyList<BuildWarning> parseWarnings = parser.GetWarnings();
+
+            Console.WriteLine($"Parsed {ast.Declarations.Count} declarations");
+
+            // Semantic Analysis
+            Console.WriteLine();
+            Console.WriteLine("=== SEMANTIC ANALYSIS ===");
+
+            var analyzer = new SemanticAnalyzer(language);
+            var result = analyzer.Analyze(ast);
+
+            Console.WriteLine($"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+
+            // Show errors and warnings
+            if (result.Errors.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
+                foreach (var error in result.Errors)
+                {
+                    Console.WriteLine($"  {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Code generation aborted due to errors.");
+                return 1;
+            }
+
+            if (result.Warnings.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
+                foreach (var warning in result.Warnings)
+                {
+                    Console.WriteLine($"  {warning.FormattedMessage}");
+                }
+            }
+
+            // Code Generation
+            Console.WriteLine();
+            Console.WriteLine("=== CODE GENERATION ===");
+
+            // Pass stdlib programs to codegen so intrinsic routines get built
+            var stdlibPrograms = result.Registry.StdlibPrograms;
+            var generator = new LLVMCodeGenerator(ast, result.Registry, stdlibPrograms);
+            string llvmIR = generator.Generate();
+
+            // Output
+            if (outputFile != null)
+            {
+                File.WriteAllText(outputFile, llvmIR);
+                Console.WriteLine($"LLVM IR written to: {outputFile}");
+            }
+            else
+            {
+                // Default output file
+                string defaultOutput = Path.ChangeExtension(sourceFile, ".ll");
+                File.WriteAllText(defaultOutput, llvmIR);
+                Console.WriteLine($"LLVM IR written to: {defaultOutput}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Code generation successful!");
+            return 0;
+        }
+        catch (GrammarException ex)
+        {
+            Console.WriteLine($"{ex.Message}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Build failed: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Recursively prints a one-line summary of an AST node to standard output,
+    /// indented to the given depth. Used to display a human-readable AST overview after parsing.
+    /// </summary>
+    private static void PrintDeclarationSummary(IAstNode node, int indent)
+    {
+        string prefix = new string(' ', indent * 2);
+
+        switch (node)
+        {
+            case RoutineDeclaration func:
+                string funcModifiers = string.Join(" ", GetModifiers(func));
+                Console.WriteLine($"{prefix}func {func.Name}({func.Parameters.Count} params) -> {func.ReturnType?.ToString() ?? "void"} {funcModifiers}".TrimEnd());
+                break;
+
+            case RecordDeclaration rec:
+                string recModifiers = string.Join(" ", GetModifiers(rec));
+                Console.WriteLine($"{prefix}record {rec.Name} ({rec.Members.Count} members) {recModifiers}".TrimEnd());
+                break;
+
+            case EntityDeclaration ent:
+                string entModifiers = string.Join(" ", GetModifiers(ent));
+                Console.WriteLine($"{prefix}entity {ent.Name} ({ent.Members.Count} members) {entModifiers}".TrimEnd());
+                break;
+
+            case ResidentDeclaration res:
+                Console.WriteLine($"{prefix}resident {res.Name} ({res.Members.Count} members)");
+                break;
+
+            case ChoiceDeclaration choice:
+                Console.WriteLine($"{prefix}choice {choice.Name} ({choice.Cases.Count} variants)");
+                break;
+
+            case VariantDeclaration variant:
+                Console.WriteLine($"{prefix}variant {variant.Name} ({variant.Cases.Count} cases)");
+                break;
+
+            case ProtocolDeclaration proto:
+                Console.WriteLine($"{prefix}protocol {proto.Name} ({proto.Methods.Count} methods)");
+                break;
+
+            case ImportDeclaration import:
+                Console.WriteLine($"{prefix}import {import.ModulePath}");
+                break;
+
+            case ModuleDeclaration ns:
+                Console.WriteLine($"{prefix}module {ns.Path}");
+                break;
+
+            default:
+                Console.WriteLine($"{prefix}{node.GetType().Name}");
+                break;
+        }
+    }
+
+    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for a routine declaration.</summary>
+    private static List<string> GetModifiers(RoutineDeclaration func)
+    {
+        var mods = new List<string>();
+        if (func.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", func.GenericParameters)}]");
+        return mods;
+    }
+
+    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for a record declaration.</summary>
+    private static List<string> GetModifiers(RecordDeclaration rec)
+    {
+        var mods = new List<string>();
+        if (rec.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", rec.GenericParameters)}]");
+        return mods;
+    }
+
+    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for an entity declaration.</summary>
+    private static List<string> GetModifiers(EntityDeclaration ent)
+    {
+        var mods = new List<string>();
+        if (ent.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", ent.GenericParameters)}]");
+        return mods;
+    }
+
+    /// <summary>
+    /// Escapes newline, carriage return, and tab characters in a string to their
+    /// backslash-escaped equivalents for safe display on a single console line.
+    /// </summary>
+    private static string EscapeString(string s)
+    {
+        return s.Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
     }
 }

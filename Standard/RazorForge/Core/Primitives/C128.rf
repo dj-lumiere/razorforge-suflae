@@ -1,0 +1,250 @@
+# RazorForge C128 (quadruple precision complex number) type implementation
+# Record of two F128 values (real and imaginary parts)
+module Core
+
+### Complex number with quadruple precision (2x F128) components
+###
+### C128 is for extended precision scientific computing.
+### Not @intrinsic — implemented as a record of two F128 member variables.
+### Has full API including arg, log, pow, and inverse trig (F128 provides atan2/sinh/cosh).
+###
+### Example:
+###   var z = C128(real: 3.0_f128, imag: 4.0_f128)
+###   var w = z.conjugate()
+###   var theta = z.arg()
+record C128 obeys Numeric, Equatable
+  real: F128
+  imag: F128
+
+# Complex constants
+preset C128_ZERO: C128 = C128(real: 0.0_f128, imag: 0.0_f128)
+preset C128_ONE: C128 = C128(real: 1.0_f128, imag: 0.0_f128)
+preset C128_I: C128 = C128(real: 0.0_f128, imag: 1.0_f128)
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Create a C128 from a real F128 value (imaginary part is zero)
+routine C128.__create__(from: F128) -> C128
+  return C128(real: from, imag: 0.0_f128)
+
+### Create a C128 from a C32 by extending both components (F32 -> F128)
+routine C128.__create__(from: C32) -> C128
+  return C128(real: F128(from.real), imag: F128(from.imag))
+
+### Create a C128 from a C64 by extending both components (F64 -> F128)
+routine C128.__create__(from: C64) -> C128
+  return C128(real: F128(from.real), imag: F128(from.imag))
+
+### Create a C128 from polar coordinates (magnitude and angle)
+###
+### Args:
+###   r: The magnitude (distance from origin)
+###   theta: The angle in radians
+###
+### Example:
+###   var z = C128.from_polar(r: 5.0_f128, theta: 0.9273_f128)
+routine C128.from_polar(r: F128, theta: F128) -> C128
+  return C128(real: r * theta.cos(), imag: r * theta.sin())
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Complex addition: (a+bi) + (c+di) = (a+c) + (b+d)i
+routine C128.__add__(you: C128) -> C128
+  return C128(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Complex subtraction: (a+bi) - (c+di) = (a-c) + (b-d)i
+routine C128.__sub__(you: C128) -> C128
+  return C128(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+routine C128.__mul__(you: C128) -> C128
+  return C128(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
+
+### Complex division: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
+routine C128.__truediv__(you: C128) -> C128
+  var d = you.real * you.real + you.imag * you.imag
+  return C128(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
+
+### Complex exponentiation: z^w = exp(w · log(z))
+routine C128.__pow__(you: C128) -> C128
+  return (you * me.log()).exp()
+
+### Complex negation: -(a+bi) = (-a) + (-b)i
+routine C128.__neg__() -> C128
+  return C128(real: -me.real, imag: -me.imag)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Component-wise equality (no ordering — complex numbers have no total order)
+routine C128.__eq__(you: C128) -> Bool
+  return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Magnitude: |z| = sqrt(real² + imag²)
+###
+### Example:
+###   C128(real: 3.0_f128, imag: 4.0_f128).abs()  # 5.0
+routine C128.abs() -> F128
+  return (me.real * me.real + me.imag * me.imag).sqrt()
+
+### Phase angle (argument) in radians: atan2(imag, real)
+###
+### Returns the angle in (-pi, pi]
+###
+### Example:
+###   C128(real: 1.0_f128, imag: 1.0_f128).arg()  # ~0.7854 (pi/4)
+routine C128.arg() -> F128
+  return me.imag.atan2(me.real)
+
+### Complex conjugate: flip the sign of the imaginary part
+###
+### Example:
+###   C128(real: 3.0_f128, imag: 4.0_f128).conjugate()  # C128(real: 3.0, imag: -4.0)
+routine C128.conjugate() -> C128
+  return C128(real: me.real, imag: -me.imag)
+
+### Squared magnitude: real² + imag² (avoids the sqrt in abs)
+routine C128.norm() -> F128
+  return me.real * me.real + me.imag * me.imag
+
+# ============================================================================
+# Trigonometric (using native F128 sinh/cosh)
+# ============================================================================
+
+### Complex sine: sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)
+routine C128.sin() -> C128
+  return C128(real: me.real.sin() * me.imag.cosh(), imag: me.real.cos() * me.imag.sinh())
+
+### Complex cosine: cos(a+bi) = cos(a)cosh(b) - i·sin(a)sinh(b)
+routine C128.cos() -> C128
+  return C128(real: me.real.cos() * me.imag.cosh(), imag: -(me.real.sin() * me.imag.sinh()))
+
+### Complex tangent: sin(2a)/d + i·sinh(2b)/d where d = cos(2a) + cosh(2b)
+routine C128.tan() -> C128
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var d = a2.cos() + b2.cosh()
+  return C128(real: a2.sin() / d, imag: b2.sinh() / d)
+
+### Complex arc sine: asin(z) = -i·log(iz + sqrt(1 - z²))
+routine C128.asin() -> C128
+  var iz = C128(real: -me.imag, imag: me.real)
+  var w = iz + (C128_ONE - me * me).sqrt()
+  var v = w.log()
+  return C128(real: v.imag, imag: -v.real)
+
+### Complex arc cosine: acos(z) = -i·log(z + i·sqrt(1 - z²))
+routine C128.acos() -> C128
+  var s = (C128_ONE - me * me).sqrt()
+  var w = me + C128(real: -s.imag, imag: s.real)
+  var v = w.log()
+  return C128(real: v.imag, imag: -v.real)
+
+### Complex arc tangent: atan(z) = (i/2)·log((i+z)/(i-z))
+routine C128.atan() -> C128
+  var num = C128(real: me.real, imag: me.imag + 1.0_f128)
+  var den = C128(real: -me.real, imag: 1.0_f128 - me.imag)
+  var v = (num / den).log()
+  return C128(real: -v.imag / 2.0_f128, imag: v.real / 2.0_f128)
+
+# ============================================================================
+# Hyperbolic (using native F128 sinh/cosh)
+# ============================================================================
+
+### Complex hyperbolic sine: sinh(a+bi) = sinh(a)cos(b) + i·cosh(a)sin(b)
+routine C128.sinh() -> C128
+  return C128(real: me.real.sinh() * me.imag.cos(), imag: me.real.cosh() * me.imag.sin())
+
+### Complex hyperbolic cosine: cosh(a+bi) = cosh(a)cos(b) + i·sinh(a)sin(b)
+routine C128.cosh() -> C128
+  return C128(real: me.real.cosh() * me.imag.cos(), imag: me.real.sinh() * me.imag.sin())
+
+### Complex hyperbolic tangent: sinh(2a)/d + i·sin(2b)/d where d = cosh(2a) + cos(2b)
+routine C128.tanh() -> C128
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var d = a2.cosh() + b2.cos()
+  return C128(real: a2.sinh() / d, imag: b2.sin() / d)
+
+### Complex inverse hyperbolic sine: asinh(z) = log(z + sqrt(z² + 1))
+routine C128.asinh() -> C128
+  return (me + (me * me + C128_ONE).sqrt()).log()
+
+### Complex inverse hyperbolic cosine: acosh(z) = log(z + sqrt(z² - 1))
+routine C128.acosh() -> C128
+  return (me + (me * me - C128_ONE).sqrt()).log()
+
+### Complex inverse hyperbolic tangent: atanh(z) = (1/2)·log((1+z)/(1-z))
+routine C128.atanh() -> C128
+  var v = ((C128_ONE + me) / (C128_ONE - me)).log()
+  return C128(real: v.real / 2.0_f128, imag: v.imag / 2.0_f128)
+
+# ============================================================================
+# Exponential and Logarithmic
+# ============================================================================
+
+### Complex exponential: exp(a+bi) = exp(a)(cos(b) + i·sin(b))
+routine C128.exp() -> C128
+  var ea = me.real.exp()
+  return C128(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Natural logarithm (principal branch): log(z) = ln|z| + i·arg(z)
+###
+### Example:
+###   C128_I.log()  # C128(real: 0.0, imag: ~1.5708)  (i·pi/2)
+routine C128.log() -> C128
+  return C128(real: me.abs().log(), imag: me.arg())
+
+### Base-10 logarithm: log10(z) = log(z) / ln(10)
+routine C128.log10() -> C128
+  var v = me.log()
+  return C128(real: v.real / F128_LN_10, imag: v.imag / F128_LN_10)
+
+### Complex square root (principal branch)
+###
+### Uses the algebraic formula (no atan2 required):
+###   sqrt(z) = sqrt((|z|+a)/2) + i·sign(b)·sqrt((|z|-a)/2)
+###
+### Example:
+###   C128(real: 3.0_f128, imag: 4.0_f128).sqrt()  # C128(real: 2.0, imag: 1.0)
+routine C128.sqrt() -> C128
+  var r = me.abs()
+  if r == 0.0_f128
+    return C128_ZERO
+  var rp = ((r + me.real) / 2.0_f128).sqrt()
+  var ip = ((r - me.real) / 2.0_f128).sqrt()
+  if me.imag < 0.0_f128
+    ip = -ip
+  return C128(real: rp, imag: ip)
+
+### Complex exponentiation: z^w = exp(w · log(z))
+###
+### Example:
+###   C128_I.pow(exp: C128_I)  # i^i = e^(-pi/2) ≈ 0.2079
+routine C128.pow(exp: C128) -> C128
+  return (exp * me.log()).exp()
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### True if both components are zero
+routine C128.is_zero() -> Bool
+  return me.real == 0.0_f128 and me.imag == 0.0_f128
+
+### True if the imaginary part is zero (purely real number)
+routine C128.is_real() -> Bool
+  return me.imag == 0.0_f128
+
+### True if the real part is zero (purely imaginary number)
+routine C128.is_imaginary() -> Bool
+  return me.real == 0.0_f128

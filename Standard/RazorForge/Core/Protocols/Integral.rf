@@ -1,0 +1,7 @@
+# Integral - Bundle protocol for integer-like operations
+# Does NOT include Divisible (/) - integers use FloorDivisible (//) instead
+# Does NOT include Negatable - unsigned integers can't negate
+module Core
+
+protocol Integral obeys Addable, Subtractable, Multiplicable, FloorDivisible, Exponentiable, Bitwiseable, Shiftable
+  pass

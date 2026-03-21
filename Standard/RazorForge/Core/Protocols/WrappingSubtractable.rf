@@ -1,0 +1,6 @@
+# WrappingSubtractable - Protocol for types that support wrapping subtraction (-%)
+module Core
+
+protocol WrappingSubtractable
+  @readonly
+  routine Me.__sub_wrap__(you: Me) -> Me

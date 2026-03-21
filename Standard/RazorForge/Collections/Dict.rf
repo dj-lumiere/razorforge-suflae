@@ -1,0 +1,255 @@
+# RazorForge Dict[K, V] - Hash map with separate chaining
+# Entity type with heap allocation
+# O(1) average insert, delete, lookup
+# Uses hash buckets with SortedDict for collision chains
+#
+# Usage:
+#   var ages = Dict[Text, S32]()
+#   ages.add("Alice", 30)
+#   ages["Bob"] = 25
+#   var alice_age = ages["Alice"]
+#   if ages.contains_key("Charlie") { }
+
+import Collections.SortedDict
+
+module Core
+
+# Initial number of buckets
+preset DICT_INITIAL_BUCKETS: UAddr = 16uaddr
+# Load factor threshold for rehashing (as percentage)
+preset DICT_LOAD_FACTOR: UAddr = 75uaddr
+
+entity Dict[K, V]
+needs K obeys Hashable, Comparable
+  secret buckets: List[SortedDict[K, V]]
+  secret count: UAddr
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine Dict[K, V].__create__() -> Dict[K, V]
+  var buckets = List[SortedDict[K, V]](DICT_INITIAL_BUCKETS)
+  var dict = Dict[K, V](
+    buckets: buckets,
+    count: 0uaddr
+  )
+  var i = 0uaddr
+  while i < DICT_INITIAL_BUCKETS
+    var empty_dict = SortedDict[K, V]()
+    dict.buckets.add_last(empty_dict)
+    i = i + 1uaddr
+  return dict
+
+routine Dict[K, V].__create__(capacity: UAddr) -> Dict[K, V]
+  var bucket_count = if capacity < DICT_INITIAL_BUCKETS then DICT_INITIAL_BUCKETS else capacity
+  var buckets = List[SortedDict[K, V]](bucket_count)
+  var dict = Dict[K, V](
+    buckets: buckets,
+    count: 0uaddr
+  )
+  var i = 0uaddr
+  while i < bucket_count
+    var empty_dict = SortedDict[K, V]()
+    dict.buckets.add_last(empty_dict)
+    i = i + 1uaddr
+  return dict
+
+# ============================================================================
+# Internal Operations
+# ============================================================================
+
+routine Dict[K, V].bucket_index(key: K) -> UAddr
+  var hash = key.__hash__()
+  return hash % me.buckets.count()
+
+routine Dict[K, V].should_rehash() -> Bool
+  var load = (me.count * 100uaddr) / me.buckets.count()
+  return load > DICT_LOAD_FACTOR
+
+routine Dict[K, V].rehash()
+  var old_buckets = me.buckets
+  var new_bucket_count = old_buckets.count() * 2uaddr
+
+  me.buckets = List[SortedDict[K, V]](new_bucket_count)
+  var i = 0uaddr
+  while i < new_bucket_count
+    var empty_dict = SortedDict[K, V]()
+    me.buckets.add_last(empty_dict)
+    i = i + 1uaddr
+  me.count = 0uaddr
+
+  # Reinsert all entries
+  i = 0uaddr
+  while i < old_buckets.count()
+    var bucket = old_buckets[i]
+    var keys = bucket.keys()
+    var j = 0uaddr
+    while j < keys.count()
+      var key = keys[j]
+      var value = bucket[key]
+      me.add(key, value)
+      j = j + 1uaddr
+    i = i + 1uaddr
+  return
+
+# ============================================================================
+# Core Operations
+# ============================================================================
+
+routine Dict[K, V].count() -> UAddr
+  return me.count
+
+routine Dict[K, V].is_empty() -> Bool
+  return me.count == 0uaddr
+
+routine Dict[K, V].clear()
+  var i = 0uaddr
+  while i < me.buckets.count()
+    me.buckets[i].clear()
+    i = i + 1uaddr
+  me.count = 0uaddr
+  return
+
+routine Dict[K, V].contains_key(key: K) -> Bool
+  var idx = me.bucket_index(key)
+  return me.buckets[idx].contains_key(key)
+
+routine Dict[K, V].add(key: K, value: V) -> Bool
+  # Returns true if inserted new, false if updated existing
+  if me.should_rehash()
+    me.rehash()
+
+  var idx = me.bucket_index(key)
+  var existed = me.buckets[idx].contains_key(key)
+  me.buckets[idx].add(key, value)
+  if not existed
+    me.count = me.count + 1uaddr
+    return true
+  return false
+
+routine Dict[K, V].remove(key: K) -> Bool
+  # Returns true if removed, false if not found
+  var idx = me.bucket_index(key)
+  if me.buckets[idx].remove(key)
+    me.count = me.count - 1uaddr
+    return true
+  return false
+
+routine Dict[K, V].get!(key: K) -> V
+  var idx = me.bucket_index(key)
+  return me.buckets[idx][key]
+
+routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
+  var idx = me.bucket_index(key)
+  if me.buckets[idx].contains_key(key)
+    return me.buckets[idx][key]
+  return default_value
+
+# ============================================================================
+# Indexing
+# ============================================================================
+
+routine Dict[K, V].__getitem__!(key: K) -> V
+  return me.get!(key)
+
+routine Dict[K, V].__setitem__(key: K, value: V)
+  var idx = me.bucket_index(key)
+  me.buckets[idx][key] = value
+  return
+
+# ============================================================================
+# Keys/Values/Entries
+# ============================================================================
+
+routine Dict[K, V].keys() -> List[K]
+  var result = List[K](me.count)
+  var i = 0uaddr
+  while i < me.buckets.count()
+    var bucket_keys = me.buckets[i].keys()
+    var j = 0uaddr
+    while j < bucket_keys.count()
+      result.add_last(bucket_keys[j])
+      j = j + 1uaddr
+    i = i + 1uaddr
+  return result
+
+routine Dict[K, V].values() -> List[V]
+  var result = List[V](me.count)
+  var i = 0uaddr
+  while i < me.buckets.count()
+    var bucket_values = me.buckets[i].values()
+    var j = 0uaddr
+    while j < bucket_values.count()
+      result.add_last(bucket_values[j])
+      j = j + 1uaddr
+    i = i + 1uaddr
+  return result
+
+routine Dict[K, V].entries() -> List[Tuple[K, V]]
+  var result = List[Tuple[K, V]](me.count)
+  var i = 0uaddr
+  while i < me.buckets.count()
+    var bucket_keys = me.buckets[i].keys()
+    var j = 0uaddr
+    while j < bucket_keys.count()
+      var key = bucket_keys[j]
+      var value = me.buckets[i].get!(key)
+      result.add_last((key, value))
+      j = j + 1uaddr
+    i = i + 1uaddr
+  return result
+
+# ============================================================================
+# Iteration
+# ============================================================================
+
+routine Dict[K, V].__seq__() -> DictIterator[K, V]
+  return DictIterator[K, V](
+    dict: me,
+    bucket_idx: 0uaddr,
+    entry_idx: 0uaddr,
+    current_keys: List[K]()
+  )
+
+entity DictIterator[K, V]
+  dict: Dict[K, V]
+  bucket_idx: UAddr
+  entry_idx: UAddr
+  current_keys: List[K]
+
+routine DictIterator[K, V].next!() -> Tuple[K, V]
+  # Advance to next non-empty bucket if needed
+  while me.entry_idx >= me.current_keys.count()
+    if me.bucket_idx >= me.dict.buckets.count()
+      absent
+    me.current_keys = me.dict.buckets[me.bucket_idx].keys()
+    me.entry_idx = 0uaddr
+    me.bucket_idx = me.bucket_idx + 1uaddr
+
+  var key = me.current_keys[me.entry_idx]
+  var value = me.dict.get!(key)
+  me.entry_idx = me.entry_idx + 1uaddr
+  return (key, value)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+routine Dict[K, V].__eq__(other: Dict[K, V]) -> Bool
+  if me.count != other.count
+    return false
+
+  var i = 0uaddr
+  while i < me.buckets.count()
+    var bucket_keys = me.buckets[i].keys()
+    var j = 0uaddr
+    while j < bucket_keys.count()
+      var key = bucket_keys[j]
+      if not other.contains_key(key)
+        return false
+      if me.get!(key) != other.get!(key)
+        return false
+      j = j + 1uaddr
+    i = i + 1uaddr
+  return true

@@ -1,4 +1,4 @@
-namespace Compilers.Shared.Lexer;
+namespace Compiler.Lexer;
 
 /// <summary>
 /// Represents a single token produced by the lexical analyzer.
@@ -14,4 +14,5 @@ namespace Compilers.Shared.Lexer;
 /// for accurate error reporting and IDE integration features like hover
 /// tooltips and go-to-definition.
 /// </remarks>
-public record Token(TokenType Type, string Text, int Line, int Column, int Position = -1);
+public record Token(TokenType Type, string FileName, string Text, int Line, int Column, int
+    Position = -1);

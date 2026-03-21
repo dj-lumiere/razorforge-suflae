@@ -1,0 +1,14 @@
+module Core
+
+# NotImplementedError - Error for unimplemented functionality
+# Used as a placeholder for methods/routines that are not yet implemented
+
+record NotImplementedError obeys Crashable
+  feature: Text
+
+routine NotImplementedError.crash_message() -> Text
+  return f"Not implemented: {me.feature}"
+
+# Convenience creator with no message
+routine NotImplementedError() -> NotImplementedError
+  return NotImplementedError(feature: "")

@@ -1,0 +1,275 @@
+{
+  "name": "RazorForge",
+  "scopeName": "source.razorforge",
+  "fileTypes": ["rf", "razorforge"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#text-literals" },
+    { "include": "#letter-literals" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "comment": "Documentation comment",
+          "name": "comment.block.documentation.razorforge",
+          "match": "###.*$"
+        },
+        {
+          "comment": "Line comment",
+          "name": "comment.line.razorforge",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "comment": "Type declarations",
+          "name": "storage.type.razorforge",
+          "match": "\\b(routine|entity|record|resident|choice|variant|protocol|flags)\\b"
+        },
+        {
+          "comment": "Variable declarations",
+          "name": "keyword.declaration.razorforge",
+          "match": "\\b(var|preset|common|define)\\b"
+        },
+        {
+          "comment": "Access and routine modifiers",
+          "name": "keyword.modifier.razorforge",
+          "match": "\\b(secret|posted|global|external|dangerous|suspended|threaded|emitting)\\b"
+        },
+        {
+          "comment": "Control flow",
+          "name": "keyword.control.razorforge",
+          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
+        },
+        {
+          "comment": "Type and pattern operations",
+          "name": "keyword.operator.razorforge",
+          "match": "\\b(is|isnot|isonly|obeys|disobeys|in|notin|but)\\b"
+        },
+        {
+          "comment": "Module system",
+          "name": "keyword.control.import.razorforge",
+          "match": "\\b(import|module)\\b"
+        },
+        {
+          "comment": "Resource management",
+          "name": "keyword.control.razorforge",
+          "match": "\\b(using)\\b"
+        },
+        {
+          "comment": "Async",
+          "name": "keyword.control.razorforge",
+          "match": "\\b(waitfor|within|after)\\b"
+        },
+        {
+          "comment": "Generic constraints",
+          "name": "keyword.other.razorforge",
+          "match": "\\b(needs)\\b"
+        },
+        {
+          "comment": "Logical operators",
+          "name": "keyword.operator.logical.razorforge",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "comment": "Self reference",
+          "name": "variable.language.razorforge",
+          "match": "\\b(me|Me)\\b"
+        },
+        {
+          "comment": "Range keywords",
+          "name": "keyword.operator.razorforge",
+          "match": "\\b(to|til|by)\\b"
+        },
+        {
+          "comment": "Danger block keyword",
+          "name": "keyword.other.razorforge",
+          "match": "\\bdanger!"
+        },
+        {
+          "comment": "Special keywords",
+          "name": "keyword.other.razorforge",
+          "match": "\\b(as|pass|with|steal|given)\\b"
+        },
+        {
+          "comment": "Boolean literals",
+          "name": "constant.language.boolean.razorforge",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "comment": "None literal",
+          "name": "constant.language.null.razorforge",
+          "match": "\\b(None)\\b"
+        }
+      ]
+    },
+    "text-literals": {
+      "patterns": [
+        {
+          "comment": "Prefixed text literals (br, rf, b, r, f)",
+          "name": "string.quoted.double.razorforge",
+          "begin": "(br|rf|b|r|f)\"",
+          "beginCaptures": {
+            "1": { "name": "storage.modifier.razorforge" }
+          },
+          "end": "\"",
+          "patterns": [{ "include": "#escapes" }]
+        },
+        {
+          "comment": "Text literal",
+          "name": "string.quoted.double.razorforge",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "include": "#escapes" }]
+        }
+      ]
+    },
+    "escapes": {
+      "patterns": [
+        {
+          "comment": "Unicode escape \\uXXXXXX (6 hex)",
+          "name": "constant.character.escape.razorforge",
+          "match": "\\\\u[0-9a-fA-F]{6}"
+        },
+        {
+          "comment": "Hex byte escape \\xFF (2 hex)",
+          "name": "constant.character.escape.razorforge",
+          "match": "\\\\x[0-9a-fA-F]{2}"
+        },
+        {
+          "comment": "Simple escapes",
+          "name": "constant.character.escape.razorforge",
+          "match": "\\\\[nrt0\\\\\"']"
+        }
+      ]
+    },
+    "letter-literals": {
+      "patterns": [
+        {
+          "comment": "Byte literal b'x'",
+          "name": "string.quoted.single.razorforge",
+          "begin": "b'",
+          "beginCaptures": { "0": { "name": "storage.modifier.razorforge" } },
+          "end": "'",
+          "patterns": [{ "include": "#escapes" }]
+        },
+        {
+          "comment": "Letter literal 'x'",
+          "name": "string.quoted.single.razorforge",
+          "begin": "'",
+          "end": "'",
+          "patterns": [{ "include": "#escapes" }]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "comment": "Hex number",
+          "name": "constant.numeric.razorforge",
+          "match": "\\b0x[0-9a-fA-F_]+([a-z0-9]+)?\\b"
+        },
+        {
+          "comment": "Binary number",
+          "name": "constant.numeric.razorforge",
+          "match": "\\b0b[01_]+([a-z0-9]+)?\\b"
+        },
+        {
+          "comment": "Octal number",
+          "name": "constant.numeric.razorforge",
+          "match": "\\b0o[0-7_]+([a-z0-9]+)?\\b"
+        },
+        {
+          "comment": "Quaternary number",
+          "name": "constant.numeric.razorforge",
+          "match": "\\b0q[0-3_]+([a-z0-9]+)?\\b"
+        },
+        {
+          "comment": "Float with suffix",
+          "name": "constant.numeric.razorforge",
+          "match": "\\b[0-9][0-9_]*\\.[0-9_]+([eE][+-]?[0-9_]+)?([a-z0-9]+)?\\b"
+        },
+        {
+          "comment": "Integer with suffix",
+          "name": "constant.numeric.razorforge",
+          "match": "\\b[0-9][0-9_]*([a-z]+)?\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "comment": "Intrinsic type attribute",
+          "name": "keyword.other.razorforge",
+          "match": "@intrinsic\\b"
+        },
+        {
+          "comment": "Compound annotation",
+          "name": "storage.modifier.annotation.razorforge",
+          "match": "@\\[[a-zA-Z_][a-zA-Z0-9_, ]*\\]"
+        },
+        {
+          "comment": "Annotation",
+          "name": "storage.modifier.annotation.razorforge",
+          "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        {
+          "comment": "Arrows",
+          "name": "keyword.operator.razorforge",
+          "match": "(->|=>)"
+        },
+        {
+          "comment": "Three-way comparison",
+          "name": "keyword.operator.razorforge",
+          "match": "<=>"
+        },
+        {
+          "comment": "Shift operators",
+          "name": "keyword.operator.razorforge",
+          "match": "(<<<|>>>|<<|>>)"
+        },
+        {
+          "comment": "Comparison",
+          "name": "keyword.operator.razorforge",
+          "match": "(===|!==|==|!=|<=|>=|<|>)"
+        },
+        {
+          "comment": "Power operators",
+          "name": "keyword.operator.razorforge",
+          "match": "(\\*\\*[%^]?=?)"
+        },
+        {
+          "comment": "Integer division",
+          "name": "keyword.operator.razorforge",
+          "match": "//=?"
+        },
+        {
+          "comment": "Overflow arithmetic",
+          "name": "keyword.operator.razorforge",
+          "match": "[+\\-*][%^]=?"
+        },
+        {
+          "comment": "Optional/coalesce operators",
+          "name": "keyword.operator.razorforge",
+          "match": "(\\?\\?=?|\\?\\.?|!!)"
+        },
+        {
+          "comment": "Assignment",
+          "name": "keyword.operator.razorforge",
+          "match": "[+\\-*/%&|^]=|="
+        },
+        {
+          "comment": "Basic operators",
+          "name": "keyword.operator.razorforge",
+          "match": "[+\\-*/%&|^~!]"
+        }
+      ]
+    }
+  }
+}

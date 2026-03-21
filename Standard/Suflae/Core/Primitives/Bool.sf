@@ -1,0 +1,29 @@
+# Suflae Bool - Boolean type
+
+module Core
+
+import RazorForge/Core.Bool
+
+record Bool
+  secret value: RazorForge/Core.Bool
+
+# Comparison
+routine Bool.__eq__(you: Bool) -> Bool
+  return Bool(value: me.value.__eq__(you.value))
+
+# Logical operations
+routine Bool.__and__(you: Bool) -> Bool
+  return Bool(value: me.value.__and__(you.value))
+
+routine Bool.__or__(you: Bool) -> Bool
+  return Bool(value: me.value.__or__(you.value))
+
+routine Bool.__not__() -> Bool
+  return Bool(value: me.value.__not__())
+
+# String conversion
+routine Text.__create__(from: Bool) -> Text
+  if from
+    return "true"
+  return "false"
+

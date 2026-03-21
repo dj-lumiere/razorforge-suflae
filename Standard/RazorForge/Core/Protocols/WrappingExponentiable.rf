@@ -1,0 +1,6 @@
+# WrappingExponentiable - Protocol for types that support wrapping exponentiation (**%)
+module Core
+
+protocol WrappingExponentiable
+  @readonly
+  routine Me.__pow_wrap__(you: Me) -> Me

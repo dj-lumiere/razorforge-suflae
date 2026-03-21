@@ -1,0 +1,6 @@
+# ClampingExponentiable - Protocol for types that support clamping exponentiation (**^)
+module Core
+
+protocol ClampingExponentiable
+  @readonly
+  routine Me.__pow_clamp__(you: Me) -> Me

@@ -1,3 +1,0 @@
-record d32 {
-    private value: cu32
-}

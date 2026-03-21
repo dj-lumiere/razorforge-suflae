@@ -1,0 +1,71 @@
+using SemanticAnalysis.Enums;
+
+namespace Compiler.Diagnostics;
+
+/// <summary>
+/// Exception thrown for grammar (lexer/parser) errors in both RazorForge and Suflae.
+/// Contains diagnostic code, message, source location, and language.
+/// </summary>
+public class GrammarException(
+    GrammarDiagnosticCode code,
+    string message,
+    string fileName,
+    int line,
+    int column,
+    Language language) : Exception(FormatMessage(code,
+    message,
+    fileName,
+    line,
+    column,
+    language))
+{
+    /// <summary>
+    /// The diagnostic code for this error.
+    /// </summary>
+    public GrammarDiagnosticCode Code { get; } = code;
+
+    /// <summary>
+    /// The source file where the error occurred.
+    /// </summary>
+    public string FileName { get; } = fileName;
+
+    /// <summary>
+    /// The 1-based line number where the error occurred.
+    /// </summary>
+    public int Line { get; } = line;
+
+    /// <summary>
+    /// The 1-based column number where the error occurred.
+    /// </summary>
+    public int Column { get; } = column;
+
+    /// <summary>
+    /// The language that produced this error.
+    /// </summary>
+    public Language Language { get; } = language;
+
+    /// <summary>
+    /// Formats the error message in the standard format:
+    /// error[RF-G001]: filename.rf:10:5: message
+    /// </summary>
+    private static string FormatMessage(
+        GrammarDiagnosticCode code,
+        string message,
+        string fileName,
+        int line,
+        int column,
+        Language language)
+    {
+        var location = fileName;
+        if (line > 0)
+        {
+            location += $":{line}";
+            if (column > 0)
+            {
+                location += $":{column}";
+            }
+        }
+
+        return $"error[{code.ToCodeString(language)}]: {location}: {message}";
+    }
+}

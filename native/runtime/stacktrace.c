@@ -1,6 +1,6 @@
 /*
- * RazorForge Runtime - Stack Trace Support
- * Provides runtime stack frame tracking for error reporting
+ * RazorForge Runtime - Routine Trace Support
+ * Provides runtime routine record tracking for error reporting
  */
 
 #include <stdlib.h>
@@ -13,39 +13,43 @@
 // Type Definitions
 // ============================================================================
 
-typedef uint32_t rf_u32;
-typedef uintptr_t rf_uaddr;
+typedef uint32_t rf_U32;
+typedef uintptr_t rf_UAddr;
 
-// StackFrame record - matches RazorForge layout (5 x u32 = 20 bytes)
-typedef struct {
-    rf_u32 file_id;
-    rf_u32 routine_id;
-    rf_u32 type_id;
-    rf_u32 line_no;
-    rf_u32 column_no;
-} rf_StackFrame;
+// RoutineRecord - matches RazorForge layout (5 x u32 = 20 bytes)
+typedef struct
+{
+    rf_U32 file_id;
+    rf_U32 routine_id;
+    rf_U32 type_id;
+    rf_U32 line_no;
+    rf_U32 column_no;
+} rf_RoutineRecord;
 
-// StackTrace record - 10 frames + depth (10 x 20 + 4 = 204 bytes)
-#define RF_STACK_TRACE_MAX_FRAMES 10
+// RoutineTrace - 10 records + depth (10 x 20 + 4 = 204 bytes)
+#define RF_ROUTINE_TRACE_MAX_RECORDS 10
 
-typedef struct {
-    rf_StackFrame frames[RF_STACK_TRACE_MAX_FRAMES];
-    rf_u32 depth;
-} rf_StackTrace;
+typedef struct
+{
+    rf_RoutineRecord records[RF_ROUTINE_TRACE_MAX_RECORDS];
+    rf_U32 depth;
+} rf_RoutineTrace;
 
 // MessageHandle record - 1 x uaddr = 8 bytes on 64-bit
-typedef struct {
-    rf_uaddr ptr;
+typedef struct
+{
+    rf_UAddr ptr;
 } rf_MessageHandle;
 
 // Error record - matches RazorForge layout
-typedef struct {
+typedef struct
+{
     rf_MessageHandle message_handle;
-    rf_StackTrace stack_trace;
-    rf_u32 file_id;
-    rf_u32 routine_id;
-    rf_u32 line_no;
-    rf_u32 column_no;
+    rf_RoutineTrace routine_trace;
+    rf_U32 file_id;
+    rf_U32 routine_id;
+    rf_U32 line_no;
+    rf_U32 column_no;
 } rf_Error;
 
 // ============================================================================
@@ -57,33 +61,33 @@ typedef struct {
 
 // Thread-local storage for the runtime call stack
 #ifdef _WIN32
-    #define RF_THREAD_LOCAL __declspec(thread)
+#define RF_THREAD_LOCAL __declspec(thread)
 #else
-    #define RF_THREAD_LOCAL __thread
+#define RF_THREAD_LOCAL __thread
 #endif
 
-static RF_THREAD_LOCAL rf_StackFrame rf_runtime_stack[RF_RUNTIME_STACK_MAX];
-static RF_THREAD_LOCAL rf_u32 rf_runtime_stack_depth = 0;
+static RF_THREAD_LOCAL rf_RoutineRecord rf_runtime_stack[RF_RUNTIME_STACK_MAX];
+static RF_THREAD_LOCAL rf_U32 rf_runtime_stack_depth = 0;
 
 // ============================================================================
-// Symbol Tables (set by compiler-generated code)
+// Symbol Tables (set by builder-generated code)
 // ============================================================================
 
-// Pointers to compiler-generated symbol tables
+// Pointers to builder-generated symbol tables
 static const char** rf_file_table = NULL;
-static rf_u32 rf_file_table_count = 0;
+static rf_U32 rf_file_table_count = 0;
 
 static const char** rf_routine_table = NULL;
-static rf_u32 rf_routine_table_count = 0;
+static rf_U32 rf_routine_table_count = 0;
 
 static const char** rf_type_table = NULL;
-static rf_u32 rf_type_table_count = 0;
+static rf_U32 rf_type_table_count = 0;
 
-// Initialize symbol tables (called by compiler-generated code at startup)
+// Initialize symbol tables (called by builder-generated code at startup)
 void __rf_init_symbol_tables(
-    const char** file_table, rf_u32 file_count,
-    const char** routine_table, rf_u32 routine_count,
-    const char** type_table, rf_u32 type_count)
+    const char** file_table, rf_U32 file_count,
+    const char** routine_table, rf_U32 routine_count,
+    const char** type_table, rf_U32 type_count)
 {
     rf_file_table = file_table;
     rf_file_table_count = file_count;
@@ -94,11 +98,11 @@ void __rf_init_symbol_tables(
 }
 
 // ============================================================================
-// Stack Frame Push/Pop
+// Routine Record Push/Pop
 // ============================================================================
 
-// Push a stack frame at routine entry
-void __rf_stack_push(rf_u32 file_id, rf_u32 routine_id, rf_u32 type_id, rf_u32 line_no, rf_u32 column_no)
+// Push a routine record at routine entry
+void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id, rf_U32 line_no, rf_U32 column_no)
 {
     if (rf_runtime_stack_depth >= RF_RUNTIME_STACK_MAX)
     {
@@ -108,17 +112,17 @@ void __rf_stack_push(rf_u32 file_id, rf_u32 routine_id, rf_u32 type_id, rf_u32 l
         exit(1);
     }
 
-    rf_StackFrame* frame = &rf_runtime_stack[rf_runtime_stack_depth];
-    frame->file_id = file_id;
-    frame->routine_id = routine_id;
-    frame->type_id = type_id;
-    frame->line_no = line_no;
-    frame->column_no = column_no;
+    rf_RoutineRecord* record = &rf_runtime_stack[rf_runtime_stack_depth];
+    record->file_id = file_id;
+    record->routine_id = routine_id;
+    record->type_id = type_id;
+    record->line_no = line_no;
+    record->column_no = column_no;
 
     rf_runtime_stack_depth++;
 }
 
-// Pop a stack frame at routine exit
+// Pop a routine record at routine exit
 void __rf_stack_pop(void)
 {
     if (rf_runtime_stack_depth > 0)
@@ -128,42 +132,42 @@ void __rf_stack_pop(void)
 }
 
 // ============================================================================
-// Stack Trace Capture
+// Routine Trace Capture
 // ============================================================================
 
-// Capture current stack into a StackTrace record
-void __rf_stack_capture(rf_StackTrace* out_trace)
+// Capture current stack into a RoutineTrace record
+void __rf_stack_capture(rf_RoutineTrace* out_trace)
 {
     if (!out_trace) return;
 
-    // Copy up to RF_STACK_TRACE_MAX_FRAMES frames from the runtime stack
-    rf_u32 frames_to_copy = rf_runtime_stack_depth;
-    if (frames_to_copy > RF_STACK_TRACE_MAX_FRAMES)
+    // Copy up to RF_ROUTINE_TRACE_MAX_RECORDS records from the runtime stack
+    rf_U32 records_to_copy = rf_runtime_stack_depth;
+    if (records_to_copy > RF_ROUTINE_TRACE_MAX_RECORDS)
     {
-        frames_to_copy = RF_STACK_TRACE_MAX_FRAMES;
+        records_to_copy = RF_ROUTINE_TRACE_MAX_RECORDS;
     }
 
-    // Copy frames in reverse order (most recent first)
-    for (rf_u32 i = 0; i < frames_to_copy; i++)
+    // Copy records in reverse order (most recent first)
+    for (rf_U32 i = 0; i < records_to_copy; i++)
     {
-        rf_u32 src_idx = rf_runtime_stack_depth - 1 - i;
-        out_trace->frames[i] = rf_runtime_stack[src_idx];
+        rf_U32 src_idx = rf_runtime_stack_depth - 1 - i;
+        out_trace->records[i] = rf_runtime_stack[src_idx];
     }
 
-    // Zero out remaining frames
-    for (rf_u32 i = frames_to_copy; i < RF_STACK_TRACE_MAX_FRAMES; i++)
+    // Zero out remaining records
+    for (rf_U32 i = records_to_copy; i < RF_ROUTINE_TRACE_MAX_RECORDS; i++)
     {
-        memset(&out_trace->frames[i], 0, sizeof(rf_StackFrame));
+        memset(&out_trace->records[i], 0, sizeof(rf_RoutineRecord));
     }
 
-    out_trace->depth = frames_to_copy;
+    out_trace->depth = records_to_copy;
 }
 
 // ============================================================================
 // Symbol Lookup
 // ============================================================================
 
-static const char* get_file_name(rf_u32 file_id)
+static const char* get_file_name(rf_U32 file_id)
 {
     if (rf_file_table && file_id < rf_file_table_count)
     {
@@ -172,7 +176,7 @@ static const char* get_file_name(rf_u32 file_id)
     return "<unknown file>";
 }
 
-static const char* get_routine_name(rf_u32 routine_id)
+static const char* get_routine_name(rf_U32 routine_id)
 {
     if (rf_routine_table && routine_id < rf_routine_table_count)
     {
@@ -181,11 +185,11 @@ static const char* get_routine_name(rf_u32 routine_id)
     return "<unknown routine>";
 }
 
-static const char* get_type_name(rf_u32 type_id)
+static const char* get_type_name(rf_U32 type_id)
 {
     if (type_id == 0)
     {
-        return NULL;  // Free function, no type
+        return NULL; // Free routine, no type
     }
     if (rf_type_table && type_id < rf_type_table_count)
     {
@@ -198,38 +202,38 @@ static const char* get_type_name(rf_u32 type_id)
 // Error Printing
 // ============================================================================
 
-// Print a single stack frame
-static void print_stack_frame(const rf_StackFrame* frame, int index)
+// Print a single routine record
+static void print_routine_record(const rf_RoutineRecord* record, int index)
 {
-    const char* file = get_file_name(frame->file_id);
-    const char* routine = get_routine_name(frame->routine_id);
-    const char* type = get_type_name(frame->type_id);
+    const char* file = get_file_name(record->file_id);
+    const char* routine = get_routine_name(record->routine_id);
+    const char* type = get_type_name(record->type_id);
 
     if (type)
     {
         fprintf(stderr, "  %d: at %s.%s (%s:%u:%u)\n",
-                index, type, routine, file, frame->line_no, frame->column_no);
+                index, type, routine, file, record->line_no, record->column_no);
     }
     else
     {
         fprintf(stderr, "  %d: at %s (%s:%u:%u)\n",
-                index, routine, file, frame->line_no, frame->column_no);
+                index, routine, file, record->line_no, record->column_no);
     }
 }
 
-// Print a full stack trace
-void __rf_print_stack_trace(const rf_StackTrace* trace)
+// Print a full routine trace
+void __rf_print_routine_trace(const rf_RoutineTrace* trace)
 {
     if (!trace || trace->depth == 0)
     {
-        fprintf(stderr, "  <no stack trace available>\n");
+        fprintf(stderr, "  <no routine trace available>\n");
         return;
     }
 
-    fprintf(stderr, "Stack trace:\n");
-    for (rf_u32 i = 0; i < trace->depth; i++)
+    fprintf(stderr, "Routine trace:\n");
+    for (rf_U32 i = 0; i < trace->depth; i++)
     {
-        print_stack_frame(&trace->frames[i], i);
+        print_routine_record(&trace->records[i], i);
     }
 }
 
@@ -243,10 +247,10 @@ void __rf_print_current_stack(void)
     }
 
     fprintf(stderr, "Current stack (depth=%u):\n", rf_runtime_stack_depth);
-    for (rf_u32 i = 0; i < rf_runtime_stack_depth; i++)
+    for (rf_U32 i = 0; i < rf_runtime_stack_depth; i++)
     {
-        rf_u32 idx = rf_runtime_stack_depth - 1 - i;
-        print_stack_frame(&rf_runtime_stack[idx], i);
+        rf_U32 idx = rf_runtime_stack_depth - 1 - i;
+        print_routine_record(&rf_runtime_stack[idx], i);
     }
 }
 
@@ -254,7 +258,7 @@ void __rf_print_current_stack(void)
 // Throw Functions
 // ============================================================================
 
-// Throw an error with message and captured stack trace
+// Throw an error with message and captured routine trace
 void __rf_throw(const char* error_type, const char* message)
 {
     fprintf(stderr, "\n%s: %s\n", error_type ? error_type : "Error", message ? message : "");
@@ -277,7 +281,7 @@ void __rf_throw_division_by_zero(void)
 }
 
 // Throw IndexOutOfBoundsError
-void __rf_throw_index_out_of_bounds(rf_u32 index, rf_u32 count)
+void __rf_throw_index_out_of_bounds(rf_U32 index, rf_U32 count)
 {
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "Index %u is out of bounds for collection with %u elements", index, count);
@@ -308,19 +312,19 @@ void __rf_throw_element_not_found(void)
 // Error Record Creation
 // ============================================================================
 
-// Create an Error record with current stack trace
+// Create an Error record with current routine trace
 void __rf_create_error(
     rf_Error* out_error,
     const char* message,
-    rf_u32 file_id,
-    rf_u32 routine_id,
-    rf_u32 line_no,
-    rf_u32 column_no)
+    rf_U32 file_id,
+    rf_U32 routine_id,
+    rf_U32 line_no,
+    rf_U32 column_no)
 {
     if (!out_error) return;
 
-    out_error->message_handle.ptr = (rf_uaddr)message;
-    __rf_stack_capture(&out_error->stack_trace);
+    out_error->message_handle.ptr = (rf_UAddr)message;
+    __rf_stack_capture(&out_error->routine_trace);
     out_error->file_id = file_id;
     out_error->routine_id = routine_id;
     out_error->line_no = line_no;
@@ -345,5 +349,5 @@ void __rf_print_error(const rf_Error* error)
     }
 
     fprintf(stderr, "\n");
-    __rf_print_stack_trace(&error->stack_trace);
+    __rf_print_routine_trace(&error->routine_trace);
 }

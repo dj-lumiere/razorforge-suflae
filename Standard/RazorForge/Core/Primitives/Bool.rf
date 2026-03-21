@@ -1,0 +1,8 @@
+module Core
+
+@llvm("i1")
+record Bool obeys Equatable, ConstCompatible
+  pass
+
+routine Bool.__eq__(you: Bool) -> Bool
+  return icmp_eq[Bool](me.value, you.value)

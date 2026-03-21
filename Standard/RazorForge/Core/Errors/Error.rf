@@ -1,0 +1,16 @@
+module Core
+
+# Error - Base error record with message and routine trace
+#
+# This is the core error type used by Result[T] and Lookup[T].
+# All member variables are compiler-generated when throw is executed.
+#
+# Size: ~228 bytes (fixed, fits inline in type unions)
+
+record RuntimeError obeys Crashable
+  pass
+
+routine RuntimeError.crash_message() -> Text
+  # Dereference the message pointer to get the string
+  # This is handled by compiler intrinsic
+  return ptr_to_text(me.message_handle.ptr)

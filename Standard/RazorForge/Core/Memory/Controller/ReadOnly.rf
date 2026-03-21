@@ -1,0 +1,15 @@
+# RazorForge ReadOnly Lock Policy
+# Unmodifiable policy - no locking needed
+# Data cannot be modified, only read
+# Equivalent to Arc[T] in Rust (without Exclusive/MultiRead)
+
+module Core
+
+record ReadOnly obeys LockPolicy
+  pass # Empty - no lock state needed for unmodifiable data
+
+routine ReadOnly.__create__() -> ReadOnly
+  return ReadOnly()
+
+# No lock/unlock methods needed - data is unmodifiable
+# Direct member variable access is allowed for Shared[T, ReadOnly]

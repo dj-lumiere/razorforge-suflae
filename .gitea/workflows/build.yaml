@@ -1,0 +1,61 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, wip/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Download native libraries
+        run: |
+          cd native
+
+          # Intel Decimal Floating-Point Math Library (BSD-3-Clause)
+          # Using netlib mirror since Intel's download center requires authentication
+          echo "Downloading Intel Decimal..."
+          curl -L -o inteldecimal.tar.gz "http://www.netlib.org/misc/intel/IntelRDFPMathLib20U2.tar.gz"
+          mkdir -p inteldecimal
+          tar -xzf inteldecimal.tar.gz -C inteldecimal --strip-components=1
+          rm inteldecimal.tar.gz
+
+          # LibBF - Arbitrary precision floating point (MIT)
+          echo "Downloading LibBF..."
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+
+          # LibTomMath - Arbitrary precision integers (Public Domain)
+          echo "Cloning LibTomMath..."
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+
+          # MAPM - Arbitrary precision decimals (Freeware)
+          echo "Cloning MAPM..."
+          git clone --depth 1 https://github.com/LuaDist/mapm.git mapm
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal

@@ -1,0 +1,190 @@
+# RazorForge UAddr (system-sized unsigned integer) native type implementation
+# Maps to LLVM pointer-sized integer - U32 on 32-bit, U64 on 64-bit platforms
+# Used for array indices, sizes, and pointer arithmetic
+#
+# SAFETY: UAddr does NOT support base arithmetic operators (+, -, *, //, %, **, <<)
+# to prevent silent overflow bugs in pointer/size calculations.
+# You must use explicit wrapping (+%, -%, etc.) or checked (+?, -?, etc.) variants.
+
+module Core
+
+# Core UAddr type definition - maps to LLVM i64 (64-bit target)
+@llvm("i64")
+record UAddr obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# ============================================================================
+# Creators
+# Since they are black hole types, all creators are automatically wrapped.
+# ============================================================================
+
+# From S8 - sign extend then reinterpret (wraps if negative)
+routine UAddr.__create__(from: S8) -> UAddr
+  return sext[S8, UAddr](from)
+
+# From S16 - sign extend then reinterpret (wraps if negative)
+routine UAddr.__create__(from: S16) -> UAddr
+  return sext[S16, UAddr](from)
+
+# From S32 - sign extend then reinterpret (wraps if negative)
+routine UAddr.__create__(from: S32) -> UAddr
+  return sext[S32, UAddr](from)
+
+# From S64 - truncate or bitcast depending on platform (wraps)
+routine UAddr.__create__(from: S64) -> UAddr
+  return trunc[S64, UAddr](from)
+
+# From S128 - truncate (wraps)
+routine UAddr.__create__(from: S128) -> UAddr
+  return trunc[S128, UAddr](from)
+
+# From U8 - zero extend
+routine UAddr.__create__(from: U8) -> UAddr
+  return zext[U8, UAddr](from)
+
+# From U16 - zero extend
+routine UAddr.__create__(from: U16) -> UAddr
+  return zext[U16, UAddr](from)
+
+# From U32 - zero extend or bitcast depending on platform
+routine UAddr.__create__(from: U32) -> UAddr
+  return zext[U32, UAddr](from)
+
+# From U64 - truncate or bitcast depending on platform (wraps)
+routine UAddr.__create__(from: U64) -> UAddr
+  return trunc[U64, UAddr](from)
+
+# From U128 - truncate (wraps)
+routine UAddr.__create__(from: U128) -> UAddr
+  return trunc[U128, UAddr](from)
+
+# From floating point - truncates
+routine UAddr.__create__(from: F16) -> UAddr
+  return from.F32().UAddr()
+
+routine UAddr.__create__(from: F32) -> UAddr
+  return fptoui[F32, UAddr](from)
+
+routine UAddr.__create__(from: F64) -> UAddr
+  return fptoui[F64, UAddr](from)
+
+routine UAddr.__create__(from: F128) -> UAddr
+  return from.F64().UAddr()
+
+# From decimal - truncates fractional part (wraps on overflow)
+routine UAddr.__create__(from: D32) -> UAddr
+  var bit_width = bitwidth[UAddr]()
+  if bit_width == 32
+    return from.U32().UAddr()
+  else
+    return from.U64().UAddr()
+
+routine UAddr.__create__(from: D64) -> UAddr
+  var bit_width = bitwidth[UAddr]()
+  if bit_width == 32
+    return from.U32().UAddr()
+  else
+    return from.U64().UAddr()
+
+routine UAddr.__create__(from: D128) -> UAddr
+  var bit_width = bitwidth[UAddr]()
+  if bit_width == 32
+    return from.U32().UAddr()
+  else
+    return from.U64().UAddr()
+
+routine UAddr.__create__(from: SAddr) -> UAddr
+  return from.U64().SAddr()
+
+# Identity conversion for Integral protocol compatibility
+routine UAddr.__create__(from: UAddr) -> UAddr
+  return from
+
+# ============================================================================
+# Wrapping Arithmetic Operations (+%, -%, *%, //%, %%, **%)
+# These explicitly wrap on overflow - use when wrapping is intentional
+# ============================================================================
+
+routine UAddr.__add_wrap__(you: UAddr) -> UAddr
+  return add[UAddr](me, you)
+
+routine UAddr.__sub_wrap__(you: UAddr) -> UAddr
+  return sub[UAddr](me, you)
+
+routine UAddr.__mul_wrap__(you: UAddr) -> UAddr
+  return mul[UAddr](me, you)
+
+routine UAddr.__floordiv_wrap__(you: UAddr) -> UAddr
+  return udiv[UAddr](me, you)
+
+routine UAddr.__mod_wrap__(you: UAddr) -> UAddr
+  return urem[UAddr](me, you)
+
+routine UAddr.__floordiv_checked__(you: UAddr) -> Maybe[UAddr]
+  if you == 0
+    return None
+  return udiv[UAddr](me, you)
+
+routine UAddr.__mod_checked__(you: UAddr) -> Maybe[UAddr]
+  if you == 0
+    return None
+  return urem[UAddr](me, you)
+
+# ============================================================================
+# Shift Operations (<<<, >>>)
+# UAddr does NOT have >> (sign-preserving right shift) - use >>> instead
+# ============================================================================
+
+routine UAddr.__lshl__(bits: U32) -> UAddr
+  return shl[UAddr](me, bits)
+
+routine UAddr.__lshr__(bits: U32) -> UAddr
+  return lshr[UAddr](me, bits)
+
+# ============================================================================
+# Bitwise Operations (&, |, ^, ~)
+# These cannot overflow
+# ============================================================================
+
+routine UAddr.__and__(you: UAddr) -> UAddr
+  return bit_and[UAddr](me, you)
+
+routine UAddr.__or__(you: UAddr) -> UAddr
+  return bit_or[UAddr](me, you)
+
+routine UAddr.__xor__(you: UAddr) -> UAddr
+  return xor[UAddr](me, you)
+
+routine UAddr.__not__() -> UAddr
+  return xor[UAddr](me, -1)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine UAddr.__eq__(you: UAddr) -> Bool
+  return icmp_eq[UAddr](me, you)
+
+routine UAddr.__cmp__(you: UAddr) -> ComparisonSign
+  if icmp_ult[UAddr](me, you)
+    return ME_SMALL
+  if icmp_ugt[UAddr](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine UAddr.min(you: UAddr) -> UAddr
+  if me <= you
+    return me
+  return you
+
+routine UAddr.max(you: UAddr) -> UAddr
+  if me >= you
+    return me
+  return you
+
+routine UAddr.is_power_of_two() -> Bool
+  return me != 0 and (me & (me -% 1)) == 0

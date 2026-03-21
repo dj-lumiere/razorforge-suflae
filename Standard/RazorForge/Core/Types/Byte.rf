@@ -1,0 +1,71 @@
+# RazorForge Byte - Raw 8-bit value
+#
+# Represents a single raw byte with no encoding assumption.
+# This is NOT a UTF-8 code unit or a character - it's just 8 bits of data.
+#
+# Use cases:
+# - Binary file I/O
+# - Network protocols
+# - Interfacing with C libraries
+# - Any raw byte data
+#
+# For text processing, use Letter (Unicode codepoint) and Text types.
+module Core
+
+record Byte obeys ConstCompatible
+  secret value: U8
+
+# Common byte constants
+preset BYTE_NULL: Byte = Byte(value: 0x00)
+preset BYTE_SPACE: Byte = Byte(value: 0x20)
+preset BYTE_NEWLINE: Byte = Byte(value: 0x0A)
+preset BYTE_TAB: Byte = Byte(value: 0x09)
+
+# ============================================================================
+# Comparison operations
+# ============================================================================
+
+routine Letter.byte_value() -> U8
+  return me.value
+
+routine Byte.__eq__(other: Byte) -> Bool
+  return me.value == other.value
+
+routine Byte.__cmp__(other: Byte) -> ComparisonSign
+  return me.value <=> other.value
+
+# ============================================================================
+# Range check
+# ============================================================================
+
+routine Byte.in_range(low: U8, high: U8) -> Bool
+  return low <= me.value <= high
+
+# ============================================================================
+# Parsing helpers (useful for binary protocols)
+# ============================================================================
+
+routine Byte.is_ascii() -> Bool
+  return me.value <= 0x7F
+
+routine Byte.is_digit() -> Bool
+  return 0x30u8 <= me.value <= 0x39u8  # ASCII 0-9
+
+routine Byte.digit_value!() -> U8
+  if not me.is_digit()
+    throw InvalidDigitError()
+  return me.value - 0x30u8
+
+routine Byte.is_hex_digit() -> Bool
+  var v = me.value
+  return (0x30u8 <= v <= 0x39u8) or    # 0-9
+     (0x41u8 <= v <= 0x46u8) or    # A-F
+     (0x61u8 <= v <= 0x66u8)       # a-f
+
+routine Byte.hex_value!() -> U8
+  var v = me.value
+  when true
+    0x30u8 <= v <= 0x39u8 => return v - 0x30u8   # 0-9
+    0x41u8 <= v <= 0x46u8 => return v - 0x37u8   # A-F (10-15)
+    0x61u8 <= v <= 0x66u8 => return v - 0x57u8   # a-f (10-15)
+    else => throw InvalidHexDigitError()

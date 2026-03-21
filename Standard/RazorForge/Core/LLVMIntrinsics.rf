@@ -1,0 +1,245 @@
+# LLVM IR instruction and intrinsic function declarations.
+# Every routine here maps 1:1 to a real LLVM instruction or @llvm.* intrinsic.
+#
+# @llvm_ir("template") is a mold string with {holes} for substitution:
+#   {result} → next SSA temp    {paramName} → emitted arg by parameter name
+#   {T}      → first type arg   {From}, {To}  → named type args
+#   {prev}   → previous line's {result}   {sizeof T} → byte size
+module Core
+
+# ============================================================================
+# Memory Operations
+# ============================================================================
+
+@llvm_ir("{result} = load {T}, ptr {address}")
+external("llvm") routine load[T](address: Snatched[T]) -> T
+@llvm_ir("store {T} {value}, ptr {address}")
+dangerous external("llvm") routine store[T](address: Snatched[T], value: T)
+@llvm_ir("store volatile {T} {value}, ptr {address}")
+dangerous external("llvm") routine store_volatile[T](address: Snatched[T], value: T)
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+@llvm_ir("{result} = sext {From} {value} to {To}")
+external("llvm") routine sext[From, To](value: From) -> To
+@llvm_ir("{result} = zext {From} {value} to {To}")
+external("llvm") routine zext[From, To](value: From) -> To
+@llvm_ir("{result} = trunc {From} {value} to {To}")
+external("llvm") routine trunc[From, To](value: From) -> To
+@llvm_ir("{result} = bitcast {From} {value} to {To}")
+external("llvm") routine bitcast[From, To](value: From) -> To
+@llvm_ir("{result} = sitofp {From} {value} to {To}")
+external("llvm") routine sitofp[From, To](value: From) -> To
+@llvm_ir("{result} = uitofp {From} {value} to {To}")
+external("llvm") routine uitofp[From, To](value: From) -> To
+@llvm_ir("{result} = fptosi {From} {value} to {To}")
+external("llvm") routine fptosi[From, To](value: From) -> To
+@llvm_ir("{result} = fptoui {From} {value} to {To}")
+external("llvm") routine fptoui[From, To](value: From) -> To
+@llvm_ir("{result} = fpext {From} {value} to {To}")
+external("llvm") routine fpext[From, To](value: From) -> To
+@llvm_ir("{result} = fptrunc {From} {value} to {To}")
+external("llvm") routine fptrunc[From, To](value: From) -> To
+
+# ============================================================================
+# Integer Arithmetic Instructions
+# ============================================================================
+
+@llvm_ir("{result} = add {T} {a}, {b}")
+external("llvm") routine add[T](a: T, b: T) -> T
+@llvm_ir("{result} = sub {T} {a}, {b}")
+external("llvm") routine sub[T](a: T, b: T) -> T
+@llvm_ir("{result} = mul {T} {a}, {b}")
+external("llvm") routine mul[T](a: T, b: T) -> T
+@llvm_ir("{result} = sdiv {T} {a}, {b}")
+external("llvm") routine sdiv[T](a: T, b: T) -> T
+@llvm_ir("{result} = udiv {T} {a}, {b}")
+external("llvm") routine udiv[T](a: T, b: T) -> T
+@llvm_ir("{result} = srem {T} {a}, {b}")
+external("llvm") routine srem[T](a: T, b: T) -> T
+@llvm_ir("{result} = urem {T} {a}, {b}")
+external("llvm") routine urem[T](a: T, b: T) -> T
+
+# ============================================================================
+# Float Arithmetic Instructions
+# ============================================================================
+
+@llvm_ir("{result} = fadd {T} {a}, {b}")
+external("llvm") routine fadd[T](a: T, b: T) -> T
+@llvm_ir("{result} = fsub {T} {a}, {b}")
+external("llvm") routine fsub[T](a: T, b: T) -> T
+@llvm_ir("{result} = fmul {T} {a}, {b}")
+external("llvm") routine fmul[T](a: T, b: T) -> T
+@llvm_ir("{result} = fdiv {T} {a}, {b}")
+external("llvm") routine fdiv[T](a: T, b: T) -> T
+@llvm_ir("{result} = frem {T} {a}, {b}")
+external("llvm") routine frem[T](a: T, b: T) -> T
+@llvm_ir("{result} = fneg {T} {value}")
+external("llvm") routine fneg[T](value: T) -> T
+
+# ============================================================================
+# Bitwise Instructions (and/or are RF keywords, prefixed with bit_)
+# ============================================================================
+
+@llvm_ir("{result} = and {T} {a}, {b}")
+external("llvm") routine bit_and[T](a: T, b: T) -> T
+@llvm_ir("{result} = or {T} {a}, {b}")
+external("llvm") routine bit_or[T](a: T, b: T) -> T
+@llvm_ir("{result} = xor {T} {a}, {b}")
+external("llvm") routine xor[T](a: T, b: T) -> T
+
+# ============================================================================
+# Shift Instructions
+# ============================================================================
+
+@llvm_ir("{result} = shl {T} {value}, {bits}")
+external("llvm") routine shl[T](value: T, bits: T) -> T
+@llvm_ir("{result} = ashr {T} {value}, {bits}")
+external("llvm") routine ashr[T](value: T, bits: T) -> T
+@llvm_ir("{result} = lshr {T} {value}, {bits}")
+external("llvm") routine lshr[T](value: T, bits: T) -> T
+
+# ============================================================================
+# Integer Comparison Instructions
+# ============================================================================
+
+@llvm_ir("{result} = icmp eq {T} {a}, {b}")
+external("llvm") routine icmp_eq[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp ne {T} {a}, {b}")
+external("llvm") routine icmp_ne[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp slt {T} {a}, {b}")
+external("llvm") routine icmp_slt[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp sle {T} {a}, {b}")
+external("llvm") routine icmp_sle[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp sgt {T} {a}, {b}")
+external("llvm") routine icmp_sgt[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp sge {T} {a}, {b}")
+external("llvm") routine icmp_sge[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp ult {T} {a}, {b}")
+external("llvm") routine icmp_ult[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp ule {T} {a}, {b}")
+external("llvm") routine icmp_ule[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp ugt {T} {a}, {b}")
+external("llvm") routine icmp_ugt[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = icmp uge {T} {a}, {b}")
+external("llvm") routine icmp_uge[T](a: T, b: T) -> Bool
+
+# ============================================================================
+# Float Comparison Instructions
+# ============================================================================
+
+@llvm_ir("{result} = fcmp oeq {T} {a}, {b}")
+external("llvm") routine fcmp_oeq[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = fcmp one {T} {a}, {b}")
+external("llvm") routine fcmp_one[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = fcmp olt {T} {a}, {b}")
+external("llvm") routine fcmp_olt[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = fcmp ole {T} {a}, {b}")
+external("llvm") routine fcmp_ole[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = fcmp ogt {T} {a}, {b}")
+external("llvm") routine fcmp_ogt[T](a: T, b: T) -> Bool
+@llvm_ir("{result} = fcmp oge {T} {a}, {b}")
+external("llvm") routine fcmp_oge[T](a: T, b: T) -> Bool
+
+# ============================================================================
+# Saturating Arithmetic (@llvm.s/u{add,sub}.sat)
+# ============================================================================
+
+@llvm_ir("{result} = call {T} @llvm.sadd.sat.{T}({T} {a}, {T} {b})")
+external("llvm") routine sadd_sat[T](a: T, b: T) -> T
+@llvm_ir("{result} = call {T} @llvm.uadd.sat.{T}({T} {a}, {T} {b})")
+external("llvm") routine uadd_sat[T](a: T, b: T) -> T
+@llvm_ir("{result} = call {T} @llvm.ssub.sat.{T}({T} {a}, {T} {b})")
+external("llvm") routine ssub_sat[T](a: T, b: T) -> T
+@llvm_ir("{result} = call {T} @llvm.usub.sat.{T}({T} {a}, {T} {b})")
+external("llvm") routine usub_sat[T](a: T, b: T) -> T
+
+# ============================================================================
+# Overflow Detection (@llvm.s/u{add,sub,mul}.with.overflow)
+# ============================================================================
+
+@llvm_ir("{result} = call { {T}, i1 } @llvm.sadd.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+external("llvm") routine sadd_with_overflow[T](a: T, b: T) -> (T, Bool)
+@llvm_ir("{result} = call { {T}, i1 } @llvm.uadd.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+external("llvm") routine uadd_with_overflow[T](a: T, b: T) -> (T, Bool)
+@llvm_ir("{result} = call { {T}, i1 } @llvm.ssub.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+external("llvm") routine ssub_with_overflow[T](a: T, b: T) -> (T, Bool)
+@llvm_ir("{result} = call { {T}, i1 } @llvm.usub.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+external("llvm") routine usub_with_overflow[T](a: T, b: T) -> (T, Bool)
+@llvm_ir("{result} = call { {T}, i1 } @llvm.smul.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+external("llvm") routine smul_with_overflow[T](a: T, b: T) -> (T, Bool)
+@llvm_ir("{result} = call { {T}, i1 } @llvm.umul.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+external("llvm") routine umul_with_overflow[T](a: T, b: T) -> (T, Bool)
+
+# ============================================================================
+# Integer Bit Manipulation (@llvm.ctpop, @llvm.ctlz, etc.)
+# ============================================================================
+
+@llvm_ir("{result} = call {T} @llvm.ctpop.{T}({T} {value})")
+external("llvm") routine ctpop[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.ctlz.{T}({T} {value}, i1 false)")
+external("llvm") routine ctlz[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.cttz.{T}({T} {value}, i1 false)")
+external("llvm") routine cttz[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.bitreverse.{T}({T} {value})")
+external("llvm") routine bitreverse[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.bswap.{T}({T} {value})")
+external("llvm") routine bswap[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.abs.{T}({T} {value}, i1 false)")
+external("llvm") routine abs[T](value: T) -> T
+
+# ============================================================================
+# Float Math (@llvm.sqrt, @llvm.fabs, etc.)
+# ============================================================================
+
+@llvm_ir("{result} = call {T} @llvm.sqrt.{T}({T} {value})")
+external("llvm") routine sqrt[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.fabs.{T}({T} {value})")
+external("llvm") routine fabs[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.floor.{T}({T} {value})")
+external("llvm") routine floor[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.ceil.{T}({T} {value})")
+external("llvm") routine ceil[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.round.{T}({T} {value})")
+external("llvm") routine round[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.trunc.{T}({T} {value})")
+external("llvm") routine trunc_float[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.sin.{T}({T} {value})")
+external("llvm") routine sin[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.cos.{T}({T} {value})")
+external("llvm") routine cos[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.exp.{T}({T} {value})")
+external("llvm") routine exp[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.log.{T}({T} {value})")
+external("llvm") routine log[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.log10.{T}({T} {value})")
+external("llvm") routine log10[T](value: T) -> T
+@llvm_ir("{result} = call {T} @llvm.pow.{T}({T} {base}, {T} {exp})")
+external("llvm") routine pow[T](base: T, exp: T) -> T
+@llvm_ir("{result} = call {T} @llvm.copysign.{T}({T} {value}, {T} {sign})")
+external("llvm") routine copysign[T](value: T, sign: T) -> T
+
+# ============================================================================
+# Atomic Operations
+# ============================================================================
+
+@llvm_ir("{result} = load atomic {T}, ptr {ptr} seq_cst, align {sizeof T}")
+external("llvm") routine atomic_load[T](ptr: Snatched[T]) -> T
+@llvm_ir("store atomic {T} {value}, ptr {ptr} seq_cst, align {sizeof T}")
+external("llvm") routine atomic_store[T](ptr: Snatched[T], value: T)
+@llvm_ir("{result} = atomicrmw add ptr {ptr}, {T} {value} seq_cst")
+external("llvm") routine atomic_add[T](ptr: Snatched[T], value: T) -> T
+@llvm_ir("{result} = atomicrmw sub ptr {ptr}, {T} {value} seq_cst")
+external("llvm") routine atomic_sub[T](ptr: Snatched[T], value: T) -> T
+@llvm_ir("{result} = atomicrmw and ptr {ptr}, {T} {value} seq_cst")
+external("llvm") routine atomic_and[T](ptr: Snatched[T], value: T) -> T
+@llvm_ir("{result} = atomicrmw or ptr {ptr}, {T} {value} seq_cst")
+external("llvm") routine atomic_or[T](ptr: Snatched[T], value: T) -> T
+@llvm_ir("{result} = atomicrmw xor ptr {ptr}, {T} {value} seq_cst")
+external("llvm") routine atomic_xor[T](ptr: Snatched[T], value: T) -> T
+@llvm_ir("{result} = atomicrmw xchg ptr {ptr}, {T} {value} seq_cst")
+external("llvm") routine atomic_exchange[T](ptr: Snatched[T], value: T) -> T
+@llvm_ir("{result} = cmpxchg ptr {ptr}, {T} {expected}, {T} {desired} seq_cst seq_cst")
+external("llvm") routine atomic_compare_and_exchange[T](ptr: Snatched[T], expected: T, desired: T) -> (T, Bool)

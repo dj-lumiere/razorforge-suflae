@@ -1,0 +1,41 @@
+# RazorForge Seized[T] - Thread-safe write lock token
+#
+# Seized[T] is created ONLY by the `seizing` syntax on Shared[T, Policy].
+# It provides thread-safe exclusive access with automatic lock acquisition/release.
+#
+# Syntax:
+#   var shared = data.share(policy: Exclusive)
+#   using shared.seize!() as s
+#     s.value = 42  # Exclusive write access, lock held
+#   Lock automatically released at block exit
+#
+# Properties:
+# - Created by compiler via `seizing` syntax on Shared[T, Policy]
+# - Scope-bound: cannot be stored, returned, or escape
+# - Exclusive: cannot be copied (only one handle at a time)
+# - Modifiable: allows modification through this handle
+# - Thread-safe: holds Exclusive or MultiRead write lock
+# - Temporary: source is invalidated during scope, restored on exit
+# - Blocks ALL other access (both read and write) while held
+#
+# Locking Policy Behavior:
+# - Exclusive: Exclusive access only (most common)
+# - MultiRead: Write lock - blocks all readers and writers
+# - ReadOnly: NOT allowed - build error (unmodifiable shared data)
+#
+# Downgrading:
+# - Can create inspecting block within seizing block (downgrade write to read)
+#
+# This type is a marker for the type system - the compiler handles lock operations.
+module Core
+
+record Seized[T]
+  secret ptr: Snatched[T]    # Generic type - use Snatched[T]
+  secret lock_guard: UAddr   # Fixed type - use UAddr
+
+# NOTE: No creators, no manual methods - all operations handled by compiler
+# The seizing syntax acquires the Exclusive or MultiRead write lock and creates this token
+# The lock is automatically released when the scope exits
+# Only ONE thread can hold a write lock at a time
+#
+# Lock acquisition can fail (e.g., poisoned lock) - use seizing! for fallible acquisition

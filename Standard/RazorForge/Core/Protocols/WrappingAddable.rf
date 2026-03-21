@@ -1,0 +1,6 @@
+# WrappingAddable - Protocol for types that support wrapping addition (+%)
+module Core
+
+protocol WrappingAddable
+  @readonly
+  routine Me.__add_wrap__(you: Me) -> Me

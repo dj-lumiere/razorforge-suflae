@@ -1,0 +1,8 @@
+module Core
+
+record IndeterminateResultError obeys Crashable
+  # No member variables needed, as this error only has one cause (0**0)
+  pass
+
+routine IndeterminateResultError.crash_message() -> Text
+  return "Indeterminate form encountered: 0 ** 0 is undefined for integer arithmetic."

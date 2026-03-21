@@ -36,3 +36,19 @@ playground/
 wiki/
 internal-wiki/
 nul
+RazorForge-Wiki/
+Suflae-Wiki/
+
+/native/.cache/
+
+# Third-party native libraries (download separately)
+/native/inteldecimal/
+/native/libbf/
+/native/libtommath/
+/native/mapm/
+
+*.old
+*.backup
+/vscode-extension/
+/cvers-src/
+old

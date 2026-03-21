@@ -1,0 +1,28 @@
+# RazorForge EnumerateSequence[T] - Lazy index pairing
+# enumerate() pairs each element with its zero-based index
+# enumerate(start:) pairs each element with an index starting from start
+
+module SeqTools
+
+entity EnumerateSequence[T] obeys Sequenceable[Tuple[UAddr, T]]
+  secret source: Sequenceable[T]
+  secret start: UAddr
+
+routine EnumerateSequence[T].__seq__() -> EnumerateEmitter[T]
+  return EnumerateEmitter[T](source: me.source.__seq__(), index: me.start)
+
+entity EnumerateEmitter[T] obeys SequenceEmitter[Tuple[UAddr, T]]
+  secret source: SequenceEmitter[T]
+  secret index: UAddr
+
+emitting routine EnumerateEmitter[T].__next__() -> Tuple[UAddr, T]
+  var item = me.source.__next__()
+  emit (me.index, item)
+  me.index = me.index + 1uaddr
+  return
+
+routine Sequenceable[T].enumerate() -> EnumerateSequence[T]
+  return EnumerateSequence[T](source: me, start: 0uaddr)
+
+routine Sequenceable[T].enumerate(start: UAddr) -> EnumerateSequence[T]
+  return EnumerateSequence[T](source: me, start: start)

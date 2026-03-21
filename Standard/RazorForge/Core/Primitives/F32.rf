@@ -1,0 +1,202 @@
+# RazorForge F32 (single precision floating point) native type implementation
+# Maps directly to LLVM float type using compiler intrinsics
+module Core
+# Core F32 type definition - maps to LLVM float
+
+@llvm("float")
+record F32 obeys Numeric, Ordered
+  pass
+
+# IEEE 754 single precision constants
+preset F32_EPSILON: F32 = 1.1920929e-7_f32
+preset F32_MIN: F32 = -3.4028235e+38_f32
+preset F32_MAX: F32 = 3.4028235e+38_f32
+preset F32_MIN_POSITIVE: F32 = 1.1754944e-38_f32
+preset F32_ZERO: F32 = 0.0_f32
+preset F32_ONE: F32 = 1.0_f32
+
+# Mathematical constants
+preset F32_PI: F32 = 3.1415927_f32
+preset F32_E: F32 = 2.7182817_f32
+preset F32_SQRT_2: F32 = 1.4142135_f32
+preset F32_LN_2: F32 = 0.6931472_f32
+preset F32_LN_10: F32 = 2.3025851_f32
+
+routine F32.__create__(from: S8) -> F32
+  return sitofp[S8, F32](from)
+
+routine F32.__create__(from: S16) -> F32
+  return sitofp[S16, F32](from)
+
+routine F32.__create__(from: S32) -> F32
+  return sitofp[S32, F32](from)
+
+routine F32.__create__(from: S64) -> F32
+  return sitofp[S64, F32](from)
+
+routine F32.__create__(from: S128) -> F32
+  return sitofp[S128, F32](from)
+
+routine F32.__create__(from: U8) -> F32
+  return uitofp[U8, F32](from)
+
+routine F32.__create__(from: U16) -> F32
+  return uitofp[U16, F32](from)
+
+routine F32.__create__(from: U32) -> F32
+  return uitofp[U32, F32](from)
+
+routine F32.__create__(from: U64) -> F32
+  return uitofp[U64, F32](from)
+
+routine F32.__create__(from: U128) -> F32
+  return uitofp[U128, F32](from)
+
+routine F32.__create__(from: F16) -> F32
+  return fpext[F16, F32](from)
+
+routine F32.__create__(from: F32) -> F32
+  return from
+
+routine F32.__create__(from: F64) -> F32
+  return fptrunc[F64, F32](from)
+
+routine F32.__create__(from: F128) -> F32
+  return fptrunc[F128, F32](from)
+
+routine F32.__create__(from: D32) -> F32
+  var bits = bitcast[D32, U32](from)
+  return rf_d32_to_f32(bits)
+
+routine F32.__create__(from: D64) -> F32
+  var bits = bitcast[D64, U64](from)
+  return rf_d64_to_f32(bits)
+
+routine F32.__create__(from: D128) -> F32
+  return rf_d128_to_f32(from.low_bits(), from.high_bits())
+
+# From SAddr - convert to float (may lose precision)
+routine F32.__create__(from: SAddr) -> F32
+  return sitofp[SAddr, F32](from)
+
+# From UAddr - convert to float (may lose precision)
+routine F32.__create__(from: UAddr) -> F32
+  return uitofp[UAddr, F32](from)
+
+# ============================================================================
+# Arithmetic Operations (IEEE 754 semantics)
+# ============================================================================
+
+routine F32.__add__(you: F32) -> F32
+  return fadd[F32](me, you)
+
+routine F32.__sub__(you: F32) -> F32
+  return fsub[F32](me, you)
+
+routine F32.__mul__(you: F32) -> F32
+  return fmul[F32](me, you)
+
+routine F32.__truediv__(you: F32) -> F32
+  return fdiv[F32](me, you)
+
+routine F32.__neg__() -> F32
+  return fneg[F32](me)
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+routine F32.__eq__(you: F32) -> Bool
+  return fcmp_oeq[F32](me, you)
+
+routine F32.__cmp__(you: F32) -> ComparisonSign
+  if fcmp_olt[F32](me, you)
+    return ME_SMALL
+  if fcmp_ogt[F32](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+routine F32.sqrt() -> F32
+  return sqrt[F32](me)
+
+routine F32.abs() -> F32
+  return fabs[F32](me)
+
+routine F32.floor() -> F32
+  return floor[F32](me)
+
+routine F32.ceil() -> F32
+  return ceil[F32](me)
+
+routine F32.round() -> F32
+  return round[F32](me)
+
+routine F32.trunc() -> F32
+  return trunc_float[F32](me)
+
+# Trigonometric functions
+routine F32.sin() -> F32
+  return sin[F32](me)
+
+routine F32.cos() -> F32
+  return cos[F32](me)
+
+# Exponential and logarithmic
+routine F32.exp() -> F32
+  return exp[F32](me)
+
+routine F32.log() -> F32
+  return log[F32](me)
+
+routine F32.log10() -> F32
+  return log10[F32](me)
+
+routine F32.pow(exp: F32) -> F32
+  return pow[F32](me, exp)
+
+routine F32.copysign(sign: F32) -> F32
+  return copysign[F32](me, sign)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine F32.min(you: F32) -> F32
+  return if me <= you then me else you
+
+routine F32.max(you: F32) -> F32
+  return if me >= you then me else you
+
+routine F32.clamp(min_val: F32, max_val: F32) -> F32
+  return me.min(max_val).max(min_val)
+
+routine F32.is_positive() -> Bool
+  return me > 0.0_f32
+
+routine F32.is_negative() -> Bool
+  return me < 0.0_f32
+
+routine F32.is_zero() -> Bool
+  return me == 0.0_f32
+
+routine F32.signum() -> F32
+  return when
+    me > 0.0_f32 => 1.0_f32
+    me < 0.0_f32 => -1.0_f32
+    else => 0.0_f32
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+# Reinterpret bits as U32 (type punning)
+routine F32.to_bits() -> U32
+  return bitcast[F32, U32](me)
+
+# Create F32 from U32 bits (type punning)
+routine F32.from_bits(bits: U32) -> F32
+  return bitcast[U32, F32](bits)

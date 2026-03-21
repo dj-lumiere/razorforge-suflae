@@ -1,0 +1,5 @@
+# WrappingArithmetic - Bundle protocol for all wrapping arithmetic operations
+module Core
+
+protocol WrappingArithmetic obeys WrappingAddable, WrappingSubtractable, WrappingMultiplicable, WrappingExponentiable
+  pass

@@ -1,4 +1,4 @@
-namespace Compilers.Shared.Lexer;
+﻿namespace Compiler.Lexer;
 
 #region Token Type Enumeration
 
@@ -11,7 +11,7 @@ namespace Compilers.Shared.Lexer;
 /// <list type="bullet">
 /// <item>Basic literals (integers, decimals, characters, strings)</item>
 /// <item>Typed numeric literals with explicit bit widths</item>
-/// <item>Memory size literals (bytes, kilobytes, etc.)</item>
+/// <item>ByteSize literals (bytes, kilobytes, etc.)</item>
 /// <item>Duration literals (seconds, milliseconds, etc.)</item>
 /// <item>Keywords for declarations, control flow, and special operations</item>
 /// <item>Operators (arithmetic, comparison, bitwise, assignment)</item>
@@ -21,6 +21,8 @@ namespace Compilers.Shared.Lexer;
 /// </remarks>
 public enum TokenType
 {
+    #region Literals
+
     #region Basic Literals
 
     // Suflae default number types (arbitrary precision)
@@ -30,94 +32,69 @@ public enum TokenType
     /// <summary>Arbitrary precision decimal in Suflae - unsuffixed decimals (3.14, 2.718)</summary>
     Decimal,
 
-    /// <summary>Represents the semicolon (;) token in the syntax
-    /// This token is present for unnecessary semicolon detection</summary>
-    Semicolon,
-
-    /// <summary>Variant declaration keyword (alias for Chimera)</summary>
-    Variant,
-
-    /// <summary>Mutant declaration keyword (alias for Chimera)</summary>
-    Mutant,
-
-    /// <summary>Single 8-bit character literal with explicit prefix (l8'a')</summary>
-    Letter8Literal,
-
-    /// <summary>Single 16-bit character literal with explicit prefix (l16'a')</summary>
-    Letter16Literal,
+    /// <summary>Byte letter literal with prefix (b'a')</summary>
+    ByteLetterLiteral,
 
     /// <summary>Single character literal - default for plain quotes ('a', '\n')</summary>
     LetterLiteral,
 
     #endregion
 
-    #region String Literals
+    #region Text Literals
 
     // Basic 32-bit texts (default)
     /// <summary>Text literal - default for plain quotes ("hello world")</summary>
     TextLiteral,
 
-    /// <summary>Formatted text with interpolation expressions (f"hello {name}")</summary>
+    /// <summary>Formatted text with inserting expressions (f"hello {name}")</summary>
     FormattedText,
 
     /// <summary>Raw text that doesn't process escape sequences (r"C:\path\file")</summary>
     RawText,
 
-    /// <summary>Raw formatted text combining raw and interpolation (rf"path: {dir}\file")</summary>
+    /// <summary>Raw formatted text combining raw and inserting (rf"path: {dir}\file")</summary>
     RawFormattedText,
 
-    // Explicit width text literals
-    /// <summary>8-bit text literal with explicit prefix (t8"hello")</summary>
-    Text8Literal,
+    /// <summary>Marks the beginning of an f-string (f" or rf")</summary>
+    InsertionStart,
 
-    /// <summary>8-bit raw text literal with explicit prefix (t8r"C:\path")</summary>
-    Text8RawText,
+    /// <summary>Marks the end of an f-string (closing ")</summary>
+    InsertionEnd,
 
-    /// <summary>8-bit formatted text literal with explicit prefix (t8f"value: {x}")</summary>
-    Text8FormattedText,
+    /// <summary>Literal text portion within an f-string</summary>
+    TextSegment,
 
-    /// <summary>8-bit raw formatted text literal with explicit prefix (t8rf"dir: {path}\file")</summary>
-    Text8RawFormattedText,
+    /// <summary>Format specifier after : in {expr:spec}</summary>
+    FormatSpec,
 
-    /// <summary>16-bit text literal with explicit prefix (t16"hello")</summary>
-    Text16Literal,
-
-    /// <summary>16-bit raw text literal with explicit prefix (t16r"C:\path")</summary>
-    Text16RawText,
-
-    /// <summary>16-bit formatted text literal with explicit prefix (t16f"value: {x}")</summary>
-    Text16FormattedText,
-
-    /// <summary>16-bit raw formatted text literal with explicit prefix (t16rf"dir: {path}\file")</summary>
-    Text16RawFormattedText,
-
+    /// <summary>Bytes literal with explicit prefix (b"hello")</summary>
     BytesLiteral,
+
+    /// <summary>Bytes raw literal with explicit prefix (br"C:\path")</summary>
     BytesRawLiteral,
-    BytesFormatted,
-    BytesRawFormatted,
 
     #endregion
 
     #region Typed Numeric Literals
 
     // Signed integers
-    /// <summary>8-bit signed integer literal (42i8)</summary>
+    /// <summary>8-bit signed integer literal (42s8)</summary>
     S8Literal,
 
-    /// <summary>16-bit signed integer literal (1000i16)</summary>
+    /// <summary>16-bit signed integer literal (1000s16)</summary>
     S16Literal,
 
-    /// <summary>32-bit signed integer literal (42i32)</summary>
+    /// <summary>32-bit signed integer literal (42s32)</summary>
     S32Literal,
 
-    /// <summary>64-bit signed integer literal (1000i64)</summary>
+    /// <summary>64-bit signed integer literal (1000s64)</summary>
     S64Literal,
 
-    /// <summary>128-bit signed integer literal (42i128)</summary>
+    /// <summary>128-bit signed integer literal (42s128)</summary>
     S128Literal,
 
     /// <summary>System pointer-sized signed integer literal (42saddr)</summary>
-    SyssintLiteral,
+    SAddrLiteral,
 
     // Unsigned integers
     /// <summary>8-bit unsigned integer literal (255u8)</summary>
@@ -135,8 +112,8 @@ public enum TokenType
     /// <summary>128-bit unsigned integer literal (42u128)</summary>
     U128Literal,
 
-    /// <summary>System pointer-sized unsigned integer literal (42usys)</summary>
-    SysuintLiteral,
+    /// <summary>System pointer-sized unsigned integer literal (42uaddr)</summary>
+    UAddrLiteral,
 
     // Floating point
     /// <summary>16-bit floating point literal (3.14f16)</summary>
@@ -161,77 +138,46 @@ public enum TokenType
     /// <summary>128-bit decimal literal (3.14d128)</summary>
     D128Literal,
 
+    // Imaginary (for complex numbers)
+    /// <summary>32-bit imaginary literal (4.0j32)</summary>
+    J32Literal,
+
+    /// <summary>64-bit imaginary literal (4.0j64 or 4.0j)</summary>
+    J64Literal,
+
+    /// <summary>128-bit imaginary literal (4.0j128)</summary>
+    J128Literal,
+
+    /// <summary>Arbitrary precision imaginary literal (4.0jn)</summary>
+    JnLiteral,
+
     #endregion
 
-    #region Memory Size Literals
+    #region ByteSize Literals
 
-    /// <summary>Byte memory size literal (100b)</summary>
+    /// <summary>Byte ByteSize literal (100b)</summary>
     ByteLiteral,
 
     // Kilobyte variants
-    /// <summary>Kilobyte memory size literal using decimal (1000 bytes) (8kb)</summary>
+    /// <summary>Kilobyte ByteSize literal using decimal (1000 bytes) (8kb)</summary>
     KilobyteLiteral,
 
-    /// <summary>Kibibyte memory size literal using binary (1024 bytes) (8kib)</summary>
+    /// <summary>Kibibyte ByteSize literal using binary (1024 bytes) (8kib)</summary>
     KibibyteLiteral,
 
-    /// <summary>Kilobit memory size literal using decimal (1000 bits) (8kbit)</summary>
-    KilobitLiteral,
-
-    /// <summary>Kibibit memory size literal using binary (1024 bits) (8kibit)</summary>
-    KibibitLiteral,
-
     // Megabyte variants
-    /// <summary>Megabyte memory size literal using decimal (1000² bytes) (100mb)</summary>
+    /// <summary>Megabyte ByteSize literal using decimal (1000² bytes) (100mb)</summary>
     MegabyteLiteral,
 
-    /// <summary>Mebibyte memory size literal using binary (1024² bytes) (100mib)</summary>
+    /// <summary>Mebibyte ByteSize literal using binary (1024² bytes) (100mib)</summary>
     MebibyteLiteral,
 
-    /// <summary>Megabit memory size literal using decimal (1000² bits) (100mbit)</summary>
-    MegabitLiteral,
-
-    /// <summary>Mebibit memory size literal using binary (1024² bits) (100mibit)</summary>
-    MebibitLiteral,
-
     // Gigabyte variants
-    /// <summary>Gigabyte memory size literal using decimal (1000³ bytes) (4gb)</summary>
+    /// <summary>Gigabyte ByteSize literal using decimal (1000³ bytes) (4gb)</summary>
     GigabyteLiteral,
 
-    /// <summary>Gibibyte memory size literal using binary (1024³ bytes) (4gib)</summary>
+    /// <summary>Gibibyte ByteSize literal using binary (1024³ bytes) (4gib)</summary>
     GibibyteLiteral,
-
-    /// <summary>Gigabit memory size literal using decimal (1000³ bits) (4gbit)</summary>
-    GigabitLiteral,
-
-    /// <summary>Gibibit memory size literal using binary (1024³ bits) (4gibit)</summary>
-    GibibitLiteral,
-
-    // Terabyte variants
-    /// <summary>Terabyte memory size literal using decimal (1000⁴ bytes) (1tb)</summary>
-    TerabyteLiteral,
-
-    /// <summary>Tebibyte memory size literal using binary (1024⁴ bytes) (1tib)</summary>
-    TebibyteLiteral,
-
-    /// <summary>Terabit memory size literal using decimal (1000⁴ bits) (1tbit)</summary>
-    TerabitLiteral,
-
-    /// <summary>Tebibit memory size literal using binary (1024⁴ bits) (1tibit)</summary>
-    TebibitLiteral,
-
-    // Petabyte variants
-    /// <summary>Petabyte memory size literal using decimal (1000⁵ bytes) (5pb)</summary>
-    PetabyteLiteral,
-
-    /// <summary>Pebibyte memory size literal using binary (1024⁵ bytes) (5pib)</summary>
-    PebibyteLiteral,
-
-    /// <summary>Petabit memory size literal using decimal (1000⁵ bits) (5pbit)</summary>
-    PetabitLiteral,
-
-    /// <summary>Pebibit memory size literal using binary (1024⁵ bits) (5pibit)</summary>
-    PebibitLiteral,
 
     #endregion
 
@@ -263,74 +209,142 @@ public enum TokenType
 
     #endregion
 
+    #endregion
+
     #region Identifiers
 
-    /// <summary>Regular identifier in snake_case, may end with ! (my_var, is_valid!)</summary>
+    /// <summary>Regular identifier prefixed with let/var/nothing</summary>
     Identifier,
-
-    /// <summary>Type identifier in PascalCase (MyClass, HttpResponse)</summary>
-    TypeIdentifier,
 
     #endregion
 
+    #region Keywords
+
     #region Keywords - Declarations
 
-    /// <summary>Function declaration keyword (routine)</summary>
+    #region Type Declarations
+
+    /// <summary>
+    /// Routine (function) declaration keyword.
+    /// Defines a callable unit of code with optional parameters and return type.
+    /// </summary>
     Routine,
 
-    /// <summary>Entity declaration keyword</summary>
+    /// <summary>
+    /// Entity declaration keyword.
+    /// Reference type for complex, dynamically-sized objects with identity semantics.
+    /// Uses theatrical memory model (.view(), .hijack(), .share(), steal).
+    /// </summary>
     Entity,
 
-    /// <summary>Record declaration keyword</summary>
+    /// <summary>
+    /// Record declaration keyword.
+    /// Value type for simple, fixed-size data with value semantics. Copied on assignment.
+    /// Use 'with' for modified copies (record with (memberVar: value)).
+    /// </summary>
     Record,
 
-    /// <summary>Choice declaration keyword (enum in both languages)</summary>
+    /// <summary>
+    /// Choice declaration keyword.
+    /// Simple enumeration of discrete, stateless options (type-safe enum).
+    /// Perfect for pattern matching with 'when'.
+    /// </summary>
     Choice,
 
-    /// <summary>Chimera declaration keyword</summary>
-    Chimera,
+    /// <summary>
+    /// Flags declaration keyword.
+    /// Bitwise flag set type - each member represents a power-of-two bit flag.
+    /// Supports bitwise combination and pattern matching on flag combinations.
+    /// </summary>
+    Flags,
 
-    /// <summary>Feature declaration keyword</summary>
+    /// <summary>
+    /// Variant declaration keyword.
+    /// Tagged union - each case can hold different data types.
+    /// Requires pattern matching to unpack. Cases are immediately disposed after unpacking.
+    /// </summary>
+    Variant,
+
+    /// <summary>
+    /// Resident declaration keyword (RazorForge only).
+    /// Hybrid fixed-size reference type for permanent, foundational objects.
+    /// Lives in persistent memory space with stable address.
+    /// </summary>
+    Resident,
+
+    /// <summary>
+    /// Protocol declaration keyword.
+    /// Interface/trait contract defining method signatures that types must implement.
+    /// Types use 'obeys' keyword to implement protocols.
+    /// </summary>
     Protocol,
 
-    /// <summary>Immutable variable declaration keyword</summary>
-    Let,
+    #endregion
 
-    /// <summary>Mutable variable declaration keyword</summary>
+    #region Variable Declarations
+
+    /// <summary>Modifiable variable binding - value can be reassigned</summary>
     Var,
 
-    /// <summary>Preset configuration keyword</summary>
+    /// <summary>
+    /// Build-time constant declaration.
+    /// Unmodifiable, build-time evaluated. Use SCREAMING_SNAKE_CASE by convention.
+    /// </summary>
     Preset,
 
-    /// <summary>Private access modifier keyword</summary>
-    Private,
+    #endregion
 
-    /// <summary>Public(family) access modifier keyword (`public(family)`)</summary>
-    PublicFamily,
+    #region Access Modifiers
 
-    /// <summary>Public(module) access modifier keyword (`public(module)`)</summary>
-    PublicModule,
+    /// <summary>Secret access modifier - visible only within the declaring module</summary>
+    Secret,
 
-    /// <summary>Public access modifier keyword</summary>
-    Public,
+    /// <summary>Posted access modifier - open read, secret write</summary>
+    Posted,
 
-    /// <summary>External linkage modifier keyword</summary>
+    /// <summary>External linkage modifier - marks externally-linked declarations (FFI)</summary>
     External,
 
-    /// <summary>Global scope modifier keyword</summary>
+    /// <summary>Dangerous modifier - marks unsafe/dangerous routines or blocks</summary>
+    Dangerous,
+
+    /// <summary>Global scope modifier - declares module-level global variable</summary>
     Global,
 
-    /// <summary>Static modifier keyword</summary>
-    TypeWise,
+    /// <summary>
+    /// Static/class-level routine modifier.
+    /// No receiver (no 'me'), accessed via Type.method() syntax.
+    /// </summary>
+    Common,
 
-    /// <summary>Self reference keyword</summary>
-    Self,
+    #endregion
 
-    /// <summary>Super/parent reference keyword</summary>
-    Super,
+    #region Self References
 
-    /// <summary>From clause keyword for inheritance</summary>
-    From,
+    /// <summary>Self reference keyword (me) - refers to the current instance in methods</summary>
+    Me,
+
+    /// <summary>Self type keyword (Me) - the type of 'me', used in protocols for associated types</summary>
+    MyType,
+
+    #endregion
+
+    #region Protocol Implementation
+
+    /// <summary>
+    /// Protocol implementation keyword.
+    /// Declares that a type implements a protocol (record Foo obeys Bar).
+    /// Similar to 'implements' in Java or ': Trait' in Rust.
+    /// </summary>
+    Obeys,
+
+    /// <summary>
+    /// Negated protocol constraint.
+    /// Asserts a type does NOT implement a protocol (needs T disobeys SomeTrait).
+    /// </summary>
+    Disobeys,
+
+    #endregion
 
     #endregion
 
@@ -345,7 +359,7 @@ public enum TokenType
     /// <summary>Else conditional keyword</summary>
     Else,
 
-    /// <summary>One liner of conditional expression (if predicate then A else B)</summary>
+    /// <summary>One-liner of conditional expression (if predicate then A else B)</summary>
     Then,
 
     /// <summary>Unless (negative if) conditional keyword</summary>
@@ -375,11 +389,14 @@ public enum TokenType
     /// <summary>Return statement keyword</summary>
     Return,
 
-    /// <summary>Throw statement keyword - crashes with error (RazorForge only)</summary>
+    /// <summary>Throw statement keyword - crashes with error</summary>
     Throw,
 
     /// <summary>Absent statement keyword - indicates value not found (triggers Lookup generation)</summary>
     Absent,
+
+    /// <summary>Becomes statement keyword (block result value)</summary>
+    Becomes,
 
     #endregion
 
@@ -388,66 +405,64 @@ public enum TokenType
     /// <summary>Import statement keyword</summary>
     Import,
 
-    /// <summary>Namespace declaration keyword</summary>
-    Namespace,
+    /// <summary>Module declaration keyword (maps to 'module' keyword)</summary>
+    Module,
 
     #endregion
 
     #region Keywords - Special
 
-    /// <summary>Using statement keyword for resource management (using obj as o { })</summary>
+    /// <summary>Using statement keyword for resource management (using db.open() as conn)</summary>
     Using,
 
-    /// <summary>Type alias as keyword</summary>
+    /// <summary>Type alias/Resource management as keyword (type Foo as Bar, or 'as' in scoped access blocks)</summary>
     As,
 
-    /// <summary>Method redefinition keyword (redefinition A = B)</summary>
+    /// <summary>Method/Type redefinition keyword (define A as B)</summary>
     Define,
 
-    /// <summary>No-operation pass keyword</summary>
+    /// <summary>No-operation pass keyword - placeholder for empty blocks</summary>
     Pass,
 
-    /// <summary>Bitter mode keyword for low-level operations</summary>
-    Bitter,
-
-    /// <summary>Danger mode keyword for unsafe operations</summary>
+    /// <summary>Danger mode keyword for unsafe operations (danger! { ... })</summary>
     Danger,
 
-    /// <summary>Mayhem mode keyword for ultimate unsafe operations (method replacement, code execution)</summary>
-    Mayhem,
-
-    /// <summary>With clause keyword for context</summary>
+    /// <summary>With clause keyword for record copying with modifications (a with .x: 42)</summary>
     With,
 
-    /// <summary>Where clause keyword for constraints</summary>
-    Where,
+    /// <summary>Given clause keyword for lambda captures (x given a => x + a)</summary>
+    Given,
 
-    /// <summary>Follows keyword for ordering constraints</summary>
-    Follows,
+    /// <summary>
+    /// Ownership transfer keyword (RazorForge only).
+    /// Transfers ownership and invalidates the source (becomes deadref).
+    /// Used for: single entity transfer (steal node), container push (list.push(steal node)),
+    /// and consuming iteration (for item in steal list).
+    /// </summary>
+    Steal,
 
-    /// <summary>In keyword for iterating/contains (ex, for i in 1 to 10 step 2)</summary>
+    /// <summary>In keyword for iteration and containment (for i in list, x in set)</summary>
     In,
 
-    /// <summary>Not in keyword - negated containment check (notin)</summary>
+    /// <summary>Not in keyword - negated containment check (x notin set)</summary>
     NotIn,
 
-    /// <summary>Is not keyword - negated type check (isnot)</summary>
+    /// <summary>Is not keyword - negated type/pattern check (x isnot Type)</summary>
     IsNot,
 
-    /// <summary>Not from keyword - negated inheritance check (notfrom)</summary>
-    NotFrom,
-
-    /// <summary>Not follows keyword - negated ordering constraint (notfollows)</summary>
-    NotFollows,
-
-    /// <summary>To keyword for Range object (ex, for i in 1 to 10 by 2)</summary>
+    /// <summary>To keyword for ascending Range (for i in 1 to 10)</summary>
     To,
 
-    /// <summary>Downto keyword for reverse Range object (ex, for i in 10 downto 1 by 2)</summary>
-    Downto,
+    /// <summary>Til keyword for exclusive range end (for i in 0 til 10 means [0, 10))</summary>
+    Til,
 
-    /// <summary>By keyword for Range object step (ex, for i in 1 to 10 by 2)</summary>
+    /// <summary>By keyword for Range step size (for i in 1 to 10 by 2)</summary>
     By,
+
+    /// <summary>
+    /// Discard keyword for explicit discarding of variable
+    /// </summary>
+    Discard,
 
     #endregion
 
@@ -461,6 +476,22 @@ public enum TokenType
 
     /// <summary>Logical NOT operator keyword</summary>
     Not,
+
+    /// <summary>
+    /// Flags exact match keyword.
+    /// Tests that only the specified flags are set — no more, no less.
+    /// 'isonly A and B' builds to equality check (value == mask) vs
+    /// 'is A and B' which is a superset check ((value &amp; mask) == mask).
+    /// </summary>
+    IsOnly,
+
+    /// <summary>
+    /// Flags removal / exclusion keyword.
+    /// Removes flags from a value (perms but WRITE = bitwise AND NOT), or
+    /// excludes flags in 'is' tests (perms is READ and WRITE but EXECUTE =
+    /// READ and WRITE are set AND EXECUTE is NOT set).
+    /// </summary>
+    But,
 
     #endregion
 
@@ -477,6 +508,10 @@ public enum TokenType
 
     #endregion
 
+    #endregion
+
+    #region Operators
+
     #region Operators - Basic Arithmetic
 
     /// <summary>Addition operator (+)</summary>
@@ -485,17 +520,17 @@ public enum TokenType
     /// <summary>Subtraction or unary minus operator (-)</summary>
     Minus,
 
-    /// <summary>Multiplication or dereference operator (*)</summary>
+    /// <summary>Multiplication operator (*)</summary>
     Star,
 
-    /// <summary>Regular division operator (/)</summary>
+    /// <summary>Regular division or module path separation operator (/)</summary>
     Slash,
-
-    /// <summary>Modulo operator (%)</summary>
-    Percent,
 
     /// <summary>Integer division operator (//)</summary>
     Divide,
+
+    /// <summary>Modulo operator (%)</summary>
+    Percent,
 
     #endregion
 
@@ -504,62 +539,20 @@ public enum TokenType
     /// <summary>Wrapping addition operator (+%)</summary>
     PlusWrap,
 
-    /// <summary>Saturating addition operator (+^)</summary>
-    PlusSaturate,
-
-    /// <summary>Unchecked addition operator (+!)</summary>
-    PlusUnchecked,
-
-    /// <summary>Checked addition operator (+?)</summary>
-    PlusChecked,
+    /// <summary>Clamping addition operator (+^)</summary>
+    PlusClamp,
 
     /// <summary>Wrapping subtraction operator (-%)</summary>
     MinusWrap,
 
-    /// <summary>Saturating subtraction operator (-^)</summary>
-    MinusSaturate,
-
-    /// <summary>Unchecked subtraction operator (-!)</summary>
-    MinusUnchecked,
-
-    /// <summary>Checked subtraction operator (-?)</summary>
-    MinusChecked,
+    /// <summary>Clamping subtraction operator (-^)</summary>
+    MinusClamp,
 
     /// <summary>Wrapping multiplication operator (*%)</summary>
     MultiplyWrap,
 
-    /// <summary>Saturating multiplication operator (*^)</summary>
-    MultiplySaturate,
-
-    /// <summary>Unchecked multiplication operator (*!)</summary>
-    MultiplyUnchecked,
-
-    /// <summary>Checked multiplication operator (*?)</summary>
-    MultiplyChecked,
-
-    /// <summary>Wrapping integer division operator (//%)</summary>
-    DivideWrap,
-
-    /// <summary>Saturating integer division operator (//^)</summary>
-    DivideSaturate,
-
-    /// <summary>Unchecked integer division operator (//!)</summary>
-    DivideUnchecked,
-
-    /// <summary>Checked integer division operator (//?)</summary>
-    DivideChecked,
-
-    /// <summary>Wrapping modulo operator (%%)</summary>
-    ModuloWrap,
-
-    /// <summary>Saturating modulo operator (%^)</summary>
-    ModuloSaturate,
-
-    /// <summary>Unchecked modulo operator (%!)</summary>
-    ModuloUnchecked,
-
-    /// <summary>Checked modulo operator (%?)</summary>
-    ModuloChecked,
+    /// <summary>Clamping multiplication operator (*^)</summary>
+    MultiplyClamp,
 
     /// <summary>Exponentiation operator (**)</summary>
     Power,
@@ -567,14 +560,8 @@ public enum TokenType
     /// <summary>Wrapping exponentiation operator (**%)</summary>
     PowerWrap,
 
-    /// <summary>Saturating exponentiation operator (**^)</summary>
-    PowerSaturate,
-
-    /// <summary>Unchecked exponentiation operator (**!)</summary>
-    PowerUnchecked,
-
-    /// <summary>Checked exponentiation operator (**?)</summary>
-    PowerChecked,
+    /// <summary>Clamping exponentiation operator (**^)</summary>
+    PowerClamp,
 
     #endregion
 
@@ -604,14 +591,17 @@ public enum TokenType
     /// <summary>Greater than or equal comparison operator (>=)</summary>
     GreaterEqual,
 
+    /// <summary>Three-way comparison (spaceship) operator (&lt;=&gt;)</summary>
+    ThreeWayComparison,
+
     #endregion
 
     #region Operators - Bitwise
 
-    /// <summary>Bitwise AND or reference operator (&)</summary>
+    /// <summary>Bitwise AND operator (&)</summary>
     Ampersand,
 
-    /// <summary>Bitwise OR or union operator (|)</summary>
+    /// <summary>Bitwise OR operator (|)</summary>
     Pipe,
 
     /// <summary>Bitwise XOR operator (^)</summary>
@@ -622,9 +612,6 @@ public enum TokenType
 
     /// <summary>Left bit shift operator (&lt;&lt;)</summary>
     LeftShift,
-
-    /// <summary>Checked left bit shift operator (&lt;&lt;?)</summary>
-    LeftShiftChecked,
 
     /// <summary>Right bit shift operator (>>)</summary>
     RightShift,
@@ -642,22 +629,97 @@ public enum TokenType
     /// <summary>Assignment operator (=)</summary>
     Assign,
 
-    /// <summary>Negation or macro operator (!)</summary>
+    /// <summary>Addition assignment operator (+=)</summary>
+    PlusAssign,
+
+    /// <summary>Subtraction assignment operator (-=)</summary>
+    MinusAssign,
+
+    /// <summary>Multiplication assignment operator (*=)</summary>
+    StarAssign,
+
+    /// <summary>Division assignment operator (/=)</summary>
+    SlashAssign,
+
+    /// <summary>Modulo assignment operator (%=)</summary>
+    PercentAssign,
+
+    /// <summary>Bitwise AND assignment operator (&amp;=)</summary>
+    AmpersandAssign,
+
+    /// <summary>Bitwise OR assignment operator (|=)</summary>
+    PipeAssign,
+
+    /// <summary>Bitwise XOR assignment operator (^=)</summary>
+    CaretAssign,
+
+    /// <summary>Left shift assignment operator (&lt;&lt;=)</summary>
+    LeftShiftAssign,
+
+    /// <summary>Right shift assignment operator (&gt;&gt;=)</summary>
+    RightShiftAssign,
+
+    /// <summary>Logical left shift assignment operator (&lt;&lt;&lt;=)</summary>
+    LogicalLeftShiftAssign,
+
+    /// <summary>Logical right shift assignment operator (&gt;&gt;&gt;=)</summary>
+    LogicalRightShiftAssign,
+
+    /// <summary>Integer division assignment operator (//=)</summary>
+    DivideAssign,
+
+    /// <summary>Power assignment operator (**=)</summary>
+    PowerAssign,
+
+    /// <summary>Wrapping add assignment operator (+%=)</summary>
+    PlusWrapAssign,
+
+    /// <summary>Wrapping subtract assignment operator (-%=)</summary>
+    MinusWrapAssign,
+
+    /// <summary>Wrapping multiply assignment operator (*%=)</summary>
+    MultiplyWrapAssign,
+
+    /// <summary>Wrapping power assignment operator (**%=)</summary>
+    PowerWrapAssign,
+
+    /// <summary>Clamping add assignment operator (+^=)</summary>
+    PlusClampAssign,
+
+    /// <summary>Clamping subtract assignment operator (-^=)</summary>
+    MinusClampAssign,
+
+    /// <summary>Clamping multiply assignment operator (*^=)</summary>
+    MultiplyClampAssign,
+
+    /// <summary>Clamping division operator (/^)</summary>
+    SlashClamp,
+
+    /// <summary>Clamping division assignment operator (/^=)</summary>
+    SlashClampAssign,
+
+    /// <summary>Clamping power assignment operator (**^=)</summary>
+    PowerClampAssign,
+
+    /// <summary>None coalescing assignment operator (??=)</summary>
+    NoneCoalesceAssign,
+
+    /// <summary>Crashable routine suffix (!)</summary>
     Bang,
 
-    /// <summary>Optional or ternary operator (?)</summary>
+    /// <summary>Force unwrap operator (!!)</summary>
+    BangBang,
+
+    /// <summary>Optional type operator (?)</summary>
     Question,
 
-    /// <summary>Attribute or annotation operator (@)</summary>
+    /// <summary>Annotation operator (@)</summary>
     At,
 
-    /// <summary>Intrinsic function call (@intrinsic)</summary>
+    /// <summary>Intrinsic type (@intrinsic) - LLVM IR primitive types like i8, i32, f64, ptr</summary>
     Intrinsic,
 
-    /// <summary>Native function call (@native)</summary>
-    Native,
-
-    /// <summary>Comment or preprocessing operator (#)</summary>
+    /// <summary>Comment operator (#)</summary>
     Hash,
 
     /// <summary>Function arrow operator (->)</summary>
@@ -670,6 +732,10 @@ public enum TokenType
     NoneCoalesce,
 
     #endregion
+
+    #endregion
+
+    #region Delimiters
 
     #region Delimiters - Brackets and Braces
 
@@ -698,69 +764,110 @@ public enum TokenType
     /// <summary>Member access dot operator (.)</summary>
     Dot,
 
+    /// <summary>Optional chaining operator (?.)</summary>
+    QuestionDot,
+
     /// <summary>Comma separator (,)</summary>
     Comma,
 
     /// <summary>Type annotation colon (:)</summary>
     Colon,
 
-    /// <summary>Namespace or static access operator (::)</summary>
-    DoubleColon,
-
-    /// <summary>Range operator (..)  </summary>
-    DotDot,
-
-    /// <summary>Spread or rest operator (...)</summary>
+    /// <summary>Vararg declaration operator (...) (ex, routine foo(values...: S32) -> S32</summary>
     DotDotDot,
+
+    #endregion
 
     #endregion
 
     #region Special Tokens
 
+    #region Whitespace Tokens
+
     /// <summary>Significant newline token (statement terminator)</summary>
     Newline,
 
-    /// <summary>Indentation increment token (Suflae language only)</summary>
+    /// <summary>Indentation increment token</summary>
     Indent,
 
-    /// <summary>Indentation decrement token (Suflae language only)</summary>
+    /// <summary>Indentation decrement token</summary>
     Dedent,
 
-    /// <summary>Documentation comment token (##)</summary>
+    /// <summary>Documentation comment token (###)</summary>
     DocComment,
 
-    /// <summary>Requires keyword for protocol/interface requirements</summary>
+    #endregion
+
+    #region Generic Constraints
+
+    /// <summary>
+    /// Generic type constraint keyword.
+    /// Enforces build-time protocol requirements on generic types.
+    /// Example: routine sort[T]() needs T obeys Comparable
+    /// </summary>
     Requires,
 
-    /// <summary>Generate keyword for coroutine/generator functions</summary>
-    Generate,
+    #endregion
 
-    /// <summary>Suspended keyword for suspended computation state</summary>
+    #region Async/Generator Keywords
+
+    /// <summary>
+    /// Generator yield keyword.
+    /// Yields values from generator/iterator functions (coroutine mechanism).
+    /// Similar to 'yield' in Python/C#.
+    /// </summary>
+    Emit,
+
+    /// <summary>
+    /// Emitting routine modifier keyword.
+    /// Marks a routine as a generator that produces values via 'emit'.
+    /// </summary>
+    Emitting,
+
+    /// <summary>
+    /// Async function declaration keyword.
+    /// Marks a function as asynchronous, returning a suspended computation.
+    /// Similar to 'async' in Rust/JavaScript.
+    /// </summary>
     Suspended,
 
-    /// <summary>Waitfor keyword for awaiting async operations</summary>
+    /// <summary>
+    /// Await keyword for async operations.
+    /// Waits for a suspended computation to complete and extracts the value.
+    /// Similar to 'await' in Rust/JavaScript.
+    /// </summary>
     Waitfor,
 
-    /// <summary>Usurping keyword for taking ownership in resource management (usurping obj as u)</summary>
-    Usurping,
+    /// <summary>
+    /// Within keyword for await timeout settings.
+    /// </summary>
+    Within,
 
-    /// <summary>Scoped read-only access keyword (viewing obj as v { })</summary>
-    Viewing,
+    /// <summary>
+    /// After keyword for task dependency chains.
+    /// Declares dependencies that must complete before the current task can run.
+    /// Used with waitfor/within for declarative task graphs.
+    /// </summary>
+    After,
 
-    /// <summary>Scoped exclusive access keyword (hijacking obj as h { })</summary>
-    Hijacking,
+    /// <summary>
+    /// OS thread function declaration keyword.
+    /// Marks a function as running on a dedicated OS thread (heavyweight, CPU-bound).
+    /// Counterpart to 'suspended' which uses green threads (lightweight, I/O-bound).
+    /// </summary>
+    Threaded,
 
-    /// <summary>Thread-safe exclusive lock keyword for Shared (seizing ts as ts { })</summary>
-    Seizing,
+    #endregion
 
-    /// <summary>Thread-safe shared read lock keyword for Shared with MultiReadLock policy (observing ts as tw { })</summary>
-    Observing,
+    #region Terminal Tokens
 
     /// <summary>End of file marker token</summary>
     Eof,
 
     /// <summary>Unknown or invalid token</summary>
     Unknown
+
+    #endregion
 
     #endregion
 }

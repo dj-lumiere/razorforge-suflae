@@ -1,0 +1,6 @@
+# Representable - Protocol for types that can be converted to Text
+module Core
+
+protocol Representable
+  @[readonly, generated]
+  routine Text.__create__(from: Me) -> Text

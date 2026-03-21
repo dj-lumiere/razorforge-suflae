@@ -1,0 +1,5 @@
+# ClampingArithmetic - Bundle protocol for all clamping arithmetic operations
+module Core
+
+protocol ClampingArithmetic obeys ClampingAddable, ClampingSubtractable, ClampingMultiplicable, ClampingExponentiable
+  pass

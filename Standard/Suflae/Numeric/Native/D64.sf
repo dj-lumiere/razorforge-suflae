@@ -1,0 +1,125 @@
+module Numerics
+
+# Suflae D64 - Decimal64 floating point (opt-in native type)
+
+import RazorForge/Core.D64
+
+record D64
+  secret value: RazorForge/Core.D64
+
+# Arithmetic operators
+routine D64.__add__(you: D64) -> D64
+  return D64(value: me.value.__add__(you.value))
+
+routine D64.__sub__(you: D64) -> D64
+  return D64(value: me.value.__sub__(you.value))
+
+routine D64.__mul__(you: D64) -> D64
+  return D64(value: me.value.__mul__(you.value))
+
+routine D64.__truediv__(you: D64) -> D64
+  return D64(value: me.value.__truediv__(you.value))
+
+routine D64.__neg__() -> D64
+  return D64(value: me.value.__neg__())
+
+# Comparison
+routine D64.__eq__(you: D64) -> Bool
+  return me.value.__eq__(you.value)
+
+routine D64.__cmp__(you: D64) -> ComparisonSign
+  return me.value.__cmp__(you.value)
+
+# Math operations
+routine D64.abs() -> D64
+  return D64(value: me.value.abs())
+
+routine D64.floor() -> D64
+  return D64(value: me.value.floor())
+
+routine D64.ceil() -> D64
+  return D64(value: me.value.ceil())
+
+routine D64.round() -> D64
+  return D64(value: me.value.round())
+
+routine D64.trunc() -> D64
+  return D64(value: me.value.trunc())
+
+# Utility methods
+routine D64.min(you: D64) -> D64
+  return D64(value: me.value.min(you.value))
+
+routine D64.max(you: D64) -> D64
+  return D64(value: me.value.max(you.value))
+
+routine D64.is_positive() -> Bool
+  return me.value.is_positive()
+
+routine D64.is_negative() -> Bool
+  return me.value.is_negative()
+
+routine D64.is_zero() -> Bool
+  return me.value.is_zero()
+
+# String conversion
+routine D64.to_text() -> Text
+  return me.value.to_text()
+
+# ============================================================================
+# Factory creators (__create__ pattern)
+# ============================================================================
+
+# From signed integers
+routine D64.__create__(from: S8) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: S16) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: S32) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: S64) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: S128) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+# From unsigned integers
+routine D64.__create__(from: U8) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: U16) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: U32) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: U64) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: U128) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+# From binary floating point
+routine D64.__create__(from: F32) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: F64) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+# From other decimal types (widening)
+routine D64.__create__(from: D32) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+# From other decimal types (narrowing)
+routine D64.__create__(from: D128) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+# From arbitrary precision
+routine D64.__create__(from: Integer) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))
+
+routine D64.__create__(from: Decimal) -> D64
+  return D64(value: RazorForge/Core.D64.__create__(from.value))

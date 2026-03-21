@@ -1,0 +1,104 @@
+# RazorForge Range - Generic range for iteration
+#
+# Created by 'to' (inclusive end) or 'til' (exclusive end) infix operators,
+# optionally with 'by' for step. Direction is decided at runtime based on
+# start vs end values.
+#
+# Usage:
+#   0 to 10          # 0, 1, 2, ..., 10 (inclusive end, ascending)
+#   0 til 10          # 0, 1, 2, ..., 9  (exclusive end, ascending)
+#   10 to 0           # 10, 9, 8, ..., 0 (inclusive end, descending)
+#   10 til 0           # 10, 9, 8, ..., 1 (exclusive end, descending)
+#   0 til 20 by 2     # 0, 2, 4, 6, 8, 10, 12, 14, 16, 18
+#   100 til 0 by 10   # 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
+#
+# With collections:
+#   list[0 to 2]       # first 3 elements (inclusive end)
+#   list[0 til 3]      # first 3 elements (exclusive end)
+#   list[^3 til ^0]    # last 3 elements
+module Core
+
+record Range[T] needs FixedNumeric
+  start: T
+  end: T
+  step: T
+  inclusive: Bool  # true for 'to', false for 'til'
+
+# Creator for inclusive range (a to b) with default step 1
+routine Range[T](start: T, end: T) -> Range[T]
+  return Range[T](start: start, end: end, step: 1, inclusive: true)
+
+# Creator for range with inclusivity flag (a to b or a til b) with default step 1
+routine Range[T](start: T, end: T, inclusive: Bool) -> Range[T]
+  return Range[T](start: start, end: end, step: 1, inclusive: inclusive)
+
+# Creator with step (a to b by c or a til b by c)
+routine Range[T](start: T, end: T, step: T, inclusive: Bool) -> Range[T]
+  if step == 0
+    stop!("Range step cannot be zero")
+  return Range[T](start: start, end: end, step: step, inclusive: inclusive)
+
+# Check if range is ascending (start <= end for to, start < end for til)
+routine Range[T].is_ascending() -> Bool
+  return me.start <= me.end
+
+# Get the step size
+routine Range[T].get_step() -> T
+  return me.step
+
+# Check if range is empty
+routine Range[T].is_empty() -> Bool
+  if me.inclusive
+    if me.is_ascending()
+      return me.start > me.end
+    else
+      return me.start < me.end
+  else
+    return me.start == me.end
+
+# ============================================================================
+# Range iteration support
+# ============================================================================
+
+record RangeIterator[T] needs FixedNumeric
+  current: T
+  end: T
+  step: T
+  ascending: Bool
+  inclusive: Bool
+  done: Bool
+
+routine Range[T].iter() -> RangeIterator[T]
+  return RangeIterator[T](
+    current: me.start,
+    end: me.end,
+    step: me.step,
+    ascending: me.is_ascending(),
+    inclusive: me.inclusive,
+    done: me.is_empty()
+  )
+
+routine RangeIterator[T].next!() -> T
+  if me.done
+    absent
+
+  var value = me.current
+
+  if me.ascending
+    me.current = me.current + me.step
+    if me.inclusive
+      if me.current > me.end
+        me.done = true
+    else
+      if me.current >= me.end
+        me.done = true
+  else
+    me.current = me.current - me.step
+    if me.inclusive
+      if me.current < me.end
+        me.done = true
+    else
+      if me.current <= me.end
+        me.done = true
+
+  return value

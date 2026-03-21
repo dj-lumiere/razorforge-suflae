@@ -1,0 +1,704 @@
+using SyntaxTree;
+using Compiler.Lexer;
+using Compiler.Diagnostics;
+
+namespace Compiler.Parser;
+
+/// <summary>
+/// Partial class containing base parser methods (token management, precedence, operators).
+/// </summary>
+public partial class Parser
+{
+    #region Token Management
+
+    private Token CurrentToken => Position < Tokens.Count
+        ? Tokens[index: Position]
+        : Tokens[^1];
+
+    private Token PeekToken(int offset = 1)
+    {
+        return Position + offset < Tokens.Count
+            ? Tokens[index: Position + offset]
+            : Tokens[^1];
+    }
+
+    private bool IsAtEnd => Position >= Tokens.Count || CurrentToken.Type == TokenType.Eof;
+
+    /// <summary>
+    /// Advance to the next token and return the current one
+    /// </summary>
+    private Token Advance()
+    {
+        Token token = CurrentToken;
+        if (!IsAtEnd)
+        {
+            Position++;
+        }
+
+        return token;
+    }
+
+    /// <summary>
+    /// Check if current token matches the expected type
+    /// </summary>
+    private bool Check(TokenType type)
+    {
+        return !IsAtEnd && CurrentToken.Type == type;
+    }
+
+    /// <summary>
+    /// Check if current token matches any of the expected types
+    /// </summary>
+    private bool Check(params TokenType[] types)
+    {
+        return types.Any(predicate: Check);
+    }
+
+    /// <summary>
+    /// Consume token if it matches expected type, otherwise throw error
+    /// </summary>
+    private Token Consume(TokenType type, string errorMessage)
+    {
+        if (Check(type: type))
+        {
+            return Advance();
+        }
+
+        Token current = CurrentToken;
+        throw new GrammarException(
+            GetExpectedTokenCode(type: type),
+            $"{errorMessage}. Expected {type}, got {current.Type}",
+            fileName, current.Line, current.Column, _language);
+    }
+
+    /// <summary>
+    /// Maps an expected token type to the most specific grammar diagnostic code.
+    /// Used by <see cref="Consume"/> to provide precise error codes.
+    /// </summary>
+    private static GrammarDiagnosticCode GetExpectedTokenCode(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.RightParen => GrammarDiagnosticCode.ExpectedClosingParen,
+            TokenType.RightBracket => GrammarDiagnosticCode.ExpectedClosingBracket,
+            TokenType.RightBrace => GrammarDiagnosticCode.ExpectedClosingBrace,
+            TokenType.Colon => GrammarDiagnosticCode.ExpectedColon,
+            TokenType.Arrow => GrammarDiagnosticCode.ExpectedArrow,
+            TokenType.FatArrow => GrammarDiagnosticCode.ExpectedFatArrow,
+            TokenType.Assign => GrammarDiagnosticCode.ExpectedEquals,
+            TokenType.Comma => GrammarDiagnosticCode.ExpectedComma,
+            TokenType.Dot => GrammarDiagnosticCode.ExpectedDot,
+            TokenType.Identifier => GrammarDiagnosticCode.ExpectedIdentifier,
+            TokenType.LeftParen => GrammarDiagnosticCode.ExpectedLeftParen,
+            TokenType.As => GrammarDiagnosticCode.ExpectedAs,
+            TokenType.Waitfor => GrammarDiagnosticCode.ExpectedWaitforAfterDependencies,
+            _ => GrammarDiagnosticCode.UnexpectedToken
+        };
+    }
+
+    /// <summary>
+    /// Consume token if it matches expected type, return whether successful
+    /// </summary>
+    private bool Match(TokenType type)
+    {
+        if (!Check(type: type))
+        {
+            return false;
+        }
+
+        Advance();
+        return true;
+    }
+
+    /// <summary>
+    /// Consume token if it matches any expected type, return whether successful
+    /// </summary>
+    protected bool Match(params TokenType[] types)
+    {
+        foreach (TokenType type in types)
+        {
+            if (!Check(type: type))
+            {
+                continue;
+            }
+
+            Advance();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Skips Newline tokens only if the specified token type follows them.
+    /// Returns true always (to be used in while loop conditions).
+    /// </summary>
+    private bool SkipNewlinesIfFollowedBy(TokenType type)
+    {
+        int offset = 0;
+        while (PeekToken(offset: offset).Type == TokenType.Newline)
+        {
+            offset++;
+        }
+
+        if (PeekToken(offset: offset).Type != type)
+        {
+            return true; // Don't skip, but let caller check Match
+        }
+
+        // Actually consume the newlines
+        while (Match(type: TokenType.Newline)) { }
+        return true;
+    }
+
+    #endregion
+
+    #region Precedence
+
+    /// <summary>
+    /// Operator precedence levels (higher number = higher precedence).
+    /// Used for Pratt parsing to determine operator binding order.
+    /// </summary>
+    protected enum Precedence
+    {
+        /// <summary>No precedence (sentinel value).</summary>
+        None = 0,
+
+        /// <summary>Lambda expressions: <c>x =&gt; x + 1</c>.</summary>
+        Lambda = 1,
+
+        /// <summary>Conditional (ternary) expressions: <c>if cond then x else y</c>.</summary>
+        Conditional = 2,
+
+        /// <summary>None-coalescing operator: <c>x ?? default</c>.</summary>
+        NoneCoalesce = 3,
+
+        /// <summary>Range expressions: <c>a to b step c</c>.</summary>
+        Range = 4,
+
+        /// <summary>Logical OR: <c>a or b</c>.</summary>
+        LogicalOr = 5,
+
+        /// <summary>Logical AND: <c>a and b</c>.</summary>
+        LogicalAnd = 6,
+
+        /// <summary>Logical NOT: <c>not a</c>.</summary>
+        LogicalNot = 7,
+
+        /// <summary>Comparison operators: <c>in, is, obeys, &lt;, &lt;=, &gt;, &gt;=, ==, !=</c> and negated forms.</summary>
+        Comparison = 8,
+
+        /// <summary>Bitwise OR: <c>a | b</c>.</summary>
+        BitwiseOr = 9,
+
+        /// <summary>Bitwise XOR: <c>a ^ b</c>.</summary>
+        BitwiseXor = 10,
+
+        /// <summary>Bitwise AND: <c>a &amp; b</c>.</summary>
+        BitwiseAnd = 11,
+
+        /// <summary>Bit shift operators: <c>&lt;&lt;, &gt;&gt;</c>.</summary>
+        Shift = 12,
+
+        /// <summary>Addition and subtraction with overflow variants.</summary>
+        Additive = 13,
+
+        /// <summary>Multiplication, division, modulo with overflow variants.</summary>
+        Multiplicative = 14,
+
+        /// <summary>Unary prefix operators: <c>-x, ~x</c>.</summary>
+        Unary = 15,
+
+        /// <summary>Power/exponentiation with overflow variants.</summary>
+        Power = 16,
+
+        /// <summary>Postfix operators: indexing, member access, function calls.</summary>
+        Postfix = 17,
+
+        /// <summary>Primary expressions: literals, identifiers, parenthesized.</summary>
+        Primary = 18
+    }
+
+    /// <summary>
+    /// Get precedence for binary operators
+    /// </summary>
+    protected Precedence GetBinaryPrecedence(TokenType type)
+    {
+        return type switch
+        {
+            // None coalescing operator
+            TokenType.NoneCoalesce => Precedence.NoneCoalesce,
+
+            // Logical operators
+            TokenType.Or => Precedence.LogicalOr,
+            TokenType.And => Precedence.LogicalAnd,
+
+            // Comparison operators
+            TokenType.In or TokenType.Is or TokenType.Obeys => Precedence.Comparison,
+            TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => Precedence.Comparison,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual => Precedence.Comparison,
+            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence.Comparison,
+
+            // Bitwise operators
+            TokenType.Pipe => Precedence.BitwiseOr,
+            TokenType.Caret => Precedence.BitwiseXor,
+            TokenType.Ampersand => Precedence.BitwiseAnd,
+
+            // Shift operators
+            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
+
+            // Additive operators
+            TokenType.Plus or TokenType.Minus => Precedence.Additive,
+            TokenType.PlusWrap or TokenType.PlusClamp => Precedence.Additive,
+            TokenType.MinusWrap or TokenType.MinusClamp => Precedence.Additive,
+
+            // Multiplicative operators
+            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent => Precedence.Multiplicative,
+            TokenType.MultiplyWrap or TokenType.MultiplyClamp => Precedence.Multiplicative,
+            TokenType.SlashClamp => Precedence.Multiplicative,
+
+            // Power operators
+            TokenType.Power => Precedence.Power,
+            TokenType.PowerWrap or TokenType.PowerClamp => Precedence.Power,
+
+            _ => Precedence.None
+        };
+    }
+
+    /// <summary>
+    /// Checks if a token represents a comparison operator that can be chained.
+    /// Only <c>&lt;, &lt;=, ==</c> can chain together, and <c>&gt;, &gt;=, ==</c> can chain together.
+    /// Three-way comparator (<c>&lt;=&gt;</c>) cannot be chained.
+    /// </summary>
+    /// <param name="type">The token type to check.</param>
+    /// <returns>True if the token is a chainable comparison operator.</returns>
+    protected bool IsChainableComparisonOperator(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual or TokenType.Equal => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Gets the comparison direction for validating chained comparisons.
+    /// Only chainable operators have direction: <c>&lt;, &lt;=</c> (ascending), <c>&gt;, &gt;=</c> (descending), <c>==</c> (equality).
+    /// </summary>
+    /// <param name="type">The comparison operator token type.</param>
+    /// <returns>-1 for descending (&gt;, &gt;=), 0 for equality (==), 1 for ascending (&lt;, &lt;=).</returns>
+    protected int GetComparisonDirection(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.Less or TokenType.LessEqual => 1, // Ascending
+            TokenType.Greater or TokenType.GreaterEqual => -1, // Descending
+            TokenType.Equal => 0, // Equality
+            _ => 0
+        };
+    }
+
+    /// <summary>
+    /// Validate that comparison chain maintains consistent direction
+    /// </summary>
+    protected bool IsValidComparisonChain(List<BinaryOperator> operators)
+    {
+        if (operators.Count <= 1)
+        {
+            return true;
+        }
+
+        var directions = operators.Select(selector: op => GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
+                                  .ToList();
+
+        // All equality is valid
+        if (directions.All(predicate: d => d == 0))
+        {
+            return true;
+        }
+
+        // Check for consistent direction (all ascending, all descending, or mixed with equality only)
+        var nonZeroDirections = directions.Where(predicate: d => d != 0)
+                                          .Distinct()
+                                          .ToList();
+        return nonZeroDirections.Count <= 1; // Only one direction (plus equality)
+    }
+
+    /// <summary>
+    /// Converts a chainable <see cref="BinaryOperator"/> enum value back to its corresponding <see cref="TokenType"/>.
+    /// Used for comparison chain validation. Only chainable operators are supported.
+    /// </summary>
+    /// <param name="op">The binary operator to convert.</param>
+    /// <returns>The corresponding token type.</returns>
+    protected TokenType BinaryOperatorToToken(BinaryOperator op)
+    {
+        return op switch
+        {
+            BinaryOperator.Less => TokenType.Less,
+            BinaryOperator.LessEqual => TokenType.LessEqual,
+            BinaryOperator.Greater => TokenType.Greater,
+            BinaryOperator.GreaterEqual => TokenType.GreaterEqual,
+            BinaryOperator.Equal => TokenType.Equal,
+            _ => TokenType.Equal // Non-chainable operators default to equality (won't affect chain validation)
+        };
+    }
+
+    /// <summary>
+    /// Check if operator is right-associative
+    /// </summary>
+    protected bool IsRightAssociative(TokenType type)
+    {
+        return type switch
+        {
+            // Power operators are right-associative
+            TokenType.Power or TokenType.PowerWrap or TokenType.PowerClamp => true,
+
+            // Assignment operators would be right-associative
+            TokenType.Assign => true,
+
+            _ => false
+        };
+    }
+
+    #endregion
+
+    #region Error Recovery
+
+    /// <summary>
+    /// Skip tokens until we find a synchronization point for error recovery
+    /// </summary>
+    protected void Synchronize()
+    {
+        Advance();
+
+        while (!IsAtEnd)
+        {
+            if (PeekToken(offset: -1)
+                   .Type == TokenType.Newline)
+            {
+                return;
+            }
+
+            switch (CurrentToken.Type)
+            {
+                case TokenType.Entity:
+                case TokenType.Record:
+                case TokenType.Choice:
+                case TokenType.Flags:
+                case TokenType.Variant:
+                case TokenType.Protocol:
+                case TokenType.Routine:
+                case TokenType.Var:
+                case TokenType.Preset:
+                case TokenType.If:
+                case TokenType.Unless:
+                case TokenType.While:
+                case TokenType.For:
+                case TokenType.Return:
+                case TokenType.Throw:
+                case TokenType.Absent:
+                    return;
+            }
+
+            Advance();
+        }
+    }
+
+    #endregion
+
+    #region Location Helpers
+
+    /// <summary>
+    /// Create a source location from the current token
+    /// </summary>
+    protected SourceLocation GetLocation()
+    {
+        return GetLocation(token: CurrentToken);
+    }
+
+    /// <summary>
+    /// Creates a source location from the specified token.
+    /// </summary>
+    /// <param name="token">The token to get location from.</param>
+    /// <returns>A <see cref="SourceLocation"/> for error reporting.</returns>
+    protected SourceLocation GetLocation(Token token)
+    {
+        return new SourceLocation(FileName: fileName,
+            Line: token.Line,
+            Column: token.Column,
+            Position: token.Position);
+    }
+
+    /// <summary>
+    /// Creates a GrammarException with the current token's location information.
+    /// Use as: throw ThrowParseError("message");
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <returns>The exception to throw.</returns>
+    protected GrammarException ThrowParseError(string message)
+    {
+        var token = CurrentToken;
+        return new GrammarException(
+            GrammarDiagnosticCode.UnexpectedToken,
+            message,
+            fileName, token.Line, token.Column, _language);
+    }
+
+    /// <summary>
+    /// Creates a GrammarException with the specified token's location information.
+    /// Use as: throw ThrowParseError("message", token);
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="token">The token where the error occurred.</param>
+    /// <returns>The exception to throw.</returns>
+    protected GrammarException ThrowParseError(string message, Token token)
+    {
+        return new GrammarException(
+            GrammarDiagnosticCode.UnexpectedToken,
+            message,
+            fileName, token.Line, token.Column, _language);
+    }
+
+    /// <summary>
+    /// Creates a GrammarException with a specific diagnostic code and the current token's location.
+    /// Use as: throw ThrowParseError(code, "message");
+    /// </summary>
+    /// <param name="code">The diagnostic code for the error.</param>
+    /// <param name="message">The error message.</param>
+    /// <returns>The exception to throw.</returns>
+    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message)
+    {
+        var token = CurrentToken;
+        return new GrammarException(code, message,
+            fileName, token.Line, token.Column, _language);
+    }
+
+    /// <summary>
+    /// Creates a GrammarException with a specific diagnostic code and token location.
+    /// Use as: throw ThrowParseError(code, "message", token);
+    /// </summary>
+    /// <param name="code">The diagnostic code for the error.</param>
+    /// <param name="message">The error message.</param>
+    /// <param name="token">The token where the error occurred.</param>
+    /// <returns>The exception to throw.</returns>
+    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message, Token token)
+    {
+        return new GrammarException(code, message,
+            fileName, token.Line, token.Column, _language);
+    }
+
+    #endregion
+
+    #region Operator Conversion
+
+    /// <summary>
+    /// Convert TokenType to BinaryOperator
+    /// </summary>
+    protected BinaryOperator TokenToBinaryOperator(TokenType tokenType)
+    {
+        return tokenType switch
+        {
+            TokenType.Plus => BinaryOperator.Add,
+            TokenType.Minus => BinaryOperator.Subtract,
+            TokenType.Star => BinaryOperator.Multiply,
+            TokenType.Slash => BinaryOperator.TrueDivide,
+            TokenType.Divide => BinaryOperator.FloorDivide,
+            TokenType.Percent => BinaryOperator.Modulo,
+            TokenType.Power => BinaryOperator.Power,
+
+            // Overflow variants (wrap and clamp)
+            TokenType.PlusWrap => BinaryOperator.AddWrap,
+            TokenType.PlusClamp => BinaryOperator.AddClamp,
+            TokenType.MinusWrap => BinaryOperator.SubtractWrap,
+            TokenType.MinusClamp => BinaryOperator.SubtractClamp,
+            TokenType.MultiplyWrap => BinaryOperator.MultiplyWrap,
+            TokenType.MultiplyClamp => BinaryOperator.MultiplyClamp,
+            TokenType.SlashClamp => BinaryOperator.TrueDivClamp,
+            TokenType.PowerWrap => BinaryOperator.PowerWrap,
+            TokenType.PowerClamp => BinaryOperator.PowerClamp,
+
+            TokenType.Equal => BinaryOperator.Equal,
+            TokenType.NotEqual => BinaryOperator.NotEqual,
+            TokenType.ReferenceEqual => BinaryOperator.Identical,
+            TokenType.ReferenceNotEqual => BinaryOperator.NotIdentical,
+            TokenType.Less => BinaryOperator.Less,
+            TokenType.LessEqual => BinaryOperator.LessEqual,
+            TokenType.Greater => BinaryOperator.Greater,
+            TokenType.GreaterEqual => BinaryOperator.GreaterEqual,
+            TokenType.ThreeWayComparison => BinaryOperator.ThreeWayComparator,
+            TokenType.And => BinaryOperator.And,
+            TokenType.Or => BinaryOperator.Or,
+            TokenType.But => BinaryOperator.But,
+            TokenType.Ampersand => BinaryOperator.BitwiseAnd,
+            TokenType.Pipe => BinaryOperator.BitwiseOr,
+            TokenType.Caret => BinaryOperator.BitwiseXor,
+            TokenType.LeftShift => BinaryOperator.ArithmeticLeftShift,
+            TokenType.RightShift => BinaryOperator.ArithmeticRightShift,
+            TokenType.LogicalLeftShift => BinaryOperator.LogicalLeftShift,
+            TokenType.LogicalRightShift => BinaryOperator.LogicalRightShift,
+            TokenType.Assign => BinaryOperator.Assign,
+            TokenType.In => BinaryOperator.In,
+            TokenType.NotIn => BinaryOperator.NotIn,
+            TokenType.Is => BinaryOperator.Is,
+            TokenType.IsNot => BinaryOperator.IsNot,
+            TokenType.Obeys => BinaryOperator.Obeys,
+            TokenType.Disobeys => BinaryOperator.NotObeys,
+            TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
+
+            _ => throw new GrammarException(
+                GrammarDiagnosticCode.UnexpectedToken,
+                $"Unknown binary operator: {tokenType}",
+                fileName, CurrentToken.Line, CurrentToken.Column, _language)
+        };
+    }
+
+    /// <summary>
+    /// Convert TokenType to UnaryOperator
+    /// </summary>
+    protected UnaryOperator TokenToUnaryOperator(TokenType tokenType)
+    {
+        return tokenType switch
+        {
+            TokenType.Minus => UnaryOperator.Minus,
+            TokenType.Not => UnaryOperator.Not,
+            TokenType.Tilde => UnaryOperator.BitwiseNot,
+
+            _ => throw new GrammarException(
+                GrammarDiagnosticCode.UnexpectedToken,
+                $"Unknown unary operator: {tokenType}",
+                fileName, CurrentToken.Line, CurrentToken.Column, _language)
+        };
+    }
+
+    #endregion
+
+    #region Numeric Parsing
+
+    /// <summary>
+    /// Parse numeric literal value
+    /// </summary>
+    /// <remarks>
+    /// Types without direct C# equivalents (f128, d32, d64, d128, Integer, Decimal) are stored
+    /// as raw strings in the AST. The semantic analyzer handles parsing these using native libraries.
+    /// </remarks>
+    protected object ParseNumericLiteral(Token token)
+    {
+        string text = token.Text;
+
+        // Parse based on token type to preserve type information
+        return token.Type switch
+        {
+            // Fixed-width integers with C# equivalents - parse immediately
+            TokenType.S8Literal => ParseTypedInteger<sbyte>(text: text, suffix: "s8"),
+            TokenType.S16Literal => ParseTypedInteger<short>(text: text, suffix: "s16"),
+            TokenType.S32Literal => ParseTypedInteger<int>(text: text, suffix: "s32"),
+            TokenType.S64Literal => ParseTypedInteger<long>(text: text, suffix: "s64"),
+            TokenType.S128Literal => ParseTypedInteger<Int128>(text: text, suffix: "s128"),
+            TokenType.U8Literal => ParseTypedInteger<byte>(text: text, suffix: "u8"),
+            TokenType.U16Literal => ParseTypedInteger<ushort>(text: text, suffix: "u16"),
+            TokenType.U32Literal => ParseTypedInteger<uint>(text: text, suffix: "u32"),
+            TokenType.U64Literal => ParseTypedInteger<ulong>(text: text, suffix: "u64"),
+            TokenType.U128Literal => ParseTypedInteger<UInt128>(text: text, suffix: "u128"),
+
+            // Fixed-width floats with C# equivalents - parse immediately
+            TokenType.F16Literal => ParseTypedFloat<Half>(text: text, suffix: "f16"),
+            TokenType.F32Literal => ParseTypedFloat<float>(text: text, suffix: "f32"),
+            TokenType.F64Literal => ParseTypedFloat<double>(text: text, suffix: "f64"),
+
+            // Deferred types - store raw string for semantic analyzer to parse with native libraries
+            // f128: IEEE binary128, requires LibBF
+            // d32/d64/d128: IEEE decimal floating-point, requires Intel DFP library
+            // Integer/Decimal: arbitrary precision, requires LibBF/MAPM
+            TokenType.F128Literal => CleanNumericSuffix(text: text, suffix: "f128"),
+            TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
+            TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),
+            TokenType.D128Literal => CleanNumericSuffix(text: text, suffix: "d128"),
+            TokenType.Integer => text,
+            TokenType.Decimal => text,
+
+            _ => text.Contains(value: '.')
+                ? double.Parse(s: text)
+                : text // Store as string for unknown numeric types
+        };
+    }
+
+    /// <summary>
+    /// Cleans a numeric literal by removing the type suffix and underscores.
+    /// Returns raw string for deferred parsing by semantic analyzer.
+    /// </summary>
+    /// <param name="text">The literal text including suffix.</param>
+    /// <param name="suffix">The type suffix to remove.</param>
+    /// <returns>Cleaned string representation of the number.</returns>
+    private static string CleanNumericSuffix(string text, string suffix)
+    {
+        string cleaned = text.EndsWith(value: suffix)
+            ? text[..^suffix.Length]
+            : text;
+        return cleaned.Replace(oldValue: "_", newValue: "");
+    }
+
+    private T ParseTypedInteger<T>(string text, string suffix) where T : struct
+    {
+        // Remove the type suffix
+        string cleanText = text.EndsWith(value: suffix)
+            ? text[..^suffix.Length]
+            : text;
+        return (T)Convert.ChangeType(value: cleanText, conversionType: typeof(T));
+    }
+
+    private T ParseTypedFloat<T>(string text, string suffix) where T : struct
+    {
+        // Remove the type suffix
+        string cleanText = text.EndsWith(value: suffix)
+            ? text[..^suffix.Length]
+            : text;
+        if (typeof(T) == typeof(Half))
+        {
+            // Half is not directly supported, use float as approximation
+            return (T)(object)(float)double.Parse(s: cleanText);
+        }
+
+        return (T)Convert.ChangeType(value: cleanText, conversionType: typeof(T));
+    }
+
+    #endregion
+
+    #region Warnings
+
+    /// <summary>
+    /// Add a build warning to the list
+    /// </summary>
+    protected void AddWarning(string message, Token token, string warningCode,
+        WarningSeverity severity = WarningSeverity.Warning)
+    {
+        Warnings.Add(item: new BuildWarning(message: message,
+            line: token.Line,
+            column: token.Column,
+            severity: severity,
+            warningCode: warningCode));
+    }
+
+    /// <summary>
+    /// Get all warnings collected during parsing
+    /// </summary>
+    public IReadOnlyList<BuildWarning> GetWarnings()
+    {
+        return Warnings.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Check for unnecessary closing brace (for indentation-based syntax)
+    /// </summary>
+    protected void CheckUnnecessaryBrace()
+    {
+        if (CurrentToken.Type == TokenType.RightBrace)
+        {
+            AddWarning(message: "Unnecessary closing brace detected. This language uses indentation-based scoping, not braces.",
+                token: CurrentToken,
+                warningCode: WarningCodes.UnnecessaryBraces,
+                severity: WarningSeverity.StyleViolation);
+        }
+    }
+
+    #endregion
+}

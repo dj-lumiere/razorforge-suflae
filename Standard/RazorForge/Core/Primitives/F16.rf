@@ -1,0 +1,184 @@
+# RazorForge F16 (half precision floating point) native type implementation
+# Maps directly to LLVM half type using compiler intrinsics
+module Core
+# Core F16 type definition - maps to LLVM half
+
+@llvm("half")
+record F16 obeys Numeric, Ordered
+  pass
+
+# IEEE 754 half precision constants
+preset F16_EPSILON: F16 = 9.765625e-4_f16
+preset F16_MIN: F16 = -65504.0_f16
+preset F16_MAX: F16 = 65504.0_f16
+preset F16_MIN_POSITIVE: F16 = 6.103515625e-5_f16
+preset F16_ZERO: F16 = 0.0_f16
+preset F16_ONE: F16 = 1.0_f16
+
+# Mathematical constants
+preset F16_PI: F16 = 3.140625_f16
+preset F16_E: F16 = 2.71875_f16
+preset F16_SQRT_2: F16 = 1.414063_f16
+
+# Convert integers to F16 using LLVM intrinsics
+routine F16.__create__(from: S8) -> F16
+  return sitofp[S8, F16](from)
+
+routine F16.__create__(from: S16) -> F16
+  return sitofp[S16, F16](from)
+
+routine F16.__create__(from: S32) -> F16
+  return sitofp[S32, F16](from)
+
+routine F16.__create__(from: S64) -> F16
+  return sitofp[S64, F16](from)
+
+routine F16.__create__(from: S128) -> F16
+  return sitofp[S128, F16](from)
+
+routine F16.__create__(from: U8) -> F16
+  return uitofp[U8, F16](from)
+
+routine F16.__create__(from: U16) -> F16
+  return uitofp[U16, F16](from)
+
+routine F16.__create__(from: U32) -> F16
+  return uitofp[U32, F16](from)
+
+routine F16.__create__(from: U64) -> F16
+  return uitofp[U64, F16](from)
+
+routine F16.__create__(from: U128) -> F16
+  return uitofp[U128, F16](from)
+
+routine F16.__create__(from: F16) -> F16
+  return from
+
+# Truncate from larger float types using LLVM intrinsics
+routine F16.__create__(from: F32) -> F16
+  return fptrunc[F32, F16](from)
+
+routine F16.__create__(from: F64) -> F16
+  return fptrunc[F64, F16](from)
+
+routine F16.__create__(from: F128) -> F16
+  return fptrunc[F128, F16](from)
+
+# Convert from decimal types via native (no LLVM intrinsic for decimal)
+routine F16.__create__(from: D32) -> F16
+  var f32_val = rf_d32_to_f32(from.to_bits())
+  return fptrunc[F32, F16](f32_val)
+
+routine F16.__create__(from: D64) -> F16
+  var f32_val = rf_d64_to_f32(from.to_bits())
+  return fptrunc[F32, F16](f32_val)
+
+routine F16.__create__(from: D128) -> F16
+  var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
+  return fptrunc[F32, F16](f32_val)
+
+# From SAddr - convert using LLVM intrinsic
+routine F16.__create__(from: SAddr) -> F16
+  return sitofp[SAddr, F16](from)
+
+# From UAddr - convert using LLVM intrinsic
+routine F16.__create__(from: UAddr) -> F16
+  return uitofp[UAddr, F16](from)
+
+# ============================================================================
+# Arithmetic Operations (IEEE 754 semantics)
+# ============================================================================
+
+routine F16.__add__(you: F16) -> F16
+  return fadd[F16](me, you)
+
+routine F16.__sub__(you: F16) -> F16
+  return fsub[F16](me, you)
+
+routine F16.__mul__(you: F16) -> F16
+  return fmul[F16](me, you)
+
+routine F16.__truediv__(you: F16) -> F16
+  return fdiv[F16](me, you)
+
+routine F16.__neg__() -> F16
+  return fneg[F16](me)
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+routine F16.__eq__(you: F16) -> Bool
+  return fcmp_oeq[F16](me, you)
+
+routine F16.__cmp__(you: F16) -> ComparisonSign
+  if fcmp_olt[F16](me, you)
+    return ME_SMALL
+  if fcmp_ogt[F16](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+routine F16.sqrt() -> F16
+  return sqrt[F16](me)
+
+routine F16.abs() -> F16
+  return fabs[F16](me)
+
+routine F16.floor() -> F16
+  return floor[F16](me)
+
+routine F16.ceil() -> F16
+  return ceil[F16](me)
+
+routine F16.round() -> F16
+  return round[F16](me)
+
+routine F16.trunc() -> F16
+  return trunc_float[F16](me)
+
+routine F16.copysign(sign: F16) -> F16
+  return copysign[F16](me, sign)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine F16.min(you: F16) -> F16
+  return if me <= you then me else you
+
+routine F16.max(you: F16) -> F16
+  return if me >= you then me else you
+
+routine F16.clamp(min_val: F16, max_val: F16) -> F16
+  return me.min(max_val).max(min_val)
+
+routine F16.is_positive() -> Bool
+  return me > 0.0_f16
+
+routine F16.is_negative() -> Bool
+  return me < 0.0_f16
+
+routine F16.is_zero() -> Bool
+  return me == 0.0_f16
+
+routine F16.signum() -> F16
+  return when
+    me > 0.0_f16 => 1.0_f16
+    me < 0.0_f16 => -1.0_f16
+    else => 0.0_f16
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+# Reinterpret bits as U16 (type punning)
+routine F16.to_bits() -> U16
+  return bitcast[F16, U16](me)
+
+# Create F16 from U16 bits (type punning)
+routine F16.from_bits(bits: U16) -> F16
+  return bitcast[U16, F16](bits)

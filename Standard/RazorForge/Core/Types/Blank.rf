@@ -1,0 +1,6 @@
+# Blank - Unit type representing "completed with no value"
+# Cannot be used as a generic type argument, except Result[Blank] and Lookup[Blank] for failable void routines
+module Core
+
+record Blank
+  pass

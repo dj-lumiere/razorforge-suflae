@@ -1,0 +1,24 @@
+﻿routine stop!()
+  throw UserTerminationError("Stopped by user")
+
+routine verify!(expr: Bool)
+  throw VerificationFailure()
+
+routine breach!()
+  throw LogicBreachError()
+
+routine max!(values...: T) needs T obeys Comparable
+  if values.is_empty()
+    throw NoSuchValueError()
+  var result = values[0]
+  for value in values
+    result = result.max(value)
+  return result
+
+routine min!(values...: T) needs T obeys Comparable
+  if values.is_empty()
+    throw NoSuchValueError()
+  var result = values[0]
+  for value in values
+    result = result.min(value)
+  return result

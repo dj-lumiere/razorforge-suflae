@@ -1,0 +1,25 @@
+# RazorForge SkipSequence[T] - Lazy skip-first-N
+# skip(count) discards count elements then yields the rest
+
+module SeqTools
+
+entity SkipSequence[T] obeys Sequenceable[T]
+  secret source: Sequenceable[T]
+  secret count: UAddr
+
+routine SkipSequence[T].__seq__() -> SkipEmitter[T]
+  return SkipEmitter[T](source: me.source.__seq__(), remaining: me.count)
+
+entity SkipEmitter[T] obeys SequenceEmitter[T]
+  secret source: SequenceEmitter[T]
+  secret remaining: UAddr
+
+emitting routine SkipEmitter[T].__next__() -> T
+  while me.remaining > 0uaddr
+    me.source.__next__()
+    me.remaining = me.remaining - 1uaddr
+  emit me.source.__next__()
+  return
+
+routine Sequenceable[T].skip(count: UAddr) -> SkipSequence[T]
+  return SkipSequence[T](source: me, count: count)

@@ -1,0 +1,183 @@
+module Numerics
+
+# Suflae S64 - Signed 64-bit integer (opt-in native type)
+
+import RazorForge/Core.S64
+
+record S64
+  secret value: RazorForge/Core.S64
+
+# Arithmetic operators
+routine S64.__add__!(you: S64) -> S64
+  return S64(value: me.value.__add__!(you.value))
+
+routine S64.__sub__!(you: S64) -> S64
+  return S64(value: me.value.__sub__!(you.value))
+
+routine S64.__mul__!(you: S64) -> S64
+  return S64(value: me.value.__mul__!(you.value))
+
+routine S64.__floordiv__!(you: S64) -> S64
+  return S64(value: me.value.__floordiv__!(you.value))
+
+routine S64.__mod__!(you: S64) -> S64
+  return S64(value: me.value.__mod__!(you.value))
+
+routine S64.__neg__!() -> S64
+  return S64(value: me.value.__neg__!())
+
+# Wrapping arithmetic
+routine S64.__add_wrap__(you: S64) -> S64
+  return S64(value: me.value.__add_wrap__(you.value))
+
+routine S64.__sub_wrap__(you: S64) -> S64
+  return S64(value: me.value.__sub_wrap__(you.value))
+
+routine S64.__mul_wrap__(you: S64) -> S64
+  return S64(value: me.value.__mul_wrap__(you.value))
+
+# Clamping arithmetic
+routine S64.__add_clamp__(you: S64) -> S64
+  return S64(value: me.value.__add_clamp__(you.value))
+
+routine S64.__sub_clamp__(you: S64) -> S64
+  return S64(value: me.value.__sub_clamp__(you.value))
+
+routine S64.__mul_clamp__(you: S64) -> S64
+  return S64(value: me.value.__mul_clamp__(you.value))
+
+# Comparison
+routine S64.__eq__(you: S64) -> Bool
+  return me.value.__eq__(you.value)
+
+routine S64.__cmp__(you: S64) -> ComparisonSign
+  return me.value.__cmp__(you.value)
+
+# Bitwise operations
+routine S64.__and__(you: S64) -> S64
+  return S64(value: me.value.__and__(you.value))
+
+routine S64.__or__(you: S64) -> S64
+  return S64(value: me.value.__or__(you.value))
+
+routine S64.__xor__(you: S64) -> S64
+  return S64(value: me.value.__xor__(you.value))
+
+routine S64.__not__() -> S64
+  return S64(value: me.value.__not__())
+
+# Shift operations
+routine S64.__ashl__(bits: U64) -> S64
+  return S64(value: me.value.__ashl__(bits))
+
+routine S64.__ashr__(bits: U64) -> S64
+  return S64(value: me.value.__ashr__(bits))
+
+routine S64.__lshl__(bits: U64) -> S64
+  return S64(value: me.value.__lshl__(bits))
+
+routine S64.__lshr__(bits: U64) -> S64
+  return S64(value: me.value.__lshr__(bits))
+
+# Math operations
+routine S64.abs() -> S64
+  return S64(value: me.value.abs())
+
+routine S64.min(you: S64) -> S64
+  return S64(value: me.value.min(you.value))
+
+routine S64.max(you: S64) -> S64
+  return S64(value: me.value.max(you.value))
+
+routine S64.clamp(min_val: S64, max_val: S64) -> S64
+  return S64(value: me.value.clamp(min_val.value, max_val.value))
+
+# Bit manipulation
+routine S64.count_ones() -> S64
+  return S64(value: me.value.count_ones())
+
+routine S64.count_zeros() -> S64
+  return S64(value: me.value.count_zeros())
+
+routine S64.leading_zeros() -> S64
+  return S64(value: me.value.leading_zeros())
+
+routine S64.trailing_zeros() -> S64
+  return S64(value: me.value.trailing_zeros())
+
+routine S64.reverse_bits() -> S64
+  return S64(value: me.value.reverse_bits())
+
+routine S64.swap_bytes() -> S64
+  return S64(value: me.value.swap_bytes())
+
+# Utility methods
+routine S64.is_positive() -> Bool
+  return me.value.is_positive()
+
+routine S64.is_negative() -> Bool
+  return me.value.is_negative()
+
+routine S64.is_zero() -> Bool
+  return me.value.is_zero()
+
+routine S64.is_even() -> Bool
+  return me.value.is_even()
+
+routine S64.is_odd() -> Bool
+  return me.value.is_odd()
+
+routine S64.signum() -> S64
+  return S64(value: me.value.signum())
+
+routine S64.is_power_of_two() -> Bool
+  return me.value.is_power_of_two()
+
+# String conversion
+routine S64.to_text() -> Text
+  return me.value.to_text()
+
+# ============================================================================
+# Factory creators (__create__ pattern)
+# ============================================================================
+
+# From smaller signed integers (widening - always fits)
+routine S64.__create__(from: S8) -> S64
+  return S64(value: RazorForge/Core.S64.__create__(from.value))
+
+routine S64.__create__(from: S16) -> S64
+  return S64(value: RazorForge/Core.S64.__create__(from.value))
+
+routine S64.__create__(from: S32) -> S64
+  return S64(value: RazorForge/Core.S64.__create__(from.value))
+
+# From larger signed integers (narrowing - can overflow)
+routine S64.__create__!(from: S128) -> S64
+  return S64(value: RazorForge/Core.S64.__create__!(from.value))
+
+# From unsigned integers (can overflow for large values)
+routine S64.__create__(from: U8) -> S64
+  return S64(value: RazorForge/Core.S64.__create__(from.value))
+
+routine S64.__create__(from: U16) -> S64
+  return S64(value: RazorForge/Core.S64.__create__(from.value))
+
+routine S64.__create__(from: U32) -> S64
+  return S64(value: RazorForge/Core.S64.__create__(from.value))
+
+routine S64.__create__!(from: U64) -> S64
+  return S64(value: RazorForge/Core.S64.__create__!(from.value))
+
+routine S64.__create__!(from: U128) -> S64
+  return S64(value: RazorForge/Core.S64.__create__!(from.value))
+
+# From floating point (truncates, can overflow)
+routine S64.__create__!(from: F32) -> S64
+  return S64(value: RazorForge/Core.S64.__create__!(from.value))
+
+routine S64.__create__!(from: F64) -> S64
+  return S64(value: RazorForge/Core.S64.__create__!(from.value))
+
+# From arbitrary precision (can overflow)
+routine S64.__create__!(from: Integer) -> S64
+  return S64(value: RazorForge/Core.S64.__create__!(from.value))

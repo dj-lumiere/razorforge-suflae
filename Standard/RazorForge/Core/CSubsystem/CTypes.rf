@@ -1,0 +1,42 @@
+# RazorForge C FFI Type Definitions
+# Type aliases for C types used in FFI
+#
+# For string types, see:
+# - CStr.rf  - null-terminated char* (narrow strings)
+# - CWStr.rf - null-terminated wchar_t* (wide strings)
+#
+# For wide characters, see:
+# - CWChar.rf - wchar_t wrapper (platform-dependent)
+#
+# Trivial type mappings (no alias needed):
+# - char / unsigned char → Byte / U8
+# - signed char → S8
+# - void → Blank
+# - void* → Snatched[Blank]
+# - long long / unsigned long long → S64 / U64
+# - NULL → Snatched[Blank](address: 0uaddr)
+
+module Core
+
+# ============================================================================
+# Integer Type Aliases
+# ============================================================================
+
+# int / unsigned int (at least 16-bit per C standard, 32-bit on all modern platforms)
+define CInt as S32
+define CUInt as U32
+
+# long / unsigned long (platform-dependent!)
+# Windows x64: 32-bit
+# Unix/Linux x64: 64-bit
+@config(target: "windows")
+define CLong as S32
+
+@config(target: "windows")
+define CULong as U32
+
+@config(target: "unix")
+define CLong as S64
+
+@config(target: "unix")
+define CULong as U64

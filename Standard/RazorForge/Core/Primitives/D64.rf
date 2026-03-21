@@ -1,0 +1,227 @@
+# RazorForge D64 (decimal64 floating point) native type implementation
+# IEEE 754-2008 decimal floating point with 16 significant digits
+# Uses Intel DFP library via external("C") routines
+
+module Core
+
+# Core D64 type definition - stored as 64-bit value in BID encoding
+record D64 obeys Numeric, Ordered
+  secret value: U64
+
+# Constants for D64
+preset D64_ZERO: D64 = 0.0_d64
+preset D64_ONE: D64 = 1.0_d64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+routine D64.__create__(from: S8) -> D64
+  var bits = rf_d64_from_s32(S32(from))
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: S16) -> D64
+  var bits = rf_d64_from_s32(S32(from))
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: S32) -> D64
+  var bits = rf_d64_from_s32(from)
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: S64) -> D64
+  var bits = rf_d64_from_s64(from)
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: S128) -> D64
+  # Convert through S64 - may lose precision
+  return from.S64!().D64()
+
+routine D64.__create__(from: U8) -> D64
+  var bits = rf_d64_from_u32(U32(from))
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: U16) -> D64
+  var bits = rf_d64_from_u32(U32(from))
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: U32) -> D64
+  var bits = rf_d64_from_u32(from)
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: U64) -> D64
+  var bits = rf_d64_from_u64(from)
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: U128) -> D64
+  # Convert through U64 - may lose precision
+  return from.U64!().D64()
+
+routine D64.__create__(from: F16) -> D64
+  return from.F32().D64()
+
+routine D64.__create__(from: F32) -> D64
+  var bits = rf_f32_to_d64(from)
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: F64) -> D64
+  var bits = rf_f64_to_d64(from)
+  return bitcast[U64, D64](bits)
+
+routine D64.__create__(from: F128) -> D64
+  return from.F64!().D64()
+
+routine D64.__create__(from: D32) -> D64
+  var bits = from.to_bits()
+  var result_bits = rf_d32_to_d64(bits)
+  return bitcast[U64, D64](result_bits)
+
+routine D64.__create__(from: D64) -> D64
+  return from
+
+routine D64.__create__(from: D128) -> D64
+  var result_bits = rf_d128_to_d64(from.low_bits(), from.high_bits())
+  return bitcast[U64, D64](result_bits)
+
+# From SAddr - convert through S64
+routine D64.__create__(from: SAddr) -> D64
+  return from.S64().D64()
+
+# From UAddr - convert through U64
+routine D64.__create__(from: UAddr) -> D64
+  return from.U64().D64()
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+routine D64.__add__(you: D64) -> D64
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  var result = rf_d64_add(a_bits, b_bits)
+  return bitcast[U64, D64](result)
+
+routine D64.__sub__(you: D64) -> D64
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  var result = rf_d64_sub(a_bits, b_bits)
+  return bitcast[U64, D64](result)
+
+routine D64.__mul__(you: D64) -> D64
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  var result = rf_d64_mul(a_bits, b_bits)
+  return bitcast[U64, D64](result)
+
+routine D64.__truediv__(you: D64) -> D64
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  var result = rf_d64_div(a_bits, b_bits)
+  return bitcast[U64, D64](result)
+
+routine D64.__neg__() -> D64
+  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  var me_bits = bitcast[D64, U64](me)
+  var result = rf_d64_sub(zero_bits, me_bits)
+  return bitcast[U64, D64](result)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine D64.__eq__(you: D64) -> Bool
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  return rf_d64_cmp(a_bits, b_bits) == 0
+
+routine D64.__cmp__(you: D64) -> ComparisonSign
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  var cmp = rf_d64_cmp(a_bits, b_bits)
+  if cmp < 0
+    return ME_SMALL
+  if cmp > 0
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine D64.sqrt() -> D64
+  var bits = bitcast[D64, U64](me)
+  var result = rf_d64_sqrt(bits)
+  return bitcast[U64, D64](result)
+
+routine D64.abs() -> D64
+  var bits = bitcast[D64, U64](me)
+  var result = rf_d64_abs(bits)
+  return bitcast[U64, D64](result)
+
+routine D64.ceil() -> D64
+  var bits = bitcast[D64, U64](me)
+  var result = rf_d64_ceil(bits)
+  return bitcast[U64, D64](result)
+
+routine D64.floor() -> D64
+  var bits = bitcast[D64, U64](me)
+  var result = rf_d64_floor(bits)
+  return bitcast[U64, D64](result)
+
+routine D64.round() -> D64
+  var bits = bitcast[D64, U64](me)
+  var result = rf_d64_round(bits)
+  return bitcast[U64, D64](result)
+
+routine D64.trunc() -> D64
+  var bits = bitcast[D64, U64](me)
+  var result = rf_d64_trunc(bits)
+  return bitcast[U64, D64](result)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine D64.min(you: D64) -> D64
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  return (if rf_d64_cmp(a_bits, b_bits) <= 0 then me else you)
+
+routine D64.max(you: D64) -> D64
+  var a_bits = bitcast[D64, U64](me)
+  var b_bits = bitcast[D64, U64](you)
+  return (if rf_d64_cmp(a_bits, b_bits) >= 0 then me else you)
+
+routine D64.clamp(min_val: D64, max_val: D64) -> D64
+  return me.min(max_val).max(min_val)
+
+routine D64.is_positive() -> Bool
+  var me_bits = bitcast[D64, U64](me)
+  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  return rf_d64_cmp(me_bits, zero_bits) > 0
+
+routine D64.is_negative() -> Bool
+  var me_bits = bitcast[D64, U64](me)
+  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  return rf_d64_cmp(me_bits, zero_bits) < 0
+
+routine D64.is_zero() -> Bool
+  var me_bits = bitcast[D64, U64](me)
+  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  return rf_d64_cmp(me_bits, zero_bits) == 0
+
+routine D64.signum() -> D64
+  var me_bits = bitcast[D64, U64](me)
+  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  var cmp = rf_d64_cmp(me_bits, zero_bits)
+  return when
+    cmp > 0 => D64_ONE
+    cmp < 0 => me.__neg__()
+    else => D64_ZERO
+
+# Reinterpret bits as U64 (type punning)
+routine D64.to_bits() -> U64
+  return bitcast[D64, U64](me)
+
+# Create D64 from U64 bits (type punning)
+routine D64.from_bits(bits: U64) -> D64
+  return bitcast[U64, D64](bits)

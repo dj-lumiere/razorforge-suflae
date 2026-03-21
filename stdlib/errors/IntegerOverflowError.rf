@@ -1,8 +1,0 @@
-# IntegerOverflowError - Error for integer conversion overflow
-# Used when converting between integer types and the value doesn't fit
-
-record IntegerOverflowError follows Crashable {
-    routine crash_message(me, message: Text<letter32>) -> Text<letter32> {
-        return message
-    }
-}

@@ -1,0 +1,117 @@
+module Text
+
+# Text representations for Core types
+#
+# These Text.__create__(from: X) routines provide string conversion for all
+# Core types. They were moved here from Core module files to eliminate the
+# Core → Text dependency during stdlib loading.
+#
+# Native format functions return heap-allocated C strings (UTF-8/ASCII).
+# Text(from: CStr(...)) decodes them to proper UTF-32 Text representation.
+
+
+# ============================================================================
+# Bool and Blank
+# ============================================================================
+
+routine Text.__create__(from: Bool) -> Text
+  if from
+    return "true"
+  return "false"
+
+routine Text.__create__(from: Blank) -> Text
+  return "Blank"
+
+# ============================================================================
+# Signed Integers
+# ============================================================================
+
+routine Text.__create__(from: S8) -> Text
+  var cstr_result = rf_format_S8(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: S16) -> Text
+  var cstr_result = rf_format_S16(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: S32) -> Text
+  var cstr_result = rf_format_S32(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: S64) -> Text
+  var cstr_result = rf_format_S64(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: S128) -> Text
+  var cstr_result = rf_format_S128(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: SAddr) -> Text
+  var cstr_result = rf_format_SAddr(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+# ============================================================================
+# Unsigned Integers
+# ============================================================================
+
+routine Text.__create__(from: U8) -> Text
+  var cstr_result = rf_format_U8(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: U16) -> Text
+  var cstr_result = rf_format_U16(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: U32) -> Text
+  var cstr_result = rf_format_U32(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: U64) -> Text
+  var cstr_result = rf_format_U64(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: U128) -> Text
+  var cstr_result = rf_format_U128(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: UAddr) -> Text
+  var cstr_result = rf_format_UAddr(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+# ============================================================================
+# Binary Floating Point
+# ============================================================================
+
+routine Text.__create__(from: F16) -> Text
+  var cstr_result = rf_format_F16(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: F32) -> Text
+  var cstr_result = rf_format_F32(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: F64) -> Text
+  var cstr_result = rf_format_F64(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: F128) -> Text
+  var cstr_result = rf_format_F128(from)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+# ============================================================================
+# Decimal Floating Point
+# ============================================================================
+
+routine Text.__create__(from: D32) -> Text
+  var bits = bitcast[D32, U32](from)
+  var cstr_result = rf_D32_to_string(bits)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: D64) -> Text
+  var bits = bitcast[D64, U64](from)
+  var cstr_result = rf_D64_to_string(bits)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine Text.__create__(from: D128) -> Text
+  var cstr_result = rf_D128_to_string(from.low_bits(), from.high_bits())
+  return Text(from: CStr(from_ptr: cstr_result))

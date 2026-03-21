@@ -1,0 +1,5 @@
+module Core
+
+protocol Crashable
+  @readonly
+  routine Me.crash_message() -> Text
