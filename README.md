@@ -45,9 +45,7 @@ routine monitor_pool(weak: Tracked<ConnectionPool>)
 
 **Use RazorForge for:**
 
-- Systems programming
 - Game engines and real-time applications
-- Embedded systems and firmware
 - Performance-critical hot paths
 - Manual memory control
 
@@ -186,7 +184,6 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **Danger Blocks**: Opt-in unsafe operations (`danger!`) for zero-overhead code
 - **Five Data Types**: `record`, `resident`, `entity`, `choice`, `variant`
 - **Explicit Concurrency**: `Shared<T, Policy>` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
-- **Freestanding Mode**: Bare metal programming without runtime
 - **C Subsystem**: Full FFI with C libraries
 
 ### Suflae
@@ -227,7 +224,6 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types for embedded systems
 - [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) — Unsafe operations and raw memory access
 - [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) — FFI and C interop
-- [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
 - [Lock Policies](https://razorforge.lumi-dev.xyz/Lock-Policies) — Exclusive, MultiRead, ReadOnly
 - [Code Style](https://razorforge.lumi-dev.xyz/Code-Style) — Coding conventions
 - [Core](https://razorforge.lumi-dev.xyz/Core) — Auto-imported types and primitives
@@ -292,7 +288,6 @@ Start with Suflae for productivity, gradually learn RazorForge for control:
 2. [Choosing Between Languages](https://razorforge.lumi-dev.xyz/Choosing-Language) — When to use each
 3. [RazorForge Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Understanding explicit control
 4. [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types
-5. [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
 ---
 
 ## Examples
