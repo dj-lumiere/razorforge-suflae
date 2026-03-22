@@ -1305,6 +1305,26 @@ f128_t rf_f128_round(f128_t x)
     return result;
 }
 
+// ============================================================================
+// String formatting
+// ============================================================================
+
+uint64_t rf_format_F128(f128_t x)
+{
+    bf_t bx;
+    f128_to_bf(&bx, x);
+    size_t len;
+    char *str = bf_ftoa(&len, &bx, 10, 34, BF_FTOA_FORMAT_FREE_MIN | BF_RNDN);
+    bf_delete(&bx);
+    if (!str) return 0;
+    // bf_ftoa allocates with bf_realloc; copy to malloc'd buffer for consistency
+    char *buf = (char*)malloc(len + 1);
+    if (!buf) { bf_realloc(&bf_ctx, str, 0); return 0; }
+    memcpy(buf, str, len + 1);
+    bf_realloc(&bf_ctx, str, 0);
+    return (uint64_t)buf;
+}
+
 #else
 #error "LibBF is required for f128 support. Define HAVE_LIBBF and link against LibBF."
 #endif // HAVE_LIBBF

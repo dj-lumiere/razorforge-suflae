@@ -736,7 +736,9 @@ public sealed partial class SemanticAnalyzer
             Location = external.Location,
             Module = GetCurrentModuleName(),
             Annotations = external.Annotations ?? [],
-            IsDangerous = external.IsDangerous
+            IsDangerous = external.IsDangerous,
+            GenericParameters = external.GenericParameters,
+            GenericConstraints = external.GenericConstraints
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
@@ -1941,6 +1943,10 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
+        // Set _currentRoutine so IsGenericParameter() can find generic params like T, To, From
+        var prevRoutine = _currentRoutine;
+        _currentRoutine = routineInfo;
+
         var parameters = new List<ParameterInfo>();
 
         foreach (Parameter param in externalDecl.Parameters)
@@ -1960,12 +1966,14 @@ public sealed partial class SemanticAnalyzer
             ? ResolveType(typeExpr: externalDecl.ReturnType)
             : null;
 
-        // Update the routine info with resolved parameters
+        _currentRoutine = prevRoutine;
+
+        // Update the routine info with resolved parameters and generic info
         _registry.UpdateRoutine(routine: routineInfo,
             parameters: parameters,
             returnType: returnType,
-            genericParameters: null,
-            genericConstraints: null);
+            genericParameters: externalDecl.GenericParameters,
+            genericConstraints: externalDecl.GenericConstraints);
     }
 
     #endregion

@@ -78,7 +78,39 @@ public partial class Parser
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 3/4: Named type - simple or generic
+        // CASE 3: Tuple type - (T, U) or (T,)
+        // ═══════════════════════════════════════════════════════════════════════════
+        if (Match(type: TokenType.LeftParen))
+        {
+            var elementTypes = new List<TypeExpression>();
+            elementTypes.Add(item: ParseType());
+
+            if (!Match(type: TokenType.Comma))
+            {
+                // Single parenthesized type without comma: just (T)
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after type");
+                return elementTypes[0];
+            }
+
+            // Single-element tuple: (T,)
+            if (Check(type: TokenType.RightParen))
+            {
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
+                return new TypeExpression(Name: "__tuple__", GenericArguments: elementTypes, Location: location);
+            }
+
+            // Multi-element tuple: (T, U, ...)
+            do
+            {
+                elementTypes.Add(item: ParseType());
+            } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightParen));
+
+            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
+            return new TypeExpression(Name: "__tuple__", GenericArguments: elementTypes, Location: location);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 4/5: Named type - simple or generic
         // ═══════════════════════════════════════════════════════════════════════════
         // Forms:
         //   User                  -> simple type
@@ -374,9 +406,18 @@ public partial class Parser
     /// </remarks>
     private List<GenericConstraintDeclaration>? ParseGenericConstraints(List<string>? genericParams, List<GenericConstraintDeclaration>? existingConstraints = null)
     {
+        // Allow needs clauses even without explicit generic params (implicit generics from parameter types)
+        // But only if there's actually a 'needs' keyword ahead — peek through newlines
         if (genericParams == null || genericParams.Count == 0)
         {
-            return existingConstraints;
+            int offset = 0;
+            while (PeekToken(offset: offset).Type == TokenType.Newline) offset++;
+            if (PeekToken(offset: offset).Type != TokenType.Requires)
+            {
+                return existingConstraints;
+            }
+            // Initialize genericParams so constraint parsing works
+            genericParams ??= [];
         }
 
         List<GenericConstraintDeclaration> constraints = existingConstraints != null

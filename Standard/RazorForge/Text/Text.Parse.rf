@@ -1,4 +1,4 @@
-module Text
+module Core
 
 # Parsing routines for Core types
 #

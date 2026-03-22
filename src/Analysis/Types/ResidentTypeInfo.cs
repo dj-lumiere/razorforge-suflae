@@ -13,7 +13,7 @@ public sealed class ResidentTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Resident;
 
     /// <summary>MemberVariables declared in this resident.</summary>
-    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; init; } = [];
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>
     /// Looks up a member variable by name.
@@ -133,6 +133,16 @@ public sealed class ResidentTypeInfo : TypeInfo
         if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
         {
             return residentType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
+        {
+            return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
+        {
+            return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

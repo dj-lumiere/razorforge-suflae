@@ -1451,10 +1451,14 @@ public partial class Parser
 
         // Integer literals (S32/S64/S128 and Integer for arbitrary precision)
         if (Match(TokenType.Integer,
+                TokenType.S8Literal,
+                TokenType.S16Literal,
                 TokenType.S32Literal,
                 TokenType.S64Literal,
                 TokenType.S128Literal,
                 TokenType.SAddrLiteral,
+                TokenType.U8Literal,
+                TokenType.U16Literal,
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
@@ -1683,7 +1687,13 @@ public partial class Parser
     /// <returns>A <see cref="WhenExpression"/> AST node.</returns>
     private WhenExpression ParseWhenExpression(SourceLocation location)
     {
-        Expression expression = ParseExpression();
+        // Subject-less when: when\n  condition => body
+        // With subject: when expr\n  pattern => body
+        Expression? expression = null;
+        if (!Check(type: TokenType.Newline))
+        {
+            expression = ParseExpression();
+        }
 
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after when expression");
         Consume(type: TokenType.Indent, errorMessage: "Expected indented block after when");
@@ -1692,8 +1702,8 @@ public partial class Parser
 
         while (!Check(type: TokenType.Dedent) && !IsAtEnd)
         {
-            // Skip newlines
-            if (Match(type: TokenType.Newline))
+            // Skip newlines and doc comments
+            if (Match(TokenType.Newline, TokenType.DocComment))
             {
                 continue;
             }
@@ -1701,15 +1711,8 @@ public partial class Parser
             Pattern pattern;
             SourceLocation clauseLocation = GetLocation();
 
-            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
-            if (Match(type: TokenType.Is))
-            {
-                _inWhenPatternContext = true;
-                pattern = ParseTypePattern();
-                _inWhenPatternContext = false;
-            }
             // Handle 'else' keyword for default case: else => body or else varName => body
-            else if (Match(type: TokenType.Else))
+            if (Match(type: TokenType.Else))
             {
                 // Check for variable binding: else varName =>
                 if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
@@ -1723,6 +1726,21 @@ public partial class Parser
                     // Plain else without variable binding - treat as wildcard
                     pattern = new WildcardPattern(Location: clauseLocation);
                 }
+            }
+            else if (expression == null)
+            {
+                // Subject-less when: arms are condition expressions (e.g., me > 0_s8 => 1_s8)
+                _inWhenPatternContext = true;
+                Expression condition = ParseExpression();
+                _inWhenPatternContext = false;
+                pattern = new ExpressionPattern(Expression: condition, Location: clauseLocation);
+            }
+            // Handle 'is' keyword pattern: is None, is SomeType, is SomeType varName
+            else if (Match(type: TokenType.Is))
+            {
+                _inWhenPatternContext = true;
+                pattern = ParseTypePattern();
+                _inWhenPatternContext = false;
             }
             // Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
             else if (IsComparisonOperator(CurrentToken.Type))
@@ -1757,8 +1775,8 @@ public partial class Parser
             }
             else
             {
-                // Single-line body: PATTERN => expression
-                body = ParseExpressionStatement();
+                // Single-line body: PATTERN => statement (expression, break, return, etc.)
+                body = ParseStatement();
             }
 
             _inWhenClauseBody = false;
@@ -2011,6 +2029,7 @@ public partial class Parser
         int scanPos = Position + 1; // start after [
         int depth = 1;
         int matchingBracketPos = -1;
+        bool hasTopLevelComma = false;
 
         while (scanPos < Tokens.Count && depth > 0)
         {
@@ -2037,6 +2056,10 @@ public partial class Parser
                 // Content at top level doesn't look like type arguments (has numbers, operators, etc.)
                 return false;
             }
+            else if (depth == 1 && tt == TokenType.Comma)
+            {
+                hasTopLevelComma = true;
+            }
 
             scanPos++;
         }
@@ -2044,8 +2067,17 @@ public partial class Parser
         if (matchingBracketPos < 0)
             return false;
 
-        // Only treat as generic if ] is followed by ( — avoids false positives like list[i].foo
-        return matchingBracketPos + 1 < Tokens.Count &&
-               Tokens[index: matchingBracketPos + 1].Type == TokenType.LeftParen;
+        if (matchingBracketPos + 1 >= Tokens.Count)
+            return false;
+
+        TokenType afterBracket = Tokens[index: matchingBracketPos + 1].Type;
+
+        // ] followed by ( → always generic: Type[T](...)
+        if (afterBracket == TokenType.LeftParen)
+            return true;
+
+        // ] followed by . with multiple args → generic: Type[T, N].method(...)
+        // Single arg + dot stays as index: list[i].foo
+        return hasTopLevelComma && afterBracket == TokenType.Dot;
     }
 }

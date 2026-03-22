@@ -129,6 +129,64 @@ public partial class LLVMCodeGenerator
         return result;
     }
 
+    /// <summary>
+    /// Constructs a record from a list of positional arguments (for TypeName(args...) calls).
+    /// </summary>
+    private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record, List<Expression> arguments)
+    {
+        // Backend-annotated or single-member-variable wrapper: just return the inner value
+        if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) && arguments.Count <= 1)
+        {
+            return EmitExpression(sb, arguments[0]);
+        }
+
+        // Multi-member-variable record: build struct value
+        string typeName = GetRecordTypeName(record);
+        string result = "undef";
+        for (int i = 0; i < arguments.Count && i < record.MemberVariables.Count; i++)
+        {
+            // Unwrap NamedArgumentExpression if present
+            var arg = arguments[i] is NamedArgumentExpression named ? named.Value : arguments[i];
+            string value = EmitExpression(sb, arg);
+            string memberVariableType = GetLLVMType(record.MemberVariables[i].Type);
+
+            string newResult = NextTemp();
+            EmitLine(sb, $"  {newResult} = insertvalue {typeName} {result}, {memberVariableType} {value}, {i}");
+            result = newResult;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Emits entity construction: heap-allocate and initialize fields.
+    /// </summary>
+    private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity, List<Expression> arguments)
+    {
+        string typeName = GetEntityTypeName(entity);
+        // Allocate entity on heap — rf_alloc returns UAddr (i64), convert to ptr
+        string sizeTemp = NextTemp();
+        EmitLine(sb, $"  {sizeTemp} = getelementptr {typeName}, ptr null, i32 1");
+        string size = NextTemp();
+        EmitLine(sb, $"  {size} = ptrtoint ptr {sizeTemp} to i64");
+        string allocResult = NextTemp();
+        EmitLine(sb, $"  {allocResult} = call i64 @rf_alloc(i64 {size})");
+        string entityPtr = NextTemp();
+        EmitLine(sb, $"  {entityPtr} = inttoptr i64 {allocResult} to ptr");
+
+        // Initialize fields
+        for (int i = 0; i < arguments.Count && i < entity.MemberVariables.Count; i++)
+        {
+            var arg = arguments[i] is NamedArgumentExpression named ? named.Value : arguments[i];
+            string value = EmitExpression(sb, arg);
+            string fieldType = GetLLVMType(entity.MemberVariables[i].Type);
+            string fieldPtr = NextTemp();
+            EmitLine(sb, $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {i}");
+            EmitLine(sb, $"  store {fieldType} {value}, ptr {fieldPtr}");
+        }
+
+        return entityPtr;
+    }
+
     #endregion
 
     #region Field Access
@@ -151,6 +209,14 @@ public partial class LLVMCodeGenerator
         if (targetType == null)
         {
             throw new InvalidOperationException("Cannot determine type of member variable access target");
+        }
+
+        // For @llvm("ptr") types (Snatched[T], etc.), .address returns the pointer as UAddr
+        if (expr.PropertyName == "address" && targetType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" })
+        {
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = ptrtoint ptr {target} to i{_pointerBitWidth}");
+            return result;
         }
 
         return targetType switch
@@ -206,6 +272,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitRecordMemberVariableRead(StringBuilder sb, string recordValue, RecordTypeInfo record, string memberVariableName)
     {
+        // Snatched[T] (@llvm("ptr")): .address → ptrtoint ptr to i64
+        if (record is { HasDirectBackendType: true, LlvmType: "ptr" } && memberVariableName == "address")
+        {
+            string addr = NextTemp();
+            EmitLine(sb, $"  {addr} = ptrtoint ptr {recordValue} to i64");
+            return addr;
+        }
+
         // Backend-annotated or single-member-variable wrapper: the value IS the field
         if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
         {
@@ -347,6 +421,9 @@ public partial class LLVMCodeGenerator
             InsertedTextExpression inserted => EmitInsertedText(sb, inserted),
             ListLiteralExpression list => EmitListLiteral(sb, list),
             FlagsTestExpression flagsTest => EmitFlagsTest(sb, flagsTest),
+            ChainedComparisonExpression chain => EmitChainedComparison(sb, chain),
+            CompoundAssignmentExpression compound => EmitCompoundAssignment(sb, compound),
+            NamedArgumentExpression named => EmitExpression(sb, named.Value),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
     }
@@ -356,22 +433,176 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitLiteral(StringBuilder sb, LiteralExpression literal)
     {
+        // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_f32").
+        // Check LiteralType first to handle them as numbers, not string constants.
+        if (literal.Value is string s)
+        {
+            if (IsIntegerLiteralType(literal.LiteralType))
+                return StripNumericSuffix(s);
+            if (IsFloatLiteralType(literal.LiteralType))
+                return EmitFloatLiteral(StripNumericSuffix(s), literal.LiteralType);
+            if (IsDecimalFloatLiteralType(literal.LiteralType))
+                return EmitDecimalFloatLiteral(sb, StripNumericSuffix(s), literal.LiteralType);
+            // Actual string literal
+            return EmitStringLiteral(sb, s);
+        }
+
         return literal.Value switch
         {
             int i => i.ToString(),
             long l => l.ToString(),
-            double d => d.ToString("G17"),
-            float f => f.ToString("G9"),
+            double d => $"0x{BitConverter.DoubleToInt64Bits(d):X16}",
+            float f => $"0x{BitConverter.DoubleToInt64Bits((double)f):X16}",
             bool b => b ? "true" : "false",
-            string s => EmitStringLiteral(sb, s),
             null => "null",
             _ => literal.Value.ToString() ?? "0"
         };
     }
 
     /// <summary>
+    /// Checks if a token type represents an integer literal.
+    /// </summary>
+    private static bool IsIntegerLiteralType(Lexer.TokenType type)
+    {
+        return type is Lexer.TokenType.S8Literal or Lexer.TokenType.S16Literal
+            or Lexer.TokenType.S32Literal or Lexer.TokenType.S64Literal
+            or Lexer.TokenType.S128Literal or Lexer.TokenType.SAddrLiteral
+            or Lexer.TokenType.U8Literal or Lexer.TokenType.U16Literal
+            or Lexer.TokenType.U32Literal or Lexer.TokenType.U64Literal
+            or Lexer.TokenType.U128Literal or Lexer.TokenType.UAddrLiteral;
+    }
+
+    /// <summary>
+    /// Checks if a token type represents a floating-point literal.
+    /// </summary>
+    private static bool IsFloatLiteralType(Lexer.TokenType type)
+    {
+        return type is Lexer.TokenType.F16Literal or Lexer.TokenType.F32Literal
+            or Lexer.TokenType.F64Literal or Lexer.TokenType.F128Literal;
+    }
+
+    private static bool IsDecimalFloatLiteralType(Lexer.TokenType type)
+    {
+        return type is Lexer.TokenType.D32Literal or Lexer.TokenType.D64Literal
+            or Lexer.TokenType.D128Literal;
+    }
+
+    /// <summary>
+    /// Strips the type suffix from a numeric literal string (e.g., "1_s32" → "1", "3_14_f64" → "3_14")
+    /// and removes digit separator underscores.
+    /// </summary>
+    /// <summary>
+    /// Converts a hex literal (0x...) to decimal for LLVM IR (which uses 0x only for floats).
+    /// </summary>
+    private static string ConvertHexToDecimal(string value)
+    {
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && value.Length > 2)
+        {
+            if (long.TryParse(value[2..], System.Globalization.NumberStyles.HexNumber, null, out long decValue))
+                return decValue.ToString();
+        }
+        return value;
+    }
+
+    private static readonly string[] NumericSuffixes =
+    [
+        "saddr", "uaddr", "s128", "u128", "s64", "u64", "s32", "u32",
+        "s16", "u16", "s8", "u8", "f128", "f64", "f32", "f16",
+        "d128", "d64", "d32"
+    ];
+
+    private static string StripNumericSuffix(string text)
+    {
+        // First try: underscore-separated suffix (e.g., "1_s32" → "1")
+        for (int i = text.Length - 1; i >= 0; i--)
+        {
+            if (text[i] == '_' && i + 1 < text.Length && char.IsLetter(text[i + 1]))
+            {
+                return text[..i].Replace("_", "");
+            }
+        }
+
+        // Second try: direct suffix without underscore (e.g., "0u64" → "0", "0x7Fu32" → "127")
+        string lower = text.ToLowerInvariant();
+        foreach (string suffix in NumericSuffixes)
+        {
+            if (lower.EndsWith(suffix))
+            {
+                string numPart = text[..^suffix.Length].Replace("_", "");
+                return ConvertHexToDecimal(numPart);
+            }
+        }
+
+        // No suffix found — just remove underscores
+        return ConvertHexToDecimal(text.Replace("_", ""));
+    }
+
+    /// <summary>
+    /// Emits a float literal in LLVM IR format.
+    /// LLVM requires specific formats for different float types.
+    /// </summary>
+    private static string EmitFloatLiteral(string numericValue, Lexer.TokenType literalType)
+    {
+        // F128: use native parser for full 128-bit precision
+        if (literalType == Lexer.TokenType.F128Literal)
+        {
+            var f128 = SemanticAnalysis.Native.NumericLiteralParser.ParseF128(numericValue);
+            // LLVM fp128 hex format: 0xL<Lo16hex><Hi16hex> (low bits first)
+            return $"0xL{f128.Lo:X16}{f128.Hi:X16}";
+        }
+
+        if (double.TryParse(numericValue, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double d))
+        {
+            // Use LLVM hex float format (0xHHHHHHHHHHHHHHHH) for exactness
+            if (literalType == Lexer.TokenType.F32Literal)
+            {
+                // F32: promote to double for LLVM's float hex format
+                float f = (float)d;
+                double promoted = f;
+                long bits = BitConverter.DoubleToInt64Bits(promoted);
+                return $"0x{bits:X16}";
+            }
+            else
+            {
+                long bits = BitConverter.DoubleToInt64Bits(d);
+                return $"0x{bits:X16}";
+            }
+        }
+        return numericValue;
+    }
+
+    /// <summary>
+    /// Emits a decimal floating-point literal (D32, D64, D128) as raw integer bits.
+    /// D32/D64 return scalar values. D128 emits insertvalue instructions and returns a temp.
+    /// </summary>
+    private string EmitDecimalFloatLiteral(StringBuilder sb, string numericValue, Lexer.TokenType literalType)
+    {
+        switch (literalType)
+        {
+            case Lexer.TokenType.D32Literal:
+                return SemanticAnalysis.Native.NumericLiteralParser.ParseD32(numericValue).Value.ToString();
+            case Lexer.TokenType.D64Literal:
+                return SemanticAnalysis.Native.NumericLiteralParser.ParseD64(numericValue).Value.ToString();
+            case Lexer.TokenType.D128Literal:
+            {
+                var d128 = SemanticAnalysis.Native.NumericLiteralParser.ParseD128(numericValue);
+                string tmp1 = NextTemp();
+                string tmp2 = NextTemp();
+                EmitLine(sb, $"  {tmp1} = insertvalue %Record.D128 undef, i64 {d128.Lo}, 0");
+                EmitLine(sb, $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {d128.Hi}, 1");
+                return tmp2;
+            }
+            default:
+                return numericValue;
+        }
+    }
+
+    /// <summary>
     /// Generates code for a string literal.
-    /// Emits a global constant and returns a pointer to it.
+    /// Emits a Text string literal as a UTF-32 constant.
+    /// Text is entity { letters: List[Letter] } where List is entity { data: ptr, count: U64, capacity: U64 }
+    /// and Letter is a U32 codepoint. Returns a pointer to the Text struct.
     /// </summary>
     private string EmitStringLiteral(StringBuilder sb, string value)
     {
@@ -381,66 +612,35 @@ public partial class LLVMCodeGenerator
             return existingName;
         }
 
-        // Generate a unique name for this string constant
-        string constName = $"@.str.{_stringCounter++}";
+        int idx = _stringCounter++;
+        string constName = $"@.str.{idx}";
         _stringConstants[value] = constName;
 
-        // Escape the string for LLVM IR
-        string escaped = EscapeStringForLLVM(value);
-        int byteLength = Encoding.UTF8.GetByteCount(value) + 1; // +1 for null terminator
+        // Collect Unicode codepoints (UTF-32)
+        var codepoints = new List<int>();
+        foreach (var rune in value.EnumerateRunes())
+        {
+            codepoints.Add(rune.Value);
+        }
 
-        // Emit global constant (null-terminated for C interop)
-        EmitLine(_globalDeclarations, $"{constName} = private unnamed_addr constant [{byteLength} x i8] c\"{escaped}\\00\"");
+        int count = codepoints.Count;
+
+        // Layer 1: raw codepoint data array [N x i32]
+        string dataName = $"@.str.data.{idx}";
+        string cpValues = string.Join(", ", codepoints.Select(cp => $"i32 {cp}"));
+        if (count > 0)
+            EmitLine(_globalDeclarations, $"{dataName} = private unnamed_addr constant [{count} x i32] [{cpValues}]");
+        else
+            EmitLine(_globalDeclarations, $"{dataName} = private unnamed_addr constant [0 x i32] zeroinitializer");
+
+        // Layer 2: List[Letter] struct { ptr data, i64 count, i64 capacity }
+        string listName = $"@.str.list.{idx}";
+        EmitLine(_globalDeclarations, $"{listName} = private unnamed_addr constant {{ ptr, i64, i64 }} {{ ptr {dataName}, i64 {count}, i64 {count} }}");
+
+        // Layer 3: Text struct { ptr letters }
+        EmitLine(_globalDeclarations, $"{constName} = private unnamed_addr constant {{ ptr }} {{ ptr {listName} }}");
 
         return constName;
-    }
-
-    /// <summary>
-    /// Escapes a string for use in LLVM IR.
-    /// </summary>
-    private static string EscapeStringForLLVM(string value)
-    {
-        var sb = new StringBuilder();
-        foreach (char c in value)
-        {
-            switch (c)
-            {
-                case '"':
-                    sb.Append("\\22");
-                    break;
-                case '\\':
-                    sb.Append("\\5C");
-                    break;
-                case '\n':
-                    sb.Append("\\0A");
-                    break;
-                case '\r':
-                    sb.Append("\\0D");
-                    break;
-                case '\t':
-                    sb.Append("\\09");
-                    break;
-                default:
-                {
-                    if (c < 32 || c > 126)
-                    {
-                        // Non-printable or non-ASCII: encode as hex bytes
-                        byte[] bytes = Encoding.UTF8.GetBytes(c.ToString());
-                        foreach (byte b in bytes)
-                        {
-                            sb.Append($"\\{b:X2}");
-                        }
-                    }
-                    else
-                    {
-                        sb.Append(c);
-                    }
-
-                    break;
-                }
-            }
-        }
-        return sb.ToString();
     }
 
     /// <summary>
@@ -458,14 +658,15 @@ public partial class LLVMCodeGenerator
         // Look up the variable in local variables first
         if (!_localVariables.TryGetValue(identifier.Name, out var varType))
         {
-            // Fallback for unknown identifiers (shouldn't happen after semantic analysis)
-            return $"%{identifier.Name}";
+            throw new InvalidOperationException($"Unknown identifier '{identifier.Name}'");
         }
 
         // Variables are stored in allocas (%name.addr), need to load them
+        // Use unique LLVM name to handle shadowing
+        string llvmName = _localVarLLVMNames.TryGetValue(identifier.Name, out var unique) ? unique : identifier.Name;
         string llvmType = GetLLVMType(varType);
         string tmp = NextTemp();
-        EmitLine(sb, $"  {tmp} = load {llvmType}, ptr %{identifier.Name}.addr");
+        EmitLine(sb, $"  {tmp} = load {llvmType}, ptr %{llvmName}.addr");
         return tmp;
     }
 
@@ -526,12 +727,173 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Emits an inline primitive type conversion (trunc/zext/sext/fpcast) for @llvm types.
+    /// Used for calls like U8(val), S32(val), F64(val), etc.
+    /// </summary>
+    private string EmitPrimitiveTypeConversion(StringBuilder sb, string targetTypeName, Expression arg, TypeInfo targetType)
+    {
+        string argValue = EmitExpression(sb, arg);
+        TypeInfo? argType = GetExpressionType(arg);
+        string targetLlvm = GetLLVMType(targetType);
+        string sourceLlvm = argType != null ? GetLLVMType(argType) : targetLlvm;
+
+        if (sourceLlvm == targetLlvm) return argValue;
+
+        bool sourceIsFloat = sourceLlvm is "half" or "float" or "double" or "fp128";
+        bool targetIsFloat = targetLlvm is "half" or "float" or "double" or "fp128";
+        bool targetUnsigned = targetTypeName is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+
+        string cast = NextTemp();
+        if (sourceIsFloat && targetIsFloat)
+        {
+            string op = GetTypeBitWidth(sourceLlvm) > GetTypeBitWidth(targetLlvm) ? "fptrunc" : "fpext";
+            EmitLine(sb, $"  {cast} = {op} {sourceLlvm} {argValue} to {targetLlvm}");
+        }
+        else if (sourceIsFloat)
+        {
+            string op = targetUnsigned ? "fptoui" : "fptosi";
+            EmitLine(sb, $"  {cast} = {op} {sourceLlvm} {argValue} to {targetLlvm}");
+        }
+        else if (targetIsFloat)
+        {
+            bool sourceUnsigned = argType?.Name is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+            string op = sourceUnsigned ? "uitofp" : "sitofp";
+            EmitLine(sb, $"  {cast} = {op} {sourceLlvm} {argValue} to {targetLlvm}");
+        }
+        else
+        {
+            int srcBits = GetTypeBitWidth(sourceLlvm);
+            int dstBits = GetTypeBitWidth(targetLlvm);
+            if (srcBits > dstBits)
+                EmitLine(sb, $"  {cast} = trunc {sourceLlvm} {argValue} to {targetLlvm}");
+            else if (targetUnsigned)
+                EmitLine(sb, $"  {cast} = zext {sourceLlvm} {argValue} to {targetLlvm}");
+            else
+                EmitLine(sb, $"  {cast} = sext {sourceLlvm} {argValue} to {targetLlvm}");
+        }
+        return cast;
+    }
+
+    /// <summary>
     /// Generates code for a standalone function call.
     /// </summary>
     private string EmitFunctionCall(StringBuilder sb, string functionName, List<Expression> arguments)
     {
-        // Look up the routine
-        RoutineInfo? routine = _registry.LookupRoutine(functionName);
+        // Primitive type conversion: U8(val), S32(val), F64(val), etc.
+        // For @llvm types with a single argument, emit trunc/zext/sext/fpcast inline.
+        // This must be checked BEFORE routine lookup, as stdlib defines conversion routines
+        // (e.g., "routine U8(from: S8) -> U8") that we want to inline instead of calling.
+        if (arguments.Count == 1)
+        {
+            TypeInfo? calledType = _registry.LookupType(functionName);
+            if (calledType is RecordTypeInfo { HasDirectBackendType: true })
+            {
+                return EmitPrimitiveTypeConversion(sb, functionName, arguments[0], calledType);
+            }
+        }
+
+        // Compiler intrinsics for heap memory management
+        // TODO: This should be removed as they are going to be C native
+        if (functionName is "heap_alloc" or "heap_free" or "heap_realloc")
+        {
+            var argVals = new List<string>();
+            var argLlvmTypes = new List<string>();
+            foreach (var arg in arguments)
+            {
+                argVals.Add(EmitExpression(sb, arg));
+                TypeInfo? at = GetExpressionType(arg);
+                argLlvmTypes.Add(at != null ? GetLLVMType(at) : "i64");
+            }
+
+            switch (functionName)
+            {
+                case "heap_alloc":
+                {
+                    // heap_alloc(bytes) → rf_alloc(i64 bytes) → returns i64 (UAddr)
+                    string bytesVal = argVals[0];
+                    string result = NextTemp();
+                    EmitLine(sb, $"  {result} = call i64 @rf_alloc(i64 {bytesVal})");
+                    return result;
+                }
+                case "heap_free":
+                {
+                    // heap_free(ptr) → rf_free(i64) — matches native declaration (UAddr → i64)
+                    EmitLine(sb, $"  call void @rf_free(i64 {argVals[0]})");
+                    return "undef";
+                }
+                case "heap_realloc":
+                {
+                    // heap_realloc(ptr, new_size) → rf_realloc(i64, i64) — matches native UAddr signature
+                    string result = NextTemp();
+                    EmitLine(sb, $"  {result} = call i64 @rf_realloc(i64 {argVals[0]}, i64 {argVals[1]})");
+                    return result;
+                }
+            }
+        }
+
+        // Look up the routine — try full name first, then short name fallback
+        RoutineInfo? routine = _registry.LookupRoutine(functionName)
+                               ?? _registry.LookupRoutineByName(functionName);
+
+        // If not found as a routine, check if it's a type name
+        bool isCreatorCall = false;
+        if (routine == null)
+        {
+            TypeInfo? calledType = _registry.LookupType(functionName);
+            if (calledType != null)
+            {
+                // Direct named-field construction: when all arg names match field names exactly,
+                // emit struct construction directly (avoids __create__ infinite recursion).
+                // e.g., CStr(ptr: from_ptr) inside CStr.__create__ body
+                if (calledType is RecordTypeInfo record && record.MemberVariables.Count > 0
+                    && arguments.Count == record.MemberVariables.Count
+                    && arguments.All(a => a is NamedArgumentExpression named &&
+                        record.MemberVariables.Any(mv => mv.Name == named.Name)))
+                {
+                    return EmitRecordConstruction(sb, record, arguments);
+                }
+
+                if (calledType is EntityTypeInfo entity && entity.MemberVariables.Count > 0
+                    && arguments.Count == entity.MemberVariables.Count
+                    && arguments.All(a => a is NamedArgumentExpression named2 &&
+                        entity.MemberVariables.Any(mv => mv.Name == named2.Name)))
+                {
+                    return EmitEntityConstruction(sb, entity, arguments);
+                }
+
+                // Zero-arg entity construction → null pointer (empty/default entity)
+                if (calledType is EntityTypeInfo && arguments.Count == 0)
+                {
+                    return "null";
+                }
+
+                // Try __create__ overload — this covers conversion constructors
+                // (e.g., CStr(from: text) → CStr.__create__(from: Text))
+                var semanticArgTypes = new List<TypeInfo>();
+                foreach (var arg in arguments)
+                {
+                    TypeInfo? t = GetExpressionType(arg);
+                    if (t != null) semanticArgTypes.Add(t);
+                }
+                routine = _registry.LookupRoutineOverload($"{functionName}.__create__", semanticArgTypes);
+                if (routine != null)
+                {
+                    isCreatorCall = true;
+                }
+                else
+                {
+                    // For single-field records where arg name doesn't match field name
+                    // (e.g., Letter(codepoint: val) where field is 'value')
+                    if (calledType is RecordTypeInfo singleRecord && singleRecord.MemberVariables.Count == 1
+                        && arguments.Count == 1 && arguments[0] is NamedArgumentExpression)
+                    {
+                        return EmitRecordConstruction(sb, singleRecord, arguments);
+                    }
+
+                    isCreatorCall = true;
+                }
+            }
+        }
 
         // Evaluate all arguments
         var argValues = new List<string>();
@@ -550,16 +912,76 @@ public partial class LLVMCodeGenerator
             argTypes.Add(GetLLVMType(argType));
         }
 
+        // Supply default arguments for parameters not covered by explicit arguments
+        if (routine != null)
+        {
+            for (int i = argValues.Count; i < routine.Parameters.Count; i++)
+            {
+                var param = routine.Parameters[i];
+                if (param.HasDefaultValue)
+                {
+                    string value = EmitExpression(sb, param.DefaultValue!);
+                    argValues.Add(value);
+                    argTypes.Add(GetLLVMType(param.Type));
+                }
+            }
+        }
+
         // Build the call
         string mangledName = routine != null
             ? MangleFunctionName(routine)
-            : functionName;
+            : SanitizeLLVMName(functionName);
+
+        // Ensure the function is declared (generates 'declare' and tracks in _generatedFunctions)
+        if (routine != null)
+        {
+            GenerateFunctionDeclaration(routine);
+        }
+        else
+        {
+            _generatedFunctions.Add(mangledName);
+        }
+
+        // For external("C") functions, F16 (half) params must be bitcast to i16 (C ABI)
+        bool isCExtern = routine is { CallingConvention: "C" };
+        if (isCExtern)
+        {
+            for (int i = 0; i < argTypes.Count; i++)
+            {
+                if (argTypes[i] == "half")
+                {
+                    string bits = NextTemp();
+                    EmitLine(sb, $"  {bits} = bitcast half {argValues[i]} to i16");
+                    argValues[i] = bits;
+                    argTypes[i] = "i16";
+                }
+            }
+        }
 
         string returnType = routine?.ReturnType != null
             ? GetLLVMType(routine.ReturnType)
             : "void";
+        string callReturnType = isCExtern && returnType == "half" ? "i16" : returnType;
 
-        if (returnType == "void")
+        // On Windows x64 MSVC ABI, external("C") functions returning structs > 8 bytes
+        // use a hidden sret pointer as the first parameter. We must match this convention.
+        bool needsSret = isCExtern && routine != null && NeedsCExternSret(routine);
+        if (needsSret)
+        {
+            // Allocate space for the result, pass as sret pointer, call as void, then load
+            string sretPtr = NextTemp();
+            EmitLine(sb, $"  {sretPtr} = alloca {returnType}");
+            // Insert sret pointer as first argument
+            argTypes.Insert(0, $"ptr sret({returnType})");
+            argValues.Insert(0, sretPtr);
+            string args = BuildCallArgs(argTypes, argValues);
+            EmitLine(sb, $"  call void @{mangledName}({args})");
+            // Load the result from the sret allocation
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = load {returnType}, ptr {sretPtr}");
+            return result;
+        }
+        else if (callReturnType == "void")
         {
             // Void return - no result
             string args = BuildCallArgs(argTypes, argValues);
@@ -571,7 +993,14 @@ public partial class LLVMCodeGenerator
             // Has return value
             string result = NextTemp();
             string args = BuildCallArgs(argTypes, argValues);
-            EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+            EmitLine(sb, $"  {result} = call {callReturnType} @{mangledName}({args})");
+            // For external("C") F16 return, bitcast i16 back to half
+            if (isCExtern && returnType == "half" && callReturnType == "i16")
+            {
+                string halfResult = NextTemp();
+                EmitLine(sb, $"  {halfResult} = bitcast i16 {result} to half");
+                return halfResult;
+            }
             return result;
         }
     }
@@ -591,9 +1020,79 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException("Cannot determine receiver type for method call");
         }
 
-        // Look up the method
+        // Look up the method — try full name, then generic base name
         string methodFullName = $"{receiverType.Name}.{member.PropertyName}";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+
+        // For generic type instances (e.g., List[Letter].count), try the generic base name
+        if (method == null && receiverType.Name.Contains('['))
+        {
+            string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
+            method = _registry.LookupRoutine($"{baseName}.{member.PropertyName}");
+        }
+
+        // Representable pattern: obj.Text() → Text.__create__(from: obj)
+        // When the method name matches a registered type and no direct method exists,
+        // route to TypeName.__create__(from: receiver).
+        if (arguments.Count == 0 && _registry.LookupType(member.PropertyName) != null)
+        {
+            string creatorName = $"{member.PropertyName}.__create__";
+            var argTypes2 = new List<TypeInfo> { receiverType };
+            RoutineInfo? creator = _registry.LookupRoutineOverload(creatorName, argTypes2);
+            if (creator != null)
+            {
+                // Emit as: TypeName.__create__(receiver)
+                string funcName = MangleFunctionName(creator);
+                GenerateFunctionDeclaration(creator);
+                string retType = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
+                string receiverLlvm = GetLLVMType(receiverType);
+                string result = NextTemp();
+                EmitLine(sb, $"  {result} = call {retType} @{funcName}({receiverLlvm} {receiver})");
+                return result;
+            }
+        }
+
+        // For zero-argument methods on entity/record types, if the method name matches a field,
+        // emit as a direct field access (common pattern: List[T].count() returns me.count)
+        // Also applies when method is a generic definition that can't be monomorphized.
+        if ((method == null || method.IsGenericDefinition) && arguments.Count == 0)
+        {
+            if (receiverType is EntityTypeInfo entity &&
+                entity.MemberVariables.Any(mv => mv.Name == member.PropertyName))
+            {
+                return EmitEntityMemberVariableRead(sb, receiver, entity, member.PropertyName);
+            }
+            if (receiverType is RecordTypeInfo record &&
+                record.MemberVariables.Any(mv => mv.Name == member.PropertyName))
+            {
+                return EmitRecordMemberVariableRead(sb, receiver, record, member.PropertyName);
+            }
+        }
+
+        // Inline List[T].__getitem__(index) → GEP into data array
+        if (member.PropertyName == "__getitem__" && arguments.Count == 1 &&
+            receiverType is EntityTypeInfo listEntity && listEntity.Name.StartsWith("List["))
+        {
+            string indexValue = EmitExpression(sb, arguments[0]);
+            // List layout: { ptr data, i64 count, i64 capacity } — field 0 is data pointer
+            // For entities, the receiver is already a pointer to the struct
+            string entityType = GetEntityTypeName(listEntity);
+            string dataPtr = NextTemp();
+            EmitLine(sb, $"  {dataPtr} = getelementptr {entityType}, ptr {receiver}, i32 0, i32 0");
+            string dataBase = NextTemp();
+            EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataPtr}");
+            // Get element type from the List's first member variable (data: Snatched[T])
+            // The element type is the type parameter of the List
+            TypeInfo? elemType = listEntity.MemberVariables.Count > 0
+                ? GetListElementType(listEntity)
+                : null;
+            string elemLlvm = elemType != null ? GetLLVMType(elemType) : "i32";
+            string elemPtr = NextTemp();
+            EmitLine(sb, $"  {elemPtr} = getelementptr {elemLlvm}, ptr {dataBase}, i64 {indexValue}");
+            string loaded = NextTemp();
+            EmitLine(sb, $"  {loaded} = load {elemLlvm}, ptr {elemPtr}");
+            return loaded;
+        }
 
         // Build argument list: receiver first, then explicit arguments
         var argValues = new List<string> { receiver };
@@ -612,10 +1111,35 @@ public partial class LLVMCodeGenerator
             argTypes.Add(GetLLVMType(argType));
         }
 
-        // Build the call
-        string mangledName = method != null
-            ? MangleFunctionName(method)
-            : $"{MangleTypeName(receiverType.Name)}_{member.PropertyName}";
+        // Build the call — for resolved generic types (e.g., List[Letter].add_last),
+        // use the resolved type name even if the method was found via the base type
+        string mangledName;
+        if (method != null && receiverType.IsGenericResolution &&
+            method.OwnerType != null && method.OwnerType.IsGenericDefinition)
+        {
+            mangledName = $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(method.Name)}";
+            // Record for monomorphization — will compile generic AST body with type substitutions
+            RecordMonomorphization(mangledName, method, receiverType);
+        }
+        else
+        {
+            mangledName = method != null
+                ? MangleFunctionName(method)
+                : $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(member.PropertyName)}";
+        }
+
+        // Ensure the method is declared (so the multi-pass stdlib loop can compile its body)
+        if (method != null)
+        {
+            GenerateFunctionDeclaration(method);
+        }
+        // For resolved generic methods, also emit a declaration with the resolved name
+        if (!_generatedFunctions.Contains(mangledName))
+        {
+            string retType = method?.ReturnType != null ? GetLLVMType(method.ReturnType) : "void";
+            EmitLine(_functionDeclarations, $"declare {retType} @{mangledName}({string.Join(", ", argTypes)})");
+            _generatedFunctions.Add(mangledName);
+        }
 
         string returnType = method?.ReturnType != null
             ? GetLLVMType(method.ReturnType)
@@ -649,6 +1173,33 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Generates code for compound assignment (e.g., x += 1).
+    /// Desugars to: x = x op value, then stores back and returns the result.
+    /// </summary>
+    private string EmitCompoundAssignment(StringBuilder sb, CompoundAssignmentExpression compound)
+    {
+        // Synthesize a BinaryExpression for the operation
+        var binaryExpr = new BinaryExpression(compound.Target, compound.Operator, compound.Value, compound.Location);
+        string result = EmitBinaryOp(sb, binaryExpr);
+
+        // Store the result back to the target
+        switch (compound.Target)
+        {
+            case IdentifierExpression id:
+                EmitVariableAssignment(sb, id.Name, result);
+                break;
+            case MemberExpression member:
+                EmitMemberVariableAssignment(sb, member, result);
+                break;
+            case IndexExpression index:
+                EmitIndexAssignment(sb, index, result);
+                break;
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Generates code for a binary operation.
     /// Only handles operators that are NOT desugared to method calls by the parser.
     /// Arithmetic/comparison/bitwise operators are desugared to __add__, __eq__, etc.
@@ -670,9 +1221,203 @@ public partial class LLVMCodeGenerator
             BinaryOperator.Obeys => EmitCompileTimeConstant("true"),
             BinaryOperator.NotObeys => EmitCompileTimeConstant("false"),
             BinaryOperator.NoneCoalesce => EmitNoneCoalesce(sb, binary),
-            _ => throw new NotImplementedException(
-                $"Binary operator '{binary.Operator}' should have been desugared to a method call")
+            // Arithmetic, comparison, bitwise operators — normally desugared to method
+            // calls by the semantic analyzer, but stdlib bodies are raw AST, so we
+            // handle them directly for primitive types.
+            _ => EmitPrimitiveBinaryOp(sb, binary)
         };
+    }
+
+    /// <summary>
+    /// Emits a primitive binary operation (arithmetic, comparison, bitwise, shift)
+    /// directly as LLVM instructions. Used for stdlib bodies where operator
+    /// desugaring to method calls hasn't been applied.
+    /// </summary>
+    private string EmitPrimitiveBinaryOp(StringBuilder sb, BinaryExpression binary)
+    {
+        // TODO: This is going to be stdlib operator overloading and thus does not need hardcoding
+        string left = EmitExpression(sb, binary.Left);
+        string right = EmitExpression(sb, binary.Right);
+        TypeInfo? leftType = GetExpressionType(binary.Left);
+        string llvmType = leftType != null ? GetLLVMType(leftType) : "i64";
+        string typeName = leftType?.Name ?? "";
+        bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+        bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
+        bool isSoftwareType = llvmType.StartsWith("%Record.") || llvmType.StartsWith("%Tuple.") || llvmType == "ptr";
+
+        // For comparison operators that return i1 (Bool)
+        string? cmpInstr = isSoftwareType ? null : binary.Operator switch
+        {
+            BinaryOperator.Equal when isFloat => "fcmp oeq",
+            BinaryOperator.Equal => "icmp eq",
+            BinaryOperator.NotEqual when isFloat => "fcmp une",
+            BinaryOperator.NotEqual => "icmp ne",
+            BinaryOperator.Less when isFloat => "fcmp olt",
+            BinaryOperator.Less when isUnsigned => "icmp ult",
+            BinaryOperator.Less => "icmp slt",
+            BinaryOperator.LessEqual when isFloat => "fcmp ole",
+            BinaryOperator.LessEqual when isUnsigned => "icmp ule",
+            BinaryOperator.LessEqual => "icmp sle",
+            BinaryOperator.Greater when isFloat => "fcmp ogt",
+            BinaryOperator.Greater when isUnsigned => "icmp ugt",
+            BinaryOperator.Greater => "icmp sgt",
+            BinaryOperator.GreaterEqual when isFloat => "fcmp oge",
+            BinaryOperator.GreaterEqual when isUnsigned => "icmp uge",
+            BinaryOperator.GreaterEqual => "icmp sge",
+            _ => null
+        };
+
+        if (cmpInstr != null)
+        {
+            string cmpResult = NextTemp();
+            EmitLine(sb, $"  {cmpResult} = {cmpInstr} {llvmType} {left}, {right}");
+            return cmpResult;
+        }
+
+        // Arithmetic and bitwise operators (skip for software-implemented types like D32, D64, D128)
+        string? arithInstr = isSoftwareType ? null : binary.Operator switch
+        {
+            BinaryOperator.Add when isFloat => "fadd",
+            BinaryOperator.Add => "add",
+            BinaryOperator.Subtract when isFloat => "fsub",
+            BinaryOperator.Subtract => "sub",
+            BinaryOperator.Multiply when isFloat => "fmul",
+            BinaryOperator.Multiply => "mul",
+            BinaryOperator.TrueDivide when isFloat => "fdiv",
+            BinaryOperator.FloorDivide when isUnsigned => "udiv",
+            BinaryOperator.FloorDivide => "sdiv",
+            BinaryOperator.Modulo when isFloat => "frem",
+            BinaryOperator.Modulo when isUnsigned => "urem",
+            BinaryOperator.Modulo => "srem",
+            BinaryOperator.AddWrap => "add",
+            BinaryOperator.SubtractWrap => "sub",
+            BinaryOperator.MultiplyWrap => "mul",
+            BinaryOperator.BitwiseAnd => "and",
+            BinaryOperator.BitwiseOr => "or",
+            BinaryOperator.BitwiseXor => "xor",
+            BinaryOperator.ArithmeticLeftShift => "shl",
+            BinaryOperator.ArithmeticRightShift when isUnsigned => "lshr",
+            BinaryOperator.ArithmeticRightShift => "ashr",
+            BinaryOperator.LogicalLeftShift => "shl",
+            BinaryOperator.LogicalRightShift => "lshr",
+            _ => null
+        };
+
+        if (arithInstr != null)
+        {
+            // Ensure right operand matches left operand's type width
+            TypeInfo? rightType = GetExpressionType(binary.Right);
+            string rightLlvmType = rightType != null ? GetLLVMType(rightType) : llvmType;
+            if (rightLlvmType != llvmType)
+            {
+                // Truncate or extend right operand to match left type
+                string cast = NextTemp();
+                int leftBits = GetTypeBitWidth(llvmType);
+                int rightBits = GetTypeBitWidth(rightLlvmType);
+                if (rightBits > leftBits)
+                    EmitLine(sb, $"  {cast} = trunc {rightLlvmType} {right} to {llvmType}");
+                else if (isUnsigned)
+                    EmitLine(sb, $"  {cast} = zext {rightLlvmType} {right} to {llvmType}");
+                else
+                    EmitLine(sb, $"  {cast} = sext {rightLlvmType} {right} to {llvmType}");
+                right = cast;
+            }
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = {arithInstr} {llvmType} {left}, {right}");
+            return result;
+        }
+
+        // Fall back to method call for types with software-implemented arithmetic (e.g., D32, D64, D128)
+        string? methodName = binary.Operator switch
+        {
+            BinaryOperator.Add => "__add__",
+            BinaryOperator.Subtract => "__sub__",
+            BinaryOperator.Multiply => "__mul__",
+            BinaryOperator.TrueDivide => "__truediv__",
+            BinaryOperator.FloorDivide => "__floordiv__",
+            BinaryOperator.Modulo => "__mod__",
+            BinaryOperator.Equal => "__eq__",
+            BinaryOperator.NotEqual => "__ne__",
+            BinaryOperator.Less => "__lt__",
+            BinaryOperator.LessEqual => "__le__",
+            BinaryOperator.Greater => "__gt__",
+            BinaryOperator.GreaterEqual => "__ge__",
+            _ => null
+        };
+        if (methodName != null && leftType != null)
+        {
+            string fullName = $"{leftType.Name}.{methodName}";
+            var method = _registry.LookupRoutine(fullName);
+            if (method != null)
+            {
+                string funcName = MangleFunctionName(method);
+                GenerateFunctionDeclaration(method);
+                string retType = method.ReturnType != null ? GetLLVMType(method.ReturnType) : llvmType;
+                string result = NextTemp();
+                EmitLine(sb, $"  {result} = call {retType} @{funcName}({llvmType} {left}, {llvmType} {right})");
+                return result;
+            }
+        }
+
+        throw new NotImplementedException(
+            $"Binary operator '{binary.Operator}' not supported for type '{typeName}' " +
+            $"(left={binary.Left.GetType().Name}, right={binary.Right.GetType().Name}, loc={binary.Location})");
+    }
+
+    /// <summary>
+    /// Emits a chained comparison (e.g., 0xC0u8 &lt;= b0 &lt;= 0xDFu8).
+    /// Evaluates middle operands once and ANDs all pairwise comparisons.
+    /// </summary>
+    private string EmitChainedComparison(StringBuilder sb, ChainedComparisonExpression chain)
+    {
+        // Evaluate all operands (middle ones evaluated only once)
+        var values = new List<string>();
+        foreach (var operand in chain.Operands)
+            values.Add(EmitExpression(sb, operand));
+
+        // Emit pairwise comparisons, AND results together
+        string result = "";
+        for (int i = 0; i < chain.Operators.Count; i++)
+        {
+            TypeInfo? leftType = GetExpressionType(chain.Operands[i]);
+            string llvmType = leftType != null ? GetLLVMType(leftType) : "i64";
+            string typeName = leftType?.Name ?? "";
+            bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+            bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
+
+            string cmpInstr = chain.Operators[i] switch
+            {
+                BinaryOperator.Less when isFloat => "fcmp olt",
+                BinaryOperator.Less when isUnsigned => "icmp ult",
+                BinaryOperator.Less => "icmp slt",
+                BinaryOperator.LessEqual when isFloat => "fcmp ole",
+                BinaryOperator.LessEqual when isUnsigned => "icmp ule",
+                BinaryOperator.LessEqual => "icmp sle",
+                BinaryOperator.Greater when isFloat => "fcmp ogt",
+                BinaryOperator.Greater when isUnsigned => "icmp ugt",
+                BinaryOperator.Greater => "icmp sgt",
+                BinaryOperator.GreaterEqual when isFloat => "fcmp oge",
+                BinaryOperator.GreaterEqual when isUnsigned => "icmp uge",
+                BinaryOperator.GreaterEqual => "icmp sge",
+                BinaryOperator.Equal => isFloat ? "fcmp oeq" : "icmp eq",
+                BinaryOperator.NotEqual => isFloat ? "fcmp une" : "icmp ne",
+                _ => throw new InvalidOperationException($"Unsupported chained comparison operator: {chain.Operators[i]}")
+            };
+
+            string cmp = NextTemp();
+            EmitLine(sb, $"  {cmp} = {cmpInstr} {llvmType} {values[i]}, {values[i + 1]}");
+
+            if (result == "")
+                result = cmp;
+            else
+            {
+                string andResult = NextTemp();
+                EmitLine(sb, $"  {andResult} = and i1 {result}, {cmp}");
+                result = andResult;
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -854,7 +1599,7 @@ public partial class LLVMCodeGenerator
 
         string mangledName = method != null
             ? MangleFunctionName(method)
-            : $"{MangleTypeName(collectionType.Name)}_{methodName}";
+            : $"{MangleTypeName(collectionType.Name)}_{SanitizeLLVMName(methodName)}";
 
         string result = NextTemp();
         string args = BuildCallArgs(argTypes, argValues);
@@ -923,7 +1668,7 @@ public partial class LLVMCodeGenerator
 
         string mangledName = method != null
             ? MangleFunctionName(method)
-            : $"{MangleTypeName(operandType.Name)}_{methodName}";
+            : $"{MangleTypeName(operandType.Name)}_{SanitizeLLVMName(methodName)}";
 
         string returnType = method?.ReturnType != null
             ? GetLLVMType(method.ReturnType)
@@ -945,6 +1690,154 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic)
     {
+        // Check for generic type constructor call: TypeName[T](args)
+        // e.g., Snatched[U8](ptr_value) → just pass through the argument
+        if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
+        {
+            TypeInfo? calledType = _registry.LookupType(id.Name);
+            if (calledType != null)
+            {
+                // Resolve type arguments (apply type substitutions for monomorphization)
+                var resolvedTypeArgs = new List<TypeInfo>();
+                foreach (var ta in generic.TypeArguments)
+                {
+                    // Check type substitutions first (e.g., T → Letter during monomorphization)
+                    TypeInfo? resolved = null;
+                    if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ta.Name, out var sub))
+                        resolved = sub;
+                    resolved ??= _registry.LookupType(ta.Name);
+                    if (resolved != null) resolvedTypeArgs.Add(resolved);
+                }
+
+                // Resolve the full generic type (e.g., List + [Letter] → List[Letter])
+                TypeInfo resolvedFullType = calledType;
+                if (calledType.IsGenericDefinition && resolvedTypeArgs.Count == calledType.GenericParameters!.Count)
+                    resolvedFullType = _registry.GetOrCreateResolution(calledType, resolvedTypeArgs);
+
+                // Multi-arg named construction: Entity[T](field1: val1, field2: val2, ...)
+                // e.g., List[T](data: ..., count: ..., capacity: ...) during monomorphization
+                if (generic.Arguments.Count > 1 && resolvedFullType is EntityTypeInfo resolvedEntity)
+                {
+                    return EmitEntityConstruction(sb, resolvedEntity, generic.Arguments.Cast<Expression>().ToList());
+                }
+
+                // For @llvm types (like Snatched[T] → ptr), the constructor is identity
+                if (generic.Arguments.Count == 1)
+                {
+                    // Use resolved type for the target LLVM type
+                    string argValue = EmitExpression(sb, generic.Arguments[0]);
+                    string targetType = GetLLVMType(resolvedFullType);
+                    TypeInfo? argType = GetExpressionType(generic.Arguments[0]);
+                    string argLlvmType = argType != null ? GetLLVMType(argType) : targetType;
+
+                    // If types match, identity. Otherwise, cast.
+                    if (argLlvmType == targetType)
+                        return argValue;
+
+                    // inttoptr / ptrtoint / bitcast as needed
+                    string cast = NextTemp();
+                    if (targetType == "ptr" && argLlvmType != "ptr")
+                        EmitLine(sb, $"  {cast} = inttoptr {argLlvmType} {argValue} to ptr");
+                    else if (targetType != "ptr" && argLlvmType == "ptr")
+                        EmitLine(sb, $"  {cast} = ptrtoint ptr {argValue} to {targetType}");
+                    else
+                        EmitLine(sb, $"  {cast} = bitcast {argLlvmType} {argValue} to {targetType}");
+                    return cast;
+                }
+
+                // Zero-arg constructor: look up __create__() or return zeroinitializer
+                if (generic.Arguments.Count == 0)
+                {
+                    // Use the already-resolved type from above
+                    TypeInfo resolvedType = resolvedFullType;
+
+                    // Try to find __create__() — first on resolved type, then on generic definition
+                    string createName = $"{resolvedType.Name}.__create__";
+                    RoutineInfo? creator = _registry.LookupRoutineOverload(createName, new List<TypeInfo>());
+                    // If we got a non-zero-arg overload, it's not what we want for zero-arg construction
+                    if (creator != null && creator.Parameters.Count > 0)
+                        creator = null;
+                    // Fall back to generic definition's __create__
+                    if (creator == null)
+                    {
+                        string genCreateName = $"{calledType.Name}.__create__";
+                        creator = _registry.LookupRoutineOverload(genCreateName, new List<TypeInfo>());
+                        if (creator != null && creator.Parameters.Count > 0)
+                            creator = null;
+                    }
+                    if (creator != null)
+                    {
+                        // For resolved generic types, use the resolved mangled name
+                        string funcName;
+                        if (resolvedType.IsGenericResolution)
+                        {
+                            funcName = $"{MangleTypeName(resolvedType.Name)}___create__";
+                            // Record for monomorphization
+                            RecordMonomorphization(funcName, creator, resolvedType);
+                        }
+                        else
+                        {
+                            funcName = MangleFunctionName(creator);
+                        }
+                        // Ensure declared
+                        string retType = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
+                        if (!_generatedFunctions.Contains(funcName))
+                        {
+                            EmitLine(_functionDeclarations, $"declare {retType} @{funcName}()");
+                            _generatedFunctions.Add(funcName);
+                        }
+                        string result = NextTemp();
+                        EmitLine(sb, $"  {result} = call {retType} @{funcName}()");
+                        return result;
+                    }
+                    return "zeroinitializer";
+                }
+            }
+        }
+
+        // Compiler intrinsics for generic standalone functions
+        string baseName = generic.Object is IdentifierExpression baseId ? baseId.Name : generic.MethodName;
+        string typeArgName = generic.TypeArguments.Count > 0 ? generic.TypeArguments[0].Name : "";
+        // Resolve type arg — check type substitutions first (for monomorphization), then registry
+        TypeInfo? typeArg = null;
+        if (typeArgName.Length > 0)
+        {
+            if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(typeArgName, out var sub))
+                typeArg = sub;
+            typeArg ??= _registry.LookupType(typeArgName);
+        }
+
+        // read_as![T](addr) → inttoptr addr to ptr, load T
+        if (baseName == "read_as" && generic.Arguments.Count == 1 && typeArg != null)
+        {
+            string addr = EmitExpression(sb, generic.Arguments[0]);
+            string elemType = GetLLVMType(typeArg);
+            TypeInfo? addrType = GetExpressionType(generic.Arguments[0]);
+            string addrLlvm = addrType != null ? GetLLVMType(addrType) : "i64";
+            string ptr;
+            if (addrLlvm == "ptr")
+                ptr = addr;
+            else
+            {
+                ptr = NextTemp();
+                EmitLine(sb, $"  {ptr} = inttoptr {addrLlvm} {addr} to ptr");
+            }
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = load {elemType}, ptr {ptr}");
+            return result;
+        }
+
+        // snatched_none[T]() → null pointer
+        if (baseName == "snatched_none" && generic.Arguments.Count == 0)
+            return "null";
+
+        // data_size[T]() → sizeof(T) as i64
+        if (baseName == "data_size" && generic.Arguments.Count == 0 && typeArg != null)
+        {
+            int bytes = GetTypeSize(typeArg);
+            return Math.Max(bytes, 1).ToString();
+        }
+
         // Resolve the receiver type and look up the method
         TypeInfo? receiverType = GetExpressionType(generic.Object);
 
@@ -1060,9 +1953,11 @@ public partial class LLVMCodeGenerator
                     string paramName = method.GenericParameters[i];
                     substituted = substituted.Replace($"{{{paramName}}}", llvmTypeArgs[i]);
 
-                    // {sizeof T} → byte size
-                    substituted = substituted.Replace($"{{sizeof {paramName}}}",
-                        (GetTypeBitWidth(llvmTypeArgs[i]) / 8).ToString());
+                    // {sizeof T} → byte size (only compute when pattern present)
+                    string sizeofPattern = $"{{sizeof {paramName}}}";
+                    if (substituted.Contains(sizeofPattern))
+                        substituted = substituted.Replace(sizeofPattern,
+                            (GetTypeBitWidth(llvmTypeArgs[i]) / 8).ToString());
                 }
             }
 
@@ -1118,8 +2013,8 @@ public partial class LLVMCodeGenerator
         string mangledName = method != null
             ? MangleFunctionName(method)
             : receiverType != null
-                ? $"{MangleTypeName(receiverType.Name)}_{generic.MethodName}"
-                : generic.MethodName;
+                ? $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(generic.MethodName)}"
+                : SanitizeLLVMName(generic.MethodName);
 
         string returnType = method?.ReturnType != null
             ? GetLLVMType(method.ReturnType)
@@ -1146,21 +2041,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetLlvmIrName(RoutineInfo routine)
     {
-        foreach (var annotation in routine.Annotations)
-        {
-            if (annotation.StartsWith("llvm_ir("))
-            {
-                // Extract: llvm_ir("name") → name
-                int start = annotation.IndexOf('"') + 1;
-                int end = annotation.LastIndexOf('"');
-                if (start > 0 && end > start)
-                {
-                    return annotation[start..end];
-                }
-            }
-        }
-
-        return routine.Name;
+        return routine.LlvmIrTemplate ?? routine.Name;
     }
 
     /// <summary>
@@ -1168,10 +2049,34 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string ResolveTypeExpressionToLLVM(TypeExpression typeExpr)
     {
+        // Apply type substitutions first (e.g., T → Letter during monomorphization)
+        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(typeExpr.Name, out var sub))
+        {
+            return GetLLVMType(sub);
+        }
+
         // Look up the type in the registry
         TypeInfo? type = _registry.LookupType(typeExpr.Name);
         if (type != null)
         {
+            // If this is a generic definition with generic arguments, resolve them
+            if (type.IsGenericDefinition && typeExpr.GenericArguments is { Count: > 0 })
+            {
+                var resolvedArgs = new List<TypeInfo>();
+                foreach (var ga in typeExpr.GenericArguments)
+                {
+                    TypeInfo? resolved = null;
+                    if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ga.Name, out var gaSub))
+                        resolved = gaSub;
+                    resolved ??= _registry.LookupType(ga.Name);
+                    if (resolved != null) resolvedArgs.Add(resolved);
+                }
+                if (resolvedArgs.Count == type.GenericParameters!.Count)
+                {
+                    var resolvedType = _registry.GetOrCreateResolution(type, resolvedArgs);
+                    return GetLLVMType(resolvedType);
+                }
+            }
             return GetLLVMType(type);
         }
 
@@ -1184,6 +2089,33 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? GetGenericMethodCallReturnType(GenericMethodCallExpression generic)
     {
+        // Check for generic type constructor call: TypeName[T](args)
+        // Parser produces GenericMethodCallExpression where Object and MethodName
+        // are both the type name (e.g., Snatched[U8](x) → Object=Snatched, MethodName=Snatched)
+        if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
+        {
+            TypeInfo? calledType = _registry.LookupType(id.Name);
+            if (calledType != null)
+            {
+                // Resolve generic type arguments to get the concrete type (e.g., List[Letter])
+                if (calledType.IsGenericDefinition && generic.TypeArguments.Count > 0)
+                {
+                    var typeArgs = new List<TypeInfo>();
+                    foreach (var ta in generic.TypeArguments)
+                    {
+                        TypeInfo? resolved = null;
+                        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ta.Name, out var sub))
+                            resolved = sub;
+                        resolved ??= _registry.LookupType(ta.Name);
+                        if (resolved != null) typeArgs.Add(resolved);
+                    }
+                    if (typeArgs.Count == calledType.GenericParameters!.Count)
+                        calledType = _registry.GetOrCreateResolution(calledType, typeArgs);
+                }
+                return calledType;
+            }
+        }
+
         TypeInfo? receiverType = GetExpressionType(generic.Object);
 
         string methodFullName = receiverType != null
@@ -1193,7 +2125,29 @@ public partial class LLVMCodeGenerator
         RoutineInfo? method = _registry.LookupRoutine(methodFullName)
                               ?? _registry.LookupRoutine(generic.MethodName);
 
-        return method?.ReturnType;
+        if (method == null) return null;
+
+        // Resolve generic return type: if return type is a generic parameter (e.g., To, T),
+        // substitute with the actual type argument from the call
+        TypeInfo? returnType = method.ReturnType;
+        if (returnType != null && method.GenericParameters is { Count: > 0 })
+        {
+            for (int i = 0; i < method.GenericParameters.Count; i++)
+            {
+                if (returnType.Name == method.GenericParameters[i] && i < generic.TypeArguments.Count)
+                {
+                    // Resolve the type argument (apply substitutions if in monomorphization)
+                    TypeInfo? resolved = null;
+                    if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(generic.TypeArguments[i].Name, out var sub))
+                        resolved = sub;
+                    resolved ??= _registry.LookupType(generic.TypeArguments[i].Name);
+                    if (resolved != null) returnType = resolved;
+                    break;
+                }
+            }
+        }
+
+        return returnType;
     }
 
     #endregion
@@ -1216,12 +2170,44 @@ public partial class LLVMCodeGenerator
             IdentifierExpression id => _localVariables.TryGetValue(id.Name, out var varType) ? varType : _registry.LookupVariable(id.Name)?.Type,
             MemberExpression member => GetMemberType(member),
             CreatorExpression ctor => _registry.LookupType(ctor.TypeName),
-            BinaryExpression binary => GetExpressionType(binary.Left), // Use left operand type
+            BinaryExpression binary => GetBinaryExpressionType(binary),
+            ChainedComparisonExpression => _registry.LookupType("Bool"), // Comparisons return Bool
             UnaryExpression unary => GetExpressionType(unary.Operand),
             CallExpression call => GetCallReturnType(call),
             GenericMethodCallExpression generic => GetGenericMethodCallReturnType(generic),
+            IndexExpression index => GetIndexReturnType(index),
+            NamedArgumentExpression named => GetExpressionType(named.Value),
+            ConditionalExpression cond => GetExpressionType(cond.TrueExpression),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Gets the return type of an index expression by looking up __getitem__ on the target type.
+    /// </summary>
+    private TypeInfo? GetBinaryExpressionType(BinaryExpression binary)
+    {
+        return binary.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual
+            or BinaryOperator.Less or BinaryOperator.LessEqual
+            or BinaryOperator.Greater or BinaryOperator.GreaterEqual
+            or BinaryOperator.And or BinaryOperator.Or
+            or BinaryOperator.Identical or BinaryOperator.NotIdentical
+            or BinaryOperator.In or BinaryOperator.NotIn
+            ? _registry.LookupType("Bool")
+            : GetExpressionType(binary.Left);
+    }
+
+    /// <summary>
+    /// Gets the return type of an index expression by looking up __getitem__ on the target type.
+    /// </summary>
+    private TypeInfo? GetIndexReturnType(IndexExpression index)
+    {
+        TypeInfo? targetType = GetExpressionType(index.Object);
+        if (targetType == null) return null;
+
+        string methodFullName = $"{targetType.Name}.__getitem__";
+        RoutineInfo? getItem = _registry.LookupRoutine(methodFullName);
+        return getItem?.ReturnType;
     }
 
     /// <summary>
@@ -1229,15 +2215,82 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? GetCallReturnType(CallExpression call)
     {
-        string funcName = call.Callee switch
+        switch (call.Callee)
         {
-            IdentifierExpression id => id.Name,
-            MemberExpression member => member.PropertyName,
-            _ => null
-        } ?? string.Empty;
-
-        var routine = _registry.LookupRoutine(funcName);
-        return routine?.ReturnType;
+            case MemberExpression member:
+            {
+                // Qualified method call: resolve receiver type, look up Type.method
+                TypeInfo? receiverType = GetExpressionType(member.Object);
+                if (receiverType != null)
+                {
+                    string methodFullName = $"{receiverType.Name}.{member.PropertyName}";
+                    var method = _registry.LookupRoutine(methodFullName);
+                    // For generic resolutions (e.g., Snatched[Letter].offset), try base name
+                    if (method == null && receiverType.Name.Contains('['))
+                    {
+                        string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
+                        method = _registry.LookupRoutine($"{baseName}.{member.PropertyName}");
+                    }
+                    if (method?.ReturnType != null)
+                    {
+                        // Substitute generic type params in return type (e.g., T → Letter)
+                        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(method.ReturnType.Name, out var sub))
+                            return sub;
+                        // For parameterized return types (e.g., Snatched[T] → Snatched[Letter]),
+                        // substitute type arguments within the generic resolution
+                        if (_typeSubstitutions != null && method.ReturnType.IsGenericResolution
+                            && method.ReturnType.TypeArguments != null)
+                        {
+                            var substitutedArgs = new List<TypeInfo>();
+                            bool anySubstituted = false;
+                            foreach (var typeArg in method.ReturnType.TypeArguments)
+                            {
+                                if (_typeSubstitutions.TryGetValue(typeArg.Name, out var resolvedArg))
+                                {
+                                    substitutedArgs.Add(resolvedArg);
+                                    anySubstituted = true;
+                                }
+                                else
+                                {
+                                    substitutedArgs.Add(typeArg);
+                                }
+                            }
+                            if (anySubstituted)
+                            {
+                                string baseName = method.ReturnType.Name;
+                                int bracketIdx = baseName.IndexOf('[');
+                                if (bracketIdx > 0) baseName = baseName[..bracketIdx];
+                                var genericDef = _registry.LookupType(baseName);
+                                if (genericDef != null)
+                                    return _registry.GetOrCreateResolution(genericDef, substitutedArgs);
+                            }
+                        }
+                        return method.ReturnType;
+                    }
+                }
+                // Fall back to unqualified lookup
+                var fallback = _registry.LookupRoutine(member.PropertyName);
+                return fallback?.ReturnType;
+            }
+            case IdentifierExpression id:
+            {
+                // Try direct routine lookup first
+                var routine = _registry.LookupRoutine(id.Name)
+                              ?? _registry.LookupRoutineByName(id.Name);
+                if (routine?.ReturnType != null)
+                    return routine.ReturnType;
+                // If name matches a type, it's a creator call — returns that type
+                TypeInfo? calledType = _registry.LookupType(id.Name);
+                if (calledType != null)
+                {
+                    var creator = _registry.LookupRoutine($"{id.Name}.__create__");
+                    return creator?.ReturnType ?? calledType;
+                }
+                return null;
+            }
+            default:
+                return null;
+        }
     }
 
     /// <summary>
@@ -1280,6 +2333,12 @@ public partial class LLVMCodeGenerator
         TypeInfo? targetType = GetExpressionType(member.Object);
         if (targetType == null) return null;
 
+        // For @llvm("ptr") types (Snatched[T], etc.), .address returns UAddr
+        if (member.PropertyName == "address" && targetType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" })
+        {
+            return _registry.LookupType("UAddr");
+        }
+
         MemberVariableInfo? memberVariable = targetType switch
         {
             EntityTypeInfo e => e.LookupMemberVariable(member.PropertyName),
@@ -1296,6 +2355,19 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Gets the bit width of an LLVM type.
     /// </summary>
+    /// <summary>
+    /// Gets the element type from a List[T] entity by parsing the type parameter.
+    /// </summary>
+    private TypeInfo? GetListElementType(EntityTypeInfo listEntity)
+    {
+        string name = listEntity.Name;
+        int bracketStart = name.IndexOf('[');
+        int bracketEnd = name.LastIndexOf(']');
+        if (bracketStart < 0 || bracketEnd <= bracketStart) return null;
+        string elemTypeName = name[(bracketStart + 1)..bracketEnd];
+        return _registry.LookupType(elemTypeName);
+    }
+
     private int GetTypeBitWidth(string llvmType)
     {
         return llvmType switch
@@ -1359,12 +2431,81 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitIndexAccess(StringBuilder sb, IndexExpression index)
     {
-        string target = EmitExpression(sb, index.Object);
-        string indexValue = EmitExpression(sb, index.Index);
-
-        // Resolve element type from container's generic type arguments
+        // Resolve target type to decide dispatch strategy
         TypeInfo? targetType = GetExpressionType(index.Object);
-        string elemType = targetType switch
+
+        // If the type has a __getitem__ method, dispatch to it
+        if (targetType != null)
+        {
+            string methodFullName = $"{targetType.Name}.__getitem__";
+            RoutineInfo? getItem = _registry.LookupRoutine(methodFullName);
+            if (getItem != null && !getItem.IsGenericDefinition)
+            {
+                // Emit as method call: obj.__getitem__(index)
+                var member = new MemberExpression(
+                    Object: index.Object,
+                    PropertyName: "__getitem__",
+                    Location: index.Location);
+                return EmitMethodCall(sb, member, new List<Expression> { index.Index });
+            }
+
+            // For entity types with a list-like first field (e.g., Text has letters: List[Letter]),
+            // inline __getitem__ as: load list ptr → GEP data → load element
+            if (getItem != null && targetType is EntityTypeInfo entity && entity.MemberVariables.Count > 0)
+            {
+                var firstField = entity.MemberVariables[0];
+                if (firstField.Type is EntityTypeInfo listType && listType.Name.StartsWith("List["))
+                {
+                    string target = EmitExpression(sb, index.Object);
+                    string indexValue = EmitExpression(sb, index.Index);
+
+                    // GEP to get the list pointer field
+                    string entityTypeName = GetEntityTypeName(entity);
+                    string listFieldPtr = NextTemp();
+                    EmitLine(sb, $"  {listFieldPtr} = getelementptr {entityTypeName}, ptr {target}, i32 0, i32 0");
+                    string listPtr = NextTemp();
+                    EmitLine(sb, $"  {listPtr} = load ptr, ptr {listFieldPtr}");
+
+                    // GEP into list's data (field 0 of list entity)
+                    string listEntityType = GetEntityTypeName(listType);
+                    string dataFieldPtr = NextTemp();
+                    EmitLine(sb, $"  {dataFieldPtr} = getelementptr {listEntityType}, ptr {listPtr}, i32 0, i32 0");
+                    string dataBase = NextTemp();
+                    EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataFieldPtr}");
+
+                    // Load the element
+                    TypeInfo? elemType = GetListElementType(listType);
+                    string elemLlvm = elemType != null ? GetLLVMType(elemType) : "i32";
+                    string elemPtr = NextTemp();
+                    EmitLine(sb, $"  {elemPtr} = getelementptr {elemLlvm}, ptr {dataBase}, i64 {indexValue}");
+                    string loaded = NextTemp();
+                    EmitLine(sb, $"  {loaded} = load {elemLlvm}, ptr {elemPtr}");
+                    return loaded;
+                }
+            }
+        }
+
+        // For CStr indexing: pointer + offset → load byte
+        if (targetType is RecordTypeInfo { Name: "CStr" })
+        {
+            string cstrVal = EmitExpression(sb, index.Object);
+            string idxVal = EmitExpression(sb, index.Index);
+            string ptr = NextTemp();
+            EmitLine(sb, $"  {ptr} = extractvalue %Record.CStr {cstrVal}, 0");
+            string addr = NextTemp();
+            EmitLine(sb, $"  {addr} = add i64 {ptr}, {idxVal}");
+            string realPtr = NextTemp();
+            EmitLine(sb, $"  {realPtr} = inttoptr i64 {addr} to ptr");
+            string loaded = NextTemp();
+            EmitLine(sb, $"  {loaded} = load i8, ptr {realPtr}");
+            return loaded;
+        }
+
+        // Fallback: raw GEP + load for pointer/contiguous-memory types
+        string fallbackTarget = EmitExpression(sb, index.Object);
+        string fallbackIndex = EmitExpression(sb, index.Index);
+
+        string fallbackElemType = targetType switch
         {
             RecordTypeInfo r when r.TypeArguments.Count > 0 => GetLLVMType(r.TypeArguments[0]),
             EntityTypeInfo e when e.TypeArguments.Count > 0 => GetLLVMType(e.TypeArguments[0]),
@@ -1372,12 +2513,12 @@ public partial class LLVMCodeGenerator
                 $"Cannot determine element type for indexing on type: {targetType?.Name}")
         };
 
-        string elemPtr = NextTemp();
-        string result = NextTemp();
-        EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {indexValue}");
-        EmitLine(sb, $"  {result} = load {elemType}, ptr {elemPtr}");
+        string fallbackElemPtr = NextTemp();
+        string fallbackResult = NextTemp();
+        EmitLine(sb, $"  {fallbackElemPtr} = getelementptr {fallbackElemType}, ptr {fallbackTarget}, i64 {fallbackIndex}");
+        EmitLine(sb, $"  {fallbackResult} = load {fallbackElemType}, ptr {fallbackElemPtr}");
 
-        return result;
+        return fallbackResult;
     }
 
     /// <summary>
@@ -1840,6 +2981,10 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? GetMemberTypeFromOwner(TypeInfo? ownerType, string memberName)
     {
+        // Snatched[T].address → UAddr
+        if (ownerType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" } && memberName == "address")
+            return _registry.LookupType("UAddr");
+
         IReadOnlyList<MemberVariableInfo>? members = ownerType switch
         {
             EntityTypeInfo entity => entity.MemberVariables,
@@ -1975,6 +3120,7 @@ public partial class LLVMCodeGenerator
         // If format spec is provided, call rf_format(value, spec_ptr) runtime function
         if (formatSpec != null)
         {
+            // TODO: No hardcoding allowed.
             if (_declaredNativeFunctions.Add("rf_format"))
             {
                 EmitLine(_functionDeclarations, "declare ptr @rf_format(i64, ptr)");
@@ -2019,8 +3165,9 @@ public partial class LLVMCodeGenerator
         }
 
         // Default: call Text.__create__(from: value)
-        string createName = "Text.__create__";
-        RoutineInfo? createMethod = _registry.LookupRoutine(createName);
+        RoutineInfo? createMethod = type != null
+            ? _registry.LookupRoutineOverload("Text.__create__", [type])
+            : _registry.LookupRoutine("Text.__create__");
 
         string llvmArgType = type != null ? GetLLVMType(type) : "i64";
         string mangledName = createMethod != null

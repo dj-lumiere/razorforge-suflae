@@ -40,7 +40,7 @@ record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible
 # Creators
 # ============================================================================
 
-routine ByteSize.__create__(bytes: U64)
+routine ByteSize.__create__(bytes: U64) -> ByteSize
   me.value = bytes
   return
 

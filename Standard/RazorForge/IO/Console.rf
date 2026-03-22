@@ -4,40 +4,26 @@
 # - alert() for stderr (with sep/end parameters)
 # - get_*() for stdin (Text by default, Bytes opt-in)
 
-module IO
-
-import Text.Text
+module IO/Console
 
 # ============================================================================
 # Output: show() - Standard Output (stdout)
 # ============================================================================
 # Signature (when variadic is supported):
-#   routine show(value: Representable, sep: Text = " ", end: Text = "\n")           # Static dispatch
-#   routine show(values...: @erased Representable, sep: Text = " ", end: Text = "\n") # Dynamic dispatch
+#   routine show(value...: Representable, sep: Text = " ", end: Text = "\n")           # Automatic dispatch
 
-# show for Text
-routine Console.show(value: Text, end: Text = "\n")
-  var bytes_value: Bytes = value.to_utf8_bytes()
-  rf_console_print(bytes_value.ptr, bytes_value.count())
-  if end.count() > 0u64
-    var end_bytes = end.to_utf8_bytes()
-    rf_console_print(end_bytes.ptr, end_bytes.count())
+routine show(value: Text, end: Text = "\n")
+  var value_cstr = CStr(from: value)
+  rf_console_print(value_cstr.ptr, value_cstr.count())
+  var end_cstr = CStr(from: end)
+  rf_console_print(end_cstr.ptr, end_cstr.count())
   return
 
-# show for Bytes (writes raw bytes directly)
-routine Console.show(value: Bytes, end: Text = "\n")
-  rf_console_print(value.ptr, value.count())
-  if end.count() > 0u64
-    var end_bytes = end.to_utf8_bytes()
-    rf_console_print(end_bytes.ptr, end_bytes.count())
-  return
-
-# Generic show for any type that implements Representable
-# Converts to Text via Text(value), then to Bytes (UTF-8) for C interop
-routine Console.show[T](value: T, end: Text = "\n")
-needs T obeys Representable
-  var text_value: Text = Text(value)
-  Console.show(text_value, end: end)
+routine show(value: Bytes, end: Text = "\n")
+  var value_cstr = CStr(from: value)
+  rf_console_print(value_cstr.ptr, value_cstr.count())
+  var end_cstr = CStr(from: end)
+  rf_console_print(end_cstr.ptr, end_cstr.count())
   return
 
 # ============================================================================
@@ -45,7 +31,7 @@ needs T obeys Representable
 # ============================================================================
 
 # alert for Text
-routine Console.alert(value: Text, end: Text = "\n")
+routine alert(value: Text, end: Text = "\n")
   var bytes_value: Bytes = value.to_utf8_bytes()
   rf_console_alert(bytes_value.ptr, bytes_value.count())
   if end.count() > 0u64
@@ -54,7 +40,7 @@ routine Console.alert(value: Text, end: Text = "\n")
   return
 
 # alert for Bytes (writes raw bytes directly)
-routine Console.alert(value: Bytes, end: Text = "\n")
+routine alert(value: Bytes, end: Text = "\n")
   rf_console_alert(value.ptr, value.count())
   if end.count() > 0u64
     var end_bytes = end.to_utf8_bytes()
@@ -62,10 +48,10 @@ routine Console.alert(value: Bytes, end: Text = "\n")
   return
 
 # Generic alert for any type that implements Representable
-routine Console.alert[T](value: T, end: Text = "\n")
+routine alert[T](value: T, end: Text = "\n")
 needs T obeys Representable
   var text_value: Text = Text(value)
-  Console.alert(text_value, end: end)
+  alert(text_value, end: end)
   return
 
 # ============================================================================
@@ -73,52 +59,52 @@ needs T obeys Representable
 # ============================================================================
 
 # Read text until newline (single line)
-routine Console.get_line() -> Text
+routine get_line() -> Text
   var ptr = rf_console_get_line()
   var bytes = Bytes(ptr: ptr)
   return bytes.to_text()
 
 # Read text until whitespace (single word)
-routine Console.get_word() -> Text
+routine get_word() -> Text
   var ptr = rf_console_get_word()
   var bytes = Bytes(ptr: ptr)
   return bytes.to_text()
 
 # Read all text until EOF
-routine Console.get_all() -> Text
+routine get_all() -> Text
   var ptr = rf_console_get_all()
   var bytes = Bytes(ptr: ptr)
   return bytes.to_text()
 
 # Read exactly n codepoints from input
-routine Console.get_letters(count: UAddr) -> Text
+routine get_letters(count: UAddr) -> Text
   var ptr = rf_console_get_letters(count)
   var bytes = Bytes(ptr: ptr)
   return bytes.to_text()
 
 # Read all lines separated by newline
-routine Console.get_lines() -> List[Text]
-  var all = Console.get_all()
+routine get_lines() -> List[Text]
+  var all = get_all()
   # TODO: Implement split by newline
-  throw NotImplementedError("Console.get_lines")
+  throw NotImplementedError("get_lines")
 
 # Read all words separated by whitespace
-routine Console.get_words() -> List[Text]
-  var all = Console.get_all()
+routine get_words() -> List[Text]
+  var all = get_all()
   # TODO: Implement split by whitespace
-  throw NotImplementedError("Console.get_words")
+  throw NotImplementedError("get_words")
 
 # ============================================================================
 # Input: Bytes functions (opt-in)
 # ============================================================================
 
 # Read all remaining input as raw bytes
-routine Console.get_raw() -> Bytes
+routine get_raw() -> Bytes
   var ptr = rf_console_get_all()
   return Bytes(ptr: ptr)
 
 # Read up to n bytes
-routine Console.get_bytes(count: UAddr) -> Bytes
+routine get_bytes(count: UAddr) -> Bytes
   var ptr = rf_console_get_bytes(count)
   return Bytes(ptr: ptr)
 
@@ -126,10 +112,10 @@ routine Console.get_bytes(count: UAddr) -> Bytes
 # Utility Functions
 # ============================================================================
 
-routine Console.flush()
+routine flush()
   rf_console_flush()
   return
 
-routine Console.clear()
+routine clear()
   rf_console_clear()
   return

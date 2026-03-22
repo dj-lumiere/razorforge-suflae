@@ -1027,7 +1027,7 @@ public record FlagsTestExpression(
 /// The body of each clause must evaluate to a value of the same type.
 /// </remarks>
 public record WhenExpression(
-    Expression Expression,
+    Expression? Expression,
     List<WhenClause> Clauses,
     SourceLocation Location) : Expression(Location: Location)
 {

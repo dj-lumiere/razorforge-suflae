@@ -296,34 +296,119 @@ public partial class LLVMCodeGenerator
         var paramTypes = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        if (routine.OwnerType != null)
+        // Skip 'me' for __create__ routines (static factories)
+        bool isCreator = routine.Name.Contains("__create__");
+        if (routine.OwnerType != null && !isCreator)
         {
             string meType = GetParameterLLVMType(routine.OwnerType);
             paramTypes.Add(meType);
         }
 
         // Add explicit parameters
-        paramTypes.AddRange(routine.Parameters.Select(param => GetParameterLLVMType(param.Type)));
+        // For external("C") functions, F16 (half) must be passed as i16 (C ABI uses integer register)
+        bool isCExtern = routine.CallingConvention == "C";
+        paramTypes.AddRange(routine.Parameters.Select(param =>
+        {
+            string t = GetParameterLLVMType(param.Type);
+            return isCExtern && t == "half" ? "i16" : t;
+        }));
 
         // Get return type
         string returnType = routine.ReturnType != null
             ? GetLLVMType(routine.ReturnType)
             : "void";
+        if (isCExtern && returnType == "half") returnType = "i16";
 
-        // Build declaration
-        string parameters = string.Join(", ", paramTypes);
-        EmitLine(_functionDeclarations, $"declare {returnType} @{funcName}({parameters})");
+        // On Windows x64 MSVC ABI, C structs > 8 bytes are returned via hidden sret pointer.
+        // LLVM IR passes {i64, i64} in registers (RAX:RDX) but C expects sret, causing ABI mismatch.
+        // Detect this case and emit the declaration with sret convention.
+        bool needsSret = isCExtern && NeedsCExternSret(routine);
+        if (needsSret)
+        {
+            // Change declaration: void @func(ptr sret(%RecordType), original_params...)
+            paramTypes.Insert(0, $"ptr sret({returnType})");
+            string parameters = string.Join(", ", paramTypes);
+            EmitLine(_functionDeclarations, $"declare void @{funcName}({parameters})");
+        }
+        else
+        {
+            // Normal declaration
+            string parameters = string.Join(", ", paramTypes);
+            EmitLine(_functionDeclarations, $"declare {returnType} @{funcName}({parameters})");
+        }
+    }
+
+    /// <summary>
+    /// Checks if an external("C") function returns a struct type that needs sret on Windows x64.
+    /// On MSVC ABI, C structs > 8 bytes are returned via a hidden first pointer parameter (sret).
+    /// LLVM's {i64, i64} return convention uses RAX:RDX registers, which doesn't match.
+    /// </summary>
+    private bool NeedsCExternSret(RoutineInfo routine)
+    {
+        if (routine.ReturnType == null) return false;
+        // Only record types that map to LLVM struct types (not intrinsics or single-wrapper) can need sret
+        string llvmType = GetLLVMType(routine.ReturnType);
+        if (!llvmType.StartsWith("%Record.") && !llvmType.StartsWith("%Tuple."))
+            return false;
+        // On Windows x64 MSVC ABI, structs > 8 bytes use sret
+        int size = GetTypeSize(routine.ReturnType);
+        return size > 8;
     }
 
     /// <summary>
     /// Generates the LLVM function definition (with body).
     /// </summary>
     /// <param name="routine">The routine declaration from AST.</param>
-    private void GenerateFunctionDefinition(RoutineDeclaration routine)
+    private void GenerateFunctionDefinition(RoutineDeclaration routine, RoutineInfo? preResolvedInfo = null)
     {
-        // Look up the routine info from registry
-        string baseName = routine.Name;
-        RoutineInfo? routineInfo = _registry.LookupRoutine(baseName);
+        RoutineInfo? routineInfo = preResolvedInfo;
+
+        if (routineInfo == null)
+        {
+            // Look up the routine info from registry
+            // For module-qualified names like "Console.show", the registry key may be
+            // "IO.show" (module.name). Try full AST name first, then short name lookup.
+            string baseName = routine.Name;
+            routineInfo = _registry.LookupRoutine(baseName);
+            if (routineInfo == null)
+            {
+                int dotIdx = baseName.IndexOf('.');
+                if (dotIdx > 0)
+                {
+                    string shortName = baseName[(dotIdx + 1)..];
+                    routineInfo = _registry.LookupRoutine(shortName)
+                                  ?? _registry.LookupRoutineByName(shortName);
+                }
+                else
+                {
+                    // No dot — try short name fallback (e.g., "show" → finds "IO.show")
+                    routineInfo = _registry.LookupRoutineByName(baseName);
+                }
+            }
+
+            // For overloaded routines, resolve the specific overload matching this AST
+            if (routineInfo != null && routine.Parameters.Count > 0)
+            {
+                var astParamTypes = new List<TypeInfo>();
+                foreach (var param in routine.Parameters)
+                {
+                    if (param.Type != null)
+                    {
+                        string typeName = param.Type.Name;
+                        if (param.Type.GenericArguments is { Count: > 0 })
+                            typeName = $"{typeName}[{string.Join(", ", param.Type.GenericArguments.Select(a => a.Name))}]";
+                        var t = _registry.LookupType(typeName);
+                        if (t != null) astParamTypes.Add(t);
+                    }
+                }
+                if (astParamTypes.Count == routine.Parameters.Count)
+                {
+                    var overload = _registry.LookupRoutineOverload(routineInfo.FullName, astParamTypes);
+                    if (overload != null)
+                        routineInfo = overload;
+                }
+            }
+        }
 
         if (routineInfo == null || routineInfo.IsGenericDefinition)
         {
@@ -351,7 +436,9 @@ public partial class LLVMCodeGenerator
         var paramList = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        if (routineInfo.OwnerType != null)
+        // Skip 'me' for __create__ routines (static factories)
+        bool isCreator = routineInfo.Name.Contains("__create__");
+        if (routineInfo.OwnerType != null && !isCreator)
         {
             string meType = GetParameterLLVMType(routineInfo.OwnerType);
             paramList.Add($"{meType} %me");
@@ -365,13 +452,36 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(routineInfo.ReturnType)
             : "void";
 
-        // Start function
+        // Start function — save position so we can rollback on error
         string parameters = string.Join(", ", paramList);
+        int savedLength = _functionDefinitions.Length;
+        int savedTempCounter = _tempCounter;
+
         EmitLine(_functionDefinitions, $"define {returnType} @{funcName}({parameters}) {{");
         EmitLine(_functionDefinitions, "entry:");
 
-        // Generate body
-        GenerateFunctionBody(routine.Body, routineInfo);
+        // Generate body — if it throws, rollback and emit a stub function
+        try
+        {
+            GenerateFunctionBody(routine.Body, routineInfo);
+        }
+        catch (Exception ex)
+        {
+            // Log the error for debugging
+            Console.Error.WriteLine($"Warning: Codegen failed for '{funcName}': {ex.Message}");
+
+            // Rollback any partial output from the failed body
+            _functionDefinitions.Length = savedLength;
+            _tempCounter = savedTempCounter;
+
+            // Emit a stub function
+            EmitLine(_functionDefinitions, $"define {returnType} @{funcName}({parameters}) {{");
+            EmitLine(_functionDefinitions, "entry:");
+            if (returnType == "void")
+                EmitLine(_functionDefinitions, "  ret void");
+            else
+                EmitLine(_functionDefinitions, $"  ret {returnType} zeroinitializer");
+        }
 
         // End function
         EmitLine(_functionDefinitions, "}");
@@ -386,6 +496,8 @@ public partial class LLVMCodeGenerator
     {
         // Clear local variables and emit slot for this function
         _localVariables.Clear();
+        _localVarLLVMNames.Clear();
+        _varNameCounts.Clear();
         _currentBlock = "entry";
         _emitSlotAddr = null;
         _emitSlotType = null;
@@ -395,6 +507,15 @@ public partial class LLVMCodeGenerator
 
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
+
+        // Register implicit 'me' parameter for methods (skip for __create__ static factories)
+        if (routine.OwnerType != null && !routine.Name.Contains("__create__"))
+        {
+            string meType = GetParameterLLVMType(routine.OwnerType);
+            EmitLine(_functionDefinitions, $"  %me.addr = alloca {meType}");
+            EmitLine(_functionDefinitions, $"  store {meType} %me, ptr %me.addr");
+            _localVariables["me"] = routine.OwnerType;
+        }
 
         // Register parameters as local variables
         foreach (var param in routine.Parameters)
@@ -487,19 +608,165 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string MangleFunctionName(RoutineInfo routine)
     {
+        string name = SanitizeLLVMName(routine.Name);
         if (routine.OwnerType == null)
         {
-            return routine.Name;
+            return name;
         }
 
         string typeName = MangleTypeName(routine.OwnerType.Name);
-        // Use underscore separator for C ABI compatibility
-        return $"{typeName}_{routine.Name}";
+        string baseName = $"{typeName}_{name}";
+
+        // Disambiguate __create__ overloads by first parameter type
+        if (name == "__create__" && routine.Parameters.Count > 0)
+        {
+            string firstParamType = MangleTypeName(routine.Parameters[0].Type.Name);
+            baseName = $"{baseName}_{firstParamType}";
+        }
+
+        return baseName;
+    }
+
+    /// <summary>
+    /// Sanitizes a name for use as an LLVM IR identifier.
+    /// Replaces characters that are invalid in LLVM identifiers.
+    /// </summary>
+    private static string SanitizeLLVMName(string name)
+    {
+        return name.Replace("!", "_crash");
     }
 
     #endregion
 
     #region Synthesized Routine Generation
+
+    /// <summary>
+    /// Monomorphizes generic methods by compiling generic AST bodies with type substitutions.
+    /// For each pending monomorphization (recorded by EmitMethodCall/EmitGenericMethodCall),
+    /// finds the generic AST body from stdlib programs, sets type parameter substitutions,
+    /// and compiles the body with the concrete types.
+    /// </summary>
+    private void MonomorphizeGenericMethods()
+    {
+        // Multi-pass: compiling one generic method may reference other generic methods
+        // (e.g., List[Letter].add_last calls List[Letter].reserve)
+        int prevDefCount;
+        do
+        {
+            prevDefCount = _generatedFunctionDefs.Count;
+
+            foreach (var (mangledName, entry) in _pendingMonomorphizations.ToList())
+            {
+                if (_generatedFunctionDefs.Contains(mangledName))
+                    continue;
+
+                // Find the generic AST body in stdlib programs
+                RoutineDeclaration? astRoutine = FindGenericAstRoutine(entry.GenericAstName);
+                if (astRoutine == null)
+                    continue;
+
+                // Build a resolved RoutineInfo with the correct owner type and substituted types
+                var resolvedInfo = BuildResolvedRoutineInfo(entry);
+
+                // Set type substitutions and compile
+                _typeSubstitutions = entry.TypeSubstitutions;
+                try
+                {
+                    GenerateFunctionDefinition(astRoutine, resolvedInfo);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"Warning: Monomorphization failed for '{mangledName}': {ex.Message}");
+                }
+                finally
+                {
+                    _typeSubstitutions = null;
+                }
+            }
+        } while (_generatedFunctionDefs.Count > prevDefCount);
+    }
+
+    /// <summary>
+    /// Finds a generic routine's AST declaration from stdlib programs.
+    /// </summary>
+    /// <param name="genericAstName">The generic AST name (e.g., "List[T].add_last").</param>
+    /// <returns>The routine declaration if found, null otherwise.</returns>
+    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName)
+    {
+        // Search user program first, then stdlib
+        foreach (var decl in _program.Declarations)
+        {
+            if (decl is RoutineDeclaration routine && routine.Name == genericAstName)
+                return routine;
+        }
+
+        foreach (var (program, _, _) in _stdlibPrograms)
+        {
+            foreach (var decl in program.Declarations)
+            {
+                if (decl is RoutineDeclaration routine && routine.Name == genericAstName)
+                    return routine;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Builds a resolved RoutineInfo for monomorphization.
+    /// Creates a new RoutineInfo with the resolved owner type and substituted parameter/return types.
+    /// </summary>
+    private RoutineInfo BuildResolvedRoutineInfo(MonomorphizationEntry entry)
+    {
+        var generic = entry.GenericMethod;
+        var subs = entry.TypeSubstitutions;
+
+        // Substitute parameter types
+        var resolvedParams = generic.Parameters
+            .Select(p =>
+            {
+                TypeInfo resolvedType = subs.TryGetValue(p.Type.Name, out var sub) ? sub : p.Type;
+                return p.WithSubstitutedType(resolvedType);
+            })
+            .ToList();
+
+        // Substitute return type
+        TypeInfo? resolvedReturnType = generic.ReturnType;
+        if (resolvedReturnType != null && subs.TryGetValue(resolvedReturnType.Name, out var retSub))
+            resolvedReturnType = retSub;
+        // For return types like List[T], resolve to List[Letter]
+        if (resolvedReturnType is { IsGenericDefinition: true, GenericParameters: not null } &&
+            resolvedReturnType.TypeArguments == null)
+        {
+            var typeArgs = resolvedReturnType.GenericParameters
+                .Select(gp => subs.TryGetValue(gp, out var s) ? s : _registry.LookupType(gp))
+                .Where(t => t != null)
+                .ToList();
+            if (typeArgs.Count == resolvedReturnType.GenericParameters.Count)
+                resolvedReturnType = _registry.GetOrCreateResolution(resolvedReturnType, typeArgs!);
+        }
+
+        return new RoutineInfo(generic.Name)
+        {
+            Kind = generic.Kind,
+            OwnerType = entry.ResolvedOwnerType,
+            Parameters = resolvedParams,
+            ReturnType = resolvedReturnType,
+            IsFailable = generic.IsFailable,
+            DeclaredModification = generic.DeclaredModification,
+            ModificationCategory = generic.ModificationCategory,
+            Visibility = generic.Visibility,
+            Location = generic.Location,
+            Module = generic.Module,
+            Annotations = generic.Annotations,
+            CallingConvention = generic.CallingConvention,
+            IsVariadic = generic.IsVariadic,
+            IsDangerous = generic.IsDangerous,
+            Storage = generic.Storage,
+            AsyncStatus = generic.AsyncStatus
+        };
+    }
 
     /// <summary>
     /// Generates LLVM IR bodies for all synthesized routines.
@@ -513,8 +780,10 @@ public partial class LLVMCodeGenerator
             if (!routine.IsSynthesized)
                 continue;
 
-            // Skip generic definitions and routines with error types
-            if (routine.IsGenericDefinition || HasErrorTypes(routine))
+            // Skip generic definitions, routines with error types,
+            // and routines on generic owner types (e.g., List[T].to_debug)
+            if (routine.IsGenericDefinition || HasErrorTypes(routine)
+                || routine.OwnerType is { IsGenericDefinition: true })
                 continue;
 
             string funcName = MangleFunctionName(routine);
@@ -523,7 +792,11 @@ public partial class LLVMCodeGenerator
             if (!_generatedFunctionDefs.Add(funcName))
                 continue;
 
-            // Also mark in declarations set to prevent declare/define conflicts
+            // Only emit synthesized routines that were declared (actually referenced)
+            if (!_generatedFunctions.Contains(funcName))
+                continue;
+
+            // Mark in declarations set to prevent declare/define conflicts
             _generatedFunctions.Add(funcName);
 
             switch (routine.Name)
@@ -1119,7 +1392,12 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitSynthesizedValueToText(TypeInfo fieldType, string llvmType, string value)
     {
-        string createName = $"Text___create__";
+        // Look up the Text.__create__ overload for this specific parameter type
+        RoutineInfo? createRoutine = _registry.LookupRoutineOverload("Text.__create__", [fieldType])
+                                     ?? _registry.LookupRoutine("Text.__create__");
+        string createName = createRoutine != null
+            ? MangleFunctionName(createRoutine)
+            : $"Text___create__";
         string textResult = NextTemp();
         EmitLine(_functionDefinitions, $"  {textResult} = call ptr @{createName}({llvmType} {value})");
         return textResult;
@@ -1130,17 +1408,8 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitSynthesizedStringLiteral(string value)
     {
-        if (_stringConstants.TryGetValue(value, out string? existing))
-            return existing;
-
-        string constName = $"@.str.{_stringCounter++}";
-        _stringConstants[value] = constName;
-
-        string escaped = EscapeStringForLLVM(value);
-        int byteLength = System.Text.Encoding.UTF8.GetByteCount(value) + 1;
-
-        EmitLine(_globalDeclarations, $"{constName} = private unnamed_addr constant [{byteLength} x i8] c\"{escaped}\\00\"");
-        return constName;
+        // Delegate to EmitStringLiteral which handles UTF-32 Text constant emission
+        return EmitStringLiteral(_functionDefinitions, value);
     }
 
     /// <summary>
@@ -1952,8 +2221,28 @@ public partial class LLVMCodeGenerator
         string dictPtr = NextTemp();
         EmitLine(sb, $"  {dictPtr} = call ptr @{dictCreateName}()");
 
-        // Get the owner struct type name for GEP
-        string structType = GetLLVMType(routine.OwnerType);
+        // Get the owner struct type name for GEP (not GetLLVMType, which returns "ptr" for entities)
+        string structType = routine.OwnerType switch
+        {
+            EntityTypeInfo ent => GetEntityTypeName(ent),
+            ResidentTypeInfo res => GetResidentTypeName(res),
+            RecordTypeInfo rec => GetRecordTypeName(rec),
+            _ => GetLLVMType(routine.OwnerType)
+        };
+
+        // For records (pass-by-value), we need a pointer to GEP into.
+        // Alloca the value and store %me into it.
+        bool isRecord = routine.OwnerType is RecordTypeInfo;
+        bool hasBackendType = routine.OwnerType is RecordTypeInfo { HasDirectBackendType: true };
+        string mePtr = "%me";
+        if (isRecord)
+        {
+            string allocaType = hasBackendType ? meType : structType;
+            string allocaPtr = NextTemp();
+            EmitLine(sb, $"  {allocaPtr} = alloca {allocaType}");
+            EmitLine(sb, $"  store {meType} %me, ptr {allocaPtr}");
+            mePtr = allocaPtr;
+        }
 
         // For each field: extract value, inline-box to Data, insert into dict
         for (int i = 0; i < fields.Count; i++)
@@ -1962,9 +2251,18 @@ public partial class LLVMCodeGenerator
             string fieldLlvmType = GetLLVMType(field.Type);
             string nameStr = EmitSynthesizedStringLiteral(field.Name);
 
-            // Extract field value from %me
-            string fieldPtr = NextTemp();
-            EmitLine(sb, $"  {fieldPtr} = getelementptr {structType}, {meType} %me, i32 0, i32 {field.Index}");
+            // Extract field value from %me (use pointer for GEP)
+            string fieldPtr;
+            if (hasBackendType)
+            {
+                // Backend-typed records (Bool, S32, etc.) — the value IS the field, just use the alloca pointer
+                fieldPtr = mePtr;
+            }
+            else
+            {
+                fieldPtr = NextTemp();
+                EmitLine(sb, $"  {fieldPtr} = getelementptr {structType}, ptr {mePtr}, i32 0, i32 {field.Index}");
+            }
             string fieldVal = NextTemp();
             EmitLine(sb, $"  {fieldVal} = load {fieldLlvmType}, ptr {fieldPtr}");
 

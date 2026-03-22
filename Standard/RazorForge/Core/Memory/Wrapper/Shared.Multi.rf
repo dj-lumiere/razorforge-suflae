@@ -27,7 +27,7 @@ needs P obeys LockPolicy
     )
 
 # Clone the shared reference (increment atomic ref count)
-routine Shared[T, P].share() -> Shared[T, P]
+routine Shared[T, P].retain() -> Shared[T, P]
   danger!
     me.controller.increase_strong_count!()  # Atomic increment
   return me

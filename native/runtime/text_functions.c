@@ -69,6 +69,49 @@ rf_UAddr rf_format_SAddr(rf_SAddr value)
     return (rf_UAddr)buffer;
 }
 
+// S128/U128 format functions use split (low, high) parameters to avoid
+// ABI mismatch: LLVM passes i128 in RCX:RDX, but MSVC ABI passes by pointer.
+rf_UAddr rf_format_U128(uint64_t low, uint64_t high)
+{
+    rf_U128 value = ((rf_U128)high << 64) | (rf_U128)low;
+    char buf[40]; // max 39 digits + null
+    char* p = buf + sizeof(buf);
+    *--p = '\0';
+    if (value == 0) {
+        *--p = '0';
+    } else {
+        while (value > 0) {
+            *--p = '0' + (char)(value % 10);
+            value /= 10;
+        }
+    }
+    size_t len = (size_t)(buf + sizeof(buf) - p);
+    char* result = (char*)malloc(len);
+    if (!result) return 0;
+    memcpy(result, p, len);
+    return (rf_UAddr)result;
+}
+
+rf_UAddr rf_format_S128(uint64_t low, uint64_t high)
+{
+    rf_S128 value = (rf_S128)(((rf_U128)high << 64) | (rf_U128)low);
+    if (value >= 0) return rf_format_U128(low, high);
+    char buf[41]; // '-' + max 39 digits + null
+    char* p = buf + sizeof(buf);
+    *--p = '\0';
+    rf_U128 uval = -((rf_U128)value);
+    while (uval > 0) {
+        *--p = '0' + (char)(uval % 10);
+        uval /= 10;
+    }
+    *--p = '-';
+    size_t len = (size_t)(buf + sizeof(buf) - p);
+    char* result = (char*)malloc(len);
+    if (!result) return 0;
+    memcpy(result, p, len);
+    return (rf_UAddr)result;
+}
+
 // ============================================================================
 // Formatting: Unsigned Integers
 // ============================================================================
@@ -186,6 +229,43 @@ rf_S64 rf_parse_S64(const char* str)
 rf_SAddr rf_parse_SAddr(const char* str)
 {
     return (rf_SAddr)strtoll(str, NULL, 10);
+}
+
+// Parse functions also need ABI-safe signatures.
+// They return the 128-bit result via an sret pointer (first parameter).
+// The codegen's NeedsCExternSret handles this automatically for i128 returns...
+// but i128 isn't a Record/Tuple type so we need a different approach.
+// Instead, we make the C functions return via split struct.
+typedef struct { uint64_t low; uint64_t high; } split128_t;
+
+split128_t rf_parse_U128(const char* str)
+{
+    rf_U128 result = 0;
+    while (*str == ' ' || *str == '\t') str++;
+    while (*str >= '0' && *str <= '9') {
+        result = result * 10 + (rf_U128)(*str - '0');
+        str++;
+    }
+    split128_t out;
+    out.low = (uint64_t)result;
+    out.high = (uint64_t)(result >> 64);
+    return out;
+}
+
+split128_t rf_parse_S128(const char* str)
+{
+    while (*str == ' ' || *str == '\t') str++;
+    int neg = 0;
+    if (*str == '-') { neg = 1; str++; }
+    else if (*str == '+') { str++; }
+    split128_t uval = rf_parse_U128(str);
+    if (neg) {
+        rf_U128 v = ((rf_U128)uval.high << 64) | (rf_U128)uval.low;
+        rf_S128 sv = -(rf_S128)v;
+        uval.low = (uint64_t)sv;
+        uval.high = (uint64_t)((rf_U128)sv >> 64);
+    }
+    return uval;
 }
 
 // ============================================================================

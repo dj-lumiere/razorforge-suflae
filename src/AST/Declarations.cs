@@ -469,7 +469,13 @@ public enum AsyncStatus
     /// OS-level threading for CPU-bound parallel work.
     /// Uses real threads with higher overhead but true parallelism.
     /// </summary>
-    Threaded
+    Threaded,
+
+    /// <summary>
+    /// Generator routine that yields values via emit statements.
+    /// Used for lazy sequence generation (SequenceEmitter pattern).
+    /// </summary>
+    Emitting
 }
 
 /// <summary>

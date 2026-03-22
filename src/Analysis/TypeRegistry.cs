@@ -57,6 +57,9 @@ public sealed class TypeRegistry
     /// <summary>All registered routines by their full name.</summary>
     private readonly Dictionary<string, RoutineInfo> _routines = new();
 
+    /// <summary>Routines indexed by module-qualified name for unambiguous lookup.</summary>
+    private readonly Dictionary<string, RoutineInfo> _routinesByQualifiedName = new();
+
     /// <summary>Routines indexed by owner type for fast method lookup.</summary>
     private readonly Dictionary<string, List<RoutineInfo>> _routinesByOwner = new();
 
@@ -69,6 +72,9 @@ public sealed class TypeRegistry
 
     /// <summary>Module-level preset constants registered by StdlibLoader (accessible across files).</summary>
     private readonly Dictionary<string, VariableInfo> _presets = new();
+
+    /// <summary>Presets indexed by module-qualified name for unambiguous lookup.</summary>
+    private readonly Dictionary<string, VariableInfo> _presetsByQualifiedName = new();
 
     #endregion
 
@@ -171,7 +177,7 @@ public sealed class TypeRegistry
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
     public IReadOnlyList<(Program Program, string FilePath, string Module)> StdlibPrograms
-        => _stdlibLoader?.ParsedPrograms ?? [];
+        => _stdlibLoader?.AllLoadedPrograms ?? [];
 
     /// <summary>
     /// Loads a module on-demand by its import path.
@@ -333,7 +339,8 @@ public sealed class TypeRegistry
             TypeArguments = record.TypeArguments,
             Visibility = record.Visibility,
             Location = record.Location,
-            Module = record.Module
+            Module = record.Module,
+            BackendType = record.BackendType
         };
 
         _types[key: recordName] = updatedRecord;
@@ -366,7 +373,8 @@ public sealed class TypeRegistry
             TypeArguments = record.TypeArguments,
             Visibility = record.Visibility,
             Location = record.Location,
-            Module = record.Module
+            Module = record.Module,
+            BackendType = record.BackendType
         };
 
         _types[key: recordName] = updatedRecord;
@@ -842,7 +850,9 @@ public sealed class TypeRegistry
     /// <returns>An enumerable of all types in the specified category.</returns>
     public IEnumerable<TypeInfo> GetTypesByCategory(TypeCategory category)
     {
-        return _types.Values.Where(predicate: t => t.Category == category);
+        return _types.Values
+            .Concat(_resolutions.Values)
+            .Where(predicate: t => t.Category == category);
     }
 
     /// <summary>
@@ -878,9 +888,23 @@ public sealed class TypeRegistry
     {
         string key = routine.FullName;
 
-        // For overloaded routines, we might need a different key
-        // For now, assume unique names
-        _routines[key: key] = routine;
+        if (!_routines.ContainsKey(key: key))
+        {
+            // First overload wins for unqualified lookup
+            _routines[key: key] = routine;
+        }
+
+        // Also register with parameter-based disambiguation for overload resolution
+        string overloadKey = GetOverloadKey(routine);
+        if (overloadKey != key) // Only store if different from primary key (avoids overwriting resolved entries)
+            _routines[key: overloadKey] = routine;
+
+        // Index by module-qualified name for unambiguous lookup
+        string qualifiedName = routine.QualifiedName;
+        if (qualifiedName != key)
+        {
+            _routinesByQualifiedName.TryAdd(qualifiedName, routine);
+        }
 
         // Index by owner type for fast method lookup
         if (routine.OwnerType != null)
@@ -894,6 +918,36 @@ public sealed class TypeRegistry
 
             list.Add(item: routine);
         }
+    }
+
+    /// <summary>
+    /// Builds a disambiguated key for overloaded routines: "Name#ParamType1,ParamType2"
+    /// </summary>
+    private static string GetOverloadKey(RoutineInfo routine)
+    {
+        if (routine.Parameters.Count == 0)
+            return routine.FullName;
+
+        var paramTypes = string.Join(",", routine.Parameters.Select(p => p.Type.Name));
+        return $"{routine.FullName}#{paramTypes}";
+    }
+
+    /// <summary>
+    /// Looks up a routine overload that matches the given argument types.
+    /// Falls back to the default (first-registered) overload if no exact match.
+    /// </summary>
+    public RoutineInfo? LookupRoutineOverload(string fullName, IReadOnlyList<TypeInfo> argTypes)
+    {
+        // Try exact overload match
+        var paramTypeNames = string.Join(",", argTypes.Select(t => t.Name));
+        string overloadKey = $"{fullName}#{paramTypeNames}";
+        if (_routines.TryGetValue(key: overloadKey, value: out RoutineInfo? overload))
+        {
+            return overload;
+        }
+
+        // Fall back to default lookup
+        return LookupRoutine(fullName: fullName);
     }
 
     /// <summary>
@@ -913,6 +967,40 @@ public sealed class TypeRegistry
             return resolution;
         }
 
+        // Fall back to module-qualified name lookup
+        if (_routinesByQualifiedName.TryGetValue(fullName, out RoutineInfo? qualified))
+        {
+            return qualified;
+        }
+
+        // Try Core module prefix (Core routines are auto-imported)
+        if (!fullName.Contains('.') && _routines.TryGetValue(key: $"Core.{fullName}", value: out routine))
+        {
+            return routine;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Looks up a routine by its module-qualified name (e.g., "Core.S8.__add__").
+    /// </summary>
+    public RoutineInfo? LookupRoutineByQualifiedName(string qualifiedName)
+    {
+        return _routinesByQualifiedName.GetValueOrDefault(qualifiedName);
+    }
+
+    /// <summary>
+    /// Looks up a routine by its short name (without module prefix).
+    /// Used by codegen when the AST has "Console.show" but the registry key is "IO.show".
+    /// </summary>
+    public RoutineInfo? LookupRoutineByName(string name)
+    {
+        foreach (var routine in _routines.Values)
+        {
+            if (routine.Name == name && routine.OwnerType == null)
+                return routine;
+        }
         return null;
     }
 
@@ -960,6 +1048,13 @@ public sealed class TypeRegistry
         };
 
         _routines[key: key] = updatedRoutine;
+
+        // Update the module-qualified name index
+        string qualifiedName = updatedRoutine.QualifiedName;
+        if (qualifiedName != key)
+        {
+            _routinesByQualifiedName[qualifiedName] = updatedRoutine;
+        }
 
         // Update the routines-by-owner index if this is a method
         if (routine.OwnerType != null)
@@ -1141,15 +1236,24 @@ public sealed class TypeRegistry
     /// </summary>
     /// <param name="name">The preset name.</param>
     /// <param name="type">The type of the preset.</param>
-    public void RegisterPreset(string name, TypeInfo type)
+    /// <param name="module">The module this preset belongs to.</param>
+    public void RegisterPreset(string name, TypeInfo type, string? module = null)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
             IsModifiable = false,
-            IsPreset = true
+            IsPreset = true,
+            Module = module
         };
 
         _presets[name] = variable;
+
+        // Index by module-qualified name for unambiguous lookup
+        string qualifiedName = variable.QualifiedName;
+        if (qualifiedName != name)
+        {
+            _presetsByQualifiedName.TryAdd(qualifiedName, variable);
+        }
     }
 
     /// <summary>
@@ -1160,7 +1264,17 @@ public sealed class TypeRegistry
     /// <returns>The variable info if found, null otherwise.</returns>
     public VariableInfo? LookupVariable(string name)
     {
-        return _currentScope.LookupVariable(name: name) ?? _presets.GetValueOrDefault(name);
+        return _currentScope.LookupVariable(name: name)
+            ?? _presets.GetValueOrDefault(name)
+            ?? _presetsByQualifiedName.GetValueOrDefault(name);
+    }
+
+    /// <summary>
+    /// Looks up a preset by its module-qualified name (e.g., "Core.S8_MIN").
+    /// </summary>
+    public VariableInfo? LookupPresetByQualifiedName(string qualifiedName)
+    {
+        return _presetsByQualifiedName.GetValueOrDefault(qualifiedName);
     }
 
     /// <summary>

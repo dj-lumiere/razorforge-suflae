@@ -12,7 +12,7 @@ public sealed class EntityTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Entity;
 
     /// <summary>MemberVariables declared in this entity.</summary>
-    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; init; } = [];
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this entity implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
@@ -125,6 +125,16 @@ public sealed class EntityTypeInfo : TypeInfo
         if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
         {
             return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
+        {
+            return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
+        {
+            return residentType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

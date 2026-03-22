@@ -84,6 +84,18 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
+        // Handle tuple types from parser: __tuple__(T, U, ...)
+        if (typeExpr is { Name: "__tuple__", GenericArguments.Count: > 0 })
+        {
+            var elementTypes = new List<TypeInfo>();
+            foreach (TypeExpression argExpr in typeExpr.GenericArguments)
+            {
+                TypeSymbol argType = ResolveType(typeExpr: argExpr);
+                elementTypes.Add(item: (TypeInfo)argType);
+            }
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
+        }
+
         // Handle generic types (List<T>, Dict<K, V>, Maybe<T>)
         if (typeExpr.GenericArguments is { Count: > 0 })
         {

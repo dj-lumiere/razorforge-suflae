@@ -13,13 +13,13 @@ typedef int8_t rf_S8;
 typedef int16_t rf_S16;
 typedef int32_t rf_S32;
 typedef int64_t rf_S64;
-// typedef __int128_t rf_S128; // Uncomment if compiler supports it
+typedef __int128 rf_S128;
 
 typedef uint8_t rf_U8;
 typedef uint16_t rf_U16;
 typedef uint32_t rf_U32;
 typedef uint64_t rf_U64;
-// typedef __uint128_t rf_U128; // Uncomment if compiler supports it
+typedef unsigned __int128 rf_U128;
 
 // ==========================================
 // 2. System & Data Types

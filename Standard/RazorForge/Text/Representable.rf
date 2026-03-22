@@ -1,4 +1,4 @@
-﻿module Text
+﻿module Core
 
 protocol Representable[T]
   @readonly

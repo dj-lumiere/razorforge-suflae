@@ -58,9 +58,10 @@ routine Byte.digit_value!() -> U8
 
 routine Byte.is_hex_digit() -> Bool
   var v = me.value
-  return (0x30u8 <= v <= 0x39u8) or    # 0-9
-     (0x41u8 <= v <= 0x46u8) or    # A-F
-     (0x61u8 <= v <= 0x66u8)       # a-f
+  var is_digit = 0x30u8 <= v <= 0x39u8
+  var is_upper_hex = 0x41u8 <= v <= 0x46u8
+  var is_lower_hex = 0x61u8 <= v <= 0x66u8
+  return is_digit or is_upper_hex or is_lower_hex
 
 routine Byte.hex_value!() -> U8
   var v = me.value

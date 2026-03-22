@@ -4,7 +4,7 @@
 # It provides thread-safe exclusive access with automatic lock acquisition/release.
 #
 # Syntax:
-#   var shared = data.share(policy: Exclusive)
+#   var shared = data.retain(policy: Exclusive)
 #   using shared.seize!() as s
 #     s.value = 42  # Exclusive write access, lock held
 #   Lock automatically released at block exit

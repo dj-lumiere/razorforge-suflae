@@ -76,19 +76,19 @@ public static class NumericLiteralParser
     /// <summary>
     /// Parses a string to IEEE decimal32 (d32) using Intel DFP library.
     /// </summary>
-    [DllImport(RuntimeLib, CallingConvention = CallingConvention.Cdecl, EntryPoint = "d32_from_string")]
+    [DllImport(RuntimeLib, CallingConvention = CallingConvention.Cdecl, EntryPoint = "rf_d32_from_string")]
     public static extern D32 ParseD32([MarshalAs(UnmanagedType.LPStr)] string str);
 
     /// <summary>
     /// Parses a string to IEEE decimal64 (d64) using Intel DFP library.
     /// </summary>
-    [DllImport(RuntimeLib, CallingConvention = CallingConvention.Cdecl, EntryPoint = "d64_from_string")]
+    [DllImport(RuntimeLib, CallingConvention = CallingConvention.Cdecl, EntryPoint = "rf_d64_from_string")]
     public static extern D64 ParseD64([MarshalAs(UnmanagedType.LPStr)] string str);
 
     /// <summary>
     /// Parses a string to IEEE decimal128 (d128) using Intel DFP library.
     /// </summary>
-    [DllImport(RuntimeLib, CallingConvention = CallingConvention.Cdecl, EntryPoint = "d128_from_string")]
+    [DllImport(RuntimeLib, CallingConvention = CallingConvention.Cdecl, EntryPoint = "rf_d128_from_string")]
     public static extern D128 ParseD128([MarshalAs(UnmanagedType.LPStr)] string str);
 
     #endregion

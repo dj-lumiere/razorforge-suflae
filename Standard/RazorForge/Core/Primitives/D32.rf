@@ -4,8 +4,9 @@
 module Core
 
 # Core D32 type definition - stored as 32-bit value in BID encoding
+@llvm("i32")
 record D32 obeys Numeric, Ordered
-  secret value: U32
+  pass
 
 # Constants for D32
 preset D32_ZERO: D32 = 0.0_d32

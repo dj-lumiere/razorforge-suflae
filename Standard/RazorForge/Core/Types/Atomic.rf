@@ -23,7 +23,7 @@ record Atomic[T]
 ###
 ### Returns:
 ###   A new Atomic[T] wrapping the initial value
-#
+###
 ### Example:
 ###   var flag = Atomic(false)
 ###   var counter = Atomic(0)

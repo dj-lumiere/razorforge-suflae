@@ -18,7 +18,7 @@
 #   list[^3 til ^0]    # last 3 elements
 module Core
 
-record Range[T] needs FixedNumeric
+record Range[T] needs T obeys FixedNumeric
   start: T
   end: T
   step: T
@@ -60,7 +60,7 @@ routine Range[T].is_empty() -> Bool
 # Range iteration support
 # ============================================================================
 
-record RangeIterator[T] needs FixedNumeric
+record RangeIterator[T] needs T obeys FixedNumeric
   current: T
   end: T
   step: T

@@ -9,7 +9,7 @@ needs P obeys LockPolicy
   secret lock: Snatched[P]
 
 # Create weak reference from Shared[T, P]
-routine Shared[T, P].track() -> Tracked[T, P]
+routine Shared[T, P].watch() -> Tracked[T, P]
   danger!
     me.controller.increase_weak_count!()
     return me
@@ -20,7 +20,7 @@ routine Tracked[T, P].is_alive() -> Bool
     return me.controller.strong_count() > 0
 
 # Clone the weak reference
-routine Tracked[T, P].track() -> Tracked[T, P]
+routine Tracked[T, P].watch() -> Tracked[T, P]
   danger!
     me.controller.increase_weak_count!()
     return me

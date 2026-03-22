@@ -20,9 +20,9 @@ routine List[T].__create__() -> List[T]
 
 routine List[T].__create__(capacity: U64) -> List[T]
   var byte_size = capacity * data_size[T]()
-  var ptr = heap_alloc(byte_size.UAddr())
+  var ptr = rf_alloc(byte_size)
   return List[T](
-    data: Snatched[T](address: ptr),
+    data: Snatched[T](ptr),
     count: 0u64,
     capacity: capacity
   )
@@ -30,7 +30,8 @@ routine List[T].__create__(capacity: U64) -> List[T]
 # Destructor
 routine List[T].__destroy__()
   if not me.data.is_none()
-    heap_free(me.data.address)
+    danger!
+      rf_free(ptrtoint[T, UAddr](me.data))
   return
 
 # Core operations
@@ -200,11 +201,13 @@ routine List[T].reserve(new_capacity: U64)
     var new_byte_size = new_capacity * data_size[T]()
 
     if me.data.is_none()
-      var ptr = heap_alloc(new_byte_size.UAddr())
-      me.data = Snatched[T](address: ptr)
+      danger!
+        var ptr = rf_alloc(new_byte_size)
+        me.data = Snatched[T](ptr)
     else
-      var ptr = heap_realloc(me.data.address, new_byte_size.UAddr())
-      me.data = Snatched[T](address: ptr)
+      danger!
+        var ptr = rf_realloc(ptrtoint[T, UAddr](me.data), new_byte_size)
+        me.data = Snatched[T](ptr)
 
     me.capacity = new_capacity
   return

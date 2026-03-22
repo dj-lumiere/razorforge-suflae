@@ -4,7 +4,7 @@
 # It provides thread-safe read-only access with automatic lock acquisition/release.
 #
 # Syntax:
-#   var shared = data.share(policy: MultiRead)
+#   var shared = data.retain(policy: MultiRead)
 #   using shared.inspect!() as obs
 #     show(obs.value)  # Read-only access, lock held
 #     var copy = obs   # OK - Inspected is copyable

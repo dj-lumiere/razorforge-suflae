@@ -1,4 +1,4 @@
-﻿# RazorForge Snatched[T] - Unsafe raw pointer wrapper
+# RazorForge Snatched[T] - Unsafe raw pointer wrapper
 #
 # Snatched[T] is created ONLY via .snatch() method inside danger! blocks.
 # It represents raw, unsafe memory access with NO safety guarantees.
@@ -30,7 +30,7 @@ dangerous routine T.get_address() -> UAddr
 
 # Create snatched pointer from any object (danger! only)
 dangerous routine T.snatch() -> Snatched[T]
-  return Snatched[T](address: me.get_address())
+  return Snatched[T](me.get_address())
 
 # Type-safe read (uses T from Snatched[T])
 dangerous routine Snatched[T].read() -> T
@@ -52,20 +52,19 @@ dangerous routine Snatched[T].volatile_write(value: T)
 
 # Type-pun read - read as different type U
 dangerous routine Snatched[T].reveal_as[U]() -> U
-  # Create Snatched[U] with same address, then read
-  let as_u = Snatched[U](address: me.address)
+  var as_u = me.obtain_as[U]()
   return as_u.read()
 
 # Type-pun write - write as different type U
 dangerous routine Snatched[T].write_as[U](value: U)
-  # Create Snatched[U] with same address, then write
-  let as_u = Snatched[U](address: me.address)
+  var as_u = me.obtain_as[U]()
   as_u.write(value)
   return
 
 # Cast pointer type - reinterpret Snatched[T] as Snatched[U]
+# Both are @llvm("ptr"), so this is a no-op at the LLVM level
 dangerous routine Snatched[T].obtain_as[U]() -> Snatched[U]
-  return Snatched[U](address: me.address)
+  return Snatched[U](ptrtoint[T, UAddr](me))
 
 # Free memory at this address
 dangerous routine Snatched[T].invalidate!()
@@ -74,19 +73,20 @@ dangerous routine Snatched[T].invalidate!()
 
 # Create none snatched pointer
 routine snatched_none[T]() -> Snatched[T]
-  return Snatched[T](address: 0_uaddr)
+  return Snatched[T](0_uaddr)
 
 # Check if pointer is none
 routine Snatched[T].is_none() -> Bool
-  return me.address == 0_uaddr
+  return icmp_eq[Snatched[T]](me, snatched_none[T]())
 
 # Offset pointer by bytes (pointer arithmetic)
 routine Snatched[T].offset(bytes: ByteSize) -> Snatched[T]
-  return Snatched[T](address: me.address + bytes)
+  var addr = ptrtoint[T, UAddr](me)
+  return Snatched[T](addr + bytes.value)
 
 # Compare addresses
-routine Snatched[T].__eq__(other: Snatched[T]) -> Bool
-  return me.address == other.address
+routine Snatched[T].__eq__(you: Snatched[T]) -> Bool
+  return icmp_eq[Snatched[T]](me, you)
 
 # NOTE: All operations on Snatched[T] are inherently unsafe
 # Undefined behavior can occur if:

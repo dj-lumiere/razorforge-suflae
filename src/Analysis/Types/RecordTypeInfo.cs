@@ -13,7 +13,7 @@ public sealed class RecordTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Record;
 
     /// <summary>MemberVariables declared in this record.</summary>
-    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; init; } = [];
+    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this record implements (obeys).</summary>
     public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
@@ -132,6 +132,7 @@ public sealed class RecordTypeInfo : TypeInfo
             ImplementedProtocols = ImplementedProtocols, // TODO: substitute protocol type args
             TypeArguments = typeArguments,
             GenericDefinition = this,
+            BackendType = BackendType,
             Visibility = Visibility,
             Location = Location,
             Module = Module
@@ -180,6 +181,16 @@ public sealed class RecordTypeInfo : TypeInfo
         if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
         {
             return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
+        {
+            return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
+        {
+            return residentType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

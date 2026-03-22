@@ -34,8 +34,26 @@ public sealed class StdlibLoader
     /// <summary>Set of already scanned directories to avoid re-scanning.</summary>
     private bool _stdlibScanned;
 
+    /// <summary>Tracks modules that have been loaded on-demand.</summary>
+    private readonly HashSet<string> _loadedModules = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets the parsed Core module programs.</summary>
     public IReadOnlyList<(Program Program, string FilePath, string Module)> ParsedPrograms => _corePrograms;
+
+    /// <summary>Gets all parsed programs (core + loaded modules) for codegen.</summary>
+    public IReadOnlyList<(Program Program, string FilePath, string Module)> AllLoadedPrograms
+    {
+        get
+        {
+            var all = new List<(Program, string, string)>(_corePrograms);
+            foreach (var mod in _loadedModules)
+            {
+                if (_modulePrograms.TryGetValue(mod, out var programs))
+                    all.AddRange(programs);
+            }
+            return all;
+        }
+    }
 
     /// <summary>
     /// Creates a new stdlib loader for a specific language.
@@ -75,10 +93,18 @@ public sealed class StdlibLoader
             ResolveProtocolParents(registry, program);
         }
 
-        // Pass 1b: Register all other types (record, entity, choice, variant)
+        // Pass 1b: Register all type shells (record, entity, choice, variant)
         foreach (var (program, _, ns) in _corePrograms)
         {
             RegisterProgramTypes(registry, program, ns);
+        }
+
+        // Pass 1c: Re-resolve member variables now that all types are registered.
+        // The initial registration may have empty member lists due to forward references
+        // (e.g., Bytes needs List which needs U64, but files are processed alphabetically).
+        foreach (var (program, _, ns) in _corePrograms)
+        {
+            ResolveProgramMemberVariables(registry, program);
         }
 
         // Pass 2: Register all routines (now all types are available for return type resolution)
@@ -88,9 +114,9 @@ public sealed class StdlibLoader
         }
 
         // Pass 3: Register all presets (module-level constants accessible across files)
-        foreach (var (program, _, _) in _corePrograms)
+        foreach (var (program, _, ns) in _corePrograms)
         {
-            RegisterProgramPresets(registry, program);
+            RegisterProgramPresets(registry, program, ns);
         }
     }
 
@@ -222,9 +248,9 @@ public sealed class StdlibLoader
                 return "Core";
             }
 
-            // Convert directory separators to module dots
-            return relativePath.Replace(Path.DirectorySeparatorChar, '.')
-                               .Replace(Path.AltDirectorySeparatorChar, '.');
+            // Convert directory separators to module path separators
+            return relativePath.Replace(Path.DirectorySeparatorChar, '/')
+                               .Replace(Path.AltDirectorySeparatorChar, '/');
         }
         catch
         {
@@ -255,6 +281,8 @@ public sealed class StdlibLoader
             return false;
         }
 
+        _loadedModules.Add(moduleName);
+
         // Three-pass registration: protocols first, then other types, then routines
         foreach (var (program, _, ns) in programs)
         {
@@ -277,9 +305,9 @@ public sealed class StdlibLoader
         }
 
         // Register presets for the module
-        foreach (var (program, _, _) in programs)
+        foreach (var (program, _, ns) in programs)
         {
-            RegisterProgramPresets(registry, program);
+            RegisterProgramPresets(registry, program, ns);
         }
 
         return true;
@@ -305,6 +333,15 @@ public sealed class StdlibLoader
             // Get module from file declaration, or derive from directory structure
             string? fileModule = GetDeclaredModule(ast);
             string effectiveModule = fileModule ?? DeriveModuleFromPath(filePath);
+
+            // Track loaded program for codegen
+            _loadedModules.Add(moduleId);
+            if (!_modulePrograms.TryGetValue(moduleId, out var progs))
+            {
+                progs = [];
+                _modulePrograms[moduleId] = progs;
+            }
+            progs.Add((ast, filePath, effectiveModule));
 
             // Two-pass registration for single module
             RegisterProgramTypes(registry, ast, effectiveModule);
@@ -418,6 +455,78 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
+    /// Re-resolves member variables for types that had unresolvable forward references
+    /// during initial registration. Called after all type shells are registered.
+    /// </summary>
+    private static void ResolveProgramMemberVariables(TypeRegistry registry, Program program)
+    {
+        foreach (var node in program.Declarations)
+        {
+            switch (node)
+            {
+                case EntityDeclaration entity:
+                {
+                    var existing = registry.LookupType(entity.Name) as EntityTypeInfo;
+                    if (existing == null || existing.MemberVariables.Count > 0)
+                        continue; // Already has members, or not found
+
+                    var members = ResolveMemberVariables(registry, entity.Members, entity.GenericParameters);
+                    if (members.Count > 0)
+                        existing.MemberVariables = members;
+                    break;
+                }
+                case RecordDeclaration record:
+                {
+                    var existing = registry.LookupType(record.Name) as RecordTypeInfo;
+                    if (existing == null || existing.MemberVariables.Count > 0)
+                        continue;
+
+                    var members = ResolveMemberVariables(registry, record.Members, record.GenericParameters);
+                    if (members.Count > 0)
+                        existing.MemberVariables = members;
+                    break;
+                }
+                case ResidentDeclaration resident:
+                {
+                    var existing = registry.LookupType(resident.Name) as ResidentTypeInfo;
+                    if (existing == null || existing.MemberVariables.Count > 0)
+                        continue;
+
+                    var members = ResolveMemberVariables(registry, resident.Members, resident.GenericParameters);
+                    if (members.Count > 0)
+                        existing.MemberVariables = members;
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves member variable types from a list of member declarations.
+    /// </summary>
+    private static List<SemanticAnalysis.Symbols.MemberVariableInfo> ResolveMemberVariables(
+        TypeRegistry registry, IReadOnlyList<Declaration> members,
+        IReadOnlyList<string>? genericParams)
+    {
+        var result = new List<SemanticAnalysis.Symbols.MemberVariableInfo>();
+        foreach (var member in members)
+        {
+            if (member is VariableDeclaration { Type: not null } memberVariable)
+            {
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, genericParams);
+                if (memberVariableType != null)
+                {
+                    result.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
+                    {
+                        Visibility = memberVariable.Visibility
+                    });
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Registers routine declarations from a program.
     /// This is pass 2 of module-based loading - all types are already registered.
     /// </summary>
@@ -425,10 +534,74 @@ public sealed class StdlibLoader
     {
         foreach (var node in program.Declarations)
         {
-            if (node is RoutineDeclaration routine)
+            switch (node)
             {
-                RegisterRoutine(registry, routine, moduleName);
+                case RoutineDeclaration routine:
+                    RegisterRoutine(registry, routine, moduleName);
+                    break;
+                case ExternalDeclaration external:
+                    RegisterExternalDeclaration(registry, external, moduleName);
+                    break;
+                case ExternalBlockDeclaration block:
+                    foreach (var decl in block.Declarations)
+                    {
+                        if (decl is ExternalDeclaration ext)
+                            RegisterExternalDeclaration(registry, ext, moduleName);
+                    }
+                    break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Registers an external("C") declaration from stdlib (e.g., NativeDeclarations.rf).
+    /// </summary>
+    private static void RegisterExternalDeclaration(TypeRegistry registry, ExternalDeclaration external,
+        string moduleName)
+    {
+        // Build generic context for type resolution (e.g., T, To, From)
+        IReadOnlyList<string>? genericCtx = external.GenericParameters is { Count: > 0 }
+            ? external.GenericParameters
+            : null;
+
+        // Resolve parameter types
+        var parameters = new List<SemanticAnalysis.Symbols.ParameterInfo>();
+        foreach (var param in external.Parameters)
+        {
+            var paramType = ResolveSimpleType(registry, param.Type, genericCtx);
+            parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
+                paramType ?? ErrorTypeInfo.Instance)
+            {
+                DefaultValue = param.DefaultValue,
+                IsVariadicParam = param.IsVariadic
+            });
+        }
+
+        // Resolve return type
+        var returnType = external.ReturnType != null
+            ? ResolveSimpleType(registry, external.ReturnType, genericCtx)
+            : null;
+
+        var routineInfo = new SemanticAnalysis.Symbols.RoutineInfo(external.Name)
+        {
+            Kind = RoutineKind.External,
+            CallingConvention = external.CallingConvention ?? "C",
+            IsVariadic = external.IsVariadic,
+            Parameters = parameters,
+            ReturnType = returnType,
+            Module = moduleName,
+            IsDangerous = external.IsDangerous,
+            GenericParameters = external.GenericParameters,
+            Annotations = external.Annotations ?? []
+        };
+
+        try
+        {
+            registry.RegisterRoutine(routineInfo);
+        }
+        catch
+        {
+            // Ignore duplicate routine registration
         }
     }
 
@@ -436,7 +609,7 @@ public sealed class StdlibLoader
     /// Registers preset (build-time constant) declarations from a program.
     /// Presets are module-level constants accessible across files within the same module.
     /// </summary>
-    private static void RegisterProgramPresets(TypeRegistry registry, Program program)
+    private static void RegisterProgramPresets(TypeRegistry registry, Program program, string moduleName)
     {
         foreach (var node in program.Declarations)
         {
@@ -445,7 +618,7 @@ public sealed class StdlibLoader
                 var presetType = ResolveSimpleType(registry, preset.Type);
                 if (presetType != null)
                 {
-                    registry.RegisterPreset(preset.Name, presetType);
+                    registry.RegisterPreset(preset.Name, presetType, moduleName);
                 }
             }
         }
@@ -467,21 +640,63 @@ public sealed class StdlibLoader
         {
             string typeName = routineName[..dotIndex];
             methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "__add__")
-            ownerType = registry.LookupType(typeName);
+
+            int bracketIndex = typeName.IndexOf('[');
+            if (bracketIndex > 0)
+            {
+                // Check if the bracket content is concrete types (e.g., List[Byte])
+                // vs generic params (e.g., List[T], Dict[K, V])
+                string bracketContent = typeName[(bracketIndex + 1)..].TrimEnd(']');
+                string baseName = typeName[..bracketIndex];
+                var baseDef = registry.LookupType(baseName);
+
+                // If the base is a generic definition, check if bracket args are its own params
+                bool isGenericDef = false;
+                if (baseDef?.GenericParameters != null)
+                {
+                    var args = bracketContent.Split(',').Select(a => a.Trim()).ToList();
+                    isGenericDef = args.All(a => baseDef.GenericParameters.Contains(a));
+                }
+
+                if (isGenericDef)
+                {
+                    // Generic definition: List[T] → owner is List
+                    ownerType = baseDef;
+                }
+                else
+                {
+                    // Concrete specialization: List[Byte] → owner is List[Byte]
+                    ownerType = registry.LookupType(typeName) ?? baseDef;
+                }
+            }
+            else
+            {
+                ownerType = registry.LookupType(typeName);
+            }
         }
+
+        // Collect generic params from owner type + routine itself for type resolution context
+        var genericContext = new List<string>();
+        if (ownerType?.GenericParameters != null) genericContext.AddRange(ownerType.GenericParameters);
+        if (routine.GenericParameters != null) genericContext.AddRange(routine.GenericParameters);
+        IReadOnlyList<string>? ctx = genericContext.Count > 0 ? genericContext : null;
 
         // Resolve parameter types
         var parameters = new List<SemanticAnalysis.Symbols.ParameterInfo>();
         foreach (var param in routine.Parameters)
         {
-            var paramType = ResolveSimpleType(registry, param.Type);
+            var paramType = ResolveSimpleType(registry, param.Type, ctx);
             parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
-                paramType ?? ErrorTypeInfo.Instance));
+                paramType ?? ErrorTypeInfo.Instance)
+            {
+                DefaultValue = param.DefaultValue,
+                IsVariadicParam = param.IsVariadic
+            });
         }
 
         // Resolve return type
         var returnType = routine.ReturnType != null
-            ? ResolveSimpleType(registry, routine.ReturnType)
+            ? ResolveSimpleType(registry, routine.ReturnType, ctx)
             : null;
 
         // Use just the method name (not "S32.__add__", just "__add__")
@@ -491,7 +706,8 @@ public sealed class StdlibLoader
             Parameters = parameters,
             ReturnType = returnType,
             Module = moduleName,
-            IsFailable = routine.IsFailable
+            IsFailable = routine.IsFailable,
+            GenericParameters = routine.GenericParameters
         };
 
         try
@@ -522,7 +738,7 @@ public sealed class StdlibLoader
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type);
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, record.GenericParameters);
                 if (memberVariableType != null)
                 {
                     memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
@@ -537,7 +753,7 @@ public sealed class StdlibLoader
         var protocols = new List<TypeInfo>();
         foreach (var protoExpr in record.Protocols)
         {
-            var protoType = ResolveSimpleType(registry, protoExpr);
+            var protoType = ResolveSimpleType(registry, protoExpr, record.GenericParameters);
             if (protoType != null)
             {
                 protocols.Add(protoType);
@@ -582,7 +798,7 @@ public sealed class StdlibLoader
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type);
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, entity.GenericParameters);
                 if (memberVariableType != null)
                 {
                     memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
@@ -597,7 +813,7 @@ public sealed class StdlibLoader
         var protocols = new List<TypeInfo>();
         foreach (var protoExpr in entity.Protocols)
         {
-            var protoType = ResolveSimpleType(registry, protoExpr);
+            var protoType = ResolveSimpleType(registry, protoExpr, entity.GenericParameters);
             if (protoType != null)
             {
                 protocols.Add(protoType);
@@ -635,7 +851,7 @@ public sealed class StdlibLoader
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type);
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, resident.GenericParameters);
                 if (memberVariableType != null)
                 {
                     memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
@@ -650,7 +866,7 @@ public sealed class StdlibLoader
         var protocols = new List<TypeInfo>();
         foreach (var protoExpr in resident.Protocols)
         {
-            var protoType = ResolveSimpleType(registry, protoExpr);
+            var protoType = ResolveSimpleType(registry, protoExpr, resident.GenericParameters);
             if (protoType != null)
             {
                 protocols.Add(protoType);
@@ -839,10 +1055,14 @@ public sealed class StdlibLoader
 
     /// <summary>
     /// Resolves a simple type expression.
-    /// Only handles intrinsic types and direct type references.
+    /// Handles intrinsic types, direct type references, generic parameter names,
+    /// and parameterized types like List[Letter] or Dict[Text, S32].
     /// </summary>
+    /// <param name="registry">The type registry to look up types in.</param>
+    /// <param name="typeExpr">The type expression to resolve.</param>
+    /// <param name="genericParams">Optional list of generic parameter names in scope (e.g., T, K, V).</param>
     private static TypeInfo? ResolveSimpleType(TypeRegistry registry,
-        TypeExpression? typeExpr)
+        TypeExpression? typeExpr, IReadOnlyList<string>? genericParams = null)
     {
         if (typeExpr == null) return null;
 
@@ -852,6 +1072,30 @@ public sealed class StdlibLoader
         if (typeName.StartsWith("@intrinsic."))
         {
             return registry.LookupType(typeName);
+        }
+
+        // Generic parameter name (T, K, V) → placeholder for substitution
+        if (genericParams != null && genericParams.Contains(typeName))
+        {
+            return new GenericParameterTypeInfo(typeName);
+        }
+
+        // Parameterized type like List[Letter], Dict[Text, S32]
+        if (typeExpr.GenericArguments is { Count: > 0 })
+        {
+            var genericDef = registry.LookupType(typeName);
+            if (genericDef is { IsGenericDefinition: true }
+                && genericDef.GenericParameters!.Count == typeExpr.GenericArguments.Count)
+            {
+                var typeArgs = new List<TypeInfo>();
+                foreach (var argExpr in typeExpr.GenericArguments)
+                {
+                    var argType = ResolveSimpleType(registry, argExpr, genericParams);
+                    if (argType == null) return null;
+                    typeArgs.Add(argType);
+                }
+                return registry.GetOrCreateResolution(genericDef, typeArgs);
+            }
         }
 
         // Try to look up existing type

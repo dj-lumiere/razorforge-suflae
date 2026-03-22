@@ -38,6 +38,62 @@ rf_S32 rf_strcmp(const char* s1, const char* s2)
 }
 
 // ============================================================================
+// Text Entity Construction (UTF-8 CStr → UTF-32 Text)
+// ============================================================================
+
+// Text entity layout:   { ptr letters }
+// List[Letter] layout:  { ptr data, i64 count, i64 capacity }
+// data points to array of i32 (UTF-32 codepoints)
+void* rf_text_from_cstr(const char* cstr)
+{
+    if (!cstr) cstr = "";
+    size_t len = strlen(cstr);
+
+    // Count UTF-32 codepoints
+    size_t cp_count = 0;
+    for (size_t i = 0; i < len; ) {
+        uint8_t b = (uint8_t)cstr[i];
+        if (b < 0x80) i += 1;
+        else if (b < 0xE0) i += 2;
+        else if (b < 0xF0) i += 3;
+        else i += 4;
+        cp_count++;
+    }
+
+    // Allocate codepoint data
+    uint32_t* data = (uint32_t*)malloc(cp_count * sizeof(uint32_t));
+    if (!data) { fprintf(stderr, "RazorForge: OOM in rf_text_from_cstr\n"); abort(); }
+
+    // Decode UTF-8 → UTF-32
+    size_t idx = 0;
+    for (size_t i = 0; i < len; ) {
+        uint8_t b0 = (uint8_t)cstr[i];
+        uint32_t cp;
+        if (b0 < 0x80)       { cp = b0; i += 1; }
+        else if (b0 < 0xE0)  { cp = ((b0 & 0x1F) << 6)  | (cstr[i+1] & 0x3F); i += 2; }
+        else if (b0 < 0xF0)  { cp = ((b0 & 0x0F) << 12) | ((cstr[i+1] & 0x3F) << 6) | (cstr[i+2] & 0x3F); i += 3; }
+        else                  { cp = ((b0 & 0x07) << 18) | ((cstr[i+1] & 0x3F) << 12) | ((cstr[i+2] & 0x3F) << 6) | (cstr[i+3] & 0x3F); i += 4; }
+        data[idx++] = cp;
+    }
+
+    // Allocate List[Letter] entity: { ptr data, i64 count, i64 capacity }
+    typedef struct { void* data; int64_t count; int64_t capacity; } ListLetter;
+    ListLetter* list = (ListLetter*)malloc(sizeof(ListLetter));
+    if (!list) { fprintf(stderr, "RazorForge: OOM in rf_text_from_cstr\n"); abort(); }
+    list->data = data;
+    list->count = (int64_t)cp_count;
+    list->capacity = (int64_t)cp_count;
+
+    // Allocate Text entity: { ptr letters }
+    typedef struct { void* letters; } TextEntity;
+    TextEntity* text = (TextEntity*)malloc(sizeof(TextEntity));
+    if (!text) { fprintf(stderr, "RazorForge: OOM in rf_text_from_cstr\n"); abort(); }
+    text->letters = list;
+
+    return text;
+}
+
+// ============================================================================
 // Console I/O Operations
 // ============================================================================
 
@@ -196,6 +252,12 @@ char* rf_console_get_all()
     buffer[length] = '\0';
     return buffer;
 }
+
+// Print null-terminated string to stdout (no newline appended)
+void rf_console_puts(const char* str) { fputs(str, stdout); }
+
+// Print null-terminated string to stderr (no newline appended)
+void rf_console_alert_puts(const char* str) { fputs(str, stderr); }
 
 // Flush output
 void rf_console_flush()

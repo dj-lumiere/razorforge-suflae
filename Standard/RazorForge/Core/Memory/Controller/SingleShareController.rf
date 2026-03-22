@@ -1,7 +1,7 @@
 module Core
 
 # RazorForge Single-threaded Share Controller
-# Core reference counting mechanism for single-threaded Shared[T] memory management
+# Core reference counting mechanism for single-threaded Retained[T] memory management
 
 entity SingleShareController
   secret strong_count: S32

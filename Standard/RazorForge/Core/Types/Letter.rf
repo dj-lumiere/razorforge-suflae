@@ -7,7 +7,7 @@
 # because character boundaries are trivial to find.
 #
 # For I/O and storage, convert to Bytes (UTF-8).
-# For Windows API interop, use CWStr with Text[letter16].
+# For Windows API interop, use CWStr with List[U16].
 #
 # For legacy 32-bit encodings, use List[U32] instead.
 module Core
@@ -44,11 +44,12 @@ routine Letter.is_ascii() -> Bool
 
 routine Letter.is_alphabetic() -> Bool
   var v = me.value
-  return (0x0041u32 <= v <= 0x005Au32) or    # A-Z
-     (0x0061u32 <= v <= 0x007Au32) or    # a-z
-     (0x00C0u32 <= v <= 0x00FFu32) or    # Latin Extended
-     (0x0100u32 <= v <= 0x017Fu32) or    # Latin Extended-A
-     (0x0180u32 <= v <= 0x024Fu32)       # Latin Extended-B
+  var is_ascii_upper = 0x0041u32 <= v <= 0x005Au32
+  var is_ascii_lower = 0x0061u32 <= v <= 0x007Au32
+  var is_latin_ext = 0x00C0u32 <= v <= 0x00FFu32
+  var is_latin_ext_a = 0x0100u32 <= v <= 0x017Fu32
+  var is_latin_ext_b = 0x0180u32 <= v <= 0x024Fu32
+  return is_ascii_upper or is_ascii_lower or is_latin_ext or is_latin_ext_a or is_latin_ext_b
 
 routine Letter.is_numeric() -> Bool
   var v = me.value
@@ -67,16 +68,17 @@ routine Letter.is_lowercase() -> Bool
 
 routine Letter.is_whitespace() -> Bool
   var v = me.value
-  return v == 0x0020u32 or    # Space
-     v == 0x0009u32 or    # Tab
-     v == 0x000Au32 or    # Line feed
-     v == 0x000Du32 or    # Carriage return
-     v == 0x000Cu32 or    # Form feed
-     v == 0x00A0u32 or    # Non-breaking space
-     v == 0x2000u32 or    # En quad
-     v == 0x2001u32 or    # Em quad
-     v == 0x2002u32 or    # En space
-     v == 0x2003u32       # Em space
+  var is_space = v == 0x0020u32
+  var is_tab = v == 0x0009u32
+  var is_lf = v == 0x000Au32
+  var is_cr = v == 0x000Du32
+  var is_ff = v == 0x000Cu32
+  var is_nbsp = v == 0x00A0u32
+  var is_en_quad = v == 0x2000u32
+  var is_em_quad = v == 0x2001u32
+  var is_en_space = v == 0x2002u32
+  var is_em_space = v == 0x2003u32
+  return is_space or is_tab or is_lf or is_cr or is_ff or is_nbsp or is_en_quad or is_em_quad or is_en_space or is_em_space
 
 routine Letter.is_control() -> Bool
   var v = me.value
@@ -141,24 +143,27 @@ routine Letter.is_supplementary() -> Bool
 
 routine Letter.is_cjk() -> Bool
   var v = me.value
-  return (0x4E00u32 <= v <= 0x9FFFu32) or    # CJK Unified Ideographs
-     (0x3400u32 <= v <= 0x4DBFu32) or    # CJK Extension A
-     (0x20000u32 <= v <= 0x2A6DFu32) or  # CJK Extension B
-     (0x2A700u32 <= v <= 0x2B73Fu32)     # CJK Extension C
+  var is_unified = 0x4E00u32 <= v <= 0x9FFFu32
+  var is_ext_a = 0x3400u32 <= v <= 0x4DBFu32
+  var is_ext_b = 0x20000u32 <= v <= 0x2A6DFu32
+  var is_ext_c = 0x2A700u32 <= v <= 0x2B73Fu32
+  return is_unified or is_ext_a or is_ext_b or is_ext_c
 
 routine Letter.is_latin() -> Bool
   var v = me.value
-  return (0x0000u32 <= v <= 0x007Fu32) or    # Basic Latin
-     (0x0080u32 <= v <= 0x00FFu32) or    # Latin-1 Supplement
-     (0x0100u32 <= v <= 0x017Fu32) or    # Latin Extended-A
-     (0x0180u32 <= v <= 0x024Fu32)       # Latin Extended-B
+  var is_basic = 0x0000u32 <= v <= 0x007Fu32
+  var is_supplement = 0x0080u32 <= v <= 0x00FFu32
+  var is_ext_a = 0x0100u32 <= v <= 0x017Fu32
+  var is_ext_b = 0x0180u32 <= v <= 0x024Fu32
+  return is_basic or is_supplement or is_ext_a or is_ext_b
 
 routine Letter.is_emoji() -> Bool
   var v = me.value
-  return (0x1F600u32 <= v <= 0x1F64Fu32) or  # Emoticons
-     (0x1F300u32 <= v <= 0x1F5FFu32) or  # Misc Symbols and Pictographs
-     (0x1F680u32 <= v <= 0x1F6FFu32) or  # Transport and Map
-     (0x1F1E0u32 <= v <= 0x1F1FFu32)     # Flags
+  var is_emoticons = 0x1F600u32 <= v <= 0x1F64Fu32
+  var is_misc = 0x1F300u32 <= v <= 0x1F5FFu32
+  var is_transport = 0x1F680u32 <= v <= 0x1F6FFu32
+  var is_flags = 0x1F1E0u32 <= v <= 0x1F1FFu32
+  return is_emoticons or is_misc or is_transport or is_flags
 
 # ============================================================================
 # Codepoint offset

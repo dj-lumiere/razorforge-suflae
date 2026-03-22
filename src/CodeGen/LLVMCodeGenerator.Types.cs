@@ -14,8 +14,16 @@ public partial class LLVMCodeGenerator
     /// </summary>
     /// <param name="type">The type to convert.</param>
     /// <returns>The LLVM type string.</returns>
+    private TypeInfo ResolveTypeSubstitution(TypeInfo type)
+    {
+        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(type.Name, out var sub))
+            return sub;
+        return type;
+    }
+
     private string GetLLVMType(TypeInfo type)
     {
+        type = ResolveTypeSubstitution(type);
         return type switch
         {
             // Intrinsic types map directly to LLVM
@@ -27,6 +35,19 @@ public partial class LLVMCodeGenerator
             // Legacy single-member-variable wrappers → unwrap to underlying intrinsic
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetLLVMType(record.UnderlyingIntrinsic!),
+
+            // Generic definition records (unresolved) → pointer fallback
+            RecordTypeInfo { IsGenericDefinition: true } => "ptr",
+
+            // Records with no fields — look up the registered definition (may have @llvm annotation)
+            RecordTypeInfo { MemberVariables.Count: 0 } record when
+                _registry.LookupType(record.Name) is RecordTypeInfo { HasDirectBackendType: true } llvmRecord
+                => llvmRecord.LlvmType,
+
+            // Records with no fields and generic base type has @llvm annotation
+            RecordTypeInfo { MemberVariables.Count: 0 } record when record.Name.Contains('[') &&
+                _registry.LookupType(record.Name[..record.Name.IndexOf('[')]) is RecordTypeInfo { HasDirectBackendType: true } baseRecord
+                => baseRecord.LlvmType,
 
             // Multi-member-variable records → LLVM struct type
             RecordTypeInfo record => GetRecordTypeName(record),
@@ -58,9 +79,8 @@ public partial class LLVMCodeGenerator
             ProtocolTypeInfo => throw new InvalidOperationException(
                 "Protocol types cannot be used directly in codegen"),
 
-            // Generic parameters should be resolved by this point
-            GenericParameterTypeInfo param => throw new InvalidOperationException(
-                $"Unresolved generic parameter '{param.Name}' in codegen"),
+            // Generic parameters — use ptr as fallback (should be resolved before reaching codegen)
+            GenericParameterTypeInfo => "ptr",
 
             // Error placeholder
             ErrorTypeInfo => throw new InvalidOperationException(
@@ -210,6 +230,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string GetParameterLLVMType(TypeInfo type)
     {
+        type = ResolveTypeSubstitution(type);
         return type switch
         {
             // Entities are always passed as pointers
@@ -296,14 +317,17 @@ public partial class LLVMCodeGenerator
     private int CalculateRecordSize(RecordTypeInfo record)
     {
         int size = 0;
+        int maxAlignment = 1;
         foreach (var memberVariable in record.MemberVariables)
         {
             int memberVariableSize = GetTypeSize(memberVariable.Type);
-            // Align to member variable size (simplified - real alignment is more complex)
-            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);
+            maxAlignment = Math.Max(maxAlignment, alignment);
+            size = AlignTo(size, alignment);
             size += memberVariableSize;
         }
-        return AlignTo(size, 8); // Align struct to 8 bytes
+        // Align struct to its natural alignment (max member alignment), matching LLVM layout
+        return AlignTo(size, maxAlignment);
     }
 
     /// <summary>
@@ -315,7 +339,8 @@ public partial class LLVMCodeGenerator
         foreach (var memberVariable in entity.MemberVariables)
         {
             int memberVariableSize = GetTypeSize(memberVariable.Type);
-            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);
+            size = AlignTo(size, alignment);
             size += memberVariableSize;
         }
         return AlignTo(size, 8);
@@ -330,7 +355,8 @@ public partial class LLVMCodeGenerator
         foreach (var memberVariable in resident.MemberVariables)
         {
             int memberVariableSize = GetTypeSize(memberVariable.Type);
-            size = AlignTo(size, Math.Min(memberVariableSize, 8));
+            int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);
+            size = AlignTo(size, alignment);
             size += memberVariableSize;
         }
         return AlignTo(size, 8);

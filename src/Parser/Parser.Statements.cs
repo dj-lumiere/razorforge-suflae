@@ -470,14 +470,14 @@ public partial class Parser
                 }
                 else
                 {
-                    // Single-line form: pattern => expression
-                    body = ParseExpressionStatement();
+                    // Single-line form: pattern => statement (break, return, expression, etc.)
+                    body = ParseStatement();
                 }
             }
             else
             {
                 Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after when pattern");
-                body = ParseExpressionStatement();
+                body = ParseStatement();
             }
             _inWhenClauseBody = false;
 
@@ -1030,8 +1030,9 @@ public partial class Parser
         // Parse statements until we hit a dedent
         while (!Check(type: TokenType.Dedent) && !IsAtEnd)
         {
-            // Skip empty lines
-            if (Match(type: TokenType.Newline))
+            // Skip empty lines and doc comments (indentation handler doesn't emit
+            // Dedent for comment-only lines, so doc comments at lower indent may appear here)
+            if (Match(TokenType.Newline, TokenType.DocComment))
             {
                 continue;
             }

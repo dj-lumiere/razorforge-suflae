@@ -300,39 +300,6 @@ routine U16.is_power_of_two() -> Bool
   return me != 0_u16 and (me & (me - 1_u16)) == 0_u16
 
 # ============================================================================
-# Type Conversions (creator syntax)
-# ============================================================================
-
-# Bitcast to signed
-routine S16(from: U16) -> S16
-  return bitcast[U16, S16](from)
-
-# Zero-extend to larger types
-routine U32(from: U16) -> U32
-  return zext[U16, U32](from)
-
-routine U64(from: U16) -> U64
-  return zext[U16, U64](from)
-
-routine U128(from: U16) -> U128
-  return zext[U16, U128](from)
-
-# Truncate to smaller types
-routine U8(from: U16) -> U8
-  return trunc[U16, U8](from)
-
-# Convert to floating point
-routine F32(from: U16) -> F32
-  return uitofp[U16, F32](from)
-
-routine F64(from: U16) -> F64
-  return uitofp[U16, F64](from)
-
-# Convert to boolean
-routine Bool(from: U16) -> Bool
-  return icmp_ne[U16](from, 0_u16)
-
-# ============================================================================
 # Utility Methods
 # ============================================================================
 

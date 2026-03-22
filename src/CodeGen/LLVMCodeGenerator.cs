@@ -61,6 +61,12 @@ public partial class LLVMCodeGenerator
     /// <summary>Map of local variable names to their types for the current function.</summary>
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
 
+    /// <summary>Map of source variable names to unique LLVM variable names (handles shadowing).</summary>
+    private readonly Dictionary<string, string> _localVarLLVMNames = new();
+
+    /// <summary>Counter for deduplicating variable names within a function.</summary>
+    private readonly Dictionary<string, int> _varNameCounts = new();
+
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedFunctionDefs = [];
 
@@ -69,6 +75,22 @@ public partial class LLVMCodeGenerator
 
     /// <summary>The label of the current basic block (for phi node generation).</summary>
     private string _currentBlock = "entry";
+
+    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Letter).</summary>
+    private Dictionary<string, TypeInfo>? _typeSubstitutions;
+
+    /// <summary>
+    /// Pending generic monomorphizations: mangled function name → info needed to compile.
+    /// Populated by EmitMethodCall/EmitGenericMethodCall when a resolved generic method is called.
+    /// </summary>
+    private readonly Dictionary<string, MonomorphizationEntry> _pendingMonomorphizations = new();
+
+    /// <summary>Entry for a pending generic monomorphization.</summary>
+    private record MonomorphizationEntry(
+        RoutineInfo GenericMethod,
+        TypeInfo ResolvedOwnerType,
+        Dictionary<string, TypeInfo> TypeSubstitutions,
+        string GenericAstName);
 
     /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
     private readonly int _pointerBitWidth;
@@ -215,8 +237,10 @@ public partial class LLVMCodeGenerator
 
         foreach (var routine in _registry.GetAllRoutines())
         {
-            // Skip generic definitions and routines with unresolved types
-            if (routine.IsGenericDefinition || HasErrorTypes(routine))
+            // Skip generic definitions, routines with unresolved types,
+            // and methods on generic owner types (e.g., Dict[K,V].count)
+            if (routine.IsGenericDefinition || HasErrorTypes(routine)
+                || routine.OwnerType is { IsGenericDefinition: true })
             {
                 continue;
             }
@@ -277,59 +301,113 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Then, generate stdlib routine definitions (for intrinsic operations)
-        // This allows S64.__add__ etc. to have their bodies built
-        // We wrap each in try-catch since some stdlib routines may have parse errors
-        foreach (var (program, _, _) in _stdlibPrograms)
+        // Then, generate stdlib routine definitions only for routines that were
+        // declared (i.e., actually referenced). This avoids compiling every stdlib
+        // routine, many of which use features not yet supported in codegen (presets, etc.)
+        // Use a multi-pass approach: compiling one stdlib routine may reference others
+        // (e.g., show() → CStr.__create__), so repeat until no new definitions are added.
+        int prevDefCount;
+        do
         {
-            foreach (var decl in program.Declarations)
+            prevDefCount = _generatedFunctionDefs.Count;
+
+            foreach (var (program, _, module) in _stdlibPrograms)
             {
-                if (decl is RoutineDeclaration routine)
+                foreach (var decl in program.Declarations)
                 {
-                    try
+                    if (decl is RoutineDeclaration routine)
                     {
-                        GenerateFunctionDefinition(routine);
-                    }
-                    catch
-                    {
-                        // Skip stdlib routines that have codegen errors
-                        // (likely due to parse errors in stdlib files)
+                        // Look up routine info — try multiple keys:
+                        // 1. Raw AST name (e.g., "show")
+                        // 2. Module-qualified (e.g., "IO.show")
+                        // 3. Short name fallback via LookupRoutineByName
+                        // 4. Overload-based lookup using AST parameter types
+                        var routineInfo = _registry.LookupRoutine(routine.Name);
+                        if (routineInfo == null && !string.IsNullOrEmpty(module))
+                        {
+                            routineInfo = _registry.LookupRoutine($"{module}.{routine.Name}");
+                        }
+                        if (routineInfo == null)
+                        {
+                            int dotIdx = routine.Name.IndexOf('.');
+                            if (dotIdx > 0)
+                            {
+                                string shortName = routine.Name[(dotIdx + 1)..];
+                                routineInfo = _registry.LookupRoutine(shortName)
+                                              ?? _registry.LookupRoutineByName(shortName);
+                            }
+                            else
+                            {
+                                routineInfo = _registry.LookupRoutineByName(routine.Name);
+                            }
+                        }
+
+                        // For overloaded routines (e.g., __create__), try to find the
+                        // specific overload matching this AST declaration's parameter types
+                        if (routineInfo != null && routine.Parameters.Count > 0)
+                        {
+                            var astParamTypes = new List<SemanticAnalysis.Types.TypeInfo>();
+                            foreach (var param in routine.Parameters)
+                            {
+                                if (param.Type != null)
+                                {
+                                    string typeName = param.Type.Name;
+                                    if (param.Type.GenericArguments is { Count: > 0 })
+                                        typeName = $"{typeName}[{string.Join(", ", param.Type.GenericArguments.Select(a => a.Name))}]";
+                                    var t = _registry.LookupType(typeName);
+                                    if (t != null) astParamTypes.Add(t);
+                                }
+                            }
+                            if (astParamTypes.Count == routine.Parameters.Count)
+                            {
+                                var overload = _registry.LookupRoutineOverload(
+                                    routineInfo.FullName, astParamTypes);
+                                if (overload != null)
+                                    routineInfo = overload;
+                            }
+                        }
+                        if (routineInfo == null || routineInfo.IsGenericDefinition)
+                            continue;
+                        if (HasErrorTypes(routineInfo))
+                            continue;
+
+                        // Only generate definitions for routines that were declared
+                        string funcName = MangleFunctionName(routineInfo);
+                        if (!_generatedFunctions.Contains(funcName))
+                            continue;
+
+                        // Skip if already defined
+                        if (_generatedFunctionDefs.Contains(funcName))
+                            continue;
+
+                        try
+                        {
+                            GenerateFunctionDefinition(routine, routineInfo);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"Warning: Stdlib codegen failed for '{routine.Name}': {ex.Message}");
+                        }
                     }
                 }
             }
-        }
+        } while (_generatedFunctionDefs.Count > prevDefCount);
+
+        // Monomorphize generic methods: compile generic AST bodies with type substitutions
+        MonomorphizeGenericMethods();
 
         // Finally, generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__)
         GenerateSynthesizedRoutines();
     }
 
     /// <summary>
-    /// Generates runtime support functions (allocation, deallocation, etc.).
-    /// Only declares functions that haven't already been declared via @native.* calls.
+    /// Generates runtime support functions.
+    /// External("C") routines from NativeDeclarations.rf are declared via GenerateFunctionDeclarations().
     /// </summary>
     private void GenerateRuntimeSupport()
     {
-        EmitLine(_functionDeclarations, "; Runtime support functions");
-
-        // Declare only if not already declared via @native.* calls
-        if (_declaredNativeFunctions.Add("rf_alloc"))
-        {
-            EmitLine(_functionDeclarations, "declare ptr @rf_alloc(i64)");
-        }
-        if (_declaredNativeFunctions.Add("rf_free"))
-        {
-            EmitLine(_functionDeclarations, "declare void @rf_free(ptr)");
-        }
-        if (_declaredNativeFunctions.Add("rf_console_print"))
-        {
-            EmitLine(_functionDeclarations, "declare void @rf_console_print(ptr, i64)");
-        }
-        if (_declaredNativeFunctions.Add("rf_console_print_line"))
-        {
-            EmitLine(_functionDeclarations, "declare void @rf_console_print_line(ptr, i64)");
-        }
-
-        EmitLine(_functionDeclarations, "");
+        // No-op: external("C") routines are handled by GenerateFunctionDeclarations()
+        // via the TypeRegistry (registered from NativeDeclarations.rf).
     }
 
     /// <summary>
@@ -363,12 +441,27 @@ public partial class LLVMCodeGenerator
             output.AppendLine();
         }
 
-        // Function declarations
+        // Function declarations — filter out any that now have definitions
         if (_functionDeclarations.Length > 0)
         {
             output.AppendLine("; Function declarations");
-            output.Append(_functionDeclarations);
-            output.AppendLine();
+            foreach (string line in _functionDeclarations.ToString().Split('\n'))
+            {
+                // Skip declare lines for functions that have definitions
+                if (line.StartsWith("declare ") && _generatedFunctionDefs.Count > 0)
+                {
+                    // Extract function name from "declare ... @funcName(...)"
+                    int atIdx = line.IndexOf('@');
+                    int parenIdx = line.IndexOf('(', atIdx > 0 ? atIdx : 0);
+                    if (atIdx > 0 && parenIdx > atIdx)
+                    {
+                        string declaredName = line[(atIdx + 1)..parenIdx];
+                        if (_generatedFunctionDefs.Contains(declaredName))
+                            continue; // Skip — this function has a define
+                    }
+                }
+                output.AppendLine(line);
+            }
         }
 
         // Function definitions
@@ -378,7 +471,19 @@ public partial class LLVMCodeGenerator
             output.Append(_functionDefinitions);
         }
 
-        return output.ToString();
+        // Emit main() entry point that calls start()
+        if (_generatedFunctionDefs.Contains("start"))
+        {
+            output.AppendLine("; Entry point");
+            output.AppendLine("define i32 @main(i32 %argc, ptr %argv) {");
+            output.AppendLine("entry:");
+            output.AppendLine("  call void @start()");
+            output.AppendLine("  ret i32 0");
+            output.AppendLine("}");
+        }
+
+        // Normalize to Unix line endings (clang/LLVM requires LF, not CRLF)
+        return output.ToString().Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
     #endregion
@@ -407,9 +512,52 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits a line to a StringBuilder.
     /// </summary>
-    private static void EmitLine(StringBuilder sb, string line)
+    private void EmitLine(StringBuilder sb, string line)
     {
         sb.AppendLine(line);
+        // Auto-track current basic block for PHI node predecessors
+        if (line.Length > 0 && line[0] != ' ' && line.EndsWith(':'))
+            _currentBlock = line[..^1];
+    }
+
+    /// <summary>
+    /// Records a pending monomorphization for a resolved generic method call.
+    /// Called from EmitMethodCall/EmitGenericMethodCall when a call targets a method on
+    /// a resolved generic type (e.g., List[Letter].add_last).
+    /// </summary>
+    private void RecordMonomorphization(string mangledName, RoutineInfo genericMethod, TypeInfo resolvedOwnerType)
+    {
+        if (_pendingMonomorphizations.ContainsKey(mangledName))
+            return;
+
+        // Build the generic AST name: "List[T].add_last" from owner's generic definition name + method name
+        TypeInfo? genericDef = resolvedOwnerType switch
+        {
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+            ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+            _ => null
+        };
+
+        if (genericDef == null || genericDef.GenericParameters == null)
+            return;
+
+        // Build type substitution map: e.g., { "T" → Letter }
+        var typeSubs = new Dictionary<string, TypeInfo>();
+        if (resolvedOwnerType.TypeArguments != null)
+        {
+            for (int i = 0; i < genericDef.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
+            {
+                typeSubs[genericDef.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+            }
+        }
+
+        // Build generic AST name: e.g., "List[T].add_last"
+        string genericParamList = string.Join(", ", genericDef.GenericParameters);
+        string genericAstName = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
+
+        _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
+            genericMethod, resolvedOwnerType, typeSubs, genericAstName);
     }
 
     #endregion

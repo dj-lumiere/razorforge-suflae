@@ -1,4 +1,4 @@
-module Text
+module Core
 
 # Text representations for Core types
 #
@@ -43,8 +43,12 @@ routine Text.__create__(from: S64) -> Text
   return Text(from: CStr(from_ptr: cstr_result))
 
 routine Text.__create__(from: S128) -> Text
-  var cstr_result = rf_format_S128(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from == 0s128
+    return "0"
+  if from > 0s128
+    return U128(from).Text()
+  var abs_val = U128(0u128 - U128(from))
+  return "-" + abs_val.Text()
 
 routine Text.__create__(from: SAddr) -> Text
   var cstr_result = rf_format_SAddr(from)
@@ -71,8 +75,15 @@ routine Text.__create__(from: U64) -> Text
   return Text(from: CStr(from_ptr: cstr_result))
 
 routine Text.__create__(from: U128) -> Text
-  var cstr_result = rf_format_U128(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from == 0u128
+    return "0"
+  var result = ""
+  var remaining = from
+  while remaining > 0u128
+    var digit = U64(remaining % 10u128)
+    remaining = remaining // 10u128
+    result = digit.Text() + result
+  return result
 
 routine Text.__create__(from: UAddr) -> Text
   var cstr_result = rf_format_UAddr(from)
@@ -104,14 +115,14 @@ routine Text.__create__(from: F128) -> Text
 
 routine Text.__create__(from: D32) -> Text
   var bits = bitcast[D32, U32](from)
-  var cstr_result = rf_D32_to_string(bits)
+  var cstr_result = rf_d32_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
 routine Text.__create__(from: D64) -> Text
   var bits = bitcast[D64, U64](from)
-  var cstr_result = rf_D64_to_string(bits)
+  var cstr_result = rf_d64_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
 routine Text.__create__(from: D128) -> Text
-  var cstr_result = rf_D128_to_string(from.low_bits(), from.high_bits())
+  var cstr_result = rf_d128_to_string(from.low_bits(), from.high_bits())
   return Text(from: CStr(from_ptr: cstr_result))

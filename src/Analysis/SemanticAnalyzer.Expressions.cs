@@ -1929,6 +1929,7 @@ public sealed partial class SemanticAnalyzer
                 ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
                 return memberVariable.Type;
             }
+
         }
         else if (objectType is EntityTypeInfo entity)
         {
@@ -2857,8 +2858,10 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private TypeSymbol AnalyzeWhenExpression(WhenExpression when)
     {
-        // Analyze the matched expression
-        TypeSymbol matchedType = AnalyzeExpression(expression: when.Expression);
+        // Analyze the matched expression (Bool for subject-less when — arms are conditions)
+        TypeSymbol matchedType = when.Expression != null
+            ? AnalyzeExpression(expression: when.Expression)
+            : _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
 
         // #88: Pattern order enforcement — else/wildcard must be last
         {

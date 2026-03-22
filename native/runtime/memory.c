@@ -302,6 +302,24 @@ uaddr resize_dynamic(uaddr address, uaddr new_bytes)
 }
 
 /*
+ * rf_alloc / rf_free — aliases matching names used in generated LLVM IR
+ */
+void* rf_alloc(uint64_t bytes)
+{
+    return (void*)heap_alloc(bytes);
+}
+
+void rf_free(void* ptr)
+{
+    heap_free((uintptr_t)ptr);
+}
+
+void* rf_realloc(void* ptr, uint64_t bytes)
+{
+    return realloc(ptr, bytes);
+}
+
+/*
  * Reference counting utilities
  */
 uaddr* create_ref_counter(uaddr initial_count)

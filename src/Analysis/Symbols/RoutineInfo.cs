@@ -28,6 +28,21 @@ public sealed class RoutineInfo
         }
     }
 
+    /// <summary>The module-qualified name (e.g., "Core.S8.__add__", "IO/Console.show").</summary>
+    public string QualifiedName
+    {
+        get
+        {
+            if (OwnerType != null)
+            {
+                // Method: Module.OwnerType.Method (e.g., "Core.S8.__add__")
+                return $"{OwnerType.FullName}.{Name}";
+            }
+            // Standalone: same as FullName (already Module.Function)
+            return FullName;
+        }
+    }
+
     /// <summary>The kind of routine.</summary>
     public RoutineKind Kind { get; init; } = RoutineKind.Function;
 
@@ -87,6 +102,32 @@ public sealed class RoutineInfo
 
     /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
     public bool IsReadOnly => Annotations.Contains(value: "readonly");
+
+    /// <summary>
+    /// For external("llvm") routines, the LLVM IR template from @llvm_ir annotation.
+    /// Extracted from annotations at access time; null if no @llvm_ir annotation.
+    /// </summary>
+    public string? LlvmIrTemplate
+    {
+        get
+        {
+            foreach (var annotation in Annotations)
+            {
+                if (!annotation.StartsWith("llvm_ir(")) continue;
+                // Extract template: llvm_ir("template") or llvm_ir(template)
+                int start = annotation.IndexOf('"') + 1;
+                int end = annotation.LastIndexOf('"');
+                if (start > 0 && end > start)
+                    return annotation[start..end];
+                // Unquoted: strip llvm_ir( prefix and ) suffix
+                var content = annotation.AsSpan()["llvm_ir(".Length..];
+                if (content.Length > 0 && content[^1] == ')')
+                    content = content[..^1];
+                return content.ToString();
+            }
+            return null;
+        }
+    }
 
     /// <summary>For external routines, the calling convention.</summary>
     public string? CallingConvention { get; init; }

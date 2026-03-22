@@ -47,16 +47,16 @@ routine CStr.__create__(from_ptr: UAddr) -> CStr
 # The caller is responsible for freeing this memory when done
 routine CStr.__create__(from: Bytes) -> CStr
   var len = from.count()
-  var buffer = Snatched[U8](address: rf_alloc(len + 1u64))
+  var buffer = Snatched[U8](rf_alloc(len + 1u64))
 
   var i: U64 = 0u64
   loop
     if i >= len
       break
-    Snatched[U8](address: buffer.address + i).write(from[i].byte_value())
+    Snatched[U8](buffer.address + i).write(from[i].byte_value())
     i = i + 1u64
   # Null terminator
-  Snatched[U8](address: buffer.address + len).write(0u8)
+  Snatched[U8](buffer.address + len).write(0u8)
 
   return CStr(ptr: buffer.address)
 
@@ -65,13 +65,13 @@ routine CStr.__create__(from: Bytes) -> CStr
 routine CStr.__create__(from: Text) -> CStr
   var len = from.count()
   if len == 0u64
-    var buffer = Snatched[U8](address: rf_alloc(1u64))
-    Snatched[U8](address: buffer.address).write(0u8)
+    var buffer = Snatched[U8](rf_alloc(1u64))
+    Snatched[U8](buffer.address).write(0u8)
     return CStr(ptr: buffer.address)
 
   # Worst case: each codepoint needs 4 bytes + null terminator
   var max_bytes = len * 4u64 + 1u64
-  var buffer = Snatched[U8](address: rf_alloc(max_bytes))
+  var buffer = Snatched[U8](rf_alloc(max_bytes))
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
 
@@ -80,31 +80,31 @@ routine CStr.__create__(from: Text) -> CStr
 
     if cp <= 0x7Fu32
       # 1-byte ASCII
-      Snatched[U8](address: buffer.address + write_pos).write(U8(cp))
+      Snatched[U8](buffer.address + write_pos).write(U8(cp))
       write_pos = write_pos + 1u64
     elseif cp <= 0x7FFu32
       # 2-byte sequence
-      Snatched[U8](address: buffer.address + write_pos).write(U8(0xC0u32 | (cp >> 6u32)))
-      Snatched[U8](address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+      Snatched[U8](buffer.address + write_pos).write(U8(0xC0u32 | (cp >> 6u32)))
+      Snatched[U8](buffer.address + write_pos + 1u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
       write_pos = write_pos + 2u64
     elseif cp <= 0xFFFFu32
       # 3-byte sequence
-      Snatched[U8](address: buffer.address + write_pos).write(U8(0xE0u32 | (cp >> 12u32)))
-      Snatched[U8](address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
-      Snatched[U8](address: buffer.address + write_pos + 2u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+      Snatched[U8](buffer.address + write_pos).write(U8(0xE0u32 | (cp >> 12u32)))
+      Snatched[U8](buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
+      Snatched[U8](buffer.address + write_pos + 2u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
       write_pos = write_pos + 3u64
     else
       # 4-byte sequence
-      Snatched[U8](address: buffer.address + write_pos).write(U8(0xF0u32 | (cp >> 18u32)))
-      Snatched[U8](address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32)))
-      Snatched[U8](address: buffer.address + write_pos + 2u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
-      Snatched[U8](address: buffer.address + write_pos + 3u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+      Snatched[U8](buffer.address + write_pos).write(U8(0xF0u32 | (cp >> 18u32)))
+      Snatched[U8](buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32)))
+      Snatched[U8](buffer.address + write_pos + 2u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
+      Snatched[U8](buffer.address + write_pos + 3u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
       write_pos = write_pos + 4u64
 
     i = i + 1u64
 
   # Null terminator
-  Snatched[U8](address: buffer.address + write_pos).write(0u8)
+  Snatched[U8](buffer.address + write_pos).write(0u8)
   return CStr(ptr: buffer.address)
 
 # ============================================================================
@@ -155,7 +155,7 @@ routine CStr.__cmp__(you: CStr) -> ComparisonSign
 # The caller is responsible for freeing the returned memory
 routine CStr.copy() -> CStr
   var len = me.length()
-  var buffer = Snatched[U8](address: rf_alloc(len + 1uaddr))
+  var buffer = Snatched[U8](rf_alloc(len + 1uaddr))
   rf_strcpy(buffer.address, me.ptr)
   return CStr(ptr: buffer.address)
 

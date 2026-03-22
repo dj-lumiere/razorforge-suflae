@@ -99,7 +99,7 @@ routine Bytes.__eq__(other: Bytes) -> Bool
 
 # Conversion to modifiable list
 
-routine List[Byte].__create__(from: Bytes)
+routine List[Byte].__create__(from: Bytes) -> List[Byte]
   return from.letters
 
 # Iteration

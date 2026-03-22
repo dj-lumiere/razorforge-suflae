@@ -310,38 +310,6 @@ routine S8.reverse_bits() -> S8
   return bitreverse[S8](me)
 
 # ============================================================================
-# Type Conversions (creator syntax)
-# ============================================================================
-
-# Bitcast to unsigned
-routine U8(from: S8) -> U8
-  return bitcast[S8, U8](from)
-
-# Sign-extend to larger types
-routine S16(from: S8) -> S16
-  return sext[S8, S16](from)
-
-routine S32(from: S8) -> S32
-  return sext[S8, S32](from)
-
-routine S64(from: S8) -> S64
-  return sext[S8, S64](from)
-
-routine S128(from: S8) -> S128
-  return sext[S8, S128](from)
-
-# Convert to floating point
-routine F32(from: S8) -> F32
-  return sitofp[S8, F32](from)
-
-routine F64(from: S8) -> F64
-  return sitofp[S8, F64](from)
-
-# Convert to boolean
-routine Bool(from: S8) -> Bool
-  return icmp_ne[S8](from, 0_s8)
-
-# ============================================================================
 # Utility Methods
 # ============================================================================
 

@@ -179,7 +179,7 @@ routine Text.__eq__(other: Text) -> Bool
 
 # Conversion to modifiable list
 
-routine List[Letter].__create__(from: Text)
+routine List[Letter].__create__(from: Text) -> List[Letter]
   return from.letters
 
 # Iteration

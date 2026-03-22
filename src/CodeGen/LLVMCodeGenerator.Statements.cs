@@ -163,12 +163,26 @@ public partial class LLVMCodeGenerator
 
         string llvmType = GetLLVMType(varType);
 
+        // Generate unique LLVM name for this variable (handles shadowing/redeclaration)
+        string uniqueName;
+        if (_varNameCounts.TryGetValue(varDecl.Name, out int count))
+        {
+            _varNameCounts[varDecl.Name] = count + 1;
+            uniqueName = $"{varDecl.Name}.{count + 1}";
+        }
+        else
+        {
+            _varNameCounts[varDecl.Name] = 1;
+            uniqueName = varDecl.Name;
+        }
+
         // Allocate stack space
-        string varPtr = $"%{varDecl.Name}.addr";
+        string varPtr = $"%{uniqueName}.addr";
         EmitLine(sb, $"  {varPtr} = alloca {llvmType}");
 
         // Register local variable for identifier lookup
         _localVariables[varDecl.Name] = varType;
+        _localVarLLVMNames[varDecl.Name] = uniqueName;
 
         // Store initial value if present
         if (varDecl.Initializer != null)
@@ -229,8 +243,9 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException($"Variable '{varName}' not found");
         }
 
+        string llvmName = _localVarLLVMNames.TryGetValue(varName, out var unique) ? unique : varName;
         string llvmType = GetLLVMType(varType);
-        EmitLine(sb, $"  store {llvmType} {value}, ptr %{varName}.addr");
+        EmitLine(sb, $"  store {llvmType} {value}, ptr %{llvmName}.addr");
     }
 
     /// <summary>
@@ -257,11 +272,40 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, string value)
     {
-        string target = EmitExpression(sb, index.Object);
-        string indexValue = EmitExpression(sb, index.Index);
-
-        // Resolve element type from container's generic type arguments
+        // Resolve target type to decide dispatch strategy
         TypeInfo? targetType = GetExpressionType(index.Object);
+
+        // If the type has a __setitem__ method, dispatch to it
+        if (targetType != null)
+        {
+            string methodFullName = $"{targetType.Name}.__setitem__";
+            RoutineInfo? setItem = _registry.LookupRoutine(methodFullName);
+            if (setItem != null)
+            {
+                // Emit as method call: obj.__setitem__(index, value)
+                // We need to emit receiver, index, and value manually since we already have `value`
+                string receiver = EmitExpression(sb, index.Object);
+                string indexValue = EmitExpression(sb, index.Index);
+
+                var argValues = new List<string> { receiver, indexValue, value };
+                var argTypes = new List<string>
+                {
+                    GetParameterLLVMType(targetType),
+                    GetExpressionType(index.Index) is { } idxType ? GetLLVMType(idxType) : "i64",
+                    setItem.Parameters.Count >= 3 ? GetLLVMType(setItem.Parameters[2].Type) : "i64"
+                };
+
+                string mangledName = MangleFunctionName(setItem);
+                string args = BuildCallArgs(argTypes, argValues);
+                EmitLine(sb, $"  call void @{mangledName}({args})");
+                return;
+            }
+        }
+
+        // Fallback: raw GEP + store for pointer/contiguous-memory types
+        string target = EmitExpression(sb, index.Object);
+        string idxVal = EmitExpression(sb, index.Index);
+
         string elemType = targetType switch
         {
             RecordTypeInfo r when r.TypeArguments.Count > 0 => GetLLVMType(r.TypeArguments[0]),
@@ -271,7 +315,7 @@ public partial class LLVMCodeGenerator
         };
 
         string elemPtr = NextTemp();
-        EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {indexValue}");
+        EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {idxVal}");
         EmitLine(sb, $"  store {elemType} {value}, ptr {elemPtr}");
     }
 
@@ -316,8 +360,9 @@ public partial class LLVMCodeGenerator
         else
         {
             string value = EmitExpression(sb, ret.Value);
-            // Use expression type if available, otherwise fall back to current function's return type
-            TypeInfo? retType = GetExpressionType(ret.Value) ?? _currentFunctionReturnType;
+            // Prefer current function's return type (matches the 'define' header)
+            // to avoid type mismatches between header and ret instruction
+            TypeInfo? retType = _currentFunctionReturnType ?? GetExpressionType(ret.Value);
             if (retType == null)
             {
                 throw new InvalidOperationException("Cannot determine return type for return statement");

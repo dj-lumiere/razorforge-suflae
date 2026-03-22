@@ -23,6 +23,12 @@ public sealed class VariableInfo
     /// Presets are always frozen (IsModifiable=false) and must be initialized with constant expressions.</summary>
     public bool IsPreset { get; init; }
 
+    /// <summary>The module this variable belongs to.</summary>
+    public string? Module { get; init; }
+
+    /// <summary>The module-qualified name (e.g., "Core.S8_MIN").</summary>
+    public string QualifiedName => string.IsNullOrEmpty(Module) ? Name : $"{Module}.{Name}";
+
     /// <summary>Source location where this variable is defined.</summary>
     public SourceLocation? Location { get; init; }
 

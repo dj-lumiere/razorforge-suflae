@@ -72,7 +72,7 @@ public sealed partial class SemanticAnalyzer
         // S510: Routines with 2+ non-me parameters require all arguments to be named.
         // This prevents argument-swap bugs at call sites. Variadic routines are exempt
         // because their extra positional args don't map to named parameters.
-        int nonMeParamCount = parameters.Count(predicate: p => p.Name != "me");
+        int nonMeParamCount = parameters.Count(predicate: p => p.Name != "me" && !p.HasDefaultValue);
         bool requiresNamedArgs = nonMeParamCount >= 2 && !routine.IsVariadic;
 
         foreach (Expression arg in arguments)

@@ -1,32 +1,32 @@
-# RazorForge Shared[T] - Single-threaded reference counting
+# RazorForge Retained[T] - Single-threaded reference counting
 # Equivalent to Rc[T] in Rust
 module Core
 
-record Shared[T]
+record Retained[T]
   secret controller: Snatched[SingleShareController]
   secret data: Snatched[T]
 
 # Create shared reference from owned value
-routine T.share() -> Shared[T]
+routine T.retain() -> Retained[T]
   danger!
     # Allocate controller
     var controller = SingleShareController().snatch()
     controller.increase_strong_count!()
 
-    # Create Shared record
-    return Shared[T](
+    # Create Retained record
+    return Retained[T](
       controller: controller,
       data: me.snatch()
     )
 
 # Clone the shared reference (increment ref count)
-routine Shared[T].share() -> Shared[T]
+routine Retained[T].retain() -> Retained[T]
   danger!
     me.controller.increase_strong_count!()
   return me
 
 # Release the shared reference (decrement ref count)
-routine Shared[T].release!()
+routine Retained[T].release!()
   danger!
     me.controller.decrease_strong_count!()
 
@@ -43,14 +43,14 @@ routine Shared[T].release!()
   return
 
 # Get reference counts for debugging
-routine Shared[T].strong_count() -> S32
+routine Retained[T].strong_count() -> S32
   danger!
     return me.controller.strong_count()
 
-routine Shared[T].weak_count() -> S32
+routine Retained[T].weak_count() -> S32
   danger!
     return me.controller.weak_count()
 
-# Direct member variable access allowed for single-threaded Shared
+# Direct member variable access allowed for single-threaded Retained
 # No locking needed - just dereference the data pointer
 # Use .view() or .hijack() for temporary access

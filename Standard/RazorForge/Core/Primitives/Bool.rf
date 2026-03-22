@@ -5,4 +5,32 @@ record Bool obeys Equatable, ConstCompatible
   pass
 
 routine Bool.__eq__(you: Bool) -> Bool
-  return icmp_eq[Bool](me.value, you.value)
+  return icmp_eq[Bool](me, you)
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+routine Bool.S32() -> S32
+  if me
+    return 1_s32
+  return 0_s32
+
+routine Bool.U8() -> U8
+  if me
+    return U8(1)
+  return U8(0)
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+routine Bool.to_debug() -> Text
+  if me
+    return "true"
+  return "false"
+
+routine Bool.hash() -> U64
+  if me
+    return 1_u64
+  return 0_u64

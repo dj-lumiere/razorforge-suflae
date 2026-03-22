@@ -20,18 +20,12 @@ public partial class Parser
     {
         var annotations = new List<string>();
 
-        // Handle @annotation, @[...] compound, and @intrinsic special token
-        while (Check(TokenType.At, TokenType.Intrinsic))
+        // Handle @annotation and @[...] compound annotations
+        while (Check(type: TokenType.At))
         {
             string annotName;
 
-            if (Match(type: TokenType.Intrinsic))
-            {
-                // @intrinsic was tokenized as a single Intrinsic token
-                annotName = "intrinsic";
-                annotations.Add(item: annotName);
-            }
-            else if (Match(type: TokenType.At))
+            if (Match(type: TokenType.At))
             {
                 // Check for compound annotation syntax: @[attr1, attr2, ...]
                 if (Match(type: TokenType.LeftBracket))
@@ -450,13 +444,16 @@ public partial class Parser
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after parameters");
 
         // ===============================================================================
-        // PHASE 3.5: GENERIC CONSTRAINTS (needs clause)
+        // PHASE 4: GENERIC CONSTRAINTS (needs clause — before or after return type)
         // ===============================================================================
+        // Supports both orderings:
+        //   routine foo[T](x: T) needs T obeys P -> Text      (needs before ->)
+        //   routine foo[T](x: T) -> Text \n needs T obeys P   (needs after -> on next line)
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(
             genericParams: genericParams, existingConstraints: inlineConstraints);
 
         // ===============================================================================
-        // PHASE 4: RETURN TYPE
+        // PHASE 5: RETURN TYPE
         // ===============================================================================
         TypeExpression? returnType = null;
         if (Match(type: TokenType.Arrow))
@@ -464,8 +461,12 @@ public partial class Parser
             returnType = ParseType();
         }
 
+        // Try constraints again after return type (supports needs on next line after ->)
+        constraints = ParseGenericConstraints(
+            genericParams: genericParams, existingConstraints: constraints);
+
         // ===============================================================================
-        // PHASE 5: BODY (indented block)
+        // PHASE 6: BODY (indented block)
         // ===============================================================================
 
         _inRoutineBody = true;
@@ -520,6 +521,7 @@ public partial class Parser
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
+        // Supports needs before or after obeys
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
 
@@ -534,6 +536,9 @@ public partial class Parser
                 // Newlines between comma-separated protocols are handled by the 'before' skip
             } while (Match(type: TokenType.Comma));
         }
+
+        // Try constraints again after obeys (supports needs on next line)
+        constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: constraints);
 
         var members = new List<Declaration>();
         bool hasPass = false;
@@ -555,7 +560,7 @@ public partial class Parser
 
             while (!Check(type: TokenType.Dedent) && !IsAtEnd)
             {
-                if (Match(type: TokenType.Newline))
+                if (Match(TokenType.Newline, TokenType.DocComment))
                 {
                     continue;
                 }
@@ -646,6 +651,9 @@ public partial class Parser
             } while (Match(type: TokenType.Comma));
         }
 
+        // Try constraints again after obeys (supports needs on next line)
+        constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: constraints);
+
         var members = new List<Declaration>();
         bool hasPass = false;
 
@@ -665,7 +673,7 @@ public partial class Parser
 
             while (!Check(type: TokenType.Dedent) && !IsAtEnd)
             {
-                if (Match(type: TokenType.Newline))
+                if (Match(TokenType.Newline, TokenType.DocComment))
                 {
                     continue;
                 }
@@ -761,6 +769,9 @@ public partial class Parser
             } while (Match(type: TokenType.Comma));
         }
 
+        // Try constraints again after obeys (supports needs on next line)
+        constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: constraints);
+
         var members = new List<Declaration>();
         bool hasPass = false;
 
@@ -780,7 +791,7 @@ public partial class Parser
 
             while (!Check(type: TokenType.Dedent) && !IsAtEnd)
             {
-                if (Match(type: TokenType.Newline))
+                if (Match(TokenType.Newline, TokenType.DocComment))
                 {
                     continue;
                 }
@@ -1088,6 +1099,9 @@ public partial class Parser
             }
             while (Match(type: TokenType.Comma));
         }
+
+        // Try constraints again after obeys (supports needs on next line)
+        constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: constraints);
 
         var methods = new List<RoutineSignature>();
 
@@ -1496,7 +1510,7 @@ public partial class Parser
 
             while (!Check(type: TokenType.Dedent) && !IsAtEnd)
             {
-                if (Match(type: TokenType.Newline))
+                if (Match(TokenType.Newline, TokenType.DocComment))
                 {
                     continue;
                 }

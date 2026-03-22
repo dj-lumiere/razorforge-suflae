@@ -30,6 +30,10 @@ external("llvm") routine zext[From, To](value: From) -> To
 external("llvm") routine trunc[From, To](value: From) -> To
 @llvm_ir("{result} = bitcast {From} {value} to {To}")
 external("llvm") routine bitcast[From, To](value: From) -> To
+@llvm_ir("{result} = ptrtoint ptr {value} to {To}")
+external("llvm") routine ptrtoint[From, To](value: Snatched[From]) -> To
+@llvm_ir("{result} = inttoptr {From} {value} to ptr")
+external("llvm") routine inttoptr[From, To](value: From) -> Snatched[To]
 @llvm_ir("{result} = sitofp {From} {value} to {To}")
 external("llvm") routine sitofp[From, To](value: From) -> To
 @llvm_ir("{result} = uitofp {From} {value} to {To}")

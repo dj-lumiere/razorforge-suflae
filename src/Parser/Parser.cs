@@ -291,6 +291,12 @@ public partial class Parser
         if (_language == Language.RazorForge)
         {
             isDangerous = Match(type: TokenType.Dangerous);
+
+            // Handle: dangerous external("C") routine ... (dangerous before external)
+            if (isDangerous && visibility == VisibilityModifier.Open && Match(type: TokenType.External))
+            {
+                visibility = VisibilityModifier.External;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -386,7 +392,7 @@ public partial class Parser
         // ROUTINE DECLARATION (with async status modifiers)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Check for suspended modifier before routine
+        // Check for suspended/threaded/emitting modifier before routine
         AsyncStatus asyncStatus = AsyncStatus.None;
         if (Match(type: TokenType.Suspended))
         {
@@ -396,6 +402,11 @@ public partial class Parser
         else if (_language == Language.RazorForge && Match(type: TokenType.Threaded))
         {
             asyncStatus = AsyncStatus.Threaded;
+        }
+        // RF-only: emitting (generator) routine
+        else if (_language == Language.RazorForge && Match(type: TokenType.Emitting))
+        {
+            asyncStatus = AsyncStatus.Emitting;
         }
 
         // Routine (function) declaration
