@@ -1543,7 +1543,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate new entity
         string newPtr = NextTemp();
-        EmitLine(_functionDefinitions, $"  {newPtr} = call ptr @rf_alloc(i64 {size})");
+        EmitLine(_functionDefinitions, $"  {newPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
         // Copy each field
         for (int i = 0; i < entity.MemberVariables.Count; i++)
@@ -1615,7 +1615,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
         string dataPtr = NextTemp();
-        EmitLine(_functionDefinitions, $"  {dataPtr} = call ptr @rf_alloc(i64 24)");
+        EmitLine(_functionDefinitions, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
         // Store type_id (compile-time FNV-1a hash)
         string tidPtr = NextTemp();
@@ -1629,7 +1629,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate memory for boxed value and copy
         string box = NextTemp();
-        EmitLine(_functionDefinitions, $"  {box} = call ptr @rf_alloc(i64 {dataSize})");
+        EmitLine(_functionDefinitions, $"  {box} = call ptr @rf_allocate_dynamic(i64 {dataSize})");
         EmitLine(_functionDefinitions, $"  store {paramLlvmType} %{paramName}, ptr {box}");
 
         // Store data_ptr
@@ -1743,11 +1743,11 @@ public partial class LLVMCodeGenerator
 
         // Allocate list header: { i64 count, i64 capacity, ptr data }
         string listPtr = NextTemp();
-        EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
         // Allocate data array
         string dataPtr = NextTemp();
-        EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {count * elemSize})");
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * elemSize})");
 
         // Store count
         string countPtr = NextTemp();
@@ -2272,7 +2272,7 @@ public partial class LLVMCodeGenerator
 
             // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
             string boxed = NextTemp();
-            EmitLine(sb, $"  {boxed} = call ptr @rf_alloc(i64 24)");
+            EmitLine(sb, $"  {boxed} = call ptr @rf_allocate_dynamic(i64 24)");
 
             // Store type_id
             string tidSlot = NextTemp();
@@ -2286,7 +2286,7 @@ public partial class LLVMCodeGenerator
 
             // Allocate and store boxed value
             string valBox = NextTemp();
-            EmitLine(sb, $"  {valBox} = call ptr @rf_alloc(i64 {fieldDataSize})");
+            EmitLine(sb, $"  {valBox} = call ptr @rf_allocate_dynamic(i64 {fieldDataSize})");
             EmitLine(sb, $"  store {fieldLlvmType} {fieldVal}, ptr {valBox}");
 
             // Store data_ptr

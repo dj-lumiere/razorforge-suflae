@@ -30,7 +30,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate memory
         string rawPtr = NextTemp();
-        EmitLine(sb, $"  {rawPtr} = call ptr @rf_alloc(i64 {size})");
+        EmitLine(sb, $"  {rawPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
         // Initialize member variables
         for (int i = 0; i < entity.MemberVariables.Count; i++)
@@ -108,7 +108,25 @@ public partial class LLVMCodeGenerator
         // Backend-annotated or single-member-variable wrapper: just return the inner value
         if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) && expr.MemberVariables.Count <= 1)
         {
-            return EmitExpression(sb, expr.MemberVariables[0].Value);
+            string argValue = EmitExpression(sb, expr.MemberVariables[0].Value);
+            if (record.HasDirectBackendType)
+            {
+                string targetLlvm = GetLLVMType(record);
+                TypeInfo? argType = GetExpressionType(expr.MemberVariables[0].Value);
+                string argLlvm = argType != null ? GetLLVMType(argType) : targetLlvm;
+                if (argLlvm != targetLlvm)
+                {
+                    string cast = NextTemp();
+                    if (targetLlvm == "ptr" && argLlvm != "ptr")
+                        EmitLine(sb, $"  {cast} = inttoptr {argLlvm} {argValue} to ptr");
+                    else if (targetLlvm != "ptr" && argLlvm == "ptr")
+                        EmitLine(sb, $"  {cast} = ptrtoint ptr {argValue} to {targetLlvm}");
+                    else
+                        EmitLine(sb, $"  {cast} = bitcast {argLlvm} {argValue} to {targetLlvm}");
+                    return cast;
+                }
+            }
+            return argValue;
         }
 
         // Multi-member-variable record: build struct value
@@ -137,7 +155,25 @@ public partial class LLVMCodeGenerator
         // Backend-annotated or single-member-variable wrapper: just return the inner value
         if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) && arguments.Count <= 1)
         {
-            return EmitExpression(sb, arguments[0]);
+            string argValue = EmitExpression(sb, arguments[0]);
+            if (record.HasDirectBackendType)
+            {
+                string targetLlvm = GetLLVMType(record);
+                TypeInfo? argType = GetExpressionType(arguments[0]);
+                string argLlvm = argType != null ? GetLLVMType(argType) : targetLlvm;
+                if (argLlvm != targetLlvm)
+                {
+                    string cast = NextTemp();
+                    if (targetLlvm == "ptr" && argLlvm != "ptr")
+                        EmitLine(sb, $"  {cast} = inttoptr {argLlvm} {argValue} to ptr");
+                    else if (targetLlvm != "ptr" && argLlvm == "ptr")
+                        EmitLine(sb, $"  {cast} = ptrtoint ptr {argValue} to {targetLlvm}");
+                    else
+                        EmitLine(sb, $"  {cast} = bitcast {argLlvm} {argValue} to {targetLlvm}");
+                    return cast;
+                }
+            }
+            return argValue;
         }
 
         // Multi-member-variable record: build struct value
@@ -163,15 +199,13 @@ public partial class LLVMCodeGenerator
     private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity, List<Expression> arguments)
     {
         string typeName = GetEntityTypeName(entity);
-        // Allocate entity on heap — rf_alloc returns UAddr (i64), convert to ptr
+        // Allocate entity on heap
         string sizeTemp = NextTemp();
         EmitLine(sb, $"  {sizeTemp} = getelementptr {typeName}, ptr null, i32 1");
         string size = NextTemp();
         EmitLine(sb, $"  {size} = ptrtoint ptr {sizeTemp} to i64");
-        string allocResult = NextTemp();
-        EmitLine(sb, $"  {allocResult} = call i64 @rf_alloc(i64 {size})");
         string entityPtr = NextTemp();
-        EmitLine(sb, $"  {entityPtr} = inttoptr i64 {allocResult} to ptr");
+        EmitLine(sb, $"  {entityPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
         // Initialize fields
         for (int i = 0; i < arguments.Count && i < entity.MemberVariables.Count; i++)
@@ -217,6 +251,31 @@ public partial class LLVMCodeGenerator
             string result = NextTemp();
             EmitLine(sb, $"  {result} = ptrtoint ptr {target} to i{_pointerBitWidth}");
             return result;
+        }
+
+        // Wrapper type forwarding: Viewed[T], Hijacked[T], etc.
+        // These are records wrapping a Snatched[T] (ptr) — forward member access to the inner entity type
+        if (targetType is RecordTypeInfo wrapperRecord
+            && wrapperRecord.Name.Contains('[')
+            && _wrapperTypeNames.Contains(wrapperRecord.Name[..wrapperRecord.Name.IndexOf('[')])
+            && wrapperRecord.TypeArguments is { Count: > 0 }
+            && wrapperRecord.TypeArguments[0] is EntityTypeInfo innerEntity
+            && !wrapperRecord.MemberVariables.Any(mv => mv.Name == expr.PropertyName))
+        {
+            // For @llvm("ptr") wrappers, the value IS the pointer directly
+            // For struct wrappers, extract the inner Snatched[T] (ptr) from field 0
+            string innerPtr;
+            if (wrapperRecord.HasDirectBackendType)
+            {
+                innerPtr = target;
+            }
+            else
+            {
+                string recordTypeName = GetRecordTypeName(wrapperRecord);
+                innerPtr = NextTemp();
+                EmitLine(sb, $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
+            }
+            return EmitEntityMemberVariableRead(sb, innerPtr, innerEntity, expr.PropertyName);
         }
 
         return targetType switch
@@ -809,24 +868,34 @@ public partial class LLVMCodeGenerator
             {
                 case "heap_alloc":
                 {
-                    // heap_alloc(bytes) → rf_alloc(i64 bytes) → returns i64 (UAddr)
+                    // heap_alloc(bytes) → rf_allocate_dynamic(i64 bytes) → returns ptr
                     string bytesVal = argVals[0];
                     string result = NextTemp();
-                    EmitLine(sb, $"  {result} = call i64 @rf_alloc(i64 {bytesVal})");
-                    return result;
+                    EmitLine(sb, $"  {result} = call ptr @rf_allocate_dynamic(i64 {bytesVal})");
+                    // Convert ptr to i64 (UAddr) for caller
+                    string asInt = NextTemp();
+                    EmitLine(sb, $"  {asInt} = ptrtoint ptr {result} to i64");
+                    return asInt;
                 }
                 case "heap_free":
                 {
-                    // heap_free(ptr) → rf_free(i64) — matches native declaration (UAddr → i64)
-                    EmitLine(sb, $"  call void @rf_free(i64 {argVals[0]})");
+                    // heap_free(ptr) → rf_invalidate(ptr)
+                    string asPtr = NextTemp();
+                    EmitLine(sb, $"  {asPtr} = inttoptr i64 {argVals[0]} to ptr");
+                    EmitLine(sb, $"  call void @rf_invalidate(ptr {asPtr})");
                     return "undef";
                 }
                 case "heap_realloc":
                 {
-                    // heap_realloc(ptr, new_size) → rf_realloc(i64, i64) — matches native UAddr signature
+                    // heap_realloc(ptr, new_size) → rf_reallocate_dynamic(ptr, i64)
+                    string asPtr = NextTemp();
+                    EmitLine(sb, $"  {asPtr} = inttoptr i64 {argVals[0]} to ptr");
                     string result = NextTemp();
-                    EmitLine(sb, $"  {result} = call i64 @rf_realloc(i64 {argVals[0]}, i64 {argVals[1]})");
-                    return result;
+                    EmitLine(sb, $"  {result} = call ptr @rf_reallocate_dynamic(ptr {asPtr}, i64 {argVals[1]})");
+                    // Convert ptr back to i64 (UAddr)
+                    string asInt = NextTemp();
+                    EmitLine(sb, $"  {asInt} = ptrtoint ptr {result} to i64");
+                    return asInt;
                 }
             }
         }
@@ -1021,14 +1090,22 @@ public partial class LLVMCodeGenerator
         }
 
         // Look up the method — try full name, then generic base name
-        string methodFullName = $"{receiverType.Name}.{member.PropertyName}";
+        // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
+        string methodName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
+        string methodFullName = $"{receiverType.Name}.{methodName}";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
 
         // For generic type instances (e.g., List[Letter].count), try the generic base name
         if (method == null && receiverType.Name.Contains('['))
         {
             string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
-            method = _registry.LookupRoutine($"{baseName}.{member.PropertyName}");
+            method = _registry.LookupRoutine($"{baseName}.{methodName}");
+        }
+
+        // Fall back to LookupMethod which checks generic-parameter-owner methods (routine T.view())
+        if (method == null)
+        {
+            method = _registry.LookupMethod(receiverType, methodName);
         }
 
         // Representable pattern: obj.Text() → Text.__create__(from: obj)
@@ -1036,6 +1113,14 @@ public partial class LLVMCodeGenerator
         // route to TypeName.__create__(from: receiver).
         if (arguments.Count == 0 && _registry.LookupType(member.PropertyName) != null)
         {
+            // For @llvm primitive types, emit inline conversion (trunc/zext/sext/fpcast)
+            // instead of a function call. e.g., val.UAddr() → inline zext/trunc.
+            TypeInfo? targetType = _registry.LookupType(member.PropertyName);
+            if (targetType is RecordTypeInfo { HasDirectBackendType: true })
+            {
+                return EmitPrimitiveTypeConversion(sb, member.PropertyName, member.Object, targetType);
+            }
+
             string creatorName = $"{member.PropertyName}.__create__";
             var argTypes2 = new List<TypeInfo> { receiverType };
             RoutineInfo? creator = _registry.LookupRoutineOverload(creatorName, argTypes2);
@@ -1121,6 +1206,13 @@ public partial class LLVMCodeGenerator
             // Record for monomorphization — will compile generic AST body with type substitutions
             RecordMonomorphization(mangledName, method, receiverType);
         }
+        else if (method != null && method.OwnerType is GenericParameterTypeInfo)
+        {
+            // Generic-parameter-owner methods (e.g., routine T.view() called on Point)
+            // Monomorphize: Point__view with T=Point
+            mangledName = $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(method.Name)}";
+            RecordMonomorphization(mangledName, method, receiverType);
+        }
         else
         {
             mangledName = method != null
@@ -1133,16 +1225,43 @@ public partial class LLVMCodeGenerator
         {
             GenerateFunctionDeclaration(method);
         }
+
+        // Resolve return type — for generic resolutions, substitute type parameters (e.g., T → U8)
+        TypeInfo? resolvedReturnType = method?.ReturnType;
+
+        // For generic-parameter-owner methods (T.view() → Viewed[T]), substitute T with receiver type
+        if (resolvedReturnType != null && method?.OwnerType is GenericParameterTypeInfo genParamOwner)
+        {
+            resolvedReturnType = SubstituteGenericParamInType(resolvedReturnType, genParamOwner.Name, receiverType);
+        }
+
+        if (resolvedReturnType is GenericParameterTypeInfo && receiverType is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            TypeInfo? ownerGenericDef = receiverType switch
+            {
+                RecordTypeInfo r => r.GenericDefinition,
+                EntityTypeInfo e => e.GenericDefinition,
+                ResidentTypeInfo res => res.GenericDefinition,
+                _ => null
+            };
+            if (ownerGenericDef?.GenericParameters != null)
+            {
+                int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(resolvedReturnType.Name);
+                if (paramIndex >= 0 && paramIndex < receiverType.TypeArguments.Count)
+                    resolvedReturnType = receiverType.TypeArguments[paramIndex];
+            }
+        }
+
         // For resolved generic methods, also emit a declaration with the resolved name
         if (!_generatedFunctions.Contains(mangledName))
         {
-            string retType = method?.ReturnType != null ? GetLLVMType(method.ReturnType) : "void";
+            string retType = resolvedReturnType != null ? GetLLVMType(resolvedReturnType) : "void";
             EmitLine(_functionDeclarations, $"declare {retType} @{mangledName}({string.Join(", ", argTypes)})");
             _generatedFunctions.Add(mangledName);
         }
 
-        string returnType = method?.ReturnType != null
-            ? GetLLVMType(method.ReturnType)
+        string returnType = resolvedReturnType != null
+            ? GetLLVMType(resolvedReturnType)
             : "void";
 
         if (returnType == "void")
@@ -1158,6 +1277,49 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
             return result;
         }
+    }
+
+    /// <summary>
+    /// Substitutes a generic parameter name with a concrete type in a type expression.
+    /// Handles both direct substitution (T → Point) and nested resolution (Viewed[T] → Viewed[Point]).
+    /// </summary>
+    private TypeInfo SubstituteGenericParamInType(TypeInfo type, string paramName, TypeInfo concreteType)
+    {
+        // Direct match: T → Point
+        if (type.Name == paramName || (type is GenericParameterTypeInfo gp && gp.Name == paramName))
+            return concreteType;
+
+        // Nested resolution: Viewed[T] → Viewed[Point]
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anyChanged = false;
+            var substitutedArgs = new List<TypeInfo>();
+            foreach (var arg in type.TypeArguments)
+            {
+                var substituted = SubstituteGenericParamInType(arg, paramName, concreteType);
+                substitutedArgs.Add(substituted);
+                if (!ReferenceEquals(substituted, arg)) anyChanged = true;
+            }
+            if (anyChanged)
+            {
+                TypeInfo? genericBase = type switch
+                {
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                    _ => null
+                };
+                if (genericBase == null)
+                {
+                    string baseName = type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name;
+                    genericBase = _registry.LookupType(baseName);
+                }
+                if (genericBase != null)
+                    return _registry.GetOrCreateResolution(genericBase, substitutedArgs);
+            }
+        }
+
+        return type;
     }
 
     /// <summary>
@@ -1734,6 +1896,15 @@ public partial class LLVMCodeGenerator
                     if (argLlvmType == targetType)
                         return argValue;
 
+                    // Single-field record wrapping a ptr (e.g., Viewed[T] = { ptr })
+                    // Use insertvalue to wrap the argument into the struct
+                    if (targetType.StartsWith("%Record.") && argLlvmType == "ptr")
+                    {
+                        string result = NextTemp();
+                        EmitLine(sb, $"  {result} = insertvalue {targetType} undef, ptr {argValue}, 0");
+                        return result;
+                    }
+
                     // inttoptr / ptrtoint / bitcast as needed
                     string cast = NextTemp();
                     if (targetType == "ptr" && argLlvmType != "ptr")
@@ -1807,23 +1978,31 @@ public partial class LLVMCodeGenerator
             typeArg ??= _registry.LookupType(typeArgName);
         }
 
-        // read_as![T](addr) → inttoptr addr to ptr, load T
-        if (baseName == "read_as" && generic.Arguments.Count == 1 && typeArg != null)
+        // rf_invalidate[T](ptr) → free the memory at the pointer
+        if (baseName == "rf_invalidate" && generic.Arguments.Count == 1)
         {
             string addr = EmitExpression(sb, generic.Arguments[0]);
-            string elemType = GetLLVMType(typeArg);
             TypeInfo? addrType = GetExpressionType(generic.Arguments[0]);
-            string addrLlvm = addrType != null ? GetLLVMType(addrType) : "i64";
-            string ptr;
+            string addrLlvm = addrType != null ? GetLLVMType(addrType) : "ptr";
             if (addrLlvm == "ptr")
-                ptr = addr;
+            {
+                EmitLine(sb, $"  call void @rf_invalidate(ptr {addr})");
+            }
             else
             {
-                ptr = NextTemp();
-                EmitLine(sb, $"  {ptr} = inttoptr {addrLlvm} {addr} to ptr");
+                string asPtr = NextTemp();
+                EmitLine(sb, $"  {asPtr} = inttoptr {addrLlvm} {addr} to ptr");
+                EmitLine(sb, $"  call void @rf_invalidate(ptr {asPtr})");
             }
+            return "undef";
+        }
+
+        // rf_address_of[T](entity) → ptrtoint ptr to UAddr (i64)
+        if (baseName == "rf_address_of" && generic.Arguments.Count == 1)
+        {
+            string val = EmitExpression(sb, generic.Arguments[0]);
             string result = NextTemp();
-            EmitLine(sb, $"  {result} = load {elemType}, ptr {ptr}");
+            EmitLine(sb, $"  {result} = ptrtoint ptr {val} to i64");
             return result;
         }
 
@@ -2231,11 +2410,38 @@ public partial class LLVMCodeGenerator
                         string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
                         method = _registry.LookupRoutine($"{baseName}.{member.PropertyName}");
                     }
+                    // Fallback: LookupMethod handles generic-param-owner methods (e.g., T.get_address)
+                    if (method == null)
+                    {
+                        method = _registry.LookupMethod(receiverType, member.PropertyName);
+                    }
                     if (method?.ReturnType != null)
                     {
                         // Substitute generic type params in return type (e.g., T → Letter)
                         if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(method.ReturnType.Name, out var sub))
                             return sub;
+
+                        // For generic resolution receivers (e.g., Snatched[U8].read() → T should become U8),
+                        // substitute using the receiver's type arguments when no _typeSubstitutions available
+                        if (receiverType is { IsGenericResolution: true, TypeArguments: not null }
+                            && method.ReturnType is GenericParameterTypeInfo)
+                        {
+                            // Find the generic parameter index in the owner type's generic parameters
+                            TypeInfo? ownerGenericDef = receiverType switch
+                            {
+                                RecordTypeInfo r => r.GenericDefinition,
+                                EntityTypeInfo e => e.GenericDefinition,
+                                ResidentTypeInfo res => res.GenericDefinition,
+                                _ => null
+                            };
+                            if (ownerGenericDef?.GenericParameters != null)
+                            {
+                                int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(method.ReturnType.Name);
+                                if (paramIndex >= 0 && paramIndex < receiverType.TypeArguments.Count)
+                                    return receiverType.TypeArguments[paramIndex];
+                            }
+                        }
+
                         // For parameterized return types (e.g., Snatched[T] → Snatched[Letter]),
                         // substitute type arguments within the generic resolution
                         if (_typeSubstitutions != null && method.ReturnType.IsGenericResolution
@@ -2683,7 +2889,7 @@ public partial class LLVMCodeGenerator
             string structType = GetTupleTypeName(tupleType);
 
             string rawPtr = NextTemp();
-            EmitLine(sb, $"  {rawPtr} = call ptr @rf_alloc(i64 {size})");
+            EmitLine(sb, $"  {rawPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
             for (int i = 0; i < elemValues.Count; i++)
             {
@@ -3225,7 +3431,7 @@ public partial class LLVMCodeGenerator
             // Fallback: allocate via rf_alloc with a reasonable default size
             // List entity needs at least: count (i64) + capacity (i64) + data ptr
             listPtr = NextTemp();
-            EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+            EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
             // Initialize count = 0, capacity = element count, data = alloc(n * elem_size)
             string countPtr = NextTemp();
@@ -3239,7 +3445,7 @@ public partial class LLVMCodeGenerator
 
             int elemSize = elemType != null ? GetTypeSize(elemType) : 8;
             string dataPtr = NextTemp();
-            EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {capacity * elemSize})");
+            EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {capacity * elemSize})");
             string dataPtrSlot = NextTemp();
             EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
             EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");

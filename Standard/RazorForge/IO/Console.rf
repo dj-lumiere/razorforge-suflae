@@ -14,16 +14,16 @@ module IO/Console
 
 routine show(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
-  rf_console_print(value_cstr.ptr, value_cstr.count())
+  rf_console_show(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_print(end_cstr.ptr, end_cstr.count())
+  rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
 routine show(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
-  rf_console_print(value_cstr.ptr, value_cstr.count())
+  rf_console_show(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_print(end_cstr.ptr, end_cstr.count())
+  rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
 # ============================================================================

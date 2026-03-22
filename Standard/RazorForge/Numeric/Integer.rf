@@ -196,7 +196,7 @@ routine U64.__create__!(from: Integer) -> U64
 routine Integer.to_text(radix: S32 = 10) -> Text
   var CStr = rf_bigint_get_str(me.handle, radix)
   var text = Text.from_cstr(CStr)
-  rf_free(CStr)
+  rf_invalidate(CStr)
   return text
 
 # ============================================================================

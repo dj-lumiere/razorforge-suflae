@@ -200,7 +200,7 @@ routine Bytes.to_text() -> Text
 # Bytes -> null-terminated C string (UTF-8)
 routine Bytes.to_cstr() -> UAddr
   var len = me.count()
-  var buffer = Snatched[Byte](address: rf_alloc(len + 1u64))
+  var buffer = Snatched[Byte](address: rf_allocate_dynamic(len + 1u64))
   var i: U64 = 0u64
   loop
     if i >= len

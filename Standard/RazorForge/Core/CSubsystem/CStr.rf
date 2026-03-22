@@ -47,7 +47,7 @@ routine CStr.__create__(from_ptr: UAddr) -> CStr
 # The caller is responsible for freeing this memory when done
 routine CStr.__create__(from: Bytes) -> CStr
   var len = from.count()
-  var buffer = Snatched[U8](rf_alloc(len + 1u64))
+  var buffer = Snatched[U8](rf_allocate_dynamic(len + 1u64))
 
   var i: U64 = 0u64
   loop
@@ -65,13 +65,13 @@ routine CStr.__create__(from: Bytes) -> CStr
 routine CStr.__create__(from: Text) -> CStr
   var len = from.count()
   if len == 0u64
-    var buffer = Snatched[U8](rf_alloc(1u64))
+    var buffer = Snatched[U8](rf_allocate_dynamic(1u64))
     Snatched[U8](buffer.address).write(0u8)
     return CStr(ptr: buffer.address)
 
   # Worst case: each codepoint needs 4 bytes + null terminator
   var max_bytes = len * 4u64 + 1u64
-  var buffer = Snatched[U8](rf_alloc(max_bytes))
+  var buffer = Snatched[U8](rf_allocate_dynamic(max_bytes))
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
 
@@ -114,7 +114,7 @@ routine CStr.__create__(from: Text) -> CStr
 # Get length of C string (excluding null terminator)
 # O(n) - must scan for null terminator
 routine CStr.count() -> UAddr
-  return rf_strlen(me.ptr)
+  return rf_cstr_count(me.ptr)
 
 # Check if C string pointer is null
 routine CStr.is_null() -> Bool
@@ -137,10 +137,10 @@ routine CStr.__getitem__!(index: UAddr) -> U8
 # ============================================================================
 
 routine CStr.__eq__(you: CStr) -> Bool
-  return rf_strcmp(me.ptr, you.ptr) == 0s32
+  return rf_cstr_compare(me.ptr, you.ptr) == 0s32
 
 routine CStr.__cmp__(you: CStr) -> ComparisonSign
-  var cmp = rf_strcmp(me.ptr, you.ptr)
+  var cmp = rf_cstr_compare(me.ptr, you.ptr)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
@@ -155,8 +155,8 @@ routine CStr.__cmp__(you: CStr) -> ComparisonSign
 # The caller is responsible for freeing the returned memory
 routine CStr.copy() -> CStr
   var len = me.length()
-  var buffer = Snatched[U8](rf_alloc(len + 1uaddr))
-  rf_strcpy(buffer.address, me.ptr)
+  var buffer = Snatched[U8](rf_allocate_dynamic(len + 1uaddr))
+  rf_cstr_copy(buffer.address, me.ptr)
   return CStr(ptr: buffer.address)
 
 # ============================================================================

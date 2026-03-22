@@ -15,8 +15,6 @@ module Core
 external("llvm") routine load[T](address: Snatched[T]) -> T
 @llvm_ir("store {T} {value}, ptr {address}")
 dangerous external("llvm") routine store[T](address: Snatched[T], value: T)
-@llvm_ir("store volatile {T} {value}, ptr {address}")
-dangerous external("llvm") routine store_volatile[T](address: Snatched[T], value: T)
 
 # ============================================================================
 # Type Conversions

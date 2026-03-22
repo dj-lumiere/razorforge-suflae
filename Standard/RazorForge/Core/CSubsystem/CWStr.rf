@@ -66,7 +66,7 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr
   # Worst case: each codepoint needs 2 code units (surrogate pair)
   var max_units = len * 2u64
   var byte_len = (max_units + 1u64) * 2u64
-  var buffer = Snatched[U8](address: rf_alloc(byte_len))
+  var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
 
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
@@ -102,7 +102,7 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr
 routine CWStr.__create__(from_units: List[U16]) -> CWStr
   var len = from_units.count()
   var byte_len = (len + 1u64) * 2u64
-  var buffer = Snatched[U8](address: rf_alloc(byte_len))
+  var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
 
   var i: U64 = 0u64
   while i < len
@@ -120,7 +120,7 @@ routine CWStr.__create__(from_units: List[U16]) -> CWStr
 # Get length of wide C string in characters (excluding null terminator)
 # O(n) - must scan for null terminator
 routine CWStr.count() -> UAddr
-  return rf_wcslen(me.ptr)
+  return rf_cwstr_count(me.ptr)
 
 # Check if wide C string pointer is null
 routine CWStr.is_null() -> Bool
@@ -145,10 +145,10 @@ routine CWStr.__getitem__!(index: UAddr) -> U16
 # ============================================================================
 
 routine CWStr.__eq__(other: CWStr) -> Bool
-  return rf_wcscmp(me.ptr, other.ptr) == 0s32
+  return rf_cwstr_compare(me.ptr, other.ptr) == 0s32
 
 routine CWStr.__cmp__(other: CWStr) -> ComparisonSign
-  var cmp = rf_wcscmp(me.ptr, other.ptr)
+  var cmp = rf_cwstr_compare(me.ptr, other.ptr)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
@@ -164,8 +164,8 @@ routine CWStr.__cmp__(other: CWStr) -> ComparisonSign
 routine CWStr.copy() -> CWStr
   var len = me.count()
   var byte_len = (len + 1uaddr) * 2uaddr  # Assuming 16-bit wchar_t
-  var buffer = Snatched[U8](address: rf_alloc(byte_len))
-  rf_wcscpy(buffer.address, me.ptr)
+  var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
+  rf_cwstr_copy(buffer.address, me.ptr)
   return CWStr(ptr: buffer.address)
 
 # ============================================================================

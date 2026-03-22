@@ -20,7 +20,7 @@ routine List[T].__create__() -> List[T]
 
 routine List[T].__create__(capacity: U64) -> List[T]
   var byte_size = capacity * data_size[T]()
-  var ptr = rf_alloc(byte_size)
+  var ptr = rf_allocate_dynamic(byte_size)
   return List[T](
     data: Snatched[T](ptr),
     count: 0u64,
@@ -31,7 +31,7 @@ routine List[T].__create__(capacity: U64) -> List[T]
 routine List[T].__destroy__()
   if not me.data.is_none()
     danger!
-      rf_free(ptrtoint[T, UAddr](me.data))
+      rf_invalidate(ptrtoint[T, UAddr](me.data))
   return
 
 # Core operations
@@ -202,11 +202,11 @@ routine List[T].reserve(new_capacity: U64)
 
     if me.data.is_none()
       danger!
-        var ptr = rf_alloc(new_byte_size)
+        var ptr = rf_allocate_dynamic(new_byte_size)
         me.data = Snatched[T](ptr)
     else
       danger!
-        var ptr = rf_realloc(ptrtoint[T, UAddr](me.data), new_byte_size)
+        var ptr = rf_reallocate_dynamic(ptrtoint[T, UAddr](me.data), new_byte_size)
         me.data = Snatched[T](ptr)
 
     me.capacity = new_capacity

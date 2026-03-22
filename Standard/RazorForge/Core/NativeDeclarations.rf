@@ -7,15 +7,11 @@ module Core
 # Memory Management
 # ============================================================================
 
-dangerous external("C") routine rf_alloc(size: U64) -> UAddr
-dangerous external("C") routine rf_realloc(ptr: UAddr, size: U64) -> UAddr
-dangerous external("C") routine rf_free(ptr: UAddr)
-dangerous external("C") routine rf_memcpy(dest: UAddr, src: UAddr, size: U64)
-dangerous external("C") routine rf_memset(dest: UAddr, value: U8, size: U64)
-dangerous external("C") routine rf_address_of[T](target: T)
-dangerous external("C") routine rf_read_as[T](dest: UAddr)
-dangerous external("C") routine rf_volatile_read_as[T](dest: UAddr)
-dangerous external("C") routine rf_invalidate[T](dest: UAddr)
+dangerous external("C") routine rf_allocate_dynamic(size: U64) -> UAddr
+dangerous external("C") routine rf_reallocate_dynamic(ptr: UAddr, size: U64) -> UAddr
+dangerous external("C") routine rf_invalidate(ptr: UAddr)
+dangerous external("C") routine rf_copy_bytes_at(dest: UAddr, src: UAddr, size: U64)
+dangerous external("C") routine rf_set_bytes_at(dest: UAddr, value: U8, size: U64)
 
 # ============================================================================
 # D32 (Decimal32) - Intel DFP Library
@@ -238,32 +234,26 @@ external("C") routine rf_moment_now() -> Moment
 # C String Operations (CStr / char*)
 # ============================================================================
 
-external("C") routine rf_strlen(ptr: UAddr) -> UAddr
-external("C") routine rf_strcmp(a: UAddr, b: UAddr) -> S32
-external("C") routine rf_strcpy(dest: UAddr, src: UAddr)
+external("C") routine rf_cstr_count(ptr: UAddr) -> UAddr
+external("C") routine rf_cstr_compare(a: UAddr, b: UAddr) -> S32
+external("C") routine rf_cstr_copy(dest: UAddr, src: UAddr)
 external("C") routine rf_cstr_len(ptr: CStr) -> UAddr
 
 # ============================================================================
 # Wide C String Operations (CWStr / wchar_t*)
 # ============================================================================
 
-external("C") routine rf_wcslen(ptr: UAddr) -> UAddr
-external("C") routine rf_wcscmp(a: UAddr, b: UAddr) -> S32
-external("C") routine rf_wcscpy(dest: UAddr, src: UAddr)
+external("C") routine rf_cwstr_count(ptr: UAddr) -> UAddr
+external("C") routine rf_cwstr_compare(a: UAddr, b: UAddr) -> S32
+external("C") routine rf_cwstr_copy(dest: UAddr, src: UAddr)
 
 # ============================================================================
 # Console I/O
 # ============================================================================
 
 # Output (stdout and stderr) - count-based (no null terminator required)
-external("C") routine rf_console_print(ptr: UAddr, len: U64)
-external("C") routine rf_console_print_line(ptr: UAddr, len: U64)
+external("C") routine rf_console_show(ptr: UAddr, len: U64)
 external("C") routine rf_console_alert(ptr: UAddr, len: U64)
-external("C") routine rf_console_alert_line(ptr: UAddr, len: U64)
-
-# Output (stdout and stderr) - null-terminated C string
-external("C") routine rf_console_puts(str: Text)
-external("C") routine rf_console_alert_puts(str: Text)
 
 # Input (returns heap-allocated C string pointer)
 external("C") routine rf_console_get_line() -> UAddr
@@ -393,23 +383,8 @@ external("C") routine rf_bigdec_e(result: UAddr, precision: S32)
 # ============================================================================
 # Text Parsing (CStr -> primitive values)
 # Native C functions that parse null-terminated UTF-8 strings
+# Integer parsing is now pure RazorForge (see Text.Parse.rf)
 # ============================================================================
-
-# Signed integers
-external("C") routine rf_parse_S8(cstr: CStr) -> S8
-external("C") routine rf_parse_S16(cstr: CStr) -> S16
-external("C") routine rf_parse_S32(cstr: CStr) -> S32
-external("C") routine rf_parse_S64(cstr: CStr) -> S64
-external("C") routine rf_parse_S128(cstr: CStr) -> S128
-external("C") routine rf_parse_SAddr(cstr: CStr) -> SAddr
-
-# Unsigned integers
-external("C") routine rf_parse_U8(cstr: CStr) -> U8
-external("C") routine rf_parse_U16(cstr: CStr) -> U16
-external("C") routine rf_parse_U32(cstr: CStr) -> U32
-external("C") routine rf_parse_U64(cstr: CStr) -> U64
-external("C") routine rf_parse_U128(cstr: CStr) -> U128
-external("C") routine rf_parse_UAddr(cstr: CStr) -> UAddr
 
 # Binary floating point
 external("C") routine rf_parse_F16(cstr: CStr) -> F16
@@ -420,23 +395,8 @@ external("C") routine rf_parse_F128(cstr: CStr) -> F128
 # ============================================================================
 # Text Formatting (primitive values -> heap-allocated CStr pointer)
 # Returns UAddr to heap-allocated null-terminated UTF-8 string
+# Integer formatting is now pure RazorForge (see Text.Convert.rf)
 # ============================================================================
-
-# Signed integers
-external("C") routine rf_format_S8(value: S8) -> UAddr
-external("C") routine rf_format_S16(value: S16) -> UAddr
-external("C") routine rf_format_S32(value: S32) -> UAddr
-external("C") routine rf_format_S64(value: S64) -> UAddr
-external("C") routine rf_format_S128(value: S128) -> UAddr
-external("C") routine rf_format_SAddr(value: SAddr) -> UAddr
-
-# Unsigned integers
-external("C") routine rf_format_U8(value: U8) -> UAddr
-external("C") routine rf_format_U16(value: U16) -> UAddr
-external("C") routine rf_format_U32(value: U32) -> UAddr
-external("C") routine rf_format_U64(value: U64) -> UAddr
-external("C") routine rf_format_U128(value: U128) -> UAddr
-external("C") routine rf_format_UAddr(value: UAddr) -> UAddr
 
 # Binary floating point
 external("C") routine rf_format_F16(value: F16) -> UAddr
