@@ -261,6 +261,28 @@ public partial class LLVMCodeGenerator
         {
             EmitEntityMemberVariableWrite(sb, target, entity, member.PropertyName, value);
         }
+        // Wrapper type forwarding: Hijacked[T], Seized[T], etc. — write through to inner entity
+        else if (targetType is RecordTypeInfo wrapperRecord
+                 && wrapperRecord.Name.Contains('[')
+                 && _wrapperTypeNames.Contains(wrapperRecord.Name[..wrapperRecord.Name.IndexOf('[')])
+                 && wrapperRecord.TypeArguments is { Count: > 0 }
+                 && wrapperRecord.TypeArguments[0] is EntityTypeInfo innerEntity)
+        {
+            // For @llvm("ptr") wrappers, the value IS the pointer directly
+            // For struct wrappers, extract the inner Snatched[T] (ptr) from field 0
+            string innerPtr;
+            if (wrapperRecord.HasDirectBackendType)
+            {
+                innerPtr = target;
+            }
+            else
+            {
+                string recordTypeName = GetRecordTypeName(wrapperRecord);
+                innerPtr = NextTemp();
+                EmitLine(sb, $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
+            }
+            EmitEntityMemberVariableWrite(sb, innerPtr, innerEntity, member.PropertyName, value);
+        }
         else
         {
             throw new InvalidOperationException($"Cannot assign to member variable on type: {targetType?.Name}");
@@ -342,7 +364,7 @@ public partial class LLVMCodeGenerator
                 // Allocate a Snatched handle and store the value
                 int size = GetTypeSizeFromLlvmType(_emitSlotType);
                 string handle = NextTemp();
-                EmitLine(sb, $"  {handle} = call ptr @rf_alloc(i64 {size})");
+                EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
                 EmitLine(sb, $"  store {_emitSlotType} {loaded}, ptr {handle}");
 
                 // Build { i64 1, ptr handle } — DataState.VALID

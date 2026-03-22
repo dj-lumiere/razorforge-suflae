@@ -1132,6 +1132,20 @@ public sealed class TypeRegistry
             }
         }
 
+        // Fallback: check methods registered on generic type parameters (e.g., routine T.view())
+        // These methods are available on all types
+        foreach (var (_, ownerMethods) in _routinesByOwner)
+        {
+            if (ownerMethods.Count > 0 && ownerMethods[0].OwnerType is GenericParameterTypeInfo)
+            {
+                RoutineInfo? universalMethod = ownerMethods.FirstOrDefault(predicate: m => m.Name == methodName);
+                if (universalMethod != null)
+                {
+                    return universalMethod;
+                }
+            }
+        }
+
         return null;
     }
 

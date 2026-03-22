@@ -19,6 +19,11 @@ public partial class LLVMCodeGenerator
     /// <summary>The type registry from semantic analysis.</summary>
     private readonly TypeRegistry _registry;
 
+    /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
+    private static readonly HashSet<string> _wrapperTypeNames =
+        ["Viewed", "Hijacked", "Retained", "Watched", "Inspected", "Seized", "Shared",
+            "Tracked", "Snatched"];
+
     /// <summary>The program AST to generate code for.</summary>
     private readonly Program _program;
 
@@ -240,7 +245,8 @@ public partial class LLVMCodeGenerator
             // Skip generic definitions, routines with unresolved types,
             // and methods on generic owner types (e.g., Dict[K,V].count)
             if (routine.IsGenericDefinition || HasErrorTypes(routine)
-                || routine.OwnerType is { IsGenericDefinition: true })
+                || routine.OwnerType is { IsGenericDefinition: true }
+                || routine.OwnerType is GenericParameterTypeInfo)
             {
                 continue;
             }
@@ -530,6 +536,20 @@ public partial class LLVMCodeGenerator
         if (_pendingMonomorphizations.ContainsKey(mangledName))
             return;
 
+        // Generic parameter owner methods (e.g., routine T.view() called on Point)
+        // The owner is GenericParameterTypeInfo("T"), resolved to a concrete type
+        if (genericMethod.OwnerType is GenericParameterTypeInfo genParam)
+        {
+            var typeSubs = new Dictionary<string, TypeInfo>
+            {
+                [genParam.Name] = resolvedOwnerType
+            };
+            string genericAstName = $"{genParam.Name}.{genericMethod.Name}";
+            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
+                genericMethod, resolvedOwnerType, typeSubs, genericAstName);
+            return;
+        }
+
         // Build the generic AST name: "List[T].add_last" from owner's generic definition name + method name
         TypeInfo? genericDef = resolvedOwnerType switch
         {
@@ -543,21 +563,21 @@ public partial class LLVMCodeGenerator
             return;
 
         // Build type substitution map: e.g., { "T" → Letter }
-        var typeSubs = new Dictionary<string, TypeInfo>();
+        var typeSubs2 = new Dictionary<string, TypeInfo>();
         if (resolvedOwnerType.TypeArguments != null)
         {
             for (int i = 0; i < genericDef.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
             {
-                typeSubs[genericDef.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+                typeSubs2[genericDef.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
             }
         }
 
         // Build generic AST name: e.g., "List[T].add_last"
         string genericParamList = string.Join(", ", genericDef.GenericParameters);
-        string genericAstName = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
+        string genericAstName2 = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
 
         _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-            genericMethod, resolvedOwnerType, typeSubs, genericAstName);
+            genericMethod, resolvedOwnerType, typeSubs2, genericAstName2);
     }
 
     #endregion

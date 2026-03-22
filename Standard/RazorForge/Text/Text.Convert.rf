@@ -6,8 +6,8 @@ module Core
 # Core types. They were moved here from Core module files to eliminate the
 # Core → Text dependency during stdlib loading.
 #
-# Native format functions return heap-allocated C strings (UTF-8/ASCII).
-# Text(from: CStr(...)) decodes them to proper UTF-32 Text representation.
+# Integer formatting is pure RazorForge — digit extraction into List[Letter].
+# Float/decimal formatting still uses native C functions via CStr.
 
 
 # ============================================================================
@@ -27,67 +27,97 @@ routine Text.__create__(from: Blank) -> Text
 # ============================================================================
 
 routine Text.__create__(from: S8) -> Text
-  var cstr_result = rf_format_S8(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  return S32(from).Text()
 
 routine Text.__create__(from: S16) -> Text
-  var cstr_result = rf_format_S16(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  return S32(from).Text()
 
 routine Text.__create__(from: S32) -> Text
-  var cstr_result = rf_format_S32(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from == 0s32
+    return "0"
+  if from > 0s32
+    return U32(from).Text()
+  return "-" + U32(0u32 - U32(from)).Text()
 
 routine Text.__create__(from: S64) -> Text
-  var cstr_result = rf_format_S64(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from == 0s64
+    return "0"
+  if from > 0s64
+    return U64(from).Text()
+  return "-" + U64(0u64 - U64(from)).Text()
 
 routine Text.__create__(from: S128) -> Text
   if from == 0s128
     return "0"
   if from > 0s128
     return U128(from).Text()
-  var abs_val = U128(0u128 - U128(from))
-  return "-" + abs_val.Text()
+  return "-" + U128(0u128 - U128(from)).Text()
 
 routine Text.__create__(from: SAddr) -> Text
-  var cstr_result = rf_format_SAddr(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from >= 0saddr
+    return UAddr(from).Text()
+  return "-" + UAddr(0uaddr - UAddr(from)).Text()
 
 # ============================================================================
 # Unsigned Integers
 # ============================================================================
 
 routine Text.__create__(from: U8) -> Text
-  var cstr_result = rf_format_U8(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  return U32(from).Text()
 
 routine Text.__create__(from: U16) -> Text
-  var cstr_result = rf_format_U16(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  return U32(from).Text()
 
 routine Text.__create__(from: U32) -> Text
-  var cstr_result = rf_format_U32(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from == 0u32
+    return "0"
+  var digits = List[Letter]()
+  var remaining = from
+  while remaining > 0u32
+    var digit = U8(remaining % 10u32)
+    remaining = remaining // 10u32
+    digits.add_first(Letter(value: 0x0030u32 + U32(digit)))
+  return Text(from_list: digits)
 
 routine Text.__create__(from: U64) -> Text
-  var cstr_result = rf_format_U64(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  if from == 0u64
+    return "0"
+  var digits = List[Letter]()
+  var remaining = from
+  while remaining > 0u64
+    var digit = U8(remaining % 10u64)
+    remaining = remaining // 10u64
+    digits.add_first(Letter(value: 0x0030u32 + U32(digit)))
+  return Text(from_list: digits)
 
 routine Text.__create__(from: U128) -> Text
   if from == 0u128
     return "0"
-  var result = ""
+  var digits = List[Letter]()
   var remaining = from
   while remaining > 0u128
-    var digit = U64(remaining % 10u128)
+    var digit = U8(remaining % 10u128)
     remaining = remaining // 10u128
-    result = digit.Text() + result
-  return result
+    digits.add_first(Letter(value: 0x0030u32 + U32(digit)))
+  return Text(from_list: digits)
 
 routine Text.__create__(from: UAddr) -> Text
-  var cstr_result = rf_format_UAddr(from)
-  return Text(from: CStr(from_ptr: cstr_result))
+  # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
+  var digits = List[Letter]()
+  digits.add_last(Letter(value: 0x0030u32))
+  digits.add_last(Letter(value: 0x0078u32))
+  var i = 0u32
+  while i < 16u32
+    if i > 0u32 and i % 4u32 == 0u32
+      digits.add_last(Letter(value: 0x005Fu32))
+    var shift = UAddr((15u32 - i) * 4u32)
+    var nibble = U32((from >> shift) & 0x0Fuaddr)
+    if nibble < 10u32
+      digits.add_last(Letter(value: 0x0030u32 + nibble))
+    else
+      digits.add_last(Letter(value: 0x0041u32 + nibble - 10u32))
+    i = i + 1u32
+  return Text(from_list: digits)
 
 # ============================================================================
 # Binary Floating Point

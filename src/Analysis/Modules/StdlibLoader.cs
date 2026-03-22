@@ -672,11 +672,20 @@ public sealed class StdlibLoader
             else
             {
                 ownerType = registry.LookupType(typeName);
+
+                // If type not found, treat as a generic type parameter (e.g., T in "routine T.view()")
+                if (ownerType == null)
+                {
+                    ownerType = new GenericParameterTypeInfo(typeName);
+                }
             }
         }
 
         // Collect generic params from owner type + routine itself for type resolution context
         var genericContext = new List<string>();
+        // If owner is a generic parameter itself (e.g., T in "routine T.view()"),
+        // add it to the generic context so return/param types can reference it
+        if (ownerType is GenericParameterTypeInfo genParam) genericContext.Add(genParam.Name);
         if (ownerType?.GenericParameters != null) genericContext.AddRange(ownerType.GenericParameters);
         if (routine.GenericParameters != null) genericContext.AddRange(routine.GenericParameters);
         IReadOnlyList<string>? ctx = genericContext.Count > 0 ? genericContext : null;

@@ -837,6 +837,13 @@ public sealed partial class SemanticAnalyzer
             // For extension methods (routine Type.method), check the routine's owner type
             if (_currentRoutine?.OwnerType != null)
             {
+                // Generic type parameter owners (e.g., T in "routine T.view()") —
+                // return the GenericParameterTypeInfo directly, no registry lookup needed
+                if (_currentRoutine.OwnerType is GenericParameterTypeInfo)
+                {
+                    return _currentRoutine.OwnerType;
+                }
+
                 // Re-lookup to get the updated type with resolved protocols/member variables
                 TypeSymbol? ownerType = _registry.LookupType(name: _currentRoutine.OwnerType.Name);
                 if (ownerType != null)
@@ -1137,6 +1144,17 @@ public sealed partial class SemanticAnalyzer
         if (target is MemberExpression member)
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+            // Read-only wrapper types (Viewed, Inspected) cannot be written through
+            if (IsReadOnlyWrapper(type: objectType))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
+                    "Use Hijacked[T] for exclusive write access or Seized[T] for locked write access.",
+                    location);
+            }
+
             ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: location);
 
             // Check if we're in a @readonly method trying to modify 'me'
@@ -1930,6 +1948,24 @@ public sealed partial class SemanticAnalyzer
                 return memberVariable.Type;
             }
 
+            // Wrapper type forwarding for record-based wrappers (Viewed[T], Hijacked[T], etc.)
+            if (IsWrapperType(type: objectType))
+            {
+                MemberVariableInfo? innerMemberVariable = LookupMemberVariableOnWrapperInnerType(wrapperType: objectType, memberVariableName: member.PropertyName);
+                if (innerMemberVariable != null)
+                {
+                    ValidateMemberVariableAccess(memberVariable: innerMemberVariable, isWrite: false, accessLocation: member.Location);
+                    return innerMemberVariable.Type;
+                }
+
+                RoutineInfo? innerMethod = LookupMethodOnWrapperInnerType(wrapperType: objectType, methodName: member.PropertyName);
+                if (innerMethod != null)
+                {
+                    ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType, method: innerMethod, location: member.Location);
+                    ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
+                    return innerMethod.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+                }
+            }
         }
         else if (objectType is EntityTypeInfo entity)
         {
@@ -1987,7 +2023,10 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Could be a method reference - use LookupMethod which handles generic resolutions
-        RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: member.PropertyName);
+        // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
+        // The parser stores '!' in PropertyName, but routine declarations strip it (IsFailable = true)
+        string lookupName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
+        RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: lookupName);
         if (method != null)
         {
             // Validate method access
@@ -1998,6 +2037,17 @@ public sealed partial class SemanticAnalyzer
             if (returnType != null && objectType is { IsGenericResolution: true, TypeArguments: not null })
             {
                 returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
+            }
+
+            // For methods on generic type parameters (e.g., routine T.view() → Viewed[T]),
+            // substitute the generic parameter with the concrete receiver type
+            if (returnType != null && method.OwnerType is GenericParameterTypeInfo genParamOwner)
+            {
+                var substitutions = new Dictionary<string, TypeSymbol>
+                {
+                    [genParamOwner.Name] = objectType
+                };
+                returnType = SubstituteWithMapping(type: returnType, substitutions: substitutions);
             }
 
             return returnType ?? ErrorTypeInfo.Instance;
@@ -3054,12 +3104,89 @@ public sealed partial class SemanticAnalyzer
             _lastSharePolicy = (shareTarget.Name, typeArgs[0].Name);
         }
 
-        // Look up the method
+        // Check if this is a generic type constructor call (e.g., Snatched[U8](addr))
+        // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args)
+        if (generic.Object is IdentifierExpression typeId
+            && objectType is TypeInfo typeInfo
+            && typeInfo.IsGenericDefinition
+            && typeId.Name == generic.MethodName)
+        {
+            // Resolve the generic type with the provided type arguments
+            TypeInfo resolvedType = _registry.GetOrCreateResolution(
+                genericDef: typeInfo, typeArguments: typeArgs.Cast<TypeInfo>().ToList());
+
+            // Analyze constructor arguments
+            foreach (Expression arg in generic.Arguments)
+            {
+                AnalyzeExpression(expression: arg);
+            }
+
+            ValidateExclusiveTokenUniqueness(arguments: generic.Arguments, location: generic.Location);
+            return resolvedType;
+        }
+
+        // Look up the method on receiver type
         RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{generic.MethodName}");
         if (method?.ReturnType != null)
         {
             // Substitute type arguments in return type
             return method.ReturnType;
+        }
+
+        // Standalone generic function call (e.g., ptrtoint[Point, UAddr](p), snatched_none[T]())
+        // The object is an identifier that resolves to a routine, not a type or variable
+        if (generic.Object is IdentifierExpression funcId)
+        {
+            RoutineInfo? routine = _registry.LookupRoutine(fullName: funcId.Name)
+                                   ?? _registry.LookupRoutineByName(funcId.Name);
+            if (routine != null)
+            {
+                foreach (Expression arg in generic.Arguments)
+                {
+                    AnalyzeExpression(expression: arg);
+                }
+
+                if (routine.ReturnType == null)
+                    return _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+
+                // Substitute generic type parameters in return type
+                TypeInfo returnType = routine.ReturnType;
+                if (returnType is GenericParameterTypeInfo && routine.GenericParameters != null)
+                {
+                    int paramIndex = routine.GenericParameters.ToList().IndexOf(returnType.Name);
+                    if (paramIndex >= 0 && paramIndex < typeArgs.Count && typeArgs[paramIndex] is TypeInfo resolved)
+                        return resolved;
+                }
+                // Return type is a generic resolution (e.g., Snatched[T] → Snatched[U8])
+                if (returnType.IsGenericResolution && returnType.TypeArguments != null && routine.GenericParameters != null)
+                {
+                    var substitutedArgs = new List<TypeInfo>();
+                    bool anySubstituted = false;
+                    foreach (var typeArg in returnType.TypeArguments)
+                    {
+                        int idx = routine.GenericParameters.ToList().IndexOf(typeArg.Name);
+                        if (idx >= 0 && idx < typeArgs.Count && typeArgs[idx] is TypeInfo sub)
+                        {
+                            substitutedArgs.Add(sub);
+                            anySubstituted = true;
+                        }
+                        else
+                        {
+                            substitutedArgs.Add(typeArg);
+                        }
+                    }
+                    if (anySubstituted)
+                    {
+                        string baseName = returnType.Name;
+                        int bracketIdx = baseName.IndexOf('[');
+                        if (bracketIdx > 0) baseName = baseName[..bracketIdx];
+                        var genericDef = _registry.LookupType(baseName);
+                        if (genericDef != null)
+                            return _registry.GetOrCreateResolution(genericDef, substitutedArgs);
+                    }
+                }
+                return returnType;
+            }
         }
 
         // Analyze arguments

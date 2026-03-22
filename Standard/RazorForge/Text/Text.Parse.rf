@@ -6,64 +6,212 @@ module Core
 # They were moved here from Core module files to eliminate the
 # Core → Text dependency during stdlib loading.
 #
-# Text (UTF-32) is encoded to CStr (UTF-8, null-terminated) before
-# passing to native C parse functions.
+# Integer parsing is pure RazorForge — digit accumulation from Text letters.
+# Float/decimal parsing still uses native C functions via CStr.
 
 # ============================================================================
 # Signed Integers
 # ============================================================================
 
 routine S8.__create__!(from_text: Text) -> S8
-  var cstr_val = from_text.CStr()
-  return rf_parse_S8(cstr_val)
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(value: 0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(value: 0x002Bu32)
+      start = 1u64
+  var result = 0u32
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S8(0u32 - result)
+  return S8(result)
 
 routine S16.__create__!(from_text: Text) -> S16
-  var cstr_val = from_text.CStr()
-  return rf_parse_S16(cstr_val)
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(value: 0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(value: 0x002Bu32)
+      start = 1u64
+  var result = 0u32
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S16(0u32 - result)
+  return S16(result)
 
 routine S32.__create__!(from_text: Text) -> S32
-  var cstr_val = from_text.CStr()
-  return rf_parse_S32(cstr_val)
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(value: 0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(value: 0x002Bu32)
+      start = 1u64
+  var result = 0u32
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S32(0u32 - result)
+  return S32(result)
 
 routine S64.__create__!(from_text: Text) -> S64
-  var cstr_val = from_text.CStr()
-  return rf_parse_S64(cstr_val)
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(value: 0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(value: 0x002Bu32)
+      start = 1u64
+  var result = 0u64
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u64 + U64(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S64(0u64 - result)
+  return S64(result)
 
 routine S128.__create__!(from_text: Text) -> S128
-  var cstr_val = from_text.CStr()
-  return rf_parse_S128(cstr_val)
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(value: 0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(value: 0x002Bu32)
+      start = 1u64
+  var result = 0u128
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u128 + U128(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S128(0u128 - result)
+  return S128(result)
 
 routine SAddr.__create__!(from_text: Text) -> SAddr
-  var cstr_val = from_text.CStr()
-  return rf_parse_SAddr(cstr_val)
+  # Parses hex format: [-]0xXXXX_XXXX_XXXX_XXXX
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(value: 0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(value: 0x002Bu32)
+      start = 1u64
+  var result = 0uaddr
+  var i = start
+  while i < from_text.count()
+    var cp = from_text[i].codepoint()
+    if 0x0030u32 <= cp <= 0x0039u32
+      result = result * 16uaddr + UAddr(cp - 0x0030u32)
+    elseif 0x0041u32 <= cp <= 0x0046u32
+      result = result * 16uaddr + UAddr(cp - 0x0041u32 + 10u32)
+    elseif 0x0061u32 <= cp <= 0x0066u32
+      result = result * 16uaddr + UAddr(cp - 0x0061u32 + 10u32)
+    i = i + 1u64
+  if negative
+    return SAddr(0uaddr - result)
+  return SAddr(result)
 
 # ============================================================================
 # Unsigned Integers
 # ============================================================================
 
 routine U8.__create__!(from_text: Text) -> U8
-  var cstr_val = from_text.CStr()
-  return rf_parse_U8(cstr_val)
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  return U8(result)
 
 routine U16.__create__!(from_text: Text) -> U16
-  var cstr_val = from_text.CStr()
-  return rf_parse_U16(cstr_val)
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  return U16(result)
 
 routine U32.__create__!(from_text: Text) -> U32
-  var cstr_val = from_text.CStr()
-  return rf_parse_U32(cstr_val)
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  return result
 
 routine U64.__create__!(from_text: Text) -> U64
-  var cstr_val = from_text.CStr()
-  return rf_parse_U64(cstr_val)
+  var result = 0u64
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u64 + U64(ch.digit_value())
+    i = i + 1u64
+  return result
 
 routine U128.__create__!(from_text: Text) -> U128
-  var cstr_val = from_text.CStr()
-  return rf_parse_U128(cstr_val)
+  var result = 0u128
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u128 + U128(ch.digit_value())
+    i = i + 1u64
+  return result
 
 routine UAddr.__create__!(from_text: Text) -> UAddr
-  var cstr_val = from_text.CStr()
-  return rf_parse_UAddr(cstr_val)
+  # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
+  var result = 0uaddr
+  var i = 0u64
+  while i < from_text.count()
+    var cp = from_text[i].codepoint()
+    if 0x0030u32 <= cp <= 0x0039u32
+      result = result * 16uaddr + UAddr(cp - 0x0030u32)
+    elseif 0x0041u32 <= cp <= 0x0046u32
+      result = result * 16uaddr + UAddr(cp - 0x0041u32 + 10u32)
+    elseif 0x0061u32 <= cp <= 0x0066u32
+      result = result * 16uaddr + UAddr(cp - 0x0061u32 + 10u32)
+    i = i + 1u64
+  return result
 
 # ============================================================================
 # Binary Floating Point

@@ -26,7 +26,7 @@ record Snatched[T]
   pass
 
 dangerous routine T.get_address() -> UAddr
-  return rf_address_of[T](me)
+  return ptrtoint[T, UAddr](me)
 
 # Create snatched pointer from any object (danger! only)
 dangerous routine T.snatch() -> Snatched[T]
@@ -34,20 +34,11 @@ dangerous routine T.snatch() -> Snatched[T]
 
 # Type-safe read (uses T from Snatched[T])
 dangerous routine Snatched[T].read() -> T
-  return rf_read_as[T](me)
+  return load[T](me)
 
 # Type-safe write (uses T from Snatched[T])
 dangerous routine Snatched[T].write(value: T)
   store[T](me, value)
-  return
-
-# Volatile read (prevents compiler optimizations)
-dangerous routine Snatched[T].volatile_read() -> T
-  return rf_volatile_read_as[T](me)
-
-# Volatile write (prevents compiler optimizations)
-dangerous routine Snatched[T].volatile_write(value: T)
-  store_volatile[T](me, value)
   return
 
 # Type-pun read - read as different type U

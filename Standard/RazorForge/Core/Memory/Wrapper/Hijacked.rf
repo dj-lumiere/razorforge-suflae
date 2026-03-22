@@ -1,28 +1,29 @@
-# RazorForge Hijacked[T] - Scoped exclusive access token
-#
-# Hijacked[T] is created ONLY by the `hijacking` syntax, NOT by creators.
-# It provides exclusive modifiable access to entities/residents within a scoped block.
-#
-# Syntax:
-#   hijacking <entity_or_resident> as h
-#       h.member variable = 42  # Exclusive write access
-#   } # h destroyed here, cannot escape scope
-#
-# Properties:
-# - Created by compiler via `hijacking` syntax
-# - Scope-bound: cannot be stored, returned, or escape
-# - Exclusive: cannot be copied (only one handle at a time)
-# - Temporary: source is invalidated during scope, restored on exit
-# - Single-threaded: for multi-threaded use, see Seized[T]
-#
-# This type is a marker for the type system - the compiler handles all operations.
+### RazorForge Hijacked[T] - Scoped exclusive access token
+###
+### Hijacked[T] is created ONLY by the `hijacking` syntax, NOT by creators.
+### It provides exclusive modifiable access to entities/residents within a scoped block.
+###
+### Syntax:
+###   using <entity_or_resident>.hijack() as h
+###     h.member variable = 42  # Exclusive write access
+###   # h destroyed here, cannot escape scope
+###
+### Properties:
+### - Created by compiler via `hijacking` syntax
+### - Scope-bound: cannot be stored, returned, or escape
+### - Exclusive: cannot be copied (only one handle at a time)
+### - Temporary: source is invalidated during scope, restored on exit
+### - Single-threaded: for multi-threaded use, see Seized[T]
+###
+### This type is a marker for the type system - the compiler handles all operations.
 module Core
 
+@llvm("ptr")
 record Hijacked[T]
-  secret ptr: Snatched[T]
+  pass
 
-routine T.hijack!() -> Hijacked[T]
-  return Hijacked[T](T.snatch())
+routine T.hijack() -> Hijacked[T]
+  return Hijacked[T](me.snatch())
 
 # NOTE: No creators, no methods - all operations handled by compiler
 # The address member variable is managed internally by the hijacking syntax implementation

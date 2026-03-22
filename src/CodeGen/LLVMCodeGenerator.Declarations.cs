@@ -410,9 +410,10 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        if (routineInfo == null || routineInfo.IsGenericDefinition)
+        if (routineInfo == null || routineInfo.IsGenericDefinition
+            || routineInfo.OwnerType is GenericParameterTypeInfo)
         {
-            return; // Skip generic definitions or unresolved routines
+            return; // Skip generic definitions, unresolved routines, and generic-param-owner routines
         }
 
         // Skip routines with error types in their signature
@@ -745,6 +746,45 @@ public partial class LLVMCodeGenerator
                 .ToList();
             if (typeArgs.Count == resolvedReturnType.GenericParameters.Count)
                 resolvedReturnType = _registry.GetOrCreateResolution(resolvedReturnType, typeArgs!);
+        }
+        // For return types like Viewed[T] (generic resolution with substitutable type arguments)
+        if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anySubstituted = false;
+            var substitutedArgs = new List<TypeInfo>();
+            foreach (var arg in resolvedReturnType.TypeArguments)
+            {
+                if (subs.TryGetValue(arg.Name, out var argSub))
+                {
+                    substitutedArgs.Add(argSub);
+                    anySubstituted = true;
+                }
+                else
+                {
+                    substitutedArgs.Add(arg);
+                }
+            }
+            if (anySubstituted)
+            {
+                // Get the generic definition to create the resolved type
+                TypeInfo? genericBase = resolvedReturnType switch
+                {
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                    _ => null
+                };
+                // If no GenericDefinition, try looking up the base name
+                if (genericBase == null)
+                {
+                    string baseName = resolvedReturnType.Name.Contains('[')
+                        ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
+                        : resolvedReturnType.Name;
+                    genericBase = _registry.LookupType(baseName);
+                }
+                if (genericBase != null)
+                    resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
+            }
         }
 
         return new RoutineInfo(generic.Name)
@@ -1926,11 +1966,11 @@ public partial class LLVMCodeGenerator
 
         // Allocate list header: { i64 count, i64 capacity, ptr data }
         string listPtr = NextTemp();
-        EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
         // Allocate data array (array of pointers, 8 bytes each)
         string dataPtr = NextTemp();
-        EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {count * 8})");
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * 8})");
 
         // Store count
         string countPtr = NextTemp();
@@ -2083,11 +2123,11 @@ public partial class LLVMCodeGenerator
 
         // Allocate list header: { i64 count, i64 capacity, ptr data }
         string listPtr = NextTemp();
-        EmitLine(sb, $"  {listPtr} = call ptr @rf_alloc(i64 24)");
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
         // Allocate data array
         string dataPtr = NextTemp();
-        EmitLine(sb, $"  {dataPtr} = call ptr @rf_alloc(i64 {count * elemSize})");
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * elemSize})");
 
         // Store count
         string countPtr = NextTemp();

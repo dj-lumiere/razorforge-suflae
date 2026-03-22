@@ -1,30 +1,31 @@
-# RazorForge Viewed[T] - Scoped read-only access token
-#
-# Viewed[T] is created ONLY by the `viewing` syntax, NOT by creators.
-# It provides read-only access to entities/residents within a scoped block.
-#
-# Syntax:
-#   viewing <entity_or_resident> as v
-#       show(v.member variable)  # Read-only access
-#       var copy = v   # OK - Viewed can be copied
-#   } # v destroyed here, cannot escape scope
-#
-# Properties:
-# - Created by compiler via `viewing` syntax
-# - Scope-bound: cannot be stored, returned, or escape
-# - Copyable: multiple Viewed[T] handles can coexist
-# - Read-only: cannot modify through this handle
-# - Temporary: source is invalidated during scope, restored on exit
-# - Single-threaded: for multi-threaded use, see Inspected[T]
-#
-# This type is a marker for the type system - the compiler handles all operations.
-
+### RazorForge Viewed[T] - Scoped read-only access token
+###
+### Viewed[T] is created ONLY by the `viewing` syntax, NOT by creators.
+### It provides read-only access to entities/residents within a scoped block.
+###
+### Syntax:
+###   using <entity_or_resident>.view() as v
+###     show(v.member variable)  # Read-only access
+###     var copy = v   # OK - Viewed can be copied
+###   # v destroyed here, cannot escape scope
+###
+### Properties:
+### - Created by compiler via `viewing` syntax
+### - Scope-bound: cannot be stored, returned, or escape
+### - Copyable: multiple Viewed[T] handles can coexist
+### - Read-only: cannot modify through this handle
+### - Temporary: source is invalidated during scope, restored on exit
+### - Single-threaded: for multi-threaded use, see Inspected[T]
+###
+### This type is a marker for the type system - the compiler handles all operations.
 module Core
-record Viewed[T]
-  secret ptr: Snatched[T]
 
-routine T.view!() -> Viewed[T]
-  return Viewed[T](T.snatch())
+@llvm("ptr")
+record Viewed[T]
+  pass
+
+routine T.view() -> Viewed[T]
+  return Viewed[T](me.snatch())
 
 # NOTE: No creators, no methods - all operations handled by compiler
 # The address member variable is managed internally by the viewing syntax implementation

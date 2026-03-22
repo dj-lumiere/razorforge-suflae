@@ -631,6 +631,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Seized[T] cannot be copied or aliased.</summary>
     SeizedCopyNotAllowed = 626,
 
+    /// <summary>Cannot write to member variable through read-only wrapper (Viewed, Inspected).</summary>
+    WriteThroughReadOnlyWrapper = 631,
+
     /// <summary>Snatched[T] method calls require danger! block.</summary>
     SnatchedRequiresDanger = 627,
 

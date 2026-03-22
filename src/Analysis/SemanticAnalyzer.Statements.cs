@@ -589,6 +589,17 @@ public sealed partial class SemanticAnalyzer
         if (assign.Target is MemberExpression member)
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+            // Read-only wrapper types (Viewed, Inspected) cannot be written through
+            if (IsReadOnlyWrapper(type: objectType))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
+                    "Use Hijacked[T] for exclusive write access or Seized[T] for locked write access.",
+                    assign.Location);
+            }
+
             ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: assign.Location);
 
             // Preset enforcement: cannot assign to member variables of preset variables
