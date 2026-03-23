@@ -1,5 +1,7 @@
-﻿routine stop!()
-  throw UserTerminationError("Stopped by user")
+﻿module Core
+
+routine stop!()
+  throw UserTerminationError()
 
 routine verify!(expr: Bool)
   throw VerificationFailure()

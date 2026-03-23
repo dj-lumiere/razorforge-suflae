@@ -130,9 +130,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetRecordTypeName(RecordTypeInfo record)
     {
-        // Mangle the name to be LLVM-compatible
-        string mangledName = MangleTypeName(record.Name);
-        return $"%Record.{mangledName}";
+        return $"%{Q($"Record.{record.Name}")}";
     }
 
     /// <summary>
@@ -140,8 +138,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetEntityTypeName(EntityTypeInfo entity)
     {
-        string mangledName = MangleTypeName(entity.Name);
-        return $"%Entity.{mangledName}";
+        return $"%{Q($"Entity.{entity.Name}")}";
     }
 
     /// <summary>
@@ -149,8 +146,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetResidentTypeName(ResidentTypeInfo resident)
     {
-        string mangledName = MangleTypeName(resident.Name);
-        return $"%Resident.{mangledName}";
+        return $"%{Q($"Resident.{resident.Name}")}";
     }
 
     /// <summary>
@@ -158,8 +154,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetVariantTypeName(VariantTypeInfo variant)
     {
-        string mangledName = MangleTypeName(variant.Name);
-        return $"%Variant.{mangledName}";
+        return $"%{Q($"Variant.{variant.Name}")}";
     }
 
     /// <summary>
@@ -167,8 +162,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetErrorHandlingTypeName(ErrorHandlingTypeInfo errorType)
     {
-        string mangledName = MangleTypeName(errorType.Name);
-        return $"%ErrorHandling.{mangledName}";
+        return $"%{Q($"ErrorHandling.{errorType.Name}")}";
     }
 
     /// <summary>
@@ -176,8 +170,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetChoiceTypeName(ChoiceTypeInfo choice)
     {
-        string mangledName = MangleTypeName(choice.Name);
-        return $"%Choice.{mangledName}";
+        return $"%{Q($"Choice.{choice.Name}")}";
     }
 
     /// <summary>
@@ -189,9 +182,10 @@ public partial class LLVMCodeGenerator
         var parts = new List<string>();
         foreach (var elemType in tuple.ElementTypes)
         {
-            parts.Add(MangleTypeName(elemType.Name));
+            parts.Add(elemType.Name);
         }
-        return $"%Tuple.{string.Join("_", parts)}";
+        string tupleName = $"Tuple.{string.Join("_", parts)}";
+        return $"%{Q(tupleName)}";
     }
 
     /// <summary>
@@ -210,17 +204,26 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Mangles a type name to be LLVM-compatible.
-    /// Replaces brackets, commas, and spaces with underscores.
+    /// Returns the name unchanged — LLVM quoted identifiers handle special characters.
     /// </summary>
     private static string MangleTypeName(string name)
     {
-        return name
-            .Replace("[", "_")
-            .Replace("]", "_")
-            .Replace(", ", "_")
-            .Replace(",", "_")
-            .Replace(" ", "_");
+        return name;
+    }
+
+    /// <summary>
+    /// Quotes an LLVM identifier if it contains characters that require quoting.
+    /// LLVM allows any characters in quoted identifiers: @"Snatched[Point].__eq__", %"Record.Snatched[Point]".
+    /// Unquoted identifiers only allow [a-zA-Z$._0-9-].
+    /// </summary>
+    private static string Q(string name)
+    {
+        foreach (char c in name)
+        {
+            if (!char.IsLetterOrDigit(c) && c != '$' && c != '.' && c != '_' && c != '-')
+                return $"\"{name}\"";
+        }
+        return name;
     }
 
     /// <summary>

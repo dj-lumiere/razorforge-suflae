@@ -29,6 +29,16 @@ public partial class LLVMCodeGenerator
         }
         _generatedTypes.Add(typeName);
 
+        // For generic resolutions with stale empty member variables (created before the generic
+        // definition's members were populated), re-create from the now-complete definition.
+        if (entity is { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef }
+            && entity.TypeArguments != null)
+        {
+            var refreshed = genDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+                entity = refreshed;
+        }
+
         // Build the struct type
         var memberVariableTypes = new List<string>();
         foreach (var memberVariable in entity.MemberVariables)
@@ -87,6 +97,15 @@ public partial class LLVMCodeGenerator
         if (!_generatedTypes.Add(typeName))
         {
             return;
+        }
+
+        // For generic resolutions with stale empty member variables, re-create from the definition
+        if (record is { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef }
+            && record.TypeArguments != null)
+        {
+            var refreshed = genDef.CreateInstance(record.TypeArguments) as RecordTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+                record = refreshed;
         }
 
         // Build the struct type
@@ -281,9 +300,9 @@ public partial class LLVMCodeGenerator
     /// Generates the LLVM function declaration (signature only).
     /// </summary>
     /// <param name="routine">The routine info.</param>
-    private void GenerateFunctionDeclaration(RoutineInfo routine)
+    private void GenerateFunctionDeclaration(RoutineInfo routine, string? nameOverride = null)
     {
-        string funcName = MangleFunctionName(routine);
+        string funcName = nameOverride ?? MangleFunctionName(routine);
 
         // Skip if already generated
         if (_generatedFunctions.Contains(funcName))
@@ -348,9 +367,13 @@ public partial class LLVMCodeGenerator
         if (routine.ReturnType == null) return false;
         // Only record types that map to LLVM struct types (not intrinsics or single-wrapper) can need sret
         string llvmType = GetLLVMType(routine.ReturnType);
-        if (!llvmType.StartsWith("%Record.") && !llvmType.StartsWith("%Tuple."))
+        if (!llvmType.StartsWith("%Record.") && !llvmType.StartsWith("%\"Record.")
+            && !llvmType.StartsWith("%Tuple.") && !llvmType.StartsWith("%\"Tuple."))
             return false;
-        // On Windows x64 MSVC ABI, structs > 8 bytes use sret
+        // On Windows x64 MSVC ABI, structs > 8 bytes use sret.
+        // TODO: On System V x86_64 (GCC/Linux), the threshold is > 16 bytes (RAX:RDX).
+        //       Structs 9–16 bytes are register-returned on Linux but sret on Windows.
+        //       This needs a target ABI config when cross-platform support is added.
         int size = GetTypeSize(routine.ReturnType);
         return size > 8;
     }
@@ -359,7 +382,7 @@ public partial class LLVMCodeGenerator
     /// Generates the LLVM function definition (with body).
     /// </summary>
     /// <param name="routine">The routine declaration from AST.</param>
-    private void GenerateFunctionDefinition(RoutineDeclaration routine, RoutineInfo? preResolvedInfo = null)
+    private void GenerateFunctionDefinition(RoutineDeclaration routine, RoutineInfo? preResolvedInfo = null, string? nameOverride = null)
     {
         RoutineInfo? routineInfo = preResolvedInfo;
 
@@ -422,7 +445,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string funcName = MangleFunctionName(routineInfo);
+        string funcName = nameOverride ?? MangleFunctionName(routineInfo);
 
         // Skip if already generated (prevents duplicates between user program and stdlib)
         if (!_generatedFunctionDefs.Add(funcName))
@@ -499,6 +522,7 @@ public partial class LLVMCodeGenerator
         _localVariables.Clear();
         _localVarLLVMNames.Clear();
         _varNameCounts.Clear();
+        _localEntityVars.Clear();
         _currentBlock = "entry";
         _emitSlotAddr = null;
         _emitSlotType = null;
@@ -529,6 +553,21 @@ public partial class LLVMCodeGenerator
             _localVariables[param.Name] = param.Type;
         }
 
+        // Emit stack trace push
+        {
+            string routineName = routine.FullName ?? routine.Name;
+            string fileName = routine.Location?.FileName ?? "<unknown>";
+            int line = routine.Location?.Line ?? 0;
+            int col = routine.Location?.Column ?? 0;
+            string routineCStr = EmitCStringConstant(routineName);
+            string fileCStr = EmitCStringConstant(fileName);
+            string routineAsInt = NextTemp();
+            string fileAsInt = NextTemp();
+            EmitLine(_functionDefinitions, $"  {routineAsInt} = ptrtoint ptr {routineCStr} to i64");
+            EmitLine(_functionDefinitions, $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
+            EmitLine(_functionDefinitions, $"  call void @rf_trace_push(i64 {routineAsInt}, i64 {fileAsInt}, i32 {line}, i32 {col})");
+        }
+
         // Emit the body statements
         EmitStatement(_functionDefinitions, body);
 
@@ -540,6 +579,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
+        EmitLine(_functionDefinitions, "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)
         {
             EmitLine(_functionDefinitions, "  ret void");
@@ -609,23 +649,30 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string MangleFunctionName(RoutineInfo routine)
     {
+        // External("C") functions use the raw C symbol name — no module prefix,
+        // so that LLVM IR symbols match the actual C linker symbols.
+        if (routine.CallingConvention == "C")
+            return Q(SanitizeLLVMName(routine.Name));
+
         string name = SanitizeLLVMName(routine.Name);
         if (routine.OwnerType == null)
         {
-            return name;
+            // Top-level: Module.Name (FullName already handles this)
+            return Q(SanitizeLLVMName(routine.FullName));
         }
 
-        string typeName = MangleTypeName(routine.OwnerType.Name);
-        string baseName = $"{typeName}_{name}";
+        // Method: Module.OwnerType.Name (OwnerType.FullName includes module)
+        string typeName = routine.OwnerType.FullName;
+        string baseName = $"{typeName}.{name}";
 
         // Disambiguate __create__ overloads by first parameter type
         if (name == "__create__" && routine.Parameters.Count > 0)
         {
-            string firstParamType = MangleTypeName(routine.Parameters[0].Type.Name);
-            baseName = $"{baseName}_{firstParamType}";
+            string firstParamType = routine.Parameters[0].Type.Name;
+            baseName = $"{baseName}#{firstParamType}";
         }
 
-        return baseName;
+        return Q(baseName);
     }
 
     /// <summary>
@@ -634,7 +681,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string SanitizeLLVMName(string name)
     {
-        return name.Replace("!", "_crash");
+        return name.Replace("!", "");
     }
 
     #endregion
@@ -669,11 +716,17 @@ public partial class LLVMCodeGenerator
                 // Build a resolved RoutineInfo with the correct owner type and substituted types
                 var resolvedInfo = BuildResolvedRoutineInfo(entry);
 
-                // Set type substitutions and compile
+                // Build string substitution map and rewrite AST with concrete types
+                var astSubs = new Dictionary<string, string>();
+                foreach (var (paramName, typeInfo) in entry.TypeSubstitutions)
+                    astSubs[paramName] = typeInfo.Name;
+                var rewrittenAst = GenericAstRewriter.Rewrite(astRoutine, astSubs);
+
+                // Keep _typeSubstitutions as fallback for ResolvedType metadata
                 _typeSubstitutions = entry.TypeSubstitutions;
                 try
                 {
-                    GenerateFunctionDefinition(astRoutine, resolvedInfo);
+                    GenerateFunctionDefinition(rewrittenAst, resolvedInfo, mangledName);
                 }
                 catch (Exception ex)
                 {
@@ -718,6 +771,63 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Resolves a type by applying generic substitutions.
+    /// Handles direct substitution (T → S64), parameterized types (List[T] → List[S64]),
+    /// and generic definitions with substitutable params.
+    /// </summary>
+    private TypeInfo ResolveSubstitutedType(TypeInfo type, Dictionary<string, TypeInfo> subs)
+    {
+        // Direct substitution: T → S64
+        if (subs.TryGetValue(type.Name, out var sub))
+            return sub;
+
+        // Parameterized: List[T] → List[S64] (substitute type arguments)
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anySubstituted = false;
+            var substitutedArgs = new List<TypeInfo>();
+            foreach (var arg in type.TypeArguments)
+            {
+                var resolved = ResolveSubstitutedType(arg, subs);
+                substitutedArgs.Add(resolved);
+                if (!ReferenceEquals(resolved, arg)) anySubstituted = true;
+            }
+            if (anySubstituted)
+            {
+                TypeInfo? genericBase = type switch
+                {
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                    _ => null
+                };
+                if (genericBase == null)
+                {
+                    string baseName = type.Name.Contains('[')
+                        ? type.Name[..type.Name.IndexOf('[')]
+                        : type.Name;
+                    genericBase = _registry.LookupType(baseName);
+                }
+                if (genericBase != null)
+                    return _registry.GetOrCreateResolution(genericBase, substitutedArgs);
+            }
+        }
+
+        // Generic definition with substitutable params: List with GenericParameters ["T"]
+        if (type is { IsGenericDefinition: true, GenericParameters: not null } && type.TypeArguments == null)
+        {
+            var typeArgs = type.GenericParameters
+                .Select(gp => subs.TryGetValue(gp, out var s) ? s : _registry.LookupType(gp))
+                .Where(t => t != null)
+                .ToList();
+            if (typeArgs.Count == type.GenericParameters.Count)
+                return _registry.GetOrCreateResolution(type, typeArgs!);
+        }
+
+        return type;
+    }
+
+    /// <summary>
     /// Builds a resolved RoutineInfo for monomorphization.
     /// Creates a new RoutineInfo with the resolved owner type and substituted parameter/return types.
     /// </summary>
@@ -726,69 +836,19 @@ public partial class LLVMCodeGenerator
         var generic = entry.GenericMethod;
         var subs = entry.TypeSubstitutions;
 
-        // Substitute parameter types
+        // Substitute parameter types (handles both direct T→S64 and parameterized List[T]→List[S64])
         var resolvedParams = generic.Parameters
             .Select(p =>
             {
-                TypeInfo resolvedType = subs.TryGetValue(p.Type.Name, out var sub) ? sub : p.Type;
+                TypeInfo resolvedType = ResolveSubstitutedType(p.Type, subs);
                 return p.WithSubstitutedType(resolvedType);
             })
             .ToList();
 
         // Substitute return type
         TypeInfo? resolvedReturnType = generic.ReturnType;
-        if (resolvedReturnType != null && subs.TryGetValue(resolvedReturnType.Name, out var retSub))
-            resolvedReturnType = retSub;
-        // For return types like List[T], resolve to List[Letter]
-        if (resolvedReturnType is { IsGenericDefinition: true, GenericParameters: not null } &&
-            resolvedReturnType.TypeArguments == null)
-        {
-            var typeArgs = resolvedReturnType.GenericParameters
-                .Select(gp => subs.TryGetValue(gp, out var s) ? s : _registry.LookupType(gp))
-                .Where(t => t != null)
-                .ToList();
-            if (typeArgs.Count == resolvedReturnType.GenericParameters.Count)
-                resolvedReturnType = _registry.GetOrCreateResolution(resolvedReturnType, typeArgs!);
-        }
-        // For return types like Viewed[T] (generic resolution with substitutable type arguments)
-        if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            bool anySubstituted = false;
-            var substitutedArgs = new List<TypeInfo>();
-            foreach (var arg in resolvedReturnType.TypeArguments)
-            {
-                if (subs.TryGetValue(arg.Name, out var argSub))
-                {
-                    substitutedArgs.Add(argSub);
-                    anySubstituted = true;
-                }
-                else
-                {
-                    substitutedArgs.Add(arg);
-                }
-            }
-            if (anySubstituted)
-            {
-                // Get the generic definition to create the resolved type
-                TypeInfo? genericBase = resolvedReturnType switch
-                {
-                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
-                    _ => null
-                };
-                // If no GenericDefinition, try looking up the base name
-                if (genericBase == null)
-                {
-                    string baseName = resolvedReturnType.Name.Contains('[')
-                        ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
-                        : resolvedReturnType.Name;
-                    genericBase = _registry.LookupType(baseName);
-                }
-                if (genericBase != null)
-                    resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
-            }
-        }
+        if (resolvedReturnType != null)
+            resolvedReturnType = ResolveSubstitutedType(resolvedReturnType, subs);
 
         return new RoutineInfo(generic.Name)
         {
@@ -1001,7 +1061,7 @@ public partial class LLVMCodeGenerator
             : "you";
 
         // Look up the __eq__ function name on the same owner type
-        string eqFuncName = $"{MangleTypeName(routine.OwnerType.Name)}___eq__";
+        string eqFuncName = Q($"{routine.OwnerType.Name}.__eq__");
 
         EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
         EmitLine(_functionDefinitions, "entry:");
@@ -1088,7 +1148,7 @@ public partial class LLVMCodeGenerator
             : "you";
 
         // Look up the __cmp__ function name on the same owner type
-        string cmpFuncName = $"{MangleTypeName(routine.OwnerType.Name)}___cmp__";
+        string cmpFuncName = Q($"{routine.OwnerType.Name}.__cmp__");
 
         EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
         EmitLine(_functionDefinitions, "entry:");
@@ -1301,7 +1361,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Complex types: call their __eq__ method
-        string eqName = $"{MangleTypeName(fieldType.Name)}___eq__";
+        string eqName = Q($"{fieldType.Name}.__eq__");
         string result = NextTemp();
         EmitLine(_functionDefinitions, $"  {result} = call i1 @{eqName}({llvmType} {meField}, {llvmType} {youField})");
         return result;
@@ -1369,7 +1429,7 @@ public partial class LLVMCodeGenerator
 
             // Concat field prefix
             string withPrefix = NextTemp();
-            EmitLine(_functionDefinitions, $"  {withPrefix} = call ptr @Text_concat(ptr {current}, ptr {fieldPrefixStr})");
+            EmitLine(_functionDefinitions, $"  {withPrefix} = call ptr @Text.concat(ptr {current}, ptr {fieldPrefixStr})");
             current = withPrefix;
 
             // Get field value
@@ -1415,14 +1475,14 @@ public partial class LLVMCodeGenerator
 
             // Concat field text
             string withField = NextTemp();
-            EmitLine(_functionDefinitions, $"  {withField} = call ptr @Text_concat(ptr {current}, ptr {fieldText})");
+            EmitLine(_functionDefinitions, $"  {withField} = call ptr @Text.concat(ptr {current}, ptr {fieldText})");
             current = withField;
         }
 
         // Append closing ")"
         string suffix = EmitSynthesizedStringLiteral(")");
         string result = NextTemp();
-        EmitLine(_functionDefinitions, $"  {result} = call ptr @Text_concat(ptr {current}, ptr {suffix})");
+        EmitLine(_functionDefinitions, $"  {result} = call ptr @Text.concat(ptr {current}, ptr {suffix})");
 
         EmitLine(_functionDefinitions, $"  ret ptr {result}");
         EmitLine(_functionDefinitions, "}");
@@ -1440,7 +1500,7 @@ public partial class LLVMCodeGenerator
                                      ?? _registry.LookupRoutine("Text.__create__");
         string createName = createRoutine != null
             ? MangleFunctionName(createRoutine)
-            : $"Text___create__";
+            : "Text.__create__";
         string textResult = NextTemp();
         EmitLine(_functionDefinitions, $"  {textResult} = call ptr @{createName}({llvmType} {value})");
         return textResult;
@@ -1484,7 +1544,7 @@ public partial class LLVMCodeGenerator
             case RecordTypeInfo { IsSingleMemberVariableWrapper: true }:
             {
                 // Single-value: call hash on the value directly
-                string hashName = $"{MangleTypeName(routine.OwnerType.Name)}_hash";
+                string hashName = Q($"{routine.OwnerType.Name}.hash");
                 // For primitive wrappers, hash the underlying value
                 string result = NextTemp();
                 EmitLine(_functionDefinitions, $"  {result} = mul i64 %me, 2654435761");
@@ -1509,7 +1569,7 @@ public partial class LLVMCodeGenerator
                     EmitLine(_functionDefinitions, $"  {field} = extractvalue {typeName} %me, {i}");
 
                     // Call field.hash()
-                    string fieldHashName = $"{MangleTypeName(mv.Type.Name)}_hash";
+                    string fieldHashName = Q($"{mv.Type.Name}.hash");
                     string fieldHash = NextTemp();
                     EmitLine(_functionDefinitions, $"  {fieldHash} = call i64 @{fieldHashName}({fieldType} {field})");
 
@@ -1624,7 +1684,7 @@ public partial class LLVMCodeGenerator
         string paramName = routine.Parameters[0].Name;
 
         // Text.__create__(from: T) → T.Text()
-        string textMethodName = $"{MangleTypeName(paramType.Name)}_Text";
+        string textMethodName = Q($"{paramType.Name}.Text");
 
         EmitLine(_functionDefinitions, $"define ptr @{funcName}(ptr %me, {paramLlvmType} %{paramName}) {{");
         EmitLine(_functionDefinitions, "entry:");
@@ -2247,10 +2307,9 @@ public partial class LLVMCodeGenerator
         TypeInfo dictTextData = _registry.GetOrCreateResolution(
             genericDef: dictDef, typeArguments: [textType, dataType]);
 
-        // Mangle names for Dict[Text, Data].__create__() and set(key, value)
-        string dictTypeName = MangleTypeName(dictTextData.Name);
-        string dictCreateName = $"{dictTypeName}___create__";
-        string dictSetName = $"{dictTypeName}_set";
+        // Build names for Dict[Text, Data].__create__() and set(key, value)
+        string dictCreateName = Q($"{dictTextData.Name}.__create__");
+        string dictSetName = Q($"{dictTextData.Name}.set");
 
         // Data entity struct type for inline boxing
         string dataStructType = dataType is EntityTypeInfo dataEntity

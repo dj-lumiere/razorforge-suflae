@@ -52,7 +52,9 @@ public abstract class TypeInfo
                 ? Name
                 : $"{Module}.{Name}";
 
-            if (TypeArguments is not { Count: > 0 })
+            // Generic resolutions already have type args in Name (e.g., "Snatched[U8]"),
+            // so only append TypeArguments for generic definitions where Name is bare
+            if (TypeArguments is not { Count: > 0 } || Name.Contains('['))
             {
                 return baseName;
             }

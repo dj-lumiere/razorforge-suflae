@@ -65,9 +65,32 @@ public sealed partial class SemanticAnalyzer
 
     private void AnalyzeFunctionBody(RoutineDeclaration routine)
     {
-        // The AST already stores names without the '!' suffix
-        // (e.g., "get!" is stored as Name="get", IsFailable=true)
-        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routine.Name);
+        // Construct the full name matching how CollectFunctionDeclaration registered it.
+        // Must replicate the exact same name resolution logic so the lookup succeeds.
+        string fullName;
+        if (_currentType != null)
+        {
+            // Member routine inside type body: OwnerType.Name + "." + routine.Name
+            fullName = $"{_currentType.Name}.{routine.Name}";
+        }
+        else if (routine.Name.Contains(value: '.'))
+        {
+            // Member routine syntax (e.g., "List[T].add_last"):
+            // Resolve OwnerType to get canonical name, then append method name
+            int dotIndex = routine.Name.IndexOf(value: '.');
+            string typeName = routine.Name[..dotIndex];
+            string methodName = routine.Name[(dotIndex + 1)..];
+            TypeSymbol? ownerType = LookupTypeWithImports(name: typeName);
+            fullName = ownerType != null ? $"{ownerType.Name}.{methodName}" : routine.Name;
+        }
+        else
+        {
+            // Top-level function: Module.Name (if module set), else just Name
+            string? module = GetCurrentModuleName();
+            fullName = string.IsNullOrEmpty(value: module) ? routine.Name : $"{module}.{routine.Name}";
+        }
+
+        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: fullName);
         if (routineInfo == null)
         {
             return;
@@ -111,8 +134,8 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // Failable routines must contain throw or absent (#77)
-        if (routineInfo is { IsFailable: true, HasThrow: false, HasAbsent: false })
+        // Failable routines must contain throw, absent, or call other failable routines (#77)
+        if (routineInfo is { IsFailable: true, HasThrow: false, HasAbsent: false, HasFailableCalls: false })
         {
             ReportError(
                 SemanticDiagnosticCode.FailableWithoutThrowOrAbsent,
@@ -464,19 +487,8 @@ public sealed partial class SemanticAnalyzer
         // Analyze the expression for side effects and type validation
         TypeSymbol exprType = AnalyzeExpression(expression: expr.Expression);
 
-        // #159: Unhandled crashable call — failable call as statement in non-failable routine
-        if (expr.Expression is CallExpression failableCall)
-        {
-            RoutineInfo? calledRoutine = ResolveCalledRoutine(call: failableCall);
-            if (calledRoutine is { IsFailable: true } && _currentRoutine is not { IsFailable: true })
-            {
-                ReportError(
-                    SemanticDiagnosticCode.UnhandledCrashableCall,
-                    $"Failable routine '{calledRoutine.Name}!' called without error handling. " +
-                    "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
-                    failableCall.Location);
-            }
-        }
+        // Note: UnhandledCrashableCall check moved to AnalyzeCallExpression to catch all contexts
+        // (return values, assignments, nested expressions — not just expression statements)
 
         // Check if this is a call expression with a non-Blank return value
         // If so, warn that the return value is unused (use 'discard' to explicitly ignore)

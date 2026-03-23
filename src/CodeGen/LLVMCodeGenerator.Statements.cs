@@ -184,6 +184,13 @@ public partial class LLVMCodeGenerator
         _localVariables[varDecl.Name] = varType;
         _localVarLLVMNames[varDecl.Name] = uniqueName;
 
+        // Track entity variables for automatic cleanup at return points
+        // Only track when initialized via constructor (actual heap allocation)
+        if (varType is EntityTypeInfo && IsEntityConstructorCall(varDecl.Initializer))
+        {
+            _localEntityVars.Add((varDecl.Name, $"%{uniqueName}.addr"));
+        }
+
         // Store initial value if present
         if (varDecl.Initializer != null)
         {
@@ -372,10 +379,15 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
                 string v1 = NextTemp();
                 EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+
+                EmitEntityCleanup(sb, null);
+                EmitLine(sb, "  call void @rf_trace_pop()");
                 EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
             }
             else
             {
+                EmitEntityCleanup(sb, null);
+                EmitLine(sb, "  call void @rf_trace_pop()");
                 EmitLine(sb, "  ret void");
             }
         }
@@ -390,7 +402,45 @@ public partial class LLVMCodeGenerator
                 throw new InvalidOperationException("Cannot determine return type for return statement");
             }
             string llvmType = GetLLVMType(retType);
+
+            // Skip cleanup for the returned entity variable (ownership transfers to caller)
+            string? returnedVarName = ret.Value is IdentifierExpression id
+                && _localEntityVars.Any(e => e.Name == id.Name) ? id.Name : null;
+            EmitEntityCleanup(sb, returnedVarName);
+
+            EmitLine(sb, "  call void @rf_trace_pop()");
             EmitLine(sb, $"  ret {llvmType} {value}");
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the expression is an entity constructor call (heap allocation).
+    /// Matches both CreatorExpression and CallExpression that resolve to an entity type.
+    /// </summary>
+    private bool IsEntityConstructorCall(Expression? expr)
+    {
+        if (expr is CreatorExpression) return true;
+        if (expr is CallExpression { Callee: IdentifierExpression id })
+        {
+            return _registry.LookupType(id.Name) is EntityTypeInfo;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Emits rf_invalidate calls for all locally-owned entity variables.
+    /// Skips the variable being returned (ownership transfers to caller).
+    /// </summary>
+    private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
+    {
+        foreach (var (name, llvmAddr) in _localEntityVars)
+        {
+            if (name == returnedVarName) continue;
+            string loaded = NextTemp();
+            EmitLine(sb, $"  {loaded} = load ptr, ptr {llvmAddr}");
+            string asInt = NextTemp();
+            EmitLine(sb, $"  {asInt} = ptrtoint ptr {loaded} to i64");
+            EmitLine(sb, $"  call void @rf_invalidate(i64 {asInt})");
         }
     }
 
@@ -432,22 +482,84 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits code for a throw statement.
-    /// Evaluates the crashable expression and traps. Future: call crash_message() and write to stderr.
+    /// Evaluates the crashable expression, calls crash_message(), and invokes rf_crash
+    /// with the error type name, message, and source location for full error reporting.
     /// </summary>
     private void EmitThrow(StringBuilder sb, ThrowStatement throwStmt)
     {
-        // Declare llvm.trap if not already declared
-        if (_declaredNativeFunctions.Add("llvm.trap"))
+        // rf_crash is declared via NativeDeclarations.rf registry
+
+        // Get the error type info
+        TypeInfo? errorType = GetExpressionType(throwStmt.Error);
+        string typeName = errorType?.Name ?? "UnknownError";
+
+        // Check if error type is an empty record (no member variables) — skip construction
+        bool isEmptyRecord = errorType is RecordTypeInfo { MemberVariables.Count: 0 };
+        string errorVal;
+        if (isEmptyRecord)
         {
-            EmitLine(_functionDeclarations, "declare void @llvm.trap() noreturn nounwind");
+            // Empty record — no need to construct, use zeroinitializer
+            errorVal = "zeroinitializer";
+        }
+        else
+        {
+            errorVal = EmitExpression(sb, throwStmt.Error);
         }
 
-        // Evaluate the error expression (for side effects / future crash_message use)
-        EmitExpression(sb, throwStmt.Error);
+        // Try to call crash_message() on the error to get the message Text
+        string dataPtr = "null";
+        string msgLen = "0";
+        string crashMethodName = $"{typeName}.crash_message";
+        var crashMethod = _registry.LookupRoutine(crashMethodName);
+        if (crashMethod != null)
+        {
+            // Ensure crash_message is declared/defined
+            GenerateFunctionDeclaration(crashMethod);
+            string mangledCrash = MangleFunctionName(crashMethod);
 
-        // For now: trap immediately. Future: extract crash_message(), print to stderr, then trap.
-        EmitLine(sb, $"  call void @llvm.trap()");
-        EmitLine(sb, $"  unreachable");
+            string llvmReceiverType = GetLLVMType(errorType!);
+
+            // Call crash_message(me) → returns ptr to Text entity
+            string textPtr = NextTemp();
+            EmitLine(sb, $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
+
+            // Text entity = { ptr letters_list }
+            // List[Letter] entity = { ptr data, i64 count, i64 capacity }
+            string lettersPtr = NextTemp();
+            EmitLine(sb, $"  {lettersPtr} = load ptr, ptr {textPtr}");
+            string dataField = NextTemp();
+            EmitLine(sb, $"  {dataField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 0");
+            dataPtr = NextTemp();
+            EmitLine(sb, $"  {dataPtr} = load ptr, ptr {dataField}");
+            string countField = NextTemp();
+            EmitLine(sb, $"  {countField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 1");
+            msgLen = NextTemp();
+            EmitLine(sb, $"  {msgLen} = load i64, ptr {countField}");
+        }
+
+        // Emit C string constants for type name and file, cast ptr → i64 (Address)
+        string typeCStr = EmitCStringConstant(typeName);
+        string fileCStr = EmitCStringConstant(throwStmt.Location.FileName);
+        string typeNameAsInt = NextTemp();
+        EmitLine(sb, $"  {typeNameAsInt} = ptrtoint ptr {typeCStr} to i64");
+        string fileAsInt = NextTemp();
+        EmitLine(sb, $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
+
+        // Cast message data ptr → i64 (Address)
+        string msgDataAsInt;
+        if (dataPtr == "null")
+        {
+            msgDataAsInt = "0";
+        }
+        else
+        {
+            msgDataAsInt = NextTemp();
+            EmitLine(sb, $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
+        }
+
+        // Call rf_crash — never returns
+        EmitLine(sb, $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
+        EmitLine(sb, "  unreachable");
     }
 
     /// <summary>
@@ -713,7 +825,7 @@ public partial class LLVMCodeGenerator
         {
             // Fallback: construct the call name from the type
             string fallbackName = emitterType != null
-                ? $"{MangleTypeName(emitterType.Name)}_try_next"
+                ? Q($"{emitterType.Name}.try_next")
                 : "try_next";
             maybeResult = NextTemp();
             EmitLine(sb, $"  {maybeResult} = call {{ i64, ptr }} @{fallbackName}({emitterLlvmType} {emitterLoad})");

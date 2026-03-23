@@ -55,7 +55,8 @@ public sealed partial class SemanticAnalyzer
     /// Validates argument count and types for a routine call against the routine's parameter list.
     /// Reports errors for too-few arguments, too-many arguments (on non-variadic routines), and type mismatches.
     /// </summary>
-    private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments, SourceLocation location)
+    private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments, SourceLocation location,
+        TypeSymbol? callObjectType = null)
     {
         IReadOnlyList<ParameterInfo> parameters = routine.Parameters;
         int totalParams = parameters.Count;
@@ -119,7 +120,7 @@ public sealed partial class SemanticAnalyzer
                     // S510: Named argument enforcement — subsumes S507
                     ReportError(
                         SemanticDiagnosticCode.NamedArgumentRequired,
-                        $"Routine '{routine.Name}' has {nonMeParamCount} parameters — all arguments must be named.",
+                        $"Routine '{routine.Name}' has {nonMeParamCount} parameters - all arguments must be named.",
                         arg.Location);
                 }
                 else if (seenNamed)
@@ -209,6 +210,21 @@ public sealed partial class SemanticAnalyzer
 
             ParameterInfo param = parameters[binding.Key];
             TypeSymbol paramType = param.Type;
+
+            // Substitute generic type parameters when calling methods on generic resolutions
+            // (e.g., Snatched[Point].write(value: T) → T becomes Point)
+            if (callObjectType is { IsGenericResolution: true, TypeArguments: not null })
+            {
+                paramType = SubstituteTypeParameters(type: paramType, genericType: callObjectType);
+            }
+            if (callObjectType != null && routine.OwnerType is GenericParameterTypeInfo genParamOwner)
+            {
+                var substitutions = new Dictionary<string, TypeSymbol>
+                {
+                    [genParamOwner.Name] = callObjectType
+                };
+                paramType = SubstituteWithMapping(type: paramType, substitutions: substitutions);
+            }
 
             Expression argExpr = binding.Value;
             TypeSymbol argType = AnalyzeExpression(expression: argExpr, expectedType: paramType);
@@ -346,9 +362,8 @@ public sealed partial class SemanticAnalyzer
             return false;
         }
 
-        // Try both regular and crashable (!) versions
-        return _registry.LookupRoutine(fullName: $"{type.Name}.{methodName}") != null
-            || _registry.LookupRoutine(fullName: $"{type.Name}.{methodName}!") != null;
+        // Use LookupMethod which handles generic resolutions (e.g., Snatched[Point].__eq__)
+        return _registry.LookupMethod(type: type, methodName: methodName) != null;
     }
 
     /// <summary>

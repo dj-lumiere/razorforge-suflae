@@ -467,33 +467,36 @@ public sealed class StdlibLoader
                 case EntityDeclaration entity:
                 {
                     var existing = registry.LookupType(entity.Name) as EntityTypeInfo;
-                    if (existing == null || existing.MemberVariables.Count > 0)
-                        continue; // Already has members, or not found
+                    int expectedCount = entity.Members.Count(m => m is VariableDeclaration { Type: not null });
+                    if (existing == null || existing.MemberVariables.Count >= expectedCount)
+                        continue;
 
                     var members = ResolveMemberVariables(registry, entity.Members, entity.GenericParameters);
-                    if (members.Count > 0)
+                    if (members.Count > existing.MemberVariables.Count)
                         existing.MemberVariables = members;
                     break;
                 }
                 case RecordDeclaration record:
                 {
                     var existing = registry.LookupType(record.Name) as RecordTypeInfo;
-                    if (existing == null || existing.MemberVariables.Count > 0)
+                    int expectedCount = record.Members.Count(m => m is VariableDeclaration { Type: not null });
+                    if (existing == null || existing.MemberVariables.Count >= expectedCount)
                         continue;
 
                     var members = ResolveMemberVariables(registry, record.Members, record.GenericParameters);
-                    if (members.Count > 0)
+                    if (members.Count > existing.MemberVariables.Count)
                         existing.MemberVariables = members;
                     break;
                 }
                 case ResidentDeclaration resident:
                 {
                     var existing = registry.LookupType(resident.Name) as ResidentTypeInfo;
-                    if (existing == null || existing.MemberVariables.Count > 0)
+                    int expectedCount = resident.Members.Count(m => m is VariableDeclaration { Type: not null });
+                    if (existing == null || existing.MemberVariables.Count >= expectedCount)
                         continue;
 
                     var members = ResolveMemberVariables(registry, resident.Members, resident.GenericParameters);
-                    if (members.Count > 0)
+                    if (members.Count > existing.MemberVariables.Count)
                         existing.MemberVariables = members;
                     break;
                 }
@@ -590,6 +593,7 @@ public sealed class StdlibLoader
             Parameters = parameters,
             ReturnType = returnType,
             Module = moduleName,
+            Location = external.Location,
             IsDangerous = external.IsDangerous,
             GenericParameters = external.GenericParameters,
             Annotations = external.Annotations ?? []
@@ -715,6 +719,7 @@ public sealed class StdlibLoader
             Parameters = parameters,
             ReturnType = returnType,
             Module = moduleName,
+            Location = routine.Location,
             IsFailable = routine.IsFailable,
             GenericParameters = routine.GenericParameters
         };

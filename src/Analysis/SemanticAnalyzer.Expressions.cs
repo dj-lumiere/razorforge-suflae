@@ -886,7 +886,9 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Try to look up as routine (function reference)
-        RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
+        // Strip '!' suffix for failable routine references (e.g., "stop!" → "stop")
+        string routineLookupName = id.Name.EndsWith('!') ? id.Name[..^1] : id.Name;
+        RoutineInfo? routine = _registry.LookupRoutine(fullName: routineLookupName);
         if (routine != null)
         {
             // Return the function type for first-class function references
@@ -1428,13 +1430,25 @@ public sealed partial class SemanticAnalyzer
         // Get the callee type/routine
         if (call.Callee is IdentifierExpression id)
         {
-            RoutineInfo? routine = _registry.LookupRoutine(fullName: id.Name);
+            // Strip '!' suffix for failable calls (e.g., "stop!" → "stop")
+            string callName = id.Name.EndsWith('!') ? id.Name[..^1] : id.Name;
+            RoutineInfo? routine = _registry.LookupRoutine(fullName: callName);
             if (routine != null)
             {
                 // Track failable calls for error handling variant generation
                 if (routine.IsFailable && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
+
+                    // Non-failable routine (except start) cannot call failable routines
+                    if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.UnhandledCrashableCall,
+                            $"Failable routine '{routine.Name}!' called without error handling. " +
+                            "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                            call.Location);
+                    }
                 }
 
                 // Validate routine access
@@ -1498,6 +1512,28 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
+                // S510: Type creators with 2+ fields require all named arguments
+                int memberCount = type switch
+                {
+                    EntityTypeInfo e => e.MemberVariables.Count,
+                    RecordTypeInfo r => r.MemberVariables.Count,
+                    ResidentTypeInfo res => res.MemberVariables.Count,
+                    _ => 0
+                };
+                if (memberCount >= 2)
+                {
+                    foreach (Expression arg in call.Arguments)
+                    {
+                        if (arg is not NamedArgumentExpression)
+                        {
+                            ReportError(
+                                SemanticDiagnosticCode.NamedArgumentRequired,
+                                $"Type '{id.Name}' has {memberCount} fields - all constructor arguments must be named.",
+                                arg.Location);
+                        }
+                    }
+                }
+
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
                 return type;
             }
@@ -1512,6 +1548,15 @@ public sealed partial class SemanticAnalyzer
                 if (routine.IsFailable && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
+
+                    if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.UnhandledCrashableCall,
+                            $"Failable routine '{routine.Name}!' called without error handling. " +
+                            "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                            call.Location);
+                    }
                 }
 
                 ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
@@ -1570,13 +1615,33 @@ public sealed partial class SemanticAnalyzer
                     call.Location);
             }
 
-            RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
+            // #54: Residents cannot use .share() or .track() — they have program lifetime
+            if (objectType is ResidentTypeInfo && member.PropertyName is "share" or "track")
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ResidentShareTrackProhibited,
+                    $"Residents cannot use '.{member.PropertyName}()' — they have program lifetime.",
+                    member.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            string callLookupName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
+            RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: callLookupName);
             if (method != null)
             {
                 // Track failable calls for error handling variant generation
                 if (method.IsFailable && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
+
+                    if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start")
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.UnhandledCrashableCall,
+                            $"Failable routine '{method.Name}!' called without error handling. " +
+                            "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                            call.Location);
+                    }
                 }
 
                 // #151: Static/instance mismatch — common routine called on instance
@@ -1618,7 +1683,8 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location);
+                AnalyzeCallArguments(routine: method, arguments: call.Arguments, location: call.Location,
+                    callObjectType: objectType);
 
                 // C29: Dispatch inference for varargs calls
                 call.ResolvedDispatch = InferDispatchStrategy(method, call);
@@ -1815,8 +1881,21 @@ public sealed partial class SemanticAnalyzer
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
-                // Return type is Blank if not specified
-                return method.ReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+                // Return type is Blank if not specified — substitute generic type parameters
+                TypeSymbol? callReturnType = method.ReturnType;
+                if (callReturnType != null && objectType is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    callReturnType = SubstituteTypeParameters(type: callReturnType, genericType: objectType);
+                }
+                if (callReturnType != null && method.OwnerType is GenericParameterTypeInfo genParamOwner)
+                {
+                    var substitutions = new Dictionary<string, TypeSymbol>
+                    {
+                        [genParamOwner.Name] = objectType
+                    };
+                    callReturnType = SubstituteWithMapping(type: callReturnType, substitutions: substitutions);
+                }
+                return callReturnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
             }
             else
             {
@@ -1873,6 +1952,15 @@ public sealed partial class SemanticAnalyzer
                         if (creator.IsFailable && _currentRoutine != null)
                         {
                             _currentRoutine.HasFailableCalls = true;
+
+                            if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start")
+                            {
+                                ReportError(
+                                    SemanticDiagnosticCode.UnhandledCrashableCall,
+                                    $"Failable routine '{creator.Name}!' called without error handling. " +
+                                    "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                                    call.Location);
+                            }
                         }
 
                         return targetType;
@@ -2082,11 +2170,14 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         AnalyzeExpression(expression: index.Index);
 
-        // Look for __getitem__ method
-        RoutineInfo? getItem = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getitem__");
+        // Look for __getitem__ method — LookupMethod handles generic resolutions
+        RoutineInfo? getItem = _registry.LookupMethod(type: objectType, methodName: "__getitem__");
         if (getItem?.ReturnType != null)
         {
-            return getItem.ReturnType;
+            TypeSymbol itemReturnType = getItem.ReturnType;
+            if (objectType is { IsGenericResolution: true, TypeArguments: not null })
+                itemReturnType = SubstituteTypeParameters(type: itemReturnType, genericType: objectType);
+            return itemReturnType;
         }
 
         // For generic types like List<T>, return the element type
@@ -2104,11 +2195,14 @@ public sealed partial class SemanticAnalyzer
         AnalyzeExpression(expression: slice.Start);
         AnalyzeExpression(expression: slice.End);
 
-        // Look for __getslice__ method
-        RoutineInfo? getSlice = _registry.LookupRoutine(fullName: $"{objectType.Name}.__getslice__");
+        // Look for __getslice__ method — LookupMethod handles generic resolutions
+        RoutineInfo? getSlice = _registry.LookupMethod(type: objectType, methodName: "__getslice__");
         if (getSlice?.ReturnType != null)
         {
-            return getSlice.ReturnType;
+            TypeSymbol sliceReturnType = getSlice.ReturnType;
+            if (objectType is { IsGenericResolution: true, TypeArguments: not null })
+                sliceReturnType = SubstituteTypeParameters(type: sliceReturnType, genericType: objectType);
+            return sliceReturnType;
         }
 
         // For generic types like List<T>, return the element type
@@ -3132,12 +3226,72 @@ public sealed partial class SemanticAnalyzer
             return resolvedType;
         }
 
-        // Look up the method on receiver type
-        RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{generic.MethodName}");
-        if (method?.ReturnType != null)
+        // Look up the method on receiver type — LookupMethod handles generic resolutions
+        RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: generic.MethodName);
+        if (method != null)
         {
-            // Substitute type arguments in return type
-            return method.ReturnType;
+            foreach (Expression arg in generic.Arguments)
+                AnalyzeExpression(expression: arg);
+            ValidateExclusiveTokenUniqueness(arguments: generic.Arguments, location: generic.Location);
+
+            if (method.ReturnType == null)
+                return _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
+
+            TypeSymbol returnType = method.ReturnType;
+
+            // Step 1: Substitute owner type's generic params (T from Snatched[T] → Snatched[Point])
+            if (objectType is { IsGenericResolution: true, TypeArguments: not null })
+                returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
+
+            // Step 2: Substitute method's own generic params (U from obtain_as[U])
+            // GenericParameters includes both owner-level (T) and method-level (U) params,
+            // but typeArgs only contains method-level args from the call site.
+            // Compute the offset to skip owner-level params when indexing into typeArgs.
+            if (method.GenericParameters != null)
+            {
+                int ownerParamCount = objectType is { IsGenericResolution: true, TypeArguments: not null }
+                    ? objectType.TypeArguments.Count : 0;
+
+                // Direct param (return type is just U)
+                if (returnType is GenericParameterTypeInfo)
+                {
+                    int paramIndex = method.GenericParameters.ToList().IndexOf(returnType.Name);
+                    int adjustedIndex = paramIndex - ownerParamCount;
+                    if (adjustedIndex >= 0 && adjustedIndex < typeArgs.Count && typeArgs[adjustedIndex] is TypeInfo resolved)
+                        return resolved;
+                }
+                // Resolution containing method's params (e.g., Snatched[U])
+                if (returnType is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    var substitutedArgs = new List<TypeInfo>();
+                    bool anySubstituted = false;
+                    foreach (var typeArg in returnType.TypeArguments)
+                    {
+                        int idx = method.GenericParameters.ToList().IndexOf(typeArg.Name);
+                        int adjustedIdx = idx - ownerParamCount;
+                        if (adjustedIdx >= 0 && adjustedIdx < typeArgs.Count && typeArgs[adjustedIdx] is TypeInfo sub)
+                        {
+                            substitutedArgs.Add(sub);
+                            anySubstituted = true;
+                        }
+                        else
+                        {
+                            substitutedArgs.Add(typeArg);
+                        }
+                    }
+                    if (anySubstituted)
+                    {
+                        string baseName = returnType.Name;
+                        int bracketIdx = baseName.IndexOf('[');
+                        if (bracketIdx > 0) baseName = baseName[..bracketIdx];
+                        var genericDef = _registry.LookupType(baseName);
+                        if (genericDef != null)
+                            return _registry.GetOrCreateResolution(genericDef, substitutedArgs);
+                    }
+                }
+            }
+
+            return returnType;
         }
 
         // Standalone generic function call (e.g., ptrtoint[Point, Address](p), snatched_none[T]())

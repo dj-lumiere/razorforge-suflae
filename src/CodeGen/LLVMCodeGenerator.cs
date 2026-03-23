@@ -57,6 +57,9 @@ public partial class LLVMCodeGenerator
     /// <summary>Counter for generating unique string constant names.</summary>
     private int _stringCounter;
 
+    /// <summary>Counter for generating unique C string constant names.</summary>
+    private int _cstrCounter;
+
     /// <summary>Map of string values to their global constant names (for deduplication).</summary>
     private readonly Dictionary<string, string> _stringConstants = new();
 
@@ -71,6 +74,9 @@ public partial class LLVMCodeGenerator
 
     /// <summary>Counter for deduplicating variable names within a function.</summary>
     private readonly Dictionary<string, int> _varNameCounts = new();
+
+    /// <summary>List of local entity variables (name, LLVM addr name) for auto-cleanup.</summary>
+    private readonly List<(string Name, string LLVMAddr)> _localEntityVars = new();
 
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedFunctionDefs = [];
@@ -95,7 +101,8 @@ public partial class LLVMCodeGenerator
         RoutineInfo GenericMethod,
         TypeInfo ResolvedOwnerType,
         Dictionary<string, TypeInfo> TypeSubstitutions,
-        string GenericAstName);
+        string GenericAstName,
+        Dictionary<string, TypeInfo>? MethodTypeSubstitutions = null);
 
     /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
     private readonly int _pointerBitWidth;
@@ -183,6 +190,9 @@ public partial class LLVMCodeGenerator
         {
             if (type is EntityTypeInfo { IsGenericDefinition: false } entity)
             {
+                // Skip resolutions with unresolved generic parameters (e.g., List[T] where T is a GenericParameterTypeInfo)
+                if (entity.TypeArguments != null && entity.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
+                    continue;
                 GenerateEntityType(entity);
             }
         }
@@ -192,6 +202,8 @@ public partial class LLVMCodeGenerator
         {
             if (type is RecordTypeInfo { IsGenericDefinition: false } record)
             {
+                if (record.TypeArguments != null && record.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
+                    continue;
                 GenerateRecordType(record);
             }
         }
@@ -201,6 +213,8 @@ public partial class LLVMCodeGenerator
         {
             if (type is ResidentTypeInfo { IsGenericDefinition: false } resident)
             {
+                if (resident.TypeArguments != null && resident.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
+                    continue;
                 GenerateResidentType(resident);
             }
         }
@@ -211,6 +225,19 @@ public partial class LLVMCodeGenerator
             if (type is ChoiceTypeInfo choice)
             {
                 GenerateChoiceType(choice);
+            }
+        }
+
+        // Generate error handling types (Result[T], Lookup[T], Maybe[T] → { i64, ptr })
+        foreach (var type in _registry.GetTypesByCategory(TypeCategory.ErrorHandling))
+        {
+            if (type is ErrorHandlingTypeInfo errorHandling)
+            {
+                string typeName = GetErrorHandlingTypeName(errorHandling);
+                if (_generatedTypes.Add(typeName))
+                {
+                    EmitLine(_typeDeclarations, $"{typeName} = type {{ i64, ptr }}");
+                }
             }
         }
 
@@ -498,13 +525,15 @@ public partial class LLVMCodeGenerator
             output.Append(_functionDefinitions);
         }
 
-        // Emit main() entry point that calls start()
-        if (_generatedFunctionDefs.Contains("start"))
+        // Emit main() entry point that calls the module's start() routine
+        string? startFunc = _generatedFunctionDefs.FirstOrDefault(f => f == "start" || f.EndsWith(".start"));
+        if (startFunc != null)
         {
             output.AppendLine("; Entry point");
             output.AppendLine("define i32 @main(i32 %argc, ptr %argv) {");
             output.AppendLine("entry:");
-            output.AppendLine("  call void @start()");
+            output.AppendLine("  call void @rf_runtime_init()");
+            output.AppendLine($"  call void @{startFunc}()");
             output.AppendLine("  ret i32 0");
             output.AppendLine("}");
         }
@@ -548,11 +577,90 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Emits a null-terminated C string as an LLVM global constant.
+    /// Returns the global name (e.g., "@.cstr.0") which can be used as a ptr.
+    /// </summary>
+    private string EmitCStringConstant(string value)
+    {
+        string name = $"@.cstr.{_cstrCounter++}";
+        byte[] utf8 = Encoding.UTF8.GetBytes(value + "\0");
+        var sb = new StringBuilder();
+        foreach (byte b in utf8)
+        {
+            if (b >= 0x20 && b < 0x7F && b != (byte)'\\' && b != (byte)'"')
+                sb.Append((char)b);
+            else
+                sb.Append($"\\{b:X2}");
+        }
+        EmitLine(_globalDeclarations, $"{name} = private unnamed_addr constant [{utf8.Length} x i8] c\"{sb}\"");
+        return name;
+    }
+
+    /// <summary>
+    /// Infers method-level type arguments from concrete argument types.
+    /// Returns a mapping of generic parameter names to concrete types, or null if inference fails.
+    /// Only infers parameters that belong to the method itself (excludes owner-level params).
+    /// </summary>
+    private static Dictionary<string, TypeInfo>? InferMethodTypeArgs(
+        RoutineInfo genericMethod, IReadOnlyList<TypeInfo> argTypes)
+    {
+        if (genericMethod.GenericParameters == null) return null;
+
+        // Determine which params are method-level (exclude owner-level)
+        var ownerParams = new HashSet<string>();
+        if (genericMethod.OwnerType?.GenericParameters != null)
+            foreach (var gp in genericMethod.OwnerType.GenericParameters)
+                ownerParams.Add(gp);
+
+        var methodParams = genericMethod.GenericParameters
+            .Where(gp => !ownerParams.Contains(gp)).ToHashSet();
+        if (methodParams.Count == 0) return null;
+
+        var inferred = new Dictionary<string, TypeInfo>();
+
+        for (int i = 0; i < genericMethod.Parameters.Count && i < argTypes.Count; i++)
+        {
+            TypeInfo paramType = genericMethod.Parameters[i].Type;
+            TypeInfo argType = argTypes[i];
+            InferFromTypes(paramType, argType, methodParams, inferred);
+        }
+
+        // Only succeed if ALL method-level params are inferred
+        return inferred.Count == methodParams.Count ? inferred : null;
+    }
+
+    /// <summary>
+    /// Recursively infers type argument mappings by matching a generic parameter type against a concrete type.
+    /// Handles direct params (T → S64) and parameterized types (List[T] → List[S64]).
+    /// </summary>
+    private static void InferFromTypes(TypeInfo paramType, TypeInfo argType,
+        HashSet<string> methodParams, Dictionary<string, TypeInfo> inferred)
+    {
+        // Case 1: Direct generic parameter (T → S64)
+        if (paramType is GenericParameterTypeInfo && methodParams.Contains(paramType.Name))
+        {
+            inferred.TryAdd(paramType.Name, argType);
+            return;
+        }
+
+        // Case 2: Generic resolution (List[T] → List[S64])
+        // Match base types and recurse on type arguments
+        if (paramType is { IsGenericResolution: true, TypeArguments: not null }
+            && argType is { IsGenericResolution: true, TypeArguments: not null }
+            && paramType.TypeArguments.Count == argType.TypeArguments.Count)
+        {
+            for (int i = 0; i < paramType.TypeArguments.Count; i++)
+                InferFromTypes(paramType.TypeArguments[i], argType.TypeArguments[i], methodParams, inferred);
+        }
+    }
+
+    /// <summary>
     /// Records a pending monomorphization for a resolved generic method call.
     /// Called from EmitMethodCall/EmitGenericMethodCall when a call targets a method on
     /// a resolved generic type (e.g., List[Letter].add_last).
     /// </summary>
-    private void RecordMonomorphization(string mangledName, RoutineInfo genericMethod, TypeInfo resolvedOwnerType)
+    private void RecordMonomorphization(string mangledName, RoutineInfo genericMethod,
+        TypeInfo resolvedOwnerType, Dictionary<string, TypeInfo>? methodTypeArgs = null)
     {
         if (_pendingMonomorphizations.ContainsKey(mangledName))
             return;
@@ -565,9 +673,13 @@ public partial class LLVMCodeGenerator
             {
                 [genParam.Name] = resolvedOwnerType
             };
+            // Merge method-level type args
+            if (methodTypeArgs != null)
+                foreach (var (key, value) in methodTypeArgs)
+                    typeSubs[key] = value;
             string genericAstName = $"{genParam.Name}.{genericMethod.Name}";
             _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-                genericMethod, resolvedOwnerType, typeSubs, genericAstName);
+                genericMethod, resolvedOwnerType, typeSubs, genericAstName, methodTypeArgs);
             return;
         }
 
@@ -580,25 +692,43 @@ public partial class LLVMCodeGenerator
             _ => null
         };
 
-        if (genericDef == null || genericDef.GenericParameters == null)
-            return;
-
-        // Build type substitution map: e.g., { "T" → Letter }
-        var typeSubs2 = new Dictionary<string, TypeInfo>();
-        if (resolvedOwnerType.TypeArguments != null)
+        if (genericDef != null && genericDef.GenericParameters != null)
         {
-            for (int i = 0; i < genericDef.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
+            // Build type substitution map: e.g., { "T" → Letter }
+            var typeSubs2 = new Dictionary<string, TypeInfo>();
+            if (resolvedOwnerType.TypeArguments != null)
             {
-                typeSubs2[genericDef.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+                for (int i = 0; i < genericDef.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
+                {
+                    typeSubs2[genericDef.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+                }
             }
+
+            // Merge method-level type args (e.g., U → S32 for double-generic methods)
+            if (methodTypeArgs != null)
+            {
+                foreach (var (key, value) in methodTypeArgs)
+                    typeSubs2[key] = value;
+            }
+
+            // Build generic AST name: e.g., "List[T].add_last"
+            string genericParamList = string.Join(", ", genericDef.GenericParameters);
+            string genericAstName2 = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
+
+            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
+                genericMethod, resolvedOwnerType, typeSubs2, genericAstName2, methodTypeArgs);
+            return;
         }
 
-        // Build generic AST name: e.g., "List[T].add_last"
-        string genericParamList = string.Join(", ", genericDef.GenericParameters);
-        string genericAstName2 = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
-
-        _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-            genericMethod, resolvedOwnerType, typeSubs2, genericAstName2);
+        // Method-level generics on a non-generic owner (e.g., Text.__create__[T](from: List[T]))
+        // Owner type is concrete (Text), but method itself has generic parameters
+        if (methodTypeArgs != null && methodTypeArgs.Count > 0 && genericMethod.IsGenericDefinition)
+        {
+            var typeSubs3 = new Dictionary<string, TypeInfo>(methodTypeArgs);
+            string genericAstName3 = genericMethod.FullName; // e.g., "Text.__create__"
+            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
+                genericMethod, resolvedOwnerType, typeSubs3, genericAstName3, methodTypeArgs);
+        }
     }
 
     #endregion

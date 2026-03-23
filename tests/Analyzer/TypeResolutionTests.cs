@@ -858,4 +858,76 @@ public class TypeResolutionTests
     }
 
     #endregion
+
+    #region Generic Method Resolution (S191, S192, S193)
+
+    [Fact]
+    public void Analyze_GenericRecord_EqualityOperator_NoError()
+    {
+        // S193: == on generic record resolution should not produce MemberNotFound
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.__eq__(you: Me) -> Bool
+
+                        record Wrapper[T] obeys Equatable
+                          value: T
+
+                        @readonly
+                        routine Wrapper.__eq__(you: Wrapper) -> Bool
+                          return true
+
+                        routine test(a: Wrapper[S32], b: Wrapper[S32]) -> Bool
+                          return a == b
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+
+    [Fact]
+    public void Analyze_GenericType_VoidMethodCall_NoError()
+    {
+        // S191: Void method call on generic resolution should not produce error type
+        string source = """
+                        record Container[T]
+                          value: T
+
+                        routine Container.reset()
+                          me.value = me.value
+                          return
+
+                        routine test(c: Container[S32])
+                          c.reset()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+
+    [Fact]
+    public void Analyze_GenericType_MethodCall_ResolvesViaDefinition()
+    {
+        // Method on generic type should be found through the generic definition
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        @readonly
+                        routine Box.size() -> S32
+                          return 1
+
+                        routine test(b: Box[S32]) -> S32
+                          return b.size()
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+
+    #endregion
 }

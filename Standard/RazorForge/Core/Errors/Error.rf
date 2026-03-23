@@ -11,6 +11,4 @@ record RuntimeError obeys Crashable
   pass
 
 routine RuntimeError.crash_message() -> Text
-  # Dereference the message pointer to get the string
-  # This is handled by compiler intrinsic
-  return ptr_to_text(me.message_handle.ptr)
+  return "A runtime error occurred."

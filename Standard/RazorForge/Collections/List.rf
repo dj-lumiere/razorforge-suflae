@@ -215,3 +215,16 @@ routine List[T].reserve(new_capacity: U64)
 routine List[T].clear()
   me.count = 0u64
   return
+
+routine Text.__create__[T](from: List[T]) -> Text
+  var list = List[Letter]()
+  for (i, v) in from.enumerate()
+    list.add_last('[')
+    for l in v.Text().List[Letter]()
+      list.add_last(l)
+    if i + 1 != from.count()
+      list.add_last(',')
+      list.add_last(' ')
+    else
+      list.add_last(']')
+  return list.Text()

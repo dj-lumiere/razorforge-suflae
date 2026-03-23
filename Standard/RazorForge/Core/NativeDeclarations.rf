@@ -7,6 +7,7 @@ module Core
 # Memory Management
 # ============================================================================
 
+external("C") routine rf_runtime_init()
 dangerous external("C") routine rf_allocate_dynamic(size: U64) -> Address
 dangerous external("C") routine rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
 dangerous external("C") routine rf_invalidate(ptr: Address)
@@ -246,6 +247,14 @@ external("C") routine rf_cstr_count(ptr: CStr) -> U64
 external("C") routine rf_cwstr_count(ptr: Address) -> U64
 external("C") routine rf_cwstr_compare(a: Address, b: Address) -> S32
 external("C") routine rf_cwstr_copy(dest: Address, src: Address)
+
+# ============================================================================
+# Stack Trace + Crash Reporting
+# ============================================================================
+
+external("C") routine rf_trace_push(routine_name: Address, file: Address, line: S32, col: S32)
+external("C") routine rf_trace_pop()
+external("C") routine rf_crash(type_name: Address, type_len: U64, file: Address, file_len: U64, line: S32, col: S32, message: Address, message_len: U64)
 
 # ============================================================================
 # Console I/O

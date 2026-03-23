@@ -101,6 +101,7 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case ModuleDeclaration ns:
+                _currentModuleName = ns.Path;
                 ValidateModuleDeclaration(ns: ns);
                 break;
 
@@ -1543,8 +1544,13 @@ public sealed partial class SemanticAnalyzer
             : routine.Name;
 
         // For extension methods (Type.method), the routine was registered with just the method name
-        // but the FullName includes the owner type, so we can look it up either way
+        // but the FullName includes the owner type, so we can look it up either way.
+        // Module-qualified routines (e.g., "HelloWorld.divide") need module prefix for lookup.
         RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routineName);
+        if (routineInfo == null && _currentModuleName != null)
+        {
+            routineInfo = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{routineName}");
+        }
         if (routineInfo == null)
         {
             return;

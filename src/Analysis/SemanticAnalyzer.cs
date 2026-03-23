@@ -62,6 +62,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>The source file path of the program being analyzed (for import resolution).</summary>
     private string _currentFilePath = string.Empty;
 
+    /// <summary>The module name declared in the current file (from 'module' declaration).</summary>
+    private string? _currentModuleName;
+
     /// <summary>Modules imported by the current file. Used for type resolution of non-Core types.</summary>
     private readonly HashSet<string> _importedModules = new(StringComparer.OrdinalIgnoreCase);
 
@@ -120,6 +123,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Store file path for import resolution
         _currentFilePath = filePath ?? program.Location.FileName;
+        _currentModuleName = null;
         _importedModules.Clear();
         _importedSymbolNames.Clear();
 
@@ -231,25 +235,28 @@ public sealed partial class SemanticAnalyzer
         // Snapshot storage: file path → imported modules after Phase 1
         var importSnapshots = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var symbolNameSnapshots = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var moduleNameSnapshots = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         // Pass 1: Collect declarations from ALL files (populates registry with all types/routines)
         foreach (var (program, filePath) in files)
         {
             _currentFilePath = filePath;
+            _currentModuleName = null;
             _importedModules.Clear();
             _importedSymbolNames.Clear();
 
             CollectDeclarations(program: program);
 
-            // Snapshot the imported modules for this file
+            // Snapshot the imported modules and module name for this file
             importSnapshots[filePath] = new HashSet<string>(_importedModules, StringComparer.OrdinalIgnoreCase);
             symbolNameSnapshots[filePath] = new HashSet<string>(_importedSymbolNames, StringComparer.Ordinal);
+            moduleNameSnapshots[filePath] = _currentModuleName;
         }
 
         // Pass 2: Resolve type bodies across ALL files (members can reference types from other files)
         foreach (var (program, filePath) in files)
         {
-            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots);
+            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots, moduleNameSnapshots);
 
             ResolveTypeBodies(program: program);
             ResolveRoutineSignatures(program: program);
@@ -263,7 +270,7 @@ public sealed partial class SemanticAnalyzer
         // Pass 3: Analyze bodies per file (expressions need correct import scoping)
         foreach (var (program, filePath) in files)
         {
-            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots);
+            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots, moduleNameSnapshots);
 
             AnalyzeBodies(program: program);
         }
@@ -280,17 +287,19 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Restores per-file import state (_currentFilePath, _importedModules, _importedSymbolNames)
+    /// Restores per-file import state (_currentFilePath, _importedModules, _importedSymbolNames, _currentModuleName)
     /// from previously captured snapshots.
     /// </summary>
     private void RestoreImportState(
         string filePath,
         Dictionary<string, HashSet<string>> importSnapshots,
-        Dictionary<string, HashSet<string>> symbolNameSnapshots)
+        Dictionary<string, HashSet<string>> symbolNameSnapshots,
+        Dictionary<string, string?>? moduleNameSnapshots = null)
     {
         _currentFilePath = filePath;
         _importedModules.Clear();
         _importedSymbolNames.Clear();
+        _currentModuleName = null;
 
         if (importSnapshots.TryGetValue(filePath, out var imports))
         {
@@ -302,6 +311,11 @@ public sealed partial class SemanticAnalyzer
         {
             foreach (string symbol in symbols)
                 _importedSymbolNames.Add(symbol);
+        }
+
+        if (moduleNameSnapshots != null && moduleNameSnapshots.TryGetValue(filePath, out var moduleName))
+        {
+            _currentModuleName = moduleName;
         }
     }
 
@@ -371,7 +385,7 @@ public sealed partial class SemanticAnalyzer
 
         return namespaces.Count > 0
             ? string.Join(separator: ".", values: namespaces)
-            : null;
+            : _currentModuleName;
     }
 
     #endregion

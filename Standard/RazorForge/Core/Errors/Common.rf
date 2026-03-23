@@ -10,25 +10,25 @@ record AbsentValueError obeys Crashable
   pass
 
 routine AbsentValueError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+  return "Attempted to access a value that is absent."
 
 # UserTerminationError - thrown by stop!()
 record UserTerminationError obeys Crashable
   pass
 
 routine UserTerminationError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+  return "Program was stopped by user."
 
 # VerificationFailedError - thrown by verify!()
 record VerificationFailedError obeys Crashable
   pass
 
 routine VerificationFailedError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+  return "A verification check failed."
 
 # LogicBreachedError - thrown by breach!()
 record LogicBreachedError obeys Crashable
   pass
 
 routine LogicBreachedError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+  return "A logic breach was detected."

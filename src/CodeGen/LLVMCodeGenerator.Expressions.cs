@@ -502,6 +502,8 @@ public partial class LLVMCodeGenerator
                 return EmitFloatLiteral(StripNumericSuffix(s), literal.LiteralType);
             if (IsDecimalFloatLiteralType(literal.LiteralType))
                 return EmitDecimalFloatLiteral(sb, StripNumericSuffix(s), literal.LiteralType);
+            if (IsByteSizeLiteralType(literal.LiteralType))
+                return EmitByteSizeLiteral(sb, s);
             // Actual string literal
             return EmitStringLiteral(sb, s);
         }
@@ -544,6 +546,55 @@ public partial class LLVMCodeGenerator
     {
         return type is Lexer.TokenType.D32Literal or Lexer.TokenType.D64Literal
             or Lexer.TokenType.D128Literal;
+    }
+
+    private static bool IsByteSizeLiteralType(Lexer.TokenType type)
+    {
+        return type is Lexer.TokenType.ByteLiteral or Lexer.TokenType.KilobyteLiteral
+            or Lexer.TokenType.KibibyteLiteral or Lexer.TokenType.MegabyteLiteral
+            or Lexer.TokenType.MebibyteLiteral or Lexer.TokenType.GigabyteLiteral
+            or Lexer.TokenType.GibibyteLiteral;
+    }
+
+    private static readonly (string suffix, ulong multiplier)[] ByteSizeSuffixes =
+    [
+        ("gib", 1_073_741_824UL),
+        ("mib", 1_048_576UL),
+        ("kib", 1_024UL),
+        ("gb", 1_000_000_000UL),
+        ("mb", 1_000_000UL),
+        ("kb", 1_000UL),
+        ("b", 1UL)
+    ];
+
+    private string EmitByteSizeLiteral(StringBuilder sb, string text)
+    {
+        // Compute the byte value from the literal text + unit suffix.
+        ulong bytes = 0;
+        string lower = text.ToLowerInvariant();
+        foreach (var (suffix, multiplier) in ByteSizeSuffixes)
+        {
+            if (lower.EndsWith(suffix))
+            {
+                string numPart = text[..^suffix.Length].TrimEnd('_').Replace("_", "");
+                if (ulong.TryParse(numPart, out ulong value))
+                    bytes = value * multiplier;
+                break;
+            }
+        }
+
+        // ByteSize is %Record.ByteSize = type { i64 } — construct the aggregate.
+        TypeInfo? bsType = _registry.LookupType("ByteSize");
+        string llvmType = bsType != null ? GetLLVMType(bsType) : "%Record.ByteSize";
+
+        // If ByteSize resolves to a struct, use insertvalue; if it's a plain i64, return directly
+        if (llvmType.StartsWith("%"))
+        {
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = insertvalue {llvmType} undef, i64 {bytes}, 0");
+            return result;
+        }
+        return bytes.ToString();
     }
 
     /// <summary>
@@ -838,6 +889,10 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitFunctionCall(StringBuilder sb, string functionName, List<Expression> arguments)
     {
+        // Strip failable '!' suffix — registry stores names without it
+        if (functionName.EndsWith('!'))
+            functionName = functionName[..^1];
+
         // Primitive type conversion: U8(val), S32(val), F64(val), etc.
         // For @llvm types with a single argument, emit trunc/zext/sext/fpcast inline.
         // This must be checked BEFORE routine lookup, as stdlib defines conversion routines
@@ -1126,14 +1181,34 @@ public partial class LLVMCodeGenerator
             RoutineInfo? creator = _registry.LookupRoutineOverload(creatorName, argTypes2);
             if (creator != null)
             {
-                // Emit as: TypeName.__create__(receiver)
+                // Method-level generics: infer T from argument types and monomorphize
+                if (creator.IsGenericDefinition)
+                {
+                    var inferred = InferMethodTypeArgs(creator, argTypes2);
+                    if (inferred != null)
+                    {
+                        var resolvedParamNames = argTypes2.Select(t => t.Name);
+                        string creatorMangledName = Q($"{creator.OwnerType?.FullName ?? member.PropertyName}.__create__#{string.Join(",", resolvedParamNames)}");
+
+                        GenerateFunctionDeclaration(creator);
+                        RecordMonomorphization(creatorMangledName, creator, creator.OwnerType ?? receiverType, inferred);
+
+                        string retType = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
+                        string receiverLlvm = GetLLVMType(receiverType);
+                        string result = NextTemp();
+                        EmitLine(sb, $"  {result} = call {retType} @{creatorMangledName}({receiverLlvm} {receiver})");
+                        return result;
+                    }
+                }
+
+                // Non-generic path
                 string funcName = MangleFunctionName(creator);
                 GenerateFunctionDeclaration(creator);
-                string retType = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
-                string receiverLlvm = GetLLVMType(receiverType);
-                string result = NextTemp();
-                EmitLine(sb, $"  {result} = call {retType} @{funcName}({receiverLlvm} {receiver})");
-                return result;
+                string retType2 = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
+                string receiverLlvm2 = GetLLVMType(receiverType);
+                string result2 = NextTemp();
+                EmitLine(sb, $"  {result2} = call {retType2} @{funcName}({receiverLlvm2} {receiver})");
+                return result2;
             }
         }
 
@@ -1196,28 +1271,55 @@ public partial class LLVMCodeGenerator
             argTypes.Add(GetLLVMType(argType));
         }
 
+        // Method-level generics on regular method calls (e.g., method has [T] on itself, not the owner)
+        // Infer type args from concrete argument types and monomorphize
+        Dictionary<string, TypeInfo>? inferredMethodTypeArgs = null;
+        if (method != null && method.IsGenericDefinition && arguments.Count > 0)
+        {
+            var concreteArgTypes = new List<TypeInfo> { receiverType };
+            foreach (var arg in arguments)
+            {
+                var t = GetExpressionType(arg);
+                if (t != null) concreteArgTypes.Add(t);
+            }
+            inferredMethodTypeArgs = InferMethodTypeArgs(method, concreteArgTypes);
+        }
+
         // Build the call — for resolved generic types (e.g., List[Letter].add_last),
         // use the resolved type name even if the method was found via the base type
         string mangledName;
-        if (method != null && receiverType.IsGenericResolution &&
+        if (method != null && inferredMethodTypeArgs != null)
+        {
+            // Method-level generics: use concrete param types in mangled name
+            var resolvedParamNames = new List<string> { receiverType.Name };
+            foreach (var arg in arguments)
+            {
+                var t = GetExpressionType(arg);
+                if (t != null) resolvedParamNames.Add(t.Name);
+            }
+            string ownerName = method.OwnerType?.FullName ?? receiverType.FullName;
+            mangledName = Q($"{ownerName}.{SanitizeLLVMName(method.Name)}#{string.Join(",", resolvedParamNames)}");
+            RecordMonomorphization(mangledName, method, method.OwnerType ?? receiverType, inferredMethodTypeArgs);
+        }
+        else if (method != null && receiverType.IsGenericResolution &&
             method.OwnerType != null && method.OwnerType.IsGenericDefinition)
         {
-            mangledName = $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(method.Name)}";
+            mangledName = Q($"{receiverType.FullName}.{SanitizeLLVMName(method.Name)}");
             // Record for monomorphization — will compile generic AST body with type substitutions
             RecordMonomorphization(mangledName, method, receiverType);
         }
         else if (method != null && method.OwnerType is GenericParameterTypeInfo)
         {
             // Generic-parameter-owner methods (e.g., routine T.view() called on Point)
-            // Monomorphize: Point__view with T=Point
-            mangledName = $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(method.Name)}";
+            // Monomorphize: Point.view with T=Point
+            mangledName = Q($"{receiverType.FullName}.{SanitizeLLVMName(method.Name)}");
             RecordMonomorphization(mangledName, method, receiverType);
         }
         else
         {
             mangledName = method != null
                 ? MangleFunctionName(method)
-                : $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(member.PropertyName)}";
+                : Q($"{receiverType.FullName}.{SanitizeLLVMName(member.PropertyName)}");
         }
 
         // Ensure the method is declared (so the multi-pass stdlib loop can compile its body)
@@ -1508,12 +1610,22 @@ public partial class LLVMCodeGenerator
         };
         if (methodName != null && leftType != null)
         {
-            string fullName = $"{leftType.Name}.{methodName}";
-            var method = _registry.LookupRoutine(fullName);
+            var method = _registry.LookupMethod(leftType, methodName);
             if (method != null)
             {
-                string funcName = MangleFunctionName(method);
-                GenerateFunctionDeclaration(method);
+                // For generic resolutions (e.g., Snatched[Point].__eq__), use the concrete type name
+                // and record monomorphization so the specialized function body gets generated
+                string funcName;
+                if (leftType.IsGenericResolution && method.OwnerType is { IsGenericDefinition: true })
+                {
+                    funcName = Q($"{leftType.FullName}.{SanitizeLLVMName(methodName)}");
+                    RecordMonomorphization(funcName, method, leftType);
+                }
+                else
+                {
+                    funcName = MangleFunctionName(method);
+                }
+                GenerateFunctionDeclaration(method, funcName);
                 string retType = method.ReturnType != null ? GetLLVMType(method.ReturnType) : llvmType;
                 string result = NextTemp();
                 EmitLine(sb, $"  {result} = call {retType} @{funcName}({llvmType} {left}, {llvmType} {right})");
@@ -1761,7 +1873,7 @@ public partial class LLVMCodeGenerator
 
         string mangledName = method != null
             ? MangleFunctionName(method)
-            : $"{MangleTypeName(collectionType.Name)}_{SanitizeLLVMName(methodName)}";
+            : Q($"{collectionType.Name}.{SanitizeLLVMName(methodName)}");
 
         string result = NextTemp();
         string args = BuildCallArgs(argTypes, argValues);
@@ -1830,7 +1942,7 @@ public partial class LLVMCodeGenerator
 
         string mangledName = method != null
             ? MangleFunctionName(method)
-            : $"{MangleTypeName(operandType.Name)}_{SanitizeLLVMName(methodName)}";
+            : Q($"{operandType.Name}.{SanitizeLLVMName(methodName)}");
 
         string returnType = method?.ReturnType != null
             ? GetLLVMType(method.ReturnType)
@@ -1942,7 +2054,7 @@ public partial class LLVMCodeGenerator
                         string funcName;
                         if (resolvedType.IsGenericResolution)
                         {
-                            funcName = $"{MangleTypeName(resolvedType.Name)}___create__";
+                            funcName = Q($"{resolvedType.FullName}.__create__");
                             // Record for monomorphization
                             RecordMonomorphization(funcName, creator, resolvedType);
                         }
@@ -2027,6 +2139,17 @@ public partial class LLVMCodeGenerator
 
         RoutineInfo? method = _registry.LookupRoutine(methodFullName)
                               ?? _registry.LookupRoutine(generic.MethodName);
+
+        // For generic type instances (e.g., Snatched[Point].obtain_as), try the generic base name
+        if (method == null && receiverType != null && receiverType.Name.Contains('['))
+        {
+            string genericBase = receiverType.Name[..receiverType.Name.IndexOf('[')];
+            method = _registry.LookupRoutine($"{genericBase}.{generic.MethodName}");
+        }
+        if (method == null && receiverType != null)
+        {
+            method = _registry.LookupMethod(receiverType, generic.MethodName);
+        }
 
         // If this is an LLVM intrinsic, emit directly as LLVM IR
         if (method is { CallingConvention: "llvm" })
@@ -2163,6 +2286,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a regular (non-LLVM-intrinsic) generic method call.
+    /// Handles both single-generic (owner-level T) and double-generic (method-level U) calls.
     /// </summary>
     private string EmitRegularGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic,
         RoutineInfo? method, TypeInfo? receiverType)
@@ -2188,16 +2312,164 @@ public partial class LLVMCodeGenerator
             argTypes.Add(GetLLVMType(argType));
         }
 
-        // Build the call
-        string mangledName = method != null
-            ? MangleFunctionName(method)
-            : receiverType != null
-                ? $"{MangleTypeName(receiverType.Name)}_{SanitizeLLVMName(generic.MethodName)}"
-                : SanitizeLLVMName(generic.MethodName);
+        // Resolve method-level type arguments (e.g., U → S32)
+        // method.GenericParameters may include both owner-level (T) and method-level (U) params.
+        // generic.TypeArguments only contains method-level type args from the call site.
+        // Skip owner-level params to match positionally with the call-site type args.
+        var resolvedMethodTypeArgNames = new List<string>();
+        Dictionary<string, TypeInfo>? methodTypeArgs = null;
+        if (method?.GenericParameters != null && generic.TypeArguments.Count > 0)
+        {
+            // Determine which generic params are owner-level (from the type definition)
+            var ownerGenericParams = new HashSet<string>();
+            if (method.OwnerType?.GenericParameters != null)
+            {
+                foreach (var gp in method.OwnerType.GenericParameters)
+                    ownerGenericParams.Add(gp);
+            }
 
-        string returnType = method?.ReturnType != null
-            ? GetLLVMType(method.ReturnType)
+            // Only method-level params (not owner-level) should match the call-site type args
+            var methodLevelParams = method.GenericParameters
+                .Where(gp => !ownerGenericParams.Contains(gp))
+                .ToList();
+
+            methodTypeArgs = new Dictionary<string, TypeInfo>();
+            for (int i = 0; i < methodLevelParams.Count && i < generic.TypeArguments.Count; i++)
+            {
+                string taName = generic.TypeArguments[i].Name;
+                TypeInfo? resolved = null;
+                if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(taName, out var sub))
+                    resolved = sub;
+                resolved ??= _registry.LookupType(taName);
+                if (resolved != null)
+                {
+                    methodTypeArgs[methodLevelParams[i]] = resolved;
+                    resolvedMethodTypeArgNames.Add(resolved.Name);
+                }
+                else
+                {
+                    resolvedMethodTypeArgNames.Add(taName);
+                }
+            }
+        }
+
+        // Build the mangled name — include method type args for double-generic calls
+        string methodNamePart = SanitizeLLVMName(generic.MethodName);
+        if (resolvedMethodTypeArgNames.Count > 0)
+        {
+            methodNamePart += $"[{string.Join(", ", resolvedMethodTypeArgNames)}]";
+        }
+
+        string mangledName;
+        if (receiverType != null)
+        {
+            mangledName = Q($"{receiverType.FullName}.{methodNamePart}");
+        }
+        else
+        {
+            mangledName = Q(methodNamePart);
+        }
+
+        // Record monomorphization for generic resolution types
+        if (receiverType != null && method != null &&
+            (receiverType.IsGenericResolution || method.OwnerType is GenericParameterTypeInfo))
+        {
+            RecordMonomorphization(mangledName, method, receiverType, methodTypeArgs);
+        }
+
+        // Resolve return type — substitute both owner-level and method-level type params
+        TypeInfo? resolvedReturnType = method?.ReturnType;
+        if (resolvedReturnType != null && methodTypeArgs != null)
+        {
+            // Direct method-level substitution (e.g., return type U → S32)
+            if (methodTypeArgs.TryGetValue(resolvedReturnType.Name, out var retSub))
+                resolvedReturnType = retSub;
+            // Generic resolution return type with method-level type args (e.g., Snatched[U] → Snatched[S32])
+            else if (resolvedReturnType is { IsGenericDefinition: true, GenericParameters: not null })
+            {
+                var typeArgs = resolvedReturnType.GenericParameters
+                    .Select(gp =>
+                    {
+                        if (methodTypeArgs.TryGetValue(gp, out var s)) return s;
+                        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(gp, out var s2)) return s2;
+                        return _registry.LookupType(gp);
+                    })
+                    .Where(t => t != null)
+                    .ToList();
+                if (typeArgs.Count == resolvedReturnType.GenericParameters.Count)
+                    resolvedReturnType = _registry.GetOrCreateResolution(resolvedReturnType, typeArgs!);
+            }
+            else if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null })
+            {
+                bool anySubstituted = false;
+                var substitutedArgs = new List<TypeInfo>();
+                foreach (var arg in resolvedReturnType.TypeArguments)
+                {
+                    if (methodTypeArgs.TryGetValue(arg.Name, out var argSub))
+                    {
+                        substitutedArgs.Add(argSub);
+                        anySubstituted = true;
+                    }
+                    else if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(arg.Name, out var argSub2))
+                    {
+                        substitutedArgs.Add(argSub2);
+                        anySubstituted = true;
+                    }
+                    else
+                    {
+                        substitutedArgs.Add(arg);
+                    }
+                }
+                if (anySubstituted)
+                {
+                    TypeInfo? genericBase = resolvedReturnType switch
+                    {
+                        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                        ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                        _ => null
+                    };
+                    if (genericBase == null)
+                    {
+                        string baseName = resolvedReturnType.Name.Contains('[')
+                            ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
+                            : resolvedReturnType.Name;
+                        genericBase = _registry.LookupType(baseName);
+                    }
+                    if (genericBase != null)
+                        resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
+                }
+            }
+        }
+        // Also handle owner-level substitution for return type
+        if (resolvedReturnType is GenericParameterTypeInfo && receiverType is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            TypeInfo? ownerGenericDef = receiverType switch
+            {
+                RecordTypeInfo r => r.GenericDefinition,
+                EntityTypeInfo e => e.GenericDefinition,
+                ResidentTypeInfo res => res.GenericDefinition,
+                _ => null
+            };
+            if (ownerGenericDef?.GenericParameters != null)
+            {
+                int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(resolvedReturnType.Name);
+                if (paramIndex >= 0 && paramIndex < receiverType.TypeArguments.Count)
+                    resolvedReturnType = receiverType.TypeArguments[paramIndex];
+            }
+        }
+
+        string returnType = resolvedReturnType != null
+            ? GetLLVMType(resolvedReturnType)
             : "void";
+
+        // Ensure the function is declared
+        if (!_generatedFunctions.Contains(mangledName))
+        {
+            string declRetType = returnType;
+            EmitLine(_functionDeclarations, $"declare {declRetType} @{mangledName}({string.Join(", ", argTypes)})");
+            _generatedFunctions.Add(mangledName);
+        }
 
         if (returnType == "void")
         {
@@ -2304,24 +2576,105 @@ public partial class LLVMCodeGenerator
         RoutineInfo? method = _registry.LookupRoutine(methodFullName)
                               ?? _registry.LookupRoutine(generic.MethodName);
 
+        // For generic type instances, try the generic base name
+        if (method == null && receiverType != null && receiverType.Name.Contains('['))
+        {
+            string genericBase = receiverType.Name[..receiverType.Name.IndexOf('[')];
+            method = _registry.LookupRoutine($"{genericBase}.{generic.MethodName}");
+        }
+        if (method == null && receiverType != null)
+        {
+            method = _registry.LookupMethod(receiverType, generic.MethodName);
+        }
+
         if (method == null) return null;
 
-        // Resolve generic return type: if return type is a generic parameter (e.g., To, T),
-        // substitute with the actual type argument from the call
+        // Build substitution map for generic parameters from call-site type args
         TypeInfo? returnType = method.ReturnType;
         if (returnType != null && method.GenericParameters is { Count: > 0 })
         {
-            for (int i = 0; i < method.GenericParameters.Count; i++)
+            var callSubstitutions = new Dictionary<string, TypeInfo>();
+
+            // Separate owner-level from method-level generic params
+            var ownerGenericParams = new HashSet<string>();
+            if (method.OwnerType?.GenericParameters != null)
+                foreach (var gp in method.OwnerType.GenericParameters)
+                    ownerGenericParams.Add(gp);
+
+            var methodLevelParams = method.GenericParameters
+                .Where(gp => !ownerGenericParams.Contains(gp))
+                .ToList();
+
+            // Map method-level params to call-site type args
+            for (int i = 0; i < methodLevelParams.Count && i < generic.TypeArguments.Count; i++)
             {
-                if (returnType.Name == method.GenericParameters[i] && i < generic.TypeArguments.Count)
+                string taName = generic.TypeArguments[i].Name;
+                TypeInfo? resolved = null;
+                if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(taName, out var sub))
+                    resolved = sub;
+                resolved ??= _registry.LookupType(taName);
+                if (resolved != null)
+                    callSubstitutions[methodLevelParams[i]] = resolved;
+            }
+
+            // Include owner-level substitutions from _typeSubstitutions
+            if (_typeSubstitutions != null)
+                foreach (var (key, value) in _typeSubstitutions)
+                    callSubstitutions.TryAdd(key, value);
+
+            // Also include owner-level substitutions from receiver type arguments
+            if (receiverType is { IsGenericResolution: true, TypeArguments: not null })
+            {
+                TypeInfo? ownerGenericDef = receiverType switch
                 {
-                    // Resolve the type argument (apply substitutions if in monomorphization)
-                    TypeInfo? resolved = null;
-                    if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(generic.TypeArguments[i].Name, out var sub))
-                        resolved = sub;
-                    resolved ??= _registry.LookupType(generic.TypeArguments[i].Name);
-                    if (resolved != null) returnType = resolved;
-                    break;
+                    RecordTypeInfo r => r.GenericDefinition,
+                    EntityTypeInfo e => e.GenericDefinition,
+                    ResidentTypeInfo res => res.GenericDefinition,
+                    _ => null
+                };
+                if (ownerGenericDef?.GenericParameters != null)
+                {
+                    for (int i = 0; i < ownerGenericDef.GenericParameters.Count && i < receiverType.TypeArguments.Count; i++)
+                        callSubstitutions.TryAdd(ownerGenericDef.GenericParameters[i], receiverType.TypeArguments[i]);
+                }
+            }
+
+            // Case 1: Return type is directly a generic parameter (e.g., U → S64)
+            if (callSubstitutions.TryGetValue(returnType.Name, out var directSub))
+            {
+                returnType = directSub;
+            }
+            // Case 2: Return type is a generic resolution with unresolved params (e.g., Snatched[U])
+            else if (returnType.IsGenericResolution && returnType.TypeArguments != null)
+            {
+                bool needsResolution = false;
+                var resolvedArgs = new List<TypeInfo>();
+                foreach (var ta in returnType.TypeArguments)
+                {
+                    if (callSubstitutions.TryGetValue(ta.Name, out var argSub))
+                    {
+                        resolvedArgs.Add(argSub);
+                        needsResolution = true;
+                    }
+                    else
+                    {
+                        resolvedArgs.Add(ta);
+                    }
+                }
+                if (needsResolution)
+                {
+                    TypeInfo? genericBase = returnType switch
+                    {
+                        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                        ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                        _ => null
+                    };
+                    genericBase ??= returnType.Name.Contains('[')
+                        ? _registry.LookupType(returnType.Name[..returnType.Name.IndexOf('[')])
+                        : null;
+                    if (genericBase != null)
+                        returnType = _registry.GetOrCreateResolution(genericBase, resolvedArgs);
                 }
             }
         }
@@ -2332,6 +2685,55 @@ public partial class LLVMCodeGenerator
     #endregion
 
     /// <summary>
+    /// Resolves unsubstituted generic parameters in a type through _typeSubstitutions.
+    /// E.g., during monomorphization with {U→S64}: Snatched[U] → Snatched[S64], U → S64.
+    /// </summary>
+    private TypeInfo ApplyTypeSubstitutions(TypeInfo type)
+    {
+        if (_typeSubstitutions == null) return type;
+
+        // Direct generic parameter substitution (e.g., U → S64)
+        if (_typeSubstitutions.TryGetValue(type.Name, out var sub))
+            return sub;
+
+        // Generic resolution with unresolved params (e.g., Snatched[U] → Snatched[S64])
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool needsResolution = false;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (var ta in type.TypeArguments)
+            {
+                if (_typeSubstitutions.TryGetValue(ta.Name, out var argSub))
+                {
+                    resolvedArgs.Add(argSub);
+                    needsResolution = true;
+                }
+                else
+                {
+                    resolvedArgs.Add(ta);
+                }
+            }
+            if (needsResolution)
+            {
+                TypeInfo? genericBase = type switch
+                {
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                    _ => null
+                };
+                genericBase ??= type.Name.Contains('[')
+                    ? _registry.LookupType(type.Name[..type.Name.IndexOf('[')])
+                    : null;
+                if (genericBase != null)
+                    return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
+            }
+        }
+
+        return type;
+    }
+
+    /// <summary>
     /// Gets the type of an expression (from semantic analysis metadata).
     /// </summary>
     private TypeInfo? GetExpressionType(Expression expr)
@@ -2339,7 +2741,12 @@ public partial class LLVMCodeGenerator
         // First, check if the semantic analyzer has already resolved the type
         if (expr.ResolvedType != null)
         {
-            return expr.ResolvedType;
+            // During monomorphization, resolve unsubstituted generic params (e.g., Snatched[U] → Snatched[S64])
+            var resolved = ApplyTypeSubstitutions(expr.ResolvedType);
+            // If the type is still an unresolved generic parameter, fall through to the
+            // expression-specific resolution which can use call-site type arguments
+            if (resolved is not GenericParameterTypeInfo)
+                return resolved;
         }
 
         // Fall back to inferring from the expression structure
@@ -2443,7 +2850,50 @@ public partial class LLVMCodeGenerator
                         }
 
                         // For parameterized return types (e.g., Snatched[T] → Snatched[Letter]),
-                        // substitute type arguments within the generic resolution
+                        // resolve through receiver's type arguments even without _typeSubstitutions
+                        if (receiverType is { IsGenericResolution: true, TypeArguments: not null }
+                            && method.ReturnType is { IsGenericResolution: true, TypeArguments: not null })
+                        {
+                            TypeInfo? ownerGenericDef = receiverType switch
+                            {
+                                RecordTypeInfo r => r.GenericDefinition,
+                                EntityTypeInfo e => e.GenericDefinition,
+                                ResidentTypeInfo res => res.GenericDefinition,
+                                _ => null
+                            };
+                            if (ownerGenericDef?.GenericParameters != null)
+                            {
+                                var paramSubs = new Dictionary<string, TypeInfo>();
+                                for (int i = 0; i < ownerGenericDef.GenericParameters.Count && i < receiverType.TypeArguments.Count; i++)
+                                    paramSubs[ownerGenericDef.GenericParameters[i]] = receiverType.TypeArguments[i];
+
+                                bool anyResolved = false;
+                                var resolvedArgs = new List<TypeInfo>();
+                                foreach (var ta in method.ReturnType.TypeArguments)
+                                {
+                                    if (paramSubs.TryGetValue(ta.Name, out var resolved))
+                                    {
+                                        resolvedArgs.Add(resolved);
+                                        anyResolved = true;
+                                    }
+                                    else
+                                    {
+                                        resolvedArgs.Add(ta);
+                                    }
+                                }
+                                if (anyResolved)
+                                {
+                                    string baseName = method.ReturnType.Name;
+                                    int bracketIdx = baseName.IndexOf('[');
+                                    if (bracketIdx > 0) baseName = baseName[..bracketIdx];
+                                    var genericDef = _registry.LookupType(baseName);
+                                    if (genericDef != null)
+                                        return _registry.GetOrCreateResolution(genericDef, resolvedArgs);
+                                }
+                            }
+                        }
+
+                        // Fallback: substitute type arguments using _typeSubstitutions
                         if (_typeSubstitutions != null && method.ReturnType.IsGenericResolution
                             && method.ReturnType.TypeArguments != null)
                         {
@@ -2480,9 +2930,11 @@ public partial class LLVMCodeGenerator
             }
             case IdentifierExpression id:
             {
+                // Strip failable '!' suffix for lookup
+                string callName = id.Name.EndsWith('!') ? id.Name[..^1] : id.Name;
                 // Try direct routine lookup first
-                var routine = _registry.LookupRoutine(id.Name)
-                              ?? _registry.LookupRoutineByName(id.Name);
+                var routine = _registry.LookupRoutine(callName)
+                              ?? _registry.LookupRoutineByName(callName);
                 if (routine?.ReturnType != null)
                     return routine.ReturnType;
                 // If name matches a type, it's a creator call — returns that type
@@ -2525,6 +2977,8 @@ public partial class LLVMCodeGenerator
             Lexer.TokenType.D128Literal => "D128",
             Lexer.TokenType.True or Lexer.TokenType.False => "Bool",
             Lexer.TokenType.TextLiteral => "Text",
+            Lexer.TokenType.LetterLiteral => "Letter",
+            Lexer.TokenType.ByteLetterLiteral => "Byte",
             _ => null
         };
 
@@ -2553,7 +3007,10 @@ public partial class LLVMCodeGenerator
             _ => null
         };
 
-        return memberVariable?.Type;
+        TypeInfo? memberType = memberVariable?.Type;
+        if (memberType != null && targetType is { IsGenericResolution: true, TypeArguments: not null })
+            memberType = ResolveGenericMemberType(memberType, targetType);
+        return memberType;
     }
 
     #endregion
@@ -2750,7 +3207,7 @@ public partial class LLVMCodeGenerator
 
         string mangledName = method != null
             ? MangleFunctionName(method)
-            : $"{MangleTypeName(targetType.Name)}___getslice__";
+            : Q($"{targetType.Name}.__getslice__");
 
         string returnType = method?.ReturnType != null
             ? GetLLVMType(method.ReturnType)
@@ -3203,9 +3660,82 @@ public partial class LLVMCodeGenerator
 
         foreach (var m in members)
         {
-            if (m.Name == memberName) return m.Type;
+            if (m.Name == memberName)
+            {
+                TypeInfo memberType = m.Type;
+                if (ownerType is { IsGenericResolution: true, TypeArguments: not null })
+                    memberType = ResolveGenericMemberType(memberType, ownerType);
+                return memberType;
+            }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Resolves generic type parameters in a member's type using the owner's type arguments.
+    /// Handles direct params (T → Letter), parameterized types (Snatched[T] → Snatched[Letter]),
+    /// and generic definitions (Snatched → Snatched[Letter]).
+    /// </summary>
+    private TypeInfo ResolveGenericMemberType(TypeInfo memberType, TypeInfo ownerType)
+    {
+        TypeInfo? ownerGenericDef = ownerType switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            ResidentTypeInfo res => res.GenericDefinition,
+            _ => null
+        };
+        if (ownerGenericDef?.GenericParameters == null || ownerType.TypeArguments == null)
+            return memberType;
+
+        var subs = new Dictionary<string, TypeInfo>();
+        for (int i = 0; i < ownerGenericDef.GenericParameters.Count && i < ownerType.TypeArguments.Count; i++)
+            subs[ownerGenericDef.GenericParameters[i]] = ownerType.TypeArguments[i];
+
+        // Direct parameter: memberType is T → substitute to Letter
+        if (memberType is GenericParameterTypeInfo && subs.TryGetValue(memberType.Name, out var directSub))
+            return directSub;
+
+        // Parameterized: memberType is Snatched[T] → substitute T in type arguments
+        if (memberType is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anySubstituted = false;
+            var substitutedArgs = new List<TypeInfo>();
+            foreach (var ta in memberType.TypeArguments)
+            {
+                if (subs.TryGetValue(ta.Name, out var resolved))
+                {
+                    substitutedArgs.Add(resolved);
+                    anySubstituted = true;
+                }
+                else
+                {
+                    substitutedArgs.Add(ta);
+                }
+            }
+            if (anySubstituted)
+            {
+                string baseName = memberType.Name;
+                int bracketIdx = baseName.IndexOf('[');
+                if (bracketIdx > 0) baseName = baseName[..bracketIdx];
+                var genericDef = _registry.LookupType(baseName);
+                if (genericDef != null)
+                    return _registry.GetOrCreateResolution(genericDef, substitutedArgs);
+            }
+        }
+
+        // Generic definition: memberType is Snatched with GenericParameters → create resolution
+        if (memberType is { IsGenericDefinition: true, GenericParameters: not null })
+        {
+            var typeArgs = memberType.GenericParameters
+                .Select(gp => subs.TryGetValue(gp, out var s) ? s : _registry.LookupType(gp))
+                .Where(t => t != null)
+                .ToList();
+            if (typeArgs.Count == memberType.GenericParameters.Count)
+                return _registry.GetOrCreateResolution(memberType, typeArgs!);
+        }
+
+        return memberType;
     }
 
     #endregion
@@ -3252,7 +3782,7 @@ public partial class LLVMCodeGenerator
 
             string mangledConcat = concatMethod != null
                 ? MangleFunctionName(concatMethod)
-                : "Text_concat";
+                : "Text.concat";
 
             string concatResult = NextTemp();
             EmitLine(sb, $"  {concatResult} = call ptr @{mangledConcat}(ptr {accumulator}, ptr {partValues[i]})");
@@ -3284,7 +3814,7 @@ public partial class LLVMCodeGenerator
             RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
             string mangledConcat = concatMethod != null
                 ? MangleFunctionName(concatMethod)
-                : "Text_concat";
+                : "Text.concat";
             string result = NextTemp();
             EmitLine(sb, $"  {result} = call ptr @{mangledConcat}(ptr {prefix}, ptr {valueText})");
             return result;
@@ -3299,7 +3829,7 @@ public partial class LLVMCodeGenerator
 
             string mangledDebug = debugMethod != null
                 ? MangleFunctionName(debugMethod)
-                : $"{MangleTypeName(typeName)}_to_debug";
+                : Q($"{typeName}.to_debug");
 
             string argType = exprType != null ? GetParameterLLVMType(exprType) : "i64";
             string result = NextTemp();
@@ -3378,7 +3908,7 @@ public partial class LLVMCodeGenerator
         string llvmArgType = type != null ? GetLLVMType(type) : "i64";
         string mangledName = createMethod != null
             ? MangleFunctionName(createMethod)
-            : "Text___create__";
+            : "Text.__create__";
 
         string textResult = NextTemp();
         EmitLine(sb, $"  {textResult} = call ptr @{mangledName}({llvmArgType} {value})");
@@ -3412,7 +3942,7 @@ public partial class LLVMCodeGenerator
 
         // Look up List type and its constructor/add_last method
         string listTypeName = listType != null ? listType.Name : $"List[{elemType?.Name ?? "S64"}]";
-        string mangledListType = MangleTypeName(listTypeName);
+        // mangledListType is no longer needed — list type name used directly via Q()
 
         // Allocate the list via constructor or rf_alloc
         // Try to find a __create__ or use a fallback allocation
