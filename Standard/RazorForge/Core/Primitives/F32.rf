@@ -75,14 +75,6 @@ routine F32.__create__(from: D64) -> F32
 routine F32.__create__(from: D128) -> F32
   return rf_d128_to_f32(from.low_bits(), from.high_bits())
 
-# From SAddr - convert to float (may lose precision)
-routine F32.__create__(from: SAddr) -> F32
-  return sitofp[SAddr, F32](from)
-
-# From UAddr - convert to float (may lose precision)
-routine F32.__create__(from: UAddr) -> F32
-  return uitofp[UAddr, F32](from)
-
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================

@@ -27,7 +27,7 @@ public enum ConstraintKind
     /// <summary>Variant type constraint (where T is variant)</summary>
     VariantType,
 
-    /// <summary>Const generic type constraint (where N is uaddr)</summary>
+    /// <summary>Const generic type constraint (where N is Address)</summary>
     ConstGeneric,
 
     /// <summary>Type equality constraint (where T in [s32, u8])</summary>

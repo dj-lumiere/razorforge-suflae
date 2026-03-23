@@ -83,14 +83,6 @@ routine D64.__create__(from: D128) -> D64
   var result_bits = rf_d128_to_d64(from.low_bits(), from.high_bits())
   return bitcast[U64, D64](result_bits)
 
-# From SAddr - convert through S64
-routine D64.__create__(from: SAddr) -> D64
-  return from.S64().D64()
-
-# From UAddr - convert through U64
-routine D64.__create__(from: UAddr) -> D64
-  return from.U64().D64()
-
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================

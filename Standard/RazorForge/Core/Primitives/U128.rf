@@ -84,14 +84,6 @@ routine U128.__create__!(from: D64) -> U128
 routine U128.__create__!(from: D128) -> U128
   return from.U64!().U128()
 
-# From SAddr - sign extend to U128 (wraps if negative)
-routine U128.__create__!(from: SAddr) -> U128
-  return sext[SAddr, U128](from)
-
-# From UAddr - zero extend to U128
-routine U128.__create__!(from: UAddr) -> U128
-  return zext[UAddr, U128](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================

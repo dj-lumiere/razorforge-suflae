@@ -47,7 +47,7 @@ public abstract record Expression(SourceLocation Location) : AstNode(Location: L
 /// <remarks>
 /// Supports the full range of RazorForge/Suflae literal types:
 /// <list type="bullet">
-/// <item>Integers: S8, S16, S32, S64, S128, SAddr, U8, U16, U32, U64, U128, UAddr</item>
+/// <item>Integers: S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, Address</item>
 /// <item>Floats: F16, F32, F64, F128</item>
 /// <item>Decimals: D32, D64, D128</item>
 /// <item>Text and characters: Letter, Byte, Text, Bytes</item>

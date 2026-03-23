@@ -196,8 +196,7 @@ public partial class Parser
                 TokenType.U8Literal,
                 TokenType.S128Literal,
                 TokenType.U128Literal,
-                TokenType.SAddrLiteral,
-                TokenType.UAddrLiteral))
+                TokenType.AddressLiteral))
         {
             string value = PeekToken(offset: -1)
                .Text;
@@ -340,7 +339,7 @@ public partial class Parser
                 }
                 else if (Check(type: TokenType.Identifier))
                 {
-                    // Const generic constraint: N is uaddr
+                    // Const generic constraint: N is Address
                     // Type validation happens in semantic analysis, not parsing
                     TypeExpression constType = ParseType();
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -460,7 +459,7 @@ public partial class Parser
                 }
                 else if (Match(type: TokenType.Is))
                 {
-                    // T is record/entity/resident/routine/choice/variant or N is uaddr (const generic)
+                    // T is record/entity/resident/routine/choice/variant or N is Address (const generic)
                     if (Match(type: TokenType.Record))
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -512,7 +511,7 @@ public partial class Parser
                     }
                     else if (Check(type: TokenType.Identifier))
                     {
-                        // Const generic constraint: N is uaddr
+                        // Const generic constraint: N is Address
                         // Type validation happens in semantic analysis, not parsing
                         TypeExpression constType = ParseType();
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,

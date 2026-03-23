@@ -77,7 +77,7 @@ routine get_all() -> Text
   return bytes.to_text()
 
 # Read exactly n codepoints from input
-routine get_letters(count: UAddr) -> Text
+routine get_letters(count: U64) -> Text
   var ptr = rf_console_get_letters(count)
   var bytes = Bytes(ptr: ptr)
   return bytes.to_text()
@@ -104,7 +104,7 @@ routine get_raw() -> Bytes
   return Bytes(ptr: ptr)
 
 # Read up to n bytes
-routine get_bytes(count: UAddr) -> Bytes
+routine get_bytes(count: U64) -> Bytes
   var ptr = rf_console_get_bytes(count)
   return Bytes(ptr: ptr)
 

@@ -31,7 +31,7 @@ routine List[T].__create__(capacity: U64) -> List[T]
 routine List[T].__destroy__()
   if not me.data.is_none()
     danger!
-      rf_invalidate(ptrtoint[T, UAddr](me.data))
+      rf_invalidate(ptrtoint[T, Address](me.data))
   return
 
 # Core operations
@@ -69,7 +69,7 @@ routine List[T].add_first(value: T)
 
 routine List[T].add_at!(index: U64, value: T)
   if index > me.count
-    throw IndexOutOfBoundsError(index: index.UAddr(), count: me.count.UAddr())
+    throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
@@ -96,7 +96,7 @@ routine List[T].remove_first!() -> T
 
 routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
-    throw IndexOutOfBoundsError(index: index.UAddr(), count: me.count.UAddr())
+    throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
   var byte_offset = index * data_size[T]()
   var value = me.data.offset(byte_offset).read()
@@ -123,7 +123,7 @@ routine List[T].__getitem__![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx.UAddr(), count: me.count.UAddr())
+    throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
   var byte_offset = idx * data_size[T]()
   return me.data.offset(byte_offset).read()
 
@@ -131,7 +131,7 @@ routine List[T].__setitem__![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx.UAddr(), count: me.count.UAddr())
+    throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
   var byte_offset = idx * data_size[T]()
   me.data.offset(byte_offset).write(value)
   return
@@ -163,7 +163,7 @@ needs I obeys Integral
   var e = end.U64()
 
   if s > me.count or e > me.count
-    throw IndexOutOfBoundsError(index: e.UAddr(), count: me.count.UAddr())
+    throw IndexOutOfBoundsError(index: e.U64(), count: me.count.U64())
 
   var result = List[T]()
   var i = s
@@ -206,7 +206,7 @@ routine List[T].reserve(new_capacity: U64)
         me.data = Snatched[T](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(ptrtoint[T, UAddr](me.data), new_byte_size)
+        var ptr = rf_reallocate_dynamic(ptrtoint[T, Address](me.data), new_byte_size)
         me.data = Snatched[T](ptr)
 
     me.capacity = new_capacity

@@ -82,14 +82,6 @@ routine D32.__create__(from: D128) -> D32
   var result_bits = rf_d128_to_d32(from.low_bits(), from.high_bits())
   return bitcast[U32, D32](result_bits)
 
-# From SAddr - convert through S64
-routine D32.__create__(from: SAddr) -> D32
-  return from.S64().D32()
-
-# From UAddr - convert through U64
-routine D32.__create__(from: UAddr) -> D32
-  return from.U64().D32()
-
 # From Bool
 routine D32.__create__(from: Bool) -> D32
   return if from then 1d32 else 0d32

@@ -1,7 +1,7 @@
 # RazorForge Wide C String Type (CWStr)
 # Null-terminated wchar_t* wrapper for C FFI interop
 #
-# CWStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
+# CWStr is a value type that wraps a raw pointer (Address) to a null-terminated
 # sequence of wide characters. It provides safe access to wide C strings
 # without copying unless explicitly requested.
 #
@@ -16,7 +16,7 @@
 # - Platform-dependent encoding
 #
 # Memory ownership:
-# - CWStr(from_ptr: UAddr) - wraps existing memory, does NOT take ownership
+# - CWStr(from_ptr: Address) - wraps existing memory, does NOT take ownership
 # - CWStr(from_text: Text) - allocates NEW memory, caller owns it
 # - CWStr.copy() - allocates NEW memory, caller owns it
 #
@@ -32,10 +32,10 @@ module Core
 
 # Wide character size in bytes (2 on Windows, 4 on Unix)
 @config(target="windows")
-preset CWCHAR_SIZE: UAddr = 2uaddr
+preset CWCHAR_SIZE: U64 = 2u64
 
 @config(target="unix")
-preset CWCHAR_SIZE: UAddr = 4uaddr
+preset CWCHAR_SIZE: U64 = 4u64
 
 # ============================================================================
 # CWStr Record Definition
@@ -44,10 +44,10 @@ preset CWCHAR_SIZE: UAddr = 4uaddr
 # Wide C string record (null-terminated wchar_t*)
 # Value type wrapper around raw pointer - no heap allocation for wrapper
 record CWStr
-  ptr: UAddr  # Raw pointer to null-terminated wide character sequence
+  ptr: Address  # Raw pointer to null-terminated wide character sequence
 
 # Null pointer constant for CWStr comparisons
-preset cwstr_null: CWStr = CWStr(ptr: 0uaddr)
+preset cwstr_null: CWStr = CWStr(ptr: 0_a)
 
 # ============================================================================
 # Creators
@@ -55,7 +55,7 @@ preset cwstr_null: CWStr = CWStr(ptr: 0uaddr)
 
 # Create CWStr from raw pointer (wraps existing memory, does NOT copy)
 # WARNING: The pointed-to memory must remain valid for the lifetime of this CWStr
-routine CWStr.__create__(from_ptr: UAddr) -> CWStr
+routine CWStr.__create__(from_ptr: Address) -> CWStr
   return CWStr(ptr: from_ptr)
 
 # Create CWStr from Text (encodes codepoints to UTF-16 with surrogates)
@@ -119,26 +119,26 @@ routine CWStr.__create__(from_units: List[U16]) -> CWStr
 
 # Get length of wide C string in characters (excluding null terminator)
 # O(n) - must scan for null terminator
-routine CWStr.count() -> UAddr
+routine CWStr.count() -> U64
   return rf_cwstr_count(me.ptr)
 
 # Check if wide C string pointer is null
 routine CWStr.is_null() -> Bool
-  return me.ptr == 0uaddr
+  return me.ptr == 0_a
 
 # Check if wide C string is empty (null or zero-length)
 routine CWStr.is_empty() -> Bool
-  return me.is_null() or me.count() == 0uaddr
+  return me.is_null() or me.count() == 0u64
 
 # ============================================================================
 # Indexing (assumes 16-bit wchar_t - Windows style)
 # ============================================================================
 
 # Get code unit at index (no bounds checking)
-routine CWStr.__getitem__!(index: UAddr) -> U16
+routine CWStr.__getitem__!(index: U64) -> U16
   if index >= me.count()
     throw IndexOutOfBoundsError()
-  return read_as![U16](me.ptr + (index * 2uaddr))
+  return read_as![U16](me.ptr + (index * 2u64))
 
 # ============================================================================
 # Comparison
@@ -163,7 +163,7 @@ routine CWStr.__cmp__(other: CWStr) -> ComparisonSign
 # The caller is responsible for freeing the returned memory
 routine CWStr.copy() -> CWStr
   var len = me.count()
-  var byte_len = (len + 1uaddr) * 2uaddr  # Assuming 16-bit wchar_t
+  var byte_len = (len + 1u64) * 2u64  # Assuming 16-bit wchar_t
   var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
   rf_cwstr_copy(buffer.address, me.ptr)
   return CWStr(ptr: buffer.address)
@@ -177,13 +177,13 @@ routine CWStr.copy() -> CWStr
 routine CWStr.to_units() -> List[U16]
   var len = me.count()
   var list = List[U16](len)
-  var i: UAddr = 0uaddr
+  var i: U64 = 0u64
   loop
     if i >= len
       break
-    var code_unit = read_as![U16](me.ptr + (i * 2uaddr))
+    var code_unit = read_as![U16](me.ptr + (i * 2u64))
     list.add_last(code_unit)
-    i = i + 1uaddr
+    i = i + 1u64
   return list
 
 # ============================================================================
@@ -191,9 +191,9 @@ routine CWStr.to_units() -> List[U16]
 # ============================================================================
 
 # Get pointer offset by n wide characters
-routine CWStr.offset(n: UAddr) -> CWStr
-  return CWStr(ptr: me.ptr + (n * 2uaddr))  # Assuming 16-bit wchar_t
+routine CWStr.offset(n: U64) -> CWStr
+  return CWStr(ptr: me.ptr + (n * 2u64))  # Assuming 16-bit wchar_t
 
 # Get pointer to substring starting at character index
-routine CWStr.from_index(start: UAddr) -> CWStr
-  return CWStr(ptr: me.ptr + (start * 2uaddr))  # Assuming 16-bit wchar_t
+routine CWStr.from_index(start: U64) -> CWStr
+  return CWStr(ptr: me.ptr + (start * 2u64))  # Assuming 16-bit wchar_t

@@ -124,7 +124,7 @@ routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
 ###   var counter = Atomic(10)
 ###   var old = counter.fetch_add(5)  # old = 10, counter now 15
 routine Atomic[T].fetch_add(delta: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-add with seq_cst ordering
   # Hardware guarantees atomicity for supported integer types
   return atomic_add[T](me.value.get_address(), delta)
@@ -145,7 +145,7 @@ needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
 ###   var counter = Atomic(10)
 ###   var old = counter.fetch_sub(3)  # old = 10, counter now 7
 routine Atomic[T].fetch_sub(delta: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-sub with seq_cst ordering
   # Hardware guarantees atomicity for supported integer types
   return atomic_sub[T](me.value.get_address(), delta)
@@ -166,7 +166,7 @@ needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
 ###   var flags = Atomic(0b1111u8)
 ###   var old = flags.fetch_and(0b1100u8)  # old = 0b1111, flags now 0b1100
 routine Atomic[T].fetch_and(mask: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-and with seq_cst ordering
   return atomic_and[T](me.value.get_address(), mask)
 
@@ -186,7 +186,7 @@ needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
 ###   var flags = Atomic(0b0011u8)
 ###   var old = flags.fetch_or(0b1100u8)  # old = 0b0011, flags now 0b1111
 routine Atomic[T].fetch_or(mask: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-or with seq_cst ordering
   return atomic_or[T](me.value.get_address(), mask)
 
@@ -206,7 +206,7 @@ needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
 ###   var flags = Atomic(0b0011u8)
 ###   var old = flags.fetch_xor(0b1100u8)  # old = 0b0011, flags now 0b1111
 routine Atomic[T].fetch_xor(mask: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-xor with seq_cst ordering
   return atomic_xor[T](me.value.get_address(), mask)
 
@@ -222,7 +222,7 @@ needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
 ###   var counter = Atomic(5)
 ###   var old = counter.fetch_inc()  # old = 5, counter now 6
 routine Atomic[T].fetch_inc() -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   return me.fetch_add(1)
 
 ### Atomically decrement the value and return the old value
@@ -237,5 +237,5 @@ needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
 ###   var counter = Atomic(5)
 ###   var old = counter.fetch_dec()  # old = 5, counter now 4
 routine Atomic[T].fetch_dec() -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, SAddr, UAddr]
+needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   return me.fetch_sub(1)

@@ -77,14 +77,6 @@ routine F16.__create__(from: D128) -> F16
   var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
   return fptrunc[F32, F16](f32_val)
 
-# From SAddr - convert using LLVM intrinsic
-routine F16.__create__(from: SAddr) -> F16
-  return sitofp[SAddr, F16](from)
-
-# From UAddr - convert using LLVM intrinsic
-routine F16.__create__(from: UAddr) -> F16
-  return uitofp[UAddr, F16](from)
-
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================

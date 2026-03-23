@@ -220,6 +220,92 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Analyzes multiple program ASTs from a multi-file build.
+    /// Phases are split so per-file phases run with correct import scoping,
+    /// while global phases run once across the combined registry.
+    /// </summary>
+    /// <param name="files">The programs and their file paths, in topological (dependency) order.</param>
+    /// <returns>Analysis result containing errors, warnings, and the populated type registry.</returns>
+    public AnalysisResult AnalyzeMultiple(IReadOnlyList<(Program Program, string FilePath)> files)
+    {
+        // Snapshot storage: file path → imported modules after Phase 1
+        var importSnapshots = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var symbolNameSnapshots = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // Pass 1: Collect declarations from ALL files (populates registry with all types/routines)
+        foreach (var (program, filePath) in files)
+        {
+            _currentFilePath = filePath;
+            _importedModules.Clear();
+            _importedSymbolNames.Clear();
+
+            CollectDeclarations(program: program);
+
+            // Snapshot the imported modules for this file
+            importSnapshots[filePath] = new HashSet<string>(_importedModules, StringComparer.OrdinalIgnoreCase);
+            symbolNameSnapshots[filePath] = new HashSet<string>(_importedSymbolNames, StringComparer.Ordinal);
+        }
+
+        // Pass 2: Resolve type bodies across ALL files (members can reference types from other files)
+        foreach (var (program, filePath) in files)
+        {
+            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots);
+
+            ResolveTypeBodies(program: program);
+            ResolveRoutineSignatures(program: program);
+        }
+
+        // Global passes (once, registry-only — no per-file import scoping needed)
+        AutoRegisterBuiltinRoutines();
+        GenerateDerivedOperators();
+        ValidateProtocolImplementations();
+
+        // Pass 3: Analyze bodies per file (expressions need correct import scoping)
+        foreach (var (program, filePath) in files)
+        {
+            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots);
+
+            AnalyzeBodies(program: program);
+        }
+
+        // Global passes (once, consume accumulated call graph + routine bodies)
+        InferModificationCategories();
+        GenerateErrorHandlingVariants();
+
+        return new AnalysisResult(
+            Registry: _registry,
+            Errors: _errors.AsReadOnly(),
+            Warnings: _warnings.AsReadOnly(),
+            ParsedLiterals: _parsedLiterals);
+    }
+
+    /// <summary>
+    /// Restores per-file import state (_currentFilePath, _importedModules, _importedSymbolNames)
+    /// from previously captured snapshots.
+    /// </summary>
+    private void RestoreImportState(
+        string filePath,
+        Dictionary<string, HashSet<string>> importSnapshots,
+        Dictionary<string, HashSet<string>> symbolNameSnapshots)
+    {
+        _currentFilePath = filePath;
+        _importedModules.Clear();
+        _importedSymbolNames.Clear();
+
+        if (importSnapshots.TryGetValue(filePath, out var imports))
+        {
+            foreach (string module in imports)
+                _importedModules.Add(module);
+        }
+
+        if (symbolNameSnapshots.TryGetValue(filePath, out var symbols))
+        {
+            foreach (string symbol in symbols)
+                _importedSymbolNames.Add(symbol);
+        }
+    }
+
+    /// <summary>
     /// Gets the type registry after analysis.
     /// </summary>
     public TypeRegistry Registry => _registry;

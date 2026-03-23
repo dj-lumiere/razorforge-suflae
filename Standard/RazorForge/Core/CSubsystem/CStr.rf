@@ -1,7 +1,7 @@
 # RazorForge C String Type (CStr)
 # Null-terminated char* wrapper for C FFI interop
 #
-# CStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
+# CStr is a value type that wraps a raw pointer (Address) to a null-terminated
 # sequence of bytes. It provides safe access to C strings without copying
 # unless explicitly requested.
 #
@@ -12,7 +12,7 @@
 # - Encoding-agnostic (typically ASCII or UTF-8 in modern code)
 #
 # Memory ownership:
-# - CStr(from_ptr: UAddr) - wraps existing memory, does NOT take ownership
+# - CStr(from_ptr: Address) - wraps existing memory, does NOT take ownership
 # - CStr(from_text: Bytes) - allocates NEW memory, caller owns it
 # - CStr.copy() - allocates NEW memory, caller owns it
 #
@@ -29,10 +29,10 @@ module Core
 # C string record (null-terminated char*)
 # Value type wrapper around raw pointer - no heap allocation for wrapper
 record CStr
-  ptr: UAddr  # Raw pointer to null-terminated Byte sequence
+  ptr: Address  # Raw pointer to null-terminated Byte sequence
 
 # Null pointer constant for CStr comparisons
-preset CSTR_NULL: CStr = CStr(ptr: 0uaddr)
+preset CSTR_NULL: CStr = CStr(ptr: 0_a)
 
 # ============================================================================
 # Creators
@@ -40,7 +40,7 @@ preset CSTR_NULL: CStr = CStr(ptr: 0uaddr)
 
 # Create CStr from raw pointer (wraps existing memory, does NOT copy)
 # WARNING: The pointed-to memory must remain valid for the lifetime of this CStr
-routine CStr.__create__(from_ptr: UAddr) -> CStr
+routine CStr.__create__(from_ptr: Address) -> CStr
   return CStr(ptr: from_ptr)
 
 # Create CStr from Bytes (allocates NEW memory with null terminator)
@@ -113,23 +113,23 @@ routine CStr.__create__(from: Text) -> CStr
 
 # Get length of C string (excluding null terminator)
 # O(n) - must scan for null terminator
-routine CStr.count() -> UAddr
+routine CStr.count() -> U64
   return rf_cstr_count(me.ptr)
 
 # Check if C string pointer is null
 routine CStr.is_null() -> Bool
-  return me.ptr == 0uaddr
+  return me.ptr == 0_a
 
 # Check if C string is empty (null or zero-length)
 routine CStr.is_empty() -> Bool
-  return me.is_null() or me.length() == 0uaddr
+  return me.is_null() or me.length() == 0u64
 
 # ============================================================================
 # Indexing
 # ============================================================================
 
 # Get Byte at index (no bounds checking in danger zone)
-routine CStr.__getitem__!(index: UAddr) -> U8
+routine CStr.__getitem__!(index: U64) -> U8
   return read_as![U8](me.ptr + index)
 
 # ============================================================================
@@ -154,8 +154,8 @@ routine CStr.__cmp__(you: CStr) -> ComparisonSign
 # Copy C string to new allocated memory
 # The caller is responsible for freeing the returned memory
 routine CStr.copy() -> CStr
-  var len = me.length()
-  var buffer = Snatched[U8](rf_allocate_dynamic(len + 1uaddr))
+  var len = me.count()
+  var buffer = Snatched[U8](rf_allocate_dynamic(len + 1u64))
   rf_cstr_copy(buffer.address, me.ptr)
   return CStr(ptr: buffer.address)
 
@@ -163,43 +163,27 @@ routine CStr.copy() -> CStr
 # Conversion to RazorForge Types
 # ============================================================================
 
-# Convert CStr to Bytes (copies data, interprets as UTF-8)
-routine CStr.to_text() -> Bytes
-  var len = me.length()
-  if len == 0uaddr
-    return Bytes()
-
-  var list = List[Byte](len)
-  var i: UAddr = 0uaddr
-  loop
-    if i >= len
-      break
-    var byte_val = read_as![U8](me.ptr + i)
-    list.add_last(Byte(codepoint: byte_val))
-    i = i + 1uaddr
-  return Bytes(from_list: list)
-
 # Convert CStr to List[U8] (copies raw bytes, for binary data or legacy encodings)
 routine CStr.to_bytes() -> List[U8]
-  var len = me.length()
+  var len = me.count()
   var list = List[U8](len)
-  var i: UAddr = 0uaddr
+  var i: U64 = 0u64
   loop
     if i >= len
       break
     var byte_val = read_as![U8](me.ptr + i)
     list.add_last(byte_val)
-    i = i + 1uaddr
-  return list
+    i = i + 1u64
+  return Bytes(list)
 
 # ============================================================================
 # Pointer Arithmetic (Danger Zone)
 # ============================================================================
 
 # Get pointer offset by n bytes
-routine CStr.offset(n: UAddr) -> CStr
+routine CStr.offset(n: U64) -> CStr
   return CStr(ptr: me.ptr + n)
 
 # Get pointer to substring starting at index
-routine CStr.from_index(start: UAddr) -> CStr
+routine CStr.from_index(start: U64) -> CStr
   return CStr(ptr: me.ptr + start)

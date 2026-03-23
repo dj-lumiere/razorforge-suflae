@@ -90,17 +90,6 @@ routine U64.__create__!(from: D64) -> U64
 routine U64.__create__!(from: D128) -> U64
   return from.S64!().U64!()
 
-# From SAddr - crashes if value is negative
-routine U64.__create__!(from: SAddr) -> U64
-  var val_s64 = from.S64!()
-  if val_s64 < 0_s64
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
-  return zext[SAddr, U64](from)
-
-# From UAddr - always fits (zero extends from 32 or 64-bit)
-routine U64.__create__!(from: UAddr) -> U64
-  return zext[UAddr, U64](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================

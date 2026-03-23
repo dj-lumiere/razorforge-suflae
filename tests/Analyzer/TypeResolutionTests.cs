@@ -763,10 +763,10 @@ public class TypeResolutionTests
         // Integer types implement ConstCompatible and should be valid
         string source = """
                         resident Buffer[T, N]
-                        needs N is UAddr
+                        needs N is Address
                           data: T
 
-                        routine test(buf: Buffer[U8, UAddr])
+                        routine test(buf: Buffer[U8, Address])
                           return
                         """;
 
@@ -845,7 +845,7 @@ public class TypeResolutionTests
         // Type argument doesn't match required const type
         string source = """
                         resident Buffer[T, N]
-                        needs N is UAddr
+                        needs N is Address
                           data: T
 
                         routine test(buf: Buffer[U8, S32])

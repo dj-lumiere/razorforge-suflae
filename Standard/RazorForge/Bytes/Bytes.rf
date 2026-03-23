@@ -36,18 +36,18 @@ routine Bytes.__create__(ptr: Snatched[Byte]) -> Bytes
   return Bytes(letters: list)
 
 routine Bytes.__create__(ptr: CStr) -> Bytes
-  var len = rf_cstr_len(ptr)
-  if len == 0uaddr
+  var len = rf_cstr_count(ptr)
+  if len == 0u64
     return Bytes()
   var list = List[Byte](len)
-  var i: UAddr = 0uaddr
+  var i: U64 = 0u64
   loop
     if i >= len
       break
     var byte_ptr = ptr + i
     var byte_val = read_as![Byte](byte_ptr)
     list.add_last(byte_val)
-    i += 1uaddr
+    i += 1u64
   return Bytes(from_list: list)
 
 # Core operations
@@ -198,7 +198,7 @@ routine Bytes.to_text() -> Text
 # ============================================================================
 
 # Bytes -> null-terminated C string (UTF-8)
-routine Bytes.to_cstr() -> UAddr
+routine Bytes.to_cstr() -> Address
   var len = me.count()
   var buffer = Snatched[Byte](address: rf_allocate_dynamic(len + 1u64))
   var i: U64 = 0u64
@@ -211,7 +211,7 @@ routine Bytes.to_cstr() -> UAddr
   return buffer.address
 
 # Text -> null-terminated C string (UTF-8 encoded)
-routine Text.to_cstr() -> UAddr
+routine Text.to_cstr() -> Address
   var bytes = me.to_utf8()
   return bytes.to_cstr()
 

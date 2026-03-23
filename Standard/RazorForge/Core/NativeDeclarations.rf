@@ -7,11 +7,11 @@ module Core
 # Memory Management
 # ============================================================================
 
-dangerous external("C") routine rf_allocate_dynamic(size: U64) -> UAddr
-dangerous external("C") routine rf_reallocate_dynamic(ptr: UAddr, size: U64) -> UAddr
-dangerous external("C") routine rf_invalidate(ptr: UAddr)
-dangerous external("C") routine rf_copy_bytes_at(dest: UAddr, src: UAddr, size: U64)
-dangerous external("C") routine rf_set_bytes_at(dest: UAddr, value: U8, size: U64)
+dangerous external("C") routine rf_allocate_dynamic(size: U64) -> Address
+dangerous external("C") routine rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
+dangerous external("C") routine rf_invalidate(ptr: Address)
+dangerous external("C") routine rf_copy_bytes_at(dest: Address, src: Address, size: U64)
+dangerous external("C") routine rf_set_bytes_at(dest: Address, value: U8, size: U64)
 
 # ============================================================================
 # D32 (Decimal32) - Intel DFP Library
@@ -55,7 +55,7 @@ external("C") routine rf_f32_to_d32(value: F32) -> U32
 external("C") routine rf_f64_to_d32(value: F64) -> U32
 
 # String conversion
-external("C") routine rf_d32_to_string(bits: U32) -> UAddr
+external("C") routine rf_d32_to_string(bits: U32) -> Address
 external("C") routine rf_d32_from_string(cstr: CStr) -> U32
 
 # ============================================================================
@@ -100,7 +100,7 @@ external("C") routine rf_f32_to_d64(value: F32) -> U64
 external("C") routine rf_f64_to_d64(value: F64) -> U64
 
 # String conversion
-external("C") routine rf_d64_to_string(bits: U64) -> UAddr
+external("C") routine rf_d64_to_string(bits: U64) -> Address
 external("C") routine rf_d64_from_string(cstr: CStr) -> U64
 
 # ============================================================================
@@ -171,7 +171,7 @@ external("C") routine rf_f32_to_d128(value: F32) -> D128
 external("C") routine rf_f64_to_d128(value: F64) -> D128
 
 # String conversion
-external("C") routine rf_d128_to_string(low: U64, high: U64) -> UAddr
+external("C") routine rf_d128_to_string(low: U64, high: U64) -> Address
 external("C") routine rf_d128_from_string(cstr: CStr) -> D128
 
 # ============================================================================
@@ -234,33 +234,33 @@ external("C") routine rf_moment_now() -> Moment
 # C String Operations (CStr / char*)
 # ============================================================================
 
-external("C") routine rf_cstr_count(ptr: UAddr) -> UAddr
-external("C") routine rf_cstr_compare(a: UAddr, b: UAddr) -> S32
-external("C") routine rf_cstr_copy(dest: UAddr, src: UAddr)
-external("C") routine rf_cstr_len(ptr: CStr) -> UAddr
+external("C") routine rf_cstr_count(ptr: Address) -> U64
+external("C") routine rf_cstr_compare(a: Address, b: Address) -> S32
+external("C") routine rf_cstr_copy(dest: Address, src: Address)
+external("C") routine rf_cstr_count(ptr: CStr) -> U64
 
 # ============================================================================
 # Wide C String Operations (CWStr / wchar_t*)
 # ============================================================================
 
-external("C") routine rf_cwstr_count(ptr: UAddr) -> UAddr
-external("C") routine rf_cwstr_compare(a: UAddr, b: UAddr) -> S32
-external("C") routine rf_cwstr_copy(dest: UAddr, src: UAddr)
+external("C") routine rf_cwstr_count(ptr: Address) -> U64
+external("C") routine rf_cwstr_compare(a: Address, b: Address) -> S32
+external("C") routine rf_cwstr_copy(dest: Address, src: Address)
 
 # ============================================================================
 # Console I/O
 # ============================================================================
 
 # Output (stdout and stderr) - count-based (no null terminator required)
-external("C") routine rf_console_show(ptr: UAddr, len: U64)
-external("C") routine rf_console_alert(ptr: UAddr, len: U64)
+external("C") routine rf_console_show(ptr: Address, len: U64)
+external("C") routine rf_console_alert(ptr: Address, len: U64)
 
 # Input (returns heap-allocated C string pointer)
-external("C") routine rf_console_get_line() -> UAddr
-external("C") routine rf_console_get_word() -> UAddr
-external("C") routine rf_console_get_all() -> UAddr
-external("C") routine rf_console_get_letters(count: UAddr) -> UAddr
-external("C") routine rf_console_get_bytes(count: UAddr) -> UAddr
+external("C") routine rf_console_get_line() -> Address
+external("C") routine rf_console_get_word() -> Address
+external("C") routine rf_console_get_all() -> Address
+external("C") routine rf_console_get_letters(count: U64) -> Address
+external("C") routine rf_console_get_bytes(count: U64) -> Address
 
 # Control
 external("C") routine rf_console_flush()
@@ -268,117 +268,117 @@ external("C") routine rf_console_clear()
 
 # ============================================================================
 # Integer (Arbitrary Precision) - LibTomMath
-# All functions use opaque handles (UAddr) to mp_int structures
+# All functions use opaque handles (Address) to mp_int structures
 # ============================================================================
 
 # Lifecycle
-external("C") routine rf_bigint_new() -> UAddr
-external("C") routine rf_bigint_clear(handle: UAddr)
-external("C") routine rf_bigint_copy(dest: UAddr, src: UAddr)
+external("C") routine rf_bigint_new() -> Address
+external("C") routine rf_bigint_clear(handle: Address)
+external("C") routine rf_bigint_copy(dest: Address, src: Address)
 
 # Initialization from values
-external("C") routine rf_bigint_set_i64(handle: UAddr, value: S64)
-external("C") routine rf_bigint_set_u64(handle: UAddr, value: U64)
-external("C") routine rf_bigint_set_str(handle: UAddr, str: UAddr, radix: S32) -> S32
+external("C") routine rf_bigint_set_i64(handle: Address, value: S64)
+external("C") routine rf_bigint_set_u64(handle: Address, value: U64)
+external("C") routine rf_bigint_set_str(handle: Address, str: Address, radix: S32) -> S32
 
 # Extraction to values
-external("C") routine rf_bigint_get_i64(handle: UAddr) -> S64
-external("C") routine rf_bigint_get_u64(handle: UAddr) -> U64
-external("C") routine rf_bigint_get_str(handle: UAddr, radix: S32) -> UAddr
+external("C") routine rf_bigint_get_i64(handle: Address) -> S64
+external("C") routine rf_bigint_get_u64(handle: Address) -> U64
+external("C") routine rf_bigint_get_str(handle: Address, radix: S32) -> Address
 
 # Arithmetic (result = op(a, b) or result = op(a))
-external("C") routine rf_bigint_add(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_sub(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_mul(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_div(quotient: UAddr, remainder: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_mod(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_neg(result: UAddr, a: UAddr)
+external("C") routine rf_bigint_add(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_sub(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_mul(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_div(quotient: Address, remainder: Address, a: Address, b: Address)
+external("C") routine rf_bigint_mod(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_neg(result: Address, a: Address)
 
 # Comparison
-external("C") routine rf_bigint_cmp(a: UAddr, b: UAddr) -> S32
+external("C") routine rf_bigint_cmp(a: Address, b: Address) -> S32
 
 # Bitwise operations
-external("C") routine rf_bigint_and(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_or(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_xor(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_shl(result: UAddr, a: UAddr, bits: S32)
-external("C") routine rf_bigint_shr(result: UAddr, a: UAddr, bits: S32)
+external("C") routine rf_bigint_and(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_or(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_xor(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_shl(result: Address, a: Address, bits: S32)
+external("C") routine rf_bigint_shr(result: Address, a: Address, bits: S32)
 
 # Math operations
-external("C") routine rf_bigint_abs(result: UAddr, a: UAddr)
-external("C") routine rf_bigint_pow(result: UAddr, base: UAddr, exp: U32)
-external("C") routine rf_bigint_sqrt(result: UAddr, a: UAddr)
-external("C") routine rf_bigint_gcd(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigint_lcm(result: UAddr, a: UAddr, b: UAddr)
+external("C") routine rf_bigint_abs(result: Address, a: Address)
+external("C") routine rf_bigint_pow(result: Address, base: Address, exp: U32)
+external("C") routine rf_bigint_sqrt(result: Address, a: Address)
+external("C") routine rf_bigint_gcd(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_lcm(result: Address, a: Address, b: Address)
 
 # Query functions
-external("C") routine rf_bigint_is_zero(handle: UAddr) -> S32
-external("C") routine rf_bigint_is_neg(handle: UAddr) -> S32
+external("C") routine rf_bigint_is_zero(handle: Address) -> S32
+external("C") routine rf_bigint_is_neg(handle: Address) -> S32
 
 # ============================================================================
 # Decimal (Arbitrary Precision) - MAPM Library
-# All functions use opaque handles (UAddr) to M_APM structures
+# All functions use opaque handles (Address) to M_APM structures
 # ============================================================================
 
 # Lifecycle
-external("C") routine rf_bigdec_new() -> UAddr
-external("C") routine rf_bigdec_free(handle: UAddr)
-external("C") routine rf_bigdec_copy(src: UAddr) -> UAddr
+external("C") routine rf_bigdec_new() -> Address
+external("C") routine rf_bigdec_free(handle: Address)
+external("C") routine rf_bigdec_copy(src: Address) -> Address
 
 # Initialization from values
-external("C") routine rf_bigdec_set_i64(handle: UAddr, value: S64)
-external("C") routine rf_bigdec_set_f64(handle: UAddr, value: F64)
-external("C") routine rf_bigdec_set_str(handle: UAddr, str: UAddr)
+external("C") routine rf_bigdec_set_i64(handle: Address, value: S64)
+external("C") routine rf_bigdec_set_f64(handle: Address, value: F64)
+external("C") routine rf_bigdec_set_str(handle: Address, str: Address)
 
 # Extraction to values
-external("C") routine rf_bigdec_get_i64(handle: UAddr) -> S64
-external("C") routine rf_bigdec_get_f64(handle: UAddr) -> F64
-external("C") routine rf_bigdec_get_str(handle: UAddr, decimal_places: S32) -> UAddr
+external("C") routine rf_bigdec_get_i64(handle: Address) -> S64
+external("C") routine rf_bigdec_get_f64(handle: Address) -> F64
+external("C") routine rf_bigdec_get_str(handle: Address, decimal_places: S32) -> Address
 
 # Arithmetic
-external("C") routine rf_bigdec_add(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigdec_sub(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigdec_mul(result: UAddr, a: UAddr, b: UAddr)
-external("C") routine rf_bigdec_div(result: UAddr, precision: S32, a: UAddr, b: UAddr)
-external("C") routine rf_bigdec_neg(result: UAddr, a: UAddr)
+external("C") routine rf_bigdec_add(result: Address, a: Address, b: Address)
+external("C") routine rf_bigdec_sub(result: Address, a: Address, b: Address)
+external("C") routine rf_bigdec_mul(result: Address, a: Address, b: Address)
+external("C") routine rf_bigdec_div(result: Address, precision: S32, a: Address, b: Address)
+external("C") routine rf_bigdec_neg(result: Address, a: Address)
 
 # Comparison
-external("C") routine rf_bigdec_cmp(a: UAddr, b: UAddr) -> S32
+external("C") routine rf_bigdec_cmp(a: Address, b: Address) -> S32
 
 # Math operations (with precision)
-external("C") routine rf_bigdec_abs(result: UAddr, a: UAddr)
-external("C") routine rf_bigdec_sqrt(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_pow(result: UAddr, precision: S32, base: UAddr, exp: UAddr)
-external("C") routine rf_bigdec_exp(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_log(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_log10(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_abs(result: Address, a: Address)
+external("C") routine rf_bigdec_sqrt(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_pow(result: Address, precision: S32, base: Address, exp: Address)
+external("C") routine rf_bigdec_exp(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_log(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_log10(result: Address, precision: S32, a: Address)
 
 # Trigonometric functions (with precision)
-external("C") routine rf_bigdec_sin(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_cos(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_tan(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_asin(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_acos(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_atan(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_sin(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_cos(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_tan(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_asin(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_acos(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_atan(result: Address, precision: S32, a: Address)
 
 # Hyperbolic functions (with precision)
-external("C") routine rf_bigdec_sinh(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_cosh(result: UAddr, precision: S32, a: UAddr)
-external("C") routine rf_bigdec_tanh(result: UAddr, precision: S32, a: UAddr)
+external("C") routine rf_bigdec_sinh(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_cosh(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_tanh(result: Address, precision: S32, a: Address)
 
 # Rounding operations
-external("C") routine rf_bigdec_ceil(result: UAddr, a: UAddr)
-external("C") routine rf_bigdec_floor(result: UAddr, a: UAddr)
-external("C") routine rf_bigdec_round(result: UAddr, decimal_places: S32, a: UAddr)
-external("C") routine rf_bigdec_trunc(result: UAddr, decimal_places: S32, a: UAddr)
+external("C") routine rf_bigdec_ceil(result: Address, a: Address)
+external("C") routine rf_bigdec_floor(result: Address, a: Address)
+external("C") routine rf_bigdec_round(result: Address, decimal_places: S32, a: Address)
+external("C") routine rf_bigdec_trunc(result: Address, decimal_places: S32, a: Address)
 
 # Query functions
-external("C") routine rf_bigdec_is_zero(handle: UAddr) -> S32
-external("C") routine rf_bigdec_is_neg(handle: UAddr) -> S32
+external("C") routine rf_bigdec_is_zero(handle: Address) -> S32
+external("C") routine rf_bigdec_is_neg(handle: Address) -> S32
 
 # Constants (computed with precision)
-external("C") routine rf_bigdec_pi(result: UAddr, precision: S32)
-external("C") routine rf_bigdec_e(result: UAddr, precision: S32)
+external("C") routine rf_bigdec_pi(result: Address, precision: S32)
+external("C") routine rf_bigdec_e(result: Address, precision: S32)
 
 # ============================================================================
 # Text Parsing (CStr -> primitive values)
@@ -394,12 +394,12 @@ external("C") routine rf_parse_F128(cstr: CStr) -> F128
 
 # ============================================================================
 # Text Formatting (primitive values -> heap-allocated CStr pointer)
-# Returns UAddr to heap-allocated null-terminated UTF-8 string
+# Returns Address to heap-allocated null-terminated UTF-8 string
 # Integer formatting is now pure RazorForge (see Text.Convert.rf)
 # ============================================================================
 
 # Binary floating point
-external("C") routine rf_format_F16(value: F16) -> UAddr
-external("C") routine rf_format_F32(value: F32) -> UAddr
-external("C") routine rf_format_F64(value: F64) -> UAddr
-external("C") routine rf_format_F128(value: F128) -> UAddr
+external("C") routine rf_format_F16(value: F16) -> Address
+external("C") routine rf_format_F32(value: F32) -> Address
+external("C") routine rf_format_F64(value: F64) -> Address
+external("C") routine rf_format_F128(value: F128) -> Address

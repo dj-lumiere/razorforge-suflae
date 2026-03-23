@@ -13,9 +13,9 @@ module Collections
 
 entity Deque[T]
   secret data: Snatched[U8]    # Circular buffer (raw storage for T elements)
-  secret start: UAddr          # Index of first element
-  secret count: UAddr          # Number of elements
-  secret capacity: UAddr       # Total allocated slots
+  secret start: U64          # Index of first element
+  secret count: U64          # Number of elements
+  secret capacity: U64       # Total allocated slots
 
 # ============================================================================
 # Creators
@@ -24,17 +24,17 @@ entity Deque[T]
 routine Deque[T].__create__() -> Deque[T]
   return Deque[T](
     data: snatched_none[U8](),
-    start: 0uaddr,
-    count: 0uaddr,
-    capacity: 0uaddr
+    start: 0u64,
+    count: 0u64,
+    capacity: 0u64
   )
 
-routine Deque[T].__create__(capacity: UAddr) -> Deque[T]
+routine Deque[T].__create__(capacity: U64) -> Deque[T]
   var byte_size = capacity * data_size[T]()
   return Deque[T](
     data: Snatched[U8](address: rf_allocate_dynamic(byte_size)),
-    start: 0uaddr,
-    count: 0uaddr,
+    start: 0u64,
+    count: 0u64,
     capacity: capacity
   )
 
@@ -42,21 +42,21 @@ routine Deque[T].__create__(capacity: UAddr) -> Deque[T]
 # Internal Helpers
 # ============================================================================
 
-routine Deque[T].wrap_index(index: UAddr) -> UAddr
+routine Deque[T].wrap_index(index: U64) -> U64
   # Wrap index around the circular buffer
-  if me.capacity == 0uaddr
-    return 0uaddr
+  if me.capacity == 0u64
+    return 0u64
   return index % me.capacity
 
-routine Deque[T].physical_index(logical_index: UAddr) -> UAddr
+routine Deque[T].physical_index(logical_index: U64) -> U64
   # Convert logical index (0 = front) to physical index in buffer
   return me.wrap_index(me.start + logical_index)
 
-routine Deque[T].read_at(physical_idx: UAddr) -> T
+routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = physical_idx * data_size[T]()
   return me.data.read[T](byte_offset)
 
-routine Deque[T].write_at(physical_idx: UAddr, value: T)
+routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = physical_idx * data_size[T]()
   me.data.write[T](byte_offset, value)
   return
@@ -65,14 +65,14 @@ routine Deque[T].write_at(physical_idx: UAddr, value: T)
 # Core Operations
 # ============================================================================
 
-routine Deque[T].count() -> UAddr
+routine Deque[T].count() -> U64
   return me.count
 
-routine Deque[T].capacity() -> UAddr
+routine Deque[T].capacity() -> U64
   return me.capacity
 
 routine Deque[T].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine Deque[T].add_last(value: T)
   # Add element to back - O(1) amortized
@@ -80,7 +80,7 @@ routine Deque[T].add_last(value: T)
     me.grow()
   var idx = me.physical_index(me.count)
   me.write_at(idx, value)
-  me.count = me.count + 1uaddr
+  me.count = me.count + 1u64
   return
 
 routine Deque[T].add_first(value: T)
@@ -88,19 +88,19 @@ routine Deque[T].add_first(value: T)
   if me.count >= me.capacity
     me.grow()
   # Decrement start (with wrap)
-  if me.start == 0uaddr
-    me.start = me.capacity - 1uaddr
+  if me.start == 0u64
+    me.start = me.capacity - 1u64
   else
-    me.start = me.start - 1uaddr
+    me.start = me.start - 1u64
   me.write_at(me.start, value)
-  me.count = me.count + 1uaddr
+  me.count = me.count + 1u64
   return
 
 routine Deque[T].remove_last!() -> T
   # Remove and return back element - O(1)
   if me.is_empty()
     absent
-  me.count = me.count - 1uaddr
+  me.count = me.count - 1u64
   var idx = me.physical_index(me.count)
   return me.read_at(idx)
 
@@ -109,8 +109,8 @@ routine Deque[T].remove_first!() -> T
   if me.is_empty()
     absent
   var value = me.read_at(me.start)
-  me.start = me.wrap_index(me.start + 1uaddr)
-  me.count = me.count - 1uaddr
+  me.start = me.wrap_index(me.start + 1u64)
+  me.count = me.count - 1u64
   return value
 
 routine Deque[T].first!() -> T
@@ -123,12 +123,12 @@ routine Deque[T].last!() -> T
   # Peek at back element without removing
   if me.is_empty()
     absent
-  var idx = me.physical_index(me.count - 1uaddr)
+  var idx = me.physical_index(me.count - 1u64)
   return me.read_at(idx)
 
 routine Deque[T].clear()
-  me.start = 0uaddr
-  me.count = 0uaddr
+  me.start = 0u64
+  me.count = 0u64
   return
 
 # ============================================================================
@@ -136,11 +136,11 @@ routine Deque[T].clear()
 # ============================================================================
 
 routine Deque[T].grow()
-  var new_capacity = if me.capacity == 0uaddr then 4uaddr else me.capacity * 2uaddr
+  var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
   me.reserve(new_capacity)
   return
 
-routine Deque[T].reserve(new_capacity: UAddr)
+routine Deque[T].reserve(new_capacity: U64)
   if new_capacity <= me.capacity
     return
 
@@ -148,16 +148,16 @@ routine Deque[T].reserve(new_capacity: UAddr)
   var new_data = Snatched[U8](address: rf_allocate_dynamic(new_byte_size))
 
   # Copy elements in logical order (unwrap the ring)
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     var old_idx = me.physical_index(i)
     var value = me.read_at(old_idx)
     var new_byte_offset = i * data_size[T]()
     Snatched[T](address: new_data.address + new_byte_offset).write(value)
-    i = i + 1uaddr
+    i = i + 1u64
 
   me.data = new_data
-  me.start = 0uaddr
+  me.start = 0u64
   me.capacity = new_capacity
   return
 
@@ -167,7 +167,7 @@ routine Deque[T].reserve(new_capacity: UAddr)
 
 routine Deque[T].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)
@@ -175,7 +175,7 @@ needs I obeys Integral
 
 routine Deque[T].__setitem__![I](index: I, value: T)
 needs I obeys Integral
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)
@@ -203,19 +203,19 @@ needs I obeys Integral
 # Rotation
 # ============================================================================
 
-routine Deque[T].rotate_left(n: UAddr)
+routine Deque[T].rotate_left(n: U64)
   # Rotate elements left by n positions
   # Front elements move to back
-  if me.count == 0uaddr
+  if me.count == 0u64
     return
   var shift = n % me.count
   me.start = me.wrap_index(me.start + shift)
   return
 
-routine Deque[T].rotate_right(n: UAddr)
+routine Deque[T].rotate_right(n: U64)
   # Rotate elements right by n positions
   # Back elements move to front
-  if me.count == 0uaddr
+  if me.count == 0u64
     return
   var shift = n % me.count
   if shift > me.start
@@ -229,17 +229,17 @@ routine Deque[T].rotate_right(n: UAddr)
 # ============================================================================
 
 routine Deque[T].__seq__() -> DequeIterator[T]
-  return DequeIterator[T](deque: me, index: 0uaddr)
+  return DequeIterator[T](deque: me, index: 0u64)
 
 entity DequeIterator[T]
   deque: Deque[T]
-  index: UAddr
+  index: U64
 
 routine DequeIterator[T].next!() -> T
   if me.index >= me.deque.count()
     absent
   var value = me.deque[me.index]
-  me.index = me.index + 1uaddr
+  me.index = me.index + 1u64
   return value
 
 # ============================================================================
@@ -257,11 +257,11 @@ routine Deque[T].last_or_default(default_value: T) -> T
   return me.last!()
 
 routine Deque[T].contains(value: T) -> Bool
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     if me[i] == value
       return true
-    i = i + 1uaddr
+    i = i + 1u64
   return false
 
 # ============================================================================
@@ -271,9 +271,9 @@ routine Deque[T].contains(value: T) -> Bool
 routine Deque[T].__eq__(other: Deque[T]) -> Bool
   if me.count != other.count
     return false
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     if me[i] != other[i]
       return false
-    i = i + 1uaddr
+    i = i + 1u64
   return true

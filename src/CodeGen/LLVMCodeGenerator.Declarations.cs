@@ -695,11 +695,14 @@ public partial class LLVMCodeGenerator
     /// <returns>The routine declaration if found, null otherwise.</returns>
     private RoutineDeclaration? FindGenericAstRoutine(string genericAstName)
     {
-        // Search user program first, then stdlib
-        foreach (var decl in _program.Declarations)
+        // Search user programs first, then stdlib
+        foreach (var (userProgram, _, _) in _userPrograms)
         {
-            if (decl is RoutineDeclaration routine && routine.Name == genericAstName)
-                return routine;
+            foreach (var decl in userProgram.Declarations)
+            {
+                if (decl is RoutineDeclaration routine && routine.Name == genericAstName)
+                    return routine;
+            }
         }
 
         foreach (var (program, _, _) in _stdlibPrograms)

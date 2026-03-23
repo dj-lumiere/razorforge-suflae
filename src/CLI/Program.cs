@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Compiler.Diagnostics;
 using Compiler.Lexer;
 using Compiler.Parser;
@@ -6,6 +7,7 @@ using SemanticAnalysis;
 using SemanticAnalysis.Enums;
 using SemanticAnalysis.Results;
 using Compiler.CodeGen;
+using Builder.Modules;
 
 namespace Builder;
 
@@ -31,7 +33,7 @@ internal class Program
         string command = args[0].ToLowerInvariant().TrimStart('-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "validate-stdlib" || command == "help";
+        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "build" || command == "buildandrun" || command == "validate-stdlib" || command == "help";
 
         if (!isCommand)
         {
@@ -66,6 +68,22 @@ internal class Program
                 }
                 return GenerateCode(sourceFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
 
+            case "build":
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Error: build command requires an entry file path");
+                    return 1;
+                }
+                return BuildMultiFile(entryFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
+
+            case "buildandrun":
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Error: buildandrun command requires an entry file path");
+                    return 1;
+                }
+                return BuildAndRun(entryFile: args[1]);
+
             case "validate-stdlib":
             {
                 string lang = args.Length >= 2 ? args[1].ToLowerInvariant() : "rf";
@@ -94,7 +112,9 @@ internal class Program
         Console.WriteLine("  RazorForge <source-file>                    - Parse file and show AST summary");
         Console.WriteLine("  RazorForge parse <source-file>              - Parse file and show AST summary");
         Console.WriteLine("  RazorForge tokenize <source-file>           - Tokenize file and show tokens");
-        Console.WriteLine("  RazorForge codegen <source-file> [out.ll]   - Generate LLVM IR");
+        Console.WriteLine("  RazorForge codegen <source-file> [out.ll]   - Generate LLVM IR (single file)");
+        Console.WriteLine("  RazorForge build <entry-file> [out.ll]      - Build multi-file project");
+        Console.WriteLine("  RazorForge buildandrun <entry-file>          - Build and execute via lli");
         Console.WriteLine("  RazorForge validate-stdlib [rf|sf]           - Validate stdlib routine bodies");
         Console.WriteLine("  RazorForge help                             - Show this help");
         Console.WriteLine();
@@ -385,6 +405,252 @@ internal class Program
         {
             Console.WriteLine($"Build failed: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Runs the multi-file build pipeline: BuildDriver (parse + resolve imports + topo sort)
+    /// → SemanticAnalyzer.AnalyzeMultiple → LLVMCodeGenerator with multiple user programs.
+    /// Returns 0 on success or 1 if any stage fails.
+    /// </summary>
+    private static int BuildMultiFile(string entryFile, string? outputFile)
+    {
+        if (!File.Exists(entryFile))
+        {
+            Console.WriteLine($"Error: File '{entryFile}' not found.");
+            return 1;
+        }
+
+        bool isSuflae = IsSuflaeFile(entryFile);
+        var language = isSuflae ? Language.Suflae : Language.RazorForge;
+
+        Console.WriteLine($"Building {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
+        Console.WriteLine();
+
+        try
+        {
+            // Determine project root (directory containing the entry file) and stdlib path
+            string projectRoot = Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
+            string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
+
+            // Phase 1: Parse all files and resolve dependencies
+            Console.WriteLine("=== BUILD DRIVER ===");
+            var driver = new BuildDriver(projectRoot, stdlibRoot, language);
+            BuildResult buildResult = driver.CompileFile(Path.GetFullPath(entryFile));
+
+            Console.WriteLine($"Parsed {buildResult.Units.Count} file(s)");
+
+            if (buildResult.Errors.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
+                foreach (var error in buildResult.Errors)
+                {
+                    Console.WriteLine($"  {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Build aborted due to errors.");
+                return 1;
+            }
+
+            if (buildResult.Warnings.Count > 0)
+            {
+                Console.WriteLine($"Warnings: {buildResult.Warnings.Count}");
+                foreach (var warning in buildResult.Warnings)
+                {
+                    Console.WriteLine($"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                }
+            }
+
+            Console.WriteLine($"Initialization order: {string.Join(" → ", buildResult.InitializationOrder)}");
+
+            // Filter out stdlib files — they are already loaded by TypeRegistry/StdlibLoader
+            string normalizedStdlib = Path.GetFullPath(stdlibRoot);
+            var userUnits = buildResult.Units
+                .Where(u => !Path.GetFullPath(u.FilePath).StartsWith(normalizedStdlib, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // Build file list in topological order
+            var unitsByFile = new Dictionary<string, FileBuildUnit>(StringComparer.OrdinalIgnoreCase);
+            foreach (var unit in userUnits)
+            {
+                unitsByFile[unit.FilePath] = unit;
+            }
+
+            // Map module names back to file units for ordering
+            var unitsByModule = new Dictionary<string, FileBuildUnit>(StringComparer.OrdinalIgnoreCase);
+            foreach (var unit in userUnits)
+            {
+                string moduleName = unit.Module ?? Path.GetFileNameWithoutExtension(unit.FilePath);
+                unitsByModule[moduleName] = unit;
+            }
+
+            var orderedFiles = new List<(SyntaxTree.Program Program, string FilePath)>();
+            foreach (string moduleName in buildResult.InitializationOrder)
+            {
+                if (unitsByModule.TryGetValue(moduleName, out var unit))
+                {
+                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                }
+            }
+
+            // Fallback: if init order doesn't cover all units (e.g., entry file with no module decl)
+            foreach (var unit in userUnits)
+            {
+                if (!orderedFiles.Any(f => string.Equals(f.FilePath, unit.FilePath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                }
+            }
+
+            // Phase 2: Semantic analysis (multi-file)
+            Console.WriteLine();
+            Console.WriteLine("=== SEMANTIC ANALYSIS ===");
+
+            var analyzer = new SemanticAnalyzer(language);
+            var result = analyzer.AnalyzeMultiple(orderedFiles);
+
+            Console.WriteLine($"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+
+            if (result.Errors.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
+                foreach (var error in result.Errors)
+                {
+                    Console.WriteLine($"  {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Code generation aborted due to errors.");
+                return 1;
+            }
+
+            if (result.Warnings.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
+                foreach (var warning in result.Warnings)
+                {
+                    Console.WriteLine($"  {warning.FormattedMessage}");
+                }
+            }
+
+            // Phase 3: Code generation (multi-program)
+            Console.WriteLine();
+            Console.WriteLine("=== CODE GENERATION ===");
+
+            var userPrograms = orderedFiles
+                .Select(f =>
+                {
+                    string module = unitsByFile.TryGetValue(f.FilePath, out var u) ? u.Module ?? "" : "";
+                    return (f.Program, f.FilePath, module);
+                })
+                .ToList();
+
+            var stdlibPrograms = result.Registry.StdlibPrograms;
+            var generator = new LLVMCodeGenerator(userPrograms, result.Registry, stdlibPrograms);
+            string llvmIR = generator.Generate();
+
+            // Output
+            string outPath = outputFile ?? Path.ChangeExtension(entryFile, ".ll");
+            File.WriteAllText(outPath, llvmIR);
+            Console.WriteLine($"LLVM IR written to: {outPath}");
+
+            Console.WriteLine();
+            Console.WriteLine("Build successful!");
+            return 0;
+        }
+        catch (GrammarException ex)
+        {
+            Console.WriteLine($"{ex.Message}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Build failed: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Builds a multi-file project and executes the resulting LLVM IR via lli.
+    /// Returns 0 on success or 1 if build or execution fails.
+    /// </summary>
+    private static int BuildAndRun(string entryFile)
+    {
+        // Build first (to a temp .ll file)
+        string llFile = Path.ChangeExtension(entryFile, ".ll");
+        int buildResult = BuildMultiFile(entryFile: entryFile, outputFile: llFile);
+        if (buildResult != 0)
+        {
+            return buildResult;
+        }
+
+        // Find the runtime library next to the executable
+        string? exeDir = Path.GetDirectoryName(typeof(Program).Assembly.Location);
+        string runtimeLib = "";
+        if (exeDir != null)
+        {
+            // Try both naming conventions (non-lib-prefixed works with lli on Windows)
+            string altPath = Path.Combine(exeDir, "razorforge_runtime.dll");
+            string libPath = Path.Combine(exeDir, "librazorforge_runtime.dll");
+            if (File.Exists(altPath))
+                runtimeLib = altPath;
+            else if (File.Exists(libPath))
+                runtimeLib = libPath;
+        }
+
+        // Execute via lli
+        Console.WriteLine();
+        Console.WriteLine("=== EXECUTION ===");
+
+        var lliArgs = new List<string>();
+        if (!string.IsNullOrEmpty(runtimeLib))
+        {
+            lliArgs.Add($"--dlopen=\"{runtimeLib}\"");
+        }
+        lliArgs.Add($"\"{llFile}\"");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "lli",
+            Arguments = string.Join(" ", lliArgs),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                Console.WriteLine("Error: Failed to start lli.");
+                return 1;
+            }
+
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (!string.IsNullOrEmpty(stdout))
+                Console.Write(stdout);
+            if (!string.IsNullOrEmpty(stderr))
+                Console.Error.Write(stderr);
+
+            if (process.ExitCode != 0)
+            {
+                Console.WriteLine($"lli exited with code {process.ExitCode}");
+            }
+
+            return process.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to execute lli: {ex.Message}");
+            Console.WriteLine("Make sure LLVM is installed and 'lli' is on your PATH.");
             return 1;
         }
     }

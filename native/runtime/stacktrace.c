@@ -14,7 +14,7 @@
 // ============================================================================
 
 typedef uint32_t rf_U32;
-typedef uintptr_t rf_UAddr;
+typedef uintptr_t rf_address;
 
 // RoutineRecord - matches RazorForge layout (5 x u32 = 20 bytes)
 typedef struct
@@ -35,10 +35,10 @@ typedef struct
     rf_U32 depth;
 } rf_RoutineTrace;
 
-// MessageHandle record - 1 x uaddr = 8 bytes on 64-bit
+// MessageHandle record - 1 x address = 8 bytes on 64-bit
 typedef struct
 {
-    rf_UAddr ptr;
+    rf_address ptr;
 } rf_MessageHandle;
 
 // Error record - matches RazorForge layout
@@ -323,7 +323,7 @@ void __rf_create_error(
 {
     if (!out_error) return;
 
-    out_error->message_handle.ptr = (rf_UAddr)message;
+    out_error->message_handle.ptr = (rf_address)message;
     __rf_stack_capture(&out_error->routine_trace);
     out_error->file_id = file_id;
     out_error->routine_id = routine_id;

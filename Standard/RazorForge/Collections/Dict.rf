@@ -15,14 +15,14 @@ import Collections.SortedDict
 module Core
 
 # Initial number of buckets
-preset DICT_INITIAL_BUCKETS: UAddr = 16uaddr
+preset DICT_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
-preset DICT_LOAD_FACTOR: UAddr = 75uaddr
+preset DICT_LOAD_FACTOR: U64 = 75u64
 
 entity Dict[K, V]
 needs K obeys Hashable, Comparable
   secret buckets: List[SortedDict[K, V]]
-  secret count: UAddr
+  secret count: U64
 
 # ============================================================================
 # Creators
@@ -32,83 +32,83 @@ routine Dict[K, V].__create__() -> Dict[K, V]
   var buckets = List[SortedDict[K, V]](DICT_INITIAL_BUCKETS)
   var dict = Dict[K, V](
     buckets: buckets,
-    count: 0uaddr
+    count: 0u64
   )
-  var i = 0uaddr
+  var i = 0u64
   while i < DICT_INITIAL_BUCKETS
     var empty_dict = SortedDict[K, V]()
     dict.buckets.add_last(empty_dict)
-    i = i + 1uaddr
+    i = i + 1u64
   return dict
 
-routine Dict[K, V].__create__(capacity: UAddr) -> Dict[K, V]
+routine Dict[K, V].__create__(capacity: U64) -> Dict[K, V]
   var bucket_count = if capacity < DICT_INITIAL_BUCKETS then DICT_INITIAL_BUCKETS else capacity
   var buckets = List[SortedDict[K, V]](bucket_count)
   var dict = Dict[K, V](
     buckets: buckets,
-    count: 0uaddr
+    count: 0u64
   )
-  var i = 0uaddr
+  var i = 0u64
   while i < bucket_count
     var empty_dict = SortedDict[K, V]()
     dict.buckets.add_last(empty_dict)
-    i = i + 1uaddr
+    i = i + 1u64
   return dict
 
 # ============================================================================
 # Internal Operations
 # ============================================================================
 
-routine Dict[K, V].bucket_index(key: K) -> UAddr
+routine Dict[K, V].bucket_index(key: K) -> U64
   var hash = key.__hash__()
   return hash % me.buckets.count()
 
 routine Dict[K, V].should_rehash() -> Bool
-  var load = (me.count * 100uaddr) / me.buckets.count()
+  var load = (me.count * 100u64) / me.buckets.count()
   return load > DICT_LOAD_FACTOR
 
 routine Dict[K, V].rehash()
   var old_buckets = me.buckets
-  var new_bucket_count = old_buckets.count() * 2uaddr
+  var new_bucket_count = old_buckets.count() * 2u64
 
   me.buckets = List[SortedDict[K, V]](new_bucket_count)
-  var i = 0uaddr
+  var i = 0u64
   while i < new_bucket_count
     var empty_dict = SortedDict[K, V]()
     me.buckets.add_last(empty_dict)
-    i = i + 1uaddr
-  me.count = 0uaddr
+    i = i + 1u64
+  me.count = 0u64
 
   # Reinsert all entries
-  i = 0uaddr
+  i = 0u64
   while i < old_buckets.count()
     var bucket = old_buckets[i]
     var keys = bucket.keys()
-    var j = 0uaddr
+    var j = 0u64
     while j < keys.count()
       var key = keys[j]
       var value = bucket[key]
       me.add(key, value)
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine Dict[K, V].count() -> UAddr
+routine Dict[K, V].count() -> U64
   return me.count
 
 routine Dict[K, V].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine Dict[K, V].clear()
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     me.buckets[i].clear()
-    i = i + 1uaddr
-  me.count = 0uaddr
+    i = i + 1u64
+  me.count = 0u64
   return
 
 routine Dict[K, V].contains_key(key: K) -> Bool
@@ -124,7 +124,7 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
   var existed = me.buckets[idx].contains_key(key)
   me.buckets[idx].add(key, value)
   if not existed
-    me.count = me.count + 1uaddr
+    me.count = me.count + 1u64
     return true
   return false
 
@@ -132,7 +132,7 @@ routine Dict[K, V].remove(key: K) -> Bool
   # Returns true if removed, false if not found
   var idx = me.bucket_index(key)
   if me.buckets[idx].remove(key)
-    me.count = me.count - 1uaddr
+    me.count = me.count - 1u64
     return true
   return false
 
@@ -164,40 +164,40 @@ routine Dict[K, V].__setitem__(key: K, value: V)
 
 routine Dict[K, V].keys() -> List[K]
   var result = List[K](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var bucket_keys = me.buckets[i].keys()
-    var j = 0uaddr
+    var j = 0u64
     while j < bucket_keys.count()
       result.add_last(bucket_keys[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return result
 
 routine Dict[K, V].values() -> List[V]
   var result = List[V](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var bucket_values = me.buckets[i].values()
-    var j = 0uaddr
+    var j = 0u64
     while j < bucket_values.count()
       result.add_last(bucket_values[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return result
 
 routine Dict[K, V].entries() -> List[Tuple[K, V]]
   var result = List[Tuple[K, V]](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var bucket_keys = me.buckets[i].keys()
-    var j = 0uaddr
+    var j = 0u64
     while j < bucket_keys.count()
       var key = bucket_keys[j]
       var value = me.buckets[i].get!(key)
       result.add_last((key, value))
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return result
 
 # ============================================================================
@@ -207,15 +207,15 @@ routine Dict[K, V].entries() -> List[Tuple[K, V]]
 routine Dict[K, V].__seq__() -> DictIterator[K, V]
   return DictIterator[K, V](
     dict: me,
-    bucket_idx: 0uaddr,
-    entry_idx: 0uaddr,
+    bucket_idx: 0u64,
+    entry_idx: 0u64,
     current_keys: List[K]()
   )
 
 entity DictIterator[K, V]
   dict: Dict[K, V]
-  bucket_idx: UAddr
-  entry_idx: UAddr
+  bucket_idx: U64
+  entry_idx: U64
   current_keys: List[K]
 
 routine DictIterator[K, V].next!() -> Tuple[K, V]
@@ -224,12 +224,12 @@ routine DictIterator[K, V].next!() -> Tuple[K, V]
     if me.bucket_idx >= me.dict.buckets.count()
       absent
     me.current_keys = me.dict.buckets[me.bucket_idx].keys()
-    me.entry_idx = 0uaddr
-    me.bucket_idx = me.bucket_idx + 1uaddr
+    me.entry_idx = 0u64
+    me.bucket_idx = me.bucket_idx + 1u64
 
   var key = me.current_keys[me.entry_idx]
   var value = me.dict.get!(key)
-  me.entry_idx = me.entry_idx + 1uaddr
+  me.entry_idx = me.entry_idx + 1u64
   return (key, value)
 
 # ============================================================================
@@ -240,16 +240,16 @@ routine Dict[K, V].__eq__(other: Dict[K, V]) -> Bool
   if me.count != other.count
     return false
 
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var bucket_keys = me.buckets[i].keys()
-    var j = 0uaddr
+    var j = 0u64
     while j < bucket_keys.count()
       var key = bucket_keys[j]
       if not other.contains_key(key)
         return false
       if me.get!(key) != other.get!(key)
         return false
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return true

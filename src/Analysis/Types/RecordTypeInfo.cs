@@ -31,7 +31,7 @@ public sealed class RecordTypeInfo : TypeInfo
     /// <summary>
     /// Whether this is a single-member-variable record that wraps an intrinsic type.
     /// These records can be treated as their underlying LLVM type for operations.
-    /// Examples: s32, bool, f64, uaddr
+    /// Examples: s32, bool, f64, Address
     /// </summary>
     public bool IsSingleMemberVariableWrapper => MemberVariables is [{ Type: IntrinsicTypeInfo }];
 

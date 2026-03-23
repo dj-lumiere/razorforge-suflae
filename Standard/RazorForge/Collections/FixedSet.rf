@@ -23,88 +23,88 @@ preset SLOT_TOMBSTONE: U8 = 2u8
 # Uses robin hood open addressing for cache-friendly probing
 resident FixedSet[T, N]
 needs T obeys Hashable
-needs N is UAddr
-  secret count: UAddr           # Current number of elements
-  secret tombstones: UAddr      # Number of tombstones (for load factor)
-  # N slots of (T, U8 state, UAddr probe_distance) stored inline by compiler
+needs N is U64
+  secret count: U64           # Current number of elements
+  secret tombstones: U64      # Number of tombstones (for load factor)
+  # N slots of (T, U8 state, U64 probe_distance) stored inline by compiler
 
 # ============================================================================
 # Creators
 # ============================================================================
 
 routine FixedSet[T, N].__create__() -> FixedSet[T, N]
-  var set = FixedSet[T, N](count: 0uaddr, tombstones: 0uaddr)
+  var set = FixedSet[T, N](count: 0u64, tombstones: 0u64)
   # Initialize all slots as empty
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     set.set_state(i, SLOT_EMPTY)
-    i = i + 1uaddr
+    i = i + 1u64
   return set
 
 # ============================================================================
 # Internal Slot Access
 # ============================================================================
 
-routine FixedSet[T, N].get_value(slot: UAddr) -> T
+routine FixedSet[T, N].get_value(slot: U64) -> T
   # Access slot value (internal)
-  return me[slot * 3uaddr]
+  return me[slot * 3u64]
 
-routine FixedSet[T, N].set_value(slot: UAddr, value: T)
-  me[slot * 3uaddr] = value
+routine FixedSet[T, N].set_value(slot: U64, value: T)
+  me[slot * 3u64] = value
   return
 
-routine FixedSet[T, N].get_state(slot: UAddr) -> U8
-  return me[slot * 3uaddr + 1uaddr]
+routine FixedSet[T, N].get_state(slot: U64) -> U8
+  return me[slot * 3u64 + 1u64]
 
-routine FixedSet[T, N].set_state(slot: UAddr, state: U8)
-  me[slot * 3uaddr + 1uaddr] = state
+routine FixedSet[T, N].set_state(slot: U64, state: U8)
+  me[slot * 3u64 + 1u64] = state
   return
 
-routine FixedSet[T, N].get_probe_dist(slot: UAddr) -> UAddr
-  return me[slot * 3uaddr + 2uaddr]
+routine FixedSet[T, N].get_probe_dist(slot: U64) -> U64
+  return me[slot * 3u64 + 2u64]
 
-routine FixedSet[T, N].set_probe_dist(slot: UAddr, dist: UAddr)
-  me[slot * 3uaddr + 2uaddr] = dist
+routine FixedSet[T, N].set_probe_dist(slot: U64, dist: U64)
+  me[slot * 3u64 + 2u64] = dist
   return
 
-routine FixedSet[T, N].hash_index(value: T) -> UAddr
+routine FixedSet[T, N].hash_index(value: T) -> U64
   var hash = value.__hash__()
   return hash % N
 
-routine FixedSet[T, N].next_slot(slot: UAddr) -> UAddr
-  return (slot + 1uaddr) % N
+routine FixedSet[T, N].next_slot(slot: U64) -> U64
+  return (slot + 1u64) % N
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine FixedSet[T, N].count() -> UAddr
+routine FixedSet[T, N].count() -> U64
   return me.count
 
-routine FixedSet[T, N].capacity() -> UAddr
+routine FixedSet[T, N].capacity() -> U64
   return N
 
 routine FixedSet[T, N].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine FixedSet[T, N].is_full() -> Bool
   return me.count == N
 
-routine FixedSet[T, N].remaining() -> UAddr
+routine FixedSet[T, N].remaining() -> U64
   return N - me.count
 
 routine FixedSet[T, N].clear()
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     me.set_state(i, SLOT_EMPTY)
-    i = i + 1uaddr
-  me.count = 0uaddr
-  me.tombstones = 0uaddr
+    i = i + 1u64
+  me.count = 0u64
+  me.tombstones = 0u64
   return
 
 routine FixedSet[T, N].contains(value: T) -> Bool
   var slot = me.hash_index(value)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
 
   loop
     var state = me.get_state(slot)
@@ -121,7 +121,7 @@ routine FixedSet[T, N].contains(value: T) -> Bool
         return true
 
     slot = FixedSet[T, N].next_slot(slot)
-    probe_dist = probe_dist + 1uaddr
+    probe_dist = probe_dist + 1u64
 
     # Safety: prevent infinite loop
     if probe_dist >= N
@@ -134,7 +134,7 @@ routine FixedSet[T, N].insert!(value: T) -> Bool
     throw IndexOutOfBoundsError(index: me.count, count: N)
 
   var slot = me.hash_index(value)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
   var inserting_value = value
   var inserting_dist = probe_dist
 
@@ -146,9 +146,9 @@ routine FixedSet[T, N].insert!(value: T) -> Bool
       me.set_value(slot, inserting_value)
       me.set_state(slot, SLOT_OCCUPIED)
       me.set_probe_dist(slot, inserting_dist)
-      me.count = me.count + 1uaddr
+      me.count = me.count + 1u64
       if state == SLOT_TOMBSTONE
-        me.tombstones = me.tombstones - 1uaddr
+        me.tombstones = me.tombstones - 1u64
       return true
 
     if state == SLOT_OCCUPIED
@@ -170,7 +170,7 @@ routine FixedSet[T, N].insert!(value: T) -> Bool
         inserting_dist = temp_dist
 
     slot = FixedSet[T, N].next_slot(slot)
-    inserting_dist = inserting_dist + 1uaddr
+    inserting_dist = inserting_dist + 1u64
 
     # Safety: prevent infinite loop
     if inserting_dist >= N
@@ -179,7 +179,7 @@ routine FixedSet[T, N].insert!(value: T) -> Bool
 routine FixedSet[T, N].remove(value: T) -> Bool
   # Returns true if removed, false if not found
   var slot = me.hash_index(value)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
 
   loop
     var state = me.get_state(slot)
@@ -194,16 +194,16 @@ routine FixedSet[T, N].remove(value: T) -> Bool
       if me.get_value(slot) == value
         # Found it - use backward shift deletion
         me.backward_shift_delete(slot)
-        me.count = me.count - 1uaddr
+        me.count = me.count - 1u64
         return true
 
     slot = FixedSet[T, N].next_slot(slot)
-    probe_dist = probe_dist + 1uaddr
+    probe_dist = probe_dist + 1u64
 
     if probe_dist >= N
       return false
 
-routine FixedSet[T, N].backward_shift_delete(slot: UAddr)
+routine FixedSet[T, N].backward_shift_delete(slot: U64)
   # Shift elements backward to maintain robin hood invariant
   var current = slot
   var next = FixedSet[T, N].next_slot(current)
@@ -212,14 +212,14 @@ routine FixedSet[T, N].backward_shift_delete(slot: UAddr)
     var state = me.get_state(next)
 
     # Stop if empty or element at home position
-    if state != SLOT_OCCUPIED or me.get_probe_dist(next) == 0uaddr
+    if state != SLOT_OCCUPIED or me.get_probe_dist(next) == 0u64
       me.set_state(current, SLOT_EMPTY)
       return
 
     # Shift element backward
     me.set_value(current, me.get_value(next))
     me.set_state(current, SLOT_OCCUPIED)
-    me.set_probe_dist(current, me.get_probe_dist(next) - 1uaddr)
+    me.set_probe_dist(current, me.get_probe_dist(next) - 1u64)
 
     current = next
     next = FixedSet[T, N].next_slot(next)
@@ -231,11 +231,11 @@ routine FixedSet[T, N].backward_shift_delete(slot: UAddr)
 
 routine FixedSet[T, N].to_list() -> List[T]
   var result = List[T](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     if me.get_state(i) == SLOT_OCCUPIED
       result.add_last(me.get_value(i))
-    i = i + 1uaddr
+    i = i + 1u64
   return result
 
 # ============================================================================
@@ -243,19 +243,19 @@ routine FixedSet[T, N].to_list() -> List[T]
 # ============================================================================
 
 routine FixedSet[T, N].iter() -> FixedSetIterator[T, N]
-  return FixedSetIterator[T, N](set: me, slot: 0uaddr)
+  return FixedSetIterator[T, N](set: me, slot: 0u64)
 
 record FixedSetIterator[T, N]
   set: FixedSet[T, N]
-  slot: UAddr
+  slot: U64
 
 routine FixedSetIterator[T, N].next!() -> T
   while me.slot < N
     if me.set.get_state(me.slot) == SLOT_OCCUPIED
       var value = me.set.get_value(me.slot)
-      me.slot = me.slot + 1uaddr
+      me.slot = me.slot + 1u64
       return value
-    me.slot = me.slot + 1uaddr
+    me.slot = me.slot + 1u64
   absent
 
 # ============================================================================
@@ -266,10 +266,10 @@ routine FixedSet[T, N].__eq__(other: FixedSet[T, N]) -> Bool
   if me.count != other.count
     return false
 
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     if me.get_state(i) == SLOT_OCCUPIED
       if not other.contains(me.get_value(i))
         return false
-    i = i + 1uaddr
+    i = i + 1u64
   return true

@@ -1,0 +1,85 @@
+# RazorForge Address (unsigned 64-bit memory address) native type implementation
+# Maps to LLVM i64 — always 64-bit (RazorForge is 64-bit only)
+# Used for raw memory addresses and pointer values
+#
+# RESTRICTED SEMANTICS:
+# - Only wrapping arithmetic: +%, -%, *%, //
+# - No regular +, -, * operators
+# - No implicit conversions — use Snatched[T] for conversion
+# - No type dominance — does not participate in mixed-type arithmetic
+# - Hex display by default
+# - Literal suffix: _a (e.g., 0x40020000_a)
+
+module Core
+
+# Core Address type definition - maps to LLVM i64
+@llvm("i64")
+record Address obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# ============================================================================
+# No __create__ routines — Address has no implicit or explicit conversions.
+# Use Snatched[T] for converting between Address and other types.
+# ============================================================================
+
+# Identity conversion for protocol compatibility
+routine Address.__create__(from: Address) -> Address
+  return from
+
+# ============================================================================
+# Wrapping Arithmetic Operations (+%, -%, *%)
+# These explicitly wrap on overflow - the only arithmetic allowed on Address
+# ============================================================================
+
+routine Address.__add_wrap__(you: Address) -> Address
+  return add[Address](me, you)
+
+routine Address.__sub_wrap__(you: Address) -> Address
+  return sub[Address](me, you)
+
+routine Address.__mul_wrap__(you: Address) -> Address
+  return mul[Address](me, you)
+
+# ============================================================================
+# Floor Division (//)
+# Address supports // (Euclidean quotient) but NOT %
+# ============================================================================
+
+routine Address.__floordiv__(you: Address) -> Address
+  return udiv[Address](me, you)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine Address.__eq__(you: Address) -> Bool
+  return icmp_eq[Address](me, you)
+
+routine Address.__cmp__(you: Address) -> ComparisonSign
+  if icmp_ult[Address](me, you)
+    return ME_SMALL
+  if icmp_ugt[Address](me, you)
+    return ME_LARGE
+  return EQUAL
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine Address.min(you: Address) -> Address
+  if me <= you
+    return me
+  return you
+
+routine Address.max(you: Address) -> Address
+  if me >= you
+    return me
+  return you
+
+routine Address.is_power_of_two() -> Bool
+  return me != 0_a and (me & (me -% 1_a)) == 0_a
+
+# to_text always displays as hex
+@readonly
+routine Text.__create__(from: Address) -> Text
+  return format_hex[Address](from)

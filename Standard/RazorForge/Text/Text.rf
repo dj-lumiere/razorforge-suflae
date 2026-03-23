@@ -39,11 +39,11 @@ routine Text.__create__(from: CStr) -> Text
     return Text()
   danger!
     var len = from.count()
-    if len == 0uaddr
+    if len == 0u64
       return Text()
 
     var list = List[Letter]()
-    var i: UAddr = 0uaddr
+    var i: U64 = 0u64
     loop
       if i >= len
         break
@@ -52,32 +52,32 @@ routine Text.__create__(from: CStr) -> Text
       if b0 <= 0x7Fu8
         # ASCII: single byte
         list.add_last(Letter(codepoint: U32(b0)))
-        i = i + 1uaddr
-      elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1uaddr < len
+        i = i + 1u64
+      elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1u64 < len
         # 2-byte sequence
-        var b1 = from[i + 1uaddr]
+        var b1 = from[i + 1u64]
         var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
         list.add_last(Letter(codepoint: cp))
-        i = i + 2uaddr
-      elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2uaddr < len
+        i = i + 2u64
+      elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2u64 < len
         # 3-byte sequence
-        var b1 = from[i + 1uaddr]
-        var b2 = from[i + 2uaddr]
+        var b1 = from[i + 1u64]
+        var b2 = from[i + 2u64]
         var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
         list.add_last(Letter(codepoint: cp))
-        i = i + 3uaddr
-      elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3uaddr < len
+        i = i + 3u64
+      elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3u64 < len
         # 4-byte sequence
-        var b1 = from[i + 1uaddr]
-        var b2 = from[i + 2uaddr]
-        var b3 = from[i + 3uaddr]
+        var b1 = from[i + 1u64]
+        var b2 = from[i + 2u64]
+        var b3 = from[i + 3u64]
         var cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
         list.add_last(Letter(codepoint: cp))
-        i = i + 4uaddr
+        i = i + 4u64
       else
         # Invalid byte — replacement character
         list.add_last(Letter(codepoint: 0xFFFDu32))
-        i = i + 1uaddr
+        i = i + 1u64
     return Text(from_list: list)
 
 # Convert CWStr to Text (decodes UTF-16 surrogate pairs to codepoints)
@@ -85,19 +85,19 @@ routine Text.__create__(from: CStr) -> Text
 routine Text.__create__(from: CWStr) -> Text
   danger!
     var len = from.count()
-    if len == 0uaddr
+    if len == 0u64
       return Text()
 
     var list = List[Letter]()
-    var i: UAddr = 0uaddr
+    var i: U64 = 0u64
     loop
       if i >= len
         break
-      var high = read_as![U16](from.ptr + (i * 2uaddr))
+      var high = read_as![U16](from.ptr + (i * 2u64))
 
       # Check for high surrogate (U+D800 to U+DBFF)
-      if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1uaddr < len
-        var low = read_as![U16](from.ptr + ((i + 1uaddr) * 2uaddr))
+      if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1u64 < len
+        var low = read_as![U16](from.ptr + ((i + 1u64) * 2u64))
         # Check for low surrogate (U+DC00 to U+DFFF)
         if low >= 0xDC00u16 and low <= 0xDFFFu16
           # Valid surrogate pair - decode to codepoint
@@ -105,19 +105,19 @@ routine Text.__create__(from: CWStr) -> Text
           var low_bits = U32(low) - 0xDC00u32
           var codepoint = high_bits | low_bits + 0x10000u32
           list.add_last(Letter(codepoint: codepoint))
-          i = i + 2uaddr
+          i = i + 2u64
         else
           # Invalid low surrogate - use replacement character
           list.add_last(Letter(codepoint: 0xFFFDu32))
-          i = i + 1uaddr
+          i = i + 1u64
       elseif high >= 0xDC00u16 and high <= 0xDFFFu16
         # Orphan low surrogate - use replacement character
         list.add_last(Letter(codepoint: 0xFFFDu32))
-        i = i + 1uaddr
+        i = i + 1u64
       else
         # BMP character (not a surrogate)
         list.add_last(Letter(codepoint: U32(high)))
-        i = i + 1uaddr
+        i = i + 1u64
     return Text(from_list: list)
 
 # Core operations

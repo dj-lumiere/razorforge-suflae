@@ -4,25 +4,25 @@
 
 module SeqTools
 
-entity EnumerateSequence[T] obeys Sequenceable[Tuple[UAddr, T]]
+entity EnumerateSequence[T] obeys Sequenceable[Tuple[U64, T]]
   secret source: Sequenceable[T]
-  secret start: UAddr
+  secret start: U64
 
 routine EnumerateSequence[T].__seq__() -> EnumerateEmitter[T]
   return EnumerateEmitter[T](source: me.source.__seq__(), index: me.start)
 
-entity EnumerateEmitter[T] obeys SequenceEmitter[Tuple[UAddr, T]]
+entity EnumerateEmitter[T] obeys SequenceEmitter[Tuple[U64, T]]
   secret source: SequenceEmitter[T]
-  secret index: UAddr
+  secret index: U64
 
-emitting routine EnumerateEmitter[T].__next__() -> Tuple[UAddr, T]
+emitting routine EnumerateEmitter[T].__next__() -> Tuple[U64, T]
   var item = me.source.__next__()
   emit (me.index, item)
-  me.index = me.index + 1uaddr
+  me.index = me.index + 1u64
   return
 
 routine Sequenceable[T].enumerate() -> EnumerateSequence[T]
-  return EnumerateSequence[T](source: me, start: 0uaddr)
+  return EnumerateSequence[T](source: me, start: 0u64)
 
-routine Sequenceable[T].enumerate(start: UAddr) -> EnumerateSequence[T]
+routine Sequenceable[T].enumerate(start: U64) -> EnumerateSequence[T]
   return EnumerateSequence[T](source: me, start: start)

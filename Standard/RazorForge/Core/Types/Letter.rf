@@ -170,5 +170,5 @@ routine Letter.is_emoji() -> Bool
 # ============================================================================
 
 routine Letter.offset![I obeys Integral](delta: I) -> Letter
-  var new_value = SAddr(me.value) + delta.to_saddr()
+  var new_value = S64(me.value) + delta.to_s64()
   return Letter(value: U32(new_value))

@@ -15,14 +15,14 @@ import Collections.SortedSet
 module Core
 
 # Initial number of buckets
-preset SET_INITIAL_BUCKETS: UAddr = 16uaddr
+preset SET_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
-preset SET_LOAD_FACTOR: UAddr = 75uaddr
+preset SET_LOAD_FACTOR: U64 = 75u64
 
 entity Set[T] obeys Sequenceable[T]
 needs T obeys Hashable, Comparable
   secret buckets: List[SortedSet[T]]
-  secret count: UAddr
+  secret count: U64
 
 # ============================================================================
 # Creators
@@ -31,85 +31,85 @@ needs T obeys Hashable, Comparable
 routine Set[T].__create__() -> Set[T]
   var set = Set[T](
     buckets: List[SortedSet[T]](SET_INITIAL_BUCKETS),
-    count: 0uaddr
+    count: 0u64
   )
   # Initialize empty buckets
-  var i = 0uaddr
+  var i = 0u64
   while i < SET_INITIAL_BUCKETS
     var empty_set = SortedSet[T]()
     set.buckets.add_last(empty_set)
-    i = i + 1uaddr
+    i = i + 1u64
   return set
 
-routine Set[T].__create__(capacity: UAddr) -> Set[T]
+routine Set[T].__create__(capacity: U64) -> Set[T]
   # Calculate bucket count for desired capacity
   var bucket_count = if capacity < SET_INITIAL_BUCKETS then SET_INITIAL_BUCKETS else capacity
   var set = Set[T](
     buckets: List[SortedSet[T]](bucket_count),
-    count: 0uaddr
+    count: 0u64
   )
-  var i = 0uaddr
+  var i = 0u64
   while i < bucket_count
     var empty_set = SortedSet[T]()
     set.buckets.add_last(empty_set)
-    i = i + 1uaddr
+    i = i + 1u64
   return set
 
 # ============================================================================
 # Internal Operations
 # ============================================================================
 
-routine Set[T].bucket_index(value: T) -> UAddr
+routine Set[T].bucket_index(value: T) -> U64
   # Get bucket index for value using hash
   var hash = value.__hash__()
   return hash % me.buckets.count()
 
 routine Set[T].should_rehash() -> Bool
   # Check if load factor exceeds threshold
-  var load = (me.count * 100uaddr) / me.buckets.count()
+  var load = (me.count * 100u64) / me.buckets.count()
   return load > SET_LOAD_FACTOR
 
 routine Set[T].rehash()
   # Double the bucket count and redistribute
   var old_buckets = me.buckets
-  var new_bucket_count = old_buckets.count() * 2uaddr
+  var new_bucket_count = old_buckets.count() * 2u64
 
   me.buckets = List[SortedSet[T]](new_bucket_count)
-  var i = 0uaddr
+  var i = 0u64
   while i < new_bucket_count
     var empty_set = SortedSet[T]()
     me.buckets.add_last(empty_set)
-    i = i + 1uaddr
-  me.count = 0uaddr
+    i = i + 1u64
+  me.count = 0u64
 
   # Reinsert all elements
-  i = 0uaddr
+  i = 0u64
   while i < old_buckets.count()
     var bucket = old_buckets[i]
     var elements = bucket.to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       me.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine Set[T].count() -> UAddr
+routine Set[T].count() -> U64
   return me.count
 
 routine Set[T].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine Set[T].clear()
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     me.buckets[i].clear()
-    i = i + 1uaddr
-  me.count = 0uaddr
+    i = i + 1u64
+  me.count = 0u64
   return
 
 routine Set[T].contains(value: T) -> Bool
@@ -123,7 +123,7 @@ routine Set[T].add(value: T) -> Bool
 
   var idx = me.bucket_index(value)
   if me.buckets[idx].add(value)
-    me.count = me.count + 1uaddr
+    me.count = me.count + 1u64
     return true
   return false
 
@@ -131,7 +131,7 @@ routine Set[T].remove(value: T) -> Bool
   # Returns true if removed, false if not found
   var idx = me.bucket_index(value)
   if me.buckets[idx].remove(value)
-    me.count = me.count - 1uaddr
+    me.count = me.count - 1u64
     return true
   return false
 
@@ -144,24 +144,24 @@ routine Set[T].union(other: Set[T]) -> Set[T]
   var result = Set[T](me.count + other.count)
 
   # Add all from me
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var elements = me.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       result.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
 
   # Add all from other
-  i = 0uaddr
+  i = 0u64
   while i < other.buckets.count()
     var elements = other.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       result.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
 
   return result
 
@@ -173,15 +173,15 @@ routine Set[T].intersection(other: Set[T]) -> Set[T]
   var smaller = if me.count < other.count then me else other
   var larger = if me.count < other.count then other else me
 
-  var i = 0uaddr
+  var i = 0u64
   while i < smaller.buckets.count()
     var elements = smaller.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       if larger.contains(elements[j])
         result.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
 
   return result
 
@@ -189,15 +189,15 @@ routine Set[T].difference(other: Set[T]) -> Set[T]
   # Return new set with elements in me but not in other
   var result = Set[T]()
 
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var elements = me.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       if not other.contains(elements[j])
         result.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
 
   return result
 
@@ -206,26 +206,26 @@ routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
   var result = Set[T]()
 
   # Add elements from me not in other
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var elements = me.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       if not other.contains(elements[j])
         result.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
 
   # Add elements from other not in me
-  i = 0uaddr
+  i = 0u64
   while i < other.buckets.count()
     var elements = other.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       if not me.contains(elements[j])
         result.add(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
 
   return result
 
@@ -234,15 +234,15 @@ routine Set[T].is_subset(other: Set[T]) -> Bool
   if me.count > other.count
     return false
 
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var elements = me.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       if not other.contains(elements[j])
         return false
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return true
 
 routine Set[T].is_superset(other: Set[T]) -> Bool
@@ -253,15 +253,15 @@ routine Set[T].is_disjoint(other: Set[T]) -> Bool
   var smaller = if me.count < other.count then me else other
   var larger = if me.count < other.count then other else me
 
-  var i = 0uaddr
+  var i = 0u64
   while i < smaller.buckets.count()
     var elements = smaller.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       if larger.contains(elements[j])
         return false
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return true
 
 # ============================================================================
@@ -270,14 +270,14 @@ routine Set[T].is_disjoint(other: Set[T]) -> Bool
 
 routine Set[T].to_list() -> List[T]
   var result = List[T](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < me.buckets.count()
     var elements = me.buckets[i].to_list()
-    var j = 0uaddr
+    var j = 0u64
     while j < elements.count()
       result.add_last(elements[j])
-      j = j + 1uaddr
-    i = i + 1uaddr
+      j = j + 1u64
+    i = i + 1u64
   return result
 
 # ============================================================================
@@ -287,15 +287,15 @@ routine Set[T].to_list() -> List[T]
 routine Set[T].__seq__() -> SetIterator[T]
   return SetIterator[T](
     set: me,
-    bucket_idx: 0uaddr,
-    element_idx: 0uaddr,
+    bucket_idx: 0u64,
+    element_idx: 0u64,
     current_elements: List[T]()
   )
 
 entity SetIterator[T]
   set: Set[T]
-  bucket_idx: UAddr
-  element_idx: UAddr
+  bucket_idx: U64
+  element_idx: U64
   current_elements: List[T]
 
 routine SetIterator[T].next!() -> T
@@ -304,11 +304,11 @@ routine SetIterator[T].next!() -> T
     if me.bucket_idx >= me.set.buckets.count()
       absent
     me.current_elements = me.set.buckets[me.bucket_idx].to_list()
-    me.element_idx = 0uaddr
-    me.bucket_idx = me.bucket_idx + 1uaddr
+    me.element_idx = 0u64
+    me.bucket_idx = me.bucket_idx + 1u64
 
   var value = me.current_elements[me.element_idx]
-  me.element_idx = me.element_idx + 1uaddr
+  me.element_idx = me.element_idx + 1u64
   return value
 
 # ============================================================================

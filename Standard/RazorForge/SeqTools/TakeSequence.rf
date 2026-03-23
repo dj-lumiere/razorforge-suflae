@@ -5,21 +5,21 @@ module SeqTools
 
 entity TakeSequence[T] obeys Sequenceable[T]
   secret source: Sequenceable[T]
-  secret limit: UAddr
+  secret limit: U64
 
 routine TakeSequence[T].__seq__() -> TakeEmitter[T]
   return TakeEmitter[T](source: me.source.__seq__(), remaining: me.limit)
 
 entity TakeEmitter[T] obeys SequenceEmitter[T]
   secret source: SequenceEmitter[T]
-  secret remaining: UAddr
+  secret remaining: U64
 
 emitting routine TakeEmitter[T].__next__() -> T
-  if me.remaining == 0uaddr
+  if me.remaining == 0u64
     absent
   emit me.source.__next__()
-  me.remaining = me.remaining - 1uaddr
+  me.remaining = me.remaining - 1u64
   return
 
-routine Sequenceable[T].take(count: UAddr) -> TakeSequence[T]
+routine Sequenceable[T].take(count: U64) -> TakeSequence[T]
   return TakeSequence[T](source: me, limit: count)

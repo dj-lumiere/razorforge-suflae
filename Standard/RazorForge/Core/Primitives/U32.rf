@@ -92,20 +92,6 @@ routine U32.__create__!(from: D64) -> U32
 routine U32.__create__!(from: D128) -> U32
   return from.S64!().U32!()
 
-# From SAddr - crashes if value negative or out of U32 range
-routine U32.__create__!(from: SAddr) -> U32
-  var val_s64 = from.S64!()
-  if not (0_s64 <= val_s64 <= 4294967295_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
-  return trunc[SAddr, U32](from)
-
-# From UAddr - crashes if value out of U32 range (on 64-bit platforms)
-routine U32.__create__!(from: UAddr) -> U32
-  var val_u64 = from.U64!()
-  if val_u64 > 4294967295_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
-  return trunc[UAddr, U32](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================

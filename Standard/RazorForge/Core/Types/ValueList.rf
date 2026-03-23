@@ -15,7 +15,7 @@ module Core
 # Compiler lays out N elements of T inline
 record ValueList[T, N]
 needs T is record
-needs N is UAddr
+needs N is U64
   # N elements of T stored inline by compiler - no explicit member variables needed
   pass
 
@@ -25,7 +25,7 @@ needs N is UAddr
 
 routine ValueList[T, N].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.UAddr!()
+  var idx = index.U64!()
   if idx >= N
     throw IndexOutOfBoundsError(index: idx, count: N)
   return me[idx]
@@ -43,19 +43,19 @@ needs I obeys Integral
 # Query Operations
 # ============================================================================
 
-routine ValueList[T, N].count() -> UAddr
+routine ValueList[T, N].count() -> U64
   return N
 
 routine ValueList[T, N].is_empty() -> Bool
-  return N == 0uaddr
+  return N == 0u64
 
 routine ValueList[T, N].first!() -> T
-  if N == 0uaddr
+  if N == 0u64
     absent
   return me[0]
 
 routine ValueList[T, N].last!() -> T
-  if N == 0uaddr
+  if N == 0u64
     absent
   return me[^1]
 
@@ -65,7 +65,7 @@ routine ValueList[T, N].contains(value: T) -> Bool
       return true
   return false
 
-routine ValueList[T, N].index_of!(value: T) -> UAddr
+routine ValueList[T, N].index_of!(value: T) -> U64
   for i in 0 til N
     if me[i] == value
       return i
@@ -76,17 +76,17 @@ routine ValueList[T, N].index_of!(value: T) -> UAddr
 # ============================================================================
 
 routine ValueList[T, N].iter() -> ValueListIterator[T, N]
-  return ValueListIterator[T, N](list: me, index: 0uaddr)
+  return ValueListIterator[T, N](list: me, index: 0u64)
 
 record ValueListIterator[T, N]
   list: ValueList[T, N]
-  index: UAddr
+  index: U64
 
 routine ValueListIterator[T, N].next!() -> T
   if me.index >= N
     absent
   var value = me.list[me.index]
-  me.index = me.index + 1uaddr
+  me.index = me.index + 1u64
   return value
 
 # Comparison (==, !=) is auto-generated using memcmp for records

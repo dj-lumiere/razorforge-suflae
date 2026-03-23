@@ -97,20 +97,6 @@ routine S8.__create__!(from: D64) -> S8
 routine S8.__create__!(from: D128) -> S8
   return from.S32!().S8!()
 
-# From SAddr - crashes if value out of S8 range
-routine S8.__create__!(from: SAddr) -> S8
-  var val_s64 = from.S64!()
-  if not (-128_s64 <= val_s64 <= 127_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
-  return trunc[SAddr, S8](from)
-
-# From UAddr - crashes if value out of S8 range
-routine S8.__create__!(from: UAddr) -> S8
-  var val_u64 = from.U64!()
-  if val_u64 > 127_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
-  return trunc[UAddr, S8](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================

@@ -135,7 +135,7 @@ routine BitList.clear()
 routine BitList.__getitem__![I](index: I) -> Bool
 needs I obeys Integral
   # Get bit at index - O(1)
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_bit_internal(U64(idx))
@@ -143,7 +143,7 @@ needs I obeys Integral
 routine BitList.__setitem__![I](index: I, value: Bool)
 needs I obeys Integral
   # Set bit at index - O(1)
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   me.set_bit_internal(U64(idx), value)
@@ -180,7 +180,7 @@ routine BitList.set_all(value: Bool)
 routine BitList.flip![I](index: I)
 needs I obeys Integral
   # Toggle bit at index
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var current = me.get_bit_internal(U64(idx))

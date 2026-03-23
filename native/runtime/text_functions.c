@@ -27,29 +27,29 @@ extern uint16_t rf_f16_from_f32(float x);
 // Formatting: Binary Floating Point
 // ============================================================================
 
-rf_UAddr rf_format_F16(rf_U16 value)
+rf_address rf_format_F16(rf_U16 value)
 {
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     float f = rf_f16_to_f32(value);
     snprintf(buffer, 64, "%.4g", (double)f);
-    return (rf_UAddr)buffer;
+    return (rf_address)buffer;
 }
 
-rf_UAddr rf_format_F32(float value)
+rf_address rf_format_F32(float value)
 {
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     snprintf(buffer, 64, "%.7g", (double)value);
-    return (rf_UAddr)buffer;
+    return (rf_address)buffer;
 }
 
-rf_UAddr rf_format_F64(double value)
+rf_address rf_format_F64(double value)
 {
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     snprintf(buffer, 64, "%.15g", value);
-    return (rf_UAddr)buffer;
+    return (rf_address)buffer;
 }
 
 // F128 formatting is in f128_functions.c (requires LibBF)

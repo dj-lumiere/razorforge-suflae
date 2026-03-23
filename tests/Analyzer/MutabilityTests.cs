@@ -308,7 +308,7 @@ public class MutabilityTests
         // You cannot hijack a child of an already-hijacked object
         string source = """
                         entity Child
-                          value: S32
+                          value: S64
 
                         entity Parent
                           child: Child

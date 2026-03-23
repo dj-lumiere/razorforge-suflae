@@ -25,8 +25,11 @@ module Core
 record Snatched[T]
   pass
 
-dangerous routine T.get_address() -> UAddr
-  return ptrtoint[T, UAddr](me)
+dangerous routine T.get_address() -> Address
+  return ptrtoint[T, Address](me)
+
+dangerous routine Snatched[T].__create__(from: Address) -> Snatched[T]
+  return inttoptr[Address, T](from)
 
 # Create snatched pointer from any object (danger! only)
 dangerous routine T.snatch() -> Snatched[T]
@@ -55,7 +58,7 @@ dangerous routine Snatched[T].write_as[U](value: U)
 # Cast pointer type - reinterpret Snatched[T] as Snatched[U]
 # Both are @llvm("ptr"), so this is a no-op at the LLVM level
 dangerous routine Snatched[T].obtain_as[U]() -> Snatched[U]
-  return Snatched[U](ptrtoint[T, UAddr](me))
+  return Snatched[U](me)
 
 # Free memory at this address
 dangerous routine Snatched[T].invalidate!()
@@ -64,7 +67,7 @@ dangerous routine Snatched[T].invalidate!()
 
 # Create none snatched pointer
 routine snatched_none[T]() -> Snatched[T]
-  return Snatched[T](0_uaddr)
+  return Snatched[T](0_a)
 
 # Check if pointer is none
 routine Snatched[T].is_none() -> Bool
@@ -72,7 +75,7 @@ routine Snatched[T].is_none() -> Bool
 
 # Offset pointer by bytes (pointer arithmetic)
 routine Snatched[T].offset(bytes: ByteSize) -> Snatched[T]
-  var addr = ptrtoint[T, UAddr](me)
+  var addr = ptrtoint[T, Address](me)
   return Snatched[T](addr + bytes.value)
 
 # Compare addresses

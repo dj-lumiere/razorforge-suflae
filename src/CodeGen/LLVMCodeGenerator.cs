@@ -24,8 +24,8 @@ public partial class LLVMCodeGenerator
         ["Viewed", "Hijacked", "Retained", "Watched", "Inspected", "Seized", "Shared",
             "Tracked", "Snatched"];
 
-    /// <summary>The program AST to generate code for.</summary>
-    private readonly Program _program;
+    /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
+    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)> _userPrograms;
 
     /// <summary>The stdlib programs to include routine bodies from.</summary>
     private readonly IReadOnlyList<(Program Program, string FilePath, string Module)> _stdlibPrograms;
@@ -114,7 +114,7 @@ public partial class LLVMCodeGenerator
     #region Constructor
 
     /// <summary>
-    /// Creates a new LLVM code generator.
+    /// Creates a new LLVM code generator for a single user program.
     /// </summary>
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
@@ -122,7 +122,22 @@ public partial class LLVMCodeGenerator
     /// <param name="pointerBitWidth">Pointer bit width for the target platform (64 for x86_64, 32 for x86).</param>
     public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
     {
-        _program = program;
+        _userPrograms = [(program, program.Location.FileName, "")];
+        _registry = registry;
+        _stdlibPrograms = stdlibPrograms ?? [];
+        _pointerBitWidth = pointerBitWidth;
+    }
+
+    /// <summary>
+    /// Creates a new LLVM code generator for multiple user programs (multi-file build).
+    /// </summary>
+    /// <param name="userPrograms">The user program ASTs with file paths and module names.</param>
+    /// <param name="registry">The type registry from semantic analysis.</param>
+    /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
+    /// <param name="pointerBitWidth">Pointer bit width for the target platform (64 for x86_64, 32 for x86).</param>
+    public LLVMCodeGenerator(IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
+    {
+        _userPrograms = userPrograms;
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
         _pointerBitWidth = pointerBitWidth;
@@ -216,15 +231,18 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void GenerateFunctionDeclarations()
     {
-        // Build set of routine names that have bodies (in user program or stdlib)
+        // Build set of routine names that have bodies (in user programs or stdlib)
         var routinesWithBodies = new HashSet<string>();
 
         // User program routines
-        foreach (var decl in _program.Declarations)
+        foreach (var (userProgram, _, _) in _userPrograms)
         {
-            if (decl is RoutineDeclaration routine)
+            foreach (var decl in userProgram.Declarations)
             {
-                routinesWithBodies.Add(routine.Name);
+                if (decl is RoutineDeclaration routine)
+                {
+                    routinesWithBodies.Add(routine.Name);
+                }
             }
         }
 
@@ -299,11 +317,14 @@ public partial class LLVMCodeGenerator
     private void GenerateFunctionDefinitions()
     {
         // First, generate user program routines (these take priority)
-        foreach (var decl in _program.Declarations)
+        foreach (var (userProgram, _, _) in _userPrograms)
         {
-            if (decl is RoutineDeclaration routine)
+            foreach (var decl in userProgram.Declarations)
             {
-                GenerateFunctionDefinition(routine);
+                if (decl is RoutineDeclaration routine)
+                {
+                    GenerateFunctionDefinition(routine);
+                }
             }
         }
 

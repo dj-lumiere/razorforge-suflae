@@ -76,14 +76,6 @@ routine F128.__create__(from: D64) -> F128
 routine F128.__create__(from: D128) -> F128
   return rf_d128_to_f128(from.low_bits(), from.high_bits())
 
-# From SAddr - convert to float using LLVM intrinsic
-routine F128.__create__(from: SAddr) -> F128
-  return sitofp[SAddr, F128](from)
-
-# From UAddr - convert to float using LLVM intrinsic
-routine F128.__create__(from: UAddr) -> F128
-  return uitofp[UAddr, F128](from)
-
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================

@@ -81,15 +81,13 @@ public sealed partial class SemanticAnalyzer
             TokenType.S32Literal => "S32",
             TokenType.S64Literal => "S64",
             TokenType.S128Literal => "S128",
-            TokenType.SAddrLiteral => "SAddr",
-
             // Unsigned integers
             TokenType.U8Literal => "U8",
             TokenType.U16Literal => "U16",
             TokenType.U32Literal => "U32",
             TokenType.U64Literal => "U64",
             TokenType.U128Literal => "U128",
-            TokenType.UAddrLiteral => "UAddr",
+            TokenType.AddressLiteral => "Address",
 
             // Floating-point
             TokenType.F16Literal => "F16",
@@ -187,14 +185,14 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is a fixed-width integer type (S8-S128, U8-U128, SAddr, UAddr).
+    /// Checks if a type is a fixed-width integer type (S8-S128, U8-U128, Address).
     /// </summary>
     // TODO: remove this
     private static bool IsFixedWidthIntegerType(TypeSymbol type)
     {
         return type.Name is "S8" or "S16" or "S32" or "S64" or "S128"
             or "U8" or "U16" or "U32" or "U64" or "U128"
-            or "SAddr" or "UAddr";
+            or "Address";
     }
 
     /// <summary>
@@ -222,7 +220,7 @@ public sealed partial class SemanticAnalyzer
             "U32" => value is >= 0 and <= uint.MaxValue,
             "U64" => value >= 0, // Any non-negative long fits in U64
             "U128" => value >= 0,
-            "SAddr" or "UAddr" => true, // System-dependent, allow for now
+            "Address" => true, // System-dependent, allow for now
             _ => false
         };
     }
@@ -246,15 +244,13 @@ public sealed partial class SemanticAnalyzer
                 TokenType.S32Literal => ParseSignedIntLiteral(literal, rawValue, "S32", int.MinValue, int.MaxValue),
                 TokenType.S64Literal => ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
                 TokenType.S128Literal => ParseS128Literal(literal, rawValue),
-                TokenType.SAddrLiteral => ParseSignedIntLiteral(literal, rawValue, "SAddr", long.MinValue, long.MaxValue),
-
                 // Fixed-width unsigned integers
                 TokenType.U8Literal => ParseUnsignedIntLiteral(literal, rawValue, "U8", byte.MaxValue),
                 TokenType.U16Literal => ParseUnsignedIntLiteral(literal, rawValue, "U16", ushort.MaxValue),
                 TokenType.U32Literal => ParseUnsignedIntLiteral(literal, rawValue, "U32", uint.MaxValue),
                 TokenType.U64Literal => ParseUnsignedIntLiteral(literal, rawValue, "U64", ulong.MaxValue),
                 TokenType.U128Literal => ParseU128Literal(literal, rawValue),
-                TokenType.UAddrLiteral => ParseUnsignedIntLiteral(literal, rawValue, "UAddr", ulong.MaxValue),
+                TokenType.AddressLiteral => ParseUnsignedIntLiteral(literal, rawValue, "Address", ulong.MaxValue),
 
                 // Fixed-width floats (F16, F32, F64 use .NET native types; F128 uses native library)
                 TokenType.F16Literal => ParseF16Literal(literal, rawValue),
@@ -364,7 +360,7 @@ public sealed partial class SemanticAnalyzer
     #region Fixed-Width Numeric Literal Parsing
 
     /// <summary>
-    /// Parses a signed integer literal (S8-S64, SAddr) with overflow validation.
+    /// Parses a signed integer literal (S8-S64) with overflow validation.
     /// </summary>
     private ParsedLiteral? ParseSignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, long minValue, long maxValue)
     {
@@ -409,7 +405,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Parses an unsigned integer literal (U8-U64, UAddr) with overflow validation.
+    /// Parses an unsigned integer literal (U8-U64, Address) with overflow validation.
     /// </summary>
     private ParsedLiteral? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, ulong maxValue)
     {
@@ -1002,7 +998,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #117: Fixed-width numeric types must match exactly (S32 + S64 = error)
-        // System types (SAddr/UAddr) are exempt
+        // System types (Address) are exempt
         if (leftType.Name != rightType.Name
             && IsFixedWidthNumericType(type: leftType)
             && IsFixedWidthNumericType(type: rightType)
@@ -1561,6 +1557,17 @@ public sealed partial class SemanticAnalyzer
                     "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
                     call.Location);
                 return ErrorTypeInfo.Instance;
+            }
+
+            // #137: Nested hijacking detection — checked before method resolution
+            // since hijack() is generic extension T.hijack() that may not resolve by concrete type name
+            if (member.PropertyName == "hijack" && IsNestedHijacking(source: member.Object))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.NestedHijackingNotAllowed,
+                    "Cannot hijack a member of an already-hijacked object. " +
+                    "Hijack the parent entity directly instead.",
+                    call.Location);
             }
 
             RoutineInfo? method = _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
@@ -3133,7 +3140,7 @@ public sealed partial class SemanticAnalyzer
             return method.ReturnType;
         }
 
-        // Standalone generic function call (e.g., ptrtoint[Point, UAddr](p), snatched_none[T]())
+        // Standalone generic function call (e.g., ptrtoint[Point, Address](p), snatched_none[T]())
         // The object is an identifier that resolves to a routine, not a type or variable
         if (generic.Object is IdentifierExpression funcId)
         {
@@ -3577,7 +3584,7 @@ public sealed partial class SemanticAnalyzer
                 back.Location);
         }
 
-        // Return a BackIndex type (or UAddr as the underlying representation)
+        // Return a BackIndex type (or Address as the underlying representation)
         // BackIndex is conceptually a wrapper around an offset from the end
         TypeSymbol? backIndexType = _registry.LookupType(name: "BackIndex");
         if (backIndexType != null)
@@ -3585,8 +3592,8 @@ public sealed partial class SemanticAnalyzer
             return backIndexType;
         }
 
-        // Fallback: return UAddr as the index representation
-        return _registry.LookupType(name: "UAddr") ?? operandType;
+        // Fallback: return Address as the index representation
+        return _registry.LookupType(name: "Address") ?? operandType;
     }
 
     /// <summary>

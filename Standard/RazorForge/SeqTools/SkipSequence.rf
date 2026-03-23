@@ -5,21 +5,21 @@ module SeqTools
 
 entity SkipSequence[T] obeys Sequenceable[T]
   secret source: Sequenceable[T]
-  secret count: UAddr
+  secret count: U64
 
 routine SkipSequence[T].__seq__() -> SkipEmitter[T]
   return SkipEmitter[T](source: me.source.__seq__(), remaining: me.count)
 
 entity SkipEmitter[T] obeys SequenceEmitter[T]
   secret source: SequenceEmitter[T]
-  secret remaining: UAddr
+  secret remaining: U64
 
 emitting routine SkipEmitter[T].__next__() -> T
-  while me.remaining > 0uaddr
+  while me.remaining > 0u64
     me.source.__next__()
-    me.remaining = me.remaining - 1uaddr
+    me.remaining = me.remaining - 1u64
   emit me.source.__next__()
   return
 
-routine Sequenceable[T].skip(count: UAddr) -> SkipSequence[T]
+routine Sequenceable[T].skip(count: U64) -> SkipSequence[T]
   return SkipSequence[T](source: me, count: count)

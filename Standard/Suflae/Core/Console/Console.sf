@@ -32,14 +32,14 @@ routine Console.get_word() -> Text
 routine Console.get_all() -> Text
   return RazorForge/IO.Console.get_all()
 
-routine Console.get_letters(count: UAddr) -> Text
+routine Console.get_letters(count: U64) -> Text
   return RazorForge/IO.Console.get_letters(count)
 
 # Input: Bytes functions (opt-in)
 routine Console.get_raw() -> Bytes
   return RazorForge/IO.Console.get_raw()
 
-routine Console.get_bytes(count: UAddr) -> Bytes
+routine Console.get_bytes(count: U64) -> Bytes
   return RazorForge/IO.Console.get_bytes(count)
 
 # Utility Functions

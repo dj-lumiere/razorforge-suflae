@@ -15,8 +15,8 @@ module Collections
 # Fixed-capacity list with reference semantics
 # N elements of T stored inline, count tracks active elements
 resident FixedList[T, N]
-needs N is UAddr
-  secret count: UAddr    # Current number of elements (0 to N)
+needs N is U64
+  secret count: U64    # Current number of elements (0 to N)
   # N elements of T stored inline by compiler
 
 # ============================================================================
@@ -24,25 +24,25 @@ needs N is UAddr
 # ============================================================================
 
 routine FixedList[T, N].__create__() -> FixedList[T, N]
-  return FixedList[T, N](count: 0uaddr)
+  return FixedList[T, N](count: 0u64)
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine FixedList[T, N].count() -> UAddr
+routine FixedList[T, N].count() -> U64
   return me.count
 
-routine FixedList[T, N].capacity() -> UAddr
+routine FixedList[T, N].capacity() -> U64
   return N
 
 routine FixedList[T, N].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine FixedList[T, N].is_full() -> Bool
   return me.count == N
 
-routine FixedList[T, N].remaining() -> UAddr
+routine FixedList[T, N].remaining() -> U64
   return N - me.count
 
 routine FixedList[T, N].add_last!(value: T)
@@ -51,18 +51,18 @@ routine FixedList[T, N].add_last!(value: T)
   if me.count >= N
     throw IndexOutOfBoundsError(index: me.count, count: N)
   me[me.count] = value
-  me.count = me.count + 1uaddr
+  me.count = me.count + 1u64
   return
 
 routine FixedList[T, N].remove_last!() -> T
   # Remove and return last element - O(1)
   if me.is_empty()
     absent
-  me.count = me.count - 1uaddr
+  me.count = me.count - 1u64
   return me[me.count]
 
 routine FixedList[T, N].clear()
-  me.count = 0uaddr
+  me.count = 0u64
   return
 
 # ============================================================================
@@ -71,14 +71,14 @@ routine FixedList[T, N].clear()
 
 routine FixedList[T, N].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me[idx]
 
 routine FixedList[T, N].__setitem__![I](index: I, value: T)
 needs I obeys Integral
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   me[idx] = value
@@ -106,7 +106,7 @@ needs I obeys Integral
 routine FixedList[T, N].add_at![I](index: I, value: T)
 needs I obeys Integral
   # Insert at index, shifting elements right - O(n)
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx > me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   if me.is_full()
@@ -115,16 +115,16 @@ needs I obeys Integral
   # Shift elements right
   var i = me.count
   while i > idx
-    me[i] = me[i - 1uaddr]
-    i = i - 1uaddr
+    me[i] = me[i - 1u64]
+    i = i - 1u64
   me[idx] = value
-  me.count = me.count + 1uaddr
+  me.count = me.count + 1u64
   return
 
 routine FixedList[T, N].remove_at![I](index: I) -> T
 needs I obeys Integral
   # Remove at index, shifting elements left - O(n)
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
 
@@ -132,10 +132,10 @@ needs I obeys Integral
 
   # Shift elements left
   var i = idx
-  while i < me.count - 1uaddr
-    me[i] = me[i + 1uaddr]
-    i = i + 1uaddr
-  me.count = me.count - 1uaddr
+  while i < me.count - 1u64
+    me[i] = me[i + 1u64]
+    i = i + 1u64
+  me.count = me.count - 1u64
 
   return value
 
@@ -144,17 +144,17 @@ needs I obeys Integral
 # ============================================================================
 
 routine FixedList[T, N].iter() -> FixedListIterator[T, N]
-  return FixedListIterator[T, N](list: me, index: 0uaddr)
+  return FixedListIterator[T, N](list: me, index: 0u64)
 
 record FixedListIterator[T, N]
   list: FixedList[T, N]
-  index: UAddr
+  index: U64
 
 routine FixedListIterator[T, N].next!() -> T
   if me.index >= me.list.count()
     absent
   var value = me.list[me.index]
-  me.index = me.index + 1uaddr
+  me.index = me.index + 1u64
   return value
 
 # ============================================================================
@@ -164,45 +164,45 @@ routine FixedListIterator[T, N].next!() -> T
 routine FixedList[T, N].first!() -> T
   if me.is_empty()
     absent
-  return me[0uaddr]
+  return me[0u64]
 
 routine FixedList[T, N].last!() -> T
   if me.is_empty()
     absent
-  return me[me.count - 1uaddr]
+  return me[me.count - 1u64]
 
 routine FixedList[T, N].first_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
-  return me[0uaddr]
+  return me[0u64]
 
 routine FixedList[T, N].last_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
-  return me[me.count - 1uaddr]
+  return me[me.count - 1u64]
 
 routine FixedList[T, N].contains(value: T) -> Bool
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     if me[i] == value
       return true
-    i = i + 1uaddr
+    i = i + 1u64
   return false
 
-routine FixedList[T, N].index_of!(value: T) -> UAddr
-  var i = 0uaddr
+routine FixedList[T, N].index_of!(value: T) -> U64
+  var i = 0u64
   while i < me.count
     if me[i] == value
       return i
-    i = i + 1uaddr
+    i = i + 1u64
   absent
 
 routine FixedList[T, N].fill(value: T)
   # Fill to capacity with value
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     me[i] = value
-    i = i + 1uaddr
+    i = i + 1u64
   me.count = N
   return
 
@@ -213,9 +213,9 @@ routine FixedList[T, N].fill(value: T)
 routine FixedList[T, N].__eq__(other: FixedList[T, N]) -> Bool
   if me.count != other.count
     return false
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     if me[i] != other[i]
       return false
-    i = i + 1uaddr
+    i = i + 1u64
   return true

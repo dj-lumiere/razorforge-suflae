@@ -19,10 +19,10 @@ needs T obeys Hashable, Comparable
     result.add(item)
   return result
 
-routine Sequenceable[T].count() -> UAddr
-  var n = 0uaddr
+routine Sequenceable[T].count() -> U64
+  var n = 0u64
   for _ in me
-    n = n + 1uaddr
+    n = n + 1u64
   return n
 
 routine Sequenceable[T].first!() -> T

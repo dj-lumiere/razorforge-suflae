@@ -25,7 +25,7 @@ typedef unsigned __int128 rf_U128;
 // 2. System & Data Types
 // ==========================================
 typedef intptr_t rf_SAddr;   // Signed Pointer-Sized
-typedef uintptr_t rf_UAddr;  // Unsigned Pointer-Sized
+typedef uintptr_t rf_address;  // Unsigned Pointer-Sized
 
 typedef uint8_t rf_Byte;      // 'Byte' is raw 8-bit data
 typedef uint32_t rf_Letter;   // 'Letter' is 32-bit Unicode codepoint
@@ -59,7 +59,7 @@ typedef wchar_t rf_CWChar;
 // Variant (tagged union)
 typedef struct rf_Variant {
     rf_U32 tag;
-    rf_UAddr data;
+    rf_address data;
 } rf_Variant;
 
 // Other types

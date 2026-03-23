@@ -92,20 +92,6 @@ routine S16.__create__!(from: D64) -> S16
 routine S16.__create__!(from: D128) -> S16
   return from.S32!().S16!()
 
-# From SAddr - crashes if value out of S16 range
-routine S16.__create__!(from: SAddr) -> S16
-  var val_s64 = from.S64!()
-  if not (-32768_s64 <= val_s64 <= 32767_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
-  return trunc[SAddr, S16](from)
-
-# From UAddr - crashes if value out of S16 range
-routine S16.__create__!(from: UAddr) -> S16
-  var val_u64 = from.U64!()
-  if val_u64 > 32767_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
-  return trunc[UAddr, S16](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================

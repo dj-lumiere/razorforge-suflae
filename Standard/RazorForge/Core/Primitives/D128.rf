@@ -73,14 +73,6 @@ routine D128.__create__(from: D64) -> D128
 routine D128.__create__(from: D128) -> D128
   return from
 
-# From SAddr - convert through S64
-routine D128.__create__(from: SAddr) -> D128
-  return from.S64().D128()
-
-# From UAddr - convert through U64
-routine D128.__create__(from: UAddr) -> D128
-  return from.U64().D128()
-
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================

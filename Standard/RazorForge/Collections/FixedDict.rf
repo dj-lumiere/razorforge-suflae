@@ -23,93 +23,93 @@ preset FDICT_SLOT_TOMBSTONE: U8 = 2u8
 # Uses robin hood open addressing for cache-friendly probing
 resident FixedDict[K, V, N]
 needs K obeys Hashable
-needs N is UAddr
-  secret count: UAddr           # Current number of entries
-  secret tombstones: UAddr      # Number of tombstones
-  # N slots of (K key, V value, U8 state, UAddr probe_distance) stored inline
+needs N is U64
+  secret count: U64           # Current number of entries
+  secret tombstones: U64      # Number of tombstones
+  # N slots of (K key, V value, U8 state, U64 probe_distance) stored inline
 
 # ============================================================================
 # Creators
 # ============================================================================
 
 routine FixedDict[K, V, N].__create__() -> FixedDict[K, V, N]
-  var dict = FixedDict[K, V, N](count: 0uaddr, tombstones: 0uaddr)
-  var i = 0uaddr
+  var dict = FixedDict[K, V, N](count: 0u64, tombstones: 0u64)
+  var i = 0u64
   while i < N
     dict.set_state(i, FDICT_SLOT_EMPTY)
-    i = i + 1uaddr
+    i = i + 1u64
   return dict
 
 # ============================================================================
 # Internal Slot Access
 # ============================================================================
 
-routine FixedDict[K, V, N].get_key(slot: UAddr) -> K
-  return me[slot * 4uaddr]
+routine FixedDict[K, V, N].get_key(slot: U64) -> K
+  return me[slot * 4u64]
 
-routine FixedDict[K, V, N].set_key(slot: UAddr, key: K)
-  me[slot * 4uaddr] = key
+routine FixedDict[K, V, N].set_key(slot: U64, key: K)
+  me[slot * 4u64] = key
   return
 
-routine FixedDict[K, V, N].get_value(slot: UAddr) -> V
-  return me[slot * 4uaddr + 1uaddr]
+routine FixedDict[K, V, N].get_value(slot: U64) -> V
+  return me[slot * 4u64 + 1u64]
 
-routine FixedDict[K, V, N].set_value(slot: UAddr, value: V)
-  me[slot * 4uaddr + 1uaddr] = value
+routine FixedDict[K, V, N].set_value(slot: U64, value: V)
+  me[slot * 4u64 + 1u64] = value
   return
 
-routine FixedDict[K, V, N].get_state(slot: UAddr) -> U8
-  return me[slot * 4uaddr + 2uaddr]
+routine FixedDict[K, V, N].get_state(slot: U64) -> U8
+  return me[slot * 4u64 + 2u64]
 
-routine FixedDict[K, V, N].set_state(slot: UAddr, state: U8)
-  me[slot * 4uaddr + 2uaddr] = state
+routine FixedDict[K, V, N].set_state(slot: U64, state: U8)
+  me[slot * 4u64 + 2u64] = state
   return
 
-routine FixedDict[K, V, N].get_probe_dist(slot: UAddr) -> UAddr
-  return me[slot * 4uaddr + 3uaddr]
+routine FixedDict[K, V, N].get_probe_dist(slot: U64) -> U64
+  return me[slot * 4u64 + 3u64]
 
-routine FixedDict[K, V, N].set_probe_dist(slot: UAddr, dist: UAddr)
-  me[slot * 4uaddr + 3uaddr] = dist
+routine FixedDict[K, V, N].set_probe_dist(slot: U64, dist: U64)
+  me[slot * 4u64 + 3u64] = dist
   return
 
-routine FixedDict[K, V, N].hash_index(key: K) -> UAddr
+routine FixedDict[K, V, N].hash_index(key: K) -> U64
   var hash = key.__hash__()
   return hash % N
 
-routine FixedDict[K, V, N].next_slot(slot: UAddr) -> UAddr
-  return (slot + 1uaddr) % N
+routine FixedDict[K, V, N].next_slot(slot: U64) -> U64
+  return (slot + 1u64) % N
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine FixedDict[K, V, N].count() -> UAddr
+routine FixedDict[K, V, N].count() -> U64
   return me.count
 
-routine FixedDict[K, V, N].capacity() -> UAddr
+routine FixedDict[K, V, N].capacity() -> U64
   return N
 
 routine FixedDict[K, V, N].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine FixedDict[K, V, N].is_full() -> Bool
   return me.count == N
 
-routine FixedDict[K, V, N].remaining() -> UAddr
+routine FixedDict[K, V, N].remaining() -> U64
   return N - me.count
 
 routine FixedDict[K, V, N].clear()
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     me.set_state(i, FDICT_SLOT_EMPTY)
-    i = i + 1uaddr
-  me.count = 0uaddr
-  me.tombstones = 0uaddr
+    i = i + 1u64
+  me.count = 0u64
+  me.tombstones = 0u64
   return
 
 routine FixedDict[K, V, N].contains_key(key: K) -> Bool
   var slot = me.hash_index(key)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
 
   loop
     var state = me.get_state(slot)
@@ -125,15 +125,15 @@ routine FixedDict[K, V, N].contains_key(key: K) -> Bool
         return true
 
     slot = FixedDict[K, V, N].next_slot(slot)
-    probe_dist = probe_dist + 1uaddr
+    probe_dist = probe_dist + 1u64
 
     if probe_dist >= N
       return false
 
-routine FixedDict[K, V, N].find_slot!(key: K) -> UAddr
+routine FixedDict[K, V, N].find_slot!(key: K) -> U64
   # Returns slot index if key found, None otherwise
   var slot = me.hash_index(key)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
 
   loop
     var state = me.get_state(slot)
@@ -149,7 +149,7 @@ routine FixedDict[K, V, N].find_slot!(key: K) -> UAddr
         return slot
 
     slot = FixedDict[K, V, N].next_slot(slot)
-    probe_dist = probe_dist + 1uaddr
+    probe_dist = probe_dist + 1u64
 
     if probe_dist >= N
       absent
@@ -168,7 +168,7 @@ routine FixedDict[K, V, N].insert!(key: K, value: V) -> Bool
     throw IndexOutOfBoundsError(index: me.count, count: N)
 
   var slot = me.hash_index(key)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
   var inserting_key = key
   var inserting_value = value
   var inserting_dist = probe_dist
@@ -181,9 +181,9 @@ routine FixedDict[K, V, N].insert!(key: K, value: V) -> Bool
       me.set_value(slot, inserting_value)
       me.set_state(slot, FDICT_SLOT_OCCUPIED)
       me.set_probe_dist(slot, inserting_dist)
-      me.count = me.count + 1uaddr
+      me.count = me.count + 1u64
       if state == FDICT_SLOT_TOMBSTONE
-        me.tombstones = me.tombstones - 1uaddr
+        me.tombstones = me.tombstones - 1u64
       return true
 
     if state == FDICT_SLOT_OCCUPIED
@@ -203,14 +203,14 @@ routine FixedDict[K, V, N].insert!(key: K, value: V) -> Bool
         inserting_dist = temp_dist
 
     slot = FixedDict[K, V, N].next_slot(slot)
-    inserting_dist = inserting_dist + 1uaddr
+    inserting_dist = inserting_dist + 1u64
 
     if inserting_dist >= N
       throw IndexOutOfBoundsError(index: me.count, count: N)
 
 routine FixedDict[K, V, N].remove(key: K) -> Bool
   var slot = me.hash_index(key)
-  var probe_dist = 0uaddr
+  var probe_dist = 0u64
 
   loop
     var state = me.get_state(slot)
@@ -224,30 +224,30 @@ routine FixedDict[K, V, N].remove(key: K) -> Bool
 
       if me.get_key(slot) == key
         me.backward_shift_delete(slot)
-        me.count = me.count - 1uaddr
+        me.count = me.count - 1u64
         return true
 
     slot = FixedDict[K, V, N].next_slot(slot)
-    probe_dist = probe_dist + 1uaddr
+    probe_dist = probe_dist + 1u64
 
     if probe_dist >= N
       return false
 
-routine FixedDict[K, V, N].backward_shift_delete(slot: UAddr)
+routine FixedDict[K, V, N].backward_shift_delete(slot: U64)
   var current = slot
   var next = FixedDict[K, V, N].next_slot(current)
 
   loop
     var state = me.get_state(next)
 
-    if state != FDICT_SLOT_OCCUPIED or me.get_probe_dist(next) == 0uaddr
+    if state != FDICT_SLOT_OCCUPIED or me.get_probe_dist(next) == 0u64
       me.set_state(current, FDICT_SLOT_EMPTY)
       return
 
     me.set_key(current, me.get_key(next))
     me.set_value(current, me.get_value(next))
     me.set_state(current, FDICT_SLOT_OCCUPIED)
-    me.set_probe_dist(current, me.get_probe_dist(next) - 1uaddr)
+    me.set_probe_dist(current, me.get_probe_dist(next) - 1u64)
 
     current = next
     next = FixedDict[K, V, N].next_slot(next)
@@ -282,29 +282,29 @@ routine FixedDict[K, V, N].__setitem__!(key: K, value: V)
 
 routine FixedDict[K, V, N].keys() -> List[K]
   var result = List[K](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     if me.get_state(i) == FDICT_SLOT_OCCUPIED
       result.add_last!(me.get_key(i))
-    i = i + 1uaddr
+    i = i + 1u64
   return result
 
 routine FixedDict[K, V, N].values() -> List[V]
   var result = List[V](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     if me.get_state(i) == FDICT_SLOT_OCCUPIED
       result.add_last!(me.get_value(i))
-    i = i + 1uaddr
+    i = i + 1u64
   return result
 
 routine FixedDict[K, V, N].entries() -> List[FixedTuple[K, V]]
   var result = List[FixedTuple[K, V]](me.count)
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     if me.get_state(i) == FDICT_SLOT_OCCUPIED
       result.add_last!((me.get_key(i), me.get_value(i)))
-    i = i + 1uaddr
+    i = i + 1u64
   return result
 
 # ============================================================================
@@ -312,19 +312,19 @@ routine FixedDict[K, V, N].entries() -> List[FixedTuple[K, V]]
 # ============================================================================
 
 routine FixedDict[K, V, N].iter() -> FixedDictIterator[K, V, N]
-  return FixedDictIterator[K, V, N](dict: me, slot: 0uaddr)
+  return FixedDictIterator[K, V, N](dict: me, slot: 0u64)
 
 record FixedDictIterator[K, V, N]
   dict: FixedDict[K, V, N]
-  slot: UAddr
+  slot: U64
 
 routine FixedDictIterator[K, V, N].next!() -> FixedTuple[K, V]
   while me.slot < N
     if me.dict.get_state(me.slot) == FDICT_SLOT_OCCUPIED
       var entry = (me.dict.get_key(me.slot), me.dict.get_value(me.slot))
-      me.slot = me.slot + 1uaddr
+      me.slot = me.slot + 1u64
       return entry
-    me.slot = me.slot + 1uaddr
+    me.slot = me.slot + 1u64
   absent
 
 # ============================================================================
@@ -335,7 +335,7 @@ routine FixedDict[K, V, N].__eq__(other: FixedDict[K, V, N]) -> Bool
   if me.count != other.count
     return false
 
-  var i = 0uaddr
+  var i = 0u64
   while i < N
     if me.get_state(i) == FDICT_SLOT_OCCUPIED
       var key = me.get_key(i)
@@ -343,5 +343,5 @@ routine FixedDict[K, V, N].__eq__(other: FixedDict[K, V, N]) -> Bool
         return false
       if me.get_value(i) != other.get!(key)
         return false
-    i = i + 1uaddr
+    i = i + 1u64
   return true

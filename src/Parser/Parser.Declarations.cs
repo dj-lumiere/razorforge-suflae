@@ -153,8 +153,7 @@ public partial class Parser
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
-                TokenType.SAddrLiteral,
-                TokenType.UAddrLiteral))
+                TokenType.AddressLiteral))
         {
             return Advance()
                .Text;

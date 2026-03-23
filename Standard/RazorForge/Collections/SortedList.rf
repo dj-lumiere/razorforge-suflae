@@ -15,20 +15,20 @@ import Collections.List
 module Collections
 
 # B-tree order (max children per node)
-preset B_LIST: UAddr = 32uaddr
+preset B_LIST: U64 = 32u64
 
 # B-tree node for SortedList
 entity BTreeListNode[T]
 needs T obeys Comparable
   keys: List[T]                        # Keys in this node
   children: List[BTreeListNode[T]]     # Child pointers (empty for leaf)
-  subtree_size: UAddr                  # Total elements in this subtree
+  subtree_size: U64                  # Total elements in this subtree
   is_leaf: Bool
 
 entity SortedList[T]
 needs T obeys Comparable
   secret root: BTreeListNode[T]
-  secret count: UAddr
+  secret count: U64
 
 # ============================================================================
 # Node Creators
@@ -38,7 +38,7 @@ routine BTreeListNode[T].__create__(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: List[T](),
     children: List[BTreeListNode[T]](),
-    subtree_size: 0uaddr,
+    subtree_size: 0u64,
     is_leaf: is_leaf
   )
 
@@ -49,22 +49,22 @@ routine BTreeListNode[T].__create__(is_leaf: Bool) -> BTreeListNode[T]
 routine SortedList[T].__create__() -> SortedList[T]
   return SortedList[T](
     root: None,
-    count: 0uaddr
+    count: 0u64
   )
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine SortedList[T].count() -> UAddr
+routine SortedList[T].count() -> U64
   return me.count
 
 routine SortedList[T].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
 routine SortedList[T].clear()
   me.root = None
-  me.count = 0uaddr
+  me.count = 0u64
   return
 
 # ============================================================================
@@ -77,9 +77,9 @@ routine SortedList[T].contains(value: T) -> Bool
   return me.search_node(me.root!, value)
 
 routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
-  var i = 0uaddr
+  var i = 0u64
   while i < node.keys.count() and value > node.keys[i]
-    i = i + 1uaddr
+    i = i + 1u64
 
   if i < node.keys.count() and value == node.keys[i]
     return true
@@ -89,25 +89,25 @@ routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
 
   return me.search_node(node.children[i], value)
 
-routine SortedList[T].count_of(value: T) -> UAddr
+routine SortedList[T].count_of(value: T) -> U64
   # Count occurrences of value
   if me.root is None
-    return 0uaddr
+    return 0u64
   return me.count_in_node(me.root!!, value)
 
-routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> UAddr
-  var count = 0uaddr
-  var i = 0uaddr
+routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
+  var count = 0u64
+  var i = 0u64
 
   while i < node.keys.count()
     if not node.is_leaf
       count = count + me.count_in_node(node.children[i], value)
     if node.keys[i] == value
-      count = count + 1uaddr
-    i = i + 1uaddr
+      count = count + 1u64
+    i = i + 1u64
 
   if not node.is_leaf
-    count = count + me.count_in_node(node.children[node.children.count() - 1uaddr], value)
+    count = count + me.count_in_node(node.children[node.children.count() - 1u64], value)
 
   return count
 
@@ -119,21 +119,21 @@ routine SortedList[T].add(value: T)
   if me.root is None
     me.root = BTreeListNode[T](is_leaf: true)
     me.root!.keys.add_last(value)
-    me.root!.subtree_size = 1uaddr
-    me.count = 1uaddr
+    me.root!.subtree_size = 1u64
+    me.count = 1u64
     return
 
   # If root is full, split it
-  if me.root!.keys.count() >= B_LIST - 1uaddr
+  if me.root!.keys.count() >= B_LIST - 1u64
     var old_root = me.root!
     var new_root = BTreeListNode[T](is_leaf: false)
     new_root.children.add_last(old_root)
-    me.split_child(new_root, 0uaddr)
+    me.split_child(new_root, 0u64)
     me.root = new_root
     me.update_subtree_size(new_root)
 
   me.insert_non_full(me.root!, value)
-  me.count = me.count + 1uaddr
+  me.count = me.count + 1u64
   return
 
 routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
@@ -141,71 +141,71 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
 
   if node.is_leaf
     # Find position and insert (allow duplicates - use <=)
-    while i > 0uaddr and value < node.keys[i - 1uaddr]
-      i = i - 1uaddr
+    while i > 0u64 and value < node.keys[i - 1u64]
+      i = i - 1u64
     # Insert at position i
     var keys_copy = List[T]()
-    var j = 0uaddr
+    var j = 0u64
     while j < i
       keys_copy.add_last(node.keys[j])
-      j = j + 1uaddr
+      j = j + 1u64
     keys_copy.add_last(value)
     while j < node.keys.count()
       keys_copy.add_last(node.keys[j])
-      j = j + 1uaddr
+      j = j + 1u64
     node.keys = keys_copy
-    node.subtree_size = node.subtree_size + 1uaddr
+    node.subtree_size = node.subtree_size + 1u64
   else
     # Find child to descend into
-    while i > 0uaddr and value < node.keys[i - 1uaddr]
-      i = i - 1uaddr
+    while i > 0u64 and value < node.keys[i - 1u64]
+      i = i - 1u64
 
     # Split child if full
-    if node.children[i].keys.count() >= B_LIST - 1uaddr
+    if node.children[i].keys.count() >= B_LIST - 1u64
       me.split_child(node, i)
       if value > node.keys[i]
-        i = i + 1uaddr
+        i = i + 1u64
 
     me.insert_non_full(node.children[i], value)
-    node.subtree_size = node.subtree_size + 1uaddr
+    node.subtree_size = node.subtree_size + 1u64
   return
 
-routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: UAddr)
+routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   var child = parent_node.children[child_idx]
-  var mid = (B_LIST - 1uaddr) / 2uaddr
+  var mid = (B_LIST - 1u64) / 2u64
 
   var new_node = BTreeListNode[T](is_leaf: child.is_leaf)
 
   # Move upper keys to new node
-  var i = mid + 1uaddr
+  var i = mid + 1u64
   while i < child.keys.count()
     new_node.keys.add_last(child.keys[i])
-    i = i + 1uaddr
+    i = i + 1u64
 
   # Move children if not leaf
   if not child.is_leaf
-    i = mid + 1uaddr
+    i = mid + 1u64
     while i < child.children.count()
       new_node.children.add_last(child.children[i])
-      i = i + 1uaddr
+      i = i + 1u64
 
   var mid_key = child.keys[mid]
 
   # Truncate child's keys
   var left_keys = List[T]()
-  i = 0uaddr
+  i = 0u64
   while i < mid
     left_keys.add_last(child.keys[i])
-    i = i + 1uaddr
+    i = i + 1u64
   child.keys = left_keys
 
   # Truncate child's children if not leaf
   if not child.is_leaf
     var left_children = List[BTreeListNode[T]]()
-    i = 0uaddr
+    i = 0u64
     while i <= mid
       left_children.add_last(child.children[i])
-      i = i + 1uaddr
+      i = i + 1u64
     child.children = left_children
 
   me.update_subtree_size(child)
@@ -215,21 +215,21 @@ routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: UAdd
   var new_keys = List[T]()
   var new_children = List[BTreeListNode[T]]()
 
-  i = 0uaddr
+  i = 0u64
   while i < child_idx
     new_keys.add_last(parent_node.keys[i])
     new_children.add_last(parent_node.children[i])
-    i = i + 1uaddr
+    i = i + 1u64
   new_keys.add_last(mid_key)
   new_children.add_last(child)
   new_children.add_last(new_node)
   while i < parent_node.keys.count()
     new_keys.add_last(parent_node.keys[i])
-    i = i + 1uaddr
-  i = child_idx + 1uaddr
+    i = i + 1u64
+  i = child_idx + 1u64
   while i < parent_node.children.count()
     new_children.add_last(parent_node.children[i])
-    i = i + 1uaddr
+    i = i + 1u64
 
   parent_node.keys = new_keys
   parent_node.children = new_children
@@ -240,10 +240,10 @@ routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
     node.subtree_size = node.keys.count()
   else
     var size = node.keys.count()
-    var i = 0uaddr
+    var i = 0u64
     while i < node.children.count()
       size = size + node.children[i].subtree_size
-      i = i + 1uaddr
+      i = i + 1u64
     node.subtree_size = size
   return
 
@@ -259,55 +259,55 @@ routine SortedList[T].remove(value: T) -> Bool
     return false
 
   me.remove_from_node(me.root!, value)
-  me.count = me.count - 1uaddr
+  me.count = me.count - 1u64
 
-  if me.root!.keys.count() == 0uaddr and not me.root!.is_leaf
+  if me.root!.keys.count() == 0u64 and not me.root!.is_leaf
     me.root = me.root!.children[0]
 
-  if me.root!.keys.count() == 0uaddr
+  if me.root!.keys.count() == 0u64
     me.root = None
 
   return true
 
 routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T)
-  var i = 0uaddr
+  var i = 0u64
   while i < node.keys.count() and value > node.keys[i]
-    i = i + 1uaddr
+    i = i + 1u64
 
   if i < node.keys.count() and value == node.keys[i]
     if node.is_leaf
       var new_keys = List[T]()
-      var j = 0uaddr
+      var j = 0u64
       while j < node.keys.count()
         if j != i
           new_keys.add_last(node.keys[j])
-        j = j + 1uaddr
+        j = j + 1u64
       node.keys = new_keys
-      node.subtree_size = node.subtree_size - 1uaddr
+      node.subtree_size = node.subtree_size - 1u64
     else
       var pred = me.get_predecessor(node, i)
       node.keys[i] = pred
       me.remove_from_node(node.children[i], pred)
-      node.subtree_size = node.subtree_size - 1uaddr
+      node.subtree_size = node.subtree_size - 1u64
   else
     if node.is_leaf
       return
 
     me.remove_from_node(node.children[i], value)
-    node.subtree_size = node.subtree_size - 1uaddr
+    node.subtree_size = node.subtree_size - 1u64
   return
 
-routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: UAddr) -> T
+routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
   var current = node.children[idx]
   while not current.is_leaf
-    current = current.children[current.children.count() - 1uaddr]
-  return current.keys[current.keys.count() - 1uaddr]
+    current = current.children[current.children.count() - 1u64]
+  return current.keys[current.keys.count() - 1u64]
 
-routine SortedList[T].remove_all(value: T) -> UAddr
+routine SortedList[T].remove_all(value: T) -> U64
   # Remove all occurrences of value, return count removed
-  var removed = 0uaddr
+  var removed = 0u64
   while me.remove(value)
-    removed = removed + 1uaddr
+    removed = removed + 1u64
   return removed
 
 # ============================================================================
@@ -316,7 +316,7 @@ routine SortedList[T].remove_all(value: T) -> UAddr
 
 routine SortedList[T].__getitem__![I](index: I) -> T
 needs I obeys Integral
-  var idx = index.UAddr()
+  var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!, idx)
@@ -326,12 +326,12 @@ needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!, idx)
 
-routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: UAddr) -> T
+routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
   if node.is_leaf
     return node.keys[rank]
 
   var remaining = rank
-  var i = 0uaddr
+  var i = 0u64
 
   while i < node.children.count()
     var child_size = node.children[i].subtree_size
@@ -342,11 +342,11 @@ routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: UAddr) -> T
     remaining = remaining - child_size
 
     if i < node.keys.count()
-      if remaining == 0uaddr
+      if remaining == 0u64
         return node.keys[i]
-      remaining = remaining - 1uaddr
+      remaining = remaining - 1u64
 
-    i = i + 1uaddr
+    i = i + 1u64
 
   return node.keys[0]
 
@@ -362,20 +362,20 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   return result
 
 routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val: T, result: List[T])
-  var i = 0uaddr
+  var i = 0u64
 
   while i < node.keys.count()
-    if not node.is_leaf and (i == 0uaddr or node.keys[i - 1uaddr] >= min_val)
+    if not node.is_leaf and (i == 0u64 or node.keys[i - 1u64] >= min_val)
       me.range_collect(node.children[i], min_val, max_val, result)
 
     var key = node.keys[i]
     if key >= min_val and key <= max_val
       result.add_last(key)
 
-    i = i + 1uaddr
+    i = i + 1u64
 
   if not node.is_leaf
-    me.range_collect(node.children[node.children.count() - 1uaddr], min_val, max_val, result)
+    me.range_collect(node.children[node.children.count() - 1u64], min_val, max_val, result)
   return
 
 # ============================================================================
@@ -395,8 +395,8 @@ routine SortedList[T].max!() -> T
     absent
   var node = me.root!
   while not node.is_leaf
-    node = node.children[node.children.count() - 1uaddr]
-  return node.keys[node.keys.count() - 1uaddr]
+    node = node.children[node.children.count() - 1u64]
+  return node.keys[node.keys.count() - 1u64]
 
 routine SortedList[T].first!() -> T
   return me.min!()
@@ -409,7 +409,7 @@ routine SortedList[T].last!() -> T
 # ============================================================================
 
 routine SortedList[T].__seq__() -> SortedListIterator[T]
-  return SortedListIterator[T](list: me, index: 0uaddr)
+  return SortedListIterator[T](list: me, index: 0u64)
 
 routine SortedList[T].to_list() -> List[T]
   var result = List[T](me.count)
@@ -419,25 +419,25 @@ routine SortedList[T].to_list() -> List[T]
   return result
 
 routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
-  var i = 0uaddr
+  var i = 0u64
   while i < node.keys.count()
     if not node.is_leaf
       me.collect_inorder(node.children[i], result)
     result.add_last(node.keys[i])
-    i = i + 1uaddr
+    i = i + 1u64
   if not node.is_leaf
-    me.collect_inorder(node.children[node.children.count() - 1uaddr], result)
+    me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
 entity SortedListIterator[T]
   list: SortedList[T]
-  index: UAddr
+  index: U64
 
 routine SortedListIterator[T].next!() -> T
   if me.index >= me.list.count()
     absent
   var value = me.list[me.index]
-  me.index = me.index + 1uaddr
+  me.index = me.index + 1u64
   return value
 
 # ============================================================================
@@ -447,9 +447,9 @@ routine SortedListIterator[T].next!() -> T
 routine SortedList[T].__eq__(other: SortedList[T]) -> Bool
   if me.count != other.count
     return false
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     if me[i] != other[i]
       return false
-    i = i + 1uaddr
+    i = i + 1u64
   return true

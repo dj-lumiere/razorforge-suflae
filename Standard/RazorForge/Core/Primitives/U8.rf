@@ -96,20 +96,6 @@ routine U8.__create__!(from: D64) -> U8
 routine U8.__create__!(from: D128) -> U8
   return from.U32!().U8!()
 
-# From SAddr - crashes if value negative or out of U8 range
-routine U8.__create__!(from: SAddr) -> U8
-  var val_s64 = from.S64!()
-  if not (0_s64 <= val_s64 <= 255_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
-  return trunc[SAddr, U8](from)
-
-# From UAddr - crashes if value out of U8 range
-routine U8.__create__!(from: UAddr) -> U8
-  var val_u64 = from.U64!()
-  if val_u64 > 255_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
-  return trunc[UAddr, U8](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================

@@ -23,11 +23,8 @@ internal enum NumericTypeKind
     /// <summary>Unsigned fixed-width integers (u8, u16, u32, u64, u128).</summary>
     UnsignedInteger,
 
-    /// <summary>System-dependent signed integer (saddr).</summary>
-    SignedAddress,
-
-    /// <summary>System-dependent unsigned integer (uaddr).</summary>
-    UnsignedAddress,
+    /// <summary>Address-sized unsigned integer (Address).</summary>
+    Address,
 
     /// <summary>Binary floating point (f16, f32, f64, f128).</summary>
     BinaryFloat,
@@ -960,8 +957,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static bool IsHijackedType(TypeSymbol type)
     {
-        // Check if the type name is "Hijacked" (for resolved generic types)
-        return type.Name == "Hijacked";
+        return type.Name == "Hijacked" || type.Name.StartsWith("Hijacked[");
     }
 
     /// <summary>
@@ -969,7 +965,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static bool IsSeizedType(TypeSymbol type)
     {
-        return type.Name == "Seized";
+        return type.Name == "Seized" || type.Name.StartsWith("Seized[");
     }
 
     /// <summary>

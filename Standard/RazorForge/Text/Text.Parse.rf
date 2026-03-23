@@ -118,32 +118,6 @@ routine S128.__create__!(from_text: Text) -> S128
     return S128(0u128 - result)
   return S128(result)
 
-routine SAddr.__create__!(from_text: Text) -> SAddr
-  # Parses hex format: [-]0xXXXX_XXXX_XXXX_XXXX
-  var start = 0u64
-  var negative = false
-  if from_text.count() > 0u64
-    var first = from_text[0u64]
-    if first == Letter(value: 0x002Du32)
-      negative = true
-      start = 1u64
-    elseif first == Letter(value: 0x002Bu32)
-      start = 1u64
-  var result = 0uaddr
-  var i = start
-  while i < from_text.count()
-    var cp = from_text[i].codepoint()
-    if 0x0030u32 <= cp <= 0x0039u32
-      result = result * 16uaddr + UAddr(cp - 0x0030u32)
-    elseif 0x0041u32 <= cp <= 0x0046u32
-      result = result * 16uaddr + UAddr(cp - 0x0041u32 + 10u32)
-    elseif 0x0061u32 <= cp <= 0x0066u32
-      result = result * 16uaddr + UAddr(cp - 0x0061u32 + 10u32)
-    i = i + 1u64
-  if negative
-    return SAddr(0uaddr - result)
-  return SAddr(result)
-
 # ============================================================================
 # Unsigned Integers
 # ============================================================================
@@ -198,18 +172,18 @@ routine U128.__create__!(from_text: Text) -> U128
     i = i + 1u64
   return result
 
-routine UAddr.__create__!(from_text: Text) -> UAddr
+routine Address.__create__!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
-  var result = 0uaddr
+  var result = 0_a
   var i = 0u64
   while i < from_text.count()
     var cp = from_text[i].codepoint()
     if 0x0030u32 <= cp <= 0x0039u32
-      result = result * 16uaddr + UAddr(cp - 0x0030u32)
+      result = result * 16_a + Address(cp - 0x0030u32)
     elseif 0x0041u32 <= cp <= 0x0046u32
-      result = result * 16uaddr + UAddr(cp - 0x0041u32 + 10u32)
+      result = result * 16_a + Address(cp - 0x0041u32 + 10u32)
     elseif 0x0061u32 <= cp <= 0x0066u32
-      result = result * 16uaddr + UAddr(cp - 0x0061u32 + 10u32)
+      result = result * 16_a + Address(cp - 0x0061u32 + 10u32)
     i = i + 1u64
   return result
 

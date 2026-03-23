@@ -18,23 +18,23 @@ routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
   return BackIndex[I](offset: offset)
 
 # Resolve BackIndex to actual index given collection length
-routine BackIndex[I obeys Integral].resolve(length: UAddr) -> UAddr
-  var offset_uaddr = me.offset.UAddr()
-  if offset_uaddr > length
+routine BackIndex[I obeys Integral].resolve(length: U64) -> U64
+  var offset_u64 = me.offset.U64()
+  if offset_u64 > length
     stop!("BackIndex out of bounds")
-  return length - offset_uaddr
+  return length - offset_u64
 
 # Get the offset value
 routine BackIndex[I obeys Integral].get_offset() -> I
   return me.offset
 
-# Convert offset to UAddr
-routine BackIndex[I obeys Integral].offset_uaddr() -> UAddr
-  return me.offset.UAddr()
+# Convert offset to U64
+routine BackIndex[I obeys Integral].offset_u64() -> U64
+  return me.offset.U64()
 
 # Comparison operations
 routine BackIndex[I obeys Integral].__eq__(other: BackIndex[I]) -> Bool
-  return me.offset.UAddr() == other.offset.UAddr()
+  return me.offset.U64() == other.offset.U64()
 
 routine BackIndex[I obeys Integral].__cmp__(other: BackIndex[I]) -> ComparisonSign
   return -me.offset <=> -other.offset

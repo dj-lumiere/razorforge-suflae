@@ -14,7 +14,7 @@
 # - void → Blank
 # - void* → Snatched[Blank]
 # - long long / unsigned long long → S64 / U64
-# - NULL → Snatched[Blank](address: 0uaddr)
+# - NULL → Snatched[Blank](address: 0_a)
 
 module Core
 

@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 // Type aliases for RazorForge integration
-typedef uintptr_t rf_uaddr;
+typedef uintptr_t rf_address;
 typedef size_t rf_size_t;
 
 /*
@@ -59,7 +59,7 @@ void* rf_reallocate_dynamic(void* ptr, uint64_t bytes)
 /*
  * Generic memory copy operation
  */
-void rf_copy_bytes_at(rf_uaddr src_address, rf_uaddr dst_address, rf_uaddr bytes)
+void rf_copy_bytes_at(rf_address src_address, rf_address dst_address, rf_address bytes)
 {
     if (src_address == 0 || dst_address == 0 || bytes == 0)
     {
@@ -75,7 +75,7 @@ void rf_copy_bytes_at(rf_uaddr src_address, rf_uaddr dst_address, rf_uaddr bytes
 /*
  * Fill memory region with a byte value
  */
-void rf_set_bytes_at(rf_uaddr dest_address, uint8_t value, uint64_t bytes)
+void rf_set_bytes_at(rf_address dest_address, uint8_t value, uint64_t bytes)
 {
     if (dest_address == 0 || bytes == 0)
     {

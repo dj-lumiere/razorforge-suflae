@@ -88,17 +88,6 @@ routine S64.__create__!(from: D64) -> S64
 routine S64.__create__!(from: D128) -> S64
   return d128_to_s64(from.low, from.high)
 
-# From SAddr - always fits (sign extends from 32 or 64-bit)
-routine S64.__create__!(from: SAddr) -> S64
-  return sext[SAddr, S64](from)
-
-# From UAddr - crashes if value > S64_MAX
-routine S64.__create__!(from: UAddr) -> S64
-  var val_u64 = from.U64!()
-  if val_u64 > 9223372036854775807_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
-  return zext[UAddr, S64](from)
-
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================

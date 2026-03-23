@@ -582,7 +582,7 @@ public record DefineDeclaration(string OldName, string NewName, SourceLocation L
 /// <list type="bullet">
 /// <item>Simple constants: preset PI: f64 = 3.14159</item>
 /// <item>Integer constants: preset MAX_SIZE: u32 = 1024u32</item>
-/// <item>Pointer constants: preset cnullptr: uaddr = 0uaddr</item>
+/// <item>Pointer constants: preset cnullptr: Address = 0a</item>
 /// <item>Must be evaluable at build time</item>
 /// </list>
 /// </remarks>
@@ -612,9 +612,9 @@ public record PresetDeclaration(
 /// <remarks>
 /// External declarations link RazorForge to native runtime:
 /// <list type="bullet">
-/// <item>external("C") routine malloc(size: uaddr) -> cptr&lt;cvoid&gt;</item>
+/// <item>external("C") routine malloc(size: Address) -> cptr&lt;cvoid&gt;</item>
 /// <item>external("C") routine free(ptr: cptr&lt;cvoid&gt;)</item>
-/// <item>external routine heap_alloc!(bytes: uaddr) -> uaddr (default C convention)</item>
+/// <item>external routine heap_alloc!(bytes: Address) -> Address (default C convention)</item>
 /// <item>No function body - implementation provided by native runtime</item>
 /// <item>Links to C functions at build time</item>
 /// </list>

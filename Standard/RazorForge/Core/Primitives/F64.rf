@@ -73,14 +73,6 @@ routine F64.__create__(from: D64) -> F64
 routine F64.__create__(from: D128) -> F64
   return rf_d128_to_f64(from.low_bits(), from.high_bits())
 
-# From SAddr - convert to float (may lose precision)
-routine F64.__create__(from: SAddr) -> F64
-  return sitofp[SAddr, F64](from)
-
-# From UAddr - convert to float (may lose precision)
-routine F64.__create__(from: UAddr) -> F64
-  return uitofp[UAddr, F64](from)
-
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================

@@ -6,4 +6,4 @@ module Core
 entity Data
   secret type_id: U64
   secret size: U64
-  secret data_ptr: UAddr
+  secret data_ptr: Address

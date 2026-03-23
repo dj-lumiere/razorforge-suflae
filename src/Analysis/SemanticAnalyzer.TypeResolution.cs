@@ -508,7 +508,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates a const generic constraint (e.g., requires N is uaddr).
+    /// Validates a const generic constraint (e.g., requires N is Address).
     /// Const generics are build-time constant values, not types.
     /// </summary>
     private void ValidateConstGenericConstraint(

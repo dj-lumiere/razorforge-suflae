@@ -90,20 +90,6 @@ routine S32.__create__!(from: D64) -> S32
 routine S32.__create__!(from: D128) -> S32
   return d128_to_s32(from.low, from.high)
 
-# From SAddr - crashes if value out of S32 range (on 64-bit platforms)
-routine S32.__create__!(from: SAddr) -> S32
-  var val_s64 = from.S64!()
-  if not (-2147483648_s64 <= val_s64 <= 2147483647_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-  return trunc[SAddr, S32](from)
-
-# From UAddr - crashes if value out of S32 range
-routine S32.__create__!(from: UAddr) -> S32
-  var val_u64 = from.U64!()
-  if val_u64 > 2147483647_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
-  return trunc[UAddr, S32](from)
-
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================

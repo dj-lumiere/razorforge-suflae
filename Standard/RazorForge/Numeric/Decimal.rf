@@ -13,7 +13,7 @@ preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 # Opaque handle to MAPM M_APM structure
 # The actual memory is managed by the native runtime
 entity Decimal obeys Numeric, Ordered
-  secret handle: UAddr
+  secret handle: Address
 
 # ============================================================================
 # Lifecycle Management

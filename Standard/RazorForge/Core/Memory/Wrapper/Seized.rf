@@ -31,7 +31,7 @@ module Core
 
 record Seized[T]
   secret ptr: Snatched[T]    # Generic type - use Snatched[T]
-  secret lock_guard: UAddr   # Fixed type - use UAddr
+  secret lock_guard: Address  # Fixed type - opaque lock handle
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
 # The seizing syntax acquires the Exclusive or MultiRead write lock and creates this token

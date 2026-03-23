@@ -245,7 +245,7 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException("Cannot determine type of member variable access target");
         }
 
-        // For @llvm("ptr") types (Snatched[T], etc.), .address returns the pointer as UAddr
+        // For @llvm("ptr") types (Snatched[T], etc.), .address returns the pointer as Address
         if (expr.PropertyName == "address" && targetType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" })
         {
             string result = NextTemp();
@@ -525,10 +525,10 @@ public partial class LLVMCodeGenerator
     {
         return type is Lexer.TokenType.S8Literal or Lexer.TokenType.S16Literal
             or Lexer.TokenType.S32Literal or Lexer.TokenType.S64Literal
-            or Lexer.TokenType.S128Literal or Lexer.TokenType.SAddrLiteral
+            or Lexer.TokenType.S128Literal
             or Lexer.TokenType.U8Literal or Lexer.TokenType.U16Literal
             or Lexer.TokenType.U32Literal or Lexer.TokenType.U64Literal
-            or Lexer.TokenType.U128Literal or Lexer.TokenType.UAddrLiteral;
+            or Lexer.TokenType.U128Literal or Lexer.TokenType.AddressLiteral;
     }
 
     /// <summary>
@@ -565,7 +565,7 @@ public partial class LLVMCodeGenerator
 
     private static readonly string[] NumericSuffixes =
     [
-        "saddr", "uaddr", "s128", "u128", "s64", "u64", "s32", "u32",
+        "a", "s128", "u128", "s64", "u64", "s32", "u32",
         "s16", "u16", "s8", "u8", "f128", "f64", "f32", "f16",
         "d128", "d64", "d32"
     ];
@@ -800,7 +800,7 @@ public partial class LLVMCodeGenerator
 
         bool sourceIsFloat = sourceLlvm is "half" or "float" or "double" or "fp128";
         bool targetIsFloat = targetLlvm is "half" or "float" or "double" or "fp128";
-        bool targetUnsigned = targetTypeName is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+        bool targetUnsigned = targetTypeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
 
         string cast = NextTemp();
         if (sourceIsFloat && targetIsFloat)
@@ -815,7 +815,7 @@ public partial class LLVMCodeGenerator
         }
         else if (targetIsFloat)
         {
-            bool sourceUnsigned = argType?.Name is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+            bool sourceUnsigned = argType?.Name is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
             string op = sourceUnsigned ? "uitofp" : "sitofp";
             EmitLine(sb, $"  {cast} = {op} {sourceLlvm} {argValue} to {targetLlvm}");
         }
@@ -872,7 +872,7 @@ public partial class LLVMCodeGenerator
                     string bytesVal = argVals[0];
                     string result = NextTemp();
                     EmitLine(sb, $"  {result} = call ptr @rf_allocate_dynamic(i64 {bytesVal})");
-                    // Convert ptr to i64 (UAddr) for caller
+                    // Convert ptr to i64 (Address) for caller
                     string asInt = NextTemp();
                     EmitLine(sb, $"  {asInt} = ptrtoint ptr {result} to i64");
                     return asInt;
@@ -892,7 +892,7 @@ public partial class LLVMCodeGenerator
                     EmitLine(sb, $"  {asPtr} = inttoptr i64 {argVals[0]} to ptr");
                     string result = NextTemp();
                     EmitLine(sb, $"  {result} = call ptr @rf_reallocate_dynamic(ptr {asPtr}, i64 {argVals[1]})");
-                    // Convert ptr back to i64 (UAddr)
+                    // Convert ptr back to i64 (Address)
                     string asInt = NextTemp();
                     EmitLine(sb, $"  {asInt} = ptrtoint ptr {result} to i64");
                     return asInt;
@@ -1114,7 +1114,7 @@ public partial class LLVMCodeGenerator
         if (arguments.Count == 0 && _registry.LookupType(member.PropertyName) != null)
         {
             // For @llvm primitive types, emit inline conversion (trunc/zext/sext/fpcast)
-            // instead of a function call. e.g., val.UAddr() → inline zext/trunc.
+            // instead of a function call. e.g., val.Address() → inline zext/trunc.
             TypeInfo? targetType = _registry.LookupType(member.PropertyName);
             if (targetType is RecordTypeInfo { HasDirectBackendType: true })
             {
@@ -1403,7 +1403,7 @@ public partial class LLVMCodeGenerator
         TypeInfo? leftType = GetExpressionType(binary.Left);
         string llvmType = leftType != null ? GetLLVMType(leftType) : "i64";
         string typeName = leftType?.Name ?? "";
-        bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+        bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
         bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
         bool isSoftwareType = llvmType.StartsWith("%Record.") || llvmType.StartsWith("%Tuple.") || llvmType == "ptr";
 
@@ -1544,7 +1544,7 @@ public partial class LLVMCodeGenerator
             TypeInfo? leftType = GetExpressionType(chain.Operands[i]);
             string llvmType = leftType != null ? GetLLVMType(leftType) : "i64";
             string typeName = leftType?.Name ?? "";
-            bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "UAddr";
+            bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
             bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
 
             string cmpInstr = chain.Operators[i] switch
@@ -1997,7 +1997,7 @@ public partial class LLVMCodeGenerator
             return "undef";
         }
 
-        // rf_address_of[T](entity) → ptrtoint ptr to UAddr (i64)
+        // rf_address_of[T](entity) → ptrtoint ptr to Address (i64)
         if (baseName == "rf_address_of" && generic.Arguments.Count == 1)
         {
             string val = EmitExpression(sb, generic.Arguments[0]);
@@ -2539,10 +2539,10 @@ public partial class LLVMCodeGenerator
         TypeInfo? targetType = GetExpressionType(member.Object);
         if (targetType == null) return null;
 
-        // For @llvm("ptr") types (Snatched[T], etc.), .address returns UAddr
+        // For @llvm("ptr") types (Snatched[T], etc.), .address returns Address
         if (member.PropertyName == "address" && targetType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" })
         {
-            return _registry.LookupType("UAddr");
+            return _registry.LookupType("Address");
         }
 
         MemberVariableInfo? memberVariable = targetType switch
@@ -3187,9 +3187,9 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? GetMemberTypeFromOwner(TypeInfo? ownerType, string memberName)
     {
-        // Snatched[T].address → UAddr
+        // Snatched[T].address → Address
         if (ownerType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" } && memberName == "address")
-            return _registry.LookupType("UAddr");
+            return _registry.LookupType("Address");
 
         IReadOnlyList<MemberVariableInfo>? members = ownerType switch
         {

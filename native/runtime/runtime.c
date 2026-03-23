@@ -24,13 +24,13 @@ void rf_runtime_init()
 // ============================================================================
 
 // Get length of cstr
-rf_UAddr rf_cstr_count(const char* cstr)
+rf_address rf_cstr_count(const char* cstr)
 {
-    return (rf_UAddr)strlen(cstr);
+    return (rf_address)strlen(cstr);
 }
-rf_UAddr rf_cstr_copy(char* dest, const char* src)
+rf_address rf_cstr_copy(char* dest, const char* src)
 {
-    return (rf_UAddr)strcpy(dest, src);
+    return (rf_address)strcpy(dest, src);
 }
 rf_S32 rf_cstr_compare(const char* s1, const char* s2)
 {
@@ -42,10 +42,10 @@ rf_S32 rf_cstr_compare(const char* s1, const char* s2)
 // ============================================================================
 
 // Count-based print to stdout (preferred - no null-termination required)
-void rf_console_show(const char* ptr, rf_UAddr count) { fwrite(ptr, 1, count, stdout); }
+void rf_console_show(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stdout); }
 
 // Count-based print to stderr (preferred - no null-termination required)
-void rf_console_alert(const char* ptr, rf_UAddr count) { fwrite(ptr, 1, count, stderr); }
+void rf_console_alert(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stderr); }
 
 // Input operations - get single character
 char rf_console_get_char()
@@ -150,7 +150,7 @@ char* rf_console_get_word()
 }
 
 // Input operations - get exactly n characters
-char* rf_console_get_letters(rf_UAddr count)
+char* rf_console_get_letters(rf_address count)
 {
     fflush(stdout);
     char* buffer = malloc(count + 1);

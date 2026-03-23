@@ -81,14 +81,6 @@ routine S128.__create__!(from: D64) -> S128
 routine S128.__create__!(from: D128) -> S128
   return from.S64!().S128()
 
-# From SAddr - sign extend to S128
-routine S128.__create__!(from: SAddr) -> S128
-  return sext[SAddr, S128](from)
-
-# From UAddr - zero extend to S128
-routine S128.__create__!(from: UAddr) -> S128
-  return zext[UAddr, S128](from)
-
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
