@@ -33,7 +33,7 @@ internal class Program
         string command = args[0].ToLowerInvariant().TrimStart('-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "build" || command == "buildandrun" || command == "validate-stdlib" || command == "help";
+        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "build" || command == "buildandrun" || command == "check" || command == "validate-stdlib" || command == "help";
 
         if (!isCommand)
         {
@@ -84,6 +84,14 @@ internal class Program
                 }
                 return BuildAndRun(entryFile: args[1]);
 
+            case "check":
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Error: check command requires an entry file path");
+                    return 1;
+                }
+                return CheckMultiFile(entryFile: args[1]);
+
             case "validate-stdlib":
             {
                 string lang = args.Length >= 2 ? args[1].ToLowerInvariant() : "rf";
@@ -115,6 +123,7 @@ internal class Program
         Console.WriteLine("  RazorForge codegen <source-file> [out.ll]   - Generate LLVM IR (single file)");
         Console.WriteLine("  RazorForge build <entry-file> [out.ll]      - Build multi-file project");
         Console.WriteLine("  RazorForge buildandrun <entry-file>          - Build and execute via lli");
+        Console.WriteLine("  RazorForge check <entry-file>                - Type-check only (no codegen)");
         Console.WriteLine("  RazorForge validate-stdlib [rf|sf]           - Validate stdlib routine bodies");
         Console.WriteLine("  RazorForge help                             - Show this help");
         Console.WriteLine();
@@ -662,6 +671,137 @@ internal class Program
         catch (Exception ex)
         {
             Console.WriteLine($"Build failed: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Runs the multi-file build pipeline through semantic analysis only (no codegen).
+    /// Reports errors and warnings. Returns 0 if type-checking succeeds, 1 otherwise.
+    /// </summary>
+    private static int CheckMultiFile(string entryFile)
+    {
+        if (!File.Exists(entryFile))
+        {
+            Console.WriteLine($"Error: File '{entryFile}' not found.");
+            return 1;
+        }
+
+        bool isSuflae = IsSuflaeFile(entryFile);
+        var language = isSuflae ? Language.Suflae : Language.RazorForge;
+
+        Console.WriteLine($"Checking {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
+        Console.WriteLine();
+
+        try
+        {
+            string projectRoot = Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
+            string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
+
+            // Phase 1: Parse all files and resolve dependencies
+            Console.WriteLine("=== BUILD DRIVER ===");
+            var driver = new BuildDriver(projectRoot, stdlibRoot, language);
+            BuildResult buildResult = driver.CompileFile(Path.GetFullPath(entryFile));
+
+            Console.WriteLine($"Parsed {buildResult.Units.Count} file(s)");
+
+            if (buildResult.Errors.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
+                foreach (var error in buildResult.Errors)
+                {
+                    Console.WriteLine($"  {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Check failed due to errors.");
+                return 1;
+            }
+
+            if (buildResult.Warnings.Count > 0)
+            {
+                Console.WriteLine($"Warnings: {buildResult.Warnings.Count}");
+                foreach (var warning in buildResult.Warnings)
+                {
+                    Console.WriteLine($"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                }
+            }
+
+            // Filter out stdlib files
+            string normalizedStdlib = Path.GetFullPath(stdlibRoot);
+            var userUnits = buildResult.Units
+                .Where(u => !Path.GetFullPath(u.FilePath).StartsWith(normalizedStdlib, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var unitsByModule = new Dictionary<string, FileBuildUnit>(StringComparer.OrdinalIgnoreCase);
+            foreach (var unit in userUnits)
+            {
+                string moduleName = unit.Module ?? Path.GetFileNameWithoutExtension(unit.FilePath);
+                unitsByModule[moduleName] = unit;
+            }
+
+            var orderedFiles = new List<(SyntaxTree.Program Program, string FilePath)>();
+            foreach (string moduleName in buildResult.InitializationOrder)
+            {
+                if (unitsByModule.TryGetValue(moduleName, out var unit))
+                {
+                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                }
+            }
+
+            foreach (var unit in userUnits)
+            {
+                if (!orderedFiles.Any(f => string.Equals(f.FilePath, unit.FilePath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                }
+            }
+
+            // Phase 2: Semantic analysis (multi-file) — no codegen
+            Console.WriteLine();
+            Console.WriteLine("=== SEMANTIC ANALYSIS ===");
+
+            var analyzer = new SemanticAnalyzer(language);
+            var result = analyzer.AnalyzeMultiple(orderedFiles);
+
+            Console.WriteLine($"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+
+            if (result.Errors.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
+                foreach (var error in result.Errors)
+                {
+                    Console.WriteLine($"  {error.FormattedMessage}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Check failed due to errors.");
+                return 1;
+            }
+
+            if (result.Warnings.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
+                foreach (var warning in result.Warnings)
+                {
+                    Console.WriteLine($"  {warning.FormattedMessage}");
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Check passed!");
+            return 0;
+        }
+        catch (GrammarException ex)
+        {
+            Console.WriteLine($"{ex.Message}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Check failed: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
             return 1;
         }
