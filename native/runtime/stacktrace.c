@@ -107,7 +107,7 @@ void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id, rf_U32 l
     if (rf_runtime_stack_depth >= RF_RUNTIME_STACK_MAX)
     {
         // Stack overflow - print error and exit
-        fprintf(stderr, "\nRazorForge Runtime Error: Stack overflow (depth > %d)\n", RF_RUNTIME_STACK_MAX);
+        fprintf(stderr, "\033[31m\nRazorForge Runtime Error: Stack overflow (depth > %d)\n\033[0m", RF_RUNTIME_STACK_MAX);
         fflush(stderr);
         exit(1);
     }
@@ -261,9 +261,9 @@ void __rf_print_current_stack(void)
 // Throw an error with message and captured routine trace
 void __rf_throw(const char* error_type, const char* message)
 {
-    fprintf(stderr, "\n%s: %s\n", error_type ? error_type : "Error", message ? message : "");
+    fprintf(stderr, "\033[91m\n%s: %s\n", error_type ? error_type : "Error", message ? message : "");
     __rf_print_current_stack();
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\033[0m\n");
     fflush(stderr);
     exit(1);
 }
@@ -340,7 +340,7 @@ void __rf_print_error(const rf_Error* error)
     const char* routine = get_routine_name(error->routine_id);
     const char* message = (const char*)error->message_handle.ptr;
 
-    fprintf(stderr, "\nError at %s:%u:%u in %s\n",
+    fprintf(stderr, "\033[91m\nError at %s:%u:%u in %s\n",
             file, error->line_no, error->column_no, routine);
 
     if (message)
@@ -350,4 +350,5 @@ void __rf_print_error(const rf_Error* error)
 
     fprintf(stderr, "\n");
     __rf_print_routine_trace(&error->routine_trace);
+    fprintf(stderr, "\033[0m");
 }

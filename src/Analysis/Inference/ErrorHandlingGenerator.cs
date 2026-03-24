@@ -194,8 +194,10 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The try_ variant routine info.</returns>
     private RoutineInfo GenerateTryVariant(RoutineInfo original)
     {
-        TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
-            message: "Failable function must have a return type");
+        TypeInfo returnType = original.ReturnType
+            ?? _registry.LookupType("Blank")
+            ?? throw new InvalidOperationException(
+                message: "Failable function must have a return type and Blank type must be registered");
 
         TypeInfo maybeType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.MaybeDefinition,
@@ -227,8 +229,10 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The check_ variant routine info.</returns>
     private RoutineInfo GenerateCheckVariant(RoutineInfo original)
     {
-        TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
-            message: "Failable function must have a return type");
+        TypeInfo returnType = original.ReturnType
+            ?? _registry.LookupType("Blank")
+            ?? throw new InvalidOperationException(
+                message: "Failable function must have a return type and Blank type must be registered");
 
         TypeInfo resultType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.ResultDefinition,
@@ -261,8 +265,10 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The lookup_ variant routine info.</returns>
     private RoutineInfo GenerateLookupVariant(RoutineInfo original)
     {
-        TypeInfo returnType = original.ReturnType ?? throw new InvalidOperationException(
-            message: "Failable function must have a return type");
+        TypeInfo returnType = original.ReturnType
+            ?? _registry.LookupType("Blank")
+            ?? throw new InvalidOperationException(
+                message: "Failable function must have a return type and Blank type must be registered");
 
         TypeInfo lookupType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.LookupDefinition,

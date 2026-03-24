@@ -75,3 +75,57 @@ double rf_parse_F64(const char* str)
 }
 
 // F128 parsing is in f128_functions.c (requires LibBF)
+
+// ============================================================================
+// Text Concatenation
+// ============================================================================
+
+/**
+ * Concatenates two Text entities, returning a new Text entity.
+ *
+ * Text layout:   { ptr letters }          — pointer to List[Letter]
+ * List layout:   { ptr data, i64 count, i64 capacity }
+ * Letter:        i32 (UTF-32 codepoint)
+ */
+
+// Forward declaration from memory.c
+extern void* rf_allocate_dynamic(uint64_t bytes);
+
+typedef struct {
+    void* data;
+    int64_t count;
+    int64_t capacity;
+} rf_List;
+
+typedef struct {
+    rf_List* letters;
+} rf_Text;
+
+void* rf_text_concat(void* text_a, void* text_b)
+{
+    rf_Text* a = (rf_Text*)text_a;
+    rf_Text* b = (rf_Text*)text_b;
+
+    int64_t count_a = a->letters->count;
+    int64_t count_b = b->letters->count;
+    int64_t total = count_a + count_b;
+
+    // Allocate new data array (i32 per codepoint)
+    int32_t* new_data = (int32_t*)rf_allocate_dynamic((uint64_t)total * sizeof(int32_t));
+    if (count_a > 0)
+        memcpy(new_data, a->letters->data, (size_t)count_a * sizeof(int32_t));
+    if (count_b > 0)
+        memcpy(new_data + count_a, b->letters->data, (size_t)count_b * sizeof(int32_t));
+
+    // Allocate new List[Letter] struct
+    rf_List* new_list = (rf_List*)rf_allocate_dynamic(sizeof(rf_List));
+    new_list->data = new_data;
+    new_list->count = total;
+    new_list->capacity = total;
+
+    // Allocate new Text wrapper
+    rf_Text* new_text = (rf_Text*)rf_allocate_dynamic(sizeof(rf_Text));
+    new_text->letters = new_list;
+
+    return new_text;
+}

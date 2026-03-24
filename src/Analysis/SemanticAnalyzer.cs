@@ -173,6 +173,11 @@ public sealed partial class SemanticAnalyzer
         var previousImports = new HashSet<string>(_importedModules, StringComparer.OrdinalIgnoreCase);
         int errorsBefore = _errors.Count;
 
+        // Run global phases that stdlib body analysis depends on
+        // (StdlibLoader registered types and routines, but these phases were not run)
+        AutoRegisterBuiltinRoutines();
+        GenerateDerivedOperators();
+
         foreach (var (program, filePath, module) in _registry.StdlibPrograms)
         {
             _currentFilePath = filePath;

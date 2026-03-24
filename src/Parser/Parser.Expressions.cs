@@ -1591,7 +1591,7 @@ public partial class Parser
         }
 
         Token token = PeekToken(offset: -1);
-        char parsedLetter = ParseLetterContent(value: token.Text);
+        string parsedLetter = ParseLetterContent(value: token.Text);
         result = new LiteralExpression(Value: parsedLetter, LiteralType: token.Type, Location: location);
         return true;
     }
@@ -1650,28 +1650,38 @@ public partial class Parser
     /// <summary>
     /// Parses the content of a letter literal, handling escape sequences.
     /// </summary>
-    private static char ParseLetterContent(string value)
+    private static string ParseLetterContent(string value)
     {
-        int quoteStart = value.LastIndexOf(value: '\'');
+        // Determine the actual character content — strip quotes if present
+        string charContent;
+        int quoteStart = value.IndexOf(value: '\'');
         int quoteEnd = value.Length - 1;
 
         if (quoteStart >= 0 && quoteEnd > quoteStart && value[index: quoteEnd] == '\'')
         {
-            string charContent = value.Substring(startIndex: quoteStart + 1, length: quoteEnd - quoteStart - 1);
-
-            return charContent switch
-            {
-                "\\'" => '\'',
-                @"\\" => '\\',
-                "\\n" => '\n',
-                "\\t" => '\t',
-                "\\r" => '\r',
-                _ when charContent.Length == 1 => charContent[index: 0],
-                _ => '?'
-            };
+            charContent = value.Substring(startIndex: quoteStart + 1, length: quoteEnd - quoteStart - 1);
+        }
+        else
+        {
+            charContent = value;
         }
 
-        return '?';
+        if (charContent.StartsWith("\\u") && charContent.Length == 8)
+        {
+            int codePoint = Convert.ToInt32(value: charContent.Substring(startIndex: 2), fromBase: 16);
+            return char.ConvertFromUtf32(utf32: codePoint);
+        }
+
+        return charContent switch
+        {
+            "\\'" => "'",
+            @"\\" => "\\",
+            "\\n" => "\n",
+            "\\t" => "\t",
+            "\\r" => "\r",
+            "\\0" => "\0",
+            _ => charContent
+        };
     }
 
     /// <summary>

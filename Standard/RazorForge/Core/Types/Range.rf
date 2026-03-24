@@ -18,7 +18,7 @@
 #   list[^3 til ^0]    # last 3 elements
 module Core
 
-record Range[T] needs T obeys FixedNumeric
+record Range[T] obeys Sequenceable needs T obeys FixedNumeric
   start: T
   end: T
   step: T
@@ -48,19 +48,17 @@ routine Range[T].get_step() -> T
 
 # Check if range is empty
 routine Range[T].is_empty() -> Bool
-  if me.inclusive
-    if me.is_ascending()
-      return me.start > me.end
-    else
-      return me.start < me.end
-  else
-    return me.start == me.end
+  if me.inclusive and me.is_ascending()
+    return me.start > me.end
+  if me.inclusive and not me.is_ascending()
+    return me.start < me.end
+  return me.start == me.end
 
 # ============================================================================
-# Range iteration support
+# Sequenceable protocol support
 # ============================================================================
 
-record RangeIterator[T] needs T obeys FixedNumeric
+entity RangeEmitter[T] needs T obeys FixedNumeric
   current: T
   end: T
   step: T
@@ -68,8 +66,9 @@ record RangeIterator[T] needs T obeys FixedNumeric
   inclusive: Bool
   done: Bool
 
-routine Range[T].iter() -> RangeIterator[T]
-  return RangeIterator[T](
+@readonly
+routine Range[T].__seq__() -> RangeEmitter[T]
+  return RangeEmitter[T](
     current: me.start,
     end: me.end,
     step: me.step,
@@ -78,11 +77,12 @@ routine Range[T].iter() -> RangeIterator[T]
     done: me.is_empty()
   )
 
-routine RangeIterator[T].next!() -> T
+@writable
+emitting routine RangeEmitter[T].__next__() -> T
   if me.done
     absent
 
-  var value = me.current
+  emit me.current
 
   if me.ascending
     me.current = me.current + me.step
@@ -101,4 +101,4 @@ routine RangeIterator[T].next!() -> T
       if me.current <= me.end
         me.done = true
 
-  return value
+  return

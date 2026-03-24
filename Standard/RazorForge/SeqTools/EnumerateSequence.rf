@@ -2,27 +2,27 @@
 # enumerate() pairs each element with its zero-based index
 # enumerate(start:) pairs each element with an index starting from start
 
-module SeqTools
+module Core
 
-entity EnumerateSequence[T] obeys Sequenceable[Tuple[U64, T]]
+entity EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]]
   secret source: Sequenceable[T]
-  secret start: U64
+  secret start: S64
 
 routine EnumerateSequence[T].__seq__() -> EnumerateEmitter[T]
   return EnumerateEmitter[T](source: me.source.__seq__(), index: me.start)
 
-entity EnumerateEmitter[T] obeys SequenceEmitter[Tuple[U64, T]]
+entity EnumerateEmitter[T] obeys SequenceEmitter[Tuple[S64, T]]
   secret source: SequenceEmitter[T]
-  secret index: U64
+  secret index: S64
 
-emitting routine EnumerateEmitter[T].__next__() -> Tuple[U64, T]
+emitting routine EnumerateEmitter[T].__next__() -> Tuple[S64, T]
   var item = me.source.__next__()
   emit (me.index, item)
-  me.index = me.index + 1u64
+  me.index = me.index + 1s64
   return
 
 routine Sequenceable[T].enumerate() -> EnumerateSequence[T]
-  return EnumerateSequence[T](source: me, start: 0u64)
+  return EnumerateSequence[T](source: me, start: 0s64)
 
 routine Sequenceable[T].enumerate(start: U64) -> EnumerateSequence[T]
   return EnumerateSequence[T](source: me, start: start)

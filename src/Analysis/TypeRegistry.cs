@@ -1044,7 +1044,8 @@ public sealed class TypeRegistry
             CallingConvention = routine.CallingConvention,
             IsVariadic = routine.IsVariadic,
             IsDangerous = routine.IsDangerous,
-            Storage = routine.Storage
+            Storage = routine.Storage,
+            AsyncStatus = routine.AsyncStatus
         };
 
         _routines[key: key] = updatedRoutine;
@@ -1089,6 +1090,38 @@ public sealed class TypeRegistry
             }
         }
 
+        // For protocol types, check the protocol's method signatures
+        if (type is ProtocolTypeInfo proto)
+        {
+            var protoMethod = proto.Methods.FirstOrDefault(m => m.Name == methodName);
+            if (protoMethod != null)
+            {
+                // Resolve return type: for generic protocols (SequenceEmitter[S64]),
+                // substitute generic params in the return type (T → S64)
+                TypeInfo? resolvedReturn = protoMethod.ReturnType;
+                if (resolvedReturn is GenericParameterTypeInfo gp && proto.TypeArguments is { Count: > 0 })
+                {
+                    var genericDef2 = proto.GenericDefinition ?? proto;
+                    if (genericDef2.GenericParameters is { Count: > 0 })
+                    {
+                        int idx = genericDef2.GenericParameters.ToList().IndexOf(gp.Name);
+                        if (idx >= 0 && idx < proto.TypeArguments.Count)
+                            resolvedReturn = proto.TypeArguments[idx];
+                    }
+                }
+                // Create a RoutineInfo wrapper so callers get standard ReturnType/OwnerType
+                return new RoutineInfo(protoMethod.Name)
+                {
+                    OwnerType = type,
+                    ReturnType = resolvedReturn,
+                    IsFailable = protoMethod.IsFailable,
+                    AsyncStatus = protoMethod.Name == "__next__"
+                        ? SyntaxTree.AsyncStatus.Emitting
+                        : SyntaxTree.AsyncStatus.None
+                };
+            }
+        }
+
         // For resolved generics, check the generic definition's methods
         if (type.IsGenericResolution)
         {
@@ -1097,8 +1130,13 @@ public sealed class TypeRegistry
                 RecordTypeInfo r => r.GenericDefinition,
                 EntityTypeInfo e => e.GenericDefinition,
                 ResidentTypeInfo res => res.GenericDefinition,
+                ProtocolTypeInfo p => p.GenericDefinition,
                 _ => null
             };
+            // Fallback: strip type arguments from name to find generic definition
+            genericDef ??= type.Name.Contains('[')
+                ? LookupType(type.Name[..type.Name.IndexOf('[')])
+                : null;
 
             if (genericDef != null)
             {

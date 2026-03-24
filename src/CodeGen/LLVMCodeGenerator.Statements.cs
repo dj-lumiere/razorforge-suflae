@@ -369,7 +369,9 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb, $"  {loaded} = load {_emitSlotType}, ptr {_emitSlotAddr}");
 
                 // Allocate a Snatched handle and store the value
-                int size = GetTypeSizeFromLlvmType(_emitSlotType);
+                int size = _currentFunctionReturnType != null
+                    ? GetTypeSize(_currentFunctionReturnType)
+                    : GetTypeSizeFromLlvmType(_emitSlotType);
                 string handle = NextTemp();
                 EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
                 EmitLine(sb, $"  store {_emitSlotType} {loaded}, ptr {handle}");
@@ -463,6 +465,17 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException("Cannot determine type for emit expression");
         }
         string llvmType = GetLLVMType(valueType);
+
+        // Tuple literals produce inline aggregates, not pointers — match EmitTupleLiteral's actual type
+        if (llvmType == "ptr" && emitStmt.Expression is SyntaxTree.TupleLiteralExpression tupleEmitExpr)
+        {
+            var elemTypes = tupleEmitExpr.Elements.Select(e =>
+            {
+                TypeInfo? et = GetExpressionType(e);
+                return et != null ? GetLLVMType(et) : "i64";
+            });
+            llvmType = $"{{ {string.Join(", ", elemTypes)} }}";
+        }
 
         // Lazily create the emit slot alloca on first emit
         if (_emitSlotAddr == null)
@@ -720,7 +733,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // General iterator protocol: seq.__seq__() → emitter, emitter.try_next() → Maybe[T]
+        // General iterator protocol: seq.__seq__() → emitter, emitter.__next__() → Maybe[T]
         // Maybe layout: { i64 (DataState), ptr (Snatched handle) }
         // DataState: VALID=1 → has value, ABSENT=0 → done
 
@@ -740,15 +753,103 @@ public partial class LLVMCodeGenerator
 
         if (seqType != null)
         {
-            string seqMethodName = $"{seqType.Name}.__seq__";
-            RoutineInfo? seqMethod = _registry.LookupRoutine(seqMethodName);
+            // Look up __seq__ method — LookupMethod handles generic type fallback
+            RoutineInfo? seqMethod = _registry.LookupMethod(seqType, "__seq__");
 
             if (seqMethod != null)
             {
-                string seqMangled = MangleFunctionName(seqMethod);
+                // Handle monomorphization for generic types
+                string seqMangled;
+                if (seqMethod.OwnerType != null &&
+                    (seqMethod.OwnerType.IsGenericDefinition || seqMethod.OwnerType is ProtocolTypeInfo) &&
+                    seqType.IsGenericResolution)
+                {
+                    seqMangled = Q($"{seqType.FullName}.__seq__");
+                    RecordMonomorphization(seqMangled, seqMethod, seqType);
+                }
+                else
+                {
+                    seqMangled = MangleFunctionName(seqMethod);
+                }
+
+                // Skip for protocol-owned methods — monomorphized version will declare itself
+                if (seqMethod.OwnerType is not ProtocolTypeInfo)
+                    GenerateFunctionDeclaration(seqMethod);
+
+                // Resolve return type: substitute generic params (e.g., RangeEmitter[T] → RangeEmitter[S64])
+                TypeInfo? resolvedReturnType = seqMethod.ReturnType;
+                if (resolvedReturnType is GenericParameterTypeInfo && seqType is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    TypeInfo? ownerGenericDef = seqType switch
+                    {
+                        RecordTypeInfo r => r.GenericDefinition,
+                        EntityTypeInfo e => e.GenericDefinition,
+                        ResidentTypeInfo res => res.GenericDefinition,
+                        _ => null
+                    };
+                    if (ownerGenericDef?.GenericParameters != null)
+                    {
+                        int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(resolvedReturnType.Name);
+                        if (paramIndex >= 0 && paramIndex < seqType.TypeArguments.Count)
+                            resolvedReturnType = seqType.TypeArguments[paramIndex];
+                    }
+                }
+                else if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null } &&
+                         seqType is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    // Nested resolution: RangeEmitter[T] → RangeEmitter[S64]
+                    TypeInfo? ownerGenericDef = seqType switch
+                    {
+                        RecordTypeInfo r => r.GenericDefinition,
+                        EntityTypeInfo e => e.GenericDefinition,
+                        ResidentTypeInfo res => res.GenericDefinition,
+                        _ => null
+                    };
+                    if (ownerGenericDef?.GenericParameters != null)
+                    {
+                        bool anyChanged = false;
+                        var substitutedArgs = new List<TypeInfo>();
+                        foreach (var arg in resolvedReturnType.TypeArguments)
+                        {
+                            if (arg is GenericParameterTypeInfo gp)
+                            {
+                                int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(gp.Name);
+                                if (paramIndex >= 0 && paramIndex < seqType.TypeArguments.Count)
+                                {
+                                    substitutedArgs.Add(seqType.TypeArguments[paramIndex]);
+                                    anyChanged = true;
+                                    continue;
+                                }
+                            }
+                            substitutedArgs.Add(arg);
+                        }
+                        if (anyChanged)
+                        {
+                            string baseName = resolvedReturnType.Name.Contains('[')
+                                ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
+                                : resolvedReturnType.Name;
+                            TypeInfo? genericBase = _registry.LookupType(baseName);
+                            if (genericBase != null)
+                                resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
+                        }
+                    }
+                }
+
+                emitterType = resolvedReturnType;
+
+                // Ensure entity type struct definition is emitted for resolved generic emitter types
+                if (emitterType is EntityTypeInfo emitterEntityType)
+                    GenerateEntityType(emitterEntityType);
+
                 string receiverLlvm = GetParameterLLVMType(seqType);
-                string emitterReturnType = seqMethod.ReturnType != null ? GetLLVMType(seqMethod.ReturnType) : "ptr";
-                emitterType = seqMethod.ReturnType;
+                string emitterReturnType = emitterType != null ? GetLLVMType(emitterType) : "ptr";
+
+                // Emit declaration for the monomorphized name
+                if (!_generatedFunctions.Contains(seqMangled))
+                {
+                    EmitLine(_functionDeclarations, $"declare {emitterReturnType} @{seqMangled}({receiverLlvm})");
+                    _generatedFunctions.Add(seqMangled);
+                }
 
                 string emitterTemp = NextTemp();
                 EmitLine(sb, $"  {emitterTemp} = call {emitterReturnType} @{seqMangled}({receiverLlvm} {seqValue})");
@@ -772,61 +873,117 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {emitterAddr} = alloca {emitterLlvmType}");
         EmitLine(sb, $"  store {emitterLlvmType} {emitterValue}, ptr {emitterAddr}");
 
-        // Determine element type T from emitter's type arguments or try_next() return type
+        // Determine element type from __next__() return type (preferred) or emitter type arguments (fallback).
+        // __next__() is preferred because the yielded type may differ from the emitter's type argument
+        // (e.g., EnumerateEmitter[S64].__next__() yields Tuple[U64, S64], not S64).
         TypeInfo? elemType = null;
-        if (emitterType?.TypeArguments is { Count: > 0 })
+        if (emitterType != null)
+        {
+            RoutineInfo? nextLookup = _registry.LookupMethod(emitterType, "__next__");
+            // Skip protocol-typed return values — they need further resolution
+            if (nextLookup?.ReturnType is ErrorHandlingTypeInfo { ValueType: not null } errType
+                && errType.ValueType is not ProtocolTypeInfo)
+                elemType = errType.ValueType;
+            else if (nextLookup?.ReturnType != null && nextLookup.ReturnType is not ProtocolTypeInfo)
+                elemType = nextLookup.ReturnType;
+        }
+
+        // Fallback: use emitter's first type argument (works for simple SequenceEmitter[T])
+        if (elemType == null && emitterType?.TypeArguments is { Count: > 0 })
         {
             elemType = emitterType.TypeArguments[0];
         }
 
-        // Fallback: infer from try_next() return type (Maybe[T] → T via ValueType)
-        if (elemType == null && emitterType != null)
+        // Resolve generic parameters in element type using emitter's type arguments
+        if (emitterType is { IsGenericResolution: true, TypeArguments: not null })
         {
-            string tryNextName = $"{emitterType.Name}.try_next";
-            RoutineInfo? tryNext = _registry.LookupRoutine(tryNextName);
-            if (tryNext?.ReturnType is ErrorHandlingTypeInfo { ValueType: not null } errType)
-            {
-                elemType = errType.ValueType;
-            }
+            elemType = ResolveGenericElementType(elemType, emitterType);
         }
 
         string elemLlvmType = elemType != null ? GetLLVMType(elemType) : "i64";
 
-        // Allocate loop variable
-        string varName = forStmt.Variable ?? "_iter";
-        string varAddr = $"%{varName}.addr";
-        EmitLine(sb, $"  {varAddr} = alloca {elemLlvmType}");
-
-        if (elemType != null)
+        // Allocate loop variable(s)
+        string? varAddr = null;
+        if (forStmt.VariablePattern != null && elemType is TupleTypeInfo tupleElemType)
         {
-            _localVariables[varName] = elemType;
+            // Tuple destructuring: pre-allocate variables for each binding
+            var bindings = forStmt.VariablePattern.Bindings;
+            for (int i = 0; i < bindings.Count && i < tupleElemType.MemberVariables.Count; i++)
+            {
+                var binding = bindings[i];
+                string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_destruct{i}";
+                if (bindName == "_") continue;
+
+                var memberVar = tupleElemType.MemberVariables[i];
+                string memberLlvmType = GetLLVMType(memberVar.Type);
+                EmitLine(sb, $"  %{bindName}.addr = alloca {memberLlvmType}");
+                _localVariables[bindName] = memberVar.Type;
+            }
+        }
+        else
+        {
+            string varName = forStmt.Variable ?? "_iter";
+            varAddr = $"%{varName}.addr";
+            EmitLine(sb, $"  {varAddr} = alloca {elemLlvmType}");
+
+            if (elemType != null)
+            {
+                _localVariables[varName] = elemType;
+            }
         }
 
         EmitLine(sb, $"  br label %{condLabel}");
 
-        // Condition block: call try_next() → Maybe[T] = { i64, ptr }
+        // Condition block: call __next__() → Maybe[T] = { i64, ptr }
         EmitLine(sb, $"{condLabel}:");
         string emitterLoad = NextTemp();
         EmitLine(sb, $"  {emitterLoad} = load {emitterLlvmType}, ptr {emitterAddr}");
 
-        // Call try_next() on the emitter
-        string tryNextMethodName = emitterType != null ? $"{emitterType.Name}.try_next" : "try_next";
-        RoutineInfo? tryNextMethod = _registry.LookupRoutine(tryNextMethodName);
+        // Call __next__() on the emitter (emitting routine, always returns { i64, ptr })
+        // LookupMethod handles generic type fallback (e.g., RangeEmitter[S64] → RangeEmitter[T])
+        RoutineInfo? nextMethod = emitterType != null
+            ? _registry.LookupMethod(emitterType, "__next__")
+            : null;
+
         string maybeResult;
 
-        if (tryNextMethod != null)
+        if (nextMethod != null)
         {
-            string tryNextMangled = MangleFunctionName(tryNextMethod);
-            string maybeRetType = tryNextMethod.ReturnType != null ? GetLLVMType(tryNextMethod.ReturnType) : "{ i64, ptr }";
+            // Handle monomorphization for generic emitter types
+            string nextMangled;
+            if (nextMethod.OwnerType != null &&
+                (nextMethod.OwnerType.IsGenericDefinition || nextMethod.OwnerType is ProtocolTypeInfo) &&
+                emitterType != null && emitterType.IsGenericResolution)
+            {
+                nextMangled = Q($"{emitterType.FullName}.__next__");
+                RecordMonomorphization(nextMangled, nextMethod, emitterType);
+            }
+            else
+            {
+                nextMangled = MangleFunctionName(nextMethod);
+            }
+
+            GenerateFunctionDeclaration(nextMethod);
+
+            // Emitting routines always return { i64, ptr } at IR level
+            string maybeRetType = "{ i64, ptr }";
+
+            // Emit declaration for the monomorphized name
+            if (!_generatedFunctions.Contains(nextMangled))
+            {
+                EmitLine(_functionDeclarations, $"declare {maybeRetType} @{nextMangled}({emitterLlvmType} {emitterLoad})");
+                _generatedFunctions.Add(nextMangled);
+            }
+
             maybeResult = NextTemp();
-            EmitLine(sb, $"  {maybeResult} = call {maybeRetType} @{tryNextMangled}({emitterLlvmType} {emitterLoad})");
+            EmitLine(sb, $"  {maybeResult} = call {maybeRetType} @{nextMangled}({emitterLlvmType} {emitterLoad})");
         }
         else
         {
             // Fallback: construct the call name from the type
             string fallbackName = emitterType != null
-                ? Q($"{emitterType.Name}.try_next")
-                : "try_next";
+                ? Q($"{emitterType.FullName}.__next__")
+                : "__next__";
             maybeResult = NextTemp();
             EmitLine(sb, $"  {maybeResult} = call {{ i64, ptr }} @{fallbackName}({emitterLlvmType} {emitterLoad})");
         }
@@ -852,10 +1009,33 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {maybeTagPtr}, i32 0, i32 1");
         EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
 
-        // Load the actual value from the Snatched handle pointer
-        string elemVal = NextTemp();
-        EmitLine(sb, $"  {elemVal} = load {elemLlvmType}, ptr {handleVal}");
-        EmitLine(sb, $"  store {elemLlvmType} {elemVal}, ptr {varAddr}");
+        // Load element value from the Snatched handle pointer
+        if (forStmt.VariablePattern != null && elemType is TupleTypeInfo bodyTupleType)
+        {
+            // Tuple destructuring: extract each field from the handle pointer
+            var bindings = forStmt.VariablePattern.Bindings;
+            string anonStructType = $"{{ {string.Join(", ", bodyTupleType.ElementTypes.Select(e => GetLLVMType(e)))} }}";
+            for (int i = 0; i < bindings.Count && i < bodyTupleType.MemberVariables.Count; i++)
+            {
+                var binding = bindings[i];
+                string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_destruct{i}";
+                if (bindName == "_") continue;
+
+                var memberVar = bodyTupleType.MemberVariables[i];
+                string memberLlvmType = GetLLVMType(memberVar.Type);
+                string memberPtr = NextTemp();
+                EmitLine(sb, $"  {memberPtr} = getelementptr {anonStructType}, ptr {handleVal}, i32 0, i32 {i}");
+                string memberVal = NextTemp();
+                EmitLine(sb, $"  {memberVal} = load {memberLlvmType}, ptr {memberPtr}");
+                EmitLine(sb, $"  store {memberLlvmType} {memberVal}, ptr %{bindName}.addr");
+            }
+        }
+        else if (varAddr != null)
+        {
+            string elemVal = NextTemp();
+            EmitLine(sb, $"  {elemVal} = load {elemLlvmType}, ptr {handleVal}");
+            EmitLine(sb, $"  store {elemLlvmType} {elemVal}, ptr {varAddr}");
+        }
 
         bool bodyTerminated = EmitStatement(sb, forStmt.Body);
         if (!bodyTerminated)
@@ -866,6 +1046,83 @@ public partial class LLVMCodeGenerator
         // End block
         EmitLine(sb, $"{endLabel}:");
         _loopStack.Pop();
+    }
+
+    /// <summary>
+    /// Resolves generic parameters within an element type using the emitter's concrete type arguments.
+    /// Handles direct params (T → S64), tuple types (Tuple[U64, T] → Tuple[U64, S64]),
+    /// and parameterized types (List[T] → List[S64]).
+    /// </summary>
+    private TypeInfo? ResolveGenericElementType(TypeInfo? elemType, TypeInfo emitterType)
+    {
+        if (elemType == null) return null;
+
+        TypeInfo? emitterGenericDef = emitterType switch
+        {
+            EntityTypeInfo e => e.GenericDefinition,
+            RecordTypeInfo r => r.GenericDefinition,
+            ResidentTypeInfo res => res.GenericDefinition,
+            _ => null
+        };
+        if (emitterGenericDef?.GenericParameters == null) return elemType;
+
+        // Build param→concrete mapping from emitter (e.g., T → S64)
+        var paramMap = new Dictionary<string, TypeInfo>();
+        for (int i = 0; i < emitterGenericDef.GenericParameters.Count && i < emitterType.TypeArguments!.Count; i++)
+            paramMap[emitterGenericDef.GenericParameters[i]] = emitterType.TypeArguments[i];
+
+        return SubstituteTypeParams(elemType, paramMap);
+    }
+
+    /// <summary>
+    /// Recursively substitutes generic type parameters in a type using the given mapping.
+    /// </summary>
+    private TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> paramMap)
+    {
+        // Direct generic parameter (T → S64)
+        if (type is GenericParameterTypeInfo && paramMap.TryGetValue(type.Name, out var sub))
+            return sub;
+
+        // Tuple with generic elements (Tuple[U64, T] → Tuple[U64, S64])
+        if (type is TupleTypeInfo tuple)
+        {
+            bool anyChanged = false;
+            var resolvedElems = new List<TypeInfo>();
+            foreach (var elem in tuple.ElementTypes)
+            {
+                var resolved = SubstituteTypeParams(elem, paramMap);
+                if (resolved != elem) anyChanged = true;
+                resolvedElems.Add(resolved);
+            }
+            if (anyChanged)
+            {
+                bool allValue = resolvedElems.All(e =>
+                    e.Category is TypeCategory.Record or TypeCategory.Intrinsic or TypeCategory.Choice or TypeCategory.Tuple);
+                return new TupleTypeInfo(resolvedElems, allValue ? TupleKind.Value : TupleKind.Reference);
+            }
+        }
+
+        // Parameterized type with generic args (List[T] → List[S64])
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anyChanged = false;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (var ta in type.TypeArguments)
+            {
+                var resolved = SubstituteTypeParams(ta, paramMap);
+                if (resolved != ta) anyChanged = true;
+                resolvedArgs.Add(resolved);
+            }
+            if (anyChanged)
+            {
+                string baseName = type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name;
+                var genericBase = _registry.LookupType(baseName);
+                if (genericBase != null)
+                    return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
+            }
+        }
+
+        return type;
     }
 
     /// <summary>
@@ -1754,6 +2011,7 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,
             ResidentTypeInfo resident => resident.MemberVariables,
+            TupleTypeInfo tuple => tuple.MemberVariables,
             _ => null
         };
 
@@ -1764,6 +2022,7 @@ public partial class LLVMCodeGenerator
                 : GetRecordTypeName(record),
             EntityTypeInfo entity => GetEntityTypeName(entity),
             ResidentTypeInfo resident => GetResidentTypeName(resident),
+            TupleTypeInfo tuple => $"{{ {string.Join(", ", tuple.ElementTypes.Select(e => GetLLVMType(e)))} }}",
             _ => "{ }"
         };
 

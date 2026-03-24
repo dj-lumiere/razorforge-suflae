@@ -90,7 +90,19 @@ public sealed partial class SemanticAnalyzer
             fullName = string.IsNullOrEmpty(value: module) ? routine.Name : $"{module}.{routine.Name}";
         }
 
-        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: fullName);
+        // Look up the routine, trying overload disambiguation by AST parameter types.
+        // Without this, all overloaded routines (e.g., S32.__create__(from: S8) vs S32.__create__(from: U64))
+        // would resolve to whichever was registered first, getting wrong parameter names/types.
+        RoutineInfo? routineInfo = null;
+        if (routine.Parameters.Count > 0)
+        {
+            var paramTypeNames = routine.Parameters
+                .Select(p => p.Type?.Name ?? "")
+                .Where(n => !string.IsNullOrEmpty(n));
+            string overloadKey = $"{fullName}#{string.Join(",", paramTypeNames)}";
+            routineInfo = _registry.LookupRoutine(fullName: overloadKey);
+        }
+        routineInfo ??= _registry.LookupRoutine(fullName: fullName);
         if (routineInfo == null)
         {
             return;

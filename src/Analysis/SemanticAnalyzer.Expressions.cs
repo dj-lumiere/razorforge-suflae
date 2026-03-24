@@ -889,6 +889,9 @@ public sealed partial class SemanticAnalyzer
         // Strip '!' suffix for failable routine references (e.g., "stop!" → "stop")
         string routineLookupName = id.Name.EndsWith('!') ? id.Name[..^1] : id.Name;
         RoutineInfo? routine = _registry.LookupRoutine(fullName: routineLookupName);
+        // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
+        if (routine == null && _currentModuleName != null && !routineLookupName.Contains('.'))
+            routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{routineLookupName}");
         if (routine != null)
         {
             // Return the function type for first-class function references
@@ -1433,6 +1436,9 @@ public sealed partial class SemanticAnalyzer
             // Strip '!' suffix for failable calls (e.g., "stop!" → "stop")
             string callName = id.Name.EndsWith('!') ? id.Name[..^1] : id.Name;
             RoutineInfo? routine = _registry.LookupRoutine(fullName: callName);
+            // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
+            if (routine == null && _currentModuleName != null && !callName.Contains('.'))
+                routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{callName}");
             if (routine != null)
             {
                 // Track failable calls for error handling variant generation
@@ -2613,8 +2619,13 @@ public sealed partial class SemanticAnalyzer
             ReportError(SemanticDiagnosticCode.RangeBoundsNotNumeric, "Range bounds must be numeric types.", range.Location);
         }
 
-        // Return Range type
-        return _registry.LookupType(name: "Range") ?? ErrorTypeInfo.Instance;
+        // Return resolved Range[T] type with concrete element type
+        TypeInfo? rangeGenericDef = _registry.LookupType(name: "Range");
+        if (rangeGenericDef != null && startType is not ErrorTypeInfo)
+        {
+            return _registry.GetOrCreateResolution(rangeGenericDef, new List<TypeInfo> { startType });
+        }
+        return rangeGenericDef ?? ErrorTypeInfo.Instance;
     }
 
     private TypeSymbol AnalyzeCreatorExpression(CreatorExpression creator)

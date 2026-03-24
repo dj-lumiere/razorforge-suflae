@@ -721,7 +721,11 @@ public sealed class StdlibLoader
             Module = moduleName,
             Location = routine.Location,
             IsFailable = routine.IsFailable,
-            GenericParameters = routine.GenericParameters
+            GenericParameters = routine.GenericParameters,
+            AsyncStatus = routine.Async,
+            Annotations = routine.Annotations,
+            IsDangerous = routine.IsDangerous,
+            Storage = routine.Storage
         };
 
         try
@@ -1019,7 +1023,7 @@ public sealed class StdlibLoader
             string methodName = isInstance ? fullName[3..] : fullName;
 
             var returnType = method.ReturnType != null
-                ? ResolveSimpleType(registry, method.ReturnType)
+                ? ResolveSimpleType(registry, method.ReturnType, protocol.GenericParameters)
                 : null;
 
             var parameterTypes = new List<TypeInfo>();
@@ -1033,7 +1037,7 @@ public sealed class StdlibLoader
                 // Handle the special 'Me' type (protocol self-type)
                 var paramType = param.Type?.Name == "Me"
                     ? ProtocolSelfTypeInfo.Instance
-                    : ResolveSimpleType(registry, param.Type);
+                    : ResolveSimpleType(registry, param.Type, protocol.GenericParameters);
                 if (paramType != null)
                 {
                     parameterTypes.Add(paramType);
@@ -1097,6 +1101,26 @@ public sealed class StdlibLoader
         // Parameterized type like List[Letter], Dict[Text, S32]
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
+            // Tuple types are not registered as generic definitions — handle specially
+            if (typeName is "Tuple" or "ValueTuple" or "FixedTuple")
+            {
+                var elemTypes = new List<TypeInfo>();
+                foreach (var argExpr in typeExpr.GenericArguments)
+                {
+                    var argType = ResolveSimpleType(registry, argExpr, genericParams);
+                    if (argType == null) return null;
+                    elemTypes.Add(argType);
+                }
+                TupleKind kind = typeName switch
+                {
+                    "ValueTuple" => TupleKind.Value,
+                    "FixedTuple" => TupleKind.Fixed,
+                    _ => elemTypes.Any(e => e is GenericParameterTypeInfo || e.Category == TypeCategory.Entity)
+                        ? TupleKind.Reference : TupleKind.Value
+                };
+                return new TupleTypeInfo(elemTypes, kind);
+            }
+
             var genericDef = registry.LookupType(typeName);
             if (genericDef is { IsGenericDefinition: true }
                 && genericDef.GenericParameters!.Count == typeExpr.GenericArguments.Count)

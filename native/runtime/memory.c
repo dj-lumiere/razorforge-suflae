@@ -21,7 +21,7 @@ void* rf_allocate_dynamic(uint64_t bytes)
     void* ptr = malloc(bytes);
     if (!ptr)
     {
-        fprintf(stderr, "RazorForge: Failed to allocate %zu bytes\n", (size_t)bytes);
+        fprintf(stderr, "\033[91mRazorForge: Failed to allocate %zu bytes\033[0m\n", (size_t)bytes);
         return NULL;
     }
 
@@ -49,7 +49,7 @@ void* rf_reallocate_dynamic(void* ptr, uint64_t bytes)
 
     if (!new_ptr && bytes != 0)
     {
-        fprintf(stderr, "RazorForge: Failed to reallocate to %zu bytes\n", (size_t)bytes);
+        fprintf(stderr, "\033[91mRazorForge: Failed to reallocate to %zu bytes\033[0m\n", (size_t)bytes);
         return NULL;
     }
 

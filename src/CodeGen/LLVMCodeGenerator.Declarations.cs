@@ -336,6 +336,9 @@ public partial class LLVMCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLLVMType(routine.ReturnType)
             : "void";
+        // Emitting routines return Maybe[T] = { i64, ptr } at IR level
+        if (routine.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+            returnType = "{ i64, ptr }";
         if (isCExtern && returnType == "half") returnType = "i16";
 
         // On Windows x64 MSVC ABI, C structs > 8 bytes are returned via hidden sret pointer.
@@ -475,6 +478,9 @@ public partial class LLVMCodeGenerator
         string returnType = routineInfo.ReturnType != null
             ? GetLLVMType(routineInfo.ReturnType)
             : "void";
+        // Emitting routines return Maybe[T] = { i64, ptr } at IR level
+        if (routineInfo.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+            returnType = "{ i64, ptr }";
 
         // Start function — save position so we can rollback on error
         string parameters = string.Join(", ", paramList);
@@ -721,6 +727,12 @@ public partial class LLVMCodeGenerator
                 foreach (var (paramName, typeInfo) in entry.TypeSubstitutions)
                     astSubs[paramName] = typeInfo.Name;
                 var rewrittenAst = GenericAstRewriter.Rewrite(astRoutine, astSubs);
+
+                // Ensure entity/record type definitions are emitted for monomorphized types
+                if (entry.ResolvedOwnerType is EntityTypeInfo ownerEntity)
+                    GenerateEntityType(ownerEntity);
+                else if (entry.ResolvedOwnerType is RecordTypeInfo ownerRecord)
+                    GenerateRecordType(ownerRecord);
 
                 // Keep _typeSubstitutions as fallback for ResolvedType metadata
                 _typeSubstitutions = entry.TypeSubstitutions;
@@ -1376,6 +1388,10 @@ public partial class LLVMCodeGenerator
     {
         if (routine.OwnerType == null) return;
 
+        // Ensure rf_text_concat is declared (used for field concatenation)
+        if (_declaredNativeFunctions.Add("rf_text_concat"))
+            EmitLine(_functionDeclarations, "declare ptr @rf_text_concat(ptr, ptr)");
+
         string meType = GetParameterLLVMType(routine.OwnerType);
 
         EmitLine(_functionDefinitions, $"define ptr @{funcName}({meType} %me) {{");
@@ -1429,7 +1445,7 @@ public partial class LLVMCodeGenerator
 
             // Concat field prefix
             string withPrefix = NextTemp();
-            EmitLine(_functionDefinitions, $"  {withPrefix} = call ptr @Text.concat(ptr {current}, ptr {fieldPrefixStr})");
+            EmitLine(_functionDefinitions, $"  {withPrefix} = call ptr @rf_text_concat(ptr {current}, ptr {fieldPrefixStr})");
             current = withPrefix;
 
             // Get field value
@@ -1475,14 +1491,14 @@ public partial class LLVMCodeGenerator
 
             // Concat field text
             string withField = NextTemp();
-            EmitLine(_functionDefinitions, $"  {withField} = call ptr @Text.concat(ptr {current}, ptr {fieldText})");
+            EmitLine(_functionDefinitions, $"  {withField} = call ptr @rf_text_concat(ptr {current}, ptr {fieldText})");
             current = withField;
         }
 
         // Append closing ")"
         string suffix = EmitSynthesizedStringLiteral(")");
         string result = NextTemp();
-        EmitLine(_functionDefinitions, $"  {result} = call ptr @Text.concat(ptr {current}, ptr {suffix})");
+        EmitLine(_functionDefinitions, $"  {result} = call ptr @rf_text_concat(ptr {current}, ptr {suffix})");
 
         EmitLine(_functionDefinitions, $"  ret ptr {result}");
         EmitLine(_functionDefinitions, "}");
@@ -1498,6 +1514,8 @@ public partial class LLVMCodeGenerator
         // Look up the Text.__create__ overload for this specific parameter type
         RoutineInfo? createRoutine = _registry.LookupRoutineOverload("Text.__create__", [fieldType])
                                      ?? _registry.LookupRoutine("Text.__create__");
+        if (createRoutine != null)
+            GenerateFunctionDeclaration(createRoutine);
         string createName = createRoutine != null
             ? MangleFunctionName(createRoutine)
             : "Text.__create__";

@@ -295,11 +295,11 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Displayable
                           @readonly
-                          routine Me.display() -> S32
+                          routine Me.display() -> Integer
 
-                        record Point obeys Displayable
-                          x: F32
-                          y: F32
+                        entity Point obeys Displayable
+                          x: Integer
+                          y: Integer
                         """;
 
         AnalysisResult result = AnalyzeSuflae(source: source);

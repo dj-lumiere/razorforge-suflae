@@ -461,35 +461,7 @@ public partial class Tokenizer
     /// </summary>
     private void ScanLetter()
     {
-        if (IsAtEnd())
-        {
-            throw new GrammarException(
-                GrammarDiagnosticCode.UnterminatedString,
-                "Unterminated character literal",
-                _fileName, _line, _column, _language);
-        }
-
-        char value;
-        if (Peek() == '\\')
-        {
-            Advance(); // consume backslash
-            value = EscapeCharacter(c: Advance());
-        }
-        else
-        {
-            value = Advance();
-        }
-
-        if (Peek() != '\'')
-        {
-            throw new GrammarException(
-                GrammarDiagnosticCode.UnterminatedString,
-                "Unterminated character literal",
-                _fileName, _line, _column, _language);
-        }
-
-        Advance(); // consume closing quote
-        AddToken(type: TokenType.LetterLiteral, text: value.ToString());
+        ScanLetterLiteral(tokenType: TokenType.LetterLiteral, bitWidth: 32);
     }
 
     /// <summary>
@@ -516,6 +488,16 @@ public partial class Tokenizer
         if (Peek() == '\\')
         {
             Advance(); // consume backslash
+
+            // \x is byte-only, \u is letter-only
+            if (bitWidth != 8 && Peek() == 'x')
+            {
+                throw new GrammarException(
+                    GrammarDiagnosticCode.InvalidEscapeSequence,
+                    "Hex escape \\x is not valid in letter literals. Use \\u for Unicode codepoints.",
+                    _fileName, _line, _column, _language);
+            }
+
             ScanEscapeSequence(bitWidth: bitWidth);
         }
         else
@@ -530,6 +512,11 @@ public partial class Tokenizer
                     _fileName, _line, _column, _language);
             }
             Advance(); // consume the character
+            // Handle UTF-16 surrogate pairs for non-BMP codepoints (Letter is UTF-32)
+            if (bitWidth != 8 && char.IsHighSurrogate(c) && !IsAtEnd() && char.IsLowSurrogate(Peek()))
+            {
+                Advance(); // consume low surrogate
+            }
         }
 
         if (!Match(expected: '\''))

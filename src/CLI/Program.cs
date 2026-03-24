@@ -410,6 +410,94 @@ internal class Program
     }
 
     /// <summary>
+    /// Rebuilds the native runtime library via cmake --build.
+    /// Returns 0 on success or 1 if the build fails.
+    /// </summary>
+    private static int BuildNativeRuntime()
+    {
+        // Find native/build by walking up from the executable directory
+        string? current = Path.GetDirectoryName(typeof(Program).Assembly.Location);
+        string? nativeBuildDir = null;
+        for (int i = 0; i < 6 && current != null; i++)
+        {
+            string candidate = Path.Combine(current, "native", "build");
+            if (File.Exists(Path.Combine(candidate, "build.ninja")) ||
+                File.Exists(Path.Combine(candidate, "Makefile")))
+            {
+                nativeBuildDir = candidate;
+                break;
+            }
+            current = Path.GetDirectoryName(current);
+        }
+
+        if (nativeBuildDir == null)
+            return 0; // No native build directory found — skip silently
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "cmake",
+            Arguments = $"--build \"{nativeBuildDir}\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                Console.WriteLine("Warning: Failed to start cmake.");
+                return 0; // Non-fatal — continue with existing runtime
+            }
+
+            string stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                Console.Error.Write(stderr);
+                Console.WriteLine($"Native runtime build failed (cmake exited with code {process.ExitCode})");
+                return 1;
+            }
+
+            // Copy fresh artifacts to the exe directory so they're picked up at link/run time
+            string? exeDir = Path.GetDirectoryName(typeof(Program).Assembly.Location);
+            if (exeDir != null)
+            {
+                string nativeBinDir = Path.Combine(nativeBuildDir, "bin");
+                string nativeLibDir = Path.Combine(nativeBuildDir, "lib");
+                string exeNativeBinDir = Path.Combine(exeDir, "native", "build", "bin");
+                string exeNativeLibDir = Path.Combine(exeDir, "native", "build", "lib");
+
+                CopyDirectoryFiles(nativeBinDir, exeNativeBinDir);
+                CopyDirectoryFiles(nativeLibDir, exeNativeLibDir);
+
+                // Also copy DLLs to the exe root (matches csproj LinkBase="." behavior)
+                if (Directory.Exists(nativeBinDir))
+                {
+                    foreach (string dll in Directory.GetFiles(nativeBinDir, "*.dll"))
+                        File.Copy(dll, Path.Combine(exeDir, Path.GetFileName(dll)), overwrite: true);
+                }
+            }
+
+            return 0;
+        }
+        catch (Exception)
+        {
+            return 0; // cmake not found — skip silently
+        }
+    }
+
+    private static void CopyDirectoryFiles(string srcDir, string dstDir)
+    {
+        if (!Directory.Exists(srcDir)) return;
+        Directory.CreateDirectory(dstDir);
+        foreach (string file in Directory.GetFiles(srcDir))
+            File.Copy(file, Path.Combine(dstDir, Path.GetFileName(file)), overwrite: true);
+    }
+
+    /// <summary>
     /// Runs the multi-file build pipeline: BuildDriver (parse + resolve imports + topo sort)
     /// → SemanticAnalyzer.AnalyzeMultiple → LLVMCodeGenerator with multiple user programs.
     /// Returns 0 on success or 1 if any stage fails.
@@ -421,6 +509,11 @@ internal class Program
             Console.WriteLine($"Error: File '{entryFile}' not found.");
             return 1;
         }
+
+        // Rebuild native runtime if sources changed
+        int nativeResult = BuildNativeRuntime();
+        if (nativeResult != 0)
+            return nativeResult;
 
         bool isSuflae = IsSuflaeFile(entryFile);
         var language = isSuflae ? Language.Suflae : Language.RazorForge;
@@ -588,35 +681,68 @@ internal class Program
             return buildResult;
         }
 
-        // Find the runtime library next to the executable
+        // Find the runtime import library (.lib) directory
         string? exeDir = Path.GetDirectoryName(typeof(Program).Assembly.Location);
-        string runtimeLib = "";
-        if (exeDir != null)
+        string runtimeLibDir = Path.Combine(exeDir ?? ".", "native", "build", "lib");
+
+        // Compile .ll → .exe using clang
+        string exeFile = Path.ChangeExtension(llFile, ".exe");
+        var clangArgs = $"-o \"{exeFile}\" \"{llFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime";
+
+        var clangPsi = new ProcessStartInfo
         {
-            // Try both naming conventions (non-lib-prefixed works with lli on Windows)
-            string altPath = Path.Combine(exeDir, "razorforge_runtime.dll");
-            string libPath = Path.Combine(exeDir, "librazorforge_runtime.dll");
-            if (File.Exists(altPath))
-                runtimeLib = altPath;
-            else if (File.Exists(libPath))
-                runtimeLib = libPath;
+            FileName = "clang",
+            Arguments = clangArgs,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        try
+        {
+            using var clangProcess = Process.Start(clangPsi);
+            if (clangProcess == null)
+            {
+                Console.WriteLine("Error: Failed to start clang.");
+                return 1;
+            }
+
+            string clangStderr = clangProcess.StandardError.ReadToEnd();
+            clangProcess.WaitForExit();
+
+            if (clangProcess.ExitCode != 0)
+            {
+                Console.Error.Write(clangStderr);
+                Console.WriteLine($"clang exited with code {clangProcess.ExitCode}");
+                return 1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to execute clang: {ex.Message}");
+            Console.WriteLine("Make sure LLVM/Clang is installed and 'clang' is on your PATH.");
+            return 1;
         }
 
-        // Execute via lli
+        // Copy the runtime DLL next to the output .exe so it can be found at runtime
+        string? outputDir = Path.GetDirectoryName(Path.GetFullPath(exeFile));
+        if (outputDir != null && exeDir != null)
+        {
+            string srcDll = Path.Combine(exeDir, "razorforge_runtime.dll");
+            if (File.Exists(srcDll))
+            {
+                string dstDll = Path.Combine(outputDir, "razorforge_runtime.dll");
+                File.Copy(srcDll, dstDll, overwrite: true);
+            }
+        }
+
+        // Run the produced .exe
         Console.WriteLine();
         Console.WriteLine("=== EXECUTION ===");
 
-        var lliArgs = new List<string>();
-        if (!string.IsNullOrEmpty(runtimeLib))
-        {
-            lliArgs.Add($"--dlopen=\"{runtimeLib}\"");
-        }
-        lliArgs.Add($"\"{llFile}\"");
-
         var psi = new ProcessStartInfo
         {
-            FileName = "lli",
-            Arguments = string.Join(" ", lliArgs),
+            FileName = Path.GetFullPath(exeFile),
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -627,7 +753,7 @@ internal class Program
             using var process = Process.Start(psi);
             if (process == null)
             {
-                Console.WriteLine("Error: Failed to start lli.");
+                Console.WriteLine("Error: Failed to start the compiled executable.");
                 return 1;
             }
 
@@ -640,17 +766,11 @@ internal class Program
             if (!string.IsNullOrEmpty(stderr))
                 Console.Error.Write(stderr);
 
-            if (process.ExitCode != 0)
-            {
-                Console.WriteLine($"lli exited with code {process.ExitCode}");
-            }
-
             return process.ExitCode;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to execute lli: {ex.Message}");
-            Console.WriteLine("Make sure LLVM is installed and 'lli' is on your PATH.");
+            Console.WriteLine($"Failed to execute {exeFile}: {ex.Message}");
             return 1;
         }
     }

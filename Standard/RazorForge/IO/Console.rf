@@ -32,26 +32,18 @@ routine show(value: Bytes, end: Text = "\n")
 
 # alert for Text
 routine alert(value: Text, end: Text = "\n")
-  var bytes_value: Bytes = value.to_utf8_bytes()
-  rf_console_alert(bytes_value.ptr, bytes_value.count())
-  if end.count() > 0u64
-    var end_bytes = end.to_utf8_bytes()
-    rf_console_alert(end_bytes.ptr, end_bytes.count())
+  var value_cstr = CStr(from: value)
+  rf_console_alert(value_cstr.ptr, value_cstr.count())
+  var end_cstr = CStr(from: end)
+  rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
 # alert for Bytes (writes raw bytes directly)
 routine alert(value: Bytes, end: Text = "\n")
-  rf_console_alert(value.ptr, value.count())
-  if end.count() > 0u64
-    var end_bytes = end.to_utf8_bytes()
-    rf_console_alert(end_bytes.ptr, end_bytes.count())
-  return
-
-# Generic alert for any type that implements Representable
-routine alert[T](value: T, end: Text = "\n")
-needs T obeys Representable
-  var text_value: Text = Text(value)
-  alert(text_value, end: end)
+  var value_cstr = CStr(from: value)
+  rf_console_alert(value_cstr.ptr, value_cstr.count())
+  var end_cstr = CStr(from: end)
+  rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
 # ============================================================================

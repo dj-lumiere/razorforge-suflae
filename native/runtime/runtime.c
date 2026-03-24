@@ -12,6 +12,14 @@ void rf_runtime_init()
 #ifdef _WIN32
     SetConsoleCP(65001);
     SetConsoleOutputCP(65001);
+    // Enable ANSI escape sequences for colored error output
+    HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+    if (hErr != INVALID_HANDLE_VALUE)
+    {
+        DWORD mode = 0;
+        if (GetConsoleMode(hErr, &mode))
+            SetConsoleMode(hErr, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
 #endif
 }
 
@@ -42,10 +50,10 @@ rf_S32 rf_cstr_compare(const char* s1, const char* s2)
 // ============================================================================
 
 // Count-based print to stdout (preferred - no null-termination required)
-void rf_console_show(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stdout); }
+void rf_console_show(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stdout); fflush(stdout); }
 
 // Count-based print to stderr (preferred - no null-termination required)
-void rf_console_alert(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stderr); }
+void rf_console_alert(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stderr); fflush(stderr); }
 
 // Input operations - get single character
 char rf_console_get_char()
@@ -239,7 +247,7 @@ void rf_crash(const char* type_name, int64_t type_len,
               int32_t line, int32_t col,
               const int32_t* message_utf32, int64_t message_len)
 {
-    fprintf(stderr, "%.*s: ", (int)type_len, type_name);
+    fprintf(stderr, "\033[91m%.*s: ", (int)type_len, type_name);
 
     if (message_utf32 != NULL && message_len > 0)
     {
@@ -269,6 +277,7 @@ void rf_crash(const char* type_name, int64_t type_len,
             fprintf(stderr, "  ... %d more frames\n", rf_trace_depth - RF_TRACE_MAX);
     }
 
+    fprintf(stderr, "\033[0m");
     exit(1);
 }
 

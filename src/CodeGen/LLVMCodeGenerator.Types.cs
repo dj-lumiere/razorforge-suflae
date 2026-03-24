@@ -75,9 +75,8 @@ public partial class LLVMCodeGenerator
             // Error handling types → struct { tag, payload }
             ErrorHandlingTypeInfo errorHandling => GetErrorHandlingTypeName(errorHandling),
 
-            // Protocols → not directly representable (used for constraints only)
-            ProtocolTypeInfo => throw new InvalidOperationException(
-                "Protocol types cannot be used directly in codegen"),
+            // Protocols → type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
+            ProtocolTypeInfo => "ptr",
 
             // Generic parameters — use ptr as fallback (should be resolved before reaching codegen)
             GenericParameterTypeInfo => "ptr",

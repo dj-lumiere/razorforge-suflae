@@ -355,16 +355,18 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Then, generate stdlib routine definitions only for routines that were
-        // declared (i.e., actually referenced). This avoids compiling every stdlib
-        // routine, many of which use features not yet supported in codegen (presets, etc.)
-        // Use a multi-pass approach: compiling one stdlib routine may reference others
-        // (e.g., show() → CStr.__create__), so repeat until no new definitions are added.
+        // Unified loop: compile stdlib bodies, monomorphize generics, and generate
+        // synthesized routines together. Each phase can introduce new declarations that
+        // the other phases need to handle. All three are idempotent (they check
+        // _generatedFunctionDefs before emitting), so calling them repeatedly is safe.
         int prevDefCount;
+        int iterations = 0;
+        const int maxIterations = 100;
         do
         {
             prevDefCount = _generatedFunctionDefs.Count;
 
+            // Phase A: Compile stdlib routine bodies for referenced routines
             foreach (var (program, _, module) in _stdlibPrograms)
             {
                 foreach (var decl in program.Declarations)
@@ -445,13 +447,20 @@ public partial class LLVMCodeGenerator
                     }
                 }
             }
+
+            // Phase B: Monomorphize generic methods (compile generic AST bodies with type substitutions)
+            MonomorphizeGenericMethods();
+
+            // Phase C: Generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__, Text(), to_debug())
+            GenerateSynthesizedRoutines();
+
+            iterations++;
+            if (iterations >= maxIterations)
+            {
+                Console.Error.WriteLine($"Warning: GenerateFunctionDefinitions reached {maxIterations} iterations, possible infinite loop");
+                break;
+            }
         } while (_generatedFunctionDefs.Count > prevDefCount);
-
-        // Monomorphize generic methods: compile generic AST bodies with type substitutions
-        MonomorphizeGenericMethods();
-
-        // Finally, generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__)
-        GenerateSynthesizedRoutines();
     }
 
     /// <summary>
@@ -678,6 +687,30 @@ public partial class LLVMCodeGenerator
                 foreach (var (key, value) in methodTypeArgs)
                     typeSubs[key] = value;
             string genericAstName = $"{genParam.Name}.{genericMethod.Name}";
+            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
+                genericMethod, resolvedOwnerType, typeSubs, genericAstName, methodTypeArgs);
+            return;
+        }
+
+        // Protocol-owned methods (e.g., Sequenceable[T].enumerate() called on List[S64])
+        // AST name must use the protocol owner, not the concrete receiver type
+        if (genericMethod.OwnerType is ProtocolTypeInfo protocolOwner &&
+            protocolOwner.GenericParameters is { Count: > 0 })
+        {
+            var typeSubs = new Dictionary<string, TypeInfo>();
+            // Map protocol's generic params using receiver's type arguments
+            if (resolvedOwnerType.TypeArguments != null)
+            {
+                for (int i = 0; i < protocolOwner.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
+                    typeSubs[protocolOwner.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+            }
+            if (methodTypeArgs != null)
+                foreach (var (key, value) in methodTypeArgs)
+                    typeSubs[key] = value;
+
+            string protoParamList = string.Join(", ", protocolOwner.GenericParameters);
+            string genericAstName = $"{protocolOwner.Name}[{protoParamList}].{genericMethod.Name}";
+
             _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
                 genericMethod, resolvedOwnerType, typeSubs, genericAstName, methodTypeArgs);
             return;

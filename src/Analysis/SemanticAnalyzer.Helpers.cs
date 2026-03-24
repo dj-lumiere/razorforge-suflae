@@ -577,6 +577,14 @@ public sealed partial class SemanticAnalyzer
         // Type must follow the Sequenceable protocol
         bool obeysSequenceable = ImplementsProtocol(type: iterableType, protocolName: "Sequenceable");
 
+        // For generic resolution types, also check if the generic definition has __seq__
+        if (!obeysSequenceable && iterableType.IsGenericResolution)
+        {
+            RoutineInfo? seqMethod = _registry.LookupMethod(type: iterableType, methodName: "__seq__");
+            if (seqMethod != null)
+                obeysSequenceable = true;
+        }
+
         if (!obeysSequenceable)
         {
             ReportError(
@@ -588,10 +596,35 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Look for __seq__ method to get element type from SequenceEmitter[T] return type
-        RoutineInfo? seqMethod = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__seq__");
-        if (seqMethod?.ReturnType?.TypeArguments is { Count: > 0 })
+        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__seq__");
+
+        // Generic fallback: Range[S64].__seq__ → Range.__seq__ via LookupMethod
+        if (seqMethod2 == null)
         {
-            return seqMethod.ReturnType.TypeArguments[0];
+            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "__seq__");
+        }
+
+        if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
+        {
+            // Resolve generic type args: if return type arg is T and iterableType is Range[S64], resolve T → S64
+            TypeInfo returnTypeArg = seqMethod2.ReturnType.TypeArguments[0];
+            if (returnTypeArg is GenericParameterTypeInfo && iterableType is { IsGenericResolution: true, TypeArguments: not null })
+            {
+                TypeInfo? genericDef = iterableType switch
+                {
+                    RecordTypeInfo r => r.GenericDefinition,
+                    EntityTypeInfo e => e.GenericDefinition,
+                    ResidentTypeInfo res => res.GenericDefinition,
+                    _ => null
+                };
+                if (genericDef?.GenericParameters != null)
+                {
+                    int paramIndex = genericDef.GenericParameters.ToList().IndexOf(returnTypeArg.Name);
+                    if (paramIndex >= 0 && paramIndex < iterableType.TypeArguments.Count)
+                        return iterableType.TypeArguments[paramIndex];
+                }
+            }
+            return returnTypeArg;
         }
 
         // Fallback to type arguments if __seq__ method not found but protocol is implemented

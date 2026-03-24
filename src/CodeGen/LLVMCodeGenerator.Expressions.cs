@@ -1,6 +1,7 @@
 ﻿namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -494,6 +495,8 @@ public partial class LLVMCodeGenerator
     {
         // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_f32").
         // Check LiteralType first to handle them as numbers, not string constants.
+        if (literal.Value is char ch)
+            return EmitLetterLiteral(sb, ch.ToString());
         if (literal.Value is string s)
         {
             if (IsIntegerLiteralType(literal.LiteralType))
@@ -504,6 +507,8 @@ public partial class LLVMCodeGenerator
                 return EmitDecimalFloatLiteral(sb, StripNumericSuffix(s), literal.LiteralType);
             if (IsByteSizeLiteralType(literal.LiteralType))
                 return EmitByteSizeLiteral(sb, s);
+            if (literal.LiteralType == Lexer.TokenType.LetterLiteral)
+                return EmitLetterLiteral(sb, s);
             // Actual string literal
             return EmitStringLiteral(sb, s);
         }
@@ -595,6 +600,25 @@ public partial class LLVMCodeGenerator
             return result;
         }
         return bytes.ToString();
+    }
+
+    /// <summary>
+    /// Emits a Letter literal as a %Record.Letter aggregate with the Unicode codepoint.
+    /// </summary>
+    private string EmitLetterLiteral(StringBuilder sb, string text)
+    {
+        int codepoint = text.Length > 0 ? char.ConvertToUtf32(text, 0) : 0;
+
+        TypeInfo? letterType = _registry.LookupType("Letter");
+        string llvmType = letterType != null ? GetLLVMType(letterType) : "%\"Record.Letter\"";
+
+        if (llvmType.StartsWith("%"))
+        {
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = insertvalue {llvmType} undef, i32 {codepoint}, 0");
+            return result;
+        }
+        return codepoint.ToString();
     }
 
     /// <summary>
@@ -1149,7 +1173,6 @@ public partial class LLVMCodeGenerator
         string methodName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
         string methodFullName = $"{receiverType.Name}.{methodName}";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
-
         // For generic type instances (e.g., List[Letter].count), try the generic base name
         if (method == null && receiverType.Name.Contains('['))
         {
@@ -1323,7 +1346,9 @@ public partial class LLVMCodeGenerator
         }
 
         // Ensure the method is declared (so the multi-pass stdlib loop can compile its body)
-        if (method != null)
+        // Skip for protocol-owned methods — they can't be declared with protocol types in LLVM IR;
+        // the monomorphized version (with concrete receiver type) will generate its own declaration.
+        if (method != null && method.OwnerType is not ProtocolTypeInfo)
         {
             GenerateFunctionDeclaration(method);
         }
@@ -1335,6 +1360,17 @@ public partial class LLVMCodeGenerator
         if (resolvedReturnType != null && method?.OwnerType is GenericParameterTypeInfo genParamOwner)
         {
             resolvedReturnType = SubstituteGenericParamInType(resolvedReturnType, genParamOwner.Name, receiverType);
+        }
+
+        // For protocol-owned methods (Sequenceable[T].enumerate() → EnumerateSequence[T]),
+        // substitute protocol generic params using receiver's type arguments
+        if (resolvedReturnType != null && method?.OwnerType is ProtocolTypeInfo protoOwner &&
+            protoOwner.GenericParameters is { Count: > 0 } &&
+            receiverType is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            for (int pi = 0; pi < protoOwner.GenericParameters.Count && pi < receiverType.TypeArguments.Count; pi++)
+                resolvedReturnType = SubstituteGenericParamInType(resolvedReturnType,
+                    protoOwner.GenericParameters[pi], receiverType.TypeArguments[pi]);
         }
 
         if (resolvedReturnType is GenericParameterTypeInfo && receiverType is { IsGenericResolution: true, TypeArguments: not null })
@@ -2587,7 +2623,28 @@ public partial class LLVMCodeGenerator
             method = _registry.LookupMethod(receiverType, generic.MethodName);
         }
 
-        if (method == null) return null;
+        // Representable pattern: obj.TypeName[Args]() → type conversion returning the resolved generic type
+        if (method == null)
+        {
+            TypeInfo? representableGenType = _registry.LookupType(generic.MethodName);
+            if (representableGenType != null && representableGenType.IsGenericDefinition &&
+                generic.TypeArguments.Count > 0)
+            {
+                var typeArgs = new List<TypeInfo>();
+                foreach (var ta in generic.TypeArguments)
+                {
+                    TypeInfo? resolved = null;
+                    if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ta.Name, out var sub))
+                        resolved = sub;
+                    resolved ??= _registry.LookupType(ta.Name);
+                    if (resolved != null) typeArgs.Add(resolved);
+                }
+                if (typeArgs.Count == representableGenType.GenericParameters!.Count)
+                    return _registry.GetOrCreateResolution(representableGenType, typeArgs);
+            }
+            if (representableGenType != null) return representableGenType;
+            return null;
+        }
 
         // Build substitution map for generic parameters from call-site type args
         TypeInfo? returnType = method.ReturnType;
@@ -2720,6 +2777,7 @@ public partial class LLVMCodeGenerator
                     RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                     EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
                     ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                    ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
                     _ => null
                 };
                 genericBase ??= type.Name.Contains('[')
@@ -2727,6 +2785,31 @@ public partial class LLVMCodeGenerator
                     : null;
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
+            }
+        }
+
+        // Tuple types with unresolved generic params in element types (e.g., Tuple[U64, T] → Tuple[U64, S64])
+        if (type is TupleTypeInfo tuple)
+        {
+            bool needsResolution = false;
+            var resolvedElems = new List<TypeInfo>();
+            foreach (var elem in tuple.ElementTypes)
+            {
+                if (_typeSubstitutions.TryGetValue(elem.Name, out var elemSub))
+                {
+                    resolvedElems.Add(elemSub);
+                    needsResolution = true;
+                }
+                else
+                {
+                    resolvedElems.Add(elem);
+                }
+            }
+            if (needsResolution)
+            {
+                bool allValue = resolvedElems.All(e =>
+                    e.Category is TypeCategory.Record or TypeCategory.Intrinsic or TypeCategory.Choice or TypeCategory.Tuple);
+                return new TupleTypeInfo(resolvedElems, allValue ? TupleKind.Value : TupleKind.Reference);
             }
         }
 
@@ -2924,6 +3007,12 @@ public partial class LLVMCodeGenerator
                         return method.ReturnType;
                     }
                 }
+                // Representable pattern: obj.TypeName() → TypeName.__create__(from: obj)
+                // If the method name matches a registered type, the return type is that type
+                TypeInfo? representableType = _registry.LookupType(member.PropertyName);
+                if (representableType != null)
+                    return representableType;
+
                 // Fall back to unqualified lookup
                 var fallback = _registry.LookupRoutine(member.PropertyName);
                 return fallback?.ReturnType;
@@ -3101,7 +3190,24 @@ public partial class LLVMCodeGenerator
         if (targetType != null)
         {
             string methodFullName = $"{targetType.Name}.__getitem__";
-            RoutineInfo? getItem = _registry.LookupRoutine(methodFullName);
+            RoutineInfo? getItem = _registry.LookupRoutine(methodFullName)
+                ?? _registry.LookupRoutine($"{targetType.Name}.__getitem__!");
+
+            // For generic resolutions (e.g., List[S64]), also try the generic definition name
+            if (getItem == null && targetType.IsGenericResolution)
+            {
+                string? genDefName = targetType switch
+                {
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
+                    _ => null
+                };
+                if (genDefName != null)
+                {
+                    getItem = _registry.LookupRoutine($"{genDefName}.__getitem__")
+                        ?? _registry.LookupRoutine($"{genDefName}.__getitem__!");
+                }
+            }
             if (getItem != null && !getItem.IsGenericDefinition)
             {
                 // Emit as method call: obj.__getitem__(index)
@@ -3110,6 +3216,27 @@ public partial class LLVMCodeGenerator
                     PropertyName: "__getitem__",
                     Location: index.Location);
                 return EmitMethodCall(sb, member, new List<Expression> { index.Index });
+            }
+
+            // Direct List entity indexing: data_ptr = list->data, elem_ptr = data_ptr[index]
+            if (getItem != null && targetType is EntityTypeInfo listEntity2 && listEntity2.Name.StartsWith("List["))
+            {
+                string target = EmitExpression(sb, index.Object);
+                string indexValue = EmitExpression(sb, index.Index);
+
+                string entityType2 = GetEntityTypeName(listEntity2);
+                string dataFieldPtr2 = NextTemp();
+                EmitLine(sb, $"  {dataFieldPtr2} = getelementptr {entityType2}, ptr {target}, i32 0, i32 0");
+                string dataBase2 = NextTemp();
+                EmitLine(sb, $"  {dataBase2} = load ptr, ptr {dataFieldPtr2}");
+
+                TypeInfo? elemType2 = GetListElementType(listEntity2);
+                string elemLlvm2 = elemType2 != null ? GetLLVMType(elemType2) : "i64";
+                string elemPtr2 = NextTemp();
+                EmitLine(sb, $"  {elemPtr2} = getelementptr {elemLlvm2}, ptr {dataBase2}, i64 {indexValue}");
+                string loaded2 = NextTemp();
+                EmitLine(sb, $"  {loaded2} = load {elemLlvm2}, ptr {elemPtr2}");
+                return loaded2;
             }
 
             // For entity types with a list-like first field (e.g., Text has letters: List[Letter]),
@@ -3228,16 +3355,25 @@ public partial class LLVMCodeGenerator
         string start = EmitExpression(sb, range.Start);
         string end = EmitExpression(sb, range.End);
         string step = range.Step != null ? EmitExpression(sb, range.Step) : "1";
-        string isDescending = range.IsDescending ? "true" : "false";
+        // IsDescending is confusingly named: false = 'to' (inclusive), true = 'til' (exclusive)
+        // Range record field 3 is 'inclusive': true for 'to', false for 'til'
+        string isInclusive = range.IsDescending ? "false" : "true";
 
         // Infer element type from start/end expressions (Range[T] is generic)
         TypeInfo? elemType = GetExpressionType(range.Start) ?? GetExpressionType(range.End);
         string elemLlvmType = elemType != null ? GetLLVMType(elemType) : "i64";
 
-        // Try to use registered Range type, fall back to literal struct
-        TypeInfo? rangeType = _registry.LookupType("Range");
+        // Try to use registered Range type, resolved with element type
+        TypeInfo? rangeGenericDef = _registry.LookupType("Range");
         string structType;
-        if (rangeType is RecordTypeInfo rangeRecord)
+        if (rangeGenericDef != null && elemType != null)
+        {
+            TypeInfo resolvedRange = _registry.GetOrCreateResolution(rangeGenericDef, new List<TypeInfo> { elemType });
+            structType = resolvedRange is RecordTypeInfo resolvedRecord
+                ? GetRecordTypeName(resolvedRecord)
+                : $"{{ {elemLlvmType}, {elemLlvmType}, {elemLlvmType}, i1 }}";
+        }
+        else if (rangeGenericDef is RecordTypeInfo rangeRecord)
         {
             structType = GetRecordTypeName(rangeRecord);
         }
@@ -3246,7 +3382,7 @@ public partial class LLVMCodeGenerator
             structType = $"{{ {elemLlvmType}, {elemLlvmType}, {elemLlvmType}, i1 }}";
         }
 
-        // Build struct via insertvalue chain: { start, end, step, is_descending }
+        // Build struct via insertvalue chain: { start, end, step, inclusive }
         string v0 = NextTemp();
         EmitLine(sb, $"  {v0} = insertvalue {structType} undef, {elemLlvmType} {start}, 0");
         string v1 = NextTemp();
@@ -3254,7 +3390,7 @@ public partial class LLVMCodeGenerator
         string v2 = NextTemp();
         EmitLine(sb, $"  {v2} = insertvalue {structType} {v1}, {elemLlvmType} {step}, 2");
         string v3 = NextTemp();
-        EmitLine(sb, $"  {v3} = insertvalue {structType} {v2}, i1 {isDescending}, 3");
+        EmitLine(sb, $"  {v3} = insertvalue {structType} {v2}, i1 {isInclusive}, 3");
 
         return v3;
     }
@@ -3773,19 +3909,15 @@ public partial class LLVMCodeGenerator
             return partValues[0];
         }
 
-        // Chain concat calls: acc = acc.concat(next)
+        // Chain concat calls via native rf_text_concat
+        if (_declaredNativeFunctions.Add("rf_text_concat"))
+            EmitLine(_functionDeclarations, "declare ptr @rf_text_concat(ptr, ptr)");
+
         string accumulator = partValues[0];
         for (int i = 1; i < partValues.Count; i++)
         {
-            string concatName = "Text.concat";
-            RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
-
-            string mangledConcat = concatMethod != null
-                ? MangleFunctionName(concatMethod)
-                : "Text.concat";
-
             string concatResult = NextTemp();
-            EmitLine(sb, $"  {concatResult} = call ptr @{mangledConcat}(ptr {accumulator}, ptr {partValues[i]})");
+            EmitLine(sb, $"  {concatResult} = call ptr @rf_text_concat(ptr {accumulator}, ptr {partValues[i]})");
             accumulator = concatResult;
         }
 
@@ -3809,14 +3941,11 @@ public partial class LLVMCodeGenerator
             string prefix = EmitStringLiteral(sb, $"{varName}=");
             string valueText = EmitValueToText(sb, exprValue, exprType, null);
 
-            // Concat: prefix + valueText
-            string concatName = "Text.concat";
-            RoutineInfo? concatMethod = _registry.LookupRoutine(concatName);
-            string mangledConcat = concatMethod != null
-                ? MangleFunctionName(concatMethod)
-                : "Text.concat";
+            // Concat: prefix + valueText via native rf_text_concat
+            if (_declaredNativeFunctions.Add("rf_text_concat"))
+                EmitLine(_functionDeclarations, "declare ptr @rf_text_concat(ptr, ptr)");
             string result = NextTemp();
-            EmitLine(sb, $"  {result} = call ptr @{mangledConcat}(ptr {prefix}, ptr {valueText})");
+            EmitLine(sb, $"  {result} = call ptr @rf_text_concat(ptr {prefix}, ptr {valueText})");
             return result;
         }
 
@@ -3826,6 +3955,8 @@ public partial class LLVMCodeGenerator
             string typeName = exprType?.Name ?? "Data";
             string debugName = $"{typeName}.to_debug";
             RoutineInfo? debugMethod = _registry.LookupRoutine(debugName);
+            if (debugMethod != null)
+                GenerateFunctionDeclaration(debugMethod);
 
             string mangledDebug = debugMethod != null
                 ? MangleFunctionName(debugMethod)
@@ -3904,6 +4035,8 @@ public partial class LLVMCodeGenerator
         RoutineInfo? createMethod = type != null
             ? _registry.LookupRoutineOverload("Text.__create__", [type])
             : _registry.LookupRoutine("Text.__create__");
+        if (createMethod != null)
+            GenerateFunctionDeclaration(createMethod);
 
         string llvmArgType = type != null ? GetLLVMType(type) : "i64";
         string mangledName = createMethod != null
@@ -3948,6 +4081,7 @@ public partial class LLVMCodeGenerator
         // Try to find a __create__ or use a fallback allocation
         string createName = $"{listTypeName}.__create__";
         RoutineInfo? createMethod = _registry.LookupRoutine(createName);
+        string entityTypeName = listType is EntityTypeInfo eti ? GetEntityTypeName(eti) : $"%\"Entity.{listTypeName}\"";
 
         string listPtr;
         if (createMethod != null)
@@ -3963,22 +4097,23 @@ public partial class LLVMCodeGenerator
             listPtr = NextTemp();
             EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
-            // Initialize count = 0, capacity = element count, data = alloc(n * elem_size)
-            string countPtr = NextTemp();
-            EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
-            EmitLine(sb, $"  store i64 0, ptr {countPtr}");
-
-            string capPtr = NextTemp();
-            EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
-            long capacity = Math.Max(list.Elements.Count, 4);
-            EmitLine(sb, $"  store i64 {capacity}, ptr {capPtr}");
-
+            // Initialize: data = alloc(n * elem_size), count = 0, capacity = element count
+            // Entity layout is { ptr (data), i64 (count), i64 (capacity) }
             int elemSize = elemType != null ? GetTypeSize(elemType) : 8;
+            long capacity = Math.Max(list.Elements.Count, 4);
             string dataPtr = NextTemp();
             EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {capacity * elemSize})");
             string dataPtrSlot = NextTemp();
-            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 0");
             EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+            string countPtr = NextTemp();
+            EmitLine(sb, $"  {countPtr} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 1");
+            EmitLine(sb, $"  store i64 0, ptr {countPtr}");
+
+            string capPtr = NextTemp();
+            EmitLine(sb, $"  {capPtr} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 2");
+            EmitLine(sb, $"  store i64 {capacity}, ptr {capPtr}");
         }
 
         // Add each element via add_last or direct store
@@ -3997,11 +4132,11 @@ public partial class LLVMCodeGenerator
         else
         {
             // Fallback: direct store into data buffer
-            // Load data ptr, then GEP + store for each element
-            string dataPtrSlot = NextTemp();
-            EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
+            // Load data ptr (field 0), then GEP + store for each element
+            string dataPtrSlot2 = NextTemp();
+            EmitLine(sb, $"  {dataPtrSlot2} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 0");
             string dataBase = NextTemp();
-            EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataPtrSlot}");
+            EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataPtrSlot2}");
 
             for (int i = 0; i < list.Elements.Count; i++)
             {
@@ -4011,10 +4146,10 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb, $"  store {elemLLVMType} {elemValue}, ptr {elemPtr}");
             }
 
-            // Update count
-            string countPtr = NextTemp();
-            EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
-            EmitLine(sb, $"  store i64 {list.Elements.Count}, ptr {countPtr}");
+            // Update count (field 1)
+            string countPtr2 = NextTemp();
+            EmitLine(sb, $"  {countPtr2} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 1");
+            EmitLine(sb, $"  store i64 {list.Elements.Count}, ptr {countPtr2}");
         }
 
         return listPtr;

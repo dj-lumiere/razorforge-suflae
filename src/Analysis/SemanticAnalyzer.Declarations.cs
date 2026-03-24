@@ -2765,17 +2765,13 @@ public sealed partial class SemanticAnalyzer
                 continue;
             }
 
-            // Look for the method on the type
+            // Look for the method on the type (not on its protocols — that would find the protocol's own declaration)
+            IEnumerable<RoutineInfo> ownMethods = _registry.GetMethodsForType(type: type);
             RoutineInfo? typeMethod =
-                _registry.LookupMethod(type: type, methodName: requiredMethod.Name);
-            if (typeMethod == null)
+                ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name);
+            if (typeMethod == null && requiredMethod.IsFailable)
             {
-                // Also check with failable suffix
-                if (requiredMethod.IsFailable)
-                {
-                    typeMethod = _registry.LookupMethod(type: type,
-                        methodName: requiredMethod.Name + "!");
-                }
+                typeMethod = ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name + "!");
             }
 
             if (typeMethod == null)

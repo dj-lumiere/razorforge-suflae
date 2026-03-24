@@ -216,15 +216,34 @@ routine List[T].clear()
   me.count = 0u64
   return
 
+# ============================================================================
+# Sequenceable protocol support
+# ============================================================================
+
+entity ListEmitter[T]
+  secret list: List[T]
+  secret index: U64
+
+@readonly
+routine List[T].__seq__() -> ListEmitter[T]
+  return ListEmitter[T](list: me, index: 0u64)
+
+@writable
+emitting routine ListEmitter[T].__next__() -> T
+  if me.index >= me.list.count()
+    absent
+
+  emit me.list[me.index]
+  me.index = me.index + 1u64
+  return
+
 routine Text.__create__[T](from: List[T]) -> Text
-  var list = List[Letter]()
-  for (i, v) in from.enumerate()
-    list.add_last('[')
-    for l in v.Text().List[Letter]()
-      list.add_last(l)
-    if i + 1 != from.count()
-      list.add_last(',')
-      list.add_last(' ')
-    else
-      list.add_last(']')
-  return list.Text()
+  var result = "["
+  var i = 0u64
+  for v in from
+    if i > 0u64
+      result = result + ", "
+    result = result + v.Text()
+    i = i + 1u64
+  result = result + "]"
+  return result
