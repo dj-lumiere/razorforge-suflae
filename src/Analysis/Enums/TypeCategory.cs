@@ -58,7 +58,7 @@ public enum TypeCategory
     /// <summary>First-class function type for lambdas and function references (e.g., Routine&lt;s32, s32, s32&gt; = two s32 params, returns s32).</summary>
     Routine,
 
-    /// <summary>Builder-generated tuple types (ValueTuple for value types, Tuple for reference types).</summary>
+    /// <summary>Builder-generated tuple types (always inline LLVM structs).</summary>
     Tuple,
 
     /// <summary>Builder-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).</summary>

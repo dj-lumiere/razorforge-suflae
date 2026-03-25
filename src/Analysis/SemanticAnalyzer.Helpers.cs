@@ -725,7 +725,7 @@ public sealed partial class SemanticAnalyzer
 
         // TupleTypeInfo doesn't have a GenericDefinition — create a new tuple directly
         if (type is TupleTypeInfo tuple)
-            return new TupleTypeInfo(elementTypes: newArgs, kind: tuple.Kind);
+            return new TupleTypeInfo(elementTypes: newArgs);
 
         return type;
     }

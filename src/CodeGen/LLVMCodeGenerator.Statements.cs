@@ -1162,9 +1162,7 @@ public partial class LLVMCodeGenerator
             }
             if (anyChanged)
             {
-                bool allValue = resolvedElems.All(e =>
-                    e.Category is TypeCategory.Record or TypeCategory.Intrinsic or TypeCategory.Choice or TypeCategory.Tuple);
-                return new TupleTypeInfo(resolvedElems, allValue ? TupleKind.Value : TupleKind.Reference);
+                return new TupleTypeInfo(resolvedElems);
             }
         }
 
@@ -1602,28 +1600,28 @@ public partial class LLVMCodeGenerator
 
         if (subjectType is VariantTypeInfo variant && targetType != null)
         {
-            // For variants, check if any case has a payload matching the target type
-            int matchTag = -1;
-            foreach (var t in variant.Cases)
-            {
-                if (t.PayloadType?.Name != targetType.Name)
-                {
-                    continue;
-                }
+            // For variants, check if any member matches the target type
+            VariantMemberInfo? matchedMember = null;
 
-                matchTag = t.TagValue;
-                break;
+            // Check for None state
+            if (targetType.Name == "None")
+            {
+                matchedMember = variant.Members.FirstOrDefault(m => m.IsNone);
+            }
+            else
+            {
+                matchedMember = variant.FindMember(targetType);
             }
 
-            if (matchTag >= 0)
+            if (matchedMember != null)
             {
                 string tagPtr = NextTemp();
                 string tag = NextTemp();
                 string variantTypeName = GetVariantTypeName(variant);
                 EmitLine(sb, $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb, $"  {tag} = load i32, ptr {tagPtr}");
+                EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
                 string cmp = NextTemp();
-                EmitLine(sb, $"  {cmp} = icmp eq i32 {tag}, {matchTag}");
+                EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
                 EmitLine(sb, $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
             }
             else
@@ -1757,7 +1755,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits code for variant pattern matching (is CASE payload).
+    /// Emits code for variant pattern matching (is MemberType payload).
     /// </summary>
     private void EmitVariantPatternMatch(StringBuilder sb, string subject, VariantPattern variant, string matchLabel, string failLabel, TypeInfo? subjectType = null)
     {
@@ -1768,35 +1766,29 @@ public partial class LLVMCodeGenerator
             variantType = _registry.LookupType(variant.VariantType) as VariantTypeInfo;
         }
 
-        string variantStructType = variantType != null ? GetVariantTypeName(variantType) : "{ i32 }";
+        string variantStructType = variantType != null ? GetVariantTypeName(variantType) : "{ i64 }";
 
         // Extract tag from variant (first field)
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb, $"  {tagPtr} = getelementptr {variantStructType}, ptr {subject}, i32 0, i32 0");
-        EmitLine(sb, $"  {tag} = load i32, ptr {tagPtr}");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
 
-        // Look up actual tag value from variant type info
+        // Look up member by case name (which is the type name)
         int expectedTag = 0;
+        VariantMemberInfo? matchedMember = null;
         if (variantType != null)
         {
-            foreach (var t in variantType.Cases)
-            {
-                if (t.Name != variant.CaseName)
-                {
-                    continue;
-                }
-
-                expectedTag = t.TagValue;
-                break;
-            }
+            matchedMember = variantType.Members.FirstOrDefault(m => m.Name == variant.CaseName);
+            if (matchedMember != null)
+                expectedTag = matchedMember.TagValue;
         }
 
         string cmp = NextTemp();
-        EmitLine(sb, $"  {cmp} = icmp eq i32 {tag}, {expectedTag}");
+        EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, {expectedTag}");
 
         // If bindings are present, extract payload in the match block
-        if (variant.Bindings is { Count: > 0 } && variantType != null)
+        if (variant.Bindings is { Count: > 0 } && matchedMember is { IsNone: false })
         {
             string extractLabel = NextLabel("variant_extract");
             EmitLine(sb, $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
@@ -1810,18 +1802,7 @@ public partial class LLVMCodeGenerator
             var binding = variant.Bindings[0];
             string bindName = binding.BindingName ?? binding.MemberVariableName ?? "_payload";
 
-            // Find payload type from the matched case
-            TypeInfo? payloadType = null;
-            foreach (var c in variantType.Cases)
-            {
-                if (c.Name != variant.CaseName)
-                {
-                    continue;
-                }
-
-                payloadType = c.PayloadType;
-                break;
-            }
+            TypeInfo? payloadType = matchedMember.Type;
 
             if (payloadType != null)
             {
@@ -1869,25 +1850,19 @@ public partial class LLVMCodeGenerator
 
         if (subjectType is VariantTypeInfo variant && targetType != null)
         {
-            int matchTag = -1;
-            foreach (var t in variant.Cases)
-            {
-                if (t.PayloadType?.Name == targetType.Name)
-                {
-                    matchTag = t.TagValue;
-                    break;
-                }
-            }
+            VariantMemberInfo? matchedMember = targetType.Name == "None"
+                ? variant.Members.FirstOrDefault(m => m.IsNone)
+                : variant.FindMember(targetType);
 
-            if (matchTag >= 0)
+            if (matchedMember != null)
             {
                 string tagPtr = NextTemp();
                 string tag = NextTemp();
                 string variantTypeName = GetVariantTypeName(variant);
                 EmitLine(sb, $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb, $"  {tag} = load i32, ptr {tagPtr}");
+                EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
                 string cmp = NextTemp();
-                EmitLine(sb, $"  {cmp} = icmp ne i32 {tag}, {matchTag}");
+                EmitLine(sb, $"  {cmp} = icmp ne i64 {tag}, {matchedMember.TagValue}");
                 EmitLine(sb, $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
             }
             else
@@ -2065,25 +2040,19 @@ public partial class LLVMCodeGenerator
 
         if (subjectType is VariantTypeInfo variant && targetType != null)
         {
-            int matchTag = -1;
-            foreach (var t in variant.Cases)
-            {
-                if (t.PayloadType?.Name == targetType.Name)
-                {
-                    matchTag = t.TagValue;
-                    break;
-                }
-            }
+            VariantMemberInfo? matchedMember = targetType.Name == "None"
+                ? variant.Members.FirstOrDefault(m => m.IsNone)
+                : variant.FindMember(targetType);
 
-            if (matchTag >= 0)
+            if (matchedMember != null)
             {
                 string tagPtr = NextTemp();
                 string tag = NextTemp();
                 string variantTypeName = GetVariantTypeName(variant);
                 EmitLine(sb, $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb, $"  {tag} = load i32, ptr {tagPtr}");
+                EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
                 string cmp = NextTemp();
-                EmitLine(sb, $"  {cmp} = icmp eq i32 {tag}, {matchTag}");
+                EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
                 EmitLine(sb, $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
             }
             else

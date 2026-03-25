@@ -220,7 +220,7 @@ routine List[T].clear()
 # Sequenceable protocol support
 # ============================================================================
 
-entity ListEmitter[T]
+entity ListEmitter[T] obeys SequenceEmitter[T]
   secret list: List[T]
   secret index: U64
 

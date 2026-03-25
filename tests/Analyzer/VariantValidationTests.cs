@@ -8,22 +8,22 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for variant type validation rules:
-/// #59: Variant case containment restrictions
+/// #59: Variant member containment restrictions
 /// </summary>
 public class VariantValidationTests
 {
-    #region #59: Variant case containment
+    #region #59: Variant member containment
 
     [Fact]
-    public void Analyze_VariantWithRecordPayload_NoError()
+    public void Analyze_VariantWithRecordMember_NoError()
     {
         string source = """
                         record Point
                           x: S32
                           y: S32
                         variant Shape
-                          CIRCLE: S32
-                          RECTANGLE: Point
+                          S32
+                          Point
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -36,11 +36,11 @@ public class VariantValidationTests
     {
         string source = """
                         variant Inner
-                          A
-                          B: S32
+                          S32
+                          None
                         variant Outer
-                          X: Inner
-                          Y
+                          Inner
+                          None
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -50,13 +50,13 @@ public class VariantValidationTests
     }
 
     [Fact]
-    public void Analyze_VariantWithPrimitivePayload_NoError()
+    public void Analyze_VariantWithPrimitiveMember_NoError()
     {
         string source = """
                         variant Value
-                          INT: S32
-                          FLOAT: F64
-                          NONE
+                          S32
+                          F64
+                          None
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -73,8 +73,8 @@ public class VariantValidationTests
     {
         string source = """
                         variant Shape
-                          Circle: S32
-                          Square: S32
+                          S32
+                          F64
 
                         routine make_shape() -> Shape
                           pass
@@ -83,7 +83,7 @@ public class VariantValidationTests
                         routine test()
                           var s = make_shape()
                           when s
-                            is Circle(r) => pass
+                            is S32(r) => pass
                             else => pass
                         """;
 
@@ -97,8 +97,8 @@ public class VariantValidationTests
     {
         string source = """
                         variant Shape
-                          Circle: S32
-                          Square: S32
+                          S32
+                          F64
 
                         routine make_shape() -> Shape
                           pass
@@ -111,7 +111,7 @@ public class VariantValidationTests
                           var s = make_shape()
                           other()
                           when s
-                            is Circle(r) => pass
+                            is S32(r) => pass
                             else => pass
                         """;
 
@@ -125,8 +125,8 @@ public class VariantValidationTests
     {
         string source = """
                         variant Shape
-                          Circle: S32
-                          Square: S32
+                          S32
+                          F64
 
                         routine make_shape() -> Shape
                           pass

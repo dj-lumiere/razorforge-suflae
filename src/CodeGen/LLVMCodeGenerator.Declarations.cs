@@ -181,8 +181,8 @@ public partial class LLVMCodeGenerator
     #region Variant Type Generation
 
     /// <summary>
-    /// Generates the LLVM type for a variant (tagged union).
-    /// Variant = record with tag (i32) + payload (sized to largest case).
+    /// Generates the LLVM type for a variant (type-based tagged union).
+    /// Variant = { i64 tag, [N x i8] payload } where N = max member size.
     /// </summary>
     /// <param name="variant">The variant type info.</param>
     private void GenerateVariantType(VariantTypeInfo variant)
@@ -198,42 +198,34 @@ public partial class LLVMCodeGenerator
 
         // Calculate max payload size
         int maxPayloadSize = 0;
-        foreach (var variantCase in variant.Cases)
+        foreach (var member in variant.Members)
         {
-            if (variantCase.PayloadType != null)
+            if (!member.IsNone && member.Type != null)
             {
-                int payloadSize = GetTypeSize(variantCase.PayloadType);
+                int payloadSize = GetTypeSize(member.Type);
                 maxPayloadSize = Math.Max(maxPayloadSize, payloadSize);
             }
         }
 
-        // Variant is { i32 tag, [N x i8] payload }
-        // We use i8 array for the union to allow any payload type
+        // Variant is { i64 tag, [N x i8] payload }
         if (maxPayloadSize > 0)
         {
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ i32, [{maxPayloadSize} x i8] }}");
+            EmitLine(_typeDeclarations, $"{typeName} = type {{ i64, [{maxPayloadSize} x i8] }}");
         }
         else
         {
-            // No payloads - just the tag
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ i32 }}");
+            // No payloads (all None) - just the tag
+            EmitLine(_typeDeclarations, $"{typeName} = type {{ i64 }}");
         }
 
-        // Add case info as comments
+        // Add member info as comments
         var sb = new StringBuilder();
-        sb.Append($"; {typeName} cases: ");
-        for (int i = 0; i < variant.Cases.Count; i++)
+        sb.Append($"; {typeName} members: ");
+        for (int i = 0; i < variant.Members.Count; i++)
         {
             if (i > 0) sb.Append(", ");
-            var c = variant.Cases[i];
-            if (c.PayloadType != null)
-            {
-                sb.Append($"{c.Name}({c.PayloadType.Name})={c.TagValue}");
-            }
-            else
-            {
-                sb.Append($"{c.Name}={c.TagValue}");
-            }
+            var m = variant.Members[i];
+            sb.Append($"{m.Name}={m.TagValue}");
         }
         EmitLine(_typeDeclarations, sb.ToString());
     }
@@ -1883,6 +1875,9 @@ public partial class LLVMCodeGenerator
         var protocolDef = protocol.GenericDefinition ?? protocol;
         string protocolBaseName = protocolDef.Name;
 
+        // Track whether we've already triggered a monomorphization for an uncompiled candidate
+        bool triggered = false;
+
         // Search all entity/record types (including resolutions) for implementers
         var seen = new HashSet<string>();
         foreach (var type in _registry.GetTypesByCategory(SemanticAnalysis.Enums.TypeCategory.Entity)
@@ -1905,6 +1900,25 @@ public partial class LLVMCodeGenerator
                 // For generic types: List[T] obeys Sequenceable[T] → when T=S64, List[S64] obeys Sequenceable[S64]
                 string implBaseName = impl.Name.Contains('[') ? impl.Name[..impl.Name.IndexOf('[')] : impl.Name;
                 if (implBaseName != protocolBaseName) continue;
+
+                // For resolved (non-generic-definition) types, verify the protocol type arguments match exactly.
+                // Without this, EnumerateEmitter[S64] (obeys SequenceEmitter[Tuple[S64, S64]]) would
+                // incorrectly match a search for SequenceEmitter[S64].
+                if (!type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 } && impl.TypeArguments is { Count: > 0 })
+                {
+                    if (protocol.TypeArguments.Count != impl.TypeArguments.Count)
+                        continue;
+                    bool argsMatch = true;
+                    for (int i = 0; i < protocol.TypeArguments.Count; i++)
+                    {
+                        if (protocol.TypeArguments[i].FullName != impl.TypeArguments[i].FullName)
+                        {
+                            argsMatch = false;
+                            break;
+                        }
+                    }
+                    if (!argsMatch) continue;
+                }
 
                 // Match: now determine the concrete type resolution
                 TypeInfo concreteType = type;
@@ -1961,6 +1975,32 @@ public partial class LLVMCodeGenerator
                 string candidateName = Q($"{concreteType.FullName}.{SanitizeLLVMName(methodName)}");
                 if (_generatedFunctionDefs.Contains(candidateName))
                     return candidateName;
+
+                // Method not compiled yet — trigger monomorphization for ONE candidate so it
+                // will be available in a subsequent iteration of the multi-pass loop.
+                // Only trigger once (first match) to avoid cascading monomorphization of
+                // all implementers (e.g., SetIterator, SkipEmitter, etc.) that aren't needed.
+                if (!triggered)
+                {
+                    TypeInfo? genericDef = concreteType switch
+                    {
+                        EntityTypeInfo e => e.GenericDefinition,
+                        RecordTypeInfo r => r.GenericDefinition,
+                        _ => null
+                    };
+                    if (genericDef != null)
+                    {
+                        var genericMethod = _registry.LookupMethod(genericDef, methodName);
+                        if (genericMethod != null && !_pendingMonomorphizations.ContainsKey(candidateName))
+                        {
+                            // Ensure entity type struct is defined for the concrete type
+                            if (concreteType is EntityTypeInfo entityType)
+                                GenerateEntityType(entityType);
+                            RecordMonomorphization(candidateName, genericMethod, concreteType);
+                            triggered = true;
+                        }
+                    }
+                }
             }
         }
 

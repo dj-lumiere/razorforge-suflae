@@ -71,8 +71,8 @@ public class TypeResolutionTests
         // Note: Don't use "Result" as it's a well-known error handling type
         string source = """
                         variant MyVariant
-                          SUCCESS: S32
-                          ERROR: Text
+                          S32
+                          Text
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -440,8 +440,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         entity Canvas
                           current: Shape
@@ -456,8 +456,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         routine process(shape: Shape)
                           pass
@@ -473,8 +473,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         @readonly
                         routine Shape.area() -> F64
@@ -490,11 +490,12 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         routine make_shape() -> Shape
-                          return CIRCLE(1.0)
+                          pass
+                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -507,8 +508,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         entity Canvas
                           current: Shape
@@ -523,8 +524,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         @readonly
                         routine Shape.__eq__(you: Shape) -> Bool
@@ -540,8 +541,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         routine make_shape() -> Shape
                           pass
@@ -562,8 +563,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         routine make_shape() -> Shape
                           pass
@@ -584,8 +585,8 @@ public class TypeResolutionTests
     {
         string source = """
                         variant Shape
-                          Circle: F32
-                          Rect: F32
+                          F32
+                          F64
 
                         routine make_shape() -> Shape
                           pass

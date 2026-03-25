@@ -15,9 +15,9 @@ public class TupleTests
     #region Type Inference
 
     [Fact]
-    public void Analyze_AllValueTypes_InfersValueTuple()
+    public void Analyze_InfersTuple()
     {
-        // All elements are value types (S32 is a record/value type)
+        // All tuples are inline structs regardless of element types
         string source = """
                         routine test()
                           var tuple = (1_s32, 2_s32, 3_s32)
@@ -31,7 +31,7 @@ public class TupleTests
     [Fact]
     public void Analyze_ContainsEntity_InfersTuple()
     {
-        // Entity is a reference type, so this should be Tuple
+        // Entity fields stored as ptr in the tuple struct
         string source = """
                         entity Point
                           x: S32

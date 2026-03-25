@@ -2849,16 +2849,7 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
-        // Determine tuple kind based on element types:
-        // ValueTuple: all elements are value types (Record, Choice, Variant, ValueTuple)
-        // Tuple: any element is an entity or other reference type
-        bool allValueTypes = elementTypes.All(predicate: TypeRegistry.IsValueType);
-        if (allValueTypes)
-        {
-            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
-        }
-
-        return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Reference);
+        return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
     }
 
     private TypeSymbol AnalyzeTypeConversionExpression(TypeConversionExpression conv)

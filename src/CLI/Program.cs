@@ -945,7 +945,7 @@ internal class Program
                 break;
 
             case VariantDeclaration variant:
-                Console.WriteLine($"{prefix}variant {variant.Name} ({variant.Cases.Count} cases)");
+                Console.WriteLine($"{prefix}variant {variant.Name} ({variant.Members.Count} members)");
                 break;
 
             case ProtocolDeclaration proto:

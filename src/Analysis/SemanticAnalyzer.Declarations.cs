@@ -1085,46 +1085,125 @@ public sealed partial class SemanticAnalyzer
 
     private void ResolveVariantBody(VariantDeclaration variant)
     {
-        if (variant.Cases.Count == 0)
+        if (variant.Members.Count == 0)
         {
             ReportError(SemanticDiagnosticCode.EmptyEnumerationBody,
-                $"Variant type '{variant.Name}' must have at least one case.",
+                $"Variant type '{variant.Name}' must have at least one member.",
                 variant.Location);
             return;
         }
 
-        // Validate each variant case's payload type
-        foreach (VariantCase variantCase in variant.Cases)
+        // Resolve each member type and build VariantMemberInfo list
+        var members = new List<VariantMemberInfo>();
+        var seenTypeNames = new HashSet<string>();
+        int nextTag = 0;
+        bool hasNone = false;
+
+        foreach (VariantMember member in variant.Members)
         {
-            if (variantCase.AssociatedTypes == null)
+            string typeName = member.Type.Name;
+
+            // Handle None state (zero-sized, no payload)
+            if (typeName == "None")
             {
-                continue; // No payload for this case
+                if (hasNone)
+                {
+                    ReportError(SemanticDiagnosticCode.VariantCaseContainsInvalidType,
+                        $"Variant type '{variant.Name}' has duplicate 'None' member.",
+                        member.Location);
+                    continue;
+                }
+                hasNone = true;
+                // None is always tag 0
+                members.Insert(0, VariantMemberInfo.CreateNone(tagValue: 0, location: member.Location));
+                continue;
             }
 
-            TypeSymbol payloadType = ResolveType(typeExpr: variantCase.AssociatedTypes);
+            TypeSymbol memberType = ResolveType(typeExpr: member.Type);
 
-            // Validate that tokens cannot be used as variant payloads
-            ValidateNotTokenVariantPayload(type: payloadType,
-                caseName: variantCase.Name,
-                location: variantCase.Location);
-
-            // #59: Variant cases cannot hold nested variants, Result[T], or Lookup[T]
-            if (payloadType is VariantTypeInfo)
+            // Check for duplicate types
+            string memberTypeName = memberType.Name;
+            if (!seenTypeNames.Add(memberTypeName))
             {
                 ReportError(SemanticDiagnosticCode.VariantCaseContainsInvalidType,
-                    $"Variant case '{variantCase.Name}' cannot contain nested variant type '{payloadType.Name}'.",
-                    variantCase.Location);
+                    $"Variant type '{variant.Name}' has duplicate member type '{memberTypeName}'.",
+                    member.Location);
+                continue;
             }
-            else if (payloadType is ErrorHandlingTypeInfo
+
+            // Validate that tokens cannot be used as variant members
+            ValidateNotTokenVariantPayload(type: memberType,
+                caseName: memberTypeName,
+                location: member.Location);
+
+            // #59: Variant members cannot hold nested variants, Result[T], or Lookup[T]
+            if (memberType is VariantTypeInfo)
+            {
+                ReportError(SemanticDiagnosticCode.VariantCaseContainsInvalidType,
+                    $"Variant member '{memberTypeName}' cannot be a nested variant type.",
+                    member.Location);
+            }
+            else if (memberType is ErrorHandlingTypeInfo
                      {
                          Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
                      })
             {
                 ReportError(SemanticDiagnosticCode.VariantCaseContainsInvalidType,
-                    $"Variant case '{variantCase.Name}' cannot contain '{payloadType.Name}'. " +
+                    $"Variant member '{memberTypeName}' cannot be '{memberType.Name}'. " +
                     "Use failable routines (!) instead of storing Result/Lookup in variants.",
-                    variantCase.Location);
+                    member.Location);
             }
+
+            members.Add(new VariantMemberInfo(type: (TypeInfo)memberType)
+            {
+                Location = member.Location
+            });
+        }
+
+        // Assign tag values: None = 0 (already set), others from 1
+        int tagStart = hasNone ? 1 : 0;
+        foreach (var m in members)
+        {
+            if (!m.IsNone)
+            {
+                // Use reflection-free approach: find and update tag
+                // Members are mutable via init, so we need to rebuild
+            }
+        }
+
+        // Rebuild with correct tags
+        var finalMembers = new List<VariantMemberInfo>();
+        int tag = 0;
+        // None first (tag 0) if present
+        var noneMember = members.FirstOrDefault(m => m.IsNone);
+        if (noneMember != null)
+        {
+            finalMembers.Add(noneMember); // already tag 0
+            tag = 1;
+        }
+        // Then all other members
+        foreach (var m in members.Where(m => !m.IsNone))
+        {
+            finalMembers.Add(new VariantMemberInfo(type: m.Type!)
+            {
+                TagValue = tag++,
+                Location = m.Location
+            });
+        }
+
+        // Update the registered type with resolved members
+        if (_registry.LookupType(variant.Name) is VariantTypeInfo variantType)
+        {
+            var updated = new VariantTypeInfo(name: variant.Name)
+            {
+                Members = finalMembers,
+                GenericParameters = variant.GenericParameters,
+                GenericConstraints = variant.GenericConstraints,
+                Visibility = variantType.Visibility,
+                Location = variant.Location,
+                Module = variantType.Module
+            };
+            _registry.UpdateType(oldType: variantType, newType: updated);
         }
     }
 

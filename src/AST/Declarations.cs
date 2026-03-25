@@ -285,27 +285,26 @@ public record FlagsDeclaration(
 }
 
 /// <summary>
-/// Variant declaration that defines tagged unions with multiple possible value types.
-/// Represents algebraic data types with multiple cases and associated data.
-/// All member variables must be records or memory handles - safe, no danger! needed.
+/// Variant declaration that defines type-based tagged unions.
+/// Each member is a type — the type IS the tag. No named cases.
 /// </summary>
 /// <param name="Name">Variant identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="Cases">List of variant cases with associated types</param>
+/// <param name="Members">List of variant member types</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Variant declarations enable powerful type-safe unions:
+/// Variant declarations enable type-safe unions:
 /// <list type="bullet">
-/// <item>Tagged unions: variant MyResult[T, E] { SUCCESS(T), TIMEOUT, ERROR(E) }</item>
-/// <item>Pattern matching: exhaustive case analysis with when statements</item>
-/// <item>Generic variants: variant MyOption[T] { OPTION1(T), OPTION2 }</item>
-/// <item>Associated data: each case can carry different typed data</item>
+/// <item>Type-based: variant Value { S64, Text, None }</item>
+/// <item>Pattern matching: when v is S64 n => use n</item>
+/// <item>Generic variants: variant Maybe[T] { T, None }</item>
+/// <item>No duplicate types allowed</item>
 /// </list>
 /// </remarks>
 public record VariantDeclaration(
     string Name,
     List<string>? GenericParameters,
-    List<VariantCase> Cases,
+    List<VariantMember> Members,
     SourceLocation Location,
     List<GenericConstraintDeclaration>? GenericConstraints = null)
     : Declaration(Location: Location)
@@ -462,22 +461,13 @@ public record ChoiceCase(
     SourceLocation Location);
 
 /// <summary>
-/// Variant case definition used within Variant declarations.
-/// Represents one possible case in a tagged union with associated type data.
+/// Variant member definition used within Variant declarations.
+/// Each member is a type expression — the type IS the tag.
 /// </summary>
-/// <param name="Name">Case identifier name</param>
-/// <param name="AssociatedTypes">Optional list of types associated with this case</param>
+/// <param name="Type">The type expression for this member</param>
 /// <param name="Location">Source location information</param>
-/// <remarks>
-/// Variant cases support associated data:
-/// <list type="bullet">
-/// <item>No data: NONE (unit case)</item>
-/// <item>Single type: SINGLE(T) (single associated value)</item>
-/// </list>
-/// </remarks>
-public record VariantCase(
-    string Name,
-    TypeExpression? AssociatedTypes,
+public record VariantMember(
+    TypeExpression Type,
     SourceLocation Location);
 
 /// <summary>

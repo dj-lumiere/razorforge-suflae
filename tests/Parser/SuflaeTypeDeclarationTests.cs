@@ -175,32 +175,32 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         variant NetworkEvent
-                          Connect
-                          Disconnect
+                          S32
+                          Text
                         """;
 
         Program program = AssertParsesSuflae(source: source);
         VariantDeclaration variant = GetDeclaration<VariantDeclaration>(program: program);
 
         Assert.Equal(expected: "NetworkEvent", actual: variant.Name);
-        Assert.Equal(expected: 2, actual: variant.Cases.Count);
+        Assert.Equal(expected: 2, actual: variant.Members.Count);
     }
 
     [Fact]
-    public void ParseSuflae_Variant_WithPayloads()
+    public void ParseSuflae_Variant_WithNone()
     {
         string source = """
                         variant ParseResult
-                          Success: S32
-                          Error: Text
+                          S32
+                          None
                         """;
 
         Program program = AssertParsesSuflae(source: source);
         VariantDeclaration variant = GetDeclaration<VariantDeclaration>(program: program);
 
-        Assert.Equal(expected: 2, actual: variant.Cases.Count);
-        Assert.NotNull(@object: variant.Cases[index: 0].AssociatedTypes);
-        Assert.NotNull(@object: variant.Cases[index: 1].AssociatedTypes);
+        Assert.Equal(expected: 2, actual: variant.Members.Count);
+        Assert.Equal(expected: "S32", actual: variant.Members[index: 0].Type.Name);
+        Assert.Equal(expected: "None", actual: variant.Members[index: 1].Type.Name);
     }
 
     #endregion

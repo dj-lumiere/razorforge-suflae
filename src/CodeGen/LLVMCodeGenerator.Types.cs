@@ -61,9 +61,8 @@ public partial class LLVMCodeGenerator
             // Choices → underlying integer type (S64)
             ChoiceTypeInfo => "i64",
 
-            // Tuples → struct (value) or pointer (reference)
-            TupleTypeInfo { Kind: TupleKind.Value } tuple => GetTupleTypeName(tuple),
-            TupleTypeInfo => "ptr", // Reference tuples are heap-allocated
+            // Tuples → always inline struct
+            TupleTypeInfo tuple => GetTupleTypeName(tuple),
 
             // Variants → struct { tag, payload }
             VariantTypeInfo variant => GetVariantTypeName(variant),
@@ -335,21 +334,21 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Calculates the size of a variant type (tag + max payload).
+    /// Calculates the size of a variant type (i64 tag + max payload).
     /// </summary>
     private int CalculateVariantSize(VariantTypeInfo variant)
     {
         int maxPayloadSize = 0;
-        foreach (var variantCase in variant.Cases)
+        foreach (var member in variant.Members)
         {
-            if (variantCase.PayloadType != null)
+            if (!member.IsNone && member.Type != null)
             {
-                int payloadSize = GetTypeSize(variantCase.PayloadType);
+                int payloadSize = GetTypeSize(member.Type);
                 maxPayloadSize = Math.Max(maxPayloadSize, payloadSize);
             }
         }
-        // Tag (i32 = 4 bytes) + padding + payload
-        return AlignTo(4, 8) + AlignTo(maxPayloadSize, 8);
+        // Tag (i64 = 8 bytes) + payload
+        return 8 + AlignTo(maxPayloadSize, 8);
     }
 
     /// <summary>

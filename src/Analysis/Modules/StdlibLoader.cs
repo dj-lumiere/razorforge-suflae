@@ -998,7 +998,7 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a variant type (tagged union) from stdlib.
+    /// Registers a variant type (type-based tagged union) from stdlib.
     /// </summary>
     private static void RegisterVariantType(TypeRegistry registry, VariantDeclaration variant,
         string moduleName)
@@ -1009,28 +1009,39 @@ public sealed class StdlibLoader
             return;
         }
 
-        // Build cases list upfront
-        var cases = new List<VariantCaseInfo>();
-        int tagValue = 0;
-        foreach (var caseDecl in variant.Cases)
-        {
-            // Determine payload type from AssociatedTypes if any
-            TypeInfo? payloadType = null;
-            if (caseDecl.AssociatedTypes != null)
-            {
-                payloadType = ResolveSimpleType(registry, caseDecl.AssociatedTypes);
-            }
+        // Build members list: None = tag 0, others sequential from 1
+        var members = new List<VariantMemberInfo>();
+        bool hasNone = false;
+        int tag = 0;
 
-            cases.Add(new VariantCaseInfo(caseDecl.Name)
+        // First pass: find None
+        foreach (var memberDecl in variant.Members)
+        {
+            if (memberDecl.Type.Name == "None")
             {
-                PayloadType = payloadType, TagValue = tagValue++
-            });
+                hasNone = true;
+                members.Add(VariantMemberInfo.CreateNone(tagValue: 0, location: null));
+                tag = 1;
+                break;
+            }
+        }
+
+        // Second pass: all non-None members
+        foreach (var memberDecl in variant.Members)
+        {
+            if (memberDecl.Type.Name == "None") continue;
+
+            TypeInfo? memberType = ResolveSimpleType(registry, memberDecl.Type);
+            if (memberType != null)
+            {
+                members.Add(new VariantMemberInfo(memberType) { TagValue = tag++ });
+            }
         }
 
         var typeInfo = new VariantTypeInfo(variant.Name)
         {
             Module = moduleName,
-            Cases = cases,
+            Members = members,
             GenericParameters = variant.GenericParameters
         };
 
@@ -1159,7 +1170,7 @@ public sealed class StdlibLoader
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
             // Tuple types are not registered as generic definitions — handle specially
-            if (typeName is "Tuple" or "ValueTuple")
+            if (typeName is "Tuple")
             {
                 var elemTypes = new List<TypeInfo>();
                 foreach (var argExpr in typeExpr.GenericArguments)
@@ -1168,13 +1179,7 @@ public sealed class StdlibLoader
                     if (argType == null) return null;
                     elemTypes.Add(argType);
                 }
-                TupleKind kind = typeName switch
-                {
-                    "ValueTuple" => TupleKind.Value,
-                    _ => elemTypes.Any(e => e is GenericParameterTypeInfo || e.Category == TypeCategory.Entity)
-                        ? TupleKind.Reference : TupleKind.Value
-                };
-                return new TupleTypeInfo(elemTypes, kind);
+                return new TupleTypeInfo(elemTypes);
             }
 
             var genericDef = registry.LookupType(typeName);

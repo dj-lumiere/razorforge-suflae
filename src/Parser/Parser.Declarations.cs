@@ -886,7 +886,7 @@ public partial class Parser
         List<GenericConstraintDeclaration>? constraints = ParseGenericConstraints(genericParams: genericParams, existingConstraints: inlineConstraints);
 
 
-        var cases = new List<VariantCase>();
+        var members = new List<VariantMember>();
 
         // Parse variant body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after variant header");
@@ -896,7 +896,7 @@ public partial class Parser
             return new VariantDeclaration(Name: name,
                 GenericParameters: genericParams,
                 GenericConstraints: constraints,
-                Cases: cases,
+                Members: members,
                 Location: location);
         }
 
@@ -909,17 +909,19 @@ public partial class Parser
                 continue;
             }
 
-            // Parse variant case
-            string caseName = ConsumeIdentifier(errorMessage: "Expected variant case name");
-
-            // CASE: Type syntax for associated types
-            TypeExpression? associatedType = null;
-            if (Match(type: TokenType.Colon))
+            // Each member is a type expression (or None keyword)
+            SourceLocation memberLoc = GetLocation();
+            TypeExpression memberType;
+            if (Match(type: TokenType.None))
             {
-                associatedType = ParseType();
+                memberType = new TypeExpression(Name: "None", GenericArguments: null, Location: memberLoc);
+            }
+            else
+            {
+                memberType = ParseType();
             }
 
-            cases.Add(item: new VariantCase(Name: caseName, AssociatedTypes: associatedType, Location: GetLocation()));
+            members.Add(item: new VariantMember(Type: memberType, Location: memberLoc));
             Match(type: TokenType.Newline);
         }
 
@@ -933,11 +935,10 @@ public partial class Parser
                 "Expected dedent after variant body");
         }
 
-
         return new VariantDeclaration(Name: name,
             GenericParameters: genericParams,
             GenericConstraints: constraints,
-            Cases: cases,
+            Members: members,
             Location: location);
     }
 

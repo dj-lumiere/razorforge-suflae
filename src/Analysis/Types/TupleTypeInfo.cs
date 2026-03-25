@@ -4,23 +4,8 @@ using Enums;
 using Symbols;
 
 /// <summary>
-/// The kind of tuple: ValueTuple (record-like) or Tuple (entity-like).
-/// </summary>
-public enum TupleKind
-{
-    /// <summary>Value type (like record). Copy semantics. Only contains value types.</summary>
-    Value,
-
-    /// <summary>Reference type (like entity). Reference semantics, heap-allocated. Contains anything.</summary>
-    Reference
-}
-
-/// <summary>
 /// Type information for builder-generated tuple types.
-/// Tuples are variadic and can contain any number of elements.
-///
-/// - ValueTuple: All elements are value types (copy semantics)
-/// - Tuple: Any element is a reference type (reference semantics, heap-allocated)
+/// Tuples are always inline LLVM structs (value semantics). Entities stored as ptr fields.
 /// </summary>
 public sealed class TupleTypeInfo : TypeInfo
 {
@@ -28,16 +13,6 @@ public sealed class TupleTypeInfo : TypeInfo
     /// The category of this type.
     /// </summary>
     public override TypeCategory Category => TypeCategory.Tuple;
-
-    /// <summary>
-    /// The kind of this tuple (Value, Fixed, or Reference).
-    /// </summary>
-    public TupleKind Kind { get; }
-
-    /// <summary>
-    /// Whether this is a ValueTuple (all elements are value types).
-    /// </summary>
-    public bool IsValueTuple => Kind == TupleKind.Value;
 
     /// <summary>
     /// The element types in order (item0, item1, ..., itemN).
@@ -50,19 +25,13 @@ public sealed class TupleTypeInfo : TypeInfo
     public IReadOnlyList<MemberVariableInfo> MemberVariables { get; }
 
     /// <summary>
-    /// Creates a new tuple type with the specified element types and kind.
+    /// Creates a new tuple type with the specified element types.
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
-    /// <param name="kind">The kind of tuple (Value or Reference).</param>
-    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes, TupleKind kind)
-        : base(name: kind switch
-        {
-            TupleKind.Value => "ValueTuple",
-            _ => "Tuple"
-        })
+    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes)
+        : base(name: "Tuple")
     {
         ElementTypes = elementTypes;
-        Kind = kind;
 
         // Generate synthetic member variables: item0, item1, ..., itemN
         var memberVariables = new List<MemberVariableInfo>(capacity: elementTypes.Count);
@@ -77,19 +46,8 @@ public sealed class TupleTypeInfo : TypeInfo
 
         MemberVariables = memberVariables;
 
-        // Set TypeArguments so FullName displays correctly (e.g., "ValueTuple<S32, S32>")
+        // Set TypeArguments so FullName displays correctly (e.g., "Tuple<S32, S32>")
         TypeArguments = elementTypes;
-    }
-
-    /// <summary>
-    /// Creates a new tuple type with the specified element types.
-    /// Backward-compatible constructor: maps true → Value, false → Reference.
-    /// </summary>
-    /// <param name="elementTypes">The types of each element in the tuple.</param>
-    /// <param name="isValueTuple">True if all elements are value types.</param>
-    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes, bool isValueTuple)
-        : this(elementTypes: elementTypes, kind: isValueTuple ? TupleKind.Value : TupleKind.Reference)
-    {
     }
 
     /// <summary>

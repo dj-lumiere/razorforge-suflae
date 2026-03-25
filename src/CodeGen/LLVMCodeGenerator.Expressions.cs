@@ -1362,7 +1362,8 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(resolvedReturnType)
             : "void";
         // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-        if (method?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+        bool isEmittingCall = method?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting;
+        if (isEmittingCall)
             returnType = "{ i64, ptr }";
 
         if (returnType == "void")
@@ -1376,8 +1377,70 @@ public partial class LLVMCodeGenerator
             string result = NextTemp();
             string args = BuildCallArgs(argTypes, argValues);
             EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
+
+            // Unwrap Maybe[T] from emitting routine calls (C74).
+            // EmitFor handles __next__() unwrapping directly, so this only fires for
+            // direct calls like `var item = me.source.__next__()` inside emitting bodies.
+            if (isEmittingCall)
+            {
+                return EmitEmittingCallUnwrap(sb, result, resolvedReturnType);
+            }
+
             return result;
         }
+    }
+
+    /// <summary>
+    /// Unwraps a Maybe[T] result from an emitting routine call (C74).
+    /// Extracts the tag, propagates ABSENT if inside an emitting routine, and loads the value.
+    /// </summary>
+    private string EmitEmittingCallUnwrap(StringBuilder sb, string maybeResult, TypeInfo? valueType)
+    {
+        // Store Maybe { i64, ptr } to memory for field extraction
+        string maybeAddr = NextTemp();
+        EmitLine(sb, $"  {maybeAddr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {maybeResult}, ptr {maybeAddr}");
+
+        // Extract tag (field 0 = DataState)
+        string tagPtr = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {maybeAddr}, i32 0, i32 0");
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        // Branch: tag == 1 (VALID) → extract value, else → propagate ABSENT
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string validLabel = NextLabel("emit_unwrap_valid");
+        string absentLabel = NextLabel("emit_unwrap_absent");
+        EmitLine(sb, $"  br i1 {isValid}, label %{validLabel}, label %{absentLabel}");
+
+        // ABSENT branch: propagate absence from current emitting routine
+        EmitLine(sb, $"{absentLabel}:");
+        if (_currentEmittingRoutine?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+        {
+            EmitLine(sb, "  call void @rf_trace_pop()");
+            EmitLine(sb, "  ret { i64, ptr } { i64 0, ptr null }");
+        }
+        else
+        {
+            EmitLine(sb, "  unreachable");
+        }
+
+        // VALID branch: extract handle pointer (field 1) and load the value
+        EmitLine(sb, $"{validLabel}:");
+        _currentBlock = validLabel;
+
+        string handlePtr = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {maybeAddr}, i32 0, i32 1");
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        string unwrappedType = valueType != null ? GetLLVMType(valueType) : "i64";
+        string unwrappedVal = NextTemp();
+        EmitLine(sb, $"  {unwrappedVal} = load {unwrappedType}, ptr {handleVal}");
+
+        return unwrappedVal;
     }
 
     /// <summary>
@@ -2775,9 +2838,7 @@ public partial class LLVMCodeGenerator
             }
             if (needsResolution)
             {
-                bool allValue = resolvedElems.All(e =>
-                    e.Category is TypeCategory.Record or TypeCategory.Intrinsic or TypeCategory.Choice or TypeCategory.Tuple);
-                return new TupleTypeInfo(resolvedElems, allValue ? TupleKind.Value : TupleKind.Reference);
+                return new TupleTypeInfo(resolvedElems);
             }
         }
 
@@ -3373,18 +3434,8 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates code for a tuple literal expression.
-    /// Creates a ValueTuple (for pure value types) or Tuple (for mixed/reference types).
+    /// Tuples are always inline LLVM structs built via insertvalue chain.
     /// </summary>
-    /// <param name="sb">StringBuilder to emit code to.</param>
-    /// <param name="tuple">The tuple literal expression.</param>
-    /// <returns>The temporary variable holding the tuple pointer.</returns>
-    /// <remarks>
-    /// Tuple layout:
-    /// - ValueTuple: stack-allocated struct with member variables item0, item1, ...
-    /// - Tuple: heap-allocated entity with member variables item0, item1, ...
-    ///
-    /// The semantic analyzer determines which type to use based on element types.
-    /// </remarks>
     private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
     {
         // Evaluate all element expressions
@@ -3400,48 +3451,26 @@ public partial class LLVMCodeGenerator
         // Resolve tuple type from semantic analysis
         TupleTypeInfo? tupleType = tuple.ResolvedType as TupleTypeInfo;
 
-        if (tupleType == null || tupleType.Kind == TupleKind.Value)
+        string structType;
+        if (tupleType != null)
         {
-            // ValueTuple: build struct via insertvalue chain
-            string structType;
-            if (tupleType != null)
-            {
-                structType = GetTupleTypeName(tupleType);
-            }
-            else
-            {
-                // Fall back to anonymous struct type
-                structType = $"{{ {string.Join(", ", elemLLVMTypes)} }}";
-            }
-
-            string result = "undef";
-            for (int i = 0; i < elemValues.Count; i++)
-            {
-                string newResult = NextTemp();
-                EmitLine(sb, $"  {newResult} = insertvalue {structType} {result}, {elemLLVMTypes[i]} {elemValues[i]}, {i}");
-                result = newResult;
-            }
-
-            return result;
+            structType = GetTupleTypeName(tupleType);
         }
         else
         {
-            // Reference Tuple: heap-allocate via rf_alloc, GEP + store each element
-            int size = CalculateTupleSize(tupleType);
-            string structType = GetTupleTypeName(tupleType);
-
-            string rawPtr = NextTemp();
-            EmitLine(sb, $"  {rawPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
-
-            for (int i = 0; i < elemValues.Count; i++)
-            {
-                string elemPtr = NextTemp();
-                EmitLine(sb, $"  {elemPtr} = getelementptr {structType}, ptr {rawPtr}, i32 0, i32 {i}");
-                EmitLine(sb, $"  store {elemLLVMTypes[i]} {elemValues[i]}, ptr {elemPtr}");
-            }
-
-            return rawPtr;
+            // Fall back to anonymous struct type
+            structType = $"{{ {string.Join(", ", elemLLVMTypes)} }}";
         }
+
+        string result = "undef";
+        for (int i = 0; i < elemValues.Count; i++)
+        {
+            string newResult = NextTemp();
+            EmitLine(sb, $"  {newResult} = insertvalue {structType} {result}, {elemLLVMTypes[i]} {elemValues[i]}, {i}");
+            result = newResult;
+        }
+
+        return result;
     }
 
     #endregion

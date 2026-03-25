@@ -200,53 +200,51 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant NetworkEvent
-                          Connect
-                          Disconnect
+                          S32
+                          Text
                         """;
 
         Program program = AssertParses(source: source);
         VariantDeclaration variant = GetDeclaration<VariantDeclaration>(program: program);
 
         Assert.Equal(expected: "NetworkEvent", actual: variant.Name);
-        Assert.Equal(expected: 2, actual: variant.Cases.Count);
+        Assert.Equal(expected: 2, actual: variant.Members.Count);
     }
 
     [Fact]
-    public void Parse_Variant_WithPayloads()
+    public void Parse_Variant_WithTypes()
     {
         string source = """
                         variant ParseResult
-                          Success: S32
-                          Error: Text
+                          S32
+                          Text
                         """;
 
         Program program = AssertParses(source: source);
         VariantDeclaration variant = GetDeclaration<VariantDeclaration>(program: program);
 
-        Assert.Equal(expected: 2, actual: variant.Cases.Count);
-        Assert.NotNull(@object: variant.Cases[index: 0].AssociatedTypes);
-        Assert.NotNull(@object: variant.Cases[index: 1].AssociatedTypes);
+        Assert.Equal(expected: 2, actual: variant.Members.Count);
+        Assert.Equal(expected: "S32", actual: variant.Members[index: 0].Type.Name);
+        Assert.Equal(expected: "Text", actual: variant.Members[index: 1].Type.Name);
     }
 
     [Fact]
-    public void Parse_Variant_MixedPayloads()
+    public void Parse_Variant_WithNone()
     {
         string source = """
                         variant Event
-                          Connect
-                          Data: Text
-                          Error: U32
-                          Nothing
+                          S32
+                          Text
+                          None
                         """;
 
         Program program = AssertParses(source: source);
         VariantDeclaration variant = GetDeclaration<VariantDeclaration>(program: program);
 
-        Assert.Equal(expected: 4, actual: variant.Cases.Count);
-        Assert.Null(@object: variant.Cases[index: 0].AssociatedTypes); // CONNECT - no payload
-        Assert.NotNull(@object: variant.Cases[index: 1].AssociatedTypes); // DATA: Text
-        Assert.NotNull(@object: variant.Cases[index: 2].AssociatedTypes); // ERROR: U32
-        Assert.Null(@object: variant.Cases[index: 3].AssociatedTypes); // NONE - no payload
+        Assert.Equal(expected: 3, actual: variant.Members.Count);
+        Assert.Equal(expected: "S32", actual: variant.Members[index: 0].Type.Name);
+        Assert.Equal(expected: "Text", actual: variant.Members[index: 1].Type.Name);
+        Assert.Equal(expected: "None", actual: variant.Members[index: 2].Type.Name);
     }
 
     #endregion

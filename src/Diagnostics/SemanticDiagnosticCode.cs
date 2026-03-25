@@ -338,10 +338,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot match variant pattern against non-variant type.</summary>
     VariantPatternOnNonVariant = 352,
 
-    /// <summary>Variant type does not have the specified case.</summary>
+    /// <summary>Variant type does not have the specified member type.</summary>
     VariantCaseNotFound = 353,
 
-    /// <summary>Variant case has no payload to destructure.</summary>
+    /// <summary>Variant member (None) has no payload to destructure.</summary>
     VariantCaseNoPayload = 354,
 
     /// <summary>Choice type does not have the specified case.</summary>
@@ -712,7 +712,7 @@ public enum SemanticDiagnosticCode
     /// <summary>The 'global' keyword is only valid for entity type variables.</summary>
     GlobalOnlyForEntities = 760,
 
-    /// <summary>Variant case cannot contain nested variants, Result[T], Lookup[T], or tokens.</summary>
+    /// <summary>Variant member cannot be a nested variant, Result[T], Lookup[T], token, or duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
     /// <summary>Index operators (__getitem__/__setitem__) are only valid on entities.</summary>
@@ -760,7 +760,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Annotation arguments must be compile-time constant literals or identifiers.</summary>
     AnnotationArgNotLiteral = 784,
 
-    /// <summary>ValueTuple can only contain value types (records, primitives, choices).</summary>
+    /// <summary>Deprecated — ValueTuple distinction removed, all tuples are inline structs.</summary>
     ValueTupleContainmentViolation = 779,
 
     /// <summary>Result, Lookup, variants, and tokens cannot be boxed to Data.</summary>

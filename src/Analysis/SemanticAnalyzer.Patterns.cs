@@ -353,14 +353,14 @@ public sealed partial class SemanticAnalyzer
     /// <param name="matchedType">The type being matched against.</param>
     private void AnalyzeVariantPattern(VariantPattern pattern, TypeSymbol matchedType)
     {
-        // Get the cases from the matched type
-        IReadOnlyList<VariantCaseInfo>? cases = matchedType switch
+        // Get the members from the matched type
+        IReadOnlyList<VariantMemberInfo>? members = matchedType switch
         {
-            VariantTypeInfo variant => variant.Cases,
+            VariantTypeInfo variant => variant.Members,
             _ => null
         };
 
-        if (cases == null)
+        if (members == null)
         {
             ReportError(
                 SemanticDiagnosticCode.VariantPatternOnNonVariant,
@@ -371,13 +371,13 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Find the matching case
-        VariantCaseInfo? matchedCase = cases.FirstOrDefault(c => c.Name == pattern.CaseName);
-        if (matchedCase == null)
+        // Find the matching member by case name (type name or "None")
+        VariantMemberInfo? matchedMember = members.FirstOrDefault(m => m.Name == pattern.CaseName);
+        if (matchedMember == null)
         {
             ReportError(
                 SemanticDiagnosticCode.VariantCaseNotFound,
-                $"Variant type '{matchedType.Name}' does not have a case named '{pattern.CaseName}'.",
+                $"Variant type '{matchedType.Name}' does not have a member type '{pattern.CaseName}'.",
                 pattern.Location);
             DeclareBindingsWithErrorType(bindings: pattern.Bindings);
             return;
@@ -389,17 +389,17 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        if (!matchedCase.HasPayload)
+        if (matchedMember.IsNone)
         {
             ReportError(
                 SemanticDiagnosticCode.VariantCaseNoPayload,
-                $"Variant case '{pattern.CaseName}' has no payload to destructure.",
+                $"Variant member 'None' has no payload to destructure.",
                 pattern.Location);
             return;
         }
 
-        // Variant cases have a single payload type
-        TypeSymbol payloadType = matchedCase.PayloadType!;
+        // Variant members have their type as the payload
+        TypeSymbol payloadType = matchedMember.Type!;
 
         // For a single binding without member variable name, bind directly to the payload
         if (pattern.Bindings.Count == 1 && pattern.Bindings[0].MemberVariableName == null)
@@ -580,7 +580,7 @@ public sealed partial class SemanticAnalyzer
         return matchedType switch
         {
             ChoiceTypeInfo choice => CheckChoiceExhaustiveness(clauses: clauses, choice: choice),
-            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses, cases: variant.Cases,
+            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses, members: variant.Members,
                 typeName: variant.Name),
             ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses, ehType: eh),
             // #129: Flags when always requires else — too many combinations to exhaustively check
@@ -678,42 +678,42 @@ public sealed partial class SemanticAnalyzer
 
 
     /// <summary>
-    /// Checks whether all cases of a variant/mutant type are covered.
-    /// The parser creates TypePattern for variant case matching (is Shape.CIRCLE or is CIRCLE),
-    /// not VariantPattern (which is defined in the AST but never created by the parser).
+    /// Checks whether all member types of a variant are covered.
+    /// The parser creates TypePattern for variant matching (is S64, is None),
+    /// not VariantPattern.
     /// </summary>
     private static ExhaustivenessResult CheckVariantExhaustiveness(
         IReadOnlyList<WhenClause> clauses,
-        IReadOnlyList<VariantCaseInfo> cases,
+        IReadOnlyList<VariantMemberInfo> members,
         string typeName)
     {
-        var coveredCases = new HashSet<string>();
+        var coveredMembers = new HashSet<string>();
 
         foreach (WhenClause clause in clauses)
         {
-            string? caseName = ExtractVariantCaseName(pattern: clause.Pattern, typeName: typeName);
-            if (caseName != null)
+            string? memberName = ExtractVariantMemberName(pattern: clause.Pattern, typeName: typeName);
+            if (memberName != null)
             {
-                coveredCases.Add(item: caseName);
+                coveredMembers.Add(item: memberName);
             }
         }
 
-        var missingCases = cases
-            .Where(predicate: c => !coveredCases.Contains(c.Name))
-            .Select(selector: c => c.Name)
+        var missingMembers = members
+            .Where(predicate: m => !coveredMembers.Contains(m.Name))
+            .Select(selector: m => m.Name)
             .ToList();
 
         return new ExhaustivenessResult(
-            IsExhaustive: missingCases.Count == 0,
-            MissingCases: missingCases);
+            IsExhaustive: missingMembers.Count == 0,
+            MissingCases: missingMembers);
     }
 
     /// <summary>
-    /// Extracts the variant case name from a pattern.
-    /// Handles TypePattern with dotted names (is Shape.CIRCLE) or bare names (is CIRCLE),
+    /// Extracts the variant member type name from a pattern.
+    /// Handles TypePattern with bare type names (is S64) or dotted (is Value.S64),
     /// as well as VariantPattern (if ever created).
     /// </summary>
-    private static string? ExtractVariantCaseName(Pattern pattern, string typeName)
+    private static string? ExtractVariantMemberName(Pattern pattern, string typeName)
     {
         switch (pattern)
         {
@@ -721,14 +721,13 @@ public sealed partial class SemanticAnalyzer
             {
                 string name = typePat.Type.Name;
 
-                // Dotted form: "Shape.CIRCLE" → extract "CIRCLE"
+                // Dotted form: "Value.S64" → extract "S64"
                 if (name.StartsWith(value: typeName + ".", comparisonType: StringComparison.Ordinal))
                 {
                     return name[(typeName.Length + 1)..];
                 }
 
-                // Bare form: "CIRCLE" — matches if it's a known case name
-                // (caller will validate against the case list)
+                // Bare form: "S64" or "None" — matches against member type names
                 if (!name.Contains(value: '.'))
                 {
                     return name;

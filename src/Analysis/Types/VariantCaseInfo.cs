@@ -1,49 +1,59 @@
-﻿namespace SemanticAnalysis.Types;
+namespace SemanticAnalysis.Types;
 
 using SyntaxTree;
 
 /// <summary>
-/// Information about a single case in a variant type.
+/// Information about a single member in a type-based variant.
+/// Members are either real types (S64, Text, etc.) or the None state (zero-sized, no payload).
 /// </summary>
-public sealed class VariantCaseInfo
+public sealed class VariantMemberInfo
 {
-    /// <summary>The name of the case (SCREAMING_SNAKE_CASE).</summary>
-    public string Name { get; }
+    /// <summary>The member type, or null for the None state.</summary>
+    public TypeInfo? Type { get; }
 
-    /// <summary>
-    /// The associated payload type, if any.
-    /// Payload is a single type (not tuple-like).
-    /// </summary>
-    public TypeInfo? PayloadType { get; init; }
+    /// <summary>Whether this member is the None state.</summary>
+    public bool IsNone => Type == null;
 
-    /// <summary>Whether this case has an associated payload.</summary>
-    public bool HasPayload => PayloadType != null;
+    /// <summary>Display name: the type name, or "None" for the None state.</summary>
+    public string Name => Type?.Name ?? "None";
 
-    /// <summary>The tag value for this case.</summary>
+    /// <summary>The tag value for this member.</summary>
     public int TagValue { get; init; }
 
-    /// <summary>Source location where this case is defined.</summary>
+    /// <summary>Source location where this member is defined.</summary>
     public SourceLocation? Location { get; init; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="VariantCaseInfo"/> class.
+    /// Creates a variant member for a real type.
     /// </summary>
-    /// <param name="name">The name of the variant case.</param>
-    public VariantCaseInfo(string name)
+    public VariantMemberInfo(TypeInfo type)
     {
-        Name = name;
+        Type = type;
     }
 
     /// <summary>
-    /// Creates a copy with substituted payload type for generic resolution.
+    /// Creates the None state member (zero-sized, no payload).
     /// </summary>
-    /// <param name="newPayloadType">The new payload type to substitute.</param>
-    /// <returns>A new <see cref="VariantCaseInfo"/> with the substituted payload type.</returns>
-    public VariantCaseInfo WithSubstitutedType(TypeInfo? newPayloadType)
+    private VariantMemberInfo()
     {
-        return new VariantCaseInfo(name: Name)
+        Type = null;
+    }
+
+    /// <summary>
+    /// Creates a None state member with the specified location and tag.
+    /// </summary>
+    public static VariantMemberInfo CreateNone(int tagValue, SourceLocation? location = null)
+    {
+        return new VariantMemberInfo { TagValue = tagValue, Location = location };
+    }
+
+    /// <summary>
+    /// Creates a copy with substituted type for generic resolution.
+    /// </summary>
+    public VariantMemberInfo WithSubstitutedType(TypeInfo newType)
+    {
+        return new VariantMemberInfo(type: newType)
         {
-            PayloadType = newPayloadType,
             TagValue = TagValue,
             Location = Location
         };

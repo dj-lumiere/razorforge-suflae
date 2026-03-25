@@ -157,7 +157,7 @@ public record DictLiteralExpression(
 
 /// <summary>
 /// Expression representing a tuple literal: (1, 2, 3) or (x,) for single-element.
-/// Creates a ValueTuple (if all elements are value types) or Tuple (if any element is a reference type).
+/// Always creates a Tuple (inline LLVM struct). Entities stored as ptr fields.
 /// </summary>
 /// <param name="Elements">The expressions for each tuple element (must have at least 1 element)</param>
 /// <param name="Location">Source location information</param>

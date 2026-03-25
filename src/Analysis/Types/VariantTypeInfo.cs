@@ -1,18 +1,18 @@
-﻿namespace SemanticAnalysis.Types;
+namespace SemanticAnalysis.Types;
 
 using Enums;
 
 /// <summary>
-/// Type information for variants (tagged unions).
+/// Type information for variants (type-based tagged unions).
 /// Variants are local-only and unmodifiable with no methods.
-/// Cases use SCREAMING_SNAKE_CASE with single-type payloads.
+/// Members are types — the type IS the tag. No named cases.
 /// </summary>
 public sealed class VariantTypeInfo : TypeInfo
 {
     public override TypeCategory Category => TypeCategory.Variant;
 
-    /// <summary>The cases of this variant.</summary>
-    public IReadOnlyList<VariantCaseInfo> Cases { get; init; } = [];
+    /// <summary>The member types of this variant.</summary>
+    public IReadOnlyList<VariantMemberInfo> Members { get; init; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -25,6 +25,21 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <param name="name">The name of the variant type.</param>
     public VariantTypeInfo(string name) : base(name: name)
     {
+    }
+
+    /// <summary>
+    /// Finds a member by its type name.
+    /// </summary>
+    /// <param name="type">The type to look up.</param>
+    /// <returns>The matching member info, or null if not found.</returns>
+    public VariantMemberInfo? FindMember(TypeInfo type)
+    {
+        foreach (var member in Members)
+        {
+            if (member.Type.Name == type.Name)
+                return member;
+        }
+        return null;
     }
 
     /// <inheritdoc/>
@@ -52,9 +67,9 @@ public sealed class VariantTypeInfo : TypeInfo
             substitution[key: GenericParameters[i]] = typeArguments[i];
         }
 
-        // Substitute types in cases
-        var substitutedCases = Cases
-            .Select(selector: c => SubstituteCaseType(caseInfo: c, substitution: substitution))
+        // Substitute types in members
+        var substitutedMembers = Members
+            .Select(selector: m => SubstituteMemberType(memberInfo: m, substitution: substitution))
             .ToList();
 
         // Build resolved type name
@@ -63,7 +78,7 @@ public sealed class VariantTypeInfo : TypeInfo
 
         return new VariantTypeInfo(name: resolvedName)
         {
-            Cases = substitutedCases,
+            Members = substitutedMembers,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,
@@ -73,30 +88,24 @@ public sealed class VariantTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Substitutes the payload type in a case for generic resolution.
+    /// Substitutes the type in a member for generic resolution.
     /// </summary>
-    /// <param name="caseInfo">The case to substitute.</param>
-    /// <param name="substitution">The type parameter substitution map.</param>
-    /// <returns>A new <see cref="VariantCaseInfo"/> with the substituted type, or the original if no payload.</returns>
-    private static VariantCaseInfo SubstituteCaseType(VariantCaseInfo caseInfo,
+    private static VariantMemberInfo SubstituteMemberType(VariantMemberInfo memberInfo,
         Dictionary<string, TypeInfo> substitution)
     {
-        if (caseInfo.PayloadType == null)
-        {
-            return caseInfo;
-        }
+        if (memberInfo.IsNone)
+            return memberInfo; // None state has no type to substitute
 
         TypeInfo substitutedType =
-            SubstituteType(type: caseInfo.PayloadType, substitution: substitution);
-        return caseInfo.WithSubstitutedType(newPayloadType: substitutedType);
+            SubstituteType(type: memberInfo.Type!, substitution: substitution);
+        if (substitutedType == memberInfo.Type)
+            return memberInfo;
+        return memberInfo.WithSubstitutedType(newType: substitutedType);
     }
 
     /// <summary>
     /// Recursively substitutes type parameters in a type.
     /// </summary>
-    /// <param name="type">The type to substitute.</param>
-    /// <param name="substitution">The type parameter substitution map.</param>
-    /// <returns>The substituted type, or the original if no substitution applies.</returns>
     private static TypeInfo SubstituteType(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)
     {

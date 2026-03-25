@@ -93,7 +93,7 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol argType = ResolveType(typeExpr: argExpr);
                 elementTypes.Add(item: (TypeInfo)argType);
             }
-            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
         }
 
         // Handle generic types (List<T>, Dict<K, V>, Maybe<T>)
