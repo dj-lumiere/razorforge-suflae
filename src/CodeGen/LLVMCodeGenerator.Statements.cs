@@ -536,7 +536,7 @@ public partial class LLVMCodeGenerator
         string llvmType = GetLLVMType(valueType);
 
         // Tuple literals produce inline aggregates, not pointers — match EmitTupleLiteral's actual type
-        if (llvmType == "ptr" && emitStmt.Expression is SyntaxTree.TupleLiteralExpression tupleEmitExpr)
+        if (llvmType == "ptr" && emitStmt.Expression is TupleLiteralExpression tupleEmitExpr)
         {
             var elemTypes = tupleEmitExpr.Elements.Select(e =>
             {

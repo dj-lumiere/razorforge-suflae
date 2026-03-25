@@ -542,7 +542,7 @@ public partial class Parser
             TokenType.Is => BinaryOperator.Is,
             TokenType.IsNot => BinaryOperator.IsNot,
             TokenType.Obeys => BinaryOperator.Obeys,
-            TokenType.Disobeys => BinaryOperator.NotObeys,
+            TokenType.Disobeys => BinaryOperator.Disobeys,
             TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
 
             _ => throw new GrammarException(

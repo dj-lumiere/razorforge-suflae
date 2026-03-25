@@ -237,10 +237,10 @@ emitting routine ListEmitter[T].__next__() -> T
   me.index = me.index + 1u64
   return
 
-routine Text.__create__[T](from: List[T]) -> Text
+routine List[T].__represent__() -> Text
   var result = "["
   var i = 0u64
-  for v in from
+  for v in me
     if i > 0u64
       result = result + ", "
     result = result + v.Text()

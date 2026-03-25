@@ -109,7 +109,7 @@ public enum TokenType
     /// <summary>128-bit unsigned integer literal (42u128)</summary>
     U128Literal,
 
-    /// <summary>Address-sized unsigned integer literal (42a)</summary>
+    /// <summary>Address-sized unsigned integer literal (42_addr)</summary>
     AddressLiteral,
 
     // Floating point

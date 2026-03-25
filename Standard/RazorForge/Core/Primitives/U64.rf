@@ -235,7 +235,7 @@ routine U64.__cmp__(you: U64) -> ComparisonSign
     return ME_SMALL
   if icmp_ugt[U64](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -306,3 +306,28 @@ routine U64.is_even() -> Bool
 
 routine U64.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine U64.__represent__() -> Text
+  if me == 0u64
+    return "0"
+  var digits = List[Letter]()
+  var remaining = me
+  while remaining > 0u64
+    var digit = U8(remaining % 10u64)
+    remaining = remaining // 10u64
+    digits.add_first(Letter(0x0030u32 + U32(digit)))
+  return Text(from_list: digits)
+
+routine U64.__create__!(from_text: Text) -> U64
+  var result = 0u64
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u64 + U64(ch.digit_value())
+    i = i + 1u64
+  return result

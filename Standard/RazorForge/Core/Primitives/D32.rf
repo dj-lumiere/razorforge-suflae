@@ -137,7 +137,7 @@ routine D32.__cmp__(you: D32) -> ComparisonSign
     return ME_SMALL
   if cmp > 0
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -224,4 +224,18 @@ routine D32.to_bits() -> U32
 
 # Create D32 from U32 bits (type punning)
 routine D32.from_bits(bits: U32) -> D32
+  return bitcast[U32, D32](bits)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine D32.__represent__() -> Text
+  var bits = bitcast[D32, U32](me)
+  var cstr_result = rf_d32_to_string(bits)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine D32.__create__!(from_text: Text) -> D32
+  var cstr_val = from_text.CStr()
+  var bits = rf_D32_from_string(cstr_val)
   return bitcast[U32, D32](bits)

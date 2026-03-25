@@ -2065,7 +2065,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Auto-registers builder-generated member routine signatures for all user types.
-    /// These are default routines that every type of a given category gets (Text(), to_debug(), hash(), etc.).
+    /// These are default routines that every type of a given category gets (__represent__(), __diagnose__(), __hash__(), etc.).
     /// Only registers if the user hasn't already defined the routine.
     /// </summary>
     private void AutoRegisterBuiltinRoutines()
@@ -2120,15 +2120,15 @@ public sealed partial class SemanticAnalyzer
             List<RoutineInfo> existingMethods = _registry.GetMethodsForType(type: type)
                                                          .ToList();
 
-            // All types: Text(), to_debug()
+            // All types: __represent__(), __diagnose__()
             if (textType != null)
             {
                 MaybeRegisterBuiltin(owner: type,
-                    name: "Text",
+                    name: "__represent__",
                     returnType: textType,
                     existingMethods: existingMethods);
                 MaybeRegisterBuiltin(owner: type,
-                    name: "to_debug",
+                    name: "__diagnose__",
                     returnType: textType,
                     existingMethods: existingMethods);
             }
@@ -2219,7 +2219,7 @@ public sealed partial class SemanticAnalyzer
                 case TypeCategory.Record:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
-                            name: "hash",
+                            name: "__hash__",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (boolType != null)
@@ -2282,7 +2282,7 @@ public sealed partial class SemanticAnalyzer
                 case TypeCategory.Choice:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
-                            name: "hash",
+                            name: "__hash__",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (s64Type != null)
@@ -2313,7 +2313,7 @@ public sealed partial class SemanticAnalyzer
                 case TypeCategory.Flags:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
-                            name: "hash",
+                            name: "__hash__",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (u64Type != null)
@@ -2593,7 +2593,7 @@ public sealed partial class SemanticAnalyzer
                 if (fieldRecord.ImplementedProtocols.Any(p => p.Name == "Hashable"))
                     continue;
                 // Check structurally: does it have hash()?
-                if (_registry.LookupMethod(type: fieldType, methodName: "hash") != null)
+                if (_registry.LookupMethod(type: fieldType, methodName: "__hash__") != null)
                     continue;
                 return false;
             }

@@ -16,7 +16,7 @@ routine Bytes.is_empty() -> Bool
 
 # Indexing
 routine Bytes.__getitem__!(index: Integer) -> Byte
-  return Byte(value: me.value.__getitem__(index.value))
+  return Byte(me.value.__getitem__(index.value))
 
 # String operations
 routine Bytes.__add__(other: Bytes) -> Bytes

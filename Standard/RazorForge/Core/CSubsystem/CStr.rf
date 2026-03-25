@@ -32,7 +32,7 @@ record CStr
   ptr: Address  # Raw pointer to null-terminated Byte sequence
 
 # Null pointer constant for CStr comparisons
-preset CSTR_NULL: CStr = CStr(ptr: 0_a)
+preset CSTR_NULL: CStr = CStr(ptr: 0_addr)
 
 # ============================================================================
 # Creators
@@ -53,12 +53,12 @@ routine CStr.__create__(from: Bytes) -> CStr
   loop
     if i >= len
       break
-    Snatched[U8](buffer.address + i).write(from[i].byte_value())
+    Snatched[U8](buffer.get_address() + i).write(from[i].byte_value())
     i = i + 1u64
   # Null terminator
-  Snatched[U8](buffer.address + len).write(0u8)
+  Snatched[U8](buffer.get_address() + len).write(0u8)
 
-  return CStr(ptr: buffer.address)
+  return CStr(ptr: buffer.get_address())
 
 # Create CStr from Text (encodes UTF-32 codepoints to UTF-8 with null terminator)
 # The caller is responsible for freeing this memory when done
@@ -66,12 +66,13 @@ routine CStr.__create__(from: Text) -> CStr
   var len = from.count()
   if len == 0u64
     var buffer = Snatched[U8](rf_allocate_dynamic(1u64))
-    Snatched[U8](buffer.address).write(0u8)
-    return CStr(ptr: buffer.address)
+    Snatched[U8](buffer.get_address()).write(0u8)
+    return CStr(ptr: buffer.get_address())
 
   # Worst case: each codepoint needs 4 bytes + null terminator
   var max_bytes = len * 4u64 + 1u64
   var buffer = Snatched[U8](rf_allocate_dynamic(max_bytes))
+  var buffer_address = buffer.get_address()
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
 
@@ -80,32 +81,32 @@ routine CStr.__create__(from: Text) -> CStr
 
     if cp <= 0x7Fu32
       # 1-byte ASCII
-      Snatched[U8](buffer.address + write_pos).write(U8(cp))
+      Snatched[U8](buffer_address + write_pos).write(U8(cp))
       write_pos = write_pos + 1u64
     elseif cp <= 0x7FFu32
       # 2-byte sequence
-      Snatched[U8](buffer.address + write_pos).write(U8(0xC0u32 | (cp >> 6u32)))
-      Snatched[U8](buffer.address + write_pos + 1u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+      Snatched[U8](buffer_address + write_pos).write(U8(0xC0u32 | (cp >> 6u32)))
+      Snatched[U8](buffer_address + write_pos + 1u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
       write_pos = write_pos + 2u64
     elseif cp <= 0xFFFFu32
       # 3-byte sequence
-      Snatched[U8](buffer.address + write_pos).write(U8(0xE0u32 | (cp >> 12u32)))
-      Snatched[U8](buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
-      Snatched[U8](buffer.address + write_pos + 2u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+      Snatched[U8](buffer_address + write_pos).write(U8(0xE0u32 | (cp >> 12u32)))
+      Snatched[U8](buffer_address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
+      Snatched[U8](buffer_address + write_pos + 2u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
       write_pos = write_pos + 3u64
     else
       # 4-byte sequence
-      Snatched[U8](buffer.address + write_pos).write(U8(0xF0u32 | (cp >> 18u32)))
-      Snatched[U8](buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32)))
-      Snatched[U8](buffer.address + write_pos + 2u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
-      Snatched[U8](buffer.address + write_pos + 3u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
+      Snatched[U8](buffer_address + write_pos).write(U8(0xF0u32 | (cp >> 18u32)))
+      Snatched[U8](buffer_address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32)))
+      Snatched[U8](buffer_address + write_pos + 2u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
+      Snatched[U8](buffer_address + write_pos + 3u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
       write_pos = write_pos + 4u64
 
     i = i + 1u64
 
   # Null terminator
-  Snatched[U8](buffer.address + write_pos).write(0u8)
-  return CStr(ptr: buffer.address)
+  Snatched[U8](buffer.get_address() + write_pos).write(0u8)
+  return CStr(ptr: buffer.get_address())
 
 # ============================================================================
 # Core Methods
@@ -118,11 +119,11 @@ routine CStr.count() -> U64
 
 # Check if C string pointer is null
 routine CStr.is_null() -> Bool
-  return me.ptr == 0_a
+  return me.ptr == 0_addr
 
 # Check if C string is empty (null or zero-length)
 routine CStr.is_empty() -> Bool
-  return me.is_null() or me.length() == 0u64
+  return me.is_null() or me.count() == 0u64
 
 # ============================================================================
 # Indexing
@@ -130,7 +131,7 @@ routine CStr.is_empty() -> Bool
 
 # Get Byte at index (no bounds checking in danger zone)
 routine CStr.__getitem__!(index: U64) -> U8
-  return read_as![U8](me.ptr + index)
+  return Snatched[U8](me.ptr + index).read()
 
 # ============================================================================
 # Comparison
@@ -145,7 +146,7 @@ routine CStr.__cmp__(you: CStr) -> ComparisonSign
     return ME_SMALL
   if cmp > 0s32
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Copying
@@ -156,8 +157,8 @@ routine CStr.__cmp__(you: CStr) -> ComparisonSign
 routine CStr.copy() -> CStr
   var len = me.count()
   var buffer = Snatched[U8](rf_allocate_dynamic(len + 1u64))
-  rf_cstr_copy(buffer.address, me.ptr)
-  return CStr(ptr: buffer.address)
+  rf_cstr_copy(buffer.get_address(), me.ptr)
+  return CStr(ptr: buffer.get_address())
 
 # ============================================================================
 # Conversion to RazorForge Types
@@ -171,7 +172,7 @@ routine CStr.to_bytes() -> List[U8]
   loop
     if i >= len
       break
-    var byte_val = read_as![U8](me.ptr + i)
+    var byte_val = Snatched[U8](me.ptr + i).read()
     list.add_last(byte_val)
     i = i + 1u64
   return Bytes(list)

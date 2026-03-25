@@ -245,7 +245,7 @@ routine S32.__cmp__(you: S32) -> ComparisonSign
     return ME_SMALL
   if icmp_sgt[S32](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -323,3 +323,35 @@ routine S32.is_power_of_two() -> Bool
   var anded = bit_and[S32](me, minus_one)
   var is_zero = icmp_eq[S32](anded, 0_s32)
   return is_pos and is_zero
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine S32.__represent__() -> Text
+  if me == 0s32
+    return "0"
+  if me > 0s32
+    return U32(me).Text()
+  return "-" + U32(0u32 - U32(me)).Text()
+
+routine S32.__create__!(from_text: Text) -> S32
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(0x002Bu32)
+      start = 1u64
+  var result = 0u32
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S32(0u32 - result)
+  return S32(result)

@@ -67,7 +67,7 @@ dangerous routine Snatched[T].invalidate!()
 
 # Create none snatched pointer
 routine snatched_none[T]() -> Snatched[T]
-  return Snatched[T](0_a)
+  return Snatched[T](0_addr)
 
 # Check if pointer is none
 routine Snatched[T].is_none() -> Bool

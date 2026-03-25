@@ -247,7 +247,7 @@ routine S16.__cmp__(you: S16) -> ComparisonSign
     return ME_SMALL
   if icmp_sgt[S16](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -318,3 +318,31 @@ routine S16.signum() -> S16
     me > 0_s16 => 1_s16
     me < 0_s16 => -1_s16
     else => 0_s16
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine S16.__represent__() -> Text
+  return S32(me).Text()
+
+routine S16.__create__!(from_text: Text) -> S16
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(0x002Bu32)
+      start = 1u64
+  var result = 0u32
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S16(0u32 - result)
+  return S16(result)

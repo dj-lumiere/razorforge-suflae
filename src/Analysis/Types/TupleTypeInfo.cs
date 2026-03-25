@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace SemanticAnalysis.Types;
 
 using Enums;
@@ -29,7 +31,7 @@ public sealed class TupleTypeInfo : TypeInfo
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
     public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes)
-        : base(name: "Tuple")
+        : base(name: $"Tuple[{string.Join(", ", elementTypes.Select(t => t.Name))}]")
     {
         ElementTypes = elementTypes;
 
@@ -46,7 +48,6 @@ public sealed class TupleTypeInfo : TypeInfo
 
         MemberVariables = memberVariables;
 
-        // Set TypeArguments so FullName displays correctly (e.g., "Tuple<S32, S32>")
         TypeArguments = elementTypes;
     }
 

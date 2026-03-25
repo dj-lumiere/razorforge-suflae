@@ -239,7 +239,7 @@ routine U16.__cmp__(you: U16) -> ComparisonSign
     return ME_SMALL
   if icmp_ugt[U16](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -298,3 +298,20 @@ routine U16.is_even() -> Bool
 
 routine U16.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine U16.__represent__() -> Text
+  return U32(me).Text()
+
+routine U16.__create__!(from_text: Text) -> U16
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  return U16(result)

@@ -241,7 +241,7 @@ routine U8.__cmp__(you: U8) -> ComparisonSign
     return ME_SMALL
   if icmp_ugt[U8](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -329,3 +329,20 @@ routine U8.is_even() -> Bool
 
 routine U8.is_odd() -> Bool
   return not me.is_even()
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine U8.__represent__() -> Text
+  return U32(me).Text()
+
+routine U8.__create__!(from_text: Text) -> U8
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    i = i + 1u64
+  return U8(result)

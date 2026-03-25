@@ -155,14 +155,14 @@ routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
 # Display
 # ============================================================================
 
-routine Text.__create__(from: ByteSize) -> Text
-  if from.value >= BYTES_PER_GIB
-    var gib = F64(from.value) / 1073741824.0
+routine ByteSize.__represent__() -> Text
+  if me.value >= BYTES_PER_GIB
+    var gib = F64(me.value) / 1073741824.0
     return f"{gib} GiB"
-  if from.value >= BYTES_PER_MIB
-    var mib = F64(from.value) / 1048576.0
+  if me.value >= BYTES_PER_MIB
+    var mib = F64(me.value) / 1048576.0
     return f"{mib} MiB"
-  if from.value >= BYTES_PER_KIB
-    var kib = F64(from.value) / 1024.0
+  if me.value >= BYTES_PER_KIB
+    var kib = F64(me.value) / 1024.0
     return f"{kib} KiB"
-  return f"{from.value} bytes"
+  return f"{me.value} bytes"

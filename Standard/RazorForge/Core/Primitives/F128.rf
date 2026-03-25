@@ -107,7 +107,7 @@ routine F128.__cmp__(you: F128) -> ComparisonSign
     return ME_SMALL
   if fcmp_ogt[F128](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations using intrinsics
@@ -343,7 +343,7 @@ routine F128.F64() -> F64
 # Diagnostics and Hashing
 # ============================================================================
 
-routine F128.to_debug() -> Text
+routine F128.__diagnose__() -> Text
   return Text(from: me)
 
 routine F128.hash() -> U64
@@ -357,3 +357,15 @@ routine F128.hash() -> U64
     lo = 0_u64
     hi = 0_u64
   return xor[U64](lo, mul[U64](hi, 1099511628211_u64))
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine F128.__represent__() -> Text
+  var cstr_result = rf_format_F128(me)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine F128.__create__!(from_text: Text) -> F128
+  var cstr_val = from_text.CStr()
+  return rf_parse_F128(cstr_val)

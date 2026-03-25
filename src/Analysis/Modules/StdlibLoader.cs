@@ -86,7 +86,7 @@ public sealed class StdlibLoader
         {
             foreach (var node in program.Declarations)
             {
-                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                if (node is ProtocolDeclaration protocol)
                     RegisterProtocolTypeShell(registry, protocol, ns);
             }
         }
@@ -96,7 +96,7 @@ public sealed class StdlibLoader
         {
             foreach (var node in program.Declarations)
             {
-                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                if (node is ProtocolDeclaration protocol)
                     FillProtocolMethods(registry, protocol);
             }
         }
@@ -311,7 +311,7 @@ public sealed class StdlibLoader
         {
             foreach (var node in program.Declarations)
             {
-                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                if (node is ProtocolDeclaration protocol)
                     RegisterProtocolTypeShell(registry, protocol, ns);
             }
         }
@@ -319,7 +319,7 @@ public sealed class StdlibLoader
         {
             foreach (var node in program.Declarations)
             {
-                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                if (node is ProtocolDeclaration protocol)
                     FillProtocolMethods(registry, protocol);
             }
         }
@@ -956,11 +956,37 @@ public sealed class StdlibLoader
 
         // Build cases list upfront
         var cases = new List<ChoiceCaseInfo>();
+        long autoValue = 0;
         foreach (var caseDecl in choice.Cases)
         {
+            long? explicitValue = null;
+            if (caseDecl.Value is LiteralExpression { Value: string valStr })
+            {
+                if (long.TryParse(valStr, out long v))
+                    explicitValue = v;
+            }
+            else if (caseDecl.Value is UnaryExpression { Operator: UnaryOperator.Minus, Operand: LiteralExpression { Value: string negStr } })
+            {
+                if (long.TryParse(negStr, out long v))
+                    explicitValue = -v;
+            }
+
+            long computedValue;
+            if (explicitValue.HasValue)
+            {
+                computedValue = explicitValue.Value;
+                autoValue = computedValue + 1;
+            }
+            else
+            {
+                computedValue = autoValue;
+                autoValue++;
+            }
+
             cases.Add(new ChoiceCaseInfo(caseDecl.Name)
             {
-                Value = null // TODO: Extract from caseDecl.Value expression
+                Value = explicitValue,
+                ComputedValue = computedValue
             });
         }
 

@@ -25,7 +25,7 @@ routine Bool.U8() -> U8
 # Diagnostics and Hashing
 # ============================================================================
 
-routine Bool.to_debug() -> Text
+routine Bool.__diagnose__() -> Text
   if me
     return "true"
   return "false"
@@ -34,3 +34,12 @@ routine Bool.hash() -> U64
   if me
     return 1_u64
   return 0_u64
+
+# ============================================================================
+# Text Representation
+# ============================================================================
+
+routine Bool.__represent__() -> Text
+  if me
+    return "true"
+  return "false"

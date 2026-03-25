@@ -238,7 +238,7 @@ public partial class Tokenizer
             [key: "u32"] = TokenType.U32Literal,
             [key: "u64"] = TokenType.U64Literal,
             [key: "u128"] = TokenType.U128Literal,
-            [key: "a"] = TokenType.AddressLiteral,
+            [key: "addr"] = TokenType.AddressLiteral,
 
             // Floating-point
             [key: "f16"] = TokenType.F16Literal,

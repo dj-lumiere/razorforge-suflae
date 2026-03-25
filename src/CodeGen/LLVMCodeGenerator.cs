@@ -317,7 +317,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Checks if a routine has any error types in its signature.
     /// </summary>
-    private static bool HasErrorTypes(SemanticAnalysis.Symbols.RoutineInfo routine)
+    private static bool HasErrorTypes(RoutineInfo routine)
     {
         // Check return type
         if (routine.ReturnType?.Category == TypeCategory.Error)
@@ -402,7 +402,7 @@ public partial class LLVMCodeGenerator
                         // specific overload matching this AST declaration's parameter types
                         if (routineInfo != null && routine.Parameters.Count > 0)
                         {
-                            var astParamTypes = new List<SemanticAnalysis.Types.TypeInfo>();
+                            var astParamTypes = new List<TypeInfo>();
                             foreach (var param in routine.Parameters)
                             {
                                 if (param.Type != null)
@@ -451,7 +451,7 @@ public partial class LLVMCodeGenerator
             // Phase B: Monomorphize generic methods (compile generic AST bodies with type substitutions)
             MonomorphizeGenericMethods();
 
-            // Phase C: Generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__, Text(), to_debug())
+            // Phase C: Generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__, __represent__, __diagnose__)
             GenerateSynthesizedRoutines();
 
             // Phase D: Generate protocol dispatch stubs (forwarding from protocol method names to concrete implementations)

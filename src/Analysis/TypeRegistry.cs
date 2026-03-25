@@ -726,6 +726,126 @@ public sealed class TypeRegistry
         var newType = new TupleTypeInfo(elementTypes: elementTypes);
         _resolutions[key: key] = newType;
 
+        // Auto-register Text.__create__(from: TupleType) and TupleType.__represent__()
+        TypeInfo? textType = LookupType("Text");
+        if (textType != null)
+        {
+            RegisterRoutine(new RoutineInfo(name: "__create__")
+            {
+                Kind = RoutineKind.Creator,
+                OwnerType = textType,
+                Parameters = [new ParameterInfo(name: "from", type: newType)],
+                ReturnType = textType,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+
+            RegisterRoutine(new RoutineInfo(name: "__represent__")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [],
+                ReturnType = textType,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+        }
+
+        // Auto-register __eq__ and __ne__ (always — element-wise equality)
+        TypeInfo? boolType = LookupType("Bool");
+        if (boolType != null)
+        {
+            var youParam = new ParameterInfo(name: "you", type: newType);
+
+            RegisterRoutine(new RoutineInfo(name: "__eq__")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [youParam],
+                ReturnType = boolType,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+
+            RegisterRoutine(new RoutineInfo(name: "__ne__")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [youParam],
+                ReturnType = boolType,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+        }
+
+        // Auto-register __hash__ if ALL element types support __hash__
+        TypeInfo? u64Type = LookupType("U64");
+        if (u64Type != null && elementTypes.All(et => LookupMethod(et, "__hash__") != null))
+        {
+            RegisterRoutine(new RoutineInfo(name: "__hash__")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [],
+                ReturnType = u64Type,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+        }
+
+        // Auto-register __cmp__ + derived operators if ALL element types support __cmp__
+        TypeInfo? comparisonSignType = LookupType("ComparisonSign");
+        if (boolType != null && comparisonSignType != null &&
+            elementTypes.All(et => LookupMethod(et, "__cmp__") != null))
+        {
+            var youParam = new ParameterInfo(name: "you", type: newType);
+
+            RegisterRoutine(new RoutineInfo(name: "__cmp__")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [youParam],
+                ReturnType = comparisonSignType,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+
+            // Derived: __lt__, __le__, __gt__, __ge__
+            foreach (string opName in new[] { "__lt__", "__le__", "__gt__", "__ge__" })
+            {
+                RegisterRoutine(new RoutineInfo(name: opName)
+                {
+                    Kind = RoutineKind.MemberRoutine,
+                    OwnerType = newType,
+                    Parameters = [youParam],
+                    ReturnType = boolType,
+                    IsFailable = false,
+                    DeclaredModification = ModificationCategory.Readonly,
+                    ModificationCategory = ModificationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+        }
+
         return newType;
     }
 
@@ -814,9 +934,15 @@ public sealed class TypeRegistry
     /// <returns>An enumerable of all types that can have methods.</returns>
     public IEnumerable<TypeInfo> GetTypesWithMethods()
     {
-        return _types.Values.Where(predicate: t =>
+        IEnumerable<TypeInfo> namedTypes = _types.Values.Where(predicate: t =>
             t.Category is TypeCategory.Record or TypeCategory.Entity or
                 TypeCategory.Choice or TypeCategory.Flags);
+
+        // Include tuple types from resolutions cache
+        IEnumerable<TypeInfo> tupleTypes = _resolutions.Values
+            .Where(predicate: t => t is TupleTypeInfo);
+
+        return namedTypes.Concat(tupleTypes);
     }
 
     /// <summary>
@@ -957,6 +1083,19 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
+    /// Finds a generic overload of a free function by name (e.g., show[T] for "show").
+    /// </summary>
+    public RoutineInfo? LookupGenericOverload(string name)
+    {
+        foreach (var routine in _routines.Values)
+        {
+            if (routine.Name == name && routine.OwnerType == null && routine.IsGenericDefinition)
+                return routine;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Updates a routine with resolved parameters and return type.
     /// </summary>
     /// <param name="routine">The routine to update.</param>
@@ -1073,8 +1212,8 @@ public sealed class TypeRegistry
                     ReturnType = resolvedReturn,
                     IsFailable = protoMethod.IsFailable,
                     AsyncStatus = protoMethod.Name == "__next__"
-                        ? SyntaxTree.AsyncStatus.Emitting
-                        : SyntaxTree.AsyncStatus.None
+                        ? AsyncStatus.Emitting
+                        : AsyncStatus.None
                 };
             }
         }

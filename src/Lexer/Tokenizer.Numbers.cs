@@ -60,6 +60,12 @@ public partial class Tokenizer
             }
         }
 
+        // Skip underscore before suffix after scientific notation (e.g., 3.4e10_f64)
+        if (Peek() == '_' && char.IsLetter(c: Peek(offset: 1)))
+        {
+            Advance();
+        }
+
         // Check for type suffix
         if (char.IsLetter(c: Peek()))
         {
@@ -125,16 +131,64 @@ public partial class Tokenizer
     #region Prefixed Numbers
 
     /// <summary>
-    /// Scans a prefixed numeric literal (hexadecimal or binary).
+    /// Scans a prefixed numeric literal (hexadecimal, binary, or hex float).
+    /// Hex floats use C99 format: 0x1.ABCDp5 (hex mantissa + binary exponent).
     /// </summary>
     private void ScanPrefixedNumber(bool isHex)
     {
+        bool isHexFloat = false;
+
         // Consume valid digits and underscores
         if (isHex)
         {
             while (IsHexDigit(c: Peek()) || Peek() == '_')
             {
+                // When encountering underscore in hex mode, check if what follows
+                // is a type suffix (e.g., _addr) rather than a digit separator (e.g., _ABCD)
+                if (Peek() == '_')
+                {
+                    int lookAhead = 1;
+                    while (char.IsLetterOrDigit(c: Peek(offset: lookAhead)))
+                        lookAhead++;
+                    if (lookAhead > 1)
+                    {
+                        string candidate = _source.Substring(
+                            startIndex: _position + 1, length: lookAhead - 1);
+                        if (_numericSuffixToTokenType.ContainsKey(key: candidate) ||
+                            candidate == ArbitraryPrecisionSuffix)
+                        {
+                            Advance(); // consume the underscore
+                            break;     // suffix follows
+                        }
+                    }
+                }
                 Advance();
+            }
+
+            // Check for hex float fractional part: 0x1.ABCDp5
+            if (Peek() == '.' && IsHexDigit(c: Peek(offset: 1)))
+            {
+                isHexFloat = true;
+                Advance(); // consume '.'
+                while (IsHexDigit(c: Peek()) || Peek() == '_')
+                {
+                    Advance();
+                }
+            }
+
+            // Check for hex float binary exponent (p/P)
+            if (Peek() == 'p' || Peek() == 'P')
+            {
+                isHexFloat = true;
+                Advance(); // consume 'p'/'P'
+                if (Peek() == '+' || Peek() == '-')
+                {
+                    Advance();
+                }
+                while (char.IsDigit(c: Peek()))
+                {
+                    Advance();
+                }
             }
         }
         else
@@ -143,6 +197,12 @@ public partial class Tokenizer
             {
                 Advance();
             }
+        }
+
+        // Skip underscore before suffix (e.g., 0x1.0p5_f64)
+        if (Peek() == '_' && char.IsLetter(c: Peek(offset: 1)))
+        {
+            Advance();
         }
 
         // Check for type suffix
@@ -157,10 +217,10 @@ public partial class Tokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            // Handle arbitrary precision suffix (n) - always Integer for hex/binary
+            // Handle arbitrary precision suffix (n)
             if (suffix == ArbitraryPrecisionSuffix)
             {
-                AddToken(type: TokenType.Integer);
+                AddToken(type: isHexFloat ? TokenType.Decimal : TokenType.Integer);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
             {
@@ -180,14 +240,14 @@ public partial class Tokenizer
         else
         {
             // Language-conditional defaults for prefixed:
-            // RF: S64Literal, SF: Integer
+            // RF: S64Literal (integer) / F64Literal (hex float), SF: Integer / Decimal
             if (_language == Language.RazorForge)
             {
-                AddToken(type: TokenType.S64Literal);
+                AddToken(type: isHexFloat ? TokenType.F64Literal : TokenType.S64Literal);
             }
             else
             {
-                AddToken(type: TokenType.Integer);
+                AddToken(type: isHexFloat ? TokenType.Decimal : TokenType.Integer);
             }
         }
     }

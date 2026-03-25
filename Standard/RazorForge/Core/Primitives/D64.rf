@@ -134,7 +134,7 @@ routine D64.__cmp__(you: D64) -> ComparisonSign
     return ME_SMALL
   if cmp > 0
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -217,4 +217,18 @@ routine D64.to_bits() -> U64
 
 # Create D64 from U64 bits (type punning)
 routine D64.from_bits(bits: U64) -> D64
+  return bitcast[U64, D64](bits)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine D64.__represent__() -> Text
+  var bits = bitcast[D64, U64](me)
+  var cstr_result = rf_d64_to_string(bits)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine D64.__create__!(from_text: Text) -> D64
+  var cstr_val = from_text.CStr()
+  var bits = rf_D64_from_string(cstr_val)
   return bitcast[U64, D64](bits)

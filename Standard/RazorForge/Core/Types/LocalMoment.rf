@@ -164,8 +164,8 @@ routine LocalMoment.__cmp__(you: LocalMoment) -> ComparisonSign
 # Text representation
 # ============================================================================
 
-routine Text.__create__(from: LocalMoment) -> Text
-  var local = from.local_moment()
+routine LocalMoment.__represent__() -> Text
+  var local = me.local_moment()
   var y = local.year()
   var mo = local.month()
   var d = local.day()
@@ -173,7 +173,7 @@ routine Text.__create__(from: LocalMoment) -> Text
   var mi = local.minute()
   var s = local.second()
 
-  var off = from.utc_offset()
+  var off = me.utc_offset()
   var off_hours = off.total_hours()
   var off_minutes = (off.total_minutes() % 60_s64).abs()
 

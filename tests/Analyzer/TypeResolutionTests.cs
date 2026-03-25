@@ -431,6 +431,61 @@ public class TypeResolutionTests
         Assert.Empty(collection: result.Errors);
     }
 
+    [Fact]
+    public void Analyze_VarWithTypeAnnotation_InfersLiteralAsAnnotatedType()
+    {
+        // var c: S32 = 123 should infer 123 as S32, not default S64
+        string source = """
+                        routine test()
+                          var c: S32 = 123
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_VarWithTypeAnnotation_InfersUnsignedLiteral()
+    {
+        string source = """
+                        routine test()
+                          var x: U8 = 255
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLiteral()
+    {
+        // 256 doesn't fit in U8 (0..255), should report overflow
+        string source = """
+                        routine test()
+                          var x: U8 = 256
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
+    }
+
+    [Fact]
+    public void Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLargeValue()
+    {
+        // 1231231231234 doesn't fit in S32 (-2147483648..2147483647), should report overflow
+        string source = """
+                        routine test()
+                          var c: S32 = 1231231231234
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
+    }
+
     #endregion
 
     #region Variant Restrictions

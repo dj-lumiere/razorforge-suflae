@@ -104,7 +104,7 @@ routine F64.__cmp__(you: F64) -> ComparisonSign
     return ME_SMALL
   if fcmp_ogt[F64](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations using intrinsics
@@ -191,3 +191,15 @@ routine F64.to_bits() -> U64
 # Create F64 from U64 bits (type punning)
 routine F64.from_bits(bits: U64) -> F64
   return bitcast[U64, F64](bits)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine F64.__represent__() -> Text
+  var cstr_result = rf_format_F64(me)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine F64.__create__!(from_text: Text) -> F64
+  var cstr_val = from_text.CStr()
+  return rf_parse_F64(cstr_val)

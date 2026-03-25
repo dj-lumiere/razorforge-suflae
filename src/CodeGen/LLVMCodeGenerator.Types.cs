@@ -164,14 +164,15 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string GetTupleTypeName(TupleTypeInfo tuple)
     {
-        // Build a name like %Tuple.S32_S64 from element types
+        // Tuples are inline LLVM structs: { i64, i64 } etc.
+        // Resolve type substitutions for generic params (e.g., T → S64)
         var parts = new List<string>();
         foreach (var elemType in tuple.ElementTypes)
         {
-            parts.Add(elemType.Name);
+            TypeInfo resolved = ResolveTypeSubstitution(elemType);
+            parts.Add(GetLLVMType(resolved));
         }
-        string tupleName = $"Tuple.{string.Join("_", parts)}";
-        return $"%{Q(tupleName)}";
+        return $"{{ {string.Join(", ", parts)} }}";
     }
 
     /// <summary>
@@ -243,7 +244,7 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetTypeSize(record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record),
-            EntityTypeInfo entity => CalculateEntitySize(entity),
+            EntityTypeInfo => 8, // Entities are heap-allocated, stored as pointers
             TupleTypeInfo tuple => CalculateTupleSize(tuple),
             WrapperTypeInfo => 8, // Pointer size
             ChoiceTypeInfo => 8, // i64 tag

@@ -230,11 +230,11 @@ routine Moment.__cmp__(you: Moment) -> ComparisonSign
 # Text representation
 # ============================================================================
 
-routine Text.__create__(from: Moment) -> Text
-  var y = from.year()
-  var mo = from.month()
-  var d = from.day()
-  var h = from.hour()
-  var mi = from.minute()
-  var s = from.second()
+routine Moment.__represent__() -> Text
+  var y = me.year()
+  var mo = me.month()
+  var d = me.day()
+  var h = me.hour()
+  var mi = me.minute()
+  var s = me.second()
   return f"{y}-{mo}-{d} {h}:{mi}:{s}"

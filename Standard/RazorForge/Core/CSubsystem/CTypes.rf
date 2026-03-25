@@ -14,17 +14,13 @@
 # - void → Blank
 # - void* → Snatched[Blank]
 # - long long / unsigned long long → S64 / U64
-# - NULL → Snatched[Blank](address: 0_a)
+# - NULL → Snatched[Blank](0_addr)
 
 module Core
 
 # ============================================================================
 # Integer Type Aliases
 # ============================================================================
-
-# int / unsigned int (at least 16-bit per C standard, 32-bit on all modern platforms)
-define CInt as S32
-define CUInt as U32
 
 # long / unsigned long (platform-dependent!)
 # Windows x64: 32-bit

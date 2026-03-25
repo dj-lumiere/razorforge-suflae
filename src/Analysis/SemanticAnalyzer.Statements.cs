@@ -378,7 +378,7 @@ public sealed partial class SemanticAnalyzer
         // If we have both type annotation and initializer, verify compatibility
         if (varDecl is { Type: not null, Initializer: not null })
         {
-            TypeSymbol initType = AnalyzeExpression(expression: varDecl.Initializer);
+            TypeSymbol initType = AnalyzeExpression(expression: varDecl.Initializer, expectedType: varType);
             if (!IsAssignableTo(source: initType, target: varType))
             {
                 ReportError(

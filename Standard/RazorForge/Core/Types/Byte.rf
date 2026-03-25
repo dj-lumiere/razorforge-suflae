@@ -12,61 +12,91 @@
 # For text processing, use Letter (Unicode codepoint) and Text types.
 module Core
 
+@llvm("i8")
 record Byte obeys ConstCompatible
-  secret value: U8
+  pass
+
+# Creators
+
+routine Byte.__create__(from: Byte) -> Byte
+  return from
+
+routine Byte.__create__(from: U8) -> Byte
+  return bitcast[Byte](from)
 
 # Common byte constants
-preset BYTE_NULL: Byte = Byte(value: 0x00)
-preset BYTE_SPACE: Byte = Byte(value: 0x20)
-preset BYTE_NEWLINE: Byte = Byte(value: 0x0A)
-preset BYTE_TAB: Byte = Byte(value: 0x09)
+preset BYTE_NULL: Byte = Byte(0x00u8)
+preset BYTE_SPACE: Byte = Byte(0x20u8)
+preset BYTE_NEWLINE: Byte = Byte(0x0Au8)
+preset BYTE_TAB: Byte = Byte(0x09u8)
 
 # ============================================================================
 # Comparison operations
 # ============================================================================
 
 routine Letter.byte_value() -> U8
-  return me.value
+  return U8(U32(me))
 
 routine Byte.__eq__(other: Byte) -> Bool
-  return me.value == other.value
+  return U8(me) == U8(other)
 
 routine Byte.__cmp__(other: Byte) -> ComparisonSign
-  return me.value <=> other.value
+  return U8(me) <=> U8(other)
 
 # ============================================================================
 # Range check
 # ============================================================================
 
 routine Byte.in_range(low: U8, high: U8) -> Bool
-  return low <= me.value <= high
+  return low <= U8(me) <= high
 
 # ============================================================================
 # Parsing helpers (useful for binary protocols)
 # ============================================================================
 
 routine Byte.is_ascii() -> Bool
-  return me.value <= 0x7F
+  return U8(me) <= 0x7F
 
 routine Byte.is_digit() -> Bool
-  return 0x30u8 <= me.value <= 0x39u8  # ASCII 0-9
+  return 0x30u8 <= U8(me) <= 0x39u8  # ASCII 0-9
 
 routine Byte.digit_value!() -> U8
   if not me.is_digit()
     throw InvalidDigitError()
-  return me.value - 0x30u8
+  return U8(me) - 0x30u8
 
 routine Byte.is_hex_digit() -> Bool
-  var v = me.value
+  var v = U8(me)
   var is_digit = 0x30u8 <= v <= 0x39u8
   var is_upper_hex = 0x41u8 <= v <= 0x46u8
   var is_lower_hex = 0x61u8 <= v <= 0x66u8
   return is_digit or is_upper_hex or is_lower_hex
 
 routine Byte.hex_value!() -> U8
-  var v = me.value
+  var v = U8(me)
   when true
     0x30u8 <= v <= 0x39u8 => return v - 0x30u8   # 0-9
     0x41u8 <= v <= 0x46u8 => return v - 0x37u8   # A-F (10-15)
     0x61u8 <= v <= 0x66u8 => return v - 0x57u8   # a-f (10-15)
     else => throw InvalidHexDigitError()
+
+# ============================================================================
+# Display — always \xHH format (raw bytes have no encoding)
+# ============================================================================
+
+routine Byte.__represent__() -> Text
+  var digits = List[Letter]()
+  digits.add_last(Letter(0x005Cu32))  # \
+  digits.add_last(Letter(0x0078u32))  # x
+  var v = U32(U8(me))
+  var high = (v >> 4u32) & 0x0Fu32
+  var low = v & 0x0Fu32
+  if high < 10u32
+    digits.add_last(Letter(0x0030u32 + high))
+  else
+    digits.add_last(Letter(0x0041u32 + high - 10u32))
+  if low < 10u32
+    digits.add_last(Letter(0x0030u32 + low))
+  else
+    digits.add_last(Letter(0x0041u32 + low - 10u32))
+  return Text(from_list: digits)

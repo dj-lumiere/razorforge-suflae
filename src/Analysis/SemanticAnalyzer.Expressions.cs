@@ -42,7 +42,7 @@ public sealed partial class SemanticAnalyzer
             LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda),
             RangeExpression range => AnalyzeRangeExpression(range: range),
             CreatorExpression creator => AnalyzeCreatorExpression(creator: creator),
-            ListLiteralExpression list => AnalyzeListLiteralExpression(list: list),
+            ListLiteralExpression list => AnalyzeListLiteralExpression(list: list, expectedType: expectedType),
             SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set),
             DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict),
             TupleLiteralExpression tuple => AnalyzeTupleLiteralExpression(tuple: tuple),
@@ -159,6 +159,15 @@ public sealed partial class SemanticAnalyzer
             {
                 typeName = expectedType.Name;
             }
+            else
+            {
+                string range = GetIntegerTypeRange(expectedType.Name);
+                ReportError(
+                    SemanticDiagnosticCode.IntegerLiteralOverflow,
+                    $"Integer literal '{literal.Value}' overflows type '{expectedType.Name}'. Valid range: {range}.",
+                    literal.Location);
+                return ErrorTypeInfo.Instance;
+            }
         }
 
         // Parse and validate deferred numeric types using native libraries
@@ -195,17 +204,45 @@ public sealed partial class SemanticAnalyzer
             or "Address";
     }
 
+    private static string GetIntegerTypeRange(string typeName) => typeName switch
+    {
+        "S8" => $"{sbyte.MinValue} to {sbyte.MaxValue}",
+        "S16" => $"{short.MinValue} to {short.MaxValue}",
+        "S32" => $"{int.MinValue} to {int.MaxValue}",
+        "S64" => $"{long.MinValue} to {long.MaxValue}",
+        "S128" => $"{Int128.MinValue} to {Int128.MaxValue}",
+        "U8" => $"0 to {byte.MaxValue}",
+        "U16" => $"0 to {ushort.MaxValue}",
+        "U32" => $"0 to {uint.MaxValue}",
+        "U64" => $"0 to {ulong.MaxValue}",
+        "U128" => $"0 to {UInt128.MaxValue}",
+        _ => "unknown"
+    };
+
     /// <summary>
     /// Checks if an integer literal value fits within the range of the target type.
     /// </summary>
     private static bool LiteralFitsInType(LiteralExpression literal, TypeSymbol targetType)
     {
-        // Get the numeric value from the literal
-        if (literal.Value is not long value)
+        long value;
+
+        if (literal.Value is long longValue)
         {
-            // TODO: For string-stored values (large numbers), we'd need more sophisticated checking
-            // For now, allow inference and let runtime handle overflow
-            return true;
+            value = longValue;
+        }
+        else if (literal.Value is string strValue)
+        {
+            // Clean underscores from numeric literal string and parse
+            string cleaned = strValue.Replace("_", "");
+            if (!long.TryParse(cleaned, out value))
+            {
+                // Value doesn't fit in long — only S128/U128 could hold it
+                return targetType.Name is "S128" or "U128";
+            }
+        }
+        else
+        {
+            return false;
         }
 
         return targetType.Name switch
@@ -250,7 +287,7 @@ public sealed partial class SemanticAnalyzer
                 TokenType.U32Literal => ParseUnsignedIntLiteral(literal, rawValue, "U32", uint.MaxValue),
                 TokenType.U64Literal => ParseUnsignedIntLiteral(literal, rawValue, "U64", ulong.MaxValue),
                 TokenType.U128Literal => ParseU128Literal(literal, rawValue),
-                TokenType.AddressLiteral => ParseUnsignedIntLiteral(literal, rawValue, "Address", ulong.MaxValue),
+                TokenType.AddressLiteral => ParseUnsignedIntLiteral(literal, rawValue, "Address", ulong.MaxValue, "addr"),
 
                 // Fixed-width floats (F16, F32, F64 use .NET native types; F128 uses native library)
                 TokenType.F16Literal => ParseF16Literal(literal, rawValue),
@@ -407,10 +444,10 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Parses an unsigned integer literal (U8-U64, Address) with overflow validation.
     /// </summary>
-    private ParsedLiteral? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, ulong maxValue)
+    private ParsedLiteral? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue, string typeName, ulong maxValue, string? suffix = null)
     {
         // Extract numeric part by removing the type suffix (e.g., "1u32" -> "1")
-        string numericPart = ExtractNumericPart(rawValue, typeName.ToLowerInvariant());
+        string numericPart = ExtractNumericPart(rawValue, suffix ?? typeName.ToLowerInvariant());
         string cleanedValue = CleanNumericLiteral(numericPart);
 
         if (!TryParseUnsignedInteger(cleanedValue, out ulong value))
@@ -459,7 +496,10 @@ public sealed partial class SemanticAnalyzer
         string numericPart = ExtractNumericPart(rawValue, "f16");
         string cleanedValue = CleanNumericLiteral(numericPart);
 
-        if (!Half.TryParse(cleanedValue, out Half value))
+        Half value;
+        if (TryParseHexFloat(cleanedValue, out double hexVal))
+            value = (Half)hexVal;
+        else if (!Half.TryParse(cleanedValue, out value))
         {
             ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid F16 literal: '{rawValue}'", literal.Location);
             return null;
@@ -486,7 +526,10 @@ public sealed partial class SemanticAnalyzer
         string numericPart = ExtractNumericPart(rawValue, "f32");
         string cleanedValue = CleanNumericLiteral(numericPart);
 
-        if (!float.TryParse(cleanedValue, out float value))
+        float value;
+        if (TryParseHexFloat(cleanedValue, out double hexVal32))
+            value = (float)hexVal32;
+        else if (!float.TryParse(cleanedValue, out value))
         {
             ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid F32 literal: '{rawValue}'", literal.Location);
             return null;
@@ -511,7 +554,10 @@ public sealed partial class SemanticAnalyzer
         string numericPart = ExtractNumericPart(rawValue, "f64");
         string cleanedValue = CleanNumericLiteral(numericPart);
 
-        if (!double.TryParse(cleanedValue, out double value))
+        double value;
+        if (TryParseHexFloat(cleanedValue, out double hexVal64))
+            value = hexVal64;
+        else if (!double.TryParse(cleanedValue, out value))
         {
             ReportError(SemanticDiagnosticCode.NumericLiteralParseFailed, $"Invalid F64 literal: '{rawValue}'", literal.Location);
             return null;
@@ -704,6 +750,62 @@ public sealed partial class SemanticAnalyzer
     private static string CleanNumericLiteral(string value)
     {
         return value.Replace("_", "");
+    }
+
+    /// <summary>
+    /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) × 2^(exponent).
+    /// </summary>
+    private static bool TryParseHexFloat(string value, out double result)
+    {
+        result = 0;
+        if (!value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) || value.Length <= 2)
+            return false;
+
+        string body = value[2..];
+        int pIndex = body.IndexOfAny(['p', 'P']);
+        if (pIndex < 0) return false;
+
+        string mantissaStr = body[..pIndex];
+        string exponentStr = body[(pIndex + 1)..];
+
+        if (!int.TryParse(exponentStr, out int exponent))
+            return false;
+
+        double mantissa = 0;
+        int dotIndex = mantissaStr.IndexOf('.');
+
+        if (dotIndex >= 0)
+        {
+            string intPart = mantissaStr[..dotIndex];
+            string fracPart = mantissaStr[(dotIndex + 1)..];
+
+            if (intPart.Length > 0 &&
+                ulong.TryParse(intPart, System.Globalization.NumberStyles.HexNumber, null, out ulong intVal))
+                mantissa = intVal;
+
+            double scale = 1.0 / 16;
+            foreach (char c in fracPart)
+            {
+                int digit = c switch
+                {
+                    >= '0' and <= '9' => c - '0',
+                    >= 'a' and <= 'f' => c - 'a' + 10,
+                    >= 'A' and <= 'F' => c - 'A' + 10,
+                    _ => 0
+                };
+                mantissa += digit * scale;
+                scale /= 16;
+            }
+        }
+        else
+        {
+            if (!ulong.TryParse(mantissaStr, System.Globalization.NumberStyles.HexNumber, null, out ulong intVal))
+                return false;
+            mantissa = intVal;
+        }
+
+        result = Math.ScaleB(mantissa, exponent);
+        return !double.IsNaN(result) && !double.IsInfinity(result);
     }
 
     /// <summary>
@@ -1442,6 +1544,39 @@ public sealed partial class SemanticAnalyzer
             // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
             if (routine == null && _currentModuleName != null && !callName.Contains('.'))
                 routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{callName}");
+
+            // Overload resolution: if the found routine is non-generic and the first
+            // argument doesn't match, try a specific or generic overload (e.g., show[T])
+            if (routine != null && !routine.IsGenericDefinition
+                && call.Arguments.Count > 0 && routine.Parameters.Count > 0)
+            {
+                Expression firstArg = call.Arguments[0] is NamedArgumentExpression na
+                    ? na.Value : call.Arguments[0];
+                TypeSymbol firstArgType = AnalyzeExpression(expression: firstArg);
+                TypeSymbol firstParamType = routine.Parameters[0].Type;
+                if (firstArgType != ErrorTypeInfo.Instance
+                    && firstArgType.FullName != firstParamType.FullName
+                    && !IsAssignableTo(firstArgType, firstParamType))
+                {
+                    RoutineInfo? better = _registry.LookupRoutineOverload(callName, [firstArgType]);
+                    if (better != null && better != routine)
+                    {
+                        routine = better;
+                        call.ResolvedRoutine = routine;
+                    }
+                    else
+                    {
+                        RoutineInfo? generic = _registry.LookupGenericOverload(callName);
+                        if (generic != null)
+                        {
+                            var inferred = InferGenericTypeArguments(generic, call.Arguments);
+                            routine = inferred != null ? generic.CreateInstance(inferred) : generic;
+                            call.ResolvedRoutine = routine;
+                        }
+                    }
+                }
+            }
+
             if (routine != null)
             {
                 // Track failable calls for error handling variant generation
@@ -1550,6 +1685,42 @@ public sealed partial class SemanticAnalyzer
             // This is done after type creator check to avoid shadowing type creators
             // with identically-named convenience functions (e.g., "routine U32(from: U8)")
             routine = LookupRoutineWithImports(name: id.Name);
+
+            // Overload resolution for import-resolved routines (e.g., show[T] from IO/Console)
+            if (routine != null && !routine.IsGenericDefinition
+                && call.Arguments.Count > 0 && routine.Parameters.Count > 0)
+            {
+                Expression firstArgImport = call.Arguments[0] is NamedArgumentExpression naImport
+                    ? naImport.Value : call.Arguments[0];
+                TypeSymbol firstArgTypeImport = AnalyzeExpression(expression: firstArgImport);
+                TypeSymbol firstParamTypeImport = routine.Parameters[0].Type;
+                if (firstArgTypeImport != ErrorTypeInfo.Instance
+                    && firstArgTypeImport.FullName != firstParamTypeImport.FullName
+                    && !IsAssignableTo(firstArgTypeImport, firstParamTypeImport))
+                {
+                    // Try module-qualified specific overload (e.g., "IO.show#S64")
+                    RoutineInfo? betterImport = _registry.LookupRoutineOverload(routine.FullName,
+                        [firstArgTypeImport]);
+                    if (betterImport != null && betterImport != routine)
+                    {
+                        routine = betterImport;
+                        call.ResolvedRoutine = routine;
+                    }
+                    else
+                    {
+                        RoutineInfo? genericImport = _registry.LookupGenericOverload(id.Name);
+                        if (genericImport != null)
+                        {
+                            var inferredImport = InferGenericTypeArguments(genericImport, call.Arguments);
+                            routine = inferredImport != null
+                                ? genericImport.CreateInstance(inferredImport)
+                                : genericImport;
+                            call.ResolvedRoutine = routine;
+                        }
+                    }
+                }
+            }
+
             if (routine != null)
             {
                 // Track failable calls for error handling variant generation
@@ -1625,6 +1796,7 @@ public sealed partial class SemanticAnalyzer
 
             string callLookupName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
             RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: callLookupName);
+
             if (method != null)
             {
                 // Track failable calls for error handling variant generation
@@ -2112,7 +2284,7 @@ public sealed partial class SemanticAnalyzer
                 returnType = SubstituteWithMapping(type: returnType, substitutions: substitutions);
             }
 
-            return returnType ?? ErrorTypeInfo.Instance;
+            return returnType ?? _registry.LookupType("Blank") ?? ErrorTypeInfo.Instance;
         }
 
         ReportError(SemanticDiagnosticCode.MemberNotFound, $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.", member.Location);
@@ -2717,8 +2889,16 @@ public sealed partial class SemanticAnalyzer
         }
     }
 
-    private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list)
+    private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list, TypeSymbol? expectedType = null)
     {
+        // Extract expected element type from List[X] expected type
+        TypeSymbol? expectedElementType = null;
+        if (expectedType is { IsGenericResolution: true, TypeArguments.Count: 1 } &&
+            expectedType.Name.StartsWith("List["))
+        {
+            expectedElementType = expectedType.TypeArguments![0];
+        }
+
         TypeSymbol? elementType = null;
 
         if (list.ElementType != null)
@@ -2727,18 +2907,25 @@ public sealed partial class SemanticAnalyzer
         }
         else if (list.Elements.Count > 0)
         {
-            // Infer from first element
-            elementType = AnalyzeExpression(expression: list.Elements[0]);
+            // Infer from first element, propagating expected element type
+            elementType = AnalyzeExpression(expression: list.Elements[0], expectedType: expectedElementType);
 
             // Validate all elements have compatible types
+            // Use inferred element type as context for subsequent elements (e.g., [] in [[1,2], []])
+            TypeSymbol elemExpected = expectedElementType ?? elementType;
             for (int i = 1; i < list.Elements.Count; i++)
             {
-                TypeSymbol elemType = AnalyzeExpression(expression: list.Elements[i]);
+                TypeSymbol elemType = AnalyzeExpression(expression: list.Elements[i], expectedType: elemExpected);
                 if (!IsAssignableTo(source: elemType, target: elementType))
                 {
                     ReportError(SemanticDiagnosticCode.ListElementTypeMismatch, $"List element type mismatch: expected '{elementType.Name}', got '{elemType.Name}'.", list.Elements[i].Location);
                 }
             }
+        }
+        else if (expectedElementType != null)
+        {
+            // Empty list with expected type from context — use it
+            elementType = expectedElementType;
         }
         else
         {
@@ -3110,6 +3297,45 @@ public sealed partial class SemanticAnalyzer
         }
 
         return resultType ?? ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Infers type arguments for a generic routine from call arguments.
+    /// Returns the inferred type arguments, or null if inference fails.
+    /// </summary>
+    private IReadOnlyList<TypeSymbol>? InferGenericTypeArguments(
+        RoutineInfo genericRoutine, IReadOnlyList<Expression> arguments)
+    {
+        if (genericRoutine.GenericParameters == null || genericRoutine.GenericParameters.Count == 0)
+            return null;
+
+        var typeArgs = new TypeSymbol?[genericRoutine.GenericParameters.Count];
+
+        int argCount = Math.Min(genericRoutine.Parameters.Count, arguments.Count);
+        for (int i = 0; i < argCount; i++)
+        {
+            TypeSymbol paramType = genericRoutine.Parameters[i].Type;
+            if (paramType is GenericParameterTypeInfo)
+            {
+                int idx = genericRoutine.GenericParameters.ToList().IndexOf(paramType.Name);
+                if (idx >= 0 && typeArgs[idx] == null)
+                {
+                    Expression arg = arguments[i] is NamedArgumentExpression na ? na.Value : arguments[i];
+                    TypeSymbol argType = AnalyzeExpression(expression: arg);
+                    if (argType != ErrorTypeInfo.Instance)
+                        typeArgs[idx] = argType;
+                }
+            }
+        }
+
+        // All type args must be inferred
+        for (int i = 0; i < typeArgs.Length; i++)
+        {
+            if (typeArgs[i] == null)
+                return null;
+        }
+
+        return typeArgs!;
     }
 
     private TypeSymbol AnalyzeGenericMethodCallExpression(GenericMethodCallExpression generic)

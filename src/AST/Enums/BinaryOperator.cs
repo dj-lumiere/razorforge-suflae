@@ -120,8 +120,8 @@ public enum BinaryOperator
     /// <summary>Protocol conformance check operator (obeys)</summary>
     Obeys,
 
-    /// <summary>Negated protocol conformance check operator (notobeys)</summary>
-    NotObeys,
+    /// <summary>Negated protocol conformance check operator (disobeys)</summary>
+    Disobeys,
 
     #endregion
 
@@ -226,7 +226,7 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.Is => "is",
                 BinaryOperator.IsNot => "isnot",
                 BinaryOperator.Obeys => "obeys",
-                BinaryOperator.NotObeys => "notobeys",
+                BinaryOperator.Disobeys => "disobeys",
 
                 BinaryOperator.And => "and",
                 BinaryOperator.Or => "or",

@@ -32,7 +32,7 @@ routine Deque[T].__create__() -> Deque[T]
 routine Deque[T].__create__(capacity: U64) -> Deque[T]
   var byte_size = capacity * data_size[T]()
   return Deque[T](
-    data: Snatched[U8](address: rf_allocate_dynamic(byte_size)),
+    data: Snatched[U8]( rf_allocate_dynamic(byte_size)),
     start: 0u64,
     count: 0u64,
     capacity: capacity
@@ -145,7 +145,7 @@ routine Deque[T].reserve(new_capacity: U64)
     return
 
   var new_byte_size = new_capacity * data_size[T]()
-  var new_data = Snatched[U8](address: rf_allocate_dynamic(new_byte_size))
+  var new_data = Snatched[U8]( rf_allocate_dynamic(new_byte_size))
 
   # Copy elements in logical order (unwrap the ring)
   var i = 0u64
@@ -153,7 +153,7 @@ routine Deque[T].reserve(new_capacity: U64)
     var old_idx = me.physical_index(i)
     var value = me.read_at(old_idx)
     var new_byte_offset = i * data_size[T]()
-    Snatched[T](address: new_data.address + new_byte_offset).write(value)
+    Snatched[T]( new_data.get_address() + new_byte_offset).write(value)
     i = i + 1u64
 
   me.data = new_data

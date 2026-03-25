@@ -101,7 +101,7 @@ routine Integer.__cmp__(you: Integer) -> CompareSign
   elseif comparison_value > 0
     return RIGHT_SMALL
   else
-    return EQUAL
+    return SAME
 
 # ============================================================================
 # Bitwise Operations

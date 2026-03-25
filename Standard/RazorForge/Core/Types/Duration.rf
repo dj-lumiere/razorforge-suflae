@@ -253,14 +253,14 @@ routine Duration.__cmp__(you: Duration) -> ComparisonSign
 # Display
 # ============================================================================
 
-routine Text.__create__(from: Duration) -> Text
-  if from.is_zero()
+routine Duration.__represent__() -> Text
+  if me.is_zero()
     return "0s"
 
-  var d = from.abs()
+  var d = me.abs()
   var parts = ""
 
-  if from.is_negative()
+  if me.is_negative()
     parts = "-"
 
   if d.get_days() != 0_s64

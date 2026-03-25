@@ -102,7 +102,7 @@ routine Decimal.__cmp__(you: Decimal) -> ComparisonSign
     return ME_SMALL
   elseif value > 0
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations (with precision parameter)

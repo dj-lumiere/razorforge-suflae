@@ -59,6 +59,49 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
 
+    [Fact]
+    public void Analyze_MethodLevelGenericReturnType_InfersWithoutAnnotation()
+    {
+        // S192: Without explicit type annotation, var c should infer as Box[Bool]
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        routine Box[T].convert[U](new_val: U) -> Box[U]
+                          return Box[U](value: new_val)
+
+                        routine test()
+                          var b = Box[S32](value: 42)
+                          var c = b.convert[Bool](true)
+                          var d: Box[Bool] = c
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_MethodLevelGenericDirectReturn_ResolvesCorrectly()
+    {
+        // S192: Method returning U directly (not wrapped in owner type)
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        routine Box[T].extract[U](val: U) -> U
+                          return val
+
+                        routine test()
+                          var b = Box[S32](value: 42)
+                          var x: Bool = b.extract[Bool](true)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
     #endregion
 
     #region S193 — __eq__ on generic record types

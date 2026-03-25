@@ -108,7 +108,7 @@ routine F16.__cmp__(you: F16) -> ComparisonSign
     return ME_SMALL
   if fcmp_ogt[F16](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations using intrinsics
@@ -174,3 +174,15 @@ routine F16.to_bits() -> U16
 # Create F16 from U16 bits (type punning)
 routine F16.from_bits(bits: U16) -> F16
   return bitcast[U16, F16](bits)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine F16.__represent__() -> Text
+  var cstr_result = rf_format_F16(me)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine F16.__create__!(from_text: Text) -> F16
+  var cstr_val = from_text.CStr()
+  return rf_parse_F16(cstr_val)

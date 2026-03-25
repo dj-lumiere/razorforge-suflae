@@ -1,5 +1,0 @@
-﻿module Core
-
-protocol Representable[T]
-  @readonly
-  routine Text.__create__(from: T) -> Text

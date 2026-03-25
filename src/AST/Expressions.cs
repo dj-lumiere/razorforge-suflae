@@ -331,6 +331,12 @@ public record CallExpression(
     /// Null for non-varargs calls. Buildtime or Runtime for protocol-constrained varargs.
     /// </summary>
     public SemanticAnalysis.Enums.DispatchStrategy? ResolvedDispatch { get; set; }
+
+    /// <summary>
+    /// The resolved routine for this call, set by the semantic analyzer during overload resolution.
+    /// When set, the codegen should use this instead of performing its own lookup.
+    /// </summary>
+    public SemanticAnalysis.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
 }
 
 /// <summary>

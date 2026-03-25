@@ -3,4 +3,4 @@ module Core
 
 protocol Representable
   @[readonly, generated]
-  routine Text.__create__(from: Me) -> Text
+  routine Me.__represent__() -> Text

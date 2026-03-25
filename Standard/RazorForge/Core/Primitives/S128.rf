@@ -240,7 +240,7 @@ routine S128.__cmp__(you: S128) -> ComparisonSign
     return ME_SMALL
   if icmp_sgt[S128](me, you)
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -311,3 +311,35 @@ routine S128.signum() -> S128
     me > 0_s128 => 1_s128
     me < 0_s128 => -1_s128
     else => 0_s128
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine S128.__represent__() -> Text
+  if me == 0s128
+    return "0"
+  if me > 0s128
+    return U128(me).Text()
+  return "-" + U128(0u128 - U128(me)).Text()
+
+routine S128.__create__!(from_text: Text) -> S128
+  var start = 0u64
+  var negative = false
+  if from_text.count() > 0u64
+    var first = from_text[0u64]
+    if first == Letter(0x002Du32)
+      negative = true
+      start = 1u64
+    elseif first == Letter(0x002Bu32)
+      start = 1u64
+  var result = 0u128
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u128 + U128(ch.digit_value())
+    i = i + 1u64
+  if negative
+    return S128(0u128 - result)
+  return S128(result)

@@ -47,7 +47,7 @@ record CWStr
   ptr: Address  # Raw pointer to null-terminated wide character sequence
 
 # Null pointer constant for CWStr comparisons
-preset cwstr_null: CWStr = CWStr(ptr: 0_a)
+preset cwstr_null: CWStr = CWStr(ptr: 0_addr)
 
 # ============================================================================
 # Creators
@@ -66,7 +66,7 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr
   # Worst case: each codepoint needs 2 code units (surrogate pair)
   var max_units = len * 2u64
   var byte_len = (max_units + 1u64) * 2u64
-  var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
+  var buffer = Snatched[U8](rf_allocate_dynamic(byte_len))
 
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
@@ -75,26 +75,26 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr
 
     if codepoint <= 0xFFFFu32
       # BMP character - single code unit
-      Snatched[U16](address: buffer.address + write_pos * 2u64).write(U16!(codepoint))
+      Snatched[U16](buffer.get_address() + write_pos * 2u64).write(U16!(codepoint))
       write_pos = write_pos + 1u64
     elseif codepoint <= 0x10FFFFu32
       # Supplementary character - surrogate pair
       var adjusted = codepoint - 0x10000u32
       var high = U16!((adjusted >> 10u32) + 0xD800u32)
       var low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
-      Snatched[U16](address: buffer.address + write_pos * 2u64).write(high)
-      Snatched[U16](address: buffer.address + (write_pos + 1u64) * 2u64).write(low)
+      Snatched[U16]( buffer.get_address() + write_pos * 2u64).write(high)
+      Snatched[U16]( buffer.get_address() + (write_pos + 1u64) * 2u64).write(low)
       write_pos = write_pos + 2u64
     else
       # Invalid codepoint - use replacement character
-      Snatched[U16](address: buffer.address + write_pos * 2u64).write(0xFFFDu16)
+      Snatched[U16]( buffer.get_address() + write_pos * 2u64).write(0xFFFDu16)
       write_pos = write_pos + 1u64
 
     i = i + 1u64
   # Null terminator (2 bytes)
-  Snatched[U16](address: buffer.address + write_pos * 2u64).write(0u16)
+  Snatched[U16](buffer.get_address() + write_pos * 2u64).write(0u16)
 
-  return CWStr(ptr: buffer.address)
+  return CWStr(ptr: buffer.get_address())
 
 # Create CWStr from List[U16] (allocates NEW memory with null terminator)
 # Treats the list as raw UTF-16 code units
@@ -102,16 +102,16 @@ routine CWStr.__create__(from_codepoints: Text) -> CWStr
 routine CWStr.__create__(from_units: List[U16]) -> CWStr
   var len = from_units.count()
   var byte_len = (len + 1u64) * 2u64
-  var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
+  var buffer = Snatched[U8](rf_allocate_dynamic(byte_len))
 
   var i: U64 = 0u64
   while i < len
-    Snatched[U16](address: buffer.address + i * 2u64).write(from_units[i])
+    Snatched[U16](buffer.get_address() + i * 2u64).write(from_units[i])
     i = i + 1u64
   # Null terminator
-  Snatched[U16](address: buffer.address + len * 2u64).write(0u16)
+  Snatched[U16](buffer.get_address() + len * 2u64).write(0u16)
 
-  return CWStr(ptr: buffer.address)
+  return CWStr(ptr: buffer.get_address())
 
 # ============================================================================
 # Core Methods
@@ -124,7 +124,7 @@ routine CWStr.count() -> U64
 
 # Check if wide C string pointer is null
 routine CWStr.is_null() -> Bool
-  return me.ptr == 0_a
+  return me.ptr == 0_addr
 
 # Check if wide C string is empty (null or zero-length)
 routine CWStr.is_empty() -> Bool
@@ -138,7 +138,7 @@ routine CWStr.is_empty() -> Bool
 routine CWStr.__getitem__!(index: U64) -> U16
   if index >= me.count()
     throw IndexOutOfBoundsError()
-  return read_as![U16](me.ptr + (index * 2u64))
+  return Snatched[U16](me.ptr + (index * 2u64)).read()
 
 # ============================================================================
 # Comparison
@@ -153,7 +153,7 @@ routine CWStr.__cmp__(other: CWStr) -> ComparisonSign
     return ME_SMALL
   if cmp > 0s32
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Copying
@@ -164,9 +164,9 @@ routine CWStr.__cmp__(other: CWStr) -> ComparisonSign
 routine CWStr.copy() -> CWStr
   var len = me.count()
   var byte_len = (len + 1u64) * 2u64  # Assuming 16-bit wchar_t
-  var buffer = Snatched[U8](address: rf_allocate_dynamic(byte_len))
-  rf_cwstr_copy(buffer.address, me.ptr)
-  return CWStr(ptr: buffer.address)
+  var buffer = Snatched[U8]( rf_allocate_dynamic(byte_len))
+  rf_cwstr_copy(buffer.get_address(), me.ptr)
+  return CWStr(ptr: buffer.get_address())
 
 # ============================================================================
 # Conversion to RazorForge Types
@@ -181,7 +181,7 @@ routine CWStr.to_units() -> List[U16]
   loop
     if i >= len
       break
-    var code_unit = read_as![U16](me.ptr + (i * 2u64))
+    var code_unit = Snatched[U16](me.ptr + (i * 2u64)).read()
     list.add_last(code_unit)
     i = i + 1u64
   return list

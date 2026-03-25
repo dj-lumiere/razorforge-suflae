@@ -106,7 +106,7 @@ routine D128.__cmp__(you: D128) -> ComparisonSign
     return ME_SMALL
   if cmp > 0
     return ME_LARGE
-  return EQUAL
+  return SAME
 
 # ============================================================================
 # Math Operations
@@ -248,3 +248,15 @@ routine D128.high_bits() -> U64
 # Create D128 from low and high U64 bits
 routine D128.from_bits(low: U64, high: U64) -> D128
   return D128(low: low, high: high)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine D128.__represent__() -> Text
+  var cstr_result = rf_d128_to_string(me.low_bits(), me.high_bits())
+  return Text(from: CStr(from_ptr: cstr_result))
+
+routine D128.__create__!(from_text: Text) -> D128
+  var cstr_val = from_text.CStr()
+  return rf_D128_from_string(cstr_val)

@@ -379,7 +379,7 @@ public sealed partial class SemanticAnalyzer
             or BinaryOperator.In or BinaryOperator.NotIn
             or BinaryOperator.Identical or BinaryOperator.NotIdentical
             or BinaryOperator.Is or BinaryOperator.IsNot
-            or BinaryOperator.Obeys or BinaryOperator.NotObeys;
+            or BinaryOperator.Obeys or BinaryOperator.Disobeys;
     }
 
     /// <summary>Returns true if the operator is a short-circuit logical operator (<c>and</c> or <c>or</c>).</summary>

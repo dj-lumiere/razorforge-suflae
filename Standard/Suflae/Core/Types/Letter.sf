@@ -66,10 +66,10 @@ routine Letter.is_emoji() -> Bool
 
 # Case conversion
 routine Letter.to_uppercase() -> Letter
-  return Letter(value: me.value.to_uppercase())
+  return Letter(me.value.to_uppercase())
 
 routine Letter.to_lowercase() -> Letter
-  return Letter(value: me.value.to_lowercase())
+  return Letter(me.value.to_lowercase())
 
 # Comparison
 routine Letter.__eq__(other: Letter) -> Bool
@@ -80,11 +80,11 @@ routine Letter.__cmp__(other: Letter) -> ComparisonSign
 
 # Type conversions
 routine Letter.to_byte() -> Byte
-  return Byte(value: me.value.to_byte())
+  return Byte(me.value.to_byte())
 
 routine Letter.digit_value() -> S32
   return me.value.digit_value()
 
 # Utility
 routine Letter.offset![I obeys Integral](delta: I) -> Letter
-  return Letter(value: me.value.offset!(delta))
+  return Letter(me.value.offset!(delta))

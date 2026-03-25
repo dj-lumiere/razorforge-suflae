@@ -246,14 +246,6 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException("Cannot determine type of member variable access target");
         }
 
-        // For @llvm("ptr") types (Snatched[T], etc.), .address returns the pointer as Address
-        if (expr.PropertyName == "address" && targetType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" })
-        {
-            string result = NextTemp();
-            EmitLine(sb, $"  {result} = ptrtoint ptr {target} to i{_pointerBitWidth}");
-            return result;
-        }
-
         // Wrapper type forwarding: Viewed[T], Hijacked[T], etc.
         // These are records wrapping a Snatched[T] (ptr) — forward member access to the inner entity type
         if (targetType is RecordTypeInfo wrapperRecord
@@ -293,6 +285,15 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitEntityMemberVariableRead(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName)
     {
+        // Refresh stale generic resolutions (member variables may be empty if created before definition was populated)
+        if (entity is { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef }
+            && entity.TypeArguments != null)
+        {
+            var refreshed = genDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+                entity = refreshed;
+        }
+
         // Find member variable index
         int memberVariableIndex = -1;
         MemberVariableInfo? memberVariable = null;
@@ -382,6 +383,15 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitEntityMemberVariableWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName, string value)
     {
+        // Refresh stale generic resolutions (member variables may be empty if created before definition was populated)
+        if (entity is { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef }
+            && entity.TypeArguments != null)
+        {
+            var refreshed = genDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+                entity = refreshed;
+        }
+
         // Find member variable index
         int memberVariableIndex = -1;
         MemberVariableInfo? memberVariable = null;
@@ -471,6 +481,10 @@ public partial class LLVMCodeGenerator
                 return EmitByteSizeLiteral(sb, s);
             if (literal.LiteralType == Lexer.TokenType.LetterLiteral)
                 return EmitLetterLiteral(sb, s);
+            if (literal.LiteralType == Lexer.TokenType.ByteLetterLiteral)
+                return EmitByteLetterLiteral(sb, s);
+            if (literal.LiteralType == Lexer.TokenType.BytesLiteral)
+                return EmitBytesLiteral(sb, s);
             // Actual string literal
             return EmitStringLiteral(sb, s);
         }
@@ -583,26 +597,96 @@ public partial class LLVMCodeGenerator
         return codepoint.ToString();
     }
 
+    private string EmitByteLetterLiteral(StringBuilder sb, string text)
+    {
+        int byteValue = text.Length > 0 ? (int)text[0] & 0xFF : 0;
+
+        TypeInfo? byteType = _registry.LookupType("Byte");
+        string llvmType = byteType != null ? GetLLVMType(byteType) : "%\"Record.Byte\"";
+
+        if (llvmType.StartsWith("%"))
+        {
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = insertvalue {llvmType} undef, i8 {byteValue}, 0");
+            return result;
+        }
+        return byteValue.ToString();
+    }
+
+    /// <summary>
+    /// Emits a Bytes literal (b"...") as a constant Bytes entity.
+    /// Bytes is entity { letters: List[Byte] } where List is entity { data: ptr, count: U64, capacity: U64 }
+    /// and Byte is an i8. Returns a pointer to the Bytes struct.
+    /// </summary>
+    private string EmitBytesLiteral(StringBuilder sb, string value)
+    {
+        int idx = _stringCounter++;
+        string constName = $"@.bytes.{idx}";
+
+        // Collect ASCII byte values
+        var bytes = new List<int>();
+        foreach (char c in value)
+        {
+            bytes.Add((int)c & 0xFF);
+        }
+
+        int count = bytes.Count;
+
+        // Layer 1: raw byte data array [N x i8]
+        string dataName = $"@.bytes.data.{idx}";
+        string byteValues = string.Join(", ", bytes.Select(b => $"i8 {b}"));
+        if (count > 0)
+            EmitLine(_globalDeclarations, $"{dataName} = private unnamed_addr constant [{count} x i8] [{byteValues}]");
+        else
+            EmitLine(_globalDeclarations, $"{dataName} = private unnamed_addr constant [0 x i8] zeroinitializer");
+
+        // Layer 2: List[Byte] struct { ptr data, i64 count, i64 capacity }
+        string listName = $"@.bytes.list.{idx}";
+        EmitLine(_globalDeclarations, $"{listName} = private unnamed_addr constant {{ ptr, i64, i64 }} {{ ptr {dataName}, i64 {count}, i64 {count} }}");
+
+        // Layer 3: Bytes entity struct { ptr letters }
+        EmitLine(_globalDeclarations, $"{constName} = private unnamed_addr constant {{ ptr }} {{ ptr {listName} }}");
+
+        return constName;
+    }
+
     /// <summary>
     /// Strips the type suffix from a numeric literal string (e.g., "1_s32" → "1", "3_14_f64" → "3_14")
     /// and removes digit separator underscores.
     /// </summary>
     /// <summary>
-    /// Converts a hex literal (0x...) to decimal for LLVM IR (which uses 0x only for floats).
+    /// Converts a prefixed literal (0x hex, 0b binary, 0o octal) to decimal for LLVM IR.
+    /// Hex floats (containing '.' or 'p') are passed through for EmitFloatLiteral.
     /// </summary>
-    private static string ConvertHexToDecimal(string value)
+    private static string ConvertPrefixedToDecimal(string value)
     {
-        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && value.Length > 2)
+        if (value.Length > 2)
         {
-            if (long.TryParse(value[2..], System.Globalization.NumberStyles.HexNumber, null, out long decValue))
-                return decValue.ToString();
+            if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                // Don't convert hex floats — they go through EmitFloatLiteral
+                if (value.IndexOfAny(['.', 'p', 'P'], 2) >= 0)
+                    return value;
+                if (ulong.TryParse(value[2..], System.Globalization.NumberStyles.HexNumber, null, out ulong hexVal))
+                    return hexVal.ToString();
+            }
+            else if (value.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+            {
+                try { return Convert.ToUInt64(value[2..], 2).ToString(); }
+                catch { /* fall through */ }
+            }
+            else if (value.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
+            {
+                try { return Convert.ToUInt64(value[2..], 8).ToString(); }
+                catch { /* fall through */ }
+            }
         }
         return value;
     }
 
     private static readonly string[] NumericSuffixes =
     [
-        "a", "s128", "u128", "s64", "u64", "s32", "u32",
+        "addr", "s128", "u128", "s64", "u64", "s32", "u32",
         "s16", "u16", "s8", "u8", "f128", "f64", "f32", "f16",
         "d128", "d64", "d32"
     ];
@@ -614,7 +698,7 @@ public partial class LLVMCodeGenerator
         {
             if (text[i] == '_' && i + 1 < text.Length && char.IsLetter(text[i + 1]))
             {
-                return text[..i].Replace("_", "");
+                return ConvertPrefixedToDecimal(text[..i].Replace("_", ""));
             }
         }
 
@@ -625,12 +709,12 @@ public partial class LLVMCodeGenerator
             if (lower.EndsWith(suffix))
             {
                 string numPart = text[..^suffix.Length].Replace("_", "");
-                return ConvertHexToDecimal(numPart);
+                return ConvertPrefixedToDecimal(numPart);
             }
         }
 
         // No suffix found — just remove underscores
-        return ConvertHexToDecimal(text.Replace("_", ""));
+        return ConvertPrefixedToDecimal(text.Replace("_", ""));
     }
 
     /// <summary>
@@ -647,25 +731,90 @@ public partial class LLVMCodeGenerator
             return $"0xL{f128.Lo:X16}{f128.Hi:X16}";
         }
 
+        // Try hex float format first (0x1.ABCDp5)
+        if (TryParseHexFloat(numericValue, out double hexFloatVal))
+        {
+            return EmitDoubleAsLlvmHex(hexFloatVal, literalType);
+        }
+
         if (double.TryParse(numericValue, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out double d))
         {
-            // Use LLVM hex float format (0xHHHHHHHHHHHHHHHH) for exactness
-            if (literalType == Lexer.TokenType.F32Literal)
-            {
-                // F32: promote to double for LLVM's float hex format
-                float f = (float)d;
-                double promoted = f;
-                long bits = BitConverter.DoubleToInt64Bits(promoted);
-                return $"0x{bits:X16}";
-            }
-            else
-            {
-                long bits = BitConverter.DoubleToInt64Bits(d);
-                return $"0x{bits:X16}";
-            }
+            return EmitDoubleAsLlvmHex(d, literalType);
         }
         return numericValue;
+    }
+
+    private static string EmitDoubleAsLlvmHex(double d, Lexer.TokenType literalType)
+    {
+        if (literalType == Lexer.TokenType.F32Literal)
+        {
+            // F32: promote to double for LLVM's float hex format
+            float f = (float)d;
+            long bits = BitConverter.DoubleToInt64Bits((double)f);
+            return $"0x{bits:X16}";
+        }
+        else
+        {
+            long bits = BitConverter.DoubleToInt64Bits(d);
+            return $"0x{bits:X16}";
+        }
+    }
+
+    /// <summary>
+    /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) × 2^(exponent).
+    /// </summary>
+    private static bool TryParseHexFloat(string value, out double result)
+    {
+        result = 0;
+        if (!value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) || value.Length <= 2)
+            return false;
+
+        string body = value[2..];
+        int pIndex = body.IndexOfAny(['p', 'P']);
+        if (pIndex < 0) return false;
+
+        string mantissaStr = body[..pIndex];
+        string exponentStr = body[(pIndex + 1)..];
+
+        if (!int.TryParse(exponentStr, out int exponent))
+            return false;
+
+        double mantissa = 0;
+        int dotIndex = mantissaStr.IndexOf('.');
+
+        if (dotIndex >= 0)
+        {
+            string intPart = mantissaStr[..dotIndex];
+            string fracPart = mantissaStr[(dotIndex + 1)..];
+
+            if (intPart.Length > 0 &&
+                ulong.TryParse(intPart, System.Globalization.NumberStyles.HexNumber, null, out ulong intVal))
+                mantissa = intVal;
+
+            double scale = 1.0 / 16;
+            foreach (char c in fracPart)
+            {
+                int digit = c switch
+                {
+                    >= '0' and <= '9' => c - '0',
+                    >= 'a' and <= 'f' => c - 'a' + 10,
+                    >= 'A' and <= 'F' => c - 'A' + 10,
+                    _ => 0
+                };
+                mantissa += digit * scale;
+                scale /= 16;
+            }
+        }
+        else
+        {
+            if (!ulong.TryParse(mantissaStr, System.Globalization.NumberStyles.HexNumber, null, out ulong intVal))
+                return false;
+            mantissa = intVal;
+        }
+
+        result = Math.ScaleB(mantissa, exponent);
+        return !double.IsNaN(result) && !double.IsInfinity(result);
     }
 
     /// <summary>
@@ -774,7 +923,7 @@ public partial class LLVMCodeGenerator
     {
         // C29: Safety guard — semantic analyzer already errors on runtime dispatch in RF mode,
         // but if we somehow reach codegen with Runtime dispatch, trap instead of emitting bad code
-        if (call.ResolvedDispatch == SemanticAnalysis.Enums.DispatchStrategy.Runtime)
+        if (call.ResolvedDispatch == DispatchStrategy.Runtime)
         {
             EmitLine(sb, "  call void @llvm.trap()");
             EmitLine(sb, "  unreachable");
@@ -789,7 +938,7 @@ public partial class LLVMCodeGenerator
         {
             // Determine if this is a method call (callee is MemberExpression) or standalone function call
             MemberExpression member => EmitMethodCall(sb, member, call.Arguments),
-            IdentifierExpression id => EmitFunctionCall(sb, id.Name, call.Arguments),
+            IdentifierExpression id => EmitFunctionCall(sb, id.Name, call.Arguments, call.ResolvedRoutine),
             _ => throw new NotImplementedException(
                 $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };
@@ -873,7 +1022,8 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates code for a standalone function call.
     /// </summary>
-    private string EmitFunctionCall(StringBuilder sb, string functionName, List<Expression> arguments)
+    private string EmitFunctionCall(StringBuilder sb, string functionName, List<Expression> arguments,
+        RoutineInfo? resolvedRoutine = null)
     {
         // Strip failable '!' suffix — registry stores names without it
         if (functionName.EndsWith('!'))
@@ -941,9 +1091,30 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Look up the routine — try full name first, then short name fallback
-        RoutineInfo? routine = _registry.LookupRoutine(functionName)
+        // Use semantic analyzer's resolved routine if available (e.g., generic overload)
+        // Otherwise look up the routine — try full name first, then short name fallback
+        RoutineInfo? routine = resolvedRoutine
+                               ?? _registry.LookupRoutine(functionName)
                                ?? _registry.LookupRoutineByName(functionName);
+
+        // Generic free function monomorphization: when calling a generic instance (e.g., show[S64]),
+        // record the monomorphization so the body is compiled with T=S64
+        if (routine is { GenericDefinition: not null, TypeArguments: not null })
+        {
+            string monoName = MangleFunctionName(routine);
+            if (!_pendingMonomorphizations.ContainsKey(monoName))
+            {
+                var genericDef = routine.GenericDefinition;
+                var typeSubs = new Dictionary<string, TypeInfo>();
+                for (int i = 0; i < genericDef.GenericParameters!.Count; i++)
+                    typeSubs[genericDef.GenericParameters[i]] = (TypeInfo)routine.TypeArguments[i];
+
+                // Use [generic] marker so FindGenericAstRoutine skips non-generic overloads
+                string genericAstName = $"{genericDef.Name}[generic]";
+                _pendingMonomorphizations[monoName] = new MonomorphizationEntry(
+                    genericDef, null!, typeSubs, genericAstName);
+            }
+        }
 
         // If not found as a routine, check if it's a type name
         bool isCreatorCall = false;
@@ -1158,7 +1329,7 @@ public partial class LLVMCodeGenerator
         // Representable pattern: obj.Text() → Text.__create__(from: obj)
         // When the method name matches a registered type and no direct method exists,
         // route to TypeName.__create__(from: receiver).
-        if (arguments.Count == 0 && _registry.LookupType(member.PropertyName) != null)
+        if (method == null && arguments.Count == 0 && _registry.LookupType(member.PropertyName) != null)
         {
             // For @llvm primitive types, emit inline conversion (trunc/zext/sext/fpcast)
             // instead of a function call. e.g., val.Address() → inline zext/trunc.
@@ -1352,7 +1523,7 @@ public partial class LLVMCodeGenerator
         {
             string retType = resolvedReturnType != null ? GetLLVMType(resolvedReturnType) : "void";
             // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-            if (method?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+            if (method?.AsyncStatus == AsyncStatus.Emitting)
                 retType = "{ i64, ptr }";
             EmitLine(_functionDeclarations, $"declare {retType} @{mangledName}({string.Join(", ", argTypes)})");
             _generatedFunctions.Add(mangledName);
@@ -1362,7 +1533,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(resolvedReturnType)
             : "void";
         // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-        bool isEmittingCall = method?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting;
+        bool isEmittingCall = method?.AsyncStatus == AsyncStatus.Emitting;
         if (isEmittingCall)
             returnType = "{ i64, ptr }";
 
@@ -1417,7 +1588,7 @@ public partial class LLVMCodeGenerator
 
         // ABSENT branch: propagate absence from current emitting routine
         EmitLine(sb, $"{absentLabel}:");
-        if (_currentEmittingRoutine?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting)
         {
             EmitLine(sb, "  call void @rf_trace_pop()");
             EmitLine(sb, "  ret { i64, ptr } { i64 0, ptr null }");
@@ -1546,7 +1717,7 @@ public partial class LLVMCodeGenerator
             BinaryOperator.Is => EmitChoiceIs(sb, binary, "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb, binary, "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant("true"),
-            BinaryOperator.NotObeys => EmitCompileTimeConstant("false"),
+            BinaryOperator.Disobeys => EmitCompileTimeConstant("false"),
             BinaryOperator.NoneCoalesce => EmitNoneCoalesce(sb, binary),
             // Arithmetic, comparison, bitwise operators — normally desugared to method
             // calls by the semantic analyzer, but stdlib bodies are raw AST, so we
@@ -1570,7 +1741,7 @@ public partial class LLVMCodeGenerator
         string typeName = leftType?.Name ?? "";
         bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
         bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
-        bool isSoftwareType = llvmType.StartsWith("%Record.") || llvmType.StartsWith("%Tuple.") || llvmType == "ptr";
+        bool isSoftwareType = llvmType.StartsWith("%Record.") || llvmType.StartsWith("%Tuple.") || llvmType.StartsWith("{") || llvmType == "ptr";
 
         // For comparison operators that return i1 (Bool)
         string? cmpInstr = isSoftwareType ? null : binary.Operator switch
@@ -3111,10 +3282,13 @@ public partial class LLVMCodeGenerator
         TypeInfo? targetType = GetExpressionType(member.Object);
         if (targetType == null) return null;
 
-        // For @llvm("ptr") types (Snatched[T], etc.), .address returns Address
-        if (member.PropertyName == "address" && targetType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" })
+        // Refresh stale generic entity resolutions for member variable lookup
+        if (targetType is EntityTypeInfo { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef } staleEntity
+            && staleEntity.TypeArguments != null)
         {
-            return _registry.LookupType("Address");
+            var refreshed = genDef.CreateInstance(staleEntity.TypeArguments) as EntityTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+                targetType = refreshed;
         }
 
         MemberVariableInfo? memberVariable = targetType switch
@@ -3757,10 +3931,6 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? GetMemberTypeFromOwner(TypeInfo? ownerType, string memberName)
     {
-        // Snatched[T].address → Address
-        if (ownerType is RecordTypeInfo { HasDirectBackendType: true, LlvmType: "ptr" } && memberName == "address")
-            return _registry.LookupType("Address");
-
         IReadOnlyList<MemberVariableInfo>? members = ownerType switch
         {
             EntityTypeInfo entity => entity.MemberVariables,
@@ -3924,18 +4094,18 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // Handle "!d" specifier: call to_debug() instead of Text.__create__
+        // Handle "!d" specifier: call __diagnose__() instead of Text.__create__
         if (formatSpec == "!d" || formatSpec == "d")
         {
             string typeName = exprType?.Name ?? "Data";
-            string debugName = $"{typeName}.to_debug";
+            string debugName = $"{typeName}.__diagnose__";
             RoutineInfo? debugMethod = _registry.LookupRoutine(debugName);
             if (debugMethod != null)
                 GenerateFunctionDeclaration(debugMethod);
 
             string mangledDebug = debugMethod != null
                 ? MangleFunctionName(debugMethod)
-                : Q($"{typeName}.to_debug");
+                : Q($"{typeName}.__diagnose__");
 
             string argType = exprType != null ? GetParameterLLVMType(exprType) : "i64";
             string result = NextTemp();

@@ -1,7 +1,7 @@
 namespace Compiler.CodeGen;
 
 using SyntaxTree;
-using Compiler.Lexer;
+using Lexer;
 
 /// <summary>
 /// Deep-clones a RoutineDeclaration AST, replacing all occurrences of generic type

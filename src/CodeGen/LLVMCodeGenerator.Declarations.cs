@@ -275,7 +275,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(routine.ReturnType)
             : "void";
         // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-        if (routine.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+        if (routine.AsyncStatus == AsyncStatus.Emitting)
             returnType = "{ i64, ptr }";
         if (isCExtern && returnType == "half") returnType = "i16";
 
@@ -417,7 +417,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(routineInfo.ReturnType)
             : "void";
         // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-        if (routineInfo.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+        if (routineInfo.AsyncStatus == AsyncStatus.Emitting)
             returnType = "{ i64, ptr }";
 
         // Start function — save position so we can rollback on error
@@ -603,7 +603,16 @@ public partial class LLVMCodeGenerator
         if (routine.OwnerType == null)
         {
             // Top-level: Module.Name (FullName already handles this)
-            return Q(SanitizeLLVMName(routine.FullName));
+            string fullName = SanitizeLLVMName(routine.FullName);
+
+            // Generic instance: append type arguments (e.g., IO.show → IO.show#S64)
+            if (routine.TypeArguments is { Count: > 0 })
+            {
+                string typeArgSuffix = string.Join(",", routine.TypeArguments.Select(t => t.Name));
+                fullName = $"{fullName}#{typeArgSuffix}";
+            }
+
+            return Q(fullName);
         }
 
         // Method: Module.OwnerType.Name (OwnerType.FullName includes module)
@@ -699,13 +708,23 @@ public partial class LLVMCodeGenerator
     /// <returns>The routine declaration if found, null otherwise.</returns>
     private RoutineDeclaration? FindGenericAstRoutine(string genericAstName)
     {
+        // Check if we need a generic routine specifically (name ends with [generic] marker)
+        bool requireGeneric = genericAstName.EndsWith("[generic]");
+        string baseName = requireGeneric
+            ? genericAstName[..genericAstName.IndexOf("[generic]")]
+            : genericAstName;
+
         // Search user programs first, then stdlib
         foreach (var (userProgram, _, _) in _userPrograms)
         {
             foreach (var decl in userProgram.Declarations)
             {
-                if (decl is RoutineDeclaration routine && routine.Name == genericAstName)
+                if (decl is RoutineDeclaration routine && routine.Name == baseName)
+                {
+                    if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
+                        continue;
                     return routine;
+                }
             }
         }
 
@@ -713,8 +732,12 @@ public partial class LLVMCodeGenerator
         {
             foreach (var decl in program.Declarations)
             {
-                if (decl is RoutineDeclaration routine && routine.Name == genericAstName)
+                if (decl is RoutineDeclaration routine && routine.Name == baseName)
+                {
+                    if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
+                        continue;
                     return routine;
+                }
             }
         }
 
@@ -835,19 +858,19 @@ public partial class LLVMCodeGenerator
                 continue;
 
             // Skip generic definitions, routines with error types,
-            // and routines on generic owner types (e.g., List[T].to_debug)
+            // and routines on generic owner types (e.g., List[T].__diagnose__)
             if (routine.IsGenericDefinition || HasErrorTypes(routine)
                 || routine.OwnerType is { IsGenericDefinition: true })
                 continue;
 
             string funcName = MangleFunctionName(routine);
 
-            // Skip if already generated
-            if (!_generatedFunctionDefs.Add(funcName))
-                continue;
-
             // Only emit synthesized routines that were declared (actually referenced)
             if (!_generatedFunctions.Contains(funcName))
+                continue;
+
+            // Skip if already generated
+            if (!_generatedFunctionDefs.Add(funcName))
                 continue;
 
             // Mark in declarations set to prevent declare/define conflicts
@@ -873,13 +896,16 @@ public partial class LLVMCodeGenerator
                 case "__eq__":
                     EmitSynthesizedEq(routine, funcName);
                     break;
-                case "Text":
+                case "__cmp__":
+                    EmitSynthesizedCmp(routine, funcName);
+                    break;
+                case "__represent__":
                     EmitSynthesizedText(routine, funcName, includeSecret: false);
                     break;
-                case "to_debug":
+                case "__diagnose__":
                     EmitSynthesizedText(routine, funcName, includeSecret: true);
                     break;
-                case "hash":
+                case "__hash__":
                     EmitSynthesizedHash(routine, funcName);
                     break;
                 case "S64":
@@ -1098,8 +1124,29 @@ public partial class LLVMCodeGenerator
             ? routine.Parameters[0].Name
             : "you";
 
-        // Look up the __cmp__ function name on the same owner type
-        string cmpFuncName = Q($"{routine.OwnerType.Name}.__cmp__");
+        // Ensure __cmp__ is declared/generated for the owner type
+        var cmpMethod = _registry.LookupMethod(routine.OwnerType, "__cmp__");
+        string cmpFuncName;
+        if (cmpMethod != null)
+        {
+            cmpFuncName = MangleFunctionName(cmpMethod);
+            // For synthesized __cmp__ (e.g., tuples), emit the define directly
+            // since GenerateSynthesizedRoutines may have already iterated past it
+            if (cmpMethod.IsSynthesized && !_generatedFunctions.Contains(cmpFuncName))
+            {
+                _generatedFunctions.Add(cmpFuncName);
+                _generatedFunctionDefs.Add(cmpFuncName);
+                EmitSynthesizedCmp(cmpMethod, cmpFuncName);
+            }
+            else
+            {
+                GenerateFunctionDeclaration(cmpMethod);
+            }
+        }
+        else
+        {
+            cmpFuncName = Q($"{routine.OwnerType.Name}.__cmp__");
+        }
 
         EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
         EmitLine(_functionDefinitions, "entry:");
@@ -1232,6 +1279,41 @@ public partial class LLVMCodeGenerator
                 EmitLine(_functionDefinitions, $"  ret i1 {accum}");
                 break;
             }
+            case TupleTypeInfo tuple:
+            {
+                if (tuple.ElementTypes.Count == 0)
+                {
+                    EmitLine(_functionDefinitions, "  ret i1 true");
+                    break;
+                }
+
+                string tupleStructType = GetTupleTypeName(tuple);
+                string accum = "true";
+                for (int i = 0; i < tuple.ElementTypes.Count; i++)
+                {
+                    TypeInfo elemType = tuple.ElementTypes[i];
+                    string elemLlvmType = GetLLVMType(elemType);
+                    string meElem = NextTemp();
+                    string youElem = NextTemp();
+                    EmitLine(_functionDefinitions, $"  {meElem} = extractvalue {tupleStructType} %me, {i}");
+                    EmitLine(_functionDefinitions, $"  {youElem} = extractvalue {tupleStructType} %{youName}, {i}");
+
+                    string cmpResult = EmitFieldEquality(elemType, elemLlvmType, meElem, youElem);
+
+                    if (accum == "true")
+                    {
+                        accum = cmpResult;
+                    }
+                    else
+                    {
+                        string andResult = NextTemp();
+                        EmitLine(_functionDefinitions, $"  {andResult} = and i1 {accum}, {cmpResult}");
+                        accum = andResult;
+                    }
+                }
+                EmitLine(_functionDefinitions, $"  ret i1 {accum}");
+                break;
+            }
             default:
                 EmitLine(_functionDefinitions, "  ret i1 false");
                 break;
@@ -1277,9 +1359,79 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized Text() or to_debug() routine.
-    /// Concatenates "TypeName(" + field.Text() calls + ")" via Text.concat.
-    /// to_debug includes secret fields; Text() excludes them.
+    /// Emits the body for a synthesized __cmp__ routine on tuples.
+    /// Lexicographic comparison: compare element-by-element, return first non-SAME result.
+    /// </summary>
+    private void EmitSynthesizedCmp(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType is not TupleTypeInfo tuple) return;
+
+        string tupleStructType = GetTupleTypeName(tuple);
+
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}({tupleStructType} %me, {tupleStructType} %you) {{");
+        EmitLine(_functionDefinitions, "entry:");
+
+        // Look up the SAME tag value (should be 0)
+        long sameTag = 0;
+        var sameCase = _registry.LookupChoiceCase("SAME");
+        if (sameCase != null)
+            sameTag = sameCase.Value.CaseInfo.ComputedValue;
+
+        if (tuple.ElementTypes.Count == 0)
+        {
+            EmitLine(_functionDefinitions, $"  ret i64 {sameTag}");
+            EmitLine(_functionDefinitions, "}");
+            EmitLine(_functionDefinitions, "");
+            return;
+        }
+
+        for (int i = 0; i < tuple.ElementTypes.Count; i++)
+        {
+            TypeInfo elemType = tuple.ElementTypes[i];
+            string elemLlvmType = GetLLVMType(elemType);
+
+            string meElem = NextTemp();
+            string youElem = NextTemp();
+            EmitLine(_functionDefinitions, $"  {meElem} = extractvalue {tupleStructType} %me, {i}");
+            EmitLine(_functionDefinitions, $"  {youElem} = extractvalue {tupleStructType} %you, {i}");
+
+            // Call element's __cmp__ (ensure it's declared)
+            var elemCmpMethod = _registry.LookupMethod(elemType, "__cmp__");
+            if (elemCmpMethod != null)
+                GenerateFunctionDeclaration(elemCmpMethod);
+            string cmpName = elemCmpMethod != null ? MangleFunctionName(elemCmpMethod) : Q($"{elemType.Name}.__cmp__");
+            string cmpResult = NextTemp();
+            EmitLine(_functionDefinitions, $"  {cmpResult} = call i64 @{cmpName}({elemLlvmType} {meElem}, {elemLlvmType} {youElem})");
+
+            // Last element: just return
+            if (i == tuple.ElementTypes.Count - 1)
+            {
+                EmitLine(_functionDefinitions, $"  ret i64 {cmpResult}");
+            }
+            else
+            {
+                // If not SAME, return immediately; otherwise continue to next element
+                string isSame = NextTemp();
+                string nextLabel = $"cmp{i + 1}";
+                string retLabel = $"ret{i}";
+                EmitLine(_functionDefinitions, $"  {isSame} = icmp eq i64 {cmpResult}, {sameTag}");
+                EmitLine(_functionDefinitions, $"  br i1 {isSame}, label %{nextLabel}, label %{retLabel}");
+                EmitLine(_functionDefinitions, "");
+                EmitLine(_functionDefinitions, $"{retLabel}:");
+                EmitLine(_functionDefinitions, $"  ret i64 {cmpResult}");
+                EmitLine(_functionDefinitions, "");
+                EmitLine(_functionDefinitions, $"{nextLabel}:");
+            }
+        }
+
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized __represent__() or __diagnose__() routine.
+    /// Concatenates "TypeName(" + field representations + ")" via Text.concat.
+    /// __diagnose__ includes secret fields; __represent__() excludes them.
     /// </summary>
     private void EmitSynthesizedText(RoutineInfo routine, string funcName, bool includeSecret)
     {
@@ -1306,6 +1458,51 @@ public partial class LLVMCodeGenerator
             _ => null
         };
 
+        // Tuples: emit "(item0, item1, ...)" format
+        if (routine.OwnerType is TupleTypeInfo tuple)
+        {
+            string tupleStructType = GetTupleTypeName(tuple);
+
+            // Start with "("
+            string tupleCur = EmitSynthesizedStringLiteral("(");
+
+            for (int i = 0; i < tuple.ElementTypes.Count; i++)
+            {
+                TypeInfo elemTypeInfo = tuple.ElementTypes[i];
+                string elemLlvmType = GetLLVMType(elemTypeInfo);
+
+                // Add ", " separator after first element
+                if (i > 0)
+                {
+                    string sep = EmitSynthesizedStringLiteral(", ");
+                    string withSep = NextTemp();
+                    EmitLine(_functionDefinitions, $"  {withSep} = call ptr @rf_text_concat(ptr {tupleCur}, ptr {sep})");
+                    tupleCur = withSep;
+                }
+
+                // Extract element value
+                string elemVal = NextTemp();
+                EmitLine(_functionDefinitions, $"  {elemVal} = extractvalue {tupleStructType} %me, {i}");
+
+                // Convert to Text
+                string elemText = EmitSynthesizedValueToText(elemTypeInfo, elemLlvmType, elemVal);
+
+                // Concat
+                string withElem = NextTemp();
+                EmitLine(_functionDefinitions, $"  {withElem} = call ptr @rf_text_concat(ptr {tupleCur}, ptr {elemText})");
+                tupleCur = withElem;
+            }
+
+            // Append ")"
+            string closeParen = EmitSynthesizedStringLiteral(")");
+            string tupleResult = NextTemp();
+            EmitLine(_functionDefinitions, $"  {tupleResult} = call ptr @rf_text_concat(ptr {tupleCur}, ptr {closeParen})");
+            EmitLine(_functionDefinitions, $"  ret ptr {tupleResult}");
+            EmitLine(_functionDefinitions, "}");
+            EmitLine(_functionDefinitions, "");
+            return;
+        }
+
         // For choice/flags, just return the type name + tag value as text
         if (routine.OwnerType is ChoiceTypeInfo or FlagsTypeInfo || fields == null)
         {
@@ -1317,7 +1514,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // Filter out secret fields for Text() (but include for to_debug)
+        // Filter out secret fields for __represent__ (but include for __diagnose__)
         var visibleFields = new List<(MemberVariableInfo MV, int Index)>();
         for (int i = 0; i < fields.Count; i++)
         {
@@ -1393,11 +1590,15 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits code to convert a value to Text for synthesized Text()/to_debug() routines.
-    /// Calls Text.__create__(from: T) on the value's type.
+    /// Emits code to convert a value to Text for synthesized __represent__()/__diagnose__() routines.
+    /// Calls Text.__create__(from: T) on the value's type (which delegates to T.__represent__()).
     /// </summary>
     private string EmitSynthesizedValueToText(TypeInfo fieldType, string llvmType, string value)
     {
+        // Text fields need no conversion
+        if (fieldType.Name == "Text")
+            return value;
+
         // Look up the Text.__create__ overload for this specific parameter type
         RoutineInfo? createRoutine = _registry.LookupRoutineOverload("Text.__create__", [fieldType])
                                      ?? _registry.LookupRoutine("Text.__create__");
@@ -1449,7 +1650,7 @@ public partial class LLVMCodeGenerator
             case RecordTypeInfo { IsSingleMemberVariableWrapper: true }:
             {
                 // Single-value: call hash on the value directly
-                string hashName = Q($"{routine.OwnerType.Name}.hash");
+                string hashName = Q($"{routine.OwnerType.Name}.__hash__");
                 // For primitive wrappers, hash the underlying value
                 string result = NextTemp();
                 EmitLine(_functionDefinitions, $"  {result} = mul i64 %me, 2654435761");
@@ -1474,7 +1675,7 @@ public partial class LLVMCodeGenerator
                     EmitLine(_functionDefinitions, $"  {field} = extractvalue {typeName} %me, {i}");
 
                     // Call field.hash()
-                    string fieldHashName = Q($"{mv.Type.Name}.hash");
+                    string fieldHashName = Q($"{mv.Type.Name}.__hash__");
                     string fieldHash = NextTemp();
                     EmitLine(_functionDefinitions, $"  {fieldHash} = call i64 @{fieldHashName}({fieldType} {field})");
 
@@ -1486,6 +1687,41 @@ public partial class LLVMCodeGenerator
                     {
                         string xorResult = NextTemp();
                         EmitLine(_functionDefinitions, $"  {xorResult} = xor i64 {accum}, {fieldHash}");
+                        accum = xorResult;
+                    }
+                }
+                EmitLine(_functionDefinitions, $"  ret i64 {accum}");
+                break;
+            }
+            case TupleTypeInfo tuple:
+            {
+                if (tuple.ElementTypes.Count == 0)
+                {
+                    EmitLine(_functionDefinitions, "  ret i64 0");
+                    break;
+                }
+
+                string tupleStructType = GetTupleTypeName(tuple);
+                string accum = "0";
+                for (int i = 0; i < tuple.ElementTypes.Count; i++)
+                {
+                    TypeInfo elemType = tuple.ElementTypes[i];
+                    string elemLlvmType = GetLLVMType(elemType);
+                    string elem = NextTemp();
+                    EmitLine(_functionDefinitions, $"  {elem} = extractvalue {tupleStructType} %me, {i}");
+
+                    string elemHashName = Q($"{elemType.Name}.__hash__");
+                    string elemHash = NextTemp();
+                    EmitLine(_functionDefinitions, $"  {elemHash} = call i64 @{elemHashName}({elemLlvmType} {elem})");
+
+                    if (accum == "0")
+                    {
+                        accum = elemHash;
+                    }
+                    else
+                    {
+                        string xorResult = NextTemp();
+                        EmitLine(_functionDefinitions, $"  {xorResult} = xor i64 {accum}, {elemHash}");
                         accum = xorResult;
                     }
                 }
@@ -1588,10 +1824,16 @@ public partial class LLVMCodeGenerator
         string paramLlvmType = GetParameterLLVMType(paramType);
         string paramName = routine.Parameters[0].Name;
 
-        // Text.__create__(from: T) → T.Text()
-        string textMethodName = Q($"{paramType.Name}.Text");
+        // Text.__create__(from: T) → T.__represent__()
+        // Look up and declare the __represent__() method so it gets generated
+        RoutineInfo? textMethod = _registry.LookupMethod(paramType, "__represent__");
+        if (textMethod != null)
+            GenerateFunctionDeclaration(textMethod);
+        string textMethodName = textMethod != null
+            ? MangleFunctionName(textMethod)
+            : Q($"{paramType.Name}.__represent__");
 
-        EmitLine(_functionDefinitions, $"define ptr @{funcName}(ptr %me, {paramLlvmType} %{paramName}) {{");
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}({paramLlvmType} %{paramName}) {{");
         EmitLine(_functionDefinitions, "entry:");
         string result = NextTemp();
         EmitLine(_functionDefinitions, $"  {result} = call ptr @{textMethodName}({paramLlvmType} %{paramName})");
@@ -1618,7 +1860,7 @@ public partial class LLVMCodeGenerator
         ulong typeId = ComputeTypeId(paramType.FullName);
         long dataSize = ComputeDataSize(paramType);
 
-        EmitLine(_functionDefinitions, $"define ptr @{funcName}(ptr %me, {paramLlvmType} %{paramName}) {{");
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}({paramLlvmType} %{paramName}) {{");
         EmitLine(_functionDefinitions, "entry:");
 
         // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
@@ -2169,7 +2411,7 @@ public partial class LLVMCodeGenerator
     private static ulong ComputeTypeId(string fullName)
     {
         ulong hash = 14695981039346656037UL; // FNV-1a offset basis
-        foreach (byte b in System.Text.Encoding.UTF8.GetBytes(fullName))
+        foreach (byte b in Encoding.UTF8.GetBytes(fullName))
         {
             hash ^= b;
             hash *= 1099511628211UL; // FNV-1a prime
