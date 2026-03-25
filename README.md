@@ -184,7 +184,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **No Lifetime Annotations**: Tokens cannot be returned from routines = safety without complexity
 - **Pay Only for What You Use**: No hidden costs, explicit tradeoffs
 - **Danger Blocks**: Opt-in unsafe operations (`danger!`) for zero-overhead code
-- **Five Data Types**: `record`, `resident`, `entity`, `choice`, `variant`
+- **Five Data Types**: `record`, `entity`, `choice`, `variant`, `protocol`
 - **Explicit Concurrency**: `Shared[T, Policy]` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
 - **Freestanding Mode**: Bare metal programming without runtime
 - **C Subsystem**: Full FFI with C libraries
@@ -223,8 +223,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 
 - [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Theatrical memory management (view, hijack, retain, steal)
 - [Concurrency Model](https://razorforge.lumi-dev.xyz/Concurrency-Model) — `Shared[T, Policy]`, threading, message passing
-- [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) — Records, entities, residents, choices, variants, mutants
-- [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types for embedded systems
+- [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) — Records, entities, choices, variants, protocols
 - [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) — Unsafe operations and raw memory access
 - [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) — FFI and C interop
 - [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
@@ -251,7 +250,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Pattern Matching](https://razorforge.lumi-dev.xyz/Pattern-Matching) — `when` expressions
 - [Generics](https://razorforge.lumi-dev.xyz/Generics) — Generic programming
 - [Protocols](https://razorforge.lumi-dev.xyz/Protocols) — Interface definitions
-- [Attributes](https://razorforge.lumi-dev.xyz/Attributes) — Metadata and annotations
+- [Annotations](https://razorforge.lumi-dev.xyz/Annotations) — Metadata annotations
 - [Modules and Imports](https://razorforge.lumi-dev.xyz/Modules-and-Imports) — Module system
 
 ### System Reference
@@ -260,8 +259,8 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Runtime](https://razorforge.lumi-dev.xyz/Runtime) — Runtime information
 - [Console I/O](https://razorforge.lumi-dev.xyz/Console-IO) — Terminal input/output
 - [File I/O](https://razorforge.lumi-dev.xyz/File-IO) — File system operations
-- [DateTime & Duration](https://razorforge.lumi-dev.xyz/DateTime-Duration) — Time handling
-- [Memory Size Literals](https://razorforge.lumi-dev.xyz/Memory-Size-Literals) — Size units (KiB, MiB)
+- [Temporal Types](https://razorforge.lumi-dev.xyz/Temporal-Types) — Moment and Duration (point + vector time model)
+- [Memory Types](https://razorforge.lumi-dev.xyz/Memory-Types) — Address and ByteSize (point + vector memory model)
 
 ---
 
@@ -291,8 +290,7 @@ Start with Suflae for productivity, gradually learn RazorForge for control:
 1. Master Suflae basics (Path 1)
 2. [Choosing Between Languages](https://razorforge.lumi-dev.xyz/Choosing-Language) — When to use each
 3. [RazorForge Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Understanding explicit control
-4. [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types
-5. [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
+4. [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
 ---
 
 ## Examples
