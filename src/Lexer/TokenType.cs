@@ -263,13 +263,6 @@ public enum TokenType
     Variant,
 
     /// <summary>
-    /// Resident declaration keyword (RazorForge only).
-    /// Hybrid fixed-size reference type for permanent, foundational objects.
-    /// Lives in persistent memory space with stable address.
-    /// </summary>
-    Resident,
-
-    /// <summary>
     /// Protocol declaration keyword.
     /// Interface/trait contract defining method signatures that types must implement.
     /// Types use 'obeys' keyword to implement protocols.

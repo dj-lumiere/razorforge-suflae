@@ -291,10 +291,6 @@ public sealed partial class SemanticAnalyzer
                     ValidateReferenceTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
                     break;
 
-                case ConstraintKind.ResidentType:
-                    ValidateResidentTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
-                    break;
-
                 case ConstraintKind.RoutineType:
                     ValidateRoutineTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
                     break;
@@ -412,24 +408,6 @@ public sealed partial class SemanticAnalyzer
             ReportError(
                 SemanticDiagnosticCode.ReferenceTypeConstraintViolation,
                 $"Type '{typeArg.Name}' is not a reference type (entity) required by constraint on '{constraint.ParameterName}'.",
-                location);
-        }
-    }
-
-    /// <summary>
-    /// Validates that a type argument satisfies a <c>residenttype</c> constraint,
-    /// requiring the argument to be a resident type.
-    /// </summary>
-    private void ValidateResidentTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
-    {
-        if (typeArg.Category != TypeCategory.Resident)
-        {
-            ReportError(
-                SemanticDiagnosticCode.ResidentTypeConstraintViolation,
-                $"Type '{typeArg.Name}' is not a resident type required by constraint on '{constraint.ParameterName}'.",
                 location);
         }
     }

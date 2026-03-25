@@ -229,7 +229,6 @@ public partial class Parser
     /// TYPE KIND CONSTRAINTS (is):
     ///   [T is record]    - Must be a value type (record)
     ///   [T is entity]    - Must be a reference type (entity)
-    ///   [T is resident]  - Must be a resident type
     ///   [T is routine]   - Must be a routine type
     ///   [T is choice]    - Must be a choice type
     ///   [T is variant]   - Must be a variant type
@@ -284,7 +283,7 @@ public partial class Parser
             // ─────────────────────────────────────────────────────────────────────
             // CONSTRAINT TYPE 2: is - type kind or const generic
             // ─────────────────────────────────────────────────────────────────────
-            // Type kinds: T is record/entity/resident/routine/choice/variant
+            // Type kinds: T is record/entity/routine/choice/variant
             // Const generic: N is S32 (N is a build-time S32 value)
             else if (Match(type: TokenType.Is))
             {
@@ -299,13 +298,6 @@ public partial class Parser
                 {
                     inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                         ConstraintType: ConstraintKind.ReferenceType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Resident))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
-                        ConstraintType: ConstraintKind.ResidentType,
                         ConstraintTypes: null,
                         Location: location));
                 }
@@ -350,7 +342,7 @@ public partial class Parser
                 else
                 {
                     throw ThrowParseError(GrammarDiagnosticCode.InvalidConstraintKind,
-                        "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
+                        "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
                 }
             }
             // ─────────────────────────────────────────────────────────────────────
@@ -396,7 +388,7 @@ public partial class Parser
     ///
     /// The same constraint kinds are supported as inline constraints:
     /// - obeys: protocol conformance
-    /// - is: type kind (record/entity/resident/routine/choice/variant) or const generic
+    /// - is: type kind (record/entity/routine/choice/variant) or const generic
     /// - in: type equality (must be one of listed types)
     ///
     /// Multiple needs clauses can be chained, or constraints can be comma-separated:
@@ -459,7 +451,7 @@ public partial class Parser
                 }
                 else if (Match(type: TokenType.Is))
                 {
-                    // T is record/entity/resident/routine/choice/variant or N is Address (const generic)
+                    // T is record/entity/routine/choice/variant or N is Address (const generic)
                     if (Match(type: TokenType.Record))
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
@@ -471,13 +463,6 @@ public partial class Parser
                     {
                         constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
                             ConstraintType: ConstraintKind.ReferenceType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Resident))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
-                            ConstraintType: ConstraintKind.ResidentType,
                             ConstraintTypes: null,
                             Location: location));
                     }
@@ -522,7 +507,7 @@ public partial class Parser
                     else
                     {
                         throw ThrowParseError(GrammarDiagnosticCode.InvalidConstraintKind,
-                            "Expected 'record', 'entity', 'resident', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
+                            "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))

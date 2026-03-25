@@ -6,7 +6,7 @@ using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing type declarations: record, entity, resident, choice, variant, protocol.
+/// Tests for parsing type declarations: record, entity, choice, variant, protocol.
 /// </summary>
 public class TypeDeclarationTests
 {
@@ -149,40 +149,6 @@ public class TypeDeclarationTests
         Assert.Equal(expected: 2, actual: entity.GenericParameters.Count);
         Assert.NotNull(@object: entity.GenericConstraints);
         Assert.Equal(expected: 3, actual: entity.GenericConstraints.Count);
-    }
-
-    #endregion
-
-    #region Resident Tests
-
-    [Fact]
-    public void Parse_SimpleResident()
-    {
-        string source = """
-                        resident SystemLogger
-                          log_count: U32
-                        """;
-
-        Program program = AssertParses(source: source);
-        ResidentDeclaration resident = GetDeclaration<ResidentDeclaration>(program: program);
-
-        Assert.Equal(expected: "SystemLogger", actual: resident.Name);
-    }
-
-    [Fact]
-    public void Parse_GenericResident_WithConstGeneric()
-    {
-        string source = """
-                        resident FixedBuffer[T, N]
-                        needs N is uaddr
-                          data: T
-                        """;
-
-        Program program = AssertParses(source: source);
-        ResidentDeclaration resident = GetDeclaration<ResidentDeclaration>(program: program);
-
-        Assert.NotNull(@object: resident.GenericParameters);
-        Assert.Equal(expected: 2, actual: resident.GenericParameters.Count);
     }
 
     #endregion
@@ -402,6 +368,39 @@ public class TypeDeclarationTests
 
         Assert.Equal(expected: "greet", actual: routine.Name);
         Assert.Single(collection: routine.Parameters);
+    }
+
+    [Fact]
+    public void Parse_VariadicRoutine()
+    {
+        string source = """
+                        routine alert(values...: Text)
+                          pass
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+
+        Assert.Equal(expected: "alert", actual: routine.Name);
+        Assert.Single(collection: routine.Parameters);
+        Assert.True(condition: routine.Parameters[0].IsVariadic);
+        Assert.Equal(expected: "values", actual: routine.Parameters[0].Name);
+    }
+
+    [Fact]
+    public void Parse_VariadicRoutine_WithConstraint()
+    {
+        string source = """
+                        routine show_all[T](values...: T) needs T obeys Representable
+                          pass
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+
+        Assert.Equal(expected: "show_all", actual: routine.Name);
+        Assert.Single(collection: routine.Parameters);
+        Assert.True(condition: routine.Parameters[0].IsVariadic);
     }
 
     [Fact]

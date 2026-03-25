@@ -46,7 +46,7 @@ public record PassDeclaration(SourceLocation Location) : Declaration(Location: L
 /// <item>Protocol constraint: where T obeys Comparable</item>
 /// <item>Value type constraint: where T is record</item>
 /// <item>Reference type constraint: where T is entity</item>
-/// <item>Resident type constraint: where T is resident</item>
+/// <item>Routine type constraint: where T is routine</item>
 /// </list>
 /// </remarks>
 public record GenericConstraintDeclaration(
@@ -220,43 +220,6 @@ public record RecordDeclaration(
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitRecordDeclaration(node: this);
-    }
-}
-
-/// <summary>
-/// Resident declaration for permanent fixed-size reference types.
-/// Residents combine record's fixed size with entity's reference semantics.
-/// </summary>
-/// <param name="Name">Resident identifier name</param>
-/// <param name="GenericParameters">Optional list of generic type parameter names</param>
-/// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">Field and method declarations within the resident</param>
-/// <param name="Visibility">Access control modifier</param>
-/// <param name="Location">Source location information</param>
-/// <param name="GenericConstraints">Optional generic type constraints (where clause)</param>
-/// <remarks>
-/// Residents are permanent, foundational objects with:
-/// <list type="bullet">
-/// <item>Fixed size at build time (like records)</item>
-/// <item>Reference semantics (like entities)</item>
-/// <item>Internal mutability (like entities)</item>
-/// <item>Persistent memory allocation</item>
-/// <item>Stable memory addresses (no moving GC)</item>
-/// </list>
-/// </remarks>
-public record ResidentDeclaration(
-    string Name,
-    List<string>? GenericParameters,
-    List<TypeExpression> Protocols,
-    List<Declaration> Members,
-    VisibilityModifier Visibility,
-    SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null,
-    bool HasPassBody = false) : Declaration(Location: Location)
-{
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitResidentDeclaration(node: this);
     }
 }
 

@@ -81,10 +81,24 @@ public sealed class StdlibLoader
         ScanStdlibFiles();
 
         // Three-pass registration ensures protocols exist before types reference them in 'obeys' clauses.
-        // Pass 1a: Register all protocols first (so 'obeys' clauses can resolve)
+        // Pass 1a: Register all protocol type shells first (names + generic params, no methods yet)
         foreach (var (program, _, ns) in _corePrograms)
         {
-            RegisterProgramProtocols(registry, program, ns);
+            foreach (var node in program.Declarations)
+            {
+                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                    RegisterProtocolTypeShell(registry, protocol, ns);
+            }
+        }
+
+        // Pass 1a.1: Fill in protocol method signatures (all protocols are now registered for cross-refs)
+        foreach (var (program, _, _) in _corePrograms)
+        {
+            foreach (var node in program.Declarations)
+            {
+                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                    FillProtocolMethods(registry, protocol);
+            }
         }
 
         // Pass 1a.2: Resolve parent protocol hierarchies (now that all protocols are registered)
@@ -105,6 +119,14 @@ public sealed class StdlibLoader
         foreach (var (program, _, ns) in _corePrograms)
         {
             ResolveProgramMemberVariables(registry, program);
+        }
+
+        // Pass 1d: Re-resolve protocol conformances now that all types are registered.
+        // Protocol arguments may reference types not yet registered during Pass 1b
+        // (e.g., EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]] needs S64).
+        foreach (var (program, _, ns) in _corePrograms)
+        {
+            ResolveProgramProtocolConformances(registry, program);
         }
 
         // Pass 2: Register all routines (now all types are available for return type resolution)
@@ -284,9 +306,22 @@ public sealed class StdlibLoader
         _loadedModules.Add(moduleName);
 
         // Three-pass registration: protocols first, then other types, then routines
+        // Register protocol shells across all files first, then fill in methods
         foreach (var (program, _, ns) in programs)
         {
-            RegisterProgramProtocols(registry, program, ns);
+            foreach (var node in program.Declarations)
+            {
+                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                    RegisterProtocolTypeShell(registry, protocol, ns);
+            }
+        }
+        foreach (var (program, _, _) in programs)
+        {
+            foreach (var node in program.Declarations)
+            {
+                if (node is SyntaxTree.ProtocolDeclaration protocol)
+                    FillProtocolMethods(registry, protocol);
+            }
         }
 
         foreach (var (program, _, _) in programs)
@@ -297,6 +332,11 @@ public sealed class StdlibLoader
         foreach (var (program, _, ns) in programs)
         {
             RegisterProgramTypes(registry, program, ns);
+        }
+
+        foreach (var (program, _, ns) in programs)
+        {
+            ResolveProgramProtocolConformances(registry, program);
         }
 
         foreach (var (program, _, ns) in programs)
@@ -404,14 +444,27 @@ public sealed class StdlibLoader
     /// <summary>
     /// Registers protocol declarations from a program.
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
+    /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
+    /// method signatures. This ensures forward references between protocols resolve correctly
+    /// (e.g., Sequenceable[T].__seq__() → SequenceEmitter[T] where SequenceEmitter is another protocol).
     /// </summary>
     private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string moduleName)
     {
+        // Pass 1: Register protocol type shells (no methods yet)
         foreach (var node in program.Declarations)
         {
             if (node is ProtocolDeclaration protocol)
             {
-                RegisterProtocolType(registry, protocol, moduleName);
+                RegisterProtocolTypeShell(registry, protocol, moduleName);
+            }
+        }
+
+        // Pass 2: Fill in method signatures (now all protocols are registered for cross-references)
+        foreach (var node in program.Declarations)
+        {
+            if (node is ProtocolDeclaration protocol)
+            {
+                FillProtocolMethods(registry, protocol);
             }
         }
     }
@@ -431,9 +484,6 @@ public sealed class StdlibLoader
             {
                 case RecordDeclaration record:
                     RegisterRecordType(registry, record, moduleName);
-                    break;
-                case ResidentDeclaration resident:
-                    RegisterResidentType(registry, resident, moduleName);
                     break;
                 case EntityDeclaration entity:
                     RegisterEntityType(registry, entity, moduleName);
@@ -488,20 +538,62 @@ public sealed class StdlibLoader
                         existing.MemberVariables = members;
                     break;
                 }
-                case ResidentDeclaration resident:
+            }
+        }
+    }
+
+    /// <summary>
+    /// Re-resolves protocol conformances for types whose protocol arguments contain
+    /// forward-referenced types (e.g., EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]]
+    /// where S64 wasn't registered during initial entity registration).
+    /// Called after all type shells are registered.
+    /// </summary>
+    private static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program)
+    {
+        foreach (var node in program.Declarations)
+        {
+            switch (node)
+            {
+                case EntityDeclaration entity when entity.Protocols.Count > 0:
                 {
-                    var existing = registry.LookupType(resident.Name) as ResidentTypeInfo;
-                    int expectedCount = resident.Members.Count(m => m is VariableDeclaration { Type: not null });
-                    if (existing == null || existing.MemberVariables.Count >= expectedCount)
+                    var existing = registry.LookupType(entity.Name) as EntityTypeInfo;
+                    if (existing == null || existing.ImplementedProtocols.Count >= entity.Protocols.Count)
                         continue;
 
-                    var members = ResolveMemberVariables(registry, resident.Members, resident.GenericParameters);
-                    if (members.Count > existing.MemberVariables.Count)
-                        existing.MemberVariables = members;
+                    var protocols = ResolveProtocolList(registry, entity.Protocols, entity.GenericParameters);
+                    if (protocols.Count > existing.ImplementedProtocols.Count)
+                        existing.ImplementedProtocols = protocols;
+                    break;
+                }
+                case RecordDeclaration record when record.Protocols.Count > 0:
+                {
+                    var existing = registry.LookupType(record.Name) as RecordTypeInfo;
+                    if (existing == null || existing.ImplementedProtocols.Count >= record.Protocols.Count)
+                        continue;
+
+                    var protocols = ResolveProtocolList(registry, record.Protocols, record.GenericParameters);
+                    if (protocols.Count > existing.ImplementedProtocols.Count)
+                        existing.ImplementedProtocols = protocols;
                     break;
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves a list of protocol type expressions into TypeInfo instances.
+    /// </summary>
+    private static List<TypeInfo> ResolveProtocolList(TypeRegistry registry,
+        IReadOnlyList<TypeExpression> protoExprs, IReadOnlyList<string>? genericParams)
+    {
+        var result = new List<TypeInfo>();
+        foreach (var protoExpr in protoExprs)
+        {
+            var protoType = ResolveSimpleType(registry, protoExpr, genericParams);
+            if (protoType != null)
+                result.Add(protoType);
+        }
+        return result;
     }
 
     /// <summary>
@@ -851,59 +943,6 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a resident type from stdlib.
-    /// Residents are fixed-size reference types with stable memory addresses.
-    /// </summary>
-    private static void RegisterResidentType(TypeRegistry registry, ResidentDeclaration resident,
-        string moduleName)
-    {
-        // Skip if already registered
-        if (registry.LookupType(resident.Name) != null)
-        {
-            return;
-        }
-
-        // Build member variables list upfront
-        var memberVariables = new List<SemanticAnalysis.Symbols.MemberVariableInfo>();
-        foreach (var member in resident.Members)
-        {
-            if (member is VariableDeclaration { Type: not null } memberVariable)
-            {
-                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, resident.GenericParameters);
-                if (memberVariableType != null)
-                {
-                    memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
-                    {
-                        Visibility = memberVariable.Visibility
-                    });
-                }
-            }
-        }
-
-        // Resolve implemented protocols (obeys clause)
-        var protocols = new List<TypeInfo>();
-        foreach (var protoExpr in resident.Protocols)
-        {
-            var protoType = ResolveSimpleType(registry, protoExpr, resident.GenericParameters);
-            if (protoType != null)
-            {
-                protocols.Add(protoType);
-            }
-        }
-
-        var typeInfo = new ResidentTypeInfo(resident.Name)
-        {
-            Module = moduleName,
-            Visibility = resident.Visibility,
-            MemberVariables = memberVariables,
-            ImplementedProtocols = protocols,
-            GenericParameters = resident.GenericParameters
-        };
-
-        registry.RegisterType(typeInfo);
-    }
-
-    /// <summary>
     /// Registers a choice type from stdlib.
     /// </summary>
     private static void RegisterChoiceType(TypeRegistry registry, ChoiceDeclaration choice,
@@ -999,23 +1038,52 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a protocol type from stdlib.
+    /// Registers a protocol type from stdlib (single-pass: registers type and methods together).
+    /// Used by RegisterProgramTypes (pass 1b) for protocols encountered outside the two-pass path.
     /// </summary>
     private static void RegisterProtocolType(TypeRegistry registry, ProtocolDeclaration protocol,
         string moduleName)
     {
+        RegisterProtocolTypeShell(registry, protocol, moduleName);
+        FillProtocolMethods(registry, protocol);
+    }
+
+    /// <summary>
+    /// Registers a protocol type shell (name, generic params) without method signatures.
+    /// This is the first pass of protocol registration — ensures all protocol types exist
+    /// before method signatures are resolved (which may reference other protocols).
+    /// </summary>
+    private static void RegisterProtocolTypeShell(TypeRegistry registry, ProtocolDeclaration protocol,
+        string moduleName)
+    {
         // Skip if already registered
         if (registry.LookupType(protocol.Name) != null)
-        {
             return;
-        }
 
-        // Build methods list upfront
+        var typeInfo = new ProtocolTypeInfo(protocol.Name)
+        {
+            Module = moduleName,
+            Visibility = protocol.Visibility,
+            Methods = [], // Filled in by FillProtocolMethods
+            GenericParameters = protocol.GenericParameters
+        };
+
+        registry.RegisterType(typeInfo);
+    }
+
+    /// <summary>
+    /// Fills in method signatures for a previously registered protocol type.
+    /// This is the second pass — all protocols are registered, so cross-references resolve.
+    /// </summary>
+    private static void FillProtocolMethods(TypeRegistry registry, ProtocolDeclaration protocol)
+    {
+        var existing = registry.LookupType(protocol.Name) as ProtocolTypeInfo;
+        if (existing == null || existing.Methods.Count > 0)
+            return; // Already has methods or not found
+
         var methods = new List<ProtocolMethodInfo>();
         foreach (var method in protocol.Methods)
         {
-            // Strip "!" suffix and "Me." prefix from method name
-            // (Parser stores raw names like "Me.__eq__" or "Me.__add__!")
             string rawName = method.Name;
             bool isFailable = rawName.EndsWith('!');
             string fullName = isFailable ? rawName[..^1] : rawName;
@@ -1031,10 +1099,8 @@ public sealed class StdlibLoader
 
             foreach (var param in method.Parameters)
             {
-                // Skip the 'me' parameter - it's implicit for instance methods
                 if (param.Name == "me") continue;
 
-                // Handle the special 'Me' type (protocol self-type)
                 var paramType = param.Type?.Name == "Me"
                     ? ProtocolSelfTypeInfo.Instance
                     : ResolveSimpleType(registry, param.Type, protocol.GenericParameters);
@@ -1045,7 +1111,6 @@ public sealed class StdlibLoader
                 }
             }
 
-            // Handle the special 'Me' type in return type
             var resolvedReturnType = method.ReturnType?.Name == "Me"
                 ? ProtocolSelfTypeInfo.Instance
                 : returnType;
@@ -1060,15 +1125,7 @@ public sealed class StdlibLoader
             });
         }
 
-        var typeInfo = new ProtocolTypeInfo(protocol.Name)
-        {
-            Module = moduleName,
-            Visibility = protocol.Visibility,
-            Methods = methods,
-            GenericParameters = protocol.GenericParameters
-        };
-
-        registry.RegisterType(typeInfo);
+        existing.Methods = methods;
     }
 
     /// <summary>
@@ -1102,7 +1159,7 @@ public sealed class StdlibLoader
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
             // Tuple types are not registered as generic definitions — handle specially
-            if (typeName is "Tuple" or "ValueTuple" or "FixedTuple")
+            if (typeName is "Tuple" or "ValueTuple")
             {
                 var elemTypes = new List<TypeInfo>();
                 foreach (var argExpr in typeExpr.GenericArguments)
@@ -1114,7 +1171,6 @@ public sealed class StdlibLoader
                 TupleKind kind = typeName switch
                 {
                     "ValueTuple" => TupleKind.Value,
-                    "FixedTuple" => TupleKind.Fixed,
                     _ => elemTypes.Any(e => e is GenericParameterTypeInfo || e.Category == TypeCategory.Entity)
                         ? TupleKind.Reference : TupleKind.Value
                 };

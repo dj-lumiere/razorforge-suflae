@@ -15,6 +15,9 @@ public sealed class ChoiceTypeInfo : TypeInfo
     /// <summary>The cases (variants) of this choice.</summary>
     public IReadOnlyList<ChoiceCaseInfo> Cases { get; init; } = [];
 
+    /// <summary>Protocols this choice implements (obeys).</summary>
+    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
+
     /// <summary>
     /// Whether all cases have explicit values.
     /// Numbering must be all-or-nothing.

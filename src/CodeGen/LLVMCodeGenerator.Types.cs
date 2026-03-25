@@ -55,9 +55,6 @@ public partial class LLVMCodeGenerator
             // Entities → pointer to LLVM struct
             EntityTypeInfo => "ptr",
 
-            // Residents → pointer to LLVM struct (same as entity at IR level)
-            ResidentTypeInfo => "ptr",
-
             // Wrappers (Viewed, Hijacked, Snatched, etc.) → all pointers at LLVM level
             WrapperTypeInfo => "ptr",
 
@@ -66,7 +63,6 @@ public partial class LLVMCodeGenerator
 
             // Tuples → struct (value) or pointer (reference)
             TupleTypeInfo { Kind: TupleKind.Value } tuple => GetTupleTypeName(tuple),
-            TupleTypeInfo { Kind: TupleKind.Fixed } tuple => GetTupleTypeName(tuple),
             TupleTypeInfo => "ptr", // Reference tuples are heap-allocated
 
             // Variants → struct { tag, payload }
@@ -138,14 +134,6 @@ public partial class LLVMCodeGenerator
     private static string GetEntityTypeName(EntityTypeInfo entity)
     {
         return $"%{Q($"Entity.{entity.Name}")}";
-    }
-
-    /// <summary>
-    /// Gets the LLVM struct type name for a resident.
-    /// </summary>
-    private static string GetResidentTypeName(ResidentTypeInfo resident)
-    {
-        return $"%{Q($"Resident.{resident.Name}")}";
     }
 
     /// <summary>
@@ -237,7 +225,6 @@ public partial class LLVMCodeGenerator
         {
             // Entities are always passed as pointers
             EntityTypeInfo => "ptr",
-            ResidentTypeInfo => "ptr",
 
             // Other types use normal mapping
             _ => GetLLVMType(type)
@@ -258,7 +245,6 @@ public partial class LLVMCodeGenerator
                 GetTypeSize(record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record),
             EntityTypeInfo entity => CalculateEntitySize(entity),
-            ResidentTypeInfo resident => CalculateResidentSize(resident),
             TupleTypeInfo tuple => CalculateTupleSize(tuple),
             WrapperTypeInfo => 8, // Pointer size
             ChoiceTypeInfo => 8, // i64 tag
@@ -339,22 +325,6 @@ public partial class LLVMCodeGenerator
     {
         int size = 0;
         foreach (var memberVariable in entity.MemberVariables)
-        {
-            int memberVariableSize = GetTypeSize(memberVariable.Type);
-            int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);
-            size = AlignTo(size, alignment);
-            size += memberVariableSize;
-        }
-        return AlignTo(size, 8);
-    }
-
-    /// <summary>
-    /// Calculates the size of a resident type.
-    /// </summary>
-    private int CalculateResidentSize(ResidentTypeInfo resident)
-    {
-        int size = 0;
-        foreach (var memberVariable in resident.MemberVariables)
         {
             int memberVariableSize = GetTypeSize(memberVariable.Type);
             int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);

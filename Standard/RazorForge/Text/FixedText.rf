@@ -1,5 +1,0 @@
-module Text
-
-resident FixedText[N]
-needs N is U64
-  secret letters: FixedList[Letter, N]

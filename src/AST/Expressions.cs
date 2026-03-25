@@ -614,7 +614,8 @@ public record RangeExpression(
     Expression End,
     Expression? Step,
     bool IsDescending,
-    SourceLocation Location) : Expression(Location: Location)
+    SourceLocation Location,
+    bool IsExclusive = false) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(IAstVisitor<T> visitor)

@@ -860,6 +860,9 @@ public sealed partial class SemanticAnalyzer
 
         // Try to look up as variable first
         VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
+        // Try current module prefix for presets (e.g., "MY_CONST" → "MyModule.MY_CONST")
+        if (varInfo == null && _currentModuleName != null && !id.Name.Contains('.'))
+            varInfo = _registry.LookupVariable(name: $"{_currentModuleName}.{id.Name}");
         if (varInfo != null)
         {
             // #11: Deadref tracking — report error if variable was invalidated by steal
@@ -1523,7 +1526,6 @@ public sealed partial class SemanticAnalyzer
                 {
                     EntityTypeInfo e => e.MemberVariables.Count,
                     RecordTypeInfo r => r.MemberVariables.Count,
-                    ResidentTypeInfo res => res.MemberVariables.Count,
                     _ => 0
                 };
                 if (memberCount >= 2)
@@ -1619,16 +1621,6 @@ public sealed partial class SemanticAnalyzer
                     "Cannot hijack a member of an already-hijacked object. " +
                     "Hijack the parent entity directly instead.",
                     call.Location);
-            }
-
-            // #54: Residents cannot use .share() or .track() — they have program lifetime
-            if (objectType is ResidentTypeInfo && member.PropertyName is "share" or "track")
-            {
-                ReportError(
-                    SemanticDiagnosticCode.ResidentShareTrackProhibited,
-                    $"Residents cannot use '.{member.PropertyName}()' — they have program lifetime.",
-                    member.Location);
-                return ErrorTypeInfo.Instance;
             }
 
             string callLookupName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
@@ -1786,17 +1778,17 @@ public sealed partial class SemanticAnalyzer
                         call.Location);
                 }
 
-                // #100/#101: inspect!/seize! only valid on locked residents or Shared entity handles
+                // #100/#101: inspect!/seize! only valid on Shared entity handles
                 if (member.PropertyName is "inspect" or "seize"
-                    && !IsResidentType(type: objectType) && !IsSharedType(type: objectType)
+                    && !IsSharedType(type: objectType)
                     && objectType is not ErrorTypeInfo)
                 {
                     ReportError(
                         member.PropertyName == "inspect"
                             ? SemanticDiagnosticCode.InspectRequiresMultiRead
                             : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                        $"'{member.PropertyName}!()' is only valid on locked residents or Shared handles. " +
-                        $"'{objectType.Name}' is neither.",
+                        $"'{member.PropertyName}!()' is only valid on Shared handles. " +
+                        $"'{objectType.Name}' is not a Shared handle.",
                         call.Location);
                 }
 
@@ -1861,17 +1853,6 @@ public sealed partial class SemanticAnalyzer
                                 call.Location);
                         }
                     }
-                }
-
-                // #56: Resident .lock!() can only be called at global initialization time
-                if (member.PropertyName == "lock" && IsResidentType(type: objectType)
-                    && _currentRoutine != null)
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.ResidentLockTimingRestriction,
-                        $"'.lock!()' on resident '{objectType.Name}' can only be called at global initialization time, " +
-                        "not inside a routine body. Lock your residents at program startup.",
-                        call.Location);
                 }
 
                 // #104/#23: Channel send() makes source variable a deadref
@@ -2071,26 +2052,6 @@ public sealed partial class SemanticAnalyzer
         else if (objectType is EntityTypeInfo entity)
         {
             MemberVariableInfo? memberVariable = entity.LookupMemberVariable(memberVariableName: member.PropertyName);
-            if (memberVariable != null)
-            {
-                // Validate member variable access (read access)
-                ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: false, accessLocation: member.Location);
-                return memberVariable.Type;
-            }
-        }
-        else if (objectType is ResidentTypeInfo resident)
-        {
-            // #54: Residents cannot use .share() or .track() — they have program lifetime
-            if (member.PropertyName is "share" or "track")
-            {
-                ReportError(
-                    SemanticDiagnosticCode.ResidentShareTrackProhibited,
-                    $"Residents cannot use '.{member.PropertyName}()' — they have program lifetime.",
-                    member.Location);
-                return ErrorTypeInfo.Instance;
-            }
-
-            MemberVariableInfo? memberVariable = resident.LookupMemberVariable(memberVariableName: member.PropertyName);
             if (memberVariable != null)
             {
                 // Validate member variable access (read access)
@@ -2673,7 +2634,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,
-            ResidentTypeInfo resident => resident.MemberVariables,
             _ => null
         };
 
@@ -2891,40 +2851,11 @@ public sealed partial class SemanticAnalyzer
 
         // Determine tuple kind based on element types:
         // ValueTuple: all elements are value types (Record, Choice, Variant, ValueTuple)
-        // FixedTuple: all elements are resident-compatible (records + residents, no entities)
         // Tuple: any element is an entity or other reference type
         bool allValueTypes = elementTypes.All(predicate: TypeRegistry.IsValueType);
         if (allValueTypes)
         {
-            // #111: Validate ValueTuple containment — no entities, variants, or tokens
-            foreach (TypeSymbol et in elementTypes)
-            {
-                if (et is VariantTypeInfo or EntityTypeInfo or ResidentTypeInfo or WrapperTypeInfo)
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.ValueTupleContainmentViolation,
-                        $"ValueTuple cannot contain type '{et.Name}'. Only value types (records, choices, primitives) are allowed.",
-                        tuple.Location);
-                }
-            }
             return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Value);
-        }
-
-        bool allResidentCompatible = elementTypes.All(predicate: TypeRegistry.IsResidentCompatible);
-        if (allResidentCompatible)
-        {
-            // #112: Validate FixedTuple containment — no entities or tokens
-            foreach (TypeSymbol et in elementTypes)
-            {
-                if (et is EntityTypeInfo or VariantTypeInfo or WrapperTypeInfo)
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.FixedTupleContainmentViolation,
-                        $"FixedTuple cannot contain type '{et.Name}'. Only records, choices, residents, and other FixedTuples are allowed.",
-                        tuple.Location);
-                }
-            }
-            return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Fixed);
         }
 
         return _registry.GetOrCreateTupleType(elementTypes: elementTypes, kind: TupleKind.Reference);
@@ -3201,7 +3132,7 @@ public sealed partial class SemanticAnalyzer
             typeArgs.Add(item: ResolveType(typeExpr: typeArg));
         }
 
-        // #19: Track lock policy from lock![Policy]() on residents
+        // #19: Track lock policy from lock![Policy]() on entities
         if (generic.MethodName == "lock" && generic.IsMemoryOperation
             && typeArgs.Count > 0 && generic.Object is IdentifierExpression lockTarget)
         {

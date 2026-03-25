@@ -11,7 +11,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Protocol;
 
     /// <summary>Method signatures defined by this protocol.</summary>
-    public IReadOnlyList<ProtocolMethodInfo> Methods { get; init; } =
+    public IReadOnlyList<ProtocolMethodInfo> Methods { get; set; } =
         [];
 
     /// <summary>Parent protocols that this protocol extends.</summary>

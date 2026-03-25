@@ -14,6 +14,9 @@ public sealed class FlagsTypeInfo : TypeInfo
     /// <summary>The members of this flags type.</summary>
     public IReadOnlyList<FlagsMemberInfo> Members { get; init; } = [];
 
+    /// <summary>Protocols this flags type implements (obeys).</summary>
+    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
+
     /// <summary>
     /// Initializes a new instance of the <see cref="FlagsTypeInfo"/> class.
     /// </summary>

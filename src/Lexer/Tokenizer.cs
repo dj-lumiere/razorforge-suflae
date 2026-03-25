@@ -219,7 +219,6 @@ public partial class Tokenizer
             _keywords[key: "danger!"] = TokenType.Danger;
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "external"] = TokenType.External;
-            _keywords[key: "resident"] = TokenType.Resident;
             _keywords[key: "steal"] = TokenType.Steal;
             _keywords[key: "threaded"] = TokenType.Threaded;
         }

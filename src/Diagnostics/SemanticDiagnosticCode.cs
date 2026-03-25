@@ -93,7 +93,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Bitwise 'not' operator requires an integer operand.</summary>
     BitwiseNotRequiresInteger = 57,
 
-    /// <summary>Identity operator (===, !==) only works with entity/resident types.</summary>
+    /// <summary>Identity operator (===, !==) only works with entity types.</summary>
     IdentityOperatorRequiresReference = 58,
 
     /// <summary>Comparison operator cannot be used with variant types.</summary>
@@ -196,9 +196,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Type is not a reference type (entity) as required by constraint.</summary>
     ReferenceTypeConstraintViolation = 152,
-
-    /// <summary>Type is not a resident type as required by constraint.</summary>
-    ResidentTypeConstraintViolation = 153,
 
     /// <summary>Type is not a routine type as required by constraint.</summary>
     RoutineTypeConstraintViolation = 154,
@@ -456,9 +453,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Operand is not a flags type for a flags operator.</summary>
     FlagsTypeMismatch = 431,
 
-    /// <summary>Entity member variable cannot be a resident type (residents are global singletons).</summary>
-    EntityContainsResidentMemberVariable = 432,
-
     /// <summary>Enumeration type (choice, variant, flags) must have at least one member/case.</summary>
     EmptyEnumerationBody = 433,
 
@@ -715,25 +709,13 @@ public enum SemanticDiagnosticCode
     /// <summary>Result/Lookup stored in variable beyond immediate dismantling.</summary>
     ErrorHandlingTypeStoredInVariable = 758,
 
-    /// <summary>Resident types can only be declared as global variables, not local variables.</summary>
-    ResidentAsLocalVariable = 759,
-
-    /// <summary>The 'global' keyword is only valid for resident type variables.</summary>
-    GlobalOnlyForResidents = 760,
-
-    /// <summary>Resident member variables can only contain records, primitives, Snatched[T], or other residents.</summary>
-    ResidentContainsInvalidType = 761,
-
-    /// <summary>Resident types cannot implement Hashable (identity-based, not content-based).</summary>
-    ResidentHashableProhibited = 762,
-
-    /// <summary>Residents cannot use .share() or .track() — they have program lifetime.</summary>
-    ResidentShareTrackProhibited = 763,
+    /// <summary>The 'global' keyword is only valid for entity type variables.</summary>
+    GlobalOnlyForEntities = 760,
 
     /// <summary>Variant case cannot contain nested variants, Result[T], Lookup[T], or tokens.</summary>
     VariantCaseContainsInvalidType = 764,
 
-    /// <summary>Index operators (__getitem__/__setitem__) are only valid on entities and residents.</summary>
+    /// <summary>Index operators (__getitem__/__setitem__) are only valid on entities.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
     /// <summary>Cannot use compound assignment on a read-only token (Viewed or Inspected).</summary>
@@ -780,9 +762,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>ValueTuple can only contain value types (records, primitives, choices).</summary>
     ValueTupleContainmentViolation = 779,
-
-    /// <summary>FixedTuple can only contain records, choices, residents, or other FixedTuples.</summary>
-    FixedTupleContainmentViolation = 780,
 
     /// <summary>Result, Lookup, variants, and tokens cannot be boxed to Data.</summary>
     DataBoxingProhibited = 781,
@@ -868,8 +847,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Channel send() makes source variable a deadref.</summary>
     ChannelSendOwnershipTransfer = 915,
 
-    /// <summary>Resident .lock!<Policy>() can only be called at global initialization time.</summary>
-    ResidentLockTimingRestriction = 920,
 }
 
 public static class SemanticDiagnosticCodeExtensions

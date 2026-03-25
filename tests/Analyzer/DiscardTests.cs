@@ -94,6 +94,67 @@ public class DiscardTests
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Analyze_DiscardMemberCall_NoError()
+    {
+        string source = """
+                        routine get_value() -> S32
+                          return 42
+
+                        record Wrapper
+                          value: S32
+
+                        routine Wrapper.extract(self: Wrapper) -> S32
+                          return self.value
+
+                        routine test()
+                          var w = Wrapper(value: 0)
+                          discard w.extract(w)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Parse_DiscardMemberCall_Succeeds()
+    {
+        string source = """
+                        record Counter
+                          value: S32
+
+                        routine Counter.increment(self: Counter) -> Counter
+                          return Counter(value: self.value)
+
+                        routine test()
+                          var c = Counter(value: 0)
+                          discard c.increment()
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    [Fact]
+    public void Parse_DiscardFailableMemberCall_Succeeds()
+    {
+        string source = """
+                        record Wrapper
+                          value: S32
+
+                        routine Wrapper.try_get!(self: Wrapper) -> S32
+                          return self.value
+
+                        routine test()
+                          var w = Wrapper(value: 42)
+                          discard w.try_get!()
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
     #endregion
 
     #region RazorForge - Discard Parser Errors

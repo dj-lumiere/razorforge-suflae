@@ -15,7 +15,7 @@ public sealed class EntityTypeInfo : TypeInfo
     public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this entity implements (obeys).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
+    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -132,9 +132,9 @@ public sealed class EntityTypeInfo : TypeInfo
             return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
-        if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
+        if (type is ProtocolTypeInfo { GenericDefinition: not null } protocolType)
         {
-            return residentType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

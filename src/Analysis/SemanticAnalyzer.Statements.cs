@@ -42,10 +42,6 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeTypeMembers(members: entity.Members);
                 break;
 
-            case ResidentDeclaration resident:
-                AnalyzeTypeMembers(members: resident.Members);
-                break;
-
             case VariableDeclaration varDecl:
                 AnalyzeVariableDeclaration(varDecl: varDecl);
                 break;
@@ -442,21 +438,12 @@ public sealed partial class SemanticAnalyzer
                 varDecl.Location);
         }
 
-        // #52: Residents can only be declared as global variables, not local variables
-        if (varType is ResidentTypeInfo && _currentRoutine != null)
+        // #57: The 'global' keyword is only valid for entity type variables
+        if (varDecl.Storage == StorageClass.Global && varType is not EntityTypeInfo && varType is not ErrorTypeInfo)
         {
             ReportError(
-                SemanticDiagnosticCode.ResidentAsLocalVariable,
-                $"Resident type '{varType.Name}' can only be declared as a global variable, not a local variable.",
-                varDecl.Location);
-        }
-
-        // #57: The 'global' keyword is only valid for resident type variables
-        if (varDecl.Storage == StorageClass.Global && varType is not ResidentTypeInfo && varType is not ErrorTypeInfo)
-        {
-            ReportError(
-                SemanticDiagnosticCode.GlobalOnlyForResidents,
-                $"The 'global' keyword is only valid for resident type variables, not for type '{varType.Name}'.",
+                SemanticDiagnosticCode.GlobalOnlyForEntities,
+                $"The 'global' keyword is only valid for entity type variables, not for type '{varType.Name}'.",
                 varDecl.Location);
         }
 

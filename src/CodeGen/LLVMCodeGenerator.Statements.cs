@@ -301,34 +301,72 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, string value)
     {
-        // Resolve target type to decide dispatch strategy
         TypeInfo? targetType = GetExpressionType(index.Object);
 
-        // If the type has a __setitem__ method, dispatch to it
-        if (targetType != null)
+        // Dispatch to __setitem__ if the type has one
+        RoutineInfo? setItem = LookupSetItemMethod(index);
+        if (setItem != null && targetType != null &&
+            (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
-            string methodFullName = $"{targetType.Name}.__setitem__";
-            RoutineInfo? setItem = _registry.LookupRoutine(methodFullName);
-            if (setItem != null)
+            string receiver = EmitExpression(sb, index.Object);
+            string indexValue = EmitExpression(sb, index.Index);
+            TypeInfo? indexType = GetExpressionType(index.Index);
+
+            // Build mangled name with proper monomorphization
+            string mangledName;
+            if (setItem.IsGenericDefinition && targetType.IsGenericResolution)
             {
-                // Emit as method call: obj.__setitem__(index, value)
-                // We need to emit receiver, index, and value manually since we already have `value`
-                string receiver = EmitExpression(sb, index.Object);
-                string indexValue = EmitExpression(sb, index.Index);
+                // Infer method-level type args from the explicit arguments (index, value)
+                var concreteArgTypes = new List<TypeInfo>();
+                if (indexType != null) concreteArgTypes.Add(indexType);
+                var methodTypeArgs = InferMethodTypeArgs(setItem, concreteArgTypes);
 
-                var argValues = new List<string> { receiver, indexValue, value };
-                var argTypes = new List<string>
+                if (methodTypeArgs != null)
                 {
-                    GetParameterLLVMType(targetType),
-                    GetExpressionType(index.Index) is { } idxType ? GetLLVMType(idxType) : "i64",
-                    setItem.Parameters.Count >= 3 ? GetLLVMType(setItem.Parameters[2].Type) : "i64"
-                };
-
-                string mangledName = MangleFunctionName(setItem);
-                string args = BuildCallArgs(argTypes, argValues);
-                EmitLine(sb, $"  call void @{mangledName}({args})");
-                return;
+                    var resolvedParamNames = new List<string> { targetType.Name };
+                    if (indexType != null) resolvedParamNames.Add(indexType.Name);
+                    // Resolve value param type
+                    if (setItem.Parameters.Count >= 2)
+                    {
+                        var valParamType = ResolveSubstitutedType(setItem.Parameters[^1].Type, methodTypeArgs);
+                        resolvedParamNames.Add(valParamType.Name);
+                    }
+                    string ownerName = setItem.OwnerType?.FullName ?? targetType.FullName;
+                    mangledName = Q($"{ownerName}.{SanitizeLLVMName(setItem.Name)}#{string.Join(",", resolvedParamNames)}");
+                    RecordMonomorphization(mangledName, setItem, targetType, methodTypeArgs);
+                }
+                else
+                {
+                    mangledName = Q($"{targetType.FullName}.{SanitizeLLVMName(setItem.Name)}");
+                    RecordMonomorphization(mangledName, setItem, targetType);
+                }
             }
+            else if (targetType.IsGenericResolution && setItem.OwnerType is { IsGenericDefinition: true })
+            {
+                mangledName = Q($"{targetType.FullName}.{SanitizeLLVMName(setItem.Name)}");
+                RecordMonomorphization(mangledName, setItem, targetType);
+            }
+            else
+            {
+                mangledName = MangleFunctionName(setItem);
+            }
+
+            GenerateFunctionDeclaration(setItem);
+
+            // Build argument types — resolve from the method's substituted signature
+            string receiverLlvm = GetParameterLLVMType(targetType);
+            string indexLlvm = indexType != null ? GetLLVMType(indexType) : "i64";
+            string valueLlvm = indexType != null ? GetLLVMType(indexType) : "i64"; // placeholder
+
+            // Use type arguments to resolve the value parameter type
+            if (targetType.TypeArguments is { Count: > 0 })
+                valueLlvm = GetLLVMType(targetType.TypeArguments[0]); // T in List[T]
+            else if (setItem.Parameters.Count >= 2)
+                valueLlvm = GetLLVMType(setItem.Parameters[^1].Type);
+
+            string args = $"{receiverLlvm} {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value}";
+            EmitLine(sb, $"  call void @{mangledName}({args})");
+            return;
         }
 
         // Fallback: raw GEP + store for pointer/contiguous-memory types
@@ -337,8 +375,8 @@ public partial class LLVMCodeGenerator
 
         string elemType = targetType switch
         {
-            RecordTypeInfo r when r.TypeArguments.Count > 0 => GetLLVMType(r.TypeArguments[0]),
-            EntityTypeInfo e when e.TypeArguments.Count > 0 => GetLLVMType(e.TypeArguments[0]),
+            RecordTypeInfo r when r.TypeArguments?.Count > 0 => GetLLVMType(r.TypeArguments[0]),
+            EntityTypeInfo e when e.TypeArguments?.Count > 0 => GetLLVMType(e.TypeArguments[0]),
             _ => throw new InvalidOperationException(
                 $"Cannot determine element type for index assignment on type: {targetType?.Name}")
         };
@@ -346,6 +384,36 @@ public partial class LLVMCodeGenerator
         string elemPtr = NextTemp();
         EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {idxVal}");
         EmitLine(sb, $"  store {elemType} {value}, ptr {elemPtr}");
+    }
+
+    /// <summary>
+    /// Looks up the __setitem__ method for an indexed target, handling failable names and generic types.
+    /// </summary>
+    private RoutineInfo? LookupSetItemMethod(IndexExpression index)
+    {
+        TypeInfo? targetType = GetExpressionType(index.Object);
+        if (targetType == null) return null;
+
+        RoutineInfo? setItem = _registry.LookupRoutine($"{targetType.Name}.__setitem__")
+            ?? _registry.LookupRoutine($"{targetType.Name}.__setitem__!");
+
+        // For generic resolutions (e.g., List[S64]), also try the generic definition name
+        if (setItem == null && targetType.IsGenericResolution)
+        {
+            string? genDefName = targetType switch
+            {
+                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
+                RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
+                _ => null
+            };
+            if (genDefName != null)
+            {
+                setItem = _registry.LookupRoutine($"{genDefName}.__setitem__")
+                    ?? _registry.LookupRoutine($"{genDefName}.__setitem__!");
+            }
+        }
+
+        return setItem;
     }
 
     #endregion
@@ -422,6 +490,7 @@ public partial class LLVMCodeGenerator
     private bool IsEntityConstructorCall(Expression? expr)
     {
         if (expr is CreatorExpression) return true;
+        if (expr is ListLiteralExpression) return true;
         if (expr is CallExpression { Callee: IdentifierExpression id })
         {
             return _registry.LookupType(id.Name) is EntityTypeInfo;
@@ -784,7 +853,6 @@ public partial class LLVMCodeGenerator
                     {
                         RecordTypeInfo r => r.GenericDefinition,
                         EntityTypeInfo e => e.GenericDefinition,
-                        ResidentTypeInfo res => res.GenericDefinition,
                         _ => null
                     };
                     if (ownerGenericDef?.GenericParameters != null)
@@ -802,7 +870,6 @@ public partial class LLVMCodeGenerator
                     {
                         RecordTypeInfo r => r.GenericDefinition,
                         EntityTypeInfo e => e.GenericDefinition,
-                        ResidentTypeInfo res => res.GenericDefinition,
                         _ => null
                     };
                     if (ownerGenericDef?.GenericParameters != null)
@@ -1061,7 +1128,6 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo e => e.GenericDefinition,
             RecordTypeInfo r => r.GenericDefinition,
-            ResidentTypeInfo res => res.GenericDefinition,
             _ => null
         };
         if (emitterGenericDef?.GenericParameters == null) return elemType;
@@ -1144,11 +1210,23 @@ public partial class LLVMCodeGenerator
         // Evaluate range bounds
         string start = EmitExpression(sb, range.Start);
         string end = EmitExpression(sb, range.End);
-        string step = range.Step != null ? EmitExpression(sb, range.Step) : "1";
+        string userStep = range.Step != null ? EmitExpression(sb, range.Step) : null;
 
-        // Allocate loop variable
+        // Allocate loop variable (uniquify name to avoid conflicts with repeated loops)
         string varName = forStmt.Variable ?? "_iter";
-        string varAddr = $"%{varName}.addr";
+        string uniqueVarName;
+        if (_varNameCounts.TryGetValue(varName, out int count))
+        {
+            _varNameCounts[varName] = count + 1;
+            uniqueVarName = $"{varName}.{count + 1}";
+        }
+        else
+        {
+            _varNameCounts[varName] = 1;
+            uniqueVarName = varName;
+        }
+        _localVarLLVMNames[varName] = uniqueVarName;
+        string varAddr = $"%{uniqueVarName}.addr";
         EmitLine(sb, $"  {varAddr} = alloca {elemLlvmType}");
         EmitLine(sb, $"  store {elemLlvmType} {start}, ptr {varAddr}");
 
@@ -1159,26 +1237,67 @@ public partial class LLVMCodeGenerator
             _localVariables[varName] = loopVarType;
         }
 
+        bool isFloat = elemLlvmType is "half" or "float" or "double" or "fp128";
+
+        // Compute direction at runtime: is_desc = start > end
+        // For float ranges or explicitly descending (downto), keep compile-time behavior
+        string? isDescReg = null;
+        string step;
+        if (isFloat || range.IsDescending)
+        {
+            step = userStep ?? "1";
+        }
+        else
+        {
+            // Runtime direction inference for integer to/til ranges
+            isDescReg = NextTemp();
+            EmitLine(sb, $"  {isDescReg} = icmp sgt {elemLlvmType} {start}, {end}");
+            if (userStep != null)
+            {
+                // Negate step if descending: step = select is_desc, -userStep, userStep
+                string negStep = NextTemp();
+                EmitLine(sb, $"  {negStep} = sub {elemLlvmType} 0, {userStep}");
+                step = NextTemp();
+                EmitLine(sb, $"  {step} = select i1 {isDescReg}, {elemLlvmType} {negStep}, {elemLlvmType} {userStep}");
+            }
+            else
+            {
+                step = NextTemp();
+                EmitLine(sb, $"  {step} = select i1 {isDescReg}, {elemLlvmType} -1, {elemLlvmType} 1");
+            }
+        }
+
         EmitLine(sb, $"  br label %{condLabel}");
 
-        // Condition: ascending → i <= end, descending → i >= end
+        // Condition
         EmitLine(sb, $"{condLabel}:");
         string current = NextTemp();
         EmitLine(sb, $"  {current} = load {elemLlvmType}, ptr {varAddr}");
-        string cmp = NextTemp();
-        bool isFloat = elemLlvmType is "half" or "float" or "double" or "fp128";
+        string cmp;
         if (isFloat)
         {
-            string fcmpOp = range.IsDescending ? "oge" : "ole";
+            cmp = NextTemp();
+            string fcmpOp = range.IsDescending ? "oge" : range.IsExclusive ? "olt" : "ole";
             EmitLine(sb, $"  {cmp} = fcmp {fcmpOp} {elemLlvmType} {current}, {end}");
         }
         else if (range.IsDescending)
         {
-            EmitLine(sb, $"  {cmp} = icmp sge {elemLlvmType} {current}, {end}");
+            // Explicit descending (downto): always use sge
+            cmp = NextTemp();
+            string icmpOp = range.IsExclusive ? "sgt" : "sge";
+            EmitLine(sb, $"  {cmp} = icmp {icmpOp} {elemLlvmType} {current}, {end}");
         }
         else
         {
-            EmitLine(sb, $"  {cmp} = icmp sle {elemLlvmType} {current}, {end}");
+            // Runtime direction: emit both comparisons, select based on is_desc
+            string ascCmp = NextTemp();
+            string descCmp = NextTemp();
+            string ascOp = range.IsExclusive ? "slt" : "sle";
+            string descOp = range.IsExclusive ? "sgt" : "sge";
+            EmitLine(sb, $"  {ascCmp} = icmp {ascOp} {elemLlvmType} {current}, {end}");
+            EmitLine(sb, $"  {descCmp} = icmp {descOp} {elemLlvmType} {current}, {end}");
+            cmp = NextTemp();
+            EmitLine(sb, $"  {cmp} = select i1 {isDescReg}, i1 {descCmp}, i1 {ascCmp}");
         }
         EmitLine(sb, $"  br i1 {cmp}, label %{bodyLabel}, label %{endLabel}");
 
@@ -1190,7 +1309,7 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  br label %{incrLabel}");
         }
 
-        // Increment: ascending → i += step, descending → i -= step
+        // Increment: i += step (step is negative for descending)
         EmitLine(sb, $"{incrLabel}:");
         string curVal = NextTemp();
         EmitLine(sb, $"  {curVal} = load {elemLlvmType}, ptr {varAddr}");
@@ -1198,15 +1317,15 @@ public partial class LLVMCodeGenerator
         if (isFloat)
         {
             string fop = range.IsDescending ? "fsub" : "fadd";
-            EmitLine(sb, $"  {nextVal} = {fop} {elemLlvmType} {curVal}, {step}");
-        }
-        else if (range.IsDescending)
-        {
-            EmitLine(sb, $"  {nextVal} = sub {elemLlvmType} {curVal}, {step}");
+            EmitLine(sb, $"  {nextVal} = {fop} {elemLlvmType} {curVal}, {userStep ?? "1"}");
         }
         else
         {
-            EmitLine(sb, $"  {nextVal} = add {elemLlvmType} {curVal}, {step}");
+            // step already has correct sign from runtime select (or is positive for explicit descending sub)
+            if (range.IsDescending)
+                EmitLine(sb, $"  {nextVal} = sub {elemLlvmType} {curVal}, {userStep ?? "1"}");
+            else
+                EmitLine(sb, $"  {nextVal} = add {elemLlvmType} {curVal}, {step}");
         }
         EmitLine(sb, $"  store {elemLlvmType} {nextVal}, ptr {varAddr}");
         EmitLine(sb, $"  br label %{condLabel}");
@@ -2001,7 +2120,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits field extraction for destructuring bindings.
-    /// Supports both positional and named bindings on records, entities, and residents.
+    /// Supports both positional and named bindings on records, entities, and tuples.
     /// </summary>
     private void EmitDestructuringBindings(StringBuilder sb, string subject, List<DestructuringBinding> bindings, TypeInfo? subjectType)
     {
@@ -2010,7 +2129,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,
-            ResidentTypeInfo resident => resident.MemberVariables,
             TupleTypeInfo tuple => tuple.MemberVariables,
             _ => null
         };
@@ -2021,7 +2139,6 @@ public partial class LLVMCodeGenerator
                 : record.IsSingleMemberVariableWrapper ? GetLLVMType(record.UnderlyingIntrinsic!)
                 : GetRecordTypeName(record),
             EntityTypeInfo entity => GetEntityTypeName(entity),
-            ResidentTypeInfo resident => GetResidentTypeName(resident),
             TupleTypeInfo tuple => $"{{ {string.Join(", ", tuple.ElementTypes.Select(e => GetLLVMType(e)))} }}",
             _ => "{ }"
         };

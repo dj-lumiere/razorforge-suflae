@@ -762,7 +762,7 @@ public class TypeResolutionTests
     {
         // Integer types implement ConstCompatible and should be valid
         string source = """
-                        resident Buffer[T, N]
+                        entity Buffer[T, N]
                         needs N is Address
                           data: T
 
@@ -844,7 +844,7 @@ public class TypeResolutionTests
     {
         // Type argument doesn't match required const type
         string source = """
-                        resident Buffer[T, N]
+                        entity Buffer[T, N]
                         needs N is Address
                           data: T
 

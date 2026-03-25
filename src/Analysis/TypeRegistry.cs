@@ -445,69 +445,62 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Updates a resident type with its resolved member variables.
+    /// Updates a choice type's implemented protocols.
     /// </summary>
-    /// <param name="residentName">The name of the resident to update.</param>
-    /// <param name="memberVariables">The resolved member variables.</param>
-    public void UpdateResidentMemberVariables(string residentName, IReadOnlyList<MemberVariableInfo> memberVariables)
+    /// <param name="choiceName">The name of the choice to update.</param>
+    /// <param name="protocols">The resolved protocol types.</param>
+    public void UpdateChoiceProtocols(string choiceName, IReadOnlyList<TypeInfo> protocols)
     {
-        if (!_types.TryGetValue(key: residentName, value: out TypeInfo? type))
+        if (!_types.TryGetValue(key: choiceName, value: out TypeInfo? type))
         {
             return;
         }
 
-        if (type is not ResidentTypeInfo resident)
+        if (type is not ChoiceTypeInfo choice)
         {
             return;
         }
 
-        var updatedResident = new ResidentTypeInfo(name: resident.Name)
+        var updatedChoice = new ChoiceTypeInfo(name: choice.Name)
         {
-            MemberVariables = memberVariables,
-            ImplementedProtocols = resident.ImplementedProtocols,
-            FixedSize = resident.FixedSize,
-            GenericParameters = resident.GenericParameters,
-            GenericConstraints = resident.GenericConstraints,
-            TypeArguments = resident.TypeArguments,
-            Visibility = resident.Visibility,
-            Location = resident.Location,
-            Module = resident.Module
+            Cases = choice.Cases,
+            ImplementedProtocols = protocols,
+            UnderlyingType = choice.UnderlyingType,
+            Visibility = choice.Visibility,
+            Location = choice.Location,
+            Module = choice.Module
         };
 
-        _types[key: residentName] = updatedResident;
+        _types[key: choiceName] = updatedChoice;
     }
 
     /// <summary>
-    /// Updates a resident type's implemented protocols.
+    /// Updates a flags type's implemented protocols.
     /// </summary>
-    /// <param name="residentName">The name of the resident to update.</param>
+    /// <param name="flagsName">The name of the flags type to update.</param>
     /// <param name="protocols">The resolved protocol types.</param>
-    public void UpdateResidentProtocols(string residentName, IReadOnlyList<TypeInfo> protocols)
+    public void UpdateFlagsProtocols(string flagsName, IReadOnlyList<TypeInfo> protocols)
     {
-        if (!_types.TryGetValue(key: residentName, value: out TypeInfo? type))
+        if (!_types.TryGetValue(key: flagsName, value: out TypeInfo? type))
         {
             return;
         }
 
-        if (type is not ResidentTypeInfo resident)
+        if (type is not FlagsTypeInfo flags)
         {
             return;
         }
 
-        var updatedResident = new ResidentTypeInfo(name: resident.Name)
+        var updatedFlags = new FlagsTypeInfo(name: flags.Name)
         {
-            MemberVariables = resident.MemberVariables,
+            Members = flags.Members,
             ImplementedProtocols = protocols,
-            FixedSize = resident.FixedSize,
-            GenericParameters = resident.GenericParameters,
-            GenericConstraints = resident.GenericConstraints,
-            TypeArguments = resident.TypeArguments,
-            Visibility = resident.Visibility,
-            Location = resident.Location,
-            Module = resident.Module
+            Visibility = flags.Visibility,
+            Location = flags.Location,
+            Module = flags.Module
         };
 
-        _types[key: residentName] = updatedResident;
+        _types[key: flagsName] = updatedFlags;
     }
 
     /// <summary>
@@ -726,7 +719,6 @@ public sealed class TypeRegistry
         string prefix = kind switch
         {
             TupleKind.Value => "ValueTuple",
-            TupleKind.Fixed => "FixedTuple",
             _ => "Tuple"
         };
         string typeList = string.Join(separator: ", ", values: elementTypes.Select(selector: t => t.FullName));
@@ -806,24 +798,6 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Determines if a type can be contained in a resident (records, choices, residents, FixedTuples, ValueTuples).
-    /// </summary>
-    /// <param name="type">The type to check.</param>
-    /// <returns>True if the type can be contained in a resident, false otherwise.</returns>
-    public static bool IsResidentCompatible(TypeInfo type)
-    {
-        return type.Category switch
-        {
-            TypeCategory.Record => true,
-            TypeCategory.Choice => true,
-            TypeCategory.Variant => true,
-            TypeCategory.Resident => true,
-            TypeCategory.Tuple when type is TupleTypeInfo tt => tt.Kind is TupleKind.Value or TupleKind.Fixed,
-            _ => false
-        };
-    }
-
-    /// <summary>
     /// Checks if a type is a single-member-variable record wrapping an intrinsic.
     /// </summary>
     /// <param name="type">The type to check.</param>
@@ -856,15 +830,14 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Gets all types that can have methods (records, entities, residents, choices).
+    /// Gets all types that can have methods (records, entities, choices, flags).
     /// </summary>
     /// <returns>An enumerable of all types that can have methods.</returns>
     public IEnumerable<TypeInfo> GetTypesWithMethods()
     {
         return _types.Values.Where(predicate: t =>
             t.Category is TypeCategory.Record or TypeCategory.Entity or
-                TypeCategory.Resident or TypeCategory.Choice or
-                TypeCategory.Flags);
+                TypeCategory.Choice or TypeCategory.Flags);
     }
 
     /// <summary>
@@ -1099,14 +1072,19 @@ public sealed class TypeRegistry
                 // Resolve return type: for generic protocols (SequenceEmitter[S64]),
                 // substitute generic params in the return type (T → S64)
                 TypeInfo? resolvedReturn = protoMethod.ReturnType;
-                if (resolvedReturn is GenericParameterTypeInfo gp && proto.TypeArguments is { Count: > 0 })
+                if (resolvedReturn != null && proto.TypeArguments is { Count: > 0 })
                 {
                     var genericDef2 = proto.GenericDefinition ?? proto;
                     if (genericDef2.GenericParameters is { Count: > 0 })
                     {
-                        int idx = genericDef2.GenericParameters.ToList().IndexOf(gp.Name);
-                        if (idx >= 0 && idx < proto.TypeArguments.Count)
-                            resolvedReturn = proto.TypeArguments[idx];
+                        // Build substitution map: T → S64, etc.
+                        var substitution = new Dictionary<string, TypeInfo>();
+                        for (int i = 0; i < genericDef2.GenericParameters.Count
+                                      && i < proto.TypeArguments.Count; i++)
+                            substitution[genericDef2.GenericParameters[i]] = proto.TypeArguments[i];
+
+                        // Recursively substitute in return type (handles both T and SequenceEmitter[T])
+                        resolvedReturn = SubstituteTypeInProtocol(resolvedReturn, substitution);
                     }
                 }
                 // Create a RoutineInfo wrapper so callers get standard ReturnType/OwnerType
@@ -1129,7 +1107,6 @@ public sealed class TypeRegistry
             {
                 RecordTypeInfo r => r.GenericDefinition,
                 EntityTypeInfo e => e.GenericDefinition,
-                ResidentTypeInfo res => res.GenericDefinition,
                 ProtocolTypeInfo p => p.GenericDefinition,
                 _ => null
             };
@@ -1154,7 +1131,6 @@ public sealed class TypeRegistry
         {
             RecordTypeInfo r => r.ImplementedProtocols,
             EntityTypeInfo e => e.ImplementedProtocols,
-            ResidentTypeInfo res => res.ImplementedProtocols,
             _ => null
         };
 
@@ -1406,12 +1382,6 @@ public sealed class TypeRegistry
     /// <returns>True if the type is allowed for the current language, false otherwise.</returns>
     public bool IsTypeAllowedForLanguage(TypeInfo type)
     {
-        // Residents are RazorForge only
-        if (type.Category == TypeCategory.Resident && Language == Language.Suflae)
-        {
-            return false;
-        }
-
         // Memory wrapper types are RazorForge only
         if (IsMemoryWrapperType(typeName: type.Name) && Language == Language.Suflae)
         {
@@ -1429,6 +1399,49 @@ public sealed class TypeRegistry
     private static bool IsMemoryWrapperType(string typeName)
     {
         return typeName is "Viewed" or "Hijacked" or "Inspected" or "Seized" or "Snatched" or "Shared" or "Tracked";
+    }
+
+    #endregion
+
+    #region Protocol Type Substitution
+
+    /// <summary>
+    /// Recursively substitutes generic type parameters in a type.
+    /// Handles both direct parameters (T → S64) and composite types (SequenceEmitter[T] → SequenceEmitter[S64]).
+    /// </summary>
+    private TypeInfo SubstituteTypeInProtocol(TypeInfo type, Dictionary<string, TypeInfo> substitution)
+    {
+        // Direct substitution for generic parameters
+        if (type is GenericParameterTypeInfo && substitution.TryGetValue(type.Name, out TypeInfo? sub))
+            return sub;
+
+        // Recursive substitution in type arguments
+        if (type.TypeArguments is not { Count: > 0 })
+            return type;
+
+        bool anyChanged = false;
+        var newArgs = new List<TypeInfo>();
+        foreach (var arg in type.TypeArguments)
+        {
+            var resolved = SubstituteTypeInProtocol(arg, substitution);
+            newArgs.Add(resolved);
+            if (!ReferenceEquals(resolved, arg)) anyChanged = true;
+        }
+        if (!anyChanged) return type;
+
+        // Get the generic definition and create a new instance with substituted args
+        TypeInfo? genericDef = type switch
+        {
+            EntityTypeInfo e => e.GenericDefinition,
+            RecordTypeInfo r => r.GenericDefinition,
+            ProtocolTypeInfo p => p.GenericDefinition,
+            _ => null
+        };
+
+        if (genericDef != null)
+            return GetOrCreateResolution(genericDef, newArgs);
+
+        return type;
     }
 
     #endregion

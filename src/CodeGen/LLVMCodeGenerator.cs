@@ -96,6 +96,17 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private readonly Dictionary<string, MonomorphizationEntry> _pendingMonomorphizations = new();
 
+    /// <summary>
+    /// Pending protocol dispatch stubs: mangled name → info needed to generate forwarding stub.
+    /// Populated by EmitMethodCall when a call targets a protocol-typed receiver.
+    /// </summary>
+    private readonly Dictionary<string, ProtocolDispatchInfo> _pendingProtocolDispatches = new();
+
+    /// <summary>Entry for a pending protocol dispatch stub.</summary>
+    private record ProtocolDispatchInfo(
+        ProtocolTypeInfo Protocol,
+        string MethodName);
+
     /// <summary>Entry for a pending generic monomorphization.</summary>
     private record MonomorphizationEntry(
         RoutineInfo GenericMethod,
@@ -205,17 +216,6 @@ public partial class LLVMCodeGenerator
                 if (record.TypeArguments != null && record.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
                     continue;
                 GenerateRecordType(record);
-            }
-        }
-
-        // Generate resident types (fixed-size reference types) - RazorForge only
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Resident))
-        {
-            if (type is ResidentTypeInfo { IsGenericDefinition: false } resident)
-            {
-                if (resident.TypeArguments != null && resident.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
-                    continue;
-                GenerateResidentType(resident);
             }
         }
 
@@ -453,6 +453,9 @@ public partial class LLVMCodeGenerator
 
             // Phase C: Generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__, Text(), to_debug())
             GenerateSynthesizedRoutines();
+
+            // Phase D: Generate protocol dispatch stubs (forwarding from protocol method names to concrete implementations)
+            GenerateProtocolDispatchStubs();
 
             iterations++;
             if (iterations >= maxIterations)
@@ -721,7 +724,6 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-            ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
             _ => null
         };
 

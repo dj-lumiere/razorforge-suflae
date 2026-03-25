@@ -4,15 +4,12 @@ using Enums;
 using Symbols;
 
 /// <summary>
-/// The kind of tuple: ValueTuple (record-like), FixedTuple (resident-like), or Tuple (entity-like).
+/// The kind of tuple: ValueTuple (record-like) or Tuple (entity-like).
 /// </summary>
 public enum TupleKind
 {
     /// <summary>Value type (like record). Copy semantics. Only contains value types.</summary>
     Value,
-
-    /// <summary>Resident type (like resident). Reference semantics, fixed size. Contains records + residents.</summary>
-    Fixed,
 
     /// <summary>Reference type (like entity). Reference semantics, heap-allocated. Contains anything.</summary>
     Reference
@@ -23,7 +20,6 @@ public enum TupleKind
 /// Tuples are variadic and can contain any number of elements.
 ///
 /// - ValueTuple: All elements are value types (copy semantics)
-/// - FixedTuple: All elements are resident-compatible (resident semantics, fixed size)
 /// - Tuple: Any element is a reference type (reference semantics, heap-allocated)
 /// </summary>
 public sealed class TupleTypeInfo : TypeInfo
@@ -44,11 +40,6 @@ public sealed class TupleTypeInfo : TypeInfo
     public bool IsValueTuple => Kind == TupleKind.Value;
 
     /// <summary>
-    /// Whether this is a FixedTuple (resident-like, all elements are resident-compatible).
-    /// </summary>
-    public bool IsFixedTuple => Kind == TupleKind.Fixed;
-
-    /// <summary>
     /// The element types in order (item0, item1, ..., itemN).
     /// </summary>
     public IReadOnlyList<TypeInfo> ElementTypes { get; }
@@ -62,12 +53,11 @@ public sealed class TupleTypeInfo : TypeInfo
     /// Creates a new tuple type with the specified element types and kind.
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
-    /// <param name="kind">The kind of tuple (Value, Fixed, or Reference).</param>
+    /// <param name="kind">The kind of tuple (Value or Reference).</param>
     public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes, TupleKind kind)
         : base(name: kind switch
         {
             TupleKind.Value => "ValueTuple",
-            TupleKind.Fixed => "FixedTuple",
             _ => "Tuple"
         })
     {

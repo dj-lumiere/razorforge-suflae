@@ -40,9 +40,6 @@ public enum TypeCategory
     /// <summary>Reference type, heap-allocated, single owner (RazorForge: entity).</summary>
     Entity,
 
-    /// <summary>Reference type, fixed-size, persistent memory (RazorForge only: resident).</summary>
-    Resident,
-
     /// <summary>Simple enumeration with optional integer values, CAN have methods.</summary>
     Choice,
 

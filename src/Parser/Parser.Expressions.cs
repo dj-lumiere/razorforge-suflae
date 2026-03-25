@@ -308,8 +308,9 @@ public partial class Parser
             return new RangeExpression(Start: expr,
                 End: end,
                 Step: step,
-                IsDescending: true,
-                Location: expr.Location);
+                IsDescending: false,
+                Location: expr.Location,
+                IsExclusive: true);
         }
 
         return expr;

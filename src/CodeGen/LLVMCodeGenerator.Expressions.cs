@@ -283,7 +283,6 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, target, entity, expr.PropertyName),
             RecordTypeInfo record => EmitRecordMemberVariableRead(sb, target, record, expr.PropertyName),
-            ResidentTypeInfo resident => EmitResidentMemberVariableRead(sb, target, resident, expr.PropertyName),
             _ => throw new InvalidOperationException($"Cannot access member variable on type: {targetType.Category}")
         };
     }
@@ -370,43 +369,6 @@ public partial class LLVMCodeGenerator
         // Extract the member variable value
         string value = NextTemp();
         EmitLine(sb, $"  {value} = extractvalue {typeName} {recordValue}, {memberVariableIndex}");
-
-        return value;
-    }
-
-    /// <summary>
-    /// Generates code to read a member variable from a resident (like entity).
-    /// </summary>
-    private string EmitResidentMemberVariableRead(StringBuilder sb, string residentPtr, ResidentTypeInfo resident, string memberVariableName)
-    {
-        // Find member variable index
-        int memberVariableIndex = -1;
-        MemberVariableInfo? memberVariable = null;
-        for (int i = 0; i < resident.MemberVariables.Count; i++)
-        {
-            if (resident.MemberVariables[i].Name == memberVariableName)
-            {
-                memberVariableIndex = i;
-                memberVariable = resident.MemberVariables[i];
-                break;
-            }
-        }
-
-        if (memberVariableIndex < 0 || memberVariable == null)
-        {
-            throw new InvalidOperationException($"Member variable '{memberVariableName}' not found on resident '{resident.Name}'");
-        }
-
-        string typeName = GetResidentTypeName(resident);
-        string memberVariableType = GetLLVMType(memberVariable.Type);
-
-        // GEP to get member variable pointer
-        string memberVariablePtr = NextTemp();
-        EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {residentPtr}, i32 0, i32 {memberVariableIndex}");
-
-        // Load the member variable value
-        string value = NextTemp();
-        EmitLine(sb, $"  {value} = load {memberVariableType}, ptr {memberVariablePtr}");
 
         return value;
     }
@@ -1173,17 +1135,24 @@ public partial class LLVMCodeGenerator
         string methodName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
         string methodFullName = $"{receiverType.Name}.{methodName}";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
+        // Also try with '!' suffix — failable methods may be registered as "name!" (e.g., __getitem__!)
+        if (method == null && !member.PropertyName.EndsWith('!'))
+            method = _registry.LookupRoutine($"{receiverType.Name}.{methodName}!");
+        if (method == null && member.PropertyName.EndsWith('!'))
+            method = _registry.LookupRoutine($"{receiverType.Name}.{member.PropertyName}");
         // For generic type instances (e.g., List[Letter].count), try the generic base name
         if (method == null && receiverType.Name.Contains('['))
         {
             string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
-            method = _registry.LookupRoutine($"{baseName}.{methodName}");
+            method = _registry.LookupRoutine($"{baseName}.{methodName}")
+                ?? _registry.LookupRoutine($"{baseName}.{methodName}!");
         }
 
         // Fall back to LookupMethod which checks generic-parameter-owner methods (routine T.view())
         if (method == null)
         {
-            method = _registry.LookupMethod(receiverType, methodName);
+            method = _registry.LookupMethod(receiverType, methodName)
+                ?? _registry.LookupMethod(receiverType, $"{methodName}!");
         }
 
         // Representable pattern: obj.Text() → Text.__create__(from: obj)
@@ -1252,31 +1221,6 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Inline List[T].__getitem__(index) → GEP into data array
-        if (member.PropertyName == "__getitem__" && arguments.Count == 1 &&
-            receiverType is EntityTypeInfo listEntity && listEntity.Name.StartsWith("List["))
-        {
-            string indexValue = EmitExpression(sb, arguments[0]);
-            // List layout: { ptr data, i64 count, i64 capacity } — field 0 is data pointer
-            // For entities, the receiver is already a pointer to the struct
-            string entityType = GetEntityTypeName(listEntity);
-            string dataPtr = NextTemp();
-            EmitLine(sb, $"  {dataPtr} = getelementptr {entityType}, ptr {receiver}, i32 0, i32 0");
-            string dataBase = NextTemp();
-            EmitLine(sb, $"  {dataBase} = load ptr, ptr {dataPtr}");
-            // Get element type from the List's first member variable (data: Snatched[T])
-            // The element type is the type parameter of the List
-            TypeInfo? elemType = listEntity.MemberVariables.Count > 0
-                ? GetListElementType(listEntity)
-                : null;
-            string elemLlvm = elemType != null ? GetLLVMType(elemType) : "i32";
-            string elemPtr = NextTemp();
-            EmitLine(sb, $"  {elemPtr} = getelementptr {elemLlvm}, ptr {dataBase}, i64 {indexValue}");
-            string loaded = NextTemp();
-            EmitLine(sb, $"  {loaded} = load {elemLlvm}, ptr {elemPtr}");
-            return loaded;
-        }
-
         // Build argument list: receiver first, then explicit arguments
         var argValues = new List<string> { receiver };
         var argTypes = new List<string> { GetParameterLLVMType(receiverType) };
@@ -1299,7 +1243,9 @@ public partial class LLVMCodeGenerator
         Dictionary<string, TypeInfo>? inferredMethodTypeArgs = null;
         if (method != null && method.IsGenericDefinition && arguments.Count > 0)
         {
-            var concreteArgTypes = new List<TypeInfo> { receiverType };
+            // Only pass explicit argument types — method.Parameters excludes implicit 'me',
+            // so including receiverType would cause an off-by-one mismatch
+            var concreteArgTypes = new List<TypeInfo>();
             foreach (var arg in arguments)
             {
                 var t = GetExpressionType(arg);
@@ -1322,7 +1268,7 @@ public partial class LLVMCodeGenerator
             }
             string ownerName = method.OwnerType?.FullName ?? receiverType.FullName;
             mangledName = Q($"{ownerName}.{SanitizeLLVMName(method.Name)}#{string.Join(",", resolvedParamNames)}");
-            RecordMonomorphization(mangledName, method, method.OwnerType ?? receiverType, inferredMethodTypeArgs);
+            RecordMonomorphization(mangledName, method, receiverType, inferredMethodTypeArgs);
         }
         else if (method != null && receiverType.IsGenericResolution &&
             method.OwnerType != null && method.OwnerType.IsGenericDefinition)
@@ -1353,6 +1299,13 @@ public partial class LLVMCodeGenerator
             GenerateFunctionDeclaration(method);
         }
 
+        // Track protocol dispatch calls for stub generation
+        if (method?.OwnerType is ProtocolTypeInfo protoDispatch)
+        {
+            _pendingProtocolDispatches.TryAdd(mangledName,
+                new ProtocolDispatchInfo(protoDispatch, method.Name));
+        }
+
         // Resolve return type — for generic resolutions, substitute type parameters (e.g., T → U8)
         TypeInfo? resolvedReturnType = method?.ReturnType;
 
@@ -1363,14 +1316,18 @@ public partial class LLVMCodeGenerator
         }
 
         // For protocol-owned methods (Sequenceable[T].enumerate() → EnumerateSequence[T]),
-        // substitute protocol generic params using receiver's type arguments
+        // substitute protocol generic params using receiver's type arguments.
+        // Use GenericDefinition to get the param names (resolved protocols have null GenericParameters).
         if (resolvedReturnType != null && method?.OwnerType is ProtocolTypeInfo protoOwner &&
-            protoOwner.GenericParameters is { Count: > 0 } &&
             receiverType is { IsGenericResolution: true, TypeArguments: not null })
         {
-            for (int pi = 0; pi < protoOwner.GenericParameters.Count && pi < receiverType.TypeArguments.Count; pi++)
-                resolvedReturnType = SubstituteGenericParamInType(resolvedReturnType,
-                    protoOwner.GenericParameters[pi], receiverType.TypeArguments[pi]);
+            var protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
+            if (protoGenDef.GenericParameters is { Count: > 0 })
+            {
+                for (int pi = 0; pi < protoGenDef.GenericParameters.Count && pi < receiverType.TypeArguments.Count; pi++)
+                    resolvedReturnType = SubstituteGenericParamInType(resolvedReturnType,
+                        protoGenDef.GenericParameters[pi], receiverType.TypeArguments[pi]);
+            }
         }
 
         if (resolvedReturnType is GenericParameterTypeInfo && receiverType is { IsGenericResolution: true, TypeArguments: not null })
@@ -1379,7 +1336,7 @@ public partial class LLVMCodeGenerator
             {
                 RecordTypeInfo r => r.GenericDefinition,
                 EntityTypeInfo e => e.GenericDefinition,
-                ResidentTypeInfo res => res.GenericDefinition,
+
                 _ => null
             };
             if (ownerGenericDef?.GenericParameters != null)
@@ -1394,6 +1351,9 @@ public partial class LLVMCodeGenerator
         if (!_generatedFunctions.Contains(mangledName))
         {
             string retType = resolvedReturnType != null ? GetLLVMType(resolvedReturnType) : "void";
+            // Emitting routines return Maybe[T] = { i64, ptr } at IR level
+            if (method?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+                retType = "{ i64, ptr }";
             EmitLine(_functionDeclarations, $"declare {retType} @{mangledName}({string.Join(", ", argTypes)})");
             _generatedFunctions.Add(mangledName);
         }
@@ -1401,6 +1361,9 @@ public partial class LLVMCodeGenerator
         string returnType = resolvedReturnType != null
             ? GetLLVMType(resolvedReturnType)
             : "void";
+        // Emitting routines return Maybe[T] = { i64, ptr } at IR level
+        if (method?.AsyncStatus == SyntaxTree.AsyncStatus.Emitting)
+            returnType = "{ i64, ptr }";
 
         if (returnType == "void")
         {
@@ -1444,7 +1407,8 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                     EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+
+                    ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
                     _ => null
                 };
                 if (genericBase == null)
@@ -1835,6 +1799,10 @@ public partial class LLVMCodeGenerator
         else if (binary.Left is MemberExpression member)
         {
             EmitMemberVariableAssignment(sb, member, value);
+        }
+        else if (binary.Left is IndexExpression index)
+        {
+            EmitIndexAssignment(sb, index, value);
         }
         else
         {
@@ -2462,7 +2430,7 @@ public partial class LLVMCodeGenerator
                     {
                         RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                         EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                        ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+    
                         _ => null
                     };
                     if (genericBase == null)
@@ -2484,7 +2452,7 @@ public partial class LLVMCodeGenerator
             {
                 RecordTypeInfo r => r.GenericDefinition,
                 EntityTypeInfo e => e.GenericDefinition,
-                ResidentTypeInfo res => res.GenericDefinition,
+
                 _ => null
             };
             if (ownerGenericDef?.GenericParameters != null)
@@ -2686,7 +2654,7 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo r => r.GenericDefinition,
                     EntityTypeInfo e => e.GenericDefinition,
-                    ResidentTypeInfo res => res.GenericDefinition,
+    
                     _ => null
                 };
                 if (ownerGenericDef?.GenericParameters != null)
@@ -2724,7 +2692,7 @@ public partial class LLVMCodeGenerator
                     {
                         RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                         EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                        ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+    
                         _ => null
                     };
                     genericBase ??= returnType.Name.Contains('[')
@@ -2776,7 +2744,7 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                     EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+
                     ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
                     _ => null
                 };
@@ -2921,7 +2889,7 @@ public partial class LLVMCodeGenerator
                             {
                                 RecordTypeInfo r => r.GenericDefinition,
                                 EntityTypeInfo e => e.GenericDefinition,
-                                ResidentTypeInfo res => res.GenericDefinition,
+                
                                 _ => null
                             };
                             if (ownerGenericDef?.GenericParameters != null)
@@ -2941,7 +2909,7 @@ public partial class LLVMCodeGenerator
                             {
                                 RecordTypeInfo r => r.GenericDefinition,
                                 EntityTypeInfo e => e.GenericDefinition,
-                                ResidentTypeInfo res => res.GenericDefinition,
+                
                                 _ => null
                             };
                             if (ownerGenericDef?.GenericParameters != null)
@@ -3092,7 +3060,6 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo e => e.LookupMemberVariable(member.PropertyName),
             RecordTypeInfo r => r.LookupMemberVariable(member.PropertyName),
-            ResidentTypeInfo res => res.LookupMemberVariable(member.PropertyName),
             _ => null
         };
 
@@ -3208,35 +3175,17 @@ public partial class LLVMCodeGenerator
                         ?? _registry.LookupRoutine($"{genDefName}.__getitem__!");
                 }
             }
-            if (getItem != null && !getItem.IsGenericDefinition)
+            if (getItem != null && (!getItem.IsGenericDefinition || targetType.IsGenericResolution))
             {
-                // Emit as method call: obj.__getitem__(index)
+                // Emit as method call: obj.__getitem__(index) or obj.__getitem__!(index)
+                // Use the actual method name (may be failable with ! suffix).
+                // For generic definitions on generic resolution types (e.g., List[S64].__getitem__!),
+                // EmitMethodCall handles monomorphization automatically.
                 var member = new MemberExpression(
                     Object: index.Object,
-                    PropertyName: "__getitem__",
+                    PropertyName: getItem.Name,
                     Location: index.Location);
                 return EmitMethodCall(sb, member, new List<Expression> { index.Index });
-            }
-
-            // Direct List entity indexing: data_ptr = list->data, elem_ptr = data_ptr[index]
-            if (getItem != null && targetType is EntityTypeInfo listEntity2 && listEntity2.Name.StartsWith("List["))
-            {
-                string target = EmitExpression(sb, index.Object);
-                string indexValue = EmitExpression(sb, index.Index);
-
-                string entityType2 = GetEntityTypeName(listEntity2);
-                string dataFieldPtr2 = NextTemp();
-                EmitLine(sb, $"  {dataFieldPtr2} = getelementptr {entityType2}, ptr {target}, i32 0, i32 0");
-                string dataBase2 = NextTemp();
-                EmitLine(sb, $"  {dataBase2} = load ptr, ptr {dataFieldPtr2}");
-
-                TypeInfo? elemType2 = GetListElementType(listEntity2);
-                string elemLlvm2 = elemType2 != null ? GetLLVMType(elemType2) : "i64";
-                string elemPtr2 = NextTemp();
-                EmitLine(sb, $"  {elemPtr2} = getelementptr {elemLlvm2}, ptr {dataBase2}, i64 {indexValue}");
-                string loaded2 = NextTemp();
-                EmitLine(sb, $"  {loaded2} = load {elemLlvm2}, ptr {elemPtr2}");
-                return loaded2;
             }
 
             // For entity types with a list-like first field (e.g., Text has letters: List[Letter]),
@@ -3451,9 +3400,9 @@ public partial class LLVMCodeGenerator
         // Resolve tuple type from semantic analysis
         TupleTypeInfo? tupleType = tuple.ResolvedType as TupleTypeInfo;
 
-        if (tupleType == null || tupleType.Kind == TupleKind.Value || tupleType.Kind == TupleKind.Fixed)
+        if (tupleType == null || tupleType.Kind == TupleKind.Value)
         {
-            // ValueTuple / FixedTuple: build struct via insertvalue chain
+            // ValueTuple: build struct via insertvalue chain
             string structType;
             if (tupleType != null)
             {
@@ -3652,12 +3601,12 @@ public partial class LLVMCodeGenerator
             return EmitOptionalChainErrorHandling(sb, obj, errorType, optMember.PropertyName);
         }
 
-        // Entity/Resident (pointer): null check
+        // Entity (pointer): null check
         return EmitOptionalChainPointer(sb, obj, objType, optMember.PropertyName);
     }
 
     /// <summary>
-    /// Optional chaining on a pointer-based type (entity/resident): null check → member access or zero.
+    /// Optional chaining on a pointer-based type (entity): null check → member access or zero.
     /// </summary>
     private string EmitOptionalChainPointer(StringBuilder sb, string obj, TypeInfo? objType, string propertyName)
     {
@@ -3770,7 +3719,6 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, value, entity, propertyName),
             RecordTypeInfo record => EmitRecordMemberVariableRead(sb, value, record, propertyName),
-            ResidentTypeInfo resident => EmitResidentMemberVariableRead(sb, value, resident, propertyName),
             _ => throw new InvalidOperationException($"Cannot access member on type: {type?.Name}")
         };
     }
@@ -3788,7 +3736,6 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo entity => entity.MemberVariables,
             RecordTypeInfo record => record.MemberVariables,
-            ResidentTypeInfo resident => resident.MemberVariables,
             _ => null
         };
 
@@ -3818,7 +3765,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo r => r.GenericDefinition,
             EntityTypeInfo e => e.GenericDefinition,
-            ResidentTypeInfo res => res.GenericDefinition,
             _ => null
         };
         if (ownerGenericDef?.GenericParameters == null || ownerType.TypeArguments == null)

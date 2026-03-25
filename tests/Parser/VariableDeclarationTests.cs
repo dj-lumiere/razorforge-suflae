@@ -249,7 +249,7 @@ public class VariableDeclarationTests
     {
         string source = """
                         routine test()
-                          var data: FixedBytes[4] = bytes
+                          var data: List[U8] = bytes
                           return
                         """;
 
@@ -436,17 +436,6 @@ public class VariableDeclarationTests
                         """;
 
         AssertParseError(source: source);
-    }
-
-    [Fact]
-    public void Parse_ResidentMemberVariables()
-    {
-        string source = """
-                        resident GlobalState
-                          counter: S32
-                        """;
-
-        AssertParses(source: source);
     }
 
     #endregion

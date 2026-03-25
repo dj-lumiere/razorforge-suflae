@@ -82,13 +82,13 @@ public partial class Parser
     private bool _parsingInlineConditional;
 
     /// <summary>
-    /// Indicates whether we're currently parsing inside a type body (record, entity, resident).
+    /// Indicates whether we're currently parsing inside a type body (record, entity).
     /// When true, allows member variable declarations without var keywords.
     /// </summary>
     private bool _parsingTypeBody = false;
 
     /// <summary>
-    /// Indicates whether we're parsing inside a record body (actual record, not entity/resident).
+    /// Indicates whether we're parsing inside a record body (actual record, not entity).
     /// When true, only secret/posted/open modifiers are allowed (not external).
     /// Also var/preset keywords are disallowed (use 'name: Type' syntax).
     /// </summary>
@@ -174,7 +174,7 @@ public partial class Parser
     /// <summary>
     /// Parses a single top-level or nested declaration.
     /// Handles: module, import, define, using, var, routine, entity, record, choice, variant, protocol, impl.
-    /// RazorForge-only: resident, external, dangerous modifier, threaded async status.
+    /// RazorForge-only: external, dangerous modifier, threaded async status.
     /// </summary>
     /// <remarks>
     /// Declaration parsing order (checked in sequence):
@@ -201,7 +201,6 @@ public partial class Parser
     ///   routine      - Function declaration
     ///   entity       - Heap-allocated reference type
     ///   record       - Stack-allocated value type
-    ///   resident     - Singleton static type (RazorForge only)
     ///   choice       - Simple enumeration
     ///   variant      - Tagged union (sum type)
     ///   protocol     - Interface/trait definition
@@ -340,7 +339,7 @@ public partial class Parser
 
         // Field declaration in type bodies: name: Type
         // Detected by identifier followed by colon (no var keyword needed)
-        // Only allowed inside type bodies (record, entity, resident)
+        // Only allowed inside type bodies (record, entity)
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
@@ -359,7 +358,7 @@ public partial class Parser
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Preset))
         {
-            // In type bodies (record, entity, resident), var/preset are not allowed
+            // In type bodies (record, entity), var/preset are not allowed
             // MemberVariables use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
             {
@@ -437,14 +436,8 @@ public partial class Parser
         // Validate: storage class modifiers are not valid for type declarations
         if (storage != StorageClass.None)
         {
-            // Check all type keywords (including RF-only Resident)
             bool isTypeKeyword = Check(TokenType.Entity, TokenType.Record,
                 TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol);
-
-            if (_language == Language.RazorForge)
-            {
-                isTypeKeyword = isTypeKeyword || Check(type: TokenType.Resident);
-            }
 
             if (isTypeKeyword)
             {
@@ -464,12 +457,6 @@ public partial class Parser
         if (Match(type: TokenType.Record))
         {
             return ParseRecordDeclaration(visibility: visibility, annotations: annotations);
-        }
-
-        // RF-only: Resident declarations (singleton static types)
-        if (_language == Language.RazorForge && Match(type: TokenType.Resident))
-        {
-            return ParseResidentDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Choice))
@@ -496,9 +483,7 @@ public partial class Parser
         // it is an record or protocol)
         if (visibility != VisibilityModifier.Open)
         {
-            string validDeclarations = _language == Language.RazorForge
-                ? "routine, entity, record, resident, choice, variant, protocol, preset, or var"
-                : "routine, entity, record, choice, variant, protocol, preset, or var";
+            string validDeclarations = "routine, entity, record, choice, variant, protocol, preset, or var";
             throw ThrowParseError(GrammarDiagnosticCode.VisibilityWithoutDeclaration,
                 $"Visibility modifier '{visibility}' must be followed by a declaration " +
                 $"({validDeclarations})");

@@ -940,10 +940,6 @@ internal class Program
                 Console.WriteLine($"{prefix}entity {ent.Name} ({ent.Members.Count} members) {entModifiers}".TrimEnd());
                 break;
 
-            case ResidentDeclaration res:
-                Console.WriteLine($"{prefix}resident {res.Name} ({res.Members.Count} members)");
-                break;
-
             case ChoiceDeclaration choice:
                 Console.WriteLine($"{prefix}choice {choice.Name} ({choice.Cases.Count} variants)");
                 break;

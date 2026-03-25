@@ -127,41 +127,6 @@ public class RecordContainmentTests
                          && e.Message.Contains("value type"));
     }
 
-    [Fact]
-    public void Analyze_RecordWithResidentMemberVariable_ReportsError()
-    {
-        string source = """
-                        resident GlobalState
-                          counter: S32
-                        record BadRecord
-                          state: GlobalState
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
-                         && e.Message.Contains("state"));
-    }
-
-    #endregion
-
-    #region Entity Cannot Hold Resident MemberVariables
-
-    [Fact]
-    public void Analyze_EntityWithResidentMemberVariable_ReportsError()
-    {
-        string source = """
-                        resident GlobalState
-                          counter: S32
-                        entity BadEntity
-                          state: GlobalState
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EntityContainsResidentMemberVariable);
-    }
-
     #endregion
 
     #region With Expression on Non-Records

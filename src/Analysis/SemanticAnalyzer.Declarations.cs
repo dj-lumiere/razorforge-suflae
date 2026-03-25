@@ -63,10 +63,6 @@ public sealed partial class SemanticAnalyzer
                 CollectEntityDeclaration(entity: entity);
                 break;
 
-            case ResidentDeclaration resident:
-                CollectResidentDeclaration(resident: resident);
-                break;
-
             case ChoiceDeclaration choice:
                 CollectChoiceDeclaration(choice: choice);
                 break;
@@ -224,15 +220,6 @@ public sealed partial class SemanticAnalyzer
                 memberVariable.Location);
         }
 
-        // Entity cannot hold resident member variables (#48)
-        if (_currentType is EntityTypeInfo && memberVariableType is ResidentTypeInfo)
-        {
-            ReportError(SemanticDiagnosticCode.EntityContainsResidentMemberVariable,
-                $"Entity member variable '{memberVariable.Name}' cannot be a resident type ('{memberVariableType.Name}'). " +
-                "Residents are global singletons and cannot be embedded in other types.",
-                memberVariable.Location);
-        }
-
         // TODO: Register member variable in the current type's member variable list when type body resolution is implemented
     }
 
@@ -240,6 +227,13 @@ public sealed partial class SemanticAnalyzer
     {
         TypeSymbol presetType = ResolveType(typeExpr: preset.Type);
         _registry.DeclareVariable(name: preset.Name, type: presetType, isPreset: true);
+
+        // Also register as a module-level preset for cross-file access
+        string? module = GetCurrentModuleName();
+        if (module != null)
+        {
+            _registry.RegisterPreset(name: preset.Name, type: presetType, module: module);
+        }
     }
 
     private void CollectRecordDeclaration(RecordDeclaration record)
@@ -286,28 +280,6 @@ public sealed partial class SemanticAnalyzer
         };
 
         TryRegisterType(type: typeInfo, location: entity.Location);
-    }
-
-    private void CollectResidentDeclaration(ResidentDeclaration resident)
-    {
-        if (_registry.Language == Language.Suflae)
-        {
-            ReportError(SemanticDiagnosticCode.FeatureNotInSuflae,
-                "Resident types are not available in Suflae.",
-                resident.Location);
-            return;
-        }
-
-        var typeInfo = new ResidentTypeInfo(name: resident.Name)
-        {
-            GenericParameters = resident.GenericParameters,
-            GenericConstraints = resident.GenericConstraints,
-            Visibility = resident.Visibility,
-            Location = resident.Location,
-            Module = GetCurrentModuleName()
-        };
-
-        TryRegisterType(type: typeInfo, location: resident.Location);
     }
 
     private void CollectChoiceDeclaration(ChoiceDeclaration choice)
@@ -377,7 +349,7 @@ public sealed partial class SemanticAnalyzer
         }
         else if (routine.Name.Contains(value: '.'))
         {
-            // Member routine syntax: "Type.routine"
+            // Member routine syntax: "Type.routine" or "Type[T].routine"
             // Extract type name and routine name separately
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
@@ -385,6 +357,14 @@ public sealed partial class SemanticAnalyzer
 
             kind = RoutineKind.MemberRoutine;
             ownerType = LookupTypeWithImports(name: typeName);
+
+            // If the type name contains generic params (e.g., "Box[T]"), strip them
+            // and look up the generic definition (e.g., "Box")
+            if (ownerType == null && typeName.Contains('['))
+            {
+                string baseTypeName = typeName[..typeName.IndexOf('[')];
+                ownerType = LookupTypeWithImports(name: baseTypeName);
+            }
         }
         else
         {
@@ -460,12 +440,12 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // #66: Index operators (__getitem__/__setitem__) are only valid on entities and residents
+        // #66: Index operators (__getitem__/__setitem__) are only valid on entities
         if (baseName is "__getitem__" or "__setitem__" && ownerType is not null &&
-            ownerType is not EntityTypeInfo && ownerType is not ResidentTypeInfo)
+            ownerType is not EntityTypeInfo)
         {
             ReportError(SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
-                $"Index operators are only valid on entities and residents, not on '{ownerType.Name}'.",
+                $"Index operators are only valid on entities, not on '{ownerType.Name}'.",
                 routine.Location);
         }
 
@@ -787,10 +767,6 @@ public sealed partial class SemanticAnalyzer
                 ResolveEntityBody(entity: entity);
                 break;
 
-            case ResidentDeclaration resident:
-                ResolveResidentBody(resident: resident);
-                break;
-
             case ProtocolDeclaration protocol:
                 ResolveProtocolBody(protocol: protocol);
                 break;
@@ -978,103 +954,6 @@ public sealed partial class SemanticAnalyzer
         if (memberVariables.Count > 0)
         {
             _registry.UpdateEntityMemberVariables(entityName: _currentType!.FullName,
-                memberVariables: memberVariables);
-        }
-
-        _currentType = previousType;
-        _currentTypeMemberVariableNames = previousFieldNames;
-    }
-
-    private void ResolveResidentBody(ResidentDeclaration resident)
-    {
-        if (resident.Members.Count == 0 && !resident.HasPassBody)
-        {
-            ReportError(SemanticDiagnosticCode.EmptyBlockWithoutPass,
-                "Empty resident body requires 'pass' keyword.",
-                resident.Location);
-        }
-
-        TypeSymbol? previousType = _currentType;
-        HashSet<string>? previousFieldNames = _currentTypeMemberVariableNames;
-
-        _currentType = _registry.LookupType(name: resident.Name);
-        _currentTypeMemberVariableNames = [];
-
-        // Resolve implemented protocols
-        if (_currentType is ResidentTypeInfo && resident.Protocols.Count > 0)
-        {
-            var resolvedProtocols = new List<TypeInfo>();
-            foreach (TypeExpression protoExpr in resident.Protocols)
-            {
-                TypeSymbol protoType = ResolveType(typeExpr: protoExpr);
-                if (protoType is ProtocolTypeInfo proto)
-                {
-                    resolvedProtocols.Add(item: proto);
-
-                    // #55: Residents cannot implement Hashable
-                    if (proto.Name == "Hashable")
-                    {
-                        ReportError(SemanticDiagnosticCode.ResidentHashableProhibited,
-                            $"Resident type '{resident.Name}' cannot implement Hashable. " +
-                            "Residents are identity-based, not content-based.",
-                            protoExpr.Location);
-                    }
-                }
-                else if (protoType is not ErrorTypeInfo)
-                {
-                    ReportError(SemanticDiagnosticCode.NotAProtocol,
-                        $"'{protoExpr.Name}' is not a protocol. Only protocols can be used with 'obeys'.",
-                        protoExpr.Location);
-                }
-            }
-
-            _registry.UpdateResidentProtocols(residentName: _currentType!.FullName,
-                protocols: resolvedProtocols);
-        }
-
-        // Collect member variables and other members
-        var memberVariables = new List<MemberVariableInfo>();
-        int memberVariableIndex = 0;
-
-        foreach (Declaration member in resident.Members)
-        {
-            if (member is VariableDeclaration memberVariable)
-            {
-                TypeSymbol memberVariableType = memberVariable.Type != null
-                    ? ResolveType(typeExpr: memberVariable.Type)
-                    : ErrorTypeInfo.Instance;
-
-                // #53: Resident member variables can only contain records, primitives, Snatched[T], or other residents
-                if (memberVariableType is TypeInfo fieldTypeInfo &&
-                    fieldTypeInfo is not ErrorTypeInfo &&
-                    fieldTypeInfo is not GenericParameterTypeInfo &&
-                    !IsValidResidentFieldType(type: fieldTypeInfo))
-                {
-                    ReportError(SemanticDiagnosticCode.ResidentContainsInvalidType,
-                        $"Resident member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not valid. " +
-                        "Resident member variables can only contain records, primitives, Snatched[T], or other residents.",
-                        memberVariable.Location);
-                }
-
-                var memberVariableInfo =
-                    new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
-                    {
-                        Visibility = memberVariable.Visibility,
-                        Index = memberVariableIndex++,
-                        HasDefaultValue = memberVariable.Initializer != null,
-                        Location = memberVariable.Location,
-                        Owner = _currentType
-                    };
-
-                memberVariables.Add(item: memberVariableInfo);
-            }
-
-            CollectDeclaration(node: member);
-        }
-
-        if (memberVariables.Count > 0)
-        {
-            _registry.UpdateResidentMemberVariables(residentName: _currentType!.FullName,
                 memberVariables: memberVariables);
         }
 
@@ -1514,14 +1393,6 @@ public sealed partial class SemanticAnalyzer
 
                 break;
 
-            case ResidentDeclaration resident:
-                foreach (Declaration member in resident.Members)
-                {
-                    ResolveRoutineSignature(node: member);
-                }
-
-                break;
-
             case ExternalDeclaration externalDecl:
                 ResolveExternalParameters(externalDecl);
                 break;
@@ -1551,10 +1422,26 @@ public sealed partial class SemanticAnalyzer
         {
             routineInfo = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{routineName}");
         }
+        // For generic type methods (e.g., "Box[T].convert"), strip the generic params from the
+        // type name and retry (the routine was registered as "Box.convert")
+        if (routineInfo == null && routineName.Contains('['))
+        {
+            int bracketStart = routineName.IndexOf('[');
+            int bracketEnd = routineName.IndexOf(']');
+            if (bracketEnd > bracketStart)
+            {
+                string strippedName = routineName[..bracketStart] + routineName[(bracketEnd + 1)..];
+                routineInfo = _registry.LookupRoutine(fullName: strippedName);
+            }
+        }
         if (routineInfo == null)
         {
             return;
         }
+
+        // Set _currentRoutine so IsGenericParameter() can find generic params like T, U
+        var prevRoutine = _currentRoutine;
+        _currentRoutine = routineInfo;
 
         var parameters = new List<ParameterInfo>();
         var implicitGenerics = new List<string>();
@@ -1684,6 +1571,8 @@ public sealed partial class SemanticAnalyzer
             routineInfo.GenericConstraints?.ToList() ?? [];
         allConstraints.AddRange(collection: implicitConstraints);
 
+        _currentRoutine = prevRoutine;
+
         // Update the routine info with resolved parameters
         _registry.UpdateRoutine(routine: routineInfo,
             parameters: parameters,
@@ -1734,7 +1623,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
-            ResidentTypeInfo resident => resident.ImplementedProtocols,
             _ => null
         };
 
@@ -1909,7 +1797,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
-            ResidentTypeInfo resident => resident.ImplementedProtocols,
             _ => null
         };
 
@@ -1980,6 +1867,117 @@ public sealed partial class SemanticAnalyzer
             returnType: returnType,
             genericParameters: externalDecl.GenericParameters,
             genericConstraints: externalDecl.GenericConstraints);
+    }
+
+    #endregion
+
+    #region Phase 2.54: Implicit Marker Protocol Conformance
+
+    /// <summary>
+    /// Automatically adds marker protocol conformance based on type category.
+    /// Records implicitly conform to RecordType, entities to EntityType, etc.
+    /// Also adds all transitive protocols from the marker's obeys chain.
+    /// </summary>
+    private void ApplyImplicitMarkerConformance()
+    {
+        foreach (TypeSymbol type in _registry.GetTypesWithMethods())
+        {
+            // Skip generic definitions — their resolutions inherit conformance
+            if (type.IsGenericDefinition) continue;
+
+            // Determine the marker protocol name for this type category
+            string? markerName = type.Category switch
+            {
+                TypeCategory.Record => "RecordType",
+                TypeCategory.Entity => "EntityType",
+                TypeCategory.Choice => "ChoiceType",
+                TypeCategory.Flags => "FlagsType",
+                _ => null
+            };
+
+            if (markerName == null) continue;
+
+            TypeSymbol? markerType = _registry.LookupType(name: markerName);
+            if (markerType is not ProtocolTypeInfo marker) continue;
+
+            // Collect all transitive protocols from the marker's obeys chain
+            var transitiveProtocols = new List<TypeInfo>();
+            CollectTransitiveProtocols(protocol: marker, result: transitiveProtocols);
+
+            // Merge with existing user-declared protocols
+            IReadOnlyList<TypeInfo> existing = GetImplementedProtocols(type: type);
+            var merged = new List<TypeInfo>(collection: existing);
+
+            // Add transitive protocols first, then the marker itself
+            // Track implicitly-added protocols so validation skips them
+            foreach (TypeInfo proto in transitiveProtocols)
+            {
+                if (merged.All(predicate: p => p.Name != proto.Name))
+                {
+                    merged.Add(item: proto);
+                    _implicitProtocolConformances.Add(item: (type.FullName, proto.Name));
+                }
+            }
+
+            if (merged.All(predicate: p => p.Name != marker.Name))
+            {
+                merged.Add(item: marker);
+                _implicitProtocolConformances.Add(item: (type.FullName, marker.Name));
+            }
+
+            // Only update if we actually added something
+            if (merged.Count > existing.Count)
+                UpdateTypeProtocols(type: type, protocols: merged);
+        }
+    }
+
+    /// <summary>
+    /// Recursively collects all transitive parent protocols from a protocol's obeys chain.
+    /// </summary>
+    private static void CollectTransitiveProtocols(ProtocolTypeInfo protocol, List<TypeInfo> result)
+    {
+        foreach (ProtocolTypeInfo parent in protocol.ParentProtocols)
+        {
+            if (result.All(predicate: p => p.Name != parent.Name))
+            {
+                result.Add(item: parent);
+                CollectTransitiveProtocols(protocol: parent, result: result);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the implemented protocols for any type that supports them.
+    /// </summary>
+    private static IReadOnlyList<TypeInfo> GetImplementedProtocols(TypeInfo type) => type switch
+    {
+        RecordTypeInfo r => r.ImplementedProtocols,
+        EntityTypeInfo e => e.ImplementedProtocols,
+        ChoiceTypeInfo c => c.ImplementedProtocols,
+        FlagsTypeInfo f => f.ImplementedProtocols,
+        _ => []
+    };
+
+    /// <summary>
+    /// Updates the implemented protocols for any type that supports them.
+    /// </summary>
+    private void UpdateTypeProtocols(TypeInfo type, IReadOnlyList<TypeInfo> protocols)
+    {
+        switch (type)
+        {
+            case RecordTypeInfo:
+                _registry.UpdateRecordProtocols(recordName: type.FullName, protocols: protocols);
+                break;
+            case EntityTypeInfo:
+                _registry.UpdateEntityProtocols(entityName: type.FullName, protocols: protocols);
+                break;
+            case ChoiceTypeInfo:
+                _registry.UpdateChoiceProtocols(choiceName: type.FullName, protocols: protocols);
+                break;
+            case FlagsTypeInfo:
+                _registry.UpdateFlagsProtocols(flagsName: type.FullName, protocols: protocols);
+                break;
+        }
     }
 
     #endregion
@@ -2202,36 +2200,6 @@ public sealed partial class SemanticAnalyzer
                         existingMethods: existingMethods);
                     break;
 
-                case TypeCategory.Resident:
-                    if (s64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
-                            name: "id",
-                            returnType: s64Type,
-                            existingMethods: existingMethods);
-                    if (boolType != null)
-                    {
-                        MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__eq__",
-                            paramName: "you",
-                            paramType: type,
-                            returnType: boolType,
-                            existingMethods: existingMethods);
-                        MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__same__",
-                            paramName: "you",
-                            paramType: type,
-                            returnType: boolType,
-                            existingMethods: existingMethods);
-                        MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__notsame__",
-                            paramName: "you",
-                            paramType: type,
-                            returnType: boolType,
-                            existingMethods: existingMethods);
-                    }
-
-                    break;
-
                 case TypeCategory.Choice:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
@@ -2379,7 +2347,7 @@ public sealed partial class SemanticAnalyzer
             foreach (TypeSymbol type in _registry.GetAllTypes())
             {
                 if (type.Category is not (TypeCategory.Record or TypeCategory.Entity
-                    or TypeCategory.Resident or TypeCategory.Choice or TypeCategory.Flags
+                    or TypeCategory.Choice or TypeCategory.Flags
                     or TypeCategory.Variant))
                     continue;
 
@@ -2415,7 +2383,7 @@ public sealed partial class SemanticAnalyzer
             {
                 // Include concrete storable types + intrinsics
                 if (type.Category is not (TypeCategory.Record or TypeCategory.Entity
-                    or TypeCategory.Resident or TypeCategory.Choice or TypeCategory.Flags
+                    or TypeCategory.Choice or TypeCategory.Flags
                     or TypeCategory.Intrinsic))
                     continue;
 
@@ -2733,7 +2701,8 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
-            ResidentTypeInfo resident => resident.ImplementedProtocols,
+            ChoiceTypeInfo choice => choice.ImplementedProtocols,
+            FlagsTypeInfo flags => flags.ImplementedProtocols,
             _ => null
         };
 
@@ -2742,10 +2711,11 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Check each protocol
+        // Check each protocol — skip protocols added by implicit marker conformance
         foreach (TypeSymbol protocol in implementedProtocols)
         {
-            if (protocol is ProtocolTypeInfo protoInfo)
+            if (protocol is ProtocolTypeInfo protoInfo &&
+                !_implicitProtocolConformances.Contains(item: (type.FullName, protoInfo.Name)))
             {
                 ValidateProtocolMethods(type: type, protocol: protoInfo);
             }

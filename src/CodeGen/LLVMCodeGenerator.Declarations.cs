@@ -143,60 +143,6 @@ public partial class LLVMCodeGenerator
 
     #endregion
 
-    #region Resident Type Generation
-
-    /// <summary>
-    /// Generates the LLVM struct type for a resident.
-    /// Resident = fixed-size reference type, persistent memory.
-    /// Like entity but with compile-time known size.
-    /// </summary>
-    /// <param name="resident">The resident type info.</param>
-    private void GenerateResidentType(ResidentTypeInfo resident)
-    {
-        string typeName = GetResidentTypeName(resident);
-
-        // Skip if already generated
-        if (_generatedTypes.Contains(typeName))
-        {
-            return;
-        }
-        _generatedTypes.Add(typeName);
-
-        // Build the struct type
-        var memberVariableTypes = new List<string>();
-        foreach (var memberVariable in resident.MemberVariables)
-        {
-            string memberVariableType = GetLLVMType(memberVariable.Type);
-            memberVariableTypes.Add(memberVariableType);
-        }
-
-        // Handle empty residents
-        if (memberVariableTypes.Count == 0)
-        {
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ i8 }}");
-        }
-        else
-        {
-            string memberVars = string.Join(", ", memberVariableTypes);
-            EmitLine(_typeDeclarations, $"{typeName} = type {{ {memberVars} }}");
-        }
-
-        // Add member variable comment
-        if (resident.MemberVariables.Count > 0)
-        {
-            var sb = new StringBuilder();
-            sb.Append($"; {typeName} member variables: ");
-            for (int i = 0; i < resident.MemberVariables.Count; i++)
-            {
-                if (i > 0) sb.Append(", ");
-                sb.Append($"{i}={resident.MemberVariables[i].Name}");
-            }
-            EmitLine(_typeDeclarations, sb.ToString());
-        }
-    }
-
-    #endregion
-
     #region Choice Type Generation
 
     /// <summary>
@@ -585,6 +531,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
+        EmitEntityCleanup(_functionDefinitions, null);
         EmitLine(_functionDefinitions, "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)
         {
@@ -631,7 +578,7 @@ public partial class LLVMCodeGenerator
                 GetZeroValueForLlvmType(record.BackendType!),
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetZeroValue(record.UnderlyingIntrinsic!),
-            EntityTypeInfo or ResidentTypeInfo or WrapperTypeInfo => "null",
+            EntityTypeInfo or WrapperTypeInfo => "null",
             _ => "zeroinitializer"
         };
     }
@@ -810,7 +757,7 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                     EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ResidentTypeInfo { GenericDefinition: not null } res => res.GenericDefinition,
+                    ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
                     _ => null
                 };
                 if (genericBase == null)
@@ -1174,7 +1121,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits the body for a synthesized __eq__ routine.
     /// For records: AND chain of field-by-field __eq__ calls (or icmp for primitives).
-    /// For entities/residents: field-by-field equality via GEP load + comparison.
+    /// For entities: field-by-field equality via GEP load + comparison.
     /// </summary>
     private void EmitSynthesizedEq(RoutineInfo routine, string funcName)
     {
@@ -1293,48 +1240,6 @@ public partial class LLVMCodeGenerator
                 EmitLine(_functionDefinitions, $"  ret i1 {accum}");
                 break;
             }
-            case ResidentTypeInfo resident:
-            {
-                // Resident: same as entity (GEP + load)
-                if (resident.MemberVariables.Count == 0)
-                {
-                    string result = NextTemp();
-                    EmitLine(_functionDefinitions, $"  {result} = icmp eq ptr %me, %{youName}");
-                    EmitLine(_functionDefinitions, $"  ret i1 {result}");
-                    break;
-                }
-
-                string typeName = GetResidentTypeName(resident);
-                string accum = "true";
-                for (int i = 0; i < resident.MemberVariables.Count; i++)
-                {
-                    var mv = resident.MemberVariables[i];
-                    string fieldType = GetLLVMType(mv.Type);
-                    string meFp = NextTemp();
-                    string youFp = NextTemp();
-                    string meField = NextTemp();
-                    string youField = NextTemp();
-                    EmitLine(_functionDefinitions, $"  {meFp} = getelementptr {typeName}, ptr %me, i32 0, i32 {i}");
-                    EmitLine(_functionDefinitions, $"  {meField} = load {fieldType}, ptr {meFp}");
-                    EmitLine(_functionDefinitions, $"  {youFp} = getelementptr {typeName}, ptr %{youName}, i32 0, i32 {i}");
-                    EmitLine(_functionDefinitions, $"  {youField} = load {fieldType}, ptr {youFp}");
-
-                    string cmpResult = EmitFieldEquality(mv.Type, fieldType, meField, youField);
-
-                    if (accum == "true")
-                    {
-                        accum = cmpResult;
-                    }
-                    else
-                    {
-                        string andResult = NextTemp();
-                        EmitLine(_functionDefinitions, $"  {andResult} = and i1 {accum}, {cmpResult}");
-                        accum = andResult;
-                    }
-                }
-                EmitLine(_functionDefinitions, $"  ret i1 {accum}");
-                break;
-            }
             default:
                 EmitLine(_functionDefinitions, "  ret i1 false");
                 break;
@@ -1364,8 +1269,8 @@ public partial class LLVMCodeGenerator
             return cmpResult;
         }
 
-        // Entity/resident types: pointer equality
-        if (fieldType is EntityTypeInfo or ResidentTypeInfo)
+        // Entity types: pointer equality
+        if (fieldType is EntityTypeInfo)
         {
             string cmpResult = NextTemp();
             EmitLine(_functionDefinitions, $"  {cmpResult} = icmp eq ptr {meField}, {youField}");
@@ -1406,7 +1311,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo rec => rec.MemberVariables,
             EntityTypeInfo ent => ent.MemberVariables,
-            ResidentTypeInfo res => res.MemberVariables,
             _ => null
         };
 
@@ -1468,15 +1372,6 @@ public partial class LLVMCodeGenerator
                     string entTypeName = GetEntityTypeName(ent);
                     string fp = NextTemp();
                     EmitLine(_functionDefinitions, $"  {fp} = getelementptr {entTypeName}, ptr %me, i32 0, i32 {fieldIdx}");
-                    fieldValue = NextTemp();
-                    EmitLine(_functionDefinitions, $"  {fieldValue} = load {fieldType}, ptr {fp}");
-                    break;
-                }
-                case ResidentTypeInfo res:
-                {
-                    string resTypeName = GetResidentTypeName(res);
-                    string fp = NextTemp();
-                    EmitLine(_functionDefinitions, $"  {fp} = getelementptr {resTypeName}, ptr %me, i32 0, i32 {fieldIdx}");
                     fieldValue = NextTemp();
                     EmitLine(_functionDefinitions, $"  {fieldValue} = load {fieldType}, ptr {fp}");
                     break;
@@ -1632,7 +1527,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized id() routine on entities/residents.
+    /// Emits the body for a synthesized id() routine on entities.
     /// Returns the pointer cast to i64.
     /// </summary>
     private void EmitSynthesizedId(RoutineInfo routine, string funcName)
@@ -1898,6 +1793,217 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, "");
     }
 
+    /// <summary>
+    /// Generates forwarding stubs for protocol method calls.
+    /// When monomorphized code calls a method on a protocol-typed field (e.g., me.source.__seq__()
+    /// where source: Sequenceable[S64]), the emitted call targets "Core.Sequenceable[S64].__seq__".
+    /// This method generates a 'define' body that forwards to the concrete implementer
+    /// (e.g., Core.List[S64].__seq__).
+    /// </summary>
+    private void GenerateProtocolDispatchStubs()
+    {
+        foreach (var (mangledName, info) in _pendingProtocolDispatches)
+        {
+            // Skip if already defined (a previous iteration or other codegen path generated it)
+            if (_generatedFunctionDefs.Contains(mangledName))
+                continue;
+
+            // Find the declaration to get param/return types
+            // The declaration was emitted in EmitMethodCall: "declare <retType> @<mangledName>(<paramTypes>)"
+            if (!_generatedFunctions.Contains(mangledName))
+                continue;
+
+            // Find concrete implementers of this protocol resolution
+            string? concreteFunc = FindConcreteImplementer(info.Protocol, info.MethodName);
+            if (concreteFunc == null || !_generatedFunctionDefs.Contains(concreteFunc))
+                continue;
+
+            // Parse the declaration to extract return type and parameter types
+            string? declLine = FindDeclarationLine(mangledName);
+            if (declLine == null)
+                continue;
+
+            // Parse: "declare <retType> @<name>(<params>)"
+            int declareIdx = declLine.IndexOf("declare ");
+            if (declareIdx < 0) continue;
+            string afterDeclare = declLine[(declareIdx + 8)..];
+            int atIdx = afterDeclare.IndexOf(" @");
+            if (atIdx < 0) continue;
+            string retType = afterDeclare[..atIdx].Trim();
+            int openParen = afterDeclare.IndexOf('(');
+            int closeParen = afterDeclare.LastIndexOf(')');
+            if (openParen < 0 || closeParen < 0) continue;
+            string paramList = afterDeclare[(openParen + 1)..closeParen].Trim();
+
+            // Build parameter names
+            var paramNames = new List<string>();
+            var paramTypes = new List<string>();
+            if (!string.IsNullOrEmpty(paramList))
+            {
+                // Split param types (handles types like { i64, ptr } that contain commas)
+                paramTypes = SplitLlvmParams(paramList);
+                for (int i = 0; i < paramTypes.Count; i++)
+                    paramNames.Add(i == 0 ? "%self" : $"%arg{i}");
+            }
+
+            // Emit forwarding stub
+            var sb = _functionDefinitions;
+            string paramDefs = string.Join(", ",
+                paramTypes.Select((t, i) => $"{t} {paramNames[i]}"));
+            EmitLine(sb, $"define {retType} @{mangledName}({paramDefs}) {{");
+            EmitLine(sb, "entry:");
+
+            string callArgs = string.Join(", ",
+                paramTypes.Select((t, i) => $"{t} {paramNames[i]}"));
+
+            if (retType == "void")
+            {
+                EmitLine(sb, $"  call void @{concreteFunc}({callArgs})");
+                EmitLine(sb, "  ret void");
+            }
+            else
+            {
+                EmitLine(sb, $"  %fwd = call {retType} @{concreteFunc}({callArgs})");
+                EmitLine(sb, $"  ret {retType} %fwd");
+            }
+            EmitLine(sb, "}");
+            EmitLine(sb, "");
+
+            _generatedFunctionDefs.Add(mangledName);
+        }
+    }
+
+    /// <summary>
+    /// Finds the concrete implementation function for a protocol method.
+    /// Searches all entity/record types for one that implements the given protocol
+    /// and has a generated function body for the method.
+    /// </summary>
+    private string? FindConcreteImplementer(ProtocolTypeInfo protocol, string methodName)
+    {
+        var protocolDef = protocol.GenericDefinition ?? protocol;
+        string protocolBaseName = protocolDef.Name;
+
+        // Search all entity/record types (including resolutions) for implementers
+        var seen = new HashSet<string>();
+        foreach (var type in _registry.GetTypesByCategory(SemanticAnalysis.Enums.TypeCategory.Entity)
+            .Concat(_registry.GetTypesByCategory(SemanticAnalysis.Enums.TypeCategory.Record)))
+        {
+            if (type.IsGenericDefinition && protocol.TypeArguments == null) continue;
+            if (!seen.Add(type.Name)) continue;
+
+            IReadOnlyList<TypeInfo>? protocols = type switch
+            {
+                EntityTypeInfo e => e.ImplementedProtocols,
+                RecordTypeInfo r => r.ImplementedProtocols,
+                _ => null
+            };
+            if (protocols == null) continue;
+
+            foreach (var impl in protocols)
+            {
+                // Check if this type implements the matching protocol
+                // For generic types: List[T] obeys Sequenceable[T] → when T=S64, List[S64] obeys Sequenceable[S64]
+                string implBaseName = impl.Name.Contains('[') ? impl.Name[..impl.Name.IndexOf('[')] : impl.Name;
+                if (implBaseName != protocolBaseName) continue;
+
+                // Match: now determine the concrete type resolution
+                TypeInfo concreteType = type;
+
+                // If the type is a generic definition, resolve it using the protocol's type args
+                if (type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 })
+                {
+                    // The protocol on the generic def has the same generic params (e.g., Sequenceable[T])
+                    // We need to map protocol's T to the concrete type arg (e.g., S64)
+                    // Then resolve the generic def with those args
+                    var protocolGenDef = protocol.GenericDefinition ?? protocol;
+                    if (protocolGenDef.GenericParameters is { Count: > 0 } && type.GenericParameters is { Count: > 0 })
+                    {
+                        // Build mapping: protocol param → concrete type arg
+                        var mapping = new Dictionary<string, TypeInfo>();
+                        for (int i = 0; i < protocolGenDef.GenericParameters.Count && i < protocol.TypeArguments.Count; i++)
+                            mapping[protocolGenDef.GenericParameters[i]] = protocol.TypeArguments[i];
+
+                        // Map type's generic params using the impl protocol's type args
+                        // e.g., List[T] with Sequenceable[T]: T maps to protocol param T → S64
+                        var typeArgs = new List<TypeInfo>();
+                        if (impl.TypeArguments is { Count: > 0 })
+                        {
+                            foreach (var implArg in impl.TypeArguments)
+                            {
+                                if (implArg is GenericParameterTypeInfo gp && mapping.TryGetValue(gp.Name, out var concrete))
+                                    typeArgs.Add(concrete);
+                                else if (mapping.TryGetValue(implArg.Name, out var concrete2))
+                                    typeArgs.Add(concrete2);
+                                else
+                                    typeArgs.Add(implArg);
+                            }
+                        }
+                        else
+                        {
+                            // If impl has no type args, use protocol's type args directly
+                            typeArgs.AddRange(protocol.TypeArguments);
+                        }
+
+                        if (typeArgs.Count == type.GenericParameters.Count)
+                        {
+                            concreteType = _registry.GetOrCreateResolution(type, typeArgs);
+                        }
+                        else
+                            continue;
+                    }
+                    else
+                        continue;
+                }
+                else if (type.IsGenericDefinition)
+                    continue; // Can't resolve without type args
+
+                // Check if the concrete method exists in generated functions
+                string candidateName = Q($"{concreteType.FullName}.{SanitizeLLVMName(methodName)}");
+                if (_generatedFunctionDefs.Contains(candidateName))
+                    return candidateName;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds a declaration line for a given mangled function name.
+    /// </summary>
+    private string? FindDeclarationLine(string mangledName)
+    {
+        string searchTarget = $"@{mangledName}(";
+        foreach (string line in _functionDeclarations.ToString().Split('\n'))
+        {
+            if (line.StartsWith("declare ") && line.Contains(searchTarget))
+                return line;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Splits LLVM parameter types, handling nested braces (e.g., "{ i64, ptr }").
+    /// </summary>
+    private static List<string> SplitLlvmParams(string paramList)
+    {
+        var result = new List<string>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < paramList.Length; i++)
+        {
+            if (paramList[i] == '{') depth++;
+            else if (paramList[i] == '}') depth--;
+            else if (paramList[i] == ',' && depth == 0)
+            {
+                result.Add(paramList[start..i].Trim());
+                start = i + 1;
+            }
+        }
+        if (start < paramList.Length)
+            result.Add(paramList[start..].Trim());
+        return result;
+    }
+
     #endregion
 
     #region BuilderService Metadata Routines
@@ -1989,7 +2095,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo rec => rec.MemberVariables.Count,
             EntityTypeInfo ent => ent.MemberVariables.Count,
-            ResidentTypeInfo res => res.MemberVariables.Count,
             _ => 0
         };
 
@@ -2096,7 +2201,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo rec => rec.ImplementedProtocols,
             EntityTypeInfo ent => ent.ImplementedProtocols,
-            ResidentTypeInfo res => res.ImplementedProtocols,
             _ => null
         };
 
@@ -2187,7 +2291,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo rec => rec.MemberVariables,
             EntityTypeInfo ent => ent.MemberVariables,
-            ResidentTypeInfo res => res.MemberVariables,
             _ => null
         };
 
@@ -2298,7 +2401,6 @@ public partial class LLVMCodeGenerator
         {
             RecordTypeInfo rec => rec.MemberVariables,
             EntityTypeInfo ent => ent.MemberVariables,
-            ResidentTypeInfo res => res.MemberVariables,
             _ => []
         };
 
@@ -2345,7 +2447,6 @@ public partial class LLVMCodeGenerator
         string structType = routine.OwnerType switch
         {
             EntityTypeInfo ent => GetEntityTypeName(ent),
-            ResidentTypeInfo res => GetResidentTypeName(res),
             RecordTypeInfo rec => GetRecordTypeName(rec),
             _ => GetLLVMType(routine.OwnerType)
         };
@@ -2434,7 +2535,6 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } => null, // Use underlying size
             RecordTypeInfo rec => rec.MemberVariables,
             EntityTypeInfo ent => ent.MemberVariables,
-            ResidentTypeInfo res => res.MemberVariables,
             _ => null
         };
 
@@ -2484,7 +2584,6 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } => null,
             RecordTypeInfo rec => rec.MemberVariables,
             EntityTypeInfo ent => ent.MemberVariables,
-            ResidentTypeInfo res => res.MemberVariables,
             _ => null
         };
 

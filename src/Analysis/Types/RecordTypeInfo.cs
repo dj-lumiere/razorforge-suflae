@@ -16,7 +16,7 @@ public sealed class RecordTypeInfo : TypeInfo
     public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this record implements (obeys).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
+    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
     /// Backend type from @llvm("type") annotation. Null if not a backend-annotated type.
@@ -188,9 +188,9 @@ public sealed class RecordTypeInfo : TypeInfo
             return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
-        if (type is ResidentTypeInfo { GenericDefinition: not null } residentType)
+        if (type is ProtocolTypeInfo { GenericDefinition: not null } protocolType)
         {
-            return residentType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

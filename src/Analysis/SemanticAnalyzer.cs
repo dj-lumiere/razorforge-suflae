@@ -95,6 +95,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Temporary: last share[Policy]() call info, propagated in variable declaration (#19).</summary>
     private (string SourceVar, string Policy)? _lastSharePolicy;
 
+    /// <summary>Tracks (TypeName, ProtocolName) pairs added by implicit marker conformance, excluded from validation.</summary>
+    private readonly HashSet<(string TypeName, string ProtocolName)> _implicitProtocolConformances = [];
+
     #endregion
 
     #region Constructor
@@ -136,6 +139,9 @@ public sealed partial class SemanticAnalyzer
         // Phase 2.5: Resolve routine signatures (parameter types, protocol-as-type desugaring)
         ResolveRoutineSignatures(program: program);
 
+        // Phase 2.54: Apply implicit marker protocol conformance (record → RecordType, etc.)
+        ApplyImplicitMarkerConformance();
+
         // Phase 2.55: Auto-register builder-generated member routines (Text, hash, __eq__, etc.)
         AutoRegisterBuiltinRoutines();
 
@@ -175,6 +181,7 @@ public sealed partial class SemanticAnalyzer
 
         // Run global phases that stdlib body analysis depends on
         // (StdlibLoader registered types and routines, but these phases were not run)
+        ApplyImplicitMarkerConformance();
         AutoRegisterBuiltinRoutines();
         GenerateDerivedOperators();
 
@@ -268,6 +275,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Global passes (once, registry-only — no per-file import scoping needed)
+        ApplyImplicitMarkerConformance();
         AutoRegisterBuiltinRoutines();
         GenerateDerivedOperators();
         ValidateProtocolImplementations();

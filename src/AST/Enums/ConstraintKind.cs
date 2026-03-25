@@ -12,9 +12,6 @@ public enum ConstraintKind
     /// <summary>Reference type constraint (where T is entity)</summary>
     ReferenceType,
 
-    /// <summary>Resident type constraint (where T is resident)</summary>
-    ResidentType,
-
     /// <summary>Routine/function type constraint (where T is routine)</summary>
     RoutineType,
 

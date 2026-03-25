@@ -479,7 +479,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
             EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
-            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
             _ => ErrorTypeInfo.Instance
         };
     }

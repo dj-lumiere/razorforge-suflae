@@ -399,11 +399,6 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the struct declaration</returns>
     T VisitRecordDeclaration(RecordDeclaration node);
 
-    /// <summary>Visits a resident declaration node (permanent fixed-size reference type)</summary>
-    /// <param name="node">The resident declaration to visit</param>
-    /// <returns>Result of visiting the resident declaration</returns>
-    T VisitResidentDeclaration(ResidentDeclaration node);
-
     /// <summary>Visits a menu declaration node (option/enum definitions)</summary>
     /// <param name="node">The menu declaration to visit</param>
     /// <returns>Result of visiting the menu declaration</returns>

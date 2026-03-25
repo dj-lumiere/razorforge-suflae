@@ -4,7 +4,7 @@ using SyntaxTree;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
-/// Information about a field in a record, entity, or resident.
+/// Information about a field in a record or entity.
 /// </summary>
 /// <remarks>
 /// Field visibility uses the four-level system:

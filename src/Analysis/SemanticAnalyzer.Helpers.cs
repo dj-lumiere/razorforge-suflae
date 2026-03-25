@@ -430,15 +430,15 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op, SourceLocation location)
     {
-        // Identity operators (===, !==) only work on entity/resident types
+        // Identity operators (===, !==) only work on entity types
         if (op is BinaryOperator.Identical or BinaryOperator.NotIdentical)
         {
-            if (left.Category is not (TypeCategory.Entity or TypeCategory.Resident) ||
-                right.Category is not (TypeCategory.Entity or TypeCategory.Resident))
+            if (left.Category is not TypeCategory.Entity ||
+                right.Category is not TypeCategory.Entity)
             {
                 ReportError(
                     SemanticDiagnosticCode.IdentityOperatorRequiresReference,
-                    $"Identity operator '{op.ToStringRepresentation()}' can only be used with entity or resident types, not '{left.Name}' and '{right.Name}'.",
+                    $"Identity operator '{op.ToStringRepresentation()}' can only be used with entity types, not '{left.Name}' and '{right.Name}'.",
                     location);
             }
 
@@ -595,7 +595,49 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
-        // Look for __seq__ method to get element type from SequenceEmitter[T] return type
+        // Strategy 1: Extract element type from Sequenceable[X] protocol conformance.
+        // This correctly handles chained generics like EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]]
+        IReadOnlyList<TypeSymbol>? protocols = iterableType switch
+        {
+            RecordTypeInfo record => record.ImplementedProtocols,
+            EntityTypeInfo entity => entity.ImplementedProtocols,
+            _ => null
+        };
+
+        if (protocols != null)
+        {
+            foreach (TypeSymbol proto in protocols)
+            {
+                if (GetBaseTypeName(typeName: proto.Name) == "Sequenceable" && proto.TypeArguments is { Count: > 0 })
+                {
+                    TypeInfo elementType = proto.TypeArguments[0];
+
+                    // Resolve generic parameters if the iterable is a generic resolution
+                    if (iterableType is { IsGenericResolution: true, TypeArguments: not null })
+                    {
+                        TypeInfo? genericDef = iterableType switch
+                        {
+                            RecordTypeInfo r => r.GenericDefinition,
+                            EntityTypeInfo e => e.GenericDefinition,
+                            _ => null
+                        };
+                        if (genericDef?.GenericParameters != null)
+                        {
+                            var substitution = new Dictionary<string, TypeInfo>();
+                            for (int i = 0; i < genericDef.GenericParameters.Count && i < iterableType.TypeArguments.Count; i++)
+                            {
+                                substitution[key: genericDef.GenericParameters[i]] = iterableType.TypeArguments[i];
+                            }
+                            elementType = SubstituteTypeParams(type: elementType, substitution: substitution);
+                        }
+                    }
+
+                    return elementType;
+                }
+            }
+        }
+
+        // Strategy 2: Look for __seq__ method to get element type from SequenceEmitter[T] return type
         RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__seq__");
 
         // Generic fallback: Range[S64].__seq__ → Range.__seq__ via LookupMethod
@@ -614,7 +656,6 @@ public sealed partial class SemanticAnalyzer
                 {
                     RecordTypeInfo r => r.GenericDefinition,
                     EntityTypeInfo e => e.GenericDefinition,
-                    ResidentTypeInfo res => res.GenericDefinition,
                     _ => null
                 };
                 if (genericDef?.GenericParameters != null)
@@ -641,6 +682,55 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Recursively substitutes generic type parameters in a type using the given substitution map.
+    /// Used to resolve protocol type arguments when the owning type is a generic resolution.
+    /// </summary>
+    private static TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> substitution)
+    {
+        // Direct substitution for generic parameters
+        if (type is GenericParameterTypeInfo && substitution.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+            return sub;
+
+        // Recursive substitution in type arguments
+        if (type.TypeArguments is not { Count: > 0 })
+            return type;
+
+        var newArgs = type.TypeArguments
+            .Select(selector: arg => SubstituteTypeParams(type: arg, substitution: substitution))
+            .ToList();
+
+        // Check if anything actually changed
+        bool changed = false;
+        for (int i = 0; i < newArgs.Count; i++)
+        {
+            if (!ReferenceEquals(objA: newArgs[i], objB: type.TypeArguments[i]))
+            {
+                changed = true;
+                break;
+            }
+        }
+        if (!changed) return type;
+
+        // Get the generic definition and create a new instance with substituted args
+        TypeInfo? genericDef = type switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            ProtocolTypeInfo p => p.GenericDefinition,
+            _ => null
+        };
+
+        if (genericDef != null)
+            return genericDef.CreateInstance(typeArguments: newArgs);
+
+        // TupleTypeInfo doesn't have a GenericDefinition — create a new tuple directly
+        if (type is TupleTypeInfo tuple)
+            return new TupleTypeInfo(elementTypes: newArgs, kind: tuple.Kind);
+
+        return type;
+    }
+
+    /// <summary>
     /// Returns true if <paramref name="type"/> implements the named protocol.
     /// Checks explicit protocol declarations, parent protocol chains, and structural conformance
     /// (i.e., whether the type has all required methods of the protocol).
@@ -659,7 +749,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
-            ResidentTypeInfo resident => resident.ImplementedProtocols,
             _ => null
         };
 
@@ -703,7 +792,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
-            ResidentTypeInfo resident => resident.ImplementedProtocols,
             _ => null
         };
 
@@ -1032,14 +1120,6 @@ public sealed partial class SemanticAnalyzer
         return type.Name == "Tracked";
     }
 
-    /// <summary>
-    /// Checks if a type is a resident type.
-    /// </summary>
-    private static bool IsResidentType(TypeSymbol type)
-    {
-        return type is ResidentTypeInfo;
-    }
-
     #endregion
 
     #region Wrapper Type Forwarding
@@ -1128,7 +1208,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName),
             EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName),
-            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName),
             _ => null
         };
     }
@@ -1551,7 +1630,6 @@ public sealed partial class SemanticAnalyzer
         {
             RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName),
             EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName),
-            ResidentTypeInfo resident => resident.LookupMemberVariable(memberVariableName: memberVariableName),
             _ => null
         };
 
@@ -1784,10 +1862,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is valid for resident member variables.
-    /// Residents can contain: records, primitives (intrinsic wrappers), Snatched[T], other residents, choices, flags.
-    /// </summary>
-    /// <summary>
     /// Fixed-width numeric type names (excludes system-dependent SAddr/UAddr).
     /// </summary>
     private static readonly HashSet<string> FixedWidthNumericTypeNames =
@@ -1804,20 +1878,6 @@ public sealed partial class SemanticAnalyzer
     private static bool IsFixedWidthNumericType(TypeInfo type)
     {
         return FixedWidthNumericTypeNames.Contains(item: type.Name);
-    }
-
-    private static bool IsValidResidentFieldType(TypeInfo type)
-    {
-        return type switch
-        {
-            RecordTypeInfo record => true, // includes primitive wrappers like Text, S32, Bool
-            ResidentTypeInfo => true,
-            ChoiceTypeInfo => true,
-            FlagsTypeInfo => true,
-            IntrinsicTypeInfo => true, // raw primitives
-            WrapperTypeInfo { Name: "Snatched" } => true,
-            _ => false
-        };
     }
 
     #endregion

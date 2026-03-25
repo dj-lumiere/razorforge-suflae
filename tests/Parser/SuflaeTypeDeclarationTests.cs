@@ -321,20 +321,6 @@ public class SuflaeTypeDeclarationTests
     #region Suflae-Specific Features
 
     [Fact]
-    public void ParseSuflae_NoResident_ShouldThrowOrIgnore()
-    {
-        // Resident is RazorForge-only, Suflae should not support it
-        string source = """
-                        resident SystemLogger
-                          log_count: U32
-                        """;
-
-        // Depending on parser behavior - may throw or parse but semantic rejects
-        Record.Exception(testCode: () => ParseSuflae(source: source));
-        // Either throws or parses (semantic will reject)
-    }
-
-    [Fact]
     public void ParseSuflae_WhenStatement()
     {
         string source = """

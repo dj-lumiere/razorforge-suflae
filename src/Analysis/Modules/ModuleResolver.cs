@@ -235,7 +235,7 @@ public sealed class ModuleResolver
     private static List<string> ExtractTypeNames(string content)
     {
         var types = new List<string>();
-        string[] keywords = ["record ", "entity ", "choice ", "variant ", "mutant ", "protocol ", "resident "
+        string[] keywords = ["record ", "entity ", "choice ", "variant ", "mutant ", "protocol "
         ];
 
         foreach (string line in content.Split('\n'))

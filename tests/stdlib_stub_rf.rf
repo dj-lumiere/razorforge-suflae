@@ -6,11 +6,6 @@
 import Collections.BitList
 import Collections.Deque
 import Collections.Dict
-import Collections.FixedBitList
-import Collections.FixedDeque
-import Collections.FixedDict
-import Collections.FixedList
-import Collections.FixedSet
 import Collections.List
 import Collections.PriorityQueue
 import Collections.Set
@@ -25,15 +20,6 @@ import IO.Console
 import Numeric.Decimal
 import Numeric.Fraction
 import Numeric.Integer
-
-# Bytes module
-import Bytes.Bytes
-import Bytes.FixedBytes
-
-# Text module
-import Text.FixedText
-import Text.Representable
-import Text.Text
 
 module StdlibStub
 
