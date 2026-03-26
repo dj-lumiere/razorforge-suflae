@@ -100,3 +100,6 @@ routine Byte.__represent__() -> Text
   else
     digits.add_last(Letter(0x0041u32 + low - 10u32))
   return Text(from_list: digits)
+
+routine Byte.__diagnose__() -> Text
+  return "Byte(" + U8(me).__represent__() + ", " + me.__represent__() + ")"

@@ -326,6 +326,9 @@ routine S16.signum() -> S16
 routine S16.__represent__() -> Text
   return S32(me).Text()
 
+routine S16.__diagnose__() -> Text
+  return "S16(" + me.__represent__() + ")"
+
 routine S16.__create__!(from_text: Text) -> S16
   var start = 0u64
   var negative = false

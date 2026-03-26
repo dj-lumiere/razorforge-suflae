@@ -18,7 +18,7 @@
 #   list[^3 til ^0]    # last 3 elements
 module Core
 
-record Range[T] obeys Sequenceable needs T obeys FixedNumeric
+record Range[T] obeys Iterable needs T obeys FixedNumeric
   start: T
   end: T
   step: T
@@ -55,7 +55,7 @@ routine Range[T].is_empty() -> Bool
   return me.start == me.end
 
 # ============================================================================
-# Sequenceable protocol support
+# Iterable protocol support
 # ============================================================================
 
 entity RangeEmitter[T] needs T obeys FixedNumeric
@@ -67,7 +67,7 @@ entity RangeEmitter[T] needs T obeys FixedNumeric
   done: Bool
 
 @readonly
-routine Range[T].__seq__() -> RangeEmitter[T]
+routine Range[T].__iter__() -> RangeEmitter[T]
   return RangeEmitter[T](
     current: me.start,
     end: me.end,

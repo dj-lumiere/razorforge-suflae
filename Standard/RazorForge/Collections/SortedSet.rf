@@ -12,8 +12,6 @@
 #   var last = set[^1]     # 5
 #   var range = set.range(1, 10)
 
-import Collections.List
-
 module Collections
 
 # B-tree order (max children per node)
@@ -413,7 +411,7 @@ routine SortedSet[T].last!() -> T
 # Iteration (in-order traversal)
 # ============================================================================
 
-routine SortedSet[T].__seq__() -> SortedSetIterator[T]
+routine SortedSet[T].__iter__() -> SortedSetIterator[T]
   return SortedSetIterator[T](set: me, index: 0u64)
 
 routine SortedSet[T].to_list() -> List[T]
@@ -448,6 +446,28 @@ routine SortedSetIterator[T].next!() -> T
 # ============================================================================
 # Comparison
 # ============================================================================
+
+routine SortedSet[T].__represent__() -> Text
+  var result = "SortedSet{"
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.Text()
+    i = i + 1u64
+  result = result + "}"
+  return result
+
+routine SortedSet[T].__diagnose__() -> Text
+  var result = "SortedSet{"
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.__diagnose__()
+    i = i + 1u64
+  result = result + "}"
+  return result
 
 routine SortedSet[T].__eq__(other: SortedSet[T]) -> Bool
   if me.count != other.count

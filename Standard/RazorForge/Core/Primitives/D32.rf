@@ -235,6 +235,9 @@ routine D32.__represent__() -> Text
   var cstr_result = rf_d32_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
+routine D32.__diagnose__() -> Text
+  return "D32(" + me.__represent__() + ")"
+
 routine D32.__create__!(from_text: Text) -> D32
   var cstr_val = from_text.CStr()
   var bits = rf_D32_from_string(cstr_val)

@@ -279,3 +279,6 @@ routine Duration.__represent__() -> Text
     parts = f"{parts}{d.get_nanoseconds()}ns"
 
   return parts
+
+routine Duration.__diagnose__() -> Text
+  return "Duration(seconds: " + me.seconds.__represent__() + ", nanoseconds: " + me.nanoseconds.__represent__() + ")"

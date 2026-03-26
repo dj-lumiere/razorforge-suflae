@@ -4,7 +4,7 @@
 
 module Core
 
-entity List[T] obeys Sequenceable[T]
+entity List[T] obeys Iterable[T]
   secret data: Snatched[T]       # Pointer to heap-allocated array
   secret count: U64              # Current number of elements
   secret capacity: U64           # Total allocated capacity
@@ -217,15 +217,15 @@ routine List[T].clear()
   return
 
 # ============================================================================
-# Sequenceable protocol support
+# Iterable protocol support
 # ============================================================================
 
-entity ListEmitter[T] obeys SequenceEmitter[T]
+entity ListEmitter[T] obeys Iterator[T]
   secret list: List[T]
   secret index: U64
 
 @readonly
-routine List[T].__seq__() -> ListEmitter[T]
+routine List[T].__iter__() -> ListEmitter[T]
   return ListEmitter[T](list: me, index: 0u64)
 
 @writable
@@ -244,6 +244,17 @@ routine List[T].__represent__() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.Text()
+    i = i + 1u64
+  result = result + "]"
+  return result
+
+routine List[T].__diagnose__() -> Text
+  var result = "List["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.__diagnose__()
     i = i + 1u64
   result = result + "]"
   return result

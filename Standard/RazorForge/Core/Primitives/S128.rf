@@ -323,6 +323,9 @@ routine S128.__represent__() -> Text
     return U128(me).Text()
   return "-" + U128(0u128 - U128(me)).Text()
 
+routine S128.__diagnose__() -> Text
+  return "S128(" + me.__represent__() + ")"
+
 routine S128.__create__!(from_text: Text) -> S128
   var start = 0u64
   var negative = false

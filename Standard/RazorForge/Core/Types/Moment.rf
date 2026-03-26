@@ -238,3 +238,6 @@ routine Moment.__represent__() -> Text
   var mi = me.minute()
   var s = me.second()
   return f"{y}-{mo}-{d} {h}:{mi}:{s}"
+
+routine Moment.__diagnose__() -> Text
+  return "Moment(seconds: " + me.seconds.__represent__() + ", nanoseconds: " + me.nanoseconds.__represent__() + ")"

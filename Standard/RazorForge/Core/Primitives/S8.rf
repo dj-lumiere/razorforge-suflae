@@ -328,6 +328,9 @@ routine S8.signum() -> S8
 routine S8.__represent__() -> Text
   return S32(me).Text()
 
+routine S8.__diagnose__() -> Text
+  return "S8(" + me.__represent__() + ")"
+
 routine S8.__create__!(from_text: Text) -> S8
   var start = 0u64
   var negative = false

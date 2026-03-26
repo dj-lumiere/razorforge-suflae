@@ -343,6 +343,9 @@ routine S64.__represent__() -> Text
     return U64(me).Text()
   return "-" + U64(0u64 - U64(me)).Text()
 
+routine S64.__diagnose__() -> Text
+  return "S64(" + me.__represent__() + ")"
+
 routine S64.__create__!(from_text: Text) -> S64
   var start = 0u64
   var negative = false

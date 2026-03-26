@@ -133,6 +133,9 @@ routine Letter.__represent__() -> Text
   list.add_last(me)
   return Text(from_list: list)
 
+routine Letter.__diagnose__() -> Text
+  return "Letter(" + me.__represent__() + ", " + U32(me).__represent__() + ")"
+
 # ============================================================================
 # Utility methods
 # ============================================================================

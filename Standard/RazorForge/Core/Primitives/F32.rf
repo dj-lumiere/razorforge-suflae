@@ -201,6 +201,10 @@ routine F32.__represent__() -> Text
   var cstr_result = rf_format_F32(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
+routine F32.__diagnose__() -> Text
+  var cstr_result = rf_format_F32(me)
+  return "F32(" + Text(from: CStr(from_ptr: cstr_result)) + ")"
+
 routine F32.__create__!(from_text: Text) -> F32
   var cstr_val = from_text.CStr()
   return rf_parse_F32(cstr_val)

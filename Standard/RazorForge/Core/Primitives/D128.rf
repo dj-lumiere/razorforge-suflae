@@ -257,6 +257,9 @@ routine D128.__represent__() -> Text
   var cstr_result = rf_d128_to_string(me.low_bits(), me.high_bits())
   return Text(from: CStr(from_ptr: cstr_result))
 
+routine D128.__diagnose__() -> Text
+  return "D128(" + me.__represent__() + ")"
+
 routine D128.__create__!(from_text: Text) -> D128
   var cstr_val = from_text.CStr()
   return rf_D128_from_string(cstr_val)

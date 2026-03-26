@@ -1,18 +1,18 @@
 # RazorForge WhereSequence[T] - Lazy filtering
 # where(predicate) keeps matching items, where_not(predicate) keeps non-matching
 
-module SeqTools
+module IterTools
 
-entity WhereSequence[T] obeys Sequenceable[T]
-  secret source: Sequenceable[T]
+entity WhereSequence[T] obeys Iterable[T]
+  secret source: Iterable[T]
   secret predicate: Routine[(T,), Bool]
   secret inverted: Bool
 
-routine WhereSequence[T].__seq__() -> WhereEmitter[T]
-  return WhereEmitter[T](source: me.source.__seq__(), predicate: me.predicate, inverted: me.inverted)
+routine WhereSequence[T].__iter__() -> WhereEmitter[T]
+  return WhereEmitter[T](source: me.source.__iter__(), predicate: me.predicate, inverted: me.inverted)
 
-entity WhereEmitter[T] obeys SequenceEmitter[T]
-  secret source: SequenceEmitter[T]
+entity WhereEmitter[T] obeys Iterator[T]
+  secret source: Iterator[T]
   secret predicate: Routine[(T,), Bool]
   secret inverted: Bool
 
@@ -26,8 +26,8 @@ emitting routine WhereEmitter[T].__next__() -> T
       emit item
       return
 
-routine Sequenceable[T].where(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
+routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
   return WhereSequence[T](source: me, predicate: predicate, inverted: false)
 
-routine Sequenceable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
+routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
   return WhereSequence[T](source: me, predicate: predicate, inverted: true)

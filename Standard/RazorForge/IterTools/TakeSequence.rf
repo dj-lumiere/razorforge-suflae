@@ -1,17 +1,17 @@
 # RazorForge TakeSequence[T] - Lazy take-first-N
 # take(count) yields at most count elements from the source
 
-module SeqTools
+module IterTools
 
-entity TakeSequence[T] obeys Sequenceable[T]
-  secret source: Sequenceable[T]
+entity TakeSequence[T] obeys Iterable[T]
+  secret source: Iterable[T]
   secret limit: U64
 
-routine TakeSequence[T].__seq__() -> TakeEmitter[T]
-  return TakeEmitter[T](source: me.source.__seq__(), remaining: me.limit)
+routine TakeSequence[T].__iter__() -> TakeEmitter[T]
+  return TakeEmitter[T](source: me.source.__iter__(), remaining: me.limit)
 
-entity TakeEmitter[T] obeys SequenceEmitter[T]
-  secret source: SequenceEmitter[T]
+entity TakeEmitter[T] obeys Iterator[T]
+  secret source: Iterator[T]
   secret remaining: U64
 
 emitting routine TakeEmitter[T].__next__() -> T
@@ -21,5 +21,5 @@ emitting routine TakeEmitter[T].__next__() -> T
   me.remaining = me.remaining - 1u64
   return
 
-routine Sequenceable[T].take(count: U64) -> TakeSequence[T]
+routine Iterable[T].take(count: U64) -> TakeSequence[T]
   return TakeSequence[T](source: me, limit: count)

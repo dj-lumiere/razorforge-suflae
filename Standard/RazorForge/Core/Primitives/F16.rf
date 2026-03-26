@@ -183,6 +183,9 @@ routine F16.__represent__() -> Text
   var cstr_result = rf_format_F16(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
+routine F16.__diagnose__() -> Text
+  return "F16(" + me.__represent__() + ")"
+
 routine F16.__create__!(from_text: Text) -> F16
   var cstr_val = from_text.CStr()
   return rf_parse_F16(cstr_val)

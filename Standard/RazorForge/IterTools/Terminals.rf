@@ -1,36 +1,36 @@
-# RazorForge SeqTools Terminals - Eager collection materialization and scalar operations
+# RazorForge IterTools Terminals - Eager collection materialization and scalar operations
 # List(), Set(), count(), first!(), last!(), any(), all(), accumulate()
 
 import Collections.List
 import Collections.Set
 
-module SeqTools
+module IterTools
 
-routine Sequenceable[T].List() -> List[T]
+routine Iterable[T].List() -> List[T]
   var result = List[T]()
   for item in me
     result.add_last(item)
   return result
 
-routine Sequenceable[T].Set() -> Set[T]
+routine Iterable[T].Set() -> Set[T]
 needs T obeys Hashable, Comparable
   var result = Set[T]()
   for item in me
     result.add(item)
   return result
 
-routine Sequenceable[T].count() -> U64
+routine Iterable[T].count() -> U64
   var n = 0u64
   for _ in me
     n = n + 1u64
   return n
 
-routine Sequenceable[T].first!() -> T
-  var emitter = me.__seq__()
+routine Iterable[T].first!() -> T
+  var emitter = me.__iter__()
   return emitter.__next__()
 
-routine Sequenceable[T].last!() -> T
-  var emitter = me.__seq__()
+routine Iterable[T].last!() -> T
+  var emitter = me.__iter__()
   var latest = emitter.__next__()
   loop
     var item = emitter.try_next()
@@ -38,19 +38,19 @@ routine Sequenceable[T].last!() -> T
       is None => return latest
       else value => latest = value
 
-routine Sequenceable[T].any(predicate: Routine[(T,), Bool]) -> Bool
+routine Iterable[T].any(predicate: Routine[(T,), Bool]) -> Bool
   for item in me
     if predicate(item)
       return true
   return false
 
-routine Sequenceable[T].all(predicate: Routine[(T,), Bool]) -> Bool
+routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
   for item in me
     if not predicate(item)
       return false
   return true
 
-routine Sequenceable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
+routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
   var result = start
   for item in me
     result = combiner(result, item)

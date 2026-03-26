@@ -55,7 +55,7 @@ routine alert(value: Bytes, end: Text = "\n")
   return
 
 routine alert[T](value: T, end: Text = "\n")
-  var text = value.__represent__()
+  var text = value.__diagnose__()
   var value_cstr = CStr(from: text)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)

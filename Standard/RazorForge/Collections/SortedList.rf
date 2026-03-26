@@ -10,8 +10,6 @@
 #   grades.add(92.0)
 #   var median = grades[grades.count() / 2]  # O(log n) access
 
-import Collections.List
-
 module Collections
 
 # B-tree order (max children per node)
@@ -408,7 +406,7 @@ routine SortedList[T].last!() -> T
 # Iteration
 # ============================================================================
 
-routine SortedList[T].__seq__() -> SortedListIterator[T]
+routine SortedList[T].__iter__() -> SortedListIterator[T]
   return SortedListIterator[T](list: me, index: 0u64)
 
 routine SortedList[T].to_list() -> List[T]
@@ -443,6 +441,28 @@ routine SortedListIterator[T].next!() -> T
 # ============================================================================
 # Comparison
 # ============================================================================
+
+routine SortedList[T].__represent__() -> Text
+  var result = "SortedList["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.Text()
+    i = i + 1u64
+  result = result + "]"
+  return result
+
+routine SortedList[T].__diagnose__() -> Text
+  var result = "SortedList["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.__diagnose__()
+    i = i + 1u64
+  result = result + "]"
+  return result
 
 routine SortedList[T].__eq__(other: SortedList[T]) -> Bool
   if me.count != other.count

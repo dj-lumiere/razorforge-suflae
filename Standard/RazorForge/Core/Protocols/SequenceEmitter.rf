@@ -1,6 +1,0 @@
-# SequenceEmitter - Protocol for types that produce elements one at a time
-module Core
-
-protocol SequenceEmitter[T]
-  @writable
-  emitting routine Me.__next__() -> T

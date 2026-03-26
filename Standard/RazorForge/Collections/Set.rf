@@ -19,7 +19,7 @@ preset SET_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
 preset SET_LOAD_FACTOR: U64 = 75u64
 
-entity Set[T] obeys Sequenceable[T]
+entity Set[T] obeys Iterable[T]
 needs T obeys Hashable, Comparable
   secret buckets: List[SortedSet[T]]
   secret count: U64
@@ -284,7 +284,7 @@ routine Set[T].to_list() -> List[T]
 # Iteration
 # ============================================================================
 
-routine Set[T].__seq__() -> SetIterator[T]
+routine Set[T].__iter__() -> SetIterator[T]
   return SetIterator[T](
     set: me,
     bucket_idx: 0u64,
@@ -314,6 +314,28 @@ routine SetIterator[T].next!() -> T
 # ============================================================================
 # Comparison
 # ============================================================================
+
+routine Set[T].__represent__() -> Text
+  var result = "{"
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.Text()
+    i = i + 1u64
+  result = result + "}"
+  return result
+
+routine Set[T].__diagnose__() -> Text
+  var result = "Set{"
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.__diagnose__()
+    i = i + 1u64
+  result = result + "}"
+  return result
 
 routine Set[T].__eq__(other: Set[T]) -> Bool
   if me.count != other.count

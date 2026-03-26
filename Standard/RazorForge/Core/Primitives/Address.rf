@@ -101,6 +101,9 @@ routine Address.__represent__() -> Text
     i = i + 1u32
   return Text(from_list: digits)
 
+routine Address.__diagnose__() -> Text
+  return "Address(" + me.__represent__() + ")"
+
 routine Address.__create__!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
   var result = 0_addr

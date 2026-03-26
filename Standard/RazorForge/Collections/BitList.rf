@@ -289,7 +289,7 @@ routine BitList.__not__() -> BitList
 # Iteration Support
 # ============================================================================
 
-routine BitList.__seq__() -> BitListIterator
+routine BitList.__iter__() -> BitListIterator
   return BitListIterator(
     list: me,
     index: 0u64
@@ -412,6 +412,28 @@ routine BitList.from_u32(value: U32) -> BitList
   while i < 32u32
     result.add_last((value & (1u32 << i)) != 0u32)
     i = i + 1u32
+  return result
+
+routine BitList.__represent__() -> Text
+  var result = "BitList["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.Text()
+    i = i + 1u64
+  result = result + "]"
+  return result
+
+routine BitList.__diagnose__() -> Text
+  var result = "BitList["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.__diagnose__()
+    i = i + 1u64
+  result = result + "]"
   return result
 
 routine BitList.from_u64(value: U64) -> BitList

@@ -1,17 +1,17 @@
 # RazorForge TakeWhileSequence[T] - Lazy conditional take
 # take_while(predicate) yields elements while predicate is true, then stops
 
-module SeqTools
+module IterTools
 
-entity TakeWhileSequence[T] obeys Sequenceable[T]
-  secret source: Sequenceable[T]
+entity TakeWhileSequence[T] obeys Iterable[T]
+  secret source: Iterable[T]
   secret predicate: Routine[(T,), Bool]
 
-routine TakeWhileSequence[T].__seq__() -> TakeWhileEmitter[T]
-  return TakeWhileEmitter[T](source: me.source.__seq__(), predicate: me.predicate, done: false)
+routine TakeWhileSequence[T].__iter__() -> TakeWhileEmitter[T]
+  return TakeWhileEmitter[T](source: me.source.__iter__(), predicate: me.predicate, done: false)
 
-entity TakeWhileEmitter[T] obeys SequenceEmitter[T]
-  secret source: SequenceEmitter[T]
+entity TakeWhileEmitter[T] obeys Iterator[T]
+  secret source: Iterator[T]
   secret predicate: Routine[(T,), Bool]
   secret done: Bool
 
@@ -25,5 +25,5 @@ emitting routine TakeWhileEmitter[T].__next__() -> T
   emit item
   return
 
-routine Sequenceable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileSequence[T]
+routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileSequence[T]
   return TakeWhileSequence[T](source: me, predicate: predicate)

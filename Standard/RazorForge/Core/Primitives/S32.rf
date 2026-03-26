@@ -335,6 +335,9 @@ routine S32.__represent__() -> Text
     return U32(me).Text()
   return "-" + U32(0u32 - U32(me)).Text()
 
+routine S32.__diagnose__() -> Text
+  return "S32(" + me.__represent__() + ")"
+
 routine S32.__create__!(from_text: Text) -> S32
   var start = 0u64
   var negative = false

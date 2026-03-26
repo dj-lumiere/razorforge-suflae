@@ -9,8 +9,6 @@
 #   tasks.add(low_priority_task, 10)    # Priority 10 (low)
 #   var next = tasks.remove!()              # Gets priority 1 task first
 
-import Collections.List
-
 module Collections
 
 # Element with priority
@@ -191,11 +189,33 @@ routine PriorityQueue[TElement, TPriority].to_list() -> List[PQEntry[TElement, T
 # Iteration (heap order, NOT priority order)
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].__seq__() -> PriorityQueueIterator[TElement, TPriority]
+routine PriorityQueue[TElement, TPriority].__iter__() -> PriorityQueueIterator[TElement, TPriority]
   return PriorityQueueIterator[TElement, TPriority](
     queue: me,
     index: 0u64
   )
+
+routine PriorityQueue[TElement, TPriority].__represent__() -> Text
+  var result = "PriorityQueue["
+  var i = 0u64
+  for entry in me
+    if i > 0u64
+      result = result + ", "
+    result = result + "(" + entry.element.Text() + ", " + entry.priority.Text() + ")"
+    i = i + 1u64
+  result = result + "]"
+  return result
+
+routine PriorityQueue[TElement, TPriority].__diagnose__() -> Text
+  var result = "PriorityQueue["
+  var i = 0u64
+  for entry in me
+    if i > 0u64
+      result = result + ", "
+    result = result + "(" + entry.element.__diagnose__() + ", " + entry.priority.__diagnose__() + ")"
+    i = i + 1u64
+  result = result + "]"
+  return result
 
 entity PriorityQueueIterator[TElement, TPriority]
   queue: PriorityQueue[TElement, TPriority]

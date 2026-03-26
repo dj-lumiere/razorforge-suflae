@@ -182,3 +182,6 @@ routine LocalMoment.__represent__() -> Text
 
   var sign = if off.is_negative() then "-" else "+"
   return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours.abs()}:{off_minutes}"
+
+routine LocalMoment.__diagnose__() -> Text
+  return "LocalMoment(moment: " + me.moment.__diagnose__() + ", offset: " + me.offset.__diagnose__() + ")"

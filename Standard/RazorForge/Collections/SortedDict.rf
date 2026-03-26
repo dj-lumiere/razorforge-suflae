@@ -9,11 +9,9 @@
 #   dict.add(1, "one")
 #   dict[3] = "three"
 #   var val = dict[1]     # "one"
-#   for (key, value) in dict.__seq__()
+#   for (key, value) in dict.__iter__()
 #       # Iterates in sorted key order
 #   }
-
-import Collections.List
 
 module Collections
 
@@ -401,7 +399,7 @@ routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, ma
 # Iteration (in key order)
 # ============================================================================
 
-routine SortedDict[K, V].__seq__() -> SortedDictIterator[K, V]
+routine SortedDict[K, V].__iter__() -> SortedDictIterator[K, V]
   return SortedDictIterator[K, V](
     entries: me.to_list(),
     index: 0u64
@@ -439,6 +437,32 @@ routine SortedDictIterator[K, V].next!() -> KVPair[K, V]
 # ============================================================================
 # Comparison
 # ============================================================================
+
+routine SortedDict[K, V].__represent__() -> Text
+  var result = "SortedDict{"
+  var ks = me.keys()
+  var i = 0u64
+  while i < ks.count()
+    if i > 0u64
+      result = result + ", "
+    var key = ks[i]
+    result = result + key.Text() + ": " + me[key].Text()
+    i = i + 1u64
+  result = result + "}"
+  return result
+
+routine SortedDict[K, V].__diagnose__() -> Text
+  var result = "SortedDict{"
+  var ks = me.keys()
+  var i = 0u64
+  while i < ks.count()
+    if i > 0u64
+      result = result + ", "
+    var key = ks[i]
+    result = result + key.__diagnose__() + ": " + me[key].__diagnose__()
+    i = i + 1u64
+  result = result + "}"
+  return result
 
 routine SortedDict[K, V].__eq__(other: SortedDict[K, V]) -> Bool
   if me.count != other.count

@@ -1,0 +1,6 @@
+# Iterator - Protocol for types that produce elements one at a time
+module Core
+
+protocol Iterator[T]
+  @writable
+  emitting routine Me.__next__() -> T

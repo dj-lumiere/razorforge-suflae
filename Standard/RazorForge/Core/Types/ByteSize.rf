@@ -166,3 +166,6 @@ routine ByteSize.__represent__() -> Text
     var kib = F64(me.value) / 1024.0
     return f"{kib} KiB"
   return f"{me.value} bytes"
+
+routine ByteSize.__diagnose__() -> Text
+  return "ByteSize(" + me.value.__represent__() + ")"

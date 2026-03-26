@@ -11,3 +11,6 @@ record Blank
 
 routine Blank.__represent__() -> Text
   return "Blank"
+
+routine Blank.__diagnose__() -> Text
+  return "Blank"

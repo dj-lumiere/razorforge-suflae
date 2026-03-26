@@ -107,7 +107,7 @@ entity BytesIterator
   bytes: Bytes
   index: U64
 
-routine Bytes.__seq__() -> BytesIterator
+routine Bytes.__iter__() -> BytesIterator
   return BytesIterator(bytes: me, index: 0u64)
 
 routine BytesIterator.next!() -> Byte
@@ -136,6 +136,9 @@ routine Bytes.__represent__() -> Text
       j += 1u64
     i += 1u64
   return Text(from_list: result)
+
+routine Bytes.__diagnose__() -> Text
+  return "Bytes(count: " + me.count().__represent__() + ", " + me.__represent__() + ")"
 
 # ============================================================================
 # Encoding Conversions

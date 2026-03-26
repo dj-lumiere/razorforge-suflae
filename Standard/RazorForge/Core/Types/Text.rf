@@ -188,7 +188,7 @@ entity TextIterator
   text: Text
   index: U64
 
-routine Text.__seq__() -> TextIterator
+routine Text.__iter__() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 
 routine TextIterator.next!() -> Letter

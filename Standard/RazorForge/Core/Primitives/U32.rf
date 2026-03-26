@@ -312,6 +312,9 @@ routine U32.__represent__() -> Text
     digits.add_first(Letter(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 
+routine U32.__diagnose__() -> Text
+  return "U32(" + me.__represent__() + ")"
+
 routine U32.__create__!(from_text: Text) -> U32
   var result = 0u32
   var i = 0u64

@@ -27,8 +27,8 @@ routine Bool.U8() -> U8
 
 routine Bool.__diagnose__() -> Text
   if me
-    return "true"
-  return "false"
+    return "Bool(true)"
+  return "Bool(false)"
 
 routine Bool.hash() -> U64
   if me

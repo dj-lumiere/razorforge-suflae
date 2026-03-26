@@ -1,17 +1,17 @@
 # RazorForge SkipSequence[T] - Lazy skip-first-N
 # skip(count) discards count elements then yields the rest
 
-module SeqTools
+module IterTools
 
-entity SkipSequence[T] obeys Sequenceable[T]
-  secret source: Sequenceable[T]
+entity SkipSequence[T] obeys Iterable[T]
+  secret source: Iterable[T]
   secret count: U64
 
-routine SkipSequence[T].__seq__() -> SkipEmitter[T]
-  return SkipEmitter[T](source: me.source.__seq__(), remaining: me.count)
+routine SkipSequence[T].__iter__() -> SkipEmitter[T]
+  return SkipEmitter[T](source: me.source.__iter__(), remaining: me.count)
 
-entity SkipEmitter[T] obeys SequenceEmitter[T]
-  secret source: SequenceEmitter[T]
+entity SkipEmitter[T] obeys Iterator[T]
+  secret source: Iterator[T]
   secret remaining: U64
 
 emitting routine SkipEmitter[T].__next__() -> T
@@ -21,5 +21,5 @@ emitting routine SkipEmitter[T].__next__() -> T
   emit me.source.__next__()
   return
 
-routine Sequenceable[T].skip(count: U64) -> SkipSequence[T]
+routine Iterable[T].skip(count: U64) -> SkipSequence[T]
   return SkipSequence[T](source: me, count: count)

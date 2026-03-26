@@ -228,7 +228,7 @@ routine Deque[T].rotate_right(n: U64)
 # Iteration Support
 # ============================================================================
 
-routine Deque[T].__seq__() -> DequeIterator[T]
+routine Deque[T].__iter__() -> DequeIterator[T]
   return DequeIterator[T](deque: me, index: 0u64)
 
 entity DequeIterator[T]
@@ -267,6 +267,28 @@ routine Deque[T].contains(value: T) -> Bool
 # ============================================================================
 # Comparison Operations
 # ============================================================================
+
+routine Deque[T].__represent__() -> Text
+  var result = "Deque["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.Text()
+    i = i + 1u64
+  result = result + "]"
+  return result
+
+routine Deque[T].__diagnose__() -> Text
+  var result = "Deque["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.__diagnose__()
+    i = i + 1u64
+  result = result + "]"
+  return result
 
 routine Deque[T].__eq__(other: Deque[T]) -> Bool
   if me.count != other.count

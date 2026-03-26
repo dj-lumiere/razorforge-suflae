@@ -204,7 +204,7 @@ routine Dict[K, V].entries() -> List[Tuple[K, V]]
 # Iteration
 # ============================================================================
 
-routine Dict[K, V].__seq__() -> DictIterator[K, V]
+routine Dict[K, V].__iter__() -> DictIterator[K, V]
   return DictIterator[K, V](
     dict: me,
     bucket_idx: 0u64,
@@ -235,6 +235,32 @@ routine DictIterator[K, V].next!() -> Tuple[K, V]
 # ============================================================================
 # Comparison
 # ============================================================================
+
+routine Dict[K, V].__represent__() -> Text
+  var result = "{"
+  var ks = me.keys()
+  var i = 0u64
+  while i < ks.count()
+    if i > 0u64
+      result = result + ", "
+    var key = ks[i]
+    result = result + key.Text() + ": " + me.get!(key).Text()
+    i = i + 1u64
+  result = result + "}"
+  return result
+
+routine Dict[K, V].__diagnose__() -> Text
+  var result = "Dict{"
+  var ks = me.keys()
+  var i = 0u64
+  while i < ks.count()
+    if i > 0u64
+      result = result + ", "
+    var key = ks[i]
+    result = result + key.__diagnose__() + ": " + me.get!(key).__diagnose__()
+    i = i + 1u64
+  result = result + "}"
+  return result
 
 routine Dict[K, V].__eq__(other: Dict[K, V]) -> Bool
   if me.count != other.count

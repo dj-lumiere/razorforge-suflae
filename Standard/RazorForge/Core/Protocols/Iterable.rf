@@ -1,0 +1,6 @@
+# Iterable - Protocol for types that can be iterated over in for-in loops
+module Core
+
+protocol Iterable[T]
+  @readonly
+  routine Me.__iter__() -> Iterator[T]

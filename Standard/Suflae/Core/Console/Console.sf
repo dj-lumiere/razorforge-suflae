@@ -18,7 +18,8 @@ routine Console.alert(value: Text, end: Text = "\n")
   RazorForge/IO.Console.alert(value, end: end)
   return
 
-routine Console.alert[T](value: T, end: Text = "\n") needs T obeys Representable
+routine Console.alert[T](value: T, end: Text = "\n")
+needs T obeys Diagnosable
   RazorForge/IO.Console.alert[T](value, end: end)
   return
 
