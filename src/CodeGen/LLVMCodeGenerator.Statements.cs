@@ -796,13 +796,13 @@ public partial class LLVMCodeGenerator
     private void EmitFor(StringBuilder sb, ForStatement forStmt)
     {
         // Fast path: range-based for loop (for x in (start to end) or (start to end by step))
-        if (forStmt.Sequenceable is RangeExpression range)
+        if (forStmt.Iterable is RangeExpression range)
         {
             EmitForRange(sb, forStmt, range);
             return;
         }
 
-        // General iterator protocol: seq.__seq__() → emitter, emitter.__next__() → Maybe[T]
+        // General iterator protocol: seq.__iter__() → emitter, emitter.__next__() → Maybe[T]
         // Maybe layout: { i64 (DataState), ptr (Snatched handle) }
         // DataState: VALID=1 → has value, ABSENT=0 → done
 
@@ -812,44 +812,44 @@ public partial class LLVMCodeGenerator
 
         _loopStack.Push((condLabel, endLabel));
 
-        // Evaluate the sequenceable expression and get its type
-        string seqValue = EmitExpression(sb, forStmt.Sequenceable);
-        TypeInfo? seqType = GetExpressionType(forStmt.Sequenceable);
+        // Evaluate the iterable expression and get its type
+        string iterValue = EmitExpression(sb, forStmt.Iterable);
+        TypeInfo? iterType = GetExpressionType(forStmt.Iterable);
 
-        // Call __seq__() to get the emitter
+        // Call __iter__() to get the emitter
         string emitterValue;
         TypeInfo? emitterType = null;
 
-        if (seqType != null)
+        if (iterType != null)
         {
-            // Look up __seq__ method — LookupMethod handles generic type fallback
-            RoutineInfo? seqMethod = _registry.LookupMethod(seqType, "__seq__");
+            // Look up __iter__ method — LookupMethod handles generic type fallback
+            RoutineInfo? iterMethod = _registry.LookupMethod(iterType, "__iter__");
 
-            if (seqMethod != null)
+            if (iterMethod != null)
             {
                 // Handle monomorphization for generic types
-                string seqMangled;
-                if (seqMethod.OwnerType != null &&
-                    (seqMethod.OwnerType.IsGenericDefinition || seqMethod.OwnerType is ProtocolTypeInfo) &&
-                    seqType.IsGenericResolution)
+                string iterMangled;
+                if (iterMethod.OwnerType != null &&
+                    (iterMethod.OwnerType.IsGenericDefinition || iterMethod.OwnerType is ProtocolTypeInfo) &&
+                    iterType.IsGenericResolution)
                 {
-                    seqMangled = Q($"{seqType.FullName}.__seq__");
-                    RecordMonomorphization(seqMangled, seqMethod, seqType);
+                    iterMangled = Q($"{iterType.FullName}.__iter__");
+                    RecordMonomorphization(iterMangled, iterMethod, iterType);
                 }
                 else
                 {
-                    seqMangled = MangleFunctionName(seqMethod);
+                    iterMangled = MangleFunctionName(iterMethod);
                 }
 
                 // Skip for protocol-owned methods — monomorphized version will declare itself
-                if (seqMethod.OwnerType is not ProtocolTypeInfo)
-                    GenerateFunctionDeclaration(seqMethod);
+                if (iterMethod.OwnerType is not ProtocolTypeInfo)
+                    GenerateFunctionDeclaration(iterMethod);
 
                 // Resolve return type: substitute generic params (e.g., RangeEmitter[T] → RangeEmitter[S64])
-                TypeInfo? resolvedReturnType = seqMethod.ReturnType;
-                if (resolvedReturnType is GenericParameterTypeInfo && seqType is { IsGenericResolution: true, TypeArguments: not null })
+                TypeInfo? resolvedReturnType = iterMethod.ReturnType;
+                if (resolvedReturnType is GenericParameterTypeInfo && iterType is { IsGenericResolution: true, TypeArguments: not null })
                 {
-                    TypeInfo? ownerGenericDef = seqType switch
+                    TypeInfo? ownerGenericDef = iterType switch
                     {
                         RecordTypeInfo r => r.GenericDefinition,
                         EntityTypeInfo e => e.GenericDefinition,
@@ -858,15 +858,15 @@ public partial class LLVMCodeGenerator
                     if (ownerGenericDef?.GenericParameters != null)
                     {
                         int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(resolvedReturnType.Name);
-                        if (paramIndex >= 0 && paramIndex < seqType.TypeArguments.Count)
-                            resolvedReturnType = seqType.TypeArguments[paramIndex];
+                        if (paramIndex >= 0 && paramIndex < iterType.TypeArguments.Count)
+                            resolvedReturnType = iterType.TypeArguments[paramIndex];
                     }
                 }
                 else if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null } &&
-                         seqType is { IsGenericResolution: true, TypeArguments: not null })
+                         iterType is { IsGenericResolution: true, TypeArguments: not null })
                 {
                     // Nested resolution: RangeEmitter[T] → RangeEmitter[S64]
-                    TypeInfo? ownerGenericDef = seqType switch
+                    TypeInfo? ownerGenericDef = iterType switch
                     {
                         RecordTypeInfo r => r.GenericDefinition,
                         EntityTypeInfo e => e.GenericDefinition,
@@ -881,9 +881,9 @@ public partial class LLVMCodeGenerator
                             if (arg is GenericParameterTypeInfo gp)
                             {
                                 int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(gp.Name);
-                                if (paramIndex >= 0 && paramIndex < seqType.TypeArguments.Count)
+                                if (paramIndex >= 0 && paramIndex < iterType.TypeArguments.Count)
                                 {
-                                    substitutedArgs.Add(seqType.TypeArguments[paramIndex]);
+                                    substitutedArgs.Add(iterType.TypeArguments[paramIndex]);
                                     anyChanged = true;
                                     continue;
                                 }
@@ -895,7 +895,7 @@ public partial class LLVMCodeGenerator
                             string baseName = resolvedReturnType.Name.Contains('[')
                                 ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
                                 : resolvedReturnType.Name;
-                            TypeInfo? genericBase = _registry.LookupType(baseName);
+                            TypeInfo? genericBase = LookupTypeInCurrentModule(baseName);
                             if (genericBase != null)
                                 resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
                         }
@@ -908,30 +908,30 @@ public partial class LLVMCodeGenerator
                 if (emitterType is EntityTypeInfo emitterEntityType)
                     GenerateEntityType(emitterEntityType);
 
-                string receiverLlvm = GetParameterLLVMType(seqType);
+                string receiverLlvm = GetParameterLLVMType(iterType);
                 string emitterReturnType = emitterType != null ? GetLLVMType(emitterType) : "ptr";
 
                 // Emit declaration for the monomorphized name
-                if (!_generatedFunctions.Contains(seqMangled))
+                if (!_generatedFunctions.Contains(iterMangled))
                 {
-                    EmitLine(_functionDeclarations, $"declare {emitterReturnType} @{seqMangled}({receiverLlvm})");
-                    _generatedFunctions.Add(seqMangled);
+                    EmitLine(_functionDeclarations, $"declare {emitterReturnType} @{iterMangled}({receiverLlvm})");
+                    _generatedFunctions.Add(iterMangled);
                 }
 
                 string emitterTemp = NextTemp();
-                EmitLine(sb, $"  {emitterTemp} = call {emitterReturnType} @{seqMangled}({receiverLlvm} {seqValue})");
+                EmitLine(sb, $"  {emitterTemp} = call {emitterReturnType} @{iterMangled}({receiverLlvm} {iterValue})");
                 emitterValue = emitterTemp;
             }
             else
             {
-                // No __seq__ found, use seqValue directly as the emitter
-                emitterValue = seqValue;
-                emitterType = seqType;
+                // No __iter__ found, use seqValue directly as the emitter
+                emitterValue = iterValue;
+                emitterType = iterType;
             }
         }
         else
         {
-            emitterValue = seqValue;
+            emitterValue = iterValue;
         }
 
         // Store emitter in an alloca so we can reload it each iteration
@@ -955,7 +955,7 @@ public partial class LLVMCodeGenerator
                 elemType = nextLookup.ReturnType;
         }
 
-        // Fallback: use emitter's first type argument (works for simple SequenceEmitter[T])
+        // Fallback: use emitter's first type argument (works for simple Iterator[T])
         if (elemType == null && emitterType?.TypeArguments is { Count: > 0 })
         {
             elemType = emitterType.TypeArguments[0];

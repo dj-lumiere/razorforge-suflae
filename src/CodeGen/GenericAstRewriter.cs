@@ -316,7 +316,7 @@ internal static class GenericAstRewriter
 
             ForStatement fs => fs with
             {
-                Sequenceable = RewriteExpression(fs.Sequenceable, subs),
+                Iterable = RewriteExpression(fs.Iterable, subs),
                 Body = RewriteStatement(fs.Body, subs),
                 ElseBranch = fs.ElseBranch != null ? RewriteStatement(fs.ElseBranch, subs) : null
             },

@@ -715,7 +715,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // Protocol-owned methods (e.g., Sequenceable[T].enumerate() called on List[S64])
+        // Protocol-owned methods (e.g., Iterable[T].enumerate() called on List[S64])
         // AST name must use the protocol owner, not the concrete receiver type
         if (genericMethod.OwnerType is ProtocolTypeInfo protocolOwner &&
             protocolOwner.GenericParameters is { Count: > 0 })

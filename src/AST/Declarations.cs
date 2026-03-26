@@ -435,7 +435,7 @@ public enum AsyncStatus
 
     /// <summary>
     /// Generator routine that yields values via emit statements.
-    /// Used for lazy sequence generation (SequenceEmitter pattern).
+    /// Used for lazy sequence generation (Iterator pattern).
     /// </summary>
     Emitting
 }

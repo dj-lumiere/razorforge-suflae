@@ -391,11 +391,11 @@ public record WhileStatement(
 }
 
 /// <summary>
-/// SequenceEmitter loop statement that executes a body for each element in an iterable collection.
+/// Iterator loop statement that executes a body for each element in an iterable collection.
 /// Represents for-in loops that automatically handle iteration over collections.
 /// </summary>
 /// <param name="Variable">Loop variable name that receives each element value</param>
-/// <param name="Sequenceable">Expression that evaluates to an iterable collection (arrays, ranges, strings)</param>
+/// <param name="Iterable">Expression that evaluates to an iterable collection (arrays, ranges, strings)</param>
 /// <param name="Body">Statement to execute for each iteration with the loop variable bound</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -412,7 +412,7 @@ public record WhileStatement(
 public record ForStatement(
     string? Variable,
     DestructuringPattern? VariablePattern,
-    Expression Sequenceable,
+    Expression Iterable,
     Statement Body,
     Statement? ElseBranch,
     SourceLocation Location) : Statement(Location: Location)

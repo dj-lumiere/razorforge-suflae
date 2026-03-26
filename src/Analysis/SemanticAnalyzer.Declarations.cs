@@ -576,7 +576,7 @@ public sealed partial class SemanticAnalyzer
         "__contains__", "__notcontains__",
 
         // Iteration
-        "__seq__", "__next__",
+        "__iter__", "__next__",
 
         // Indexing
         "__getitem__", "__setitem__",
@@ -669,8 +669,8 @@ public sealed partial class SemanticAnalyzer
         ["__setitem__"] = "Indexable",
 
         // Sequence operators
-        ["__seq__"] = "Sequenceable",
-        ["__next__"] = "SequenceEmitter",
+        ["__iter__"] = "Iterable",
+        ["__next__"] = "Iterator",
 
         // In-place compound assignment operators
         ["__iadd__"] = "InPlaceAddable",

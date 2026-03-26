@@ -1187,7 +1187,7 @@ public sealed class TypeRegistry
             var protoMethod = proto.Methods.FirstOrDefault(m => m.Name == methodName);
             if (protoMethod != null)
             {
-                // Resolve return type: for generic protocols (SequenceEmitter[S64]),
+                // Resolve return type: for generic protocols (Iterator[S64]),
                 // substitute generic params in the return type (T → S64)
                 TypeInfo? resolvedReturn = protoMethod.ReturnType;
                 if (resolvedReturn != null && proto.TypeArguments is { Count: > 0 })
@@ -1201,7 +1201,7 @@ public sealed class TypeRegistry
                                       && i < proto.TypeArguments.Count; i++)
                             substitution[genericDef2.GenericParameters[i]] = proto.TypeArguments[i];
 
-                        // Recursively substitute in return type (handles both T and SequenceEmitter[T])
+                        // Recursively substitute in return type (handles both T and Iterator[T])
                         resolvedReturn = SubstituteTypeInProtocol(resolvedReturn, substitution);
                     }
                 }
@@ -1525,7 +1525,7 @@ public sealed class TypeRegistry
 
     /// <summary>
     /// Recursively substitutes generic type parameters in a type.
-    /// Handles both direct parameters (T → S64) and composite types (SequenceEmitter[T] → SequenceEmitter[S64]).
+    /// Handles both direct parameters (T → S64) and composite types (Iterator[T] → Iterator[S64]).
     /// </summary>
     private TypeInfo SubstituteTypeInProtocol(TypeInfo type, Dictionary<string, TypeInfo> substitution)
     {

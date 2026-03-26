@@ -239,7 +239,7 @@ public partial class Parser
 
         return new ForStatement(Variable: variable,
             VariablePattern: variablePattern,
-            Sequenceable: sequenceable,
+            Iterable: sequenceable,
             Body: body,
             ElseBranch: elseBranch,
             Location: location);

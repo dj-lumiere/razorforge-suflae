@@ -1486,7 +1486,7 @@ public partial class LLVMCodeGenerator
             resolvedReturnType = SubstituteGenericParamInType(resolvedReturnType, genParamOwner.Name, receiverType);
         }
 
-        // For protocol-owned methods (Sequenceable[T].enumerate() → EnumerateSequence[T]),
+        // For protocol-owned methods (Iterable[T].enumerate() → EnumerateSequence[T]),
         // substitute protocol generic params using receiver's type arguments.
         // Use GenericDefinition to get the param names (resolved protocols have null GenericParameters).
         if (resolvedReturnType != null && method?.OwnerType is ProtocolTypeInfo protoOwner &&

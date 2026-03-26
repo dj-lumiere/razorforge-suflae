@@ -412,7 +412,7 @@ public sealed partial class SemanticAnalyzer
         // Indexing
         "__getitem__", "__setitem__",
         // Iteration
-        "__seq__", "__next__",
+        "__iter__", "__next__",
         // Context management
         "__enter__", "__exit__"
     ];
@@ -568,35 +568,35 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
-    /// The type must implement the <c>Sequenceable</c> protocol, whose <c>__seq__</c> returns a <c>SequenceEmitter[T]</c>.
-    /// The element type is taken from the return type of the <c>__seq__</c> method or the type's first generic argument.
+    /// The type must implement the <c>Iterable</c> protocol, whose <c>__iter__</c> returns a <c>Iterator[T]</c>.
+    /// The element type is taken from the return type of the <c>__iter__</c> method or the type's first generic argument.
     /// Reports an error and returns <see cref="ErrorTypeInfo"/> if the type is not iterable or the element type cannot be determined.
     /// </summary>
-    private TypeSymbol GetSequenceableElementType(TypeSymbol iterableType, SourceLocation location)
+    private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
     {
-        // Type must follow the Sequenceable protocol
-        bool obeysSequenceable = ImplementsProtocol(type: iterableType, protocolName: "Sequenceable");
+        // Type must follow the Iterable protocol
+        bool obeysIterable = ImplementsProtocol(type: iterableType, protocolName: "Iterable");
 
-        // For generic resolution types, also check if the generic definition has __seq__
-        if (!obeysSequenceable && iterableType.IsGenericResolution)
+        // For generic resolution types, also check if the generic definition has __iter__
+        if (!obeysIterable && iterableType.IsGenericResolution)
         {
-            RoutineInfo? seqMethod = _registry.LookupMethod(type: iterableType, methodName: "__seq__");
+            RoutineInfo? seqMethod = _registry.LookupMethod(type: iterableType, methodName: "__iter__");
             if (seqMethod != null)
-                obeysSequenceable = true;
+                obeysIterable = true;
         }
 
-        if (!obeysSequenceable)
+        if (!obeysIterable)
         {
             ReportError(
                 SemanticDiagnosticCode.TypeNotIterable,
-                $"Type '{iterableType.Name}' is not sequenceable. Types must follow the " +
-                $"'Sequenceable' protocol to be used in for-in loops.",
+                $"Type '{iterableType.Name}' is not iterable. Types must follow the " +
+                $"'Iterable' protocol to be used in for-in loops.",
                 location);
             return ErrorTypeInfo.Instance;
         }
 
-        // Strategy 1: Extract element type from Sequenceable[X] protocol conformance.
-        // This correctly handles chained generics like EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]]
+        // Strategy 1: Extract element type from Iterable[X] protocol conformance.
+        // This correctly handles chained generics like EnumerateSequence[T] obeys Iterable[Tuple[S64, T]]
         IReadOnlyList<TypeSymbol>? protocols = iterableType switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
@@ -608,7 +608,7 @@ public sealed partial class SemanticAnalyzer
         {
             foreach (TypeSymbol proto in protocols)
             {
-                if (GetBaseTypeName(typeName: proto.Name) == "Sequenceable" && proto.TypeArguments is { Count: > 0 })
+                if (GetBaseTypeName(typeName: proto.Name) == "Iterable" && proto.TypeArguments is { Count: > 0 })
                 {
                     TypeInfo elementType = proto.TypeArguments[0];
 
@@ -637,13 +637,13 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Strategy 2: Look for __seq__ method to get element type from SequenceEmitter[T] return type
-        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__seq__");
+        // Strategy 2: Look for __iter__ method to get element type from Iterator[T] return type
+        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__iter__");
 
-        // Generic fallback: Range[S64].__seq__ → Range.__seq__ via LookupMethod
+        // Generic fallback: Range[S64].__iter__ → Range.__iter__ via LookupMethod
         if (seqMethod2 == null)
         {
-            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "__seq__");
+            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "__iter__");
         }
 
         if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
@@ -668,7 +668,7 @@ public sealed partial class SemanticAnalyzer
             return returnTypeArg;
         }
 
-        // Fallback to type arguments if __seq__ method not found but protocol is implemented
+        // Fallback to type arguments if __iter__ method not found but protocol is implemented
         if (iterableType.TypeArguments is { Count: > 0 })
         {
             return iterableType.TypeArguments[0];
@@ -676,7 +676,7 @@ public sealed partial class SemanticAnalyzer
 
         ReportError(
             SemanticDiagnosticCode.TypeNotIterable,
-            $"Cannot determine element type for '{iterableType.Name}'. The __seq__ method must return SequenceEmitter[T].",
+            $"Cannot determine element type for '{iterableType.Name}'. The __iter__ method must return Iterator[T].",
             location);
         return ErrorTypeInfo.Instance;
     }

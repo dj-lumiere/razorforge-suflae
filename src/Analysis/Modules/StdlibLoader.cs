@@ -113,6 +113,31 @@ public sealed class StdlibLoader
             RegisterProgramTypes(registry, program, ns);
         }
 
+        // Pass 1b.1: Load modules imported by Core files so their types are available
+        // for member variable resolution (e.g., Set imports Collections.SortedSet).
+        var importedModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (program, _, _) in _corePrograms)
+        {
+            foreach (var decl in program.Declarations)
+            {
+                if (decl is ImportDeclaration import)
+                {
+                    // Extract top-level module name (e.g., "Collections" from "Collections.SortedSet")
+                    string moduleName = import.ModulePath.Replace('/', '.');
+                    int dotIndex = moduleName.IndexOf('.');
+                    if (dotIndex > 0)
+                        moduleName = moduleName[..dotIndex];
+                    if (!moduleName.Equals("Core", StringComparison.OrdinalIgnoreCase) &&
+                        !_loadedModules.Contains(moduleName))
+                        importedModules.Add(moduleName);
+                }
+            }
+        }
+        foreach (string mod in importedModules)
+        {
+            LoadModule(registry, mod);
+        }
+
         // Pass 1c: Re-resolve member variables now that all types are registered.
         // The initial registration may have empty member lists due to forward references
         // (e.g., Bytes needs List which needs U64, but files are processed alphabetically).
@@ -123,7 +148,7 @@ public sealed class StdlibLoader
 
         // Pass 1d: Re-resolve protocol conformances now that all types are registered.
         // Protocol arguments may reference types not yet registered during Pass 1b
-        // (e.g., EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]] needs S64).
+        // (e.g., EnumerateSequence[T] obeys Iterable[Tuple[S64, T]] needs S64).
         foreach (var (program, _, ns) in _corePrograms)
         {
             ResolveProgramProtocolConformances(registry, program);
@@ -334,6 +359,14 @@ public sealed class StdlibLoader
             RegisterProgramTypes(registry, program, ns);
         }
 
+        // Re-resolve member variables now that all type shells in this module are registered.
+        // Initial registration may have empty member lists due to forward references
+        // (e.g., Set needs SortedSet which may not be registered yet during alphabetical processing).
+        foreach (var (program, _, ns) in programs)
+        {
+            ResolveProgramMemberVariables(registry, program);
+        }
+
         foreach (var (program, _, ns) in programs)
         {
             ResolveProgramProtocolConformances(registry, program);
@@ -446,7 +479,7 @@ public sealed class StdlibLoader
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
     /// method signatures. This ensures forward references between protocols resolve correctly
-    /// (e.g., Sequenceable[T].__seq__() → SequenceEmitter[T] where SequenceEmitter is another protocol).
+    /// (e.g., Iterable[T].__iter__() → Iterator[T] where Iterator is another protocol).
     /// </summary>
     private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string moduleName)
     {
@@ -544,7 +577,7 @@ public sealed class StdlibLoader
 
     /// <summary>
     /// Re-resolves protocol conformances for types whose protocol arguments contain
-    /// forward-referenced types (e.g., EnumerateSequence[T] obeys Sequenceable[Tuple[S64, T]]
+    /// forward-referenced types (e.g., EnumerateSequence[T] obeys Iterable[Tuple[S64, T]]
     /// where S64 wasn't registered during initial entity registration).
     /// Called after all type shells are registered.
     /// </summary>
@@ -663,7 +696,7 @@ public sealed class StdlibLoader
         var parameters = new List<SemanticAnalysis.Symbols.ParameterInfo>();
         foreach (var param in external.Parameters)
         {
-            var paramType = ResolveSimpleType(registry, param.Type, genericCtx);
+            var paramType = ResolveSimpleType(registry, param.Type, genericCtx, moduleName);
             parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
                 paramType ?? ErrorTypeInfo.Instance)
             {
@@ -674,7 +707,7 @@ public sealed class StdlibLoader
 
         // Resolve return type
         var returnType = external.ReturnType != null
-            ? ResolveSimpleType(registry, external.ReturnType, genericCtx)
+            ? ResolveSimpleType(registry, external.ReturnType, genericCtx, moduleName)
             : null;
 
         var routineInfo = new SemanticAnalysis.Symbols.RoutineInfo(external.Name)
@@ -744,7 +777,8 @@ public sealed class StdlibLoader
                 // vs generic params (e.g., List[T], Dict[K, V])
                 string bracketContent = typeName[(bracketIndex + 1)..].TrimEnd(']');
                 string baseName = typeName[..bracketIndex];
-                var baseDef = registry.LookupType(baseName);
+                var baseDef = registry.LookupType(baseName)
+                              ?? registry.LookupType($"{moduleName}.{baseName}");
 
                 // If the base is a generic definition, check if bracket args are its own params
                 bool isGenericDef = false;
@@ -767,7 +801,8 @@ public sealed class StdlibLoader
             }
             else
             {
-                ownerType = registry.LookupType(typeName);
+                ownerType = registry.LookupType(typeName)
+                            ?? registry.LookupType($"{moduleName}.{typeName}");
 
                 // If type not found, treat as a generic type parameter (e.g., T in "routine T.view()")
                 if (ownerType == null)
@@ -790,7 +825,7 @@ public sealed class StdlibLoader
         var parameters = new List<SemanticAnalysis.Symbols.ParameterInfo>();
         foreach (var param in routine.Parameters)
         {
-            var paramType = ResolveSimpleType(registry, param.Type, ctx);
+            var paramType = ResolveSimpleType(registry, param.Type, ctx, moduleName);
             parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
                 paramType ?? ErrorTypeInfo.Instance)
             {
@@ -801,7 +836,7 @@ public sealed class StdlibLoader
 
         // Resolve return type
         var returnType = routine.ReturnType != null
-            ? ResolveSimpleType(registry, routine.ReturnType, ctx)
+            ? ResolveSimpleType(registry, routine.ReturnType, ctx, moduleName)
             : null;
 
         // Use just the method name (not "S32.__add__", just "__add__")
@@ -848,7 +883,7 @@ public sealed class StdlibLoader
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, record.GenericParameters);
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, record.GenericParameters, moduleName);
                 if (memberVariableType != null)
                 {
                     memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
@@ -863,7 +898,7 @@ public sealed class StdlibLoader
         var protocols = new List<TypeInfo>();
         foreach (var protoExpr in record.Protocols)
         {
-            var protoType = ResolveSimpleType(registry, protoExpr, record.GenericParameters);
+            var protoType = ResolveSimpleType(registry, protoExpr, record.GenericParameters, moduleName);
             if (protoType != null)
             {
                 protocols.Add(protoType);
@@ -908,7 +943,7 @@ public sealed class StdlibLoader
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
-                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, entity.GenericParameters);
+                var memberVariableType = ResolveSimpleType(registry, memberVariable.Type, entity.GenericParameters, moduleName);
                 if (memberVariableType != null)
                 {
                     memberVariables.Add(new SemanticAnalysis.Symbols.MemberVariableInfo(memberVariable.Name, memberVariableType)
@@ -923,7 +958,7 @@ public sealed class StdlibLoader
         var protocols = new List<TypeInfo>();
         foreach (var protoExpr in entity.Protocols)
         {
-            var protoType = ResolveSimpleType(registry, protoExpr, entity.GenericParameters);
+            var protoType = ResolveSimpleType(registry, protoExpr, entity.GenericParameters, moduleName);
             if (protoType != null)
             {
                 protocols.Add(protoType);
@@ -1174,7 +1209,8 @@ public sealed class StdlibLoader
     /// <param name="typeExpr">The type expression to resolve.</param>
     /// <param name="genericParams">Optional list of generic parameter names in scope (e.g., T, K, V).</param>
     private static TypeInfo? ResolveSimpleType(TypeRegistry registry,
-        TypeExpression? typeExpr, IReadOnlyList<string>? genericParams = null)
+        TypeExpression? typeExpr, IReadOnlyList<string>? genericParams = null,
+        string? moduleName = null)
     {
         if (typeExpr == null) return null;
 
@@ -1201,21 +1237,22 @@ public sealed class StdlibLoader
                 var elemTypes = new List<TypeInfo>();
                 foreach (var argExpr in typeExpr.GenericArguments)
                 {
-                    var argType = ResolveSimpleType(registry, argExpr, genericParams);
+                    var argType = ResolveSimpleType(registry, argExpr, genericParams, moduleName);
                     if (argType == null) return null;
                     elemTypes.Add(argType);
                 }
                 return new TupleTypeInfo(elemTypes);
             }
 
-            var genericDef = registry.LookupType(typeName);
+            var genericDef = registry.LookupType(typeName)
+                             ?? (moduleName != null ? registry.LookupType($"{moduleName}.{typeName}") : null);
             if (genericDef is { IsGenericDefinition: true }
                 && genericDef.GenericParameters!.Count == typeExpr.GenericArguments.Count)
             {
                 var typeArgs = new List<TypeInfo>();
                 foreach (var argExpr in typeExpr.GenericArguments)
                 {
-                    var argType = ResolveSimpleType(registry, argExpr, genericParams);
+                    var argType = ResolveSimpleType(registry, argExpr, genericParams, moduleName);
                     if (argType == null) return null;
                     typeArgs.Add(argType);
                 }
@@ -1223,8 +1260,9 @@ public sealed class StdlibLoader
             }
         }
 
-        // Try to look up existing type
-        return registry.LookupType(typeName);
+        // Try to look up existing type, with module-qualified fallback
+        return registry.LookupType(typeName)
+               ?? (moduleName != null ? registry.LookupType($"{moduleName}.{typeName}") : null);
     }
 
     /// <summary>

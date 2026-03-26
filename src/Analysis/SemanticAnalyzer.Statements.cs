@@ -737,11 +737,11 @@ public sealed partial class SemanticAnalyzer
     {
         _registry.EnterScope(kind: ScopeKind.Loop, name: "for");
 
-        // Analyze sequenceable expression
-        TypeSymbol sequenceableType = AnalyzeExpression(expression: forStmt.Sequenceable);
+        // Analyze iterable expression
+        TypeSymbol iterableType = AnalyzeExpression(expression: forStmt.Iterable);
 
-        // Get element type from sequenceable
-        TypeSymbol elementType = GetSequenceableElementType(iterableType: sequenceableType, location: forStmt.Location);
+        // Get element type from iterable
+        TypeSymbol elementType = GetIterableElementType(iterableType: iterableType, location: forStmt.Location);
 
         // Handle either simple variable or destructuring pattern
         if (forStmt.Variable != null)
@@ -798,7 +798,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #22: Track active iteration source for migratable-during-iteration check
-        string? iterationSourceName = forStmt.Sequenceable is IdentifierExpression iterSource
+        string? iterationSourceName = forStmt.Iterable is IdentifierExpression iterSource
             ? iterSource.Name
             : null;
 

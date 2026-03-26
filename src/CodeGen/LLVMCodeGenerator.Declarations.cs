@@ -2029,10 +2029,10 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates forwarding stubs for protocol method calls.
-    /// When monomorphized code calls a method on a protocol-typed field (e.g., me.source.__seq__()
-    /// where source: Sequenceable[S64]), the emitted call targets "Core.Sequenceable[S64].__seq__".
+    /// When monomorphized code calls a method on a protocol-typed field (e.g., me.source.__iter__()
+    /// where source: Iterable[S64]), the emitted call targets "Core.Iterable[S64].__iter__".
     /// This method generates a 'define' body that forwards to the concrete implementer
-    /// (e.g., Core.List[S64].__seq__).
+    /// (e.g., Core.List[S64].__iter__).
     /// </summary>
     private void GenerateProtocolDispatchStubs()
     {
@@ -2139,13 +2139,13 @@ public partial class LLVMCodeGenerator
             foreach (var impl in protocols)
             {
                 // Check if this type implements the matching protocol
-                // For generic types: List[T] obeys Sequenceable[T] → when T=S64, List[S64] obeys Sequenceable[S64]
+                // For generic types: List[T] obeys Iterable[T] → when T=S64, List[S64] obeys Iterable[S64]
                 string implBaseName = impl.Name.Contains('[') ? impl.Name[..impl.Name.IndexOf('[')] : impl.Name;
                 if (implBaseName != protocolBaseName) continue;
 
                 // For resolved (non-generic-definition) types, verify the protocol type arguments match exactly.
-                // Without this, EnumerateEmitter[S64] (obeys SequenceEmitter[Tuple[S64, S64]]) would
-                // incorrectly match a search for SequenceEmitter[S64].
+                // Without this, EnumerateEmitter[S64] (obeys Iterator[Tuple[S64, S64]]) would
+                // incorrectly match a search for Iterator[S64].
                 if (!type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 } && impl.TypeArguments is { Count: > 0 })
                 {
                     if (protocol.TypeArguments.Count != impl.TypeArguments.Count)
@@ -2168,7 +2168,7 @@ public partial class LLVMCodeGenerator
                 // If the type is a generic definition, resolve it using the protocol's type args
                 if (type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 })
                 {
-                    // The protocol on the generic def has the same generic params (e.g., Sequenceable[T])
+                    // The protocol on the generic def has the same generic params (e.g., Iterable[T])
                     // We need to map protocol's T to the concrete type arg (e.g., S64)
                     // Then resolve the generic def with those args
                     var protocolGenDef = protocol.GenericDefinition ?? protocol;
@@ -2180,7 +2180,7 @@ public partial class LLVMCodeGenerator
                             mapping[protocolGenDef.GenericParameters[i]] = protocol.TypeArguments[i];
 
                         // Map type's generic params using the impl protocol's type args
-                        // e.g., List[T] with Sequenceable[T]: T maps to protocol param T → S64
+                        // e.g., List[T] with Iterable[T]: T maps to protocol param T → S64
                         var typeArgs = new List<TypeInfo>();
                         if (impl.TypeArguments is { Count: > 0 })
                         {

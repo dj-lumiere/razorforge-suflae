@@ -237,7 +237,7 @@ public enum SemanticDiagnosticCode
     /// <summary>While condition must be boolean.</summary>
     WhileConditionNotBool = 204,
 
-    /// <summary>Type is not iterable for for-loop (does not follow Sequenceable protocol).</summary>
+    /// <summary>Type is not iterable for for-loop (does not follow Iterable protocol).</summary>
     TypeNotIterable = 205,
 
     /// <summary>Unknown statement type encountered.</summary>
