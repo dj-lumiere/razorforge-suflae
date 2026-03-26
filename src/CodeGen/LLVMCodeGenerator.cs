@@ -163,6 +163,26 @@ public partial class LLVMCodeGenerator
 
     #endregion
 
+    #region Helpers
+
+    /// <summary>
+    /// Looks up a type by name, trying the current routine's module-qualified name first,
+    /// then falling back to the bare name. Mirrors SemanticAnalyzer.LookupTypeInCurrentModule.
+    /// </summary>
+    private TypeInfo? LookupTypeInCurrentModule(string name)
+    {
+        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module
+                             ?? _currentEmittingRoutine?.Module;
+        if (moduleName != null && !name.Contains('.'))
+        {
+            TypeInfo? qualified = _registry.LookupType($"{moduleName}.{name}");
+            if (qualified != null) return qualified;
+        }
+        return _registry.LookupType(name);
+    }
+
+    #endregion
+
     #region Public API
 
     /// <summary>

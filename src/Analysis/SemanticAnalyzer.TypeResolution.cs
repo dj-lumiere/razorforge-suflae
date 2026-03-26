@@ -37,6 +37,16 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // Try current module (user-defined types are registered as "Module.Name")
+        if (_currentModuleName != null && !name.Contains('.'))
+        {
+            result = _registry.LookupType(name: $"{_currentModuleName}.{name}");
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
         return null;
     }
 

@@ -744,6 +744,23 @@ public sealed partial class SemanticAnalyzer
     #region Phase 2: Type Body Resolution
 
     /// <summary>
+    /// Looks up a type by name, trying the current module-qualified name first,
+    /// then falling back to the bare name. This is needed because Phase 1 registers
+    /// user types with their full name (e.g., "Module.Point"), but Phase 2 resolvers
+    /// only have the bare name from the AST node.
+    /// </summary>
+    private TypeInfo? LookupTypeInCurrentModule(string name)
+    {
+        string? moduleName = GetCurrentModuleName();
+        if (moduleName != null)
+        {
+            TypeInfo? qualified = _registry.LookupType(name: $"{moduleName}.{name}");
+            if (qualified != null) return qualified;
+        }
+        return _registry.LookupType(name: name);
+    }
+
+    /// <summary>
     /// Resolves type bodies including member variables and method signatures.
     /// </summary>
     /// <param name="program">The program to resolve.</param>
@@ -797,7 +814,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? previousType = _currentType;
         HashSet<string>? previousFieldNames = _currentTypeMemberVariableNames;
 
-        _currentType = _registry.LookupType(name: record.Name);
+        _currentType = LookupTypeInCurrentModule(name: record.Name);
         _currentTypeMemberVariableNames = [];
 
         // Resolve implemented protocols
@@ -897,7 +914,7 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? previousType = _currentType;
         HashSet<string>? previousFieldNames = _currentTypeMemberVariableNames;
 
-        _currentType = _registry.LookupType(name: entity.Name);
+        _currentType = LookupTypeInCurrentModule(name: entity.Name);
         _currentTypeMemberVariableNames = [];
 
         // Resolve implemented protocols
@@ -964,7 +981,7 @@ public sealed partial class SemanticAnalyzer
     private void ResolveProtocolBody(ProtocolDeclaration protocol)
     {
         // Look up the registered protocol type
-        TypeSymbol? protoType = _registry.LookupType(name: protocol.Name);
+        TypeSymbol? protoType = LookupTypeInCurrentModule(name: protocol.Name);
         if (protoType is not ProtocolTypeInfo protocolInfo)
         {
             return;
@@ -1220,7 +1237,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        TypeSymbol? choiceType = _registry.LookupType(name: choice.Name);
+        TypeSymbol? choiceType = LookupTypeInCurrentModule(name: choice.Name);
         if (choiceType is not ChoiceTypeInfo choiceInfo)
         {
             return;
@@ -1325,7 +1342,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        TypeSymbol? flagsType = _registry.LookupType(name: flags.Name);
+        TypeSymbol? flagsType = LookupTypeInCurrentModule(name: flags.Name);
         if (flagsType is not FlagsTypeInfo flagsInfo)
         {
             return;
@@ -1691,7 +1708,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Re-lookup the owner type to get the updated version with protocols
-        TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.Name);
+        TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.FullName);
         if (currentOwnerType == null)
         {
             return;
@@ -1848,7 +1865,7 @@ public sealed partial class SemanticAnalyzer
 
         // Re-lookup the owner type to get the updated version with protocols
         // (the RoutineInfo.OwnerType may reference an older object from Phase 1)
-        TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.Name);
+        TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.FullName);
         if (currentOwnerType == null)
         {
             return;

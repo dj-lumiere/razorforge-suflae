@@ -69,8 +69,8 @@ public partial class LLVMCodeGenerator
     /// <returns>The temporary variable holding the result.</returns>
     private string EmitConstructorCall(StringBuilder sb, CreatorExpression expr)
     {
-        // Look up the type
-        TypeInfo? type = _registry.LookupType(expr.TypeName);
+        // Look up the type (try module-qualified name for user types)
+        TypeInfo? type = LookupTypeInCurrentModule(expr.TypeName);
         if (type == null)
         {
             throw new InvalidOperationException($"Unknown type in constructor: {expr.TypeName}");
@@ -1035,7 +1035,7 @@ public partial class LLVMCodeGenerator
         // (e.g., "routine U8(from: S8) -> U8") that we want to inline instead of calling.
         if (arguments.Count == 1)
         {
-            TypeInfo? calledType = _registry.LookupType(functionName);
+            TypeInfo? calledType = LookupTypeInCurrentModule(functionName);
             if (calledType is RecordTypeInfo { HasDirectBackendType: true })
             {
                 return EmitPrimitiveTypeConversion(sb, functionName, arguments[0], calledType);
@@ -1120,7 +1120,7 @@ public partial class LLVMCodeGenerator
         bool isCreatorCall = false;
         if (routine == null)
         {
-            TypeInfo? calledType = _registry.LookupType(functionName);
+            TypeInfo? calledType = LookupTypeInCurrentModule(functionName);
             if (calledType != null)
             {
                 // Direct named-field construction: when all arg names match field names exactly,
@@ -1156,7 +1156,7 @@ public partial class LLVMCodeGenerator
                     TypeInfo? t = GetExpressionType(arg);
                     if (t != null) semanticArgTypes.Add(t);
                 }
-                routine = _registry.LookupRoutineOverload($"{functionName}.__create__", semanticArgTypes);
+                routine = _registry.LookupRoutineOverload($"{calledType.Name}.__create__", semanticArgTypes);
                 if (routine != null)
                 {
                     isCreatorCall = true;
@@ -2206,7 +2206,7 @@ public partial class LLVMCodeGenerator
         // e.g., Snatched[U8](ptr_value) → just pass through the argument
         if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
         {
-            TypeInfo? calledType = _registry.LookupType(id.Name);
+            TypeInfo? calledType = LookupTypeInCurrentModule(id.Name);
             if (calledType != null)
             {
                 // Resolve type arguments (apply type substitutions for monomorphization)
@@ -2783,7 +2783,7 @@ public partial class LLVMCodeGenerator
         // are both the type name (e.g., Snatched[U8](x) → Object=Snatched, MethodName=Snatched)
         if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
         {
-            TypeInfo? calledType = _registry.LookupType(id.Name);
+            TypeInfo? calledType = LookupTypeInCurrentModule(id.Name);
             if (calledType != null)
             {
                 // Resolve generic type arguments to get the concrete type (e.g., List[Letter])
@@ -3038,7 +3038,7 @@ public partial class LLVMCodeGenerator
             LiteralExpression literal => GetLiteralType(literal),
             IdentifierExpression id => _localVariables.TryGetValue(id.Name, out var varType) ? varType : _registry.LookupVariable(id.Name)?.Type,
             MemberExpression member => GetMemberType(member),
-            CreatorExpression ctor => _registry.LookupType(ctor.TypeName),
+            CreatorExpression ctor => LookupTypeInCurrentModule(ctor.TypeName),
             BinaryExpression binary => GetBinaryExpressionType(binary),
             ChainedComparisonExpression => _registry.LookupType("Bool"), // Comparisons return Bool
             UnaryExpression unary => GetExpressionType(unary.Operand),
@@ -3227,10 +3227,10 @@ public partial class LLVMCodeGenerator
                 if (routine?.ReturnType != null)
                     return routine.ReturnType;
                 // If name matches a type, it's a creator call — returns that type
-                TypeInfo? calledType = _registry.LookupType(id.Name);
+                TypeInfo? calledType = LookupTypeInCurrentModule(id.Name);
                 if (calledType != null)
                 {
-                    var creator = _registry.LookupRoutine($"{id.Name}.__create__");
+                    var creator = _registry.LookupRoutine($"{calledType.Name}.__create__");
                     return creator?.ReturnType ?? calledType;
                 }
                 return null;
