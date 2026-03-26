@@ -101,6 +101,47 @@ typedef struct {
     rf_List* letters;
 } rf_Text;
 
+/**
+ * Formats a pointer as "0xXXXX_XXXX_XXXX_XXXX" and returns a Text entity.
+ * Used by RF entity __diagnose__() to include the heap address.
+ */
+void* rf_format_address(void* ptr)
+{
+    uint64_t addr = (uint64_t)ptr;
+
+    // Format: "0xXXXX_XXXX_XXXX_XXXX" = 2 + 16 + 3 = 21 characters
+    const int len = 21;
+    int32_t* data = (int32_t*)rf_allocate_dynamic((uint64_t)len * sizeof(int32_t));
+
+    // "0x" prefix
+    data[0] = '0';
+    data[1] = 'x';
+
+    // 16 hex digits in groups of 4, separated by underscores
+    const char hex[] = "0123456789ABCDEF";
+    int pos = 2;
+    for (int group = 0; group < 4; group++) {
+        if (group > 0) {
+            data[pos++] = '_';
+        }
+        int shift = (3 - group) * 16;
+        for (int d = 0; d < 4; d++) {
+            int nibble = (int)((addr >> (shift + (3 - d) * 4)) & 0xF);
+            data[pos++] = hex[nibble];
+        }
+    }
+
+    rf_List* list = (rf_List*)rf_allocate_dynamic(sizeof(rf_List));
+    list->data = data;
+    list->count = len;
+    list->capacity = len;
+
+    rf_Text* text = (rf_Text*)rf_allocate_dynamic(sizeof(rf_Text));
+    text->letters = list;
+
+    return text;
+}
+
 void* rf_text_concat(void* text_a, void* text_b)
 {
     rf_Text* a = (rf_Text*)text_a;
