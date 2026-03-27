@@ -53,7 +53,13 @@ rf_S32 rf_cstr_compare(const char* s1, const char* s2)
 void rf_console_show(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stdout); fflush(stdout); }
 
 // Count-based print to stderr (preferred - no null-termination required)
-void rf_console_alert(const char* ptr, rf_address count) { fwrite(ptr, 1, count, stderr); fflush(stderr); }
+void rf_console_alert(const char* ptr, rf_address count)
+{
+    fwrite("\033[91m", 1, 5, stderr);
+    fwrite(ptr, 1, count, stderr);
+    fwrite("\033[0m", 1, 4, stderr);
+    fflush(stderr);
+}
 
 // Input operations - get single character
 char rf_console_get_char()
