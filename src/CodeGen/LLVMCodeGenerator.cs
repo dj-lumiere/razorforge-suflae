@@ -124,6 +124,9 @@ public partial class LLVMCodeGenerator
     /// <summary>LLVM type of the emit slot value.</summary>
     private string? _emitSlotType;
 
+    /// <summary>Whether the current function being generated is failable (has ! suffix, can return absent).</summary>
+    private bool _currentRoutineIsFailable;
+
     /// <summary>The routine currently being emitted (for source_routine() / source_module() injection).</summary>
     private RoutineInfo? _currentEmittingRoutine;
 
@@ -221,8 +224,9 @@ public partial class LLVMCodeGenerator
         {
             if (type is EntityTypeInfo { IsGenericDefinition: false } entity)
             {
-                // Skip resolutions with unresolved generic parameters (e.g., List[T] where T is a GenericParameterTypeInfo)
-                if (entity.TypeArguments != null && entity.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
+                // Skip resolutions with unresolved generic parameters at any depth
+                // (e.g., List[BTreeSetNode[T]] where T is nested inside a type argument)
+                if (entity.TypeArguments != null && entity.TypeArguments.Any(ContainsGenericParameter))
                     continue;
                 GenerateEntityType(entity);
             }
@@ -233,7 +237,7 @@ public partial class LLVMCodeGenerator
         {
             if (type is RecordTypeInfo { IsGenericDefinition: false } record)
             {
-                if (record.TypeArguments != null && record.TypeArguments.Any(ta => ta is GenericParameterTypeInfo))
+                if (record.TypeArguments != null && record.TypeArguments.Any(ContainsGenericParameter))
                     continue;
                 GenerateRecordType(record);
             }
@@ -269,6 +273,16 @@ public partial class LLVMCodeGenerator
                 GenerateVariantType(variant);
             }
         }
+    }
+
+    /// <summary>
+    /// Checks if a type contains unresolved generic parameters at any nesting depth.
+    /// </summary>
+    private static bool ContainsGenericParameter(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo) return true;
+        if (type.TypeArguments == null) return false;
+        return type.TypeArguments.Any(ContainsGenericParameter);
     }
 
     /// <summary>
@@ -558,7 +572,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Emit main() entry point that calls the module's start() routine
-        string? startFunc = _generatedFunctionDefs.FirstOrDefault(f => f == "start" || f.EndsWith(".start"));
+        string? startFunc = _generatedFunctionDefs.FirstOrDefault(f => f == "start" || f.EndsWith(".start") || f.EndsWith(".start\""));
         if (startFunc != null)
         {
             output.AppendLine("; Entry point");

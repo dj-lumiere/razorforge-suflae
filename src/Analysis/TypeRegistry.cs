@@ -643,6 +643,17 @@ public sealed class TypeRegistry
             return type;
         }
 
+        // Try any module prefix (e.g., Collections.SortedSet for bare "SortedSet")
+        if (!name.Contains('.'))
+        {
+            string suffix = $".{name}";
+            foreach (var (key, value) in _types)
+            {
+                if (key.EndsWith(suffix))
+                    return value;
+            }
+        }
+
         return null;
     }
 
@@ -744,6 +755,19 @@ public sealed class TypeRegistry
             });
 
             RegisterRoutine(new RoutineInfo(name: "__represent__")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [],
+                ReturnType = textType,
+                IsFailable = false,
+                DeclaredModification = ModificationCategory.Readonly,
+                ModificationCategory = ModificationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+
+            RegisterRoutine(new RoutineInfo(name: "__diagnose__")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1229,9 +1253,14 @@ public sealed class TypeRegistry
                 _ => null
             };
             // Fallback: strip type arguments from name to find generic definition
-            genericDef ??= type.Name.Contains('[')
-                ? LookupType(type.Name[..type.Name.IndexOf('[')])
-                : null;
+            if (genericDef == null && type.Name.Contains('['))
+            {
+                string baseName = type.Name[..type.Name.IndexOf('[')];
+                genericDef = LookupType(baseName);
+                // Try module-qualified name for non-Core types
+                if (genericDef == null && !string.IsNullOrEmpty(type.Module))
+                    genericDef = LookupType($"{type.Module}.{baseName}");
+            }
 
             if (genericDef != null)
             {

@@ -1,0 +1,125 @@
+# RazorForge ValueBitList[N] - Fixed-size inline bit vector with value semantics
+# Record type - N bits stored inline, copied on assignment
+# Uses packed bytes for space efficiency (8 bits per byte)
+#
+# Usage:
+#   var flags: ValueBitList[8] = ValueBitList[8]()
+#   flags = flags.with_set(0, true)
+#   flags = flags.with_set(3, true)
+#   var is_set = flags[0]     # true
+
+module Core
+
+# Fixed-size bit vector with value semantics
+# Compiler lays out ceil(N/8) bytes inline
+record ValueBitList[N]
+needs N is U64
+  # ceil(N/8) bytes stored inline by compiler
+  pass
+
+# ============================================================================
+# Query Operations
+# ============================================================================
+
+routine ValueBitList[N].count() -> U64
+  return N
+
+routine ValueBitList[N].is_empty() -> Bool
+  return N == 0u64
+
+# ============================================================================
+# Indexing (read-only, value semantics)
+# ============================================================================
+
+routine ValueBitList[N].__getitem__![I](index: I) -> Bool
+needs I obeys Integral
+  var idx = index.U64!()
+  if idx >= N
+    throw IndexOutOfBoundsError(index: idx, count: N)
+  # Access bit at index within packed bytes
+  var byte_idx = idx // 8u64
+  var bit_off = U8(idx % 8u64)
+  var byte_val = me.byte_at(byte_idx)
+  return (byte_val & (1u8 << bit_off)) != 0u8
+
+routine ValueBitList[N].__getitem__![I](index: BackIndex[I]) -> Bool
+needs I obeys Integral
+  var idx = index.resolve(N)
+  return me[idx]
+
+# ============================================================================
+# Functional Modification (returns new copy)
+# ============================================================================
+
+routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
+  # Returns a new ValueBitList with the bit at index changed
+  if index >= N
+    return me
+  var result = me
+  # Modify the bit in the copy
+  var byte_idx = index // 8u64
+  var bit_off = U8(index % 8u64)
+  var byte_val = result.byte_at(byte_idx)
+  if value
+    result.set_byte_at(byte_idx, byte_val | (1u8 << bit_off))
+  else
+    result.set_byte_at(byte_idx, byte_val & ~(1u8 << bit_off))
+  return result
+
+routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
+  # Returns a new ValueBitList with the bit at index toggled
+  if index >= N
+    return me
+  var current = me[index]
+  return me.with_set(index, not current)
+
+# ============================================================================
+# Bit Queries
+# ============================================================================
+
+routine ValueBitList[N].count_ones() -> U64
+  var count = 0u64
+  var i = 0u64
+  while i < N
+    if me[i]
+      count = count + 1u64
+    i = i + 1u64
+  return count
+
+routine ValueBitList[N].count_zeros() -> U64
+  return N - me.count_ones()
+
+routine ValueBitList[N].any() -> Bool
+  var i = 0u64
+  while i < N
+    if me[i]
+      return true
+    i = i + 1u64
+  return false
+
+routine ValueBitList[N].all() -> Bool
+  var i = 0u64
+  while i < N
+    if not me[i]
+      return false
+    i = i + 1u64
+  return true
+
+routine ValueBitList[N].none() -> Bool
+  return not me.any()
+
+# ============================================================================
+# Internal byte access (compiler-intrinsic for packed layout)
+# ============================================================================
+
+@llvm("extractvalue")
+routine ValueBitList[N].byte_at(index: U64) -> U8
+  # Compiler intrinsic: read byte at index from packed storage
+  pass
+
+@llvm("insertvalue")
+routine ValueBitList[N].set_byte_at(index: U64, value: U8)
+  # Compiler intrinsic: write byte at index in packed storage
+  pass
+
+# Comparison (==, !=) is auto-generated using memcmp for records

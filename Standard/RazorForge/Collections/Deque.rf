@@ -54,11 +54,13 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
 
 routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = physical_idx * data_size[T]()
-  return me.data.read[T](byte_offset)
+  var ptr = Snatched[T](me.data.get_address() + byte_offset)
+  return ptr.read()
 
 routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = physical_idx * data_size[T]()
-  me.data.write[T](byte_offset, value)
+  var ptr = Snatched[T](me.data.get_address() + byte_offset)
+  ptr.write(value)
   return
 
 # ============================================================================
@@ -228,19 +230,21 @@ routine Deque[T].rotate_right(n: U64)
 # Iteration Support
 # ============================================================================
 
-routine Deque[T].__iter__() -> DequeIterator[T]
-  return DequeIterator[T](deque: me, index: 0u64)
+@readonly
+routine Deque[T].__iter__() -> DequeEmitter[T]
+  return DequeEmitter[T](deque: me, index: 0u64)
 
-entity DequeIterator[T]
-  deque: Deque[T]
-  index: U64
+entity DequeEmitter[T] obeys Iterator[T]
+  secret deque: Deque[T]
+  secret index: U64
 
-routine DequeIterator[T].next!() -> T
+@writable
+emitting routine DequeEmitter[T].__next__() -> T
   if me.index >= me.deque.count()
     absent
-  var value = me.deque[me.index]
+  emit me.deque[me.index]
   me.index = me.index + 1u64
-  return value
+  return
 
 # ============================================================================
 # Utility Operations

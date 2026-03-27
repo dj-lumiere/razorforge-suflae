@@ -454,6 +454,13 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb, "  call void @rf_trace_pop()");
                 EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
             }
+            else if (_currentRoutineIsFailable)
+            {
+                // Failable void routine: return { i64 1, ptr null } (VALID, no payload)
+                EmitEntityCleanup(sb, null);
+                EmitLine(sb, "  call void @rf_trace_pop()");
+                EmitLine(sb, "  ret { i64, ptr } { i64 1, ptr null }");
+            }
             else
             {
                 EmitEntityCleanup(sb, null);
@@ -479,7 +486,24 @@ public partial class LLVMCodeGenerator
             EmitEntityCleanup(sb, returnedVarName);
 
             EmitLine(sb, "  call void @rf_trace_pop()");
-            EmitLine(sb, $"  ret {llvmType} {value}");
+
+            // Failable routines wrap the return value in { i64, ptr } with tag=1 (VALID)
+            if (_currentRoutineIsFailable)
+            {
+                int size = GetTypeSize(retType);
+                string handle = NextTemp();
+                EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
+                EmitLine(sb, $"  store {llvmType} {value}, ptr {handle}");
+                string v0 = NextTemp();
+                EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
+                string v1 = NextTemp();
+                EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+            }
+            else
+            {
+                EmitLine(sb, $"  ret {llvmType} {value}");
+            }
         }
     }
 

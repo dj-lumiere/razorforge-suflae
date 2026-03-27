@@ -1,6 +1,7 @@
 ﻿namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -38,6 +39,9 @@ public partial class LLVMCodeGenerator
             if (refreshed != null && refreshed.MemberVariables.Count > 0)
                 entity = refreshed;
         }
+
+        // Recursively ensure struct types for member variable types are defined
+        EnsureMemberVariableTypesGenerated(entity.MemberVariables);
 
         // Build the struct type
         var memberVariableTypes = new List<string>();
@@ -108,6 +112,9 @@ public partial class LLVMCodeGenerator
                 record = refreshed;
         }
 
+        // Recursively ensure struct types for member variable types are defined
+        EnsureMemberVariableTypesGenerated(record.MemberVariables);
+
         // Build the struct type
         var memberVariableTypes = new List<string>();
         foreach (var memberVariable in record.MemberVariables)
@@ -138,6 +145,27 @@ public partial class LLVMCodeGenerator
                 sb.Append($"{i}={record.MemberVariables[i].Name}");
             }
             EmitLine(_typeDeclarations, sb.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Recursively ensures struct type definitions exist for member variable types.
+    /// Handles nested generic resolutions that may not be in the registry (e.g.,
+    /// Maybe[BTreeSetNode[S64]] created during member variable substitution).
+    /// </summary>
+    private void EnsureMemberVariableTypesGenerated(IReadOnlyList<MemberVariableInfo> memberVariables)
+    {
+        foreach (var mv in memberVariables)
+        {
+            switch (mv.Type)
+            {
+                case EntityTypeInfo { IsGenericDefinition: false } nestedEntity:
+                    GenerateEntityType(nestedEntity);
+                    break;
+                case RecordTypeInfo { IsGenericDefinition: false, HasDirectBackendType: false, IsSingleMemberVariableWrapper: false } nestedRecord:
+                    GenerateRecordType(nestedRecord);
+                    break;
+            }
         }
     }
 
@@ -274,8 +302,8 @@ public partial class LLVMCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLLVMType(routine.ReturnType)
             : "void";
-        // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-        if (routine.AsyncStatus == AsyncStatus.Emitting)
+        // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
+        if (routine.AsyncStatus == AsyncStatus.Emitting || routine.IsFailable)
             returnType = "{ i64, ptr }";
         if (isCExtern && returnType == "half") returnType = "i16";
 
@@ -416,8 +444,8 @@ public partial class LLVMCodeGenerator
         string returnType = routineInfo.ReturnType != null
             ? GetLLVMType(routineInfo.ReturnType)
             : "void";
-        // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-        if (routineInfo.AsyncStatus == AsyncStatus.Emitting)
+        // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
+        if (routineInfo.AsyncStatus == AsyncStatus.Emitting || routineInfo.IsFailable)
             returnType = "{ i64, ptr }";
 
         // Start function — save position so we can rollback on error
@@ -473,6 +501,7 @@ public partial class LLVMCodeGenerator
 
         // Set current function return type for use in EmitReturn
         _currentFunctionReturnType = routine.ReturnType;
+        _currentRoutineIsFailable = routine.IsFailable;
 
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
@@ -1430,8 +1459,9 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits the body for a synthesized __represent__() or __diagnose__() routine.
-    /// Concatenates "TypeName(" + field representations + ")" via Text.concat.
-    /// __diagnose__ includes secret fields; __represent__() excludes them.
+    /// __represent__: "TypeName(field: val, ...)" — open+posted fields only.
+    /// __diagnose__: "TypeName(field: val, ...)" for records/SF entities,
+    ///               "TypeName@0xADDR(field: val, ...)" for RF entities (includes heap address).
     /// </summary>
     private void EmitSynthesizedText(RoutineInfo routine, string funcName, bool includeSecret)
     {
@@ -1448,7 +1478,7 @@ public partial class LLVMCodeGenerator
 
         int savedTempCounter = _tempCounter;
 
-        string typeName = routine.OwnerType.Name;
+        string typeName = routine.OwnerType.FullName;
 
         // Get fields to include
         IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
@@ -1458,13 +1488,14 @@ public partial class LLVMCodeGenerator
             _ => null
         };
 
-        // Tuples: emit "(item0, item1, ...)" format
+        // Tuples: emit "(item0, item1, ...)" for represent, "TypeName(item0, item1, ...)" for diagnose
         if (routine.OwnerType is TupleTypeInfo tuple)
         {
             string tupleStructType = GetTupleTypeName(tuple);
 
-            // Start with "("
-            string tupleCur = EmitSynthesizedStringLiteral("(");
+            // Start with "(" for represent, "Tuple[T1, T2, ...](" for diagnose
+            string openLiteral = includeSecret ? $"{typeName}(" : "(";
+            string tupleCur = EmitSynthesizedStringLiteral(openLiteral);
 
             for (int i = 0; i < tuple.ElementTypes.Count; i++)
             {
@@ -1484,8 +1515,8 @@ public partial class LLVMCodeGenerator
                 string elemVal = NextTemp();
                 EmitLine(_functionDefinitions, $"  {elemVal} = extractvalue {tupleStructType} %me, {i}");
 
-                // Convert to Text
-                string elemText = EmitSynthesizedValueToText(elemTypeInfo, elemLlvmType, elemVal);
+                // Convert to Text (use __diagnose__ for diagnose mode)
+                string elemText = EmitSynthesizedValueToText(elemTypeInfo, elemLlvmType, elemVal, useDiagnose: includeSecret);
 
                 // Concat
                 string withElem = NextTemp();
@@ -1522,18 +1553,43 @@ public partial class LLVMCodeGenerator
                 visibleFields.Add((fields[i], i));
         }
 
-        // Build "TypeName(field1=..., field2=...)"
-        // Start with "TypeName("
-        string prefix = $"{typeName}(";
-        string current = EmitSynthesizedStringLiteral(prefix);
+        // Build "TypeName(field: val, ...)" or for RF entity __diagnose__:
+        // "TypeName@0xADDR(field: val, ...)"
+        bool emitAddress = includeSecret
+                           && routine.OwnerType is EntityTypeInfo
+                           && _registry.Language == Language.RazorForge;
+
+        string current;
+        if (emitAddress)
+        {
+            // Emit "TypeName@0x" prefix, then format the pointer as hex
+            if (_declaredNativeFunctions.Add("rf_format_address"))
+                EmitLine(_functionDeclarations, "declare ptr @rf_format_address(ptr)");
+
+            string typePrefix = EmitSynthesizedStringLiteral($"{typeName}@");
+            string addrText = NextTemp();
+            EmitLine(_functionDefinitions, $"  {addrText} = call ptr @rf_format_address(ptr %me)");
+            string withAddr = NextTemp();
+            EmitLine(_functionDefinitions, $"  {withAddr} = call ptr @rf_text_concat(ptr {typePrefix}, ptr {addrText})");
+            string openParen = EmitSynthesizedStringLiteral("(");
+            string withParen = NextTemp();
+            EmitLine(_functionDefinitions, $"  {withParen} = call ptr @rf_text_concat(ptr {withAddr}, ptr {openParen})");
+            current = withParen;
+        }
+        else
+        {
+            string prefix = $"{typeName}(";
+            current = EmitSynthesizedStringLiteral(prefix);
+        }
 
         for (int vi = 0; vi < visibleFields.Count; vi++)
         {
             var (mv, fieldIdx) = visibleFields[vi];
             string fieldType = GetLLVMType(mv.Type);
 
-            // Add "fieldName=" prefix
-            string fieldPrefix = vi > 0 ? $", {mv.Name}=" : $"{mv.Name}=";
+            // Add "[secret] fieldName: " or "fieldName: " prefix
+            string secretTag = includeSecret && mv.Visibility == VisibilityModifier.Secret ? "[secret] " : "";
+            string fieldPrefix = vi > 0 ? $", {secretTag}{mv.Name}: " : $"{secretTag}{mv.Name}: ";
             string fieldPrefixStr = EmitSynthesizedStringLiteral(fieldPrefix);
 
             // Concat field prefix
@@ -1570,8 +1626,8 @@ public partial class LLVMCodeGenerator
                     break;
             }
 
-            // Convert field value to Text via Text.__create__ or .Text()
-            string fieldText = EmitSynthesizedValueToText(mv.Type, fieldType, fieldValue);
+            // Convert field value to Text (use __diagnose__ for diagnose mode)
+            string fieldText = EmitSynthesizedValueToText(mv.Type, fieldType, fieldValue, useDiagnose: includeSecret);
 
             // Concat field text
             string withField = NextTemp();
@@ -1591,13 +1647,29 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits code to convert a value to Text for synthesized __represent__()/__diagnose__() routines.
-    /// Calls Text.__create__(from: T) on the value's type (which delegates to T.__represent__()).
+    /// When useDiagnose is false, calls Text.__create__(from: T) which delegates to T.__represent__().
+    /// When useDiagnose is true, calls T.__diagnose__() directly.
     /// </summary>
-    private string EmitSynthesizedValueToText(TypeInfo fieldType, string llvmType, string value)
+    private string EmitSynthesizedValueToText(TypeInfo fieldType, string llvmType, string value, bool useDiagnose = false)
     {
         // Text fields need no conversion
         if (fieldType.Name == "Text")
             return value;
+
+        if (useDiagnose)
+        {
+            // Call T.__diagnose__() directly
+            RoutineInfo? diagRoutine = _registry.LookupRoutine($"{fieldType.FullName}.__diagnose__");
+            if (diagRoutine != null)
+            {
+                GenerateFunctionDeclaration(diagRoutine);
+                string diagName = MangleFunctionName(diagRoutine);
+                string diagResult = NextTemp();
+                EmitLine(_functionDefinitions, $"  {diagResult} = call ptr @{diagName}({llvmType} {value})");
+                return diagResult;
+            }
+            // Fall through to Text.__create__ if no __diagnose__ found
+        }
 
         // Look up the Text.__create__ overload for this specific parameter type
         RoutineInfo? createRoutine = _registry.LookupRoutineOverload("Text.__create__", [fieldType])

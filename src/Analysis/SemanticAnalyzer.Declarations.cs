@@ -2082,7 +2082,8 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Auto-registers builder-generated member routine signatures for all user types.
-    /// These are default routines that every type of a given category gets (__represent__(), __diagnose__(), __hash__(), etc.).
+    /// These are default routines that every type of a given category gets (__hash__(), __eq__(), etc.).
+    /// __represent__ and __diagnose__ are auto-registered (overridable).
     /// Only registers if the user hasn't already defined the routine.
     /// </summary>
     private void AutoRegisterBuiltinRoutines()
@@ -2137,7 +2138,7 @@ public sealed partial class SemanticAnalyzer
             List<RoutineInfo> existingMethods = _registry.GetMethodsForType(type: type)
                                                          .ToList();
 
-            // All types: __represent__(), __diagnose__()
+            // All types: __represent__(), __diagnose__() — auto-generated, overridable
             if (textType != null)
             {
                 MaybeRegisterBuiltin(owner: type,

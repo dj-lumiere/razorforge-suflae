@@ -40,6 +40,11 @@ public sealed class EntityTypeInfo : TypeInfo
     {
     }
 
+    /// Tracks in-progress CreateInstance calls to break cycles from self-referential types
+    /// (e.g., BTreeSetNode[T] containing Maybe[BTreeSetNode[T]]).
+    [ThreadStatic]
+    private static HashSet<string>? _creatingInstances;
+
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
@@ -58,32 +63,57 @@ public sealed class EntityTypeInfo : TypeInfo
                 $"Expected {GenericParameters.Count} type arguments, got {typeArguments.Count}.");
         }
 
-        // Create type parameter substitution map
-        var substitution = new Dictionary<string, TypeInfo>();
-        for (int i = 0; i < GenericParameters.Count; i++)
-        {
-            substitution[key: GenericParameters[i]] = typeArguments[i];
-        }
-
-        // Substitute types in member variables
-        var substitutedMemberVariables = MemberVariables
-            .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
-            .ToList();
-
         // Build resolved type name
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
             values: typeArguments.Select(selector: t => t.Name))}]";
 
-        return new EntityTypeInfo(name: resolvedName)
+        // Detect cycles: if we're already creating this exact resolution, return a shell
+        // to break infinite recursion. The shell is used only as a type reference in member
+        // variable lists, not to access members directly.
+        _creatingInstances ??= new HashSet<string>();
+        if (!_creatingInstances.Add(resolvedName))
         {
-            MemberVariables = substitutedMemberVariables,
-            ImplementedProtocols = ImplementedProtocols,
-            TypeArguments = typeArguments,
-            GenericDefinition = this,
-            Visibility = Visibility,
-            Location = Location,
-            Module = Module
-        };
+            return new EntityTypeInfo(name: resolvedName)
+            {
+                MemberVariables = [],
+                ImplementedProtocols = ImplementedProtocols,
+                TypeArguments = typeArguments,
+                GenericDefinition = this,
+                Visibility = Visibility,
+                Location = Location,
+                Module = Module
+            };
+        }
+
+        try
+        {
+            // Create type parameter substitution map
+            var substitution = new Dictionary<string, TypeInfo>();
+            for (int i = 0; i < GenericParameters.Count; i++)
+            {
+                substitution[key: GenericParameters[i]] = typeArguments[i];
+            }
+
+            // Substitute types in member variables
+            var substitutedMemberVariables = MemberVariables
+                .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
+                .ToList();
+
+            return new EntityTypeInfo(name: resolvedName)
+            {
+                MemberVariables = substitutedMemberVariables,
+                ImplementedProtocols = ImplementedProtocols,
+                TypeArguments = typeArguments,
+                GenericDefinition = this,
+                Visibility = Visibility,
+                Location = Location,
+                Module = Module
+            };
+        }
+        finally
+        {
+            _creatingInstances.Remove(resolvedName);
+        }
     }
 
     /// <summary>
@@ -135,6 +165,11 @@ public sealed class EntityTypeInfo : TypeInfo
         if (type is ProtocolTypeInfo { GenericDefinition: not null } protocolType)
         {
             return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is ErrorHandlingTypeInfo { GenericDefinition: not null } errorType)
+        {
+            return errorType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

@@ -236,6 +236,10 @@ public partial class LLVMCodeGenerator
     /// <returns>The temporary variable holding the member variable value.</returns>
     private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
     {
+        // Handle force-unwrap suffix: me.root! → load me.root (Maybe), then unwrap
+        bool isForceUnwrap = expr.PropertyName.EndsWith('!');
+        string propertyName = isForceUnwrap ? expr.PropertyName[..^1] : expr.PropertyName;
+
         // Evaluate the target expression
         string target = EmitExpression(sb, expr.Object);
 
@@ -253,7 +257,7 @@ public partial class LLVMCodeGenerator
             && _wrapperTypeNames.Contains(wrapperRecord.Name[..wrapperRecord.Name.IndexOf('[')])
             && wrapperRecord.TypeArguments is { Count: > 0 }
             && wrapperRecord.TypeArguments[0] is EntityTypeInfo innerEntity
-            && !wrapperRecord.MemberVariables.Any(mv => mv.Name == expr.PropertyName))
+            && !wrapperRecord.MemberVariables.Any(mv => mv.Name == propertyName))
         {
             // For @llvm("ptr") wrappers, the value IS the pointer directly
             // For struct wrappers, extract the inner Snatched[T] (ptr) from field 0
@@ -268,15 +272,84 @@ public partial class LLVMCodeGenerator
                 innerPtr = NextTemp();
                 EmitLine(sb, $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
             }
-            return EmitEntityMemberVariableRead(sb, innerPtr, innerEntity, expr.PropertyName);
+            string result = EmitEntityMemberVariableRead(sb, innerPtr, innerEntity, propertyName);
+            return isForceUnwrap ? EmitMemberForceUnwrap(sb, result, targetType, propertyName) : result;
         }
 
-        return targetType switch
+        string value = targetType switch
         {
-            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, target, entity, expr.PropertyName),
-            RecordTypeInfo record => EmitRecordMemberVariableRead(sb, target, record, expr.PropertyName),
+            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb, target, entity, propertyName),
+            RecordTypeInfo record => EmitRecordMemberVariableRead(sb, target, record, propertyName),
             _ => throw new InvalidOperationException($"Cannot access member variable on type: {targetType.Category}")
         };
+
+        return isForceUnwrap ? EmitMemberForceUnwrap(sb, value, targetType, propertyName) : value;
+    }
+
+    /// <summary>
+    /// Force-unwraps a Maybe value from a member variable access (me.field!).
+    /// The value is a { i64, ptr } where tag=0 is None, tag=1 is valid.
+    /// </summary>
+    private string EmitMemberForceUnwrap(StringBuilder sb, string maybeValue, TypeInfo ownerType, string memberName)
+    {
+        // Find the member variable type to determine the unwrapped type
+        MemberVariableInfo? memberVar = ownerType switch
+        {
+            EntityTypeInfo e => e.LookupMemberVariable(memberName),
+            RecordTypeInfo r => r.LookupMemberVariable(memberName),
+            _ => null
+        };
+
+        TypeInfo? memberType = memberVar?.Type;
+        if (memberType != null && ownerType is { IsGenericResolution: true, TypeArguments: not null })
+            memberType = ResolveGenericMemberType(memberType, ownerType);
+
+        // Declare llvm.trap if not already declared
+        if (_declaredNativeFunctions.Add("llvm.trap"))
+            EmitLine(_functionDeclarations, "declare void @llvm.trap() noreturn nounwind");
+
+        // Alloca and store the { i64, ptr } value
+        string allocaPtr = NextTemp();
+        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitLine(sb, $"  store {{ i64, ptr }} {maybeValue}, ptr {allocaPtr}");
+
+        // Extract tag
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+        string isValid = NextTemp();
+        EmitLine(sb, $"  {isValid} = icmp eq i64 {tag}, 1");
+
+        string okLabel = NextLabel("unwrap_ok");
+        string failLabel = NextLabel("unwrap_fail");
+        EmitLine(sb, $"  br i1 {isValid}, label %{okLabel}, label %{failLabel}");
+
+        // Fail: trap
+        EmitLine(sb, $"{failLabel}:");
+        _currentBlock = failLabel;
+        EmitLine(sb, "  call void @llvm.trap()");
+        EmitLine(sb, "  unreachable");
+
+        // OK: extract value from handle
+        EmitLine(sb, $"{okLabel}:");
+        _currentBlock = okLabel;
+        string handlePtr = NextTemp();
+        string handleVal = NextTemp();
+        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
+
+        // For entity types, the value IS the pointer; for records, load from the pointer
+        if (memberType is EntityTypeInfo)
+        {
+            return handleVal;
+        }
+
+        string llvmValueType = memberType != null ? GetLLVMType(memberType) : "ptr";
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = load {llvmValueType}, ptr {handleVal}");
+        return result;
     }
 
     /// <summary>
@@ -285,14 +358,8 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitEntityMemberVariableRead(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName)
     {
-        // Refresh stale generic resolutions (member variables may be empty if created before definition was populated)
-        if (entity is { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef }
-            && entity.TypeArguments != null)
-        {
-            var refreshed = genDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
-            if (refreshed != null && refreshed.MemberVariables.Count > 0)
-                entity = refreshed;
-        }
+        // Refresh stale generic resolutions (member variables may be empty or missing the target member)
+        entity = RefreshEntityMemberVariables(entity, memberVariableName);
 
         // Find member variable index
         int memberVariableIndex = -1;
@@ -383,14 +450,8 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitEntityMemberVariableWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName, string value)
     {
-        // Refresh stale generic resolutions (member variables may be empty if created before definition was populated)
-        if (entity is { IsGenericResolution: true, MemberVariables.Count: 0, GenericDefinition: { MemberVariables.Count: > 0 } genDef }
-            && entity.TypeArguments != null)
-        {
-            var refreshed = genDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
-            if (refreshed != null && refreshed.MemberVariables.Count > 0)
-                entity = refreshed;
-        }
+        // Refresh stale generic resolutions
+        entity = RefreshEntityMemberVariables(entity, memberVariableName);
 
         // Find member variable index
         int memberVariableIndex = -1;
@@ -429,6 +490,38 @@ public partial class LLVMCodeGenerator
     /// Main expression dispatch - generates code for any expression type.
     /// </summary>
     /// <param name="sb">StringBuilder to emit code to.</param>
+    /// <summary>
+    /// Refreshes entity member variables for resolved generic types that may have stale/empty members.
+    /// Tries GenericDefinition first, then falls back to registry lookup.
+    /// </summary>
+    private EntityTypeInfo RefreshEntityMemberVariables(EntityTypeInfo entity, string memberVariableName)
+    {
+        if (!entity.IsGenericResolution || entity.TypeArguments == null)
+            return entity;
+        if (entity.MemberVariables.Any(mv => mv.Name == memberVariableName))
+            return entity;
+
+        // Try GenericDefinition if available
+        if (entity.GenericDefinition is { MemberVariables.Count: > 0 } genDef)
+        {
+            var refreshed = genDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Any(mv => mv.Name == memberVariableName))
+                return refreshed;
+        }
+
+        // Fallback: look up the generic definition from the registry
+        string baseName = entity.Name.Contains('[') ? entity.Name[..entity.Name.IndexOf('[')] : entity.Name;
+        var lookupDef = LookupTypeInCurrentModule(baseName) as EntityTypeInfo;
+        if (lookupDef is { IsGenericDefinition: true, MemberVariables.Count: > 0 })
+        {
+            var refreshed = lookupDef.CreateInstance(entity.TypeArguments) as EntityTypeInfo;
+            if (refreshed != null && refreshed.MemberVariables.Any(mv => mv.Name == memberVariableName))
+                return refreshed;
+        }
+
+        return entity;
+    }
+
     /// <param name="expr">The expression to generate code for.</param>
     /// <returns>The temporary variable holding the expression result.</returns>
     private string EmitExpression(StringBuilder sb, Expression expr)
@@ -455,6 +548,7 @@ public partial class LLVMCodeGenerator
             FlagsTestExpression flagsTest => EmitFlagsTest(sb, flagsTest),
             ChainedComparisonExpression chain => EmitChainedComparison(sb, chain),
             CompoundAssignmentExpression compound => EmitCompoundAssignment(sb, compound),
+            IsPatternExpression isPattern => EmitIsPattern(sb, isPattern),
             NamedArgumentExpression named => EmitExpression(sb, named.Value),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
@@ -488,6 +582,10 @@ public partial class LLVMCodeGenerator
             // Actual string literal
             return EmitStringLiteral(sb, s);
         }
+
+        // None literal → emit zeroinitializer for Maybe types ({ i64, ptr } with tag=0)
+        if (literal.LiteralType == Lexer.TokenType.None)
+            return "zeroinitializer";
 
         return literal.Value switch
         {
@@ -900,6 +998,21 @@ public partial class LLVMCodeGenerator
             return choiceCase.Value.CaseInfo.ComputedValue.ToString();
         }
 
+        // Check if this is a preset (module-level constant, e.g., SET_INITIAL_BUCKETS)
+        var presetVar = _registry.LookupVariable(identifier.Name);
+        if (presetVar is { IsPreset: true })
+        {
+            // Find the preset's value expression from stdlib/user programs
+            foreach (var (program, _, _) in _stdlibPrograms.Concat(_userPrograms))
+            {
+                foreach (var decl in program.Declarations)
+                {
+                    if (decl is PresetDeclaration preset && preset.Name == identifier.Name)
+                        return EmitExpression(sb, preset.Value);
+                }
+            }
+        }
+
         // Look up the variable in local variables first
         if (!_localVariables.TryGetValue(identifier.Name, out var varType))
         {
@@ -1142,10 +1255,20 @@ public partial class LLVMCodeGenerator
                     return EmitEntityConstruction(sb, entity, arguments);
                 }
 
-                // Zero-arg entity construction → null pointer (empty/default entity)
+                // Zero-arg entity construction → try __create__() first, then null
                 if (calledType is EntityTypeInfo && arguments.Count == 0)
                 {
-                    return "null";
+                    string createName = $"{calledType.Name}.__create__";
+                    var creator = _registry.LookupRoutineOverload(createName, new List<TypeInfo>());
+                    if (creator != null && creator.Parameters.Count == 0)
+                    {
+                        routine = creator;
+                        isCreatorCall = true;
+                    }
+                    else
+                    {
+                        return "null";
+                    }
                 }
 
                 // Try __create__ overload — this covers conversion constructors
@@ -1242,6 +1365,10 @@ public partial class LLVMCodeGenerator
         string returnType = routine?.ReturnType != null
             ? GetLLVMType(routine.ReturnType)
             : "void";
+        // Failable routines return Maybe[T] = { i64, ptr } at IR level
+        bool isFailableCall = routine?.IsFailable == true;
+        if (isFailableCall)
+            returnType = "{ i64, ptr }";
         string callReturnType = isCExtern && returnType == "half" ? "i16" : returnType;
 
         // On Windows x64 MSVC ABI, external("C") functions returning structs > 8 bytes
@@ -1281,6 +1408,14 @@ public partial class LLVMCodeGenerator
                 string halfResult = NextTemp();
                 EmitLine(sb, $"  {halfResult} = bitcast i16 {result} to half");
                 return halfResult;
+            }
+            // Unwrap failable calls
+            if (isFailableCall)
+            {
+                // Failable void routines: no value to unwrap
+                if (routine?.ReturnType == null)
+                    return result;
+                return EmitEmittingCallUnwrap(sb, result, routine?.ReturnType);
             }
             return result;
         }
@@ -1522,8 +1657,8 @@ public partial class LLVMCodeGenerator
         if (!_generatedFunctions.Contains(mangledName))
         {
             string retType = resolvedReturnType != null ? GetLLVMType(resolvedReturnType) : "void";
-            // Emitting routines return Maybe[T] = { i64, ptr } at IR level
-            if (method?.AsyncStatus == AsyncStatus.Emitting)
+            // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
+            if (method?.AsyncStatus == AsyncStatus.Emitting || method?.IsFailable == true)
                 retType = "{ i64, ptr }";
             EmitLine(_functionDeclarations, $"declare {retType} @{mangledName}({string.Join(", ", argTypes)})");
             _generatedFunctions.Add(mangledName);
@@ -1532,9 +1667,10 @@ public partial class LLVMCodeGenerator
         string returnType = resolvedReturnType != null
             ? GetLLVMType(resolvedReturnType)
             : "void";
-        // Emitting routines return Maybe[T] = { i64, ptr } at IR level
+        // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
         bool isEmittingCall = method?.AsyncStatus == AsyncStatus.Emitting;
-        if (isEmittingCall)
+        bool isFailableCall = method?.IsFailable == true;
+        if (isEmittingCall || isFailableCall)
             returnType = "{ i64, ptr }";
 
         if (returnType == "void")
@@ -1549,11 +1685,14 @@ public partial class LLVMCodeGenerator
             string args = BuildCallArgs(argTypes, argValues);
             EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
 
-            // Unwrap Maybe[T] from emitting routine calls (C74).
+            // Unwrap Maybe[T] from emitting/failable routine calls (C74).
             // EmitFor handles __next__() unwrapping directly, so this only fires for
             // direct calls like `var item = me.source.__next__()` inside emitting bodies.
-            if (isEmittingCall)
+            if (isEmittingCall || isFailableCall)
             {
+                // Failable void routines: no value to unwrap, just discard the { i64, ptr }
+                if (isFailableCall && resolvedReturnType == null)
+                    return result;
                 return EmitEmittingCallUnwrap(sb, result, resolvedReturnType);
             }
 
@@ -1586,15 +1725,17 @@ public partial class LLVMCodeGenerator
         string absentLabel = NextLabel("emit_unwrap_absent");
         EmitLine(sb, $"  br i1 {isValid}, label %{validLabel}, label %{absentLabel}");
 
-        // ABSENT branch: propagate absence from current emitting routine
+        // ABSENT branch: propagate absence or trap
         EmitLine(sb, $"{absentLabel}:");
-        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting)
+        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting || _currentRoutineIsFailable)
         {
+            // Inside emitting or failable routine: propagate absence to caller
             EmitLine(sb, "  call void @rf_trace_pop()");
             EmitLine(sb, "  ret { i64, ptr } { i64 0, ptr null }");
         }
         else
         {
+            // Non-failable caller: absence is a contract violation
             EmitLine(sb, "  unreachable");
         }
 
@@ -1641,7 +1782,7 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                     EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-
+                    ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
                     ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
                     _ => null
                 };
@@ -1782,6 +1923,8 @@ public partial class LLVMCodeGenerator
             BinaryOperator.Multiply when isFloat => "fmul",
             BinaryOperator.Multiply => "mul",
             BinaryOperator.TrueDivide when isFloat => "fdiv",
+            BinaryOperator.TrueDivide when isUnsigned => "udiv",
+            BinaryOperator.TrueDivide => "sdiv",
             BinaryOperator.FloorDivide when isUnsigned => "udiv",
             BinaryOperator.FloorDivide => "sdiv",
             BinaryOperator.Modulo when isFloat => "frem",
@@ -1870,6 +2013,45 @@ public partial class LLVMCodeGenerator
         throw new NotImplementedException(
             $"Binary operator '{binary.Operator}' not supported for type '{typeName}' " +
             $"(left={binary.Left.GetType().Name}, right={binary.Right.GetType().Name}, loc={binary.Location})");
+    }
+
+    /// <summary>
+    /// Emits an 'is' pattern expression (e.g., 'value is None', 'value isnot None').
+    /// For Maybe/ErrorHandling types, checks the tag field.
+    /// </summary>
+    private string EmitIsPattern(StringBuilder sb, IsPatternExpression isPattern)
+    {
+        string operand = EmitExpression(sb, isPattern.Expression);
+
+        // Handle NonePattern or TypePattern with type name "None" — check Maybe tag == 0
+        bool isNoneCheck = isPattern.Pattern is NonePattern
+            || (isPattern.Pattern is TypePattern tp && tp.Type.Name == "None");
+
+        if (isNoneCheck)
+        {
+            // For Maybe types, check tag == 0 (ABSENT/None)
+            // Use the proper LLVM type for the operand (named or anonymous)
+            TypeInfo? operandType = GetExpressionType(isPattern.Expression);
+            string maybeType = operandType != null ? GetLLVMType(operandType) : "{ i64, ptr }";
+
+            string allocaPtr = NextTemp();
+            EmitLine(sb, $"  {allocaPtr} = alloca {maybeType}");
+            EmitLine(sb, $"  store {maybeType} {operand}, ptr {allocaPtr}");
+
+            string tagPtr = NextTemp();
+            string tag = NextTemp();
+            EmitLine(sb, $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
+            EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
+
+            string result = NextTemp();
+            if (isPattern.IsNegated)
+                EmitLine(sb, $"  {result} = icmp ne i64 {tag}, 0"); // isnot None → tag != 0
+            else
+                EmitLine(sb, $"  {result} = icmp eq i64 {tag}, 0"); // is None → tag == 0
+            return result;
+        }
+
+        throw new NotImplementedException($"IsPatternExpression pattern type not implemented: {isPattern.Pattern.GetType().Name}");
     }
 
     /// <summary>
@@ -2138,7 +2320,7 @@ public partial class LLVMCodeGenerator
         {
             UnaryOperator.Not => EmitLogicalNot(sb, unary),
             UnaryOperator.Minus => EmitUnaryMethodCall(sb, unary, "__neg__"),
-            UnaryOperator.BitwiseNot => EmitUnaryMethodCall(sb, unary, "__not__"),
+            UnaryOperator.BitwiseNot => EmitBitwiseNot(sb, unary),
             UnaryOperator.Steal => EmitExpression(sb, unary.Operand),
             UnaryOperator.ForceUnwrap => EmitForceUnwrap(sb, unary),
             _ => throw new NotImplementedException(
@@ -2155,6 +2337,26 @@ public partial class LLVMCodeGenerator
         string result = NextTemp();
         EmitLine(sb, $"  {result} = xor i1 {operand}, true");
         return result;
+    }
+
+    /// <summary>
+    /// Emits bitwise NOT: xor %val, -1 for integer types, falls back to method call for others.
+    /// </summary>
+    private string EmitBitwiseNot(StringBuilder sb, UnaryExpression unary)
+    {
+        string operand = EmitExpression(sb, unary.Operand);
+        TypeInfo? operandType = GetExpressionType(unary.Operand);
+        if (operandType != null)
+        {
+            string llvmType = GetLLVMType(operandType);
+            if (llvmType.StartsWith("i") && llvmType != "i1")
+            {
+                string result = NextTemp();
+                EmitLine(sb, $"  {result} = xor {llvmType} {operand}, -1");
+                return result;
+            }
+        }
+        return EmitUnaryMethodCall(sb, unary, "__not__");
     }
 
     /// <summary>
@@ -2206,7 +2408,8 @@ public partial class LLVMCodeGenerator
         // e.g., Snatched[U8](ptr_value) → just pass through the argument
         if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
         {
-            TypeInfo? calledType = LookupTypeInCurrentModule(id.Name);
+            TypeInfo? calledType = LookupTypeInCurrentModule(id.Name)
+                                  ?? (id.ResolvedType as TypeInfo);
             if (calledType != null)
             {
                 // Resolve type arguments (apply type substitutions for monomorphization)
@@ -2967,6 +3170,13 @@ public partial class LLVMCodeGenerator
                     resolvedArgs.Add(argSub);
                     needsResolution = true;
                 }
+                else if (ta is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    // Recursively resolve nested generics (e.g., BTreeListNode[T] → BTreeListNode[S64])
+                    var innerResolved = ApplyTypeSubstitutions(ta);
+                    resolvedArgs.Add(innerResolved);
+                    if (innerResolved != ta) needsResolution = true;
+                }
                 else
                 {
                     resolvedArgs.Add(ta);
@@ -2978,7 +3188,7 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                     EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-
+                    ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
                     ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
                     _ => null
                 };
@@ -3041,7 +3251,7 @@ public partial class LLVMCodeGenerator
             CreatorExpression ctor => LookupTypeInCurrentModule(ctor.TypeName),
             BinaryExpression binary => GetBinaryExpressionType(binary),
             ChainedComparisonExpression => _registry.LookupType("Bool"), // Comparisons return Bool
-            UnaryExpression unary => GetExpressionType(unary.Operand),
+            UnaryExpression unary => GetUnaryExpressionType(unary),
             CallExpression call => GetCallReturnType(call),
             GenericMethodCallExpression generic => GetGenericMethodCallReturnType(generic),
             IndexExpression index => GetIndexReturnType(index),
@@ -3054,6 +3264,20 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Gets the return type of an index expression by looking up __getitem__ on the target type.
     /// </summary>
+    private TypeInfo? GetUnaryExpressionType(UnaryExpression unary)
+    {
+        TypeInfo? operandType = GetExpressionType(unary.Operand);
+        if (unary.Operator == UnaryOperator.ForceUnwrap && operandType != null)
+        {
+            // Force-unwrap: return the value type inside the Maybe/ErrorHandling wrapper
+            if (operandType is ErrorHandlingTypeInfo eh)
+                return eh.ValueType;
+            if (operandType.Name.StartsWith("Maybe[") && operandType.TypeArguments is { Count: 1 })
+                return operandType.TypeArguments[0];
+        }
+        return operandType;
+    }
+
     private TypeInfo? GetBinaryExpressionType(BinaryExpression binary)
     {
         return binary.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual
@@ -3732,9 +3956,21 @@ public partial class LLVMCodeGenerator
         string operand = EmitExpression(sb, unary.Operand);
         TypeInfo? operandType = GetExpressionType(unary.Operand);
 
-        if (operandType is not ErrorHandlingTypeInfo errorType)
+        // Determine the value type inside the Maybe/ErrorHandling wrapper
+        TypeInfo? valueType = null;
+        if (operandType is ErrorHandlingTypeInfo errorType)
         {
-            throw new InvalidOperationException("'!!' operator requires ErrorHandlingTypeInfo operand");
+            valueType = errorType.ValueType;
+        }
+        else if (operandType != null && operandType.Name.StartsWith("Maybe[") && operandType.TypeArguments is { Count: 1 })
+        {
+            // Handle Maybe types that were resolved as RecordTypeInfo by the registry cache
+            valueType = operandType.TypeArguments[0];
+        }
+
+        if (valueType == null)
+        {
+            throw new InvalidOperationException($"'!!' operator requires Maybe/ErrorHandling operand, got {operandType?.GetType().Name ?? "null"}: {operandType?.Name ?? "null"}");
         }
 
         // Declare llvm.trap if not already declared
@@ -3778,7 +4014,6 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
 
         // Load T from the handle pointer
-        TypeInfo valueType = errorType.ValueType;
         string llvmValueType = GetLLVMType(valueType);
         string result = NextTemp();
         EmitLine(sb, $"  {result} = load {llvmValueType}, ptr {handleVal}");
@@ -3977,7 +4212,7 @@ public partial class LLVMCodeGenerator
         if (memberType is GenericParameterTypeInfo && subs.TryGetValue(memberType.Name, out var directSub))
             return directSub;
 
-        // Parameterized: memberType is Snatched[T] → substitute T in type arguments
+        // Parameterized: memberType is Snatched[T] or Maybe[BTreeListNode[T]] → recursively substitute
         if (memberType is { IsGenericResolution: true, TypeArguments: not null })
         {
             bool anySubstituted = false;
@@ -3988,6 +4223,13 @@ public partial class LLVMCodeGenerator
                 {
                     substitutedArgs.Add(resolved);
                     anySubstituted = true;
+                }
+                else if (ta is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    // Recursively substitute nested generics (e.g., BTreeListNode[T] → BTreeListNode[S64])
+                    var innerResolved = ResolveGenericMemberType(ta, ownerType);
+                    substitutedArgs.Add(innerResolved);
+                    if (innerResolved != ta) anySubstituted = true;
                 }
                 else
                 {

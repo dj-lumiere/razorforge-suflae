@@ -3715,7 +3715,11 @@ public sealed partial class SemanticAnalyzer
 
         // Extract base name (e.g., "List" from "List[S32]")
         string baseName = GetBaseTypeName(typeName: resolution.Name);
-        return _registry.LookupType(name: baseName);
+        TypeSymbol? def = _registry.LookupType(name: baseName);
+        // Try module-qualified name for non-Core types (e.g., "Collections.Deque")
+        if (def == null && !string.IsNullOrEmpty(resolution.Module))
+            def = _registry.LookupType(name: $"{resolution.Module}.{baseName}");
+        return def;
     }
 
     /// <summary>

@@ -53,23 +53,25 @@ routine BitList.bit_offset(bit_index: U64) -> U8
 
 routine BitList.get_bit_internal(index: U64) -> Bool
   # Internal: get bit without bounds checking
-  var byte_idx = BitList.byte_index(index)
-  var bit_off = BitList.bit_offset(index)
-  var byte_val = me.data.read[U8](byte_idx)
+  var byte_idx = index // 8u64
+  var bit_off = U8(index % 8u64)
+  var ptr = Snatched[Byte](me.data.get_address() + byte_idx)
+  var byte_val = U8(ptr.read())
   return (byte_val & (1u8 << bit_off)) != 0u8
 
 routine BitList.set_bit_internal(index: U64, value: Bool)
   # Internal: set bit without bounds checking
-  var byte_idx = BitList.byte_index(index)
-  var bit_off = BitList.bit_offset(index)
-  var byte_val = me.data.read[U8](byte_idx)
+  var byte_idx = index // 8u64
+  var bit_off = U8(index % 8u64)
+  var byte_ptr = Snatched[Byte](me.data.get_address() + byte_idx)
+  var byte_val = U8(byte_ptr.read())
 
   if value
     # Set bit to 1
-    me.data.write[U8](byte_idx, byte_val | (1u8 << bit_off))
+    byte_ptr.write(Byte(byte_val | (1u8 << bit_off)))
   else
     # Set bit to 0
-    me.data.write[U8](byte_idx, byte_val & ~(1u8 << bit_off))
+    byte_ptr.write(Byte(byte_val & ~(1u8 << bit_off)))
   return
 
 # ============================================================================
@@ -174,7 +176,7 @@ routine BitList.set_all(value: Bool)
   # Set all bits to the same value
   var byte_count = (me.count + 7u64) / 8u64
   var fill_byte = if value then 0xFFu8 else 0x00u8
-  me.data.fill!(fill_byte)
+  rf_set_bytes_at(me.data.get_address(), fill_byte, byte_count)
   return
 
 routine BitList.flip![I](index: I)
@@ -192,8 +194,9 @@ routine BitList.flip_all()
   var byte_count = (me.count + 7u64) / 8u64
   var i = 0u64
   while i < byte_count
-    var byte_val = me.data.read[U8](i)
-    me.data.write[U8](i, ~byte_val)
+    var byte_ptr = Snatched[Byte](me.data.get_address() + i)
+    var byte_val = U8(byte_ptr.read())
+    byte_ptr.write(Byte(~byte_val))
     i = i + 1u64
   return
 
@@ -353,14 +356,14 @@ routine BitList.to_u8!() -> U8
   # Convert first 8 bits to U8 (absent if fewer than 8 bits)
   if me.count < 8u64
     absent
-  return me.data.read[U8](0u64)
+  return U8(me.data.read())
 
 routine BitList.to_u16!() -> U16
   # Convert first 16 bits to U16 (absent if fewer than 16 bits)
   if me.count < 16u64
     absent
-  var low = U16(me.data.read[U8](0u64))
-  var high = U16(me.data.read[U8](1u64))
+  var low = U16(U8(me.data.read()))
+  var high = U16(U8(Snatched[Byte](me.data.get_address() + 1u64).read()))
   return low | (high << 8u16)
 
 routine BitList.to_u32!() -> U32
@@ -370,7 +373,7 @@ routine BitList.to_u32!() -> U32
   var result = 0u32
   var i = 0u64
   while i < 4u64
-    var byte_val = U32(me.data.read[U8](i))
+    var byte_val = U32(U8(Snatched[Byte](me.data.get_address() + i).read()))
     result = result | (byte_val << U32(i * 8u64))
     i = i + 1u64
   return result
@@ -382,7 +385,7 @@ routine BitList.to_u64!() -> U64
   var result = 0u64
   var i = 0u64
   while i < 8u64
-    var byte_val = U64(me.data.read[U8](i))
+    var byte_val = U64(U8(Snatched[Byte](me.data.get_address() + i).read()))
     result = result | (byte_val << (i * 8u64))
     i = i + 1u64
   return result
@@ -420,7 +423,7 @@ routine BitList.__represent__() -> Text
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.Text()
+    result = result + v.__represent__()
     i = i + 1u64
   result = result + "]"
   return result

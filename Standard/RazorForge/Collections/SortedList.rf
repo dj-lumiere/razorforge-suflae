@@ -25,7 +25,7 @@ needs T obeys Comparable
 
 entity SortedList[T]
 needs T obeys Comparable
-  secret root: BTreeListNode[T]
+  secret root: BTreeListNode[T]?
   secret count: U64
 
 # ============================================================================
@@ -72,7 +72,7 @@ routine SortedList[T].clear()
 routine SortedList[T].contains(value: T) -> Bool
   if me.root is None
     return false
-  return me.search_node(me.root!, value)
+  return me.search_node(me.root!!, value)
 
 routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
   var i = 0u64
@@ -116,21 +116,21 @@ routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
 routine SortedList[T].add(value: T)
   if me.root is None
     me.root = BTreeListNode[T](is_leaf: true)
-    me.root!.keys.add_last(value)
-    me.root!.subtree_size = 1u64
+    me.root!!.keys.add_last(value)
+    me.root!!.subtree_size = 1u64
     me.count = 1u64
     return
 
   # If root is full, split it
-  if me.root!.keys.count() >= B_LIST - 1u64
-    var old_root = me.root!
+  if me.root!!.keys.count() >= B_LIST - 1u64
+    var old_root = me.root!!
     var new_root = BTreeListNode[T](is_leaf: false)
     new_root.children.add_last(old_root)
     me.split_child(new_root, 0u64)
     me.root = new_root
     me.update_subtree_size(new_root)
 
-  me.insert_non_full(me.root!, value)
+  me.insert_non_full(me.root!!, value)
   me.count = me.count + 1u64
   return
 
@@ -256,13 +256,13 @@ routine SortedList[T].remove(value: T) -> Bool
   if not me.contains(value)
     return false
 
-  me.remove_from_node(me.root!, value)
+  me.remove_from_node(me.root!!, value)
   me.count = me.count - 1u64
 
-  if me.root!.keys.count() == 0u64 and not me.root!.is_leaf
-    me.root = me.root!.children[0]
+  if me.root!!.keys.count() == 0u64 and not me.root!!.is_leaf
+    me.root = me.root!!.children[0]
 
-  if me.root!.keys.count() == 0u64
+  if me.root!!.keys.count() == 0u64
     me.root = None
 
   return true
@@ -317,12 +317,12 @@ needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
-  return me.get_by_rank(me.root!, idx)
+  return me.get_by_rank(me.root!!, idx)
 
 routine SortedList[T].__getitem__![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
-  return me.get_by_rank(me.root!, idx)
+  return me.get_by_rank(me.root!!, idx)
 
 routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
   if node.is_leaf
@@ -356,7 +356,7 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
     return result
-  me.range_collect(me.root!, min_val, max_val, result)
+  me.range_collect(me.root!!, min_val, max_val, result)
   return result
 
 routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val: T, result: List[T])
@@ -383,7 +383,7 @@ routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val:
 routine SortedList[T].min!() -> T
   if me.is_empty()
     absent
-  var node = me.root!
+  var node = me.root!!
   while not node.is_leaf
     node = node.children[0]
   return node.keys[0]
@@ -391,7 +391,7 @@ routine SortedList[T].min!() -> T
 routine SortedList[T].max!() -> T
   if me.is_empty()
     absent
-  var node = me.root!
+  var node = me.root!!
   while not node.is_leaf
     node = node.children[node.children.count() - 1u64]
   return node.keys[node.keys.count() - 1u64]
@@ -413,7 +413,7 @@ routine SortedList[T].to_list() -> List[T]
   var result = List[T](me.count)
   if me.root is None
     return result
-  me.collect_inorder(me.root!, result)
+  me.collect_inorder(me.root!!, result)
   return result
 
 routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
@@ -448,7 +448,7 @@ routine SortedList[T].__represent__() -> Text
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.Text()
+    result = result + v.__represent__()
     i = i + 1u64
   result = result + "]"
   return result
