@@ -20,86 +20,86 @@ preset F64_INFINITY: F64 = 1.0_f64 / 0.0_f64  # TODO: Proper infinity constant
 # Creators
 # ============================================================================
 
-routine F64.__create__(from: S8) -> F64
+routine F64.$create(from: S8) -> F64
   return sitofp[S8, F64](from)
 
-routine F64.__create__(from: S16) -> F64
+routine F64.$create(from: S16) -> F64
   return sitofp[S16, F64](from)
 
-routine F64.__create__(from: S32) -> F64
+routine F64.$create(from: S32) -> F64
   return sitofp[S32, F64](from)
 
-routine F64.__create__(from: S64) -> F64
+routine F64.$create(from: S64) -> F64
   return sitofp[S64, F64](from)
 
-routine F64.__create__(from: S128) -> F64
+routine F64.$create(from: S128) -> F64
   return sitofp[S128, F64](from)
 
-routine F64.__create__(from: U8) -> F64
+routine F64.$create(from: U8) -> F64
   return uitofp[U8, F64](from)
 
-routine F64.__create__(from: U16) -> F64
+routine F64.$create(from: U16) -> F64
   return uitofp[U16, F64](from)
 
-routine F64.__create__(from: U32) -> F64
+routine F64.$create(from: U32) -> F64
   return uitofp[U32, F64](from)
 
-routine F64.__create__(from: U64) -> F64
+routine F64.$create(from: U64) -> F64
   return uitofp[U64, F64](from)
 
-routine F64.__create__(from: U128) -> F64
+routine F64.$create(from: U128) -> F64
   return uitofp[U128, F64](from)
 
-routine F64.__create__(from: F16) -> F64
+routine F64.$create(from: F16) -> F64
   return fpext[F16, F64](from)
 
-routine F64.__create__(from: F32) -> F64
+routine F64.$create(from: F32) -> F64
   return fpext[F32, F64](from)
 
-routine F64.__create__(from: F64) -> F64
+routine F64.$create(from: F64) -> F64
   return from
 
-routine F64.__create__(from: F128) -> F64
+routine F64.$create(from: F128) -> F64
   return fptrunc[F128, F64](from)
 
-routine F64.__create__(from: D32) -> F64
+routine F64.$create(from: D32) -> F64
   var bits = bitcast[D32, U32](from)
   return rf_d32_to_f64(bits)
 
-routine F64.__create__(from: D64) -> F64
+routine F64.$create(from: D64) -> F64
   var bits = bitcast[D64, U64](from)
   return rf_d64_to_f64(bits)
 
-routine F64.__create__(from: D128) -> F64
+routine F64.$create(from: D128) -> F64
   return rf_d128_to_f64(from.low_bits(), from.high_bits())
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-routine F64.__add__(you: F64) -> F64
+routine F64.$add(you: F64) -> F64
   return fadd[F64](me, you)
 
-routine F64.__sub__(you: F64) -> F64
+routine F64.$sub(you: F64) -> F64
   return fsub[F64](me, you)
 
-routine F64.__mul__(you: F64) -> F64
+routine F64.$mul(you: F64) -> F64
   return fmul[F64](me, you)
 
-routine F64.__truediv__(you: F64) -> F64
+routine F64.$truediv(you: F64) -> F64
   return fdiv[F64](me, you)
 
-routine F64.__neg__() -> F64
+routine F64.$neg() -> F64
   return fneg[F64](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
-routine F64.__eq__(you: F64) -> Bool
+routine F64.$eq(you: F64) -> Bool
   return fcmp_oeq[F64](me, you)
 
-routine F64.__cmp__(you: F64) -> ComparisonSign
+routine F64.$cmp(you: F64) -> ComparisonSign
   if fcmp_olt[F64](me, you)
     return ME_SMALL
   if fcmp_ogt[F64](me, you)
@@ -196,13 +196,13 @@ routine F64.from_bits(bits: U64) -> F64
 # Text Representation and Parsing
 # ============================================================================
 
-routine F64.__represent__() -> Text
+routine F64.$represent() -> Text
   var cstr_result = rf_format_F64(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
-routine F64.__diagnose__() -> Text
-  return "F64(" + me.__represent__() + ")"
+routine F64.$diagnose() -> Text
+  return "F64(" + me.$represent() + ")"
 
-routine F64.__create__!(from_text: Text) -> F64
+routine F64.$create!(from_text: Text) -> F64
   var cstr_val = from_text.CStr()
   return rf_parse_F64(cstr_val)

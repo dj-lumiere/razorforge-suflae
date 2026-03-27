@@ -479,7 +479,7 @@ public sealed class StdlibLoader
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
     /// method signatures. This ensures forward references between protocols resolve correctly
-    /// (e.g., Iterable[T].__iter__() → Iterator[T] where Iterator is another protocol).
+    /// (e.g., Iterable[T].$iter() → Iterator[T] where Iterator is another protocol).
     /// </summary>
     private static void RegisterProgramProtocols(TypeRegistry registry, Program program, string moduleName)
     {
@@ -754,12 +754,12 @@ public sealed class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a routine from stdlib (including type methods like S32.__add__).
+    /// Registers a routine from stdlib (including type methods like S32.$add).
     /// </summary>
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
         string moduleName)
     {
-        // Parse method names like "S32.__add__" or "Type.method"
+        // Parse method names like "S32.$add" or "Type.method"
         string routineName = routine.Name;
         TypeInfo? ownerType = null;
         string methodName = routineName;
@@ -768,7 +768,7 @@ public sealed class StdlibLoader
         if (dotIndex > 0)
         {
             string typeName = routineName[..dotIndex];
-            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "__add__")
+            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "$add")
 
             int bracketIndex = typeName.IndexOf('[');
             if (bracketIndex > 0)
@@ -839,7 +839,7 @@ public sealed class StdlibLoader
             ? ResolveSimpleType(registry, routine.ReturnType, ctx, moduleName)
             : null;
 
-        // Use just the method name (not "S32.__add__", just "__add__")
+        // Use just the method name (not "S32.$add", just "$add")
         var routineInfo = new SemanticAnalysis.Symbols.RoutineInfo(methodName)
         {
             OwnerType = ownerType,

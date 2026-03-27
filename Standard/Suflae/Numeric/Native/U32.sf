@@ -8,73 +8,73 @@ record U32
   secret value: RazorForge/Core.U32
 
 # Arithmetic operators
-routine U32.__add__!(you: U32) -> U32
-  return U32(value: me.value.__add__!(you.value))
+routine U32.$add!(you: U32) -> U32
+  return U32(value: me.value.$add!(you.value))
 
-routine U32.__sub__!(you: U32) -> U32
-  return U32(value: me.value.__sub__!(you.value))
+routine U32.$sub!(you: U32) -> U32
+  return U32(value: me.value.$sub!(you.value))
 
-routine U32.__mul__!(you: U32) -> U32
-  return U32(value: me.value.__mul__!(you.value))
+routine U32.$mul!(you: U32) -> U32
+  return U32(value: me.value.$mul!(you.value))
 
-routine U32.__floordiv__!(you: U32) -> U32
-  return U32(value: me.value.__floordiv__!(you.value))
+routine U32.$floordiv!(you: U32) -> U32
+  return U32(value: me.value.$floordiv!(you.value))
 
-routine U32.__mod__!(you: U32) -> U32
-  return U32(value: me.value.__mod__!(you.value))
+routine U32.$mod!(you: U32) -> U32
+  return U32(value: me.value.$mod!(you.value))
 
 # Wrapping arithmetic
-routine U32.__add_wrap__(you: U32) -> U32
-  return U32(value: me.value.__add_wrap__(you.value))
+routine U32.$add_wrap(you: U32) -> U32
+  return U32(value: me.value.$add_wrap(you.value))
 
-routine U32.__sub_wrap__(you: U32) -> U32
-  return U32(value: me.value.__sub_wrap__(you.value))
+routine U32.$sub_wrap(you: U32) -> U32
+  return U32(value: me.value.$sub_wrap(you.value))
 
-routine U32.__mul_wrap__(you: U32) -> U32
-  return U32(value: me.value.__mul_wrap__(you.value))
+routine U32.$mul_wrap(you: U32) -> U32
+  return U32(value: me.value.$mul_wrap(you.value))
 
 # Clamping arithmetic
-routine U32.__add_clamp__(you: U32) -> U32
-  return U32(value: me.value.__add_clamp__(you.value))
+routine U32.$add_clamp(you: U32) -> U32
+  return U32(value: me.value.$add_clamp(you.value))
 
-routine U32.__sub_clamp__(you: U32) -> U32
-  return U32(value: me.value.__sub_clamp__(you.value))
+routine U32.$sub_clamp(you: U32) -> U32
+  return U32(value: me.value.$sub_clamp(you.value))
 
-routine U32.__mul_clamp__(you: U32) -> U32
-  return U32(value: me.value.__mul_clamp__(you.value))
+routine U32.$mul_clamp(you: U32) -> U32
+  return U32(value: me.value.$mul_clamp(you.value))
 
 # Comparison
-routine U32.__eq__(you: U32) -> Bool
-  return me.value.__eq__(you.value)
+routine U32.$eq(you: U32) -> Bool
+  return me.value.$eq(you.value)
 
-routine U32.__cmp__(you: U32) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine U32.$cmp(you: U32) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Bitwise operations
-routine U32.__and__(you: U32) -> U32
-  return U32(value: me.value.__and__(you.value))
+routine U32.$bitand(you: U32) -> U32
+  return U32(value: me.value.$bitand(you.value))
 
-routine U32.__or__(you: U32) -> U32
-  return U32(value: me.value.__or__(you.value))
+routine U32.$bitor(you: U32) -> U32
+  return U32(value: me.value.$bitor(you.value))
 
-routine U32.__xor__(you: U32) -> U32
-  return U32(value: me.value.__xor__(you.value))
+routine U32.$bitxor(you: U32) -> U32
+  return U32(value: me.value.$bitxor(you.value))
 
-routine U32.__not__() -> U32
-  return U32(value: me.value.__not__())
+routine U32.$bitnot() -> U32
+  return U32(value: me.value.$bitnot())
 
 # Shift operations
-routine U32.__ashl__(bits: U32) -> U32
-  return U32(value: me.value.__ashl__(bits))
+routine U32.$ashl(bits: U32) -> U32
+  return U32(value: me.value.$ashl(bits))
 
-routine U32.__ashr__(bits: U32) -> U32
-  return U32(value: me.value.__ashr__(bits))
+routine U32.$ashr(bits: U32) -> U32
+  return U32(value: me.value.$ashr(bits))
 
-routine U32.__lshl__(bits: U32) -> U32
-  return U32(value: me.value.__lshl__(bits))
+routine U32.$lshl(bits: U32) -> U32
+  return U32(value: me.value.$lshl(bits))
 
-routine U32.__lshr__(bits: U32) -> U32
-  return U32(value: me.value.__lshr__(bits))
+routine U32.$lshr(bits: U32) -> U32
+  return U32(value: me.value.$lshr(bits))
 
 # Math operations
 routine U32.min(you: U32) -> U32
@@ -123,46 +123,46 @@ routine U32.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From smaller unsigned integers (widening - always fits)
-routine U32.__create__(from: U8) -> U32
-  return U32(value: RazorForge/Core.U32.__create__(from.value))
+routine U32.$create(from: U8) -> U32
+  return U32(value: RazorForge/Core.U32.$create(from.value))
 
-routine U32.__create__(from: U16) -> U32
-  return U32(value: RazorForge/Core.U32.__create__(from.value))
+routine U32.$create(from: U16) -> U32
+  return U32(value: RazorForge/Core.U32.$create(from.value))
 
 # From larger unsigned integers (narrowing - can overflow)
-routine U32.__create__!(from: U64) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: U64) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
-routine U32.__create__!(from: U128) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: U128) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
 # From signed integers (can overflow)
-routine U32.__create__!(from: S8) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: S8) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
-routine U32.__create__!(from: S16) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: S16) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
-routine U32.__create__!(from: S32) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: S32) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
-routine U32.__create__!(from: S64) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: S64) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
-routine U32.__create__!(from: S128) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: S128) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
 # From floating point (truncates, can overflow)
-routine U32.__create__!(from: F32) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: F32) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
-routine U32.__create__!(from: F64) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: F64) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))
 
 # From arbitrary precision (can overflow)
-routine U32.__create__!(from: Integer) -> U32
-  return U32(value: RazorForge/Core.U32.__create__!(from.value))
+routine U32.$create!(from: Integer) -> U32
+  return U32(value: RazorForge/Core.U32.$create!(from.value))

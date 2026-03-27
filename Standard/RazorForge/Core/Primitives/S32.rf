@@ -17,127 +17,127 @@ preset S32_ONE: S32 = 1_s32
 # ============================================================================
 
 # From S8 - always fits, no check needed
-routine S32.__create__(from: S8) -> S32
+routine S32.$create(from: S8) -> S32
   return sext[S8, S32](from)
 
 # From S16 - always fits, no check needed
-routine S32.__create__(from: S16) -> S32
+routine S32.$create(from: S16) -> S32
   return sext[S16, S32](from)
 
-routine S32.__create__(from: S32) -> S32
+routine S32.$create(from: S32) -> S32
   return from
 
 # From S64 - crashes if value out of S32 range
-routine S32.__create__!(from: S64) -> S32
+routine S32.$create!(from: S64) -> S32
   unless S64(S32_MIN) <= from <= S64(S32_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
   return trunc[S64, S32](from)
 
 # From S128 - crashes if value out of S32 range
-routine S32.__create__!(from: S128) -> S32
+routine S32.$create!(from: S128) -> S32
   unless S128(S32_MIN) <= from <= S128(S32_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
   return trunc[S128, S32](from)
 
 # From U8 - always fits, no check needed
-routine S32.__create__(from: U8) -> S32
+routine S32.$create(from: U8) -> S32
   return zext[U8, S32](from)
 
 # From U16 - always fits, no check needed
-routine S32.__create__(from: U16) -> S32
+routine S32.$create(from: U16) -> S32
   return zext[U16, S32](from)
 
 # From U32 - crashes if value > S32_MAX (bit 31 set)
-routine S32.__create__!(from: U32) -> S32
+routine S32.$create!(from: U32) -> S32
   unless from <= U32(S32_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
   return bitcast[U32, S32](from)
 
 # From U64 - crashes if value > S32_MAX
-routine S32.__create__!(from: U64) -> S32
+routine S32.$create!(from: U64) -> S32
   unless from <= U64(S32_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
   return trunc[U64, S32](from)
 
 # From U128 - crashes if value > S32_MAX
-routine S32.__create__!(from: U128) -> S32
+routine S32.$create!(from: U128) -> S32
   unless from <= U128(S32_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
   return trunc[U128, S32](from)
 
 # From floating point - truncates
-routine S32.__create__!(from: F16) -> S32
+routine S32.$create!(from: F16) -> S32
   return from.F32().S32!()
 
-routine S32.__create__!(from: F32) -> S32
+routine S32.$create!(from: F32) -> S32
   return fptosi[F32, S32](from)
 
-routine S32.__create__!(from: F64) -> S32
+routine S32.$create!(from: F64) -> S32
   return fptosi[F64, S32](from)
 
-routine S32.__create__!(from: F128) -> S32
+routine S32.$create!(from: F128) -> S32
   return from.F64!().S32!()
 
 # From decimal - truncates fractional part and can overflow
-routine S32.__create__!(from: D32) -> S32
+routine S32.$create!(from: D32) -> S32
   var bits = bitcast[D32, U32](from)
   return d32_to_s32(bits)
 
-routine S32.__create__!(from: D64) -> S32
+routine S32.$create!(from: D64) -> S32
   var bits = bitcast[D64, U64](from)
   return d64_to_s32(bits)
 
-routine S32.__create__!(from: D128) -> S32
+routine S32.$create!(from: D128) -> S32
   return d128_to_s32(from.low, from.high)
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-routine S32.__add__!(you: S32) -> S32
+routine S32.$add!(you: S32) -> S32
   return add[S32](me, you)
 
-routine S32.__sub__!(you: S32) -> S32
+routine S32.$sub!(you: S32) -> S32
   return sub[S32](me, you)
 
-routine S32.__mul__!(you: S32) -> S32
+routine S32.$mul!(you: S32) -> S32
   return mul[S32](me, you)
 
-routine S32.__floordiv__!(you: S32) -> S32
+routine S32.$floordiv!(you: S32) -> S32
   if you == 0
     throw DivisionByZeroError()
   return sdiv[S32](me, you)
 
-routine S32.__mod__!(you: S32) -> S32
+routine S32.$mod!(you: S32) -> S32
   return srem[S32](me, you)
 
-routine S32.__neg__!() -> S32
+routine S32.$neg!() -> S32
   return sub[S32](0, me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine S32.__add_wrap__(you: S32) -> S32
+routine S32.$add_wrap(you: S32) -> S32
   return add[S32](me, you)
 
-routine S32.__sub_wrap__(you: S32) -> S32
+routine S32.$sub_wrap(you: S32) -> S32
   return sub[S32](me, you)
 
-routine S32.__mul_wrap__(you: S32) -> S32
+routine S32.$mul_wrap(you: S32) -> S32
   return mul[S32](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine S32.__add_clamp__(you: S32) -> S32
+routine S32.$add_clamp(you: S32) -> S32
   return sadd_sat[S32](me, you)
 
-routine S32.__sub_clamp__(you: S32) -> S32
+routine S32.$sub_clamp(you: S32) -> S32
   return ssub_sat[S32](me, you)
 
-routine S32.__mul_clamp__(you: S32) -> S32
+routine S32.$mul_clamp(you: S32) -> S32
   var wide = mul[S64](sext[S32, S64](me), sext[S32, S64](you))
   if icmp_sgt[S64](wide, 2147483647_s64)
     return S32_MAX
@@ -150,7 +150,7 @@ routine S32.__mul_clamp__(you: S32) -> S32
 # ============================================================================
 
 # Power operator (**) - can overflow
-routine S32.__pow__!(exp: S32) -> S32
+routine S32.$pow!(exp: S32) -> S32
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = exp
@@ -166,7 +166,7 @@ routine S32.__pow__!(exp: S32) -> S32
   return result
 
 # Wrapping power (**%)
-routine S32.__pow_wrap__!(exp: S32) -> S32
+routine S32.$pow_wrap!(exp: S32) -> S32
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = exp
@@ -182,7 +182,7 @@ routine S32.__pow_wrap__!(exp: S32) -> S32
   return result
 
 # Clamping power (**^)
-routine S32.__pow_clamp__!(exp: S32) -> S32
+routine S32.$pow_clamp!(exp: S32) -> S32
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = exp
@@ -192,8 +192,8 @@ routine S32.__pow_clamp__!(exp: S32) -> S32
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.__mul_clamp__(base)
-    base = base.__mul_clamp__(base)
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
     e = e >> 1
   return result
 
@@ -201,16 +201,16 @@ routine S32.__pow_clamp__!(exp: S32) -> S32
 # Bitwise Operations
 # ============================================================================
 
-routine S32.__and__(you: S32) -> S32
+routine S32.$bitand(you: S32) -> S32
   return bit_and[S32](me, you)
 
-routine S32.__or__(you: S32) -> S32
+routine S32.$bitor(you: S32) -> S32
   return bit_or[S32](me, you)
 
-routine S32.__xor__(you: S32) -> S32
+routine S32.$bitxor(you: S32) -> S32
   return xor[S32](me, you)
 
-routine S32.__not__() -> S32
+routine S32.$bitnot() -> S32
   return xor[S32](me, -1)
 
 # ============================================================================
@@ -218,29 +218,29 @@ routine S32.__not__() -> S32
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving
-routine S32.__ashl__(bits: U32) -> S32
+routine S32.$ashl(bits: U32) -> S32
   return shl[S32](me, bits)
 
 # Arithmetic right shift (>>) - preserves sign, always safe
-routine S32.__ashr__(bits: U32) -> S32
+routine S32.$ashr(bits: U32) -> S32
   return ashr[S32](me, bits)
 
 # Logical left shift (<<<) - removes sign
-routine S32.__lshl__(bits: U32) -> S32
+routine S32.$lshl(bits: U32) -> S32
   return shl[S32](me, bits)
 
 # Logical right shift (>>>) - fills with zeros, ignores sign
-routine S32.__lshr__(bits: U32) -> S32
+routine S32.$lshr(bits: U32) -> S32
   return lshr[S32](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine S32.__eq__(you: S32) -> Bool
+routine S32.$eq(you: S32) -> Bool
   return icmp_eq[S32](me, you)
 
-routine S32.__cmp__(you: S32) -> ComparisonSign
+routine S32.$cmp(you: S32) -> ComparisonSign
   if icmp_slt[S32](me, you)
     return ME_SMALL
   if icmp_sgt[S32](me, you)
@@ -280,10 +280,10 @@ routine S32.trailing_zeros() -> S32
   return cttz[S32](me)
 
 routine S32.leading_ones() -> S32
-  return me.__not__().leading_zeros()
+  return me.$bitnot().leading_zeros()
 
 routine S32.trailing_ones() -> S32
-  return me.__not__().trailing_zeros()
+  return me.$bitnot().trailing_zeros()
 
 routine S32.reverse_bits() -> S32
   return bitreverse[S32](me)
@@ -328,17 +328,17 @@ routine S32.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine S32.__represent__() -> Text
+routine S32.$represent() -> Text
   if me == 0s32
     return "0"
   if me > 0s32
     return U32(me).Text()
   return "-" + U32(0u32 - U32(me)).Text()
 
-routine S32.__diagnose__() -> Text
-  return "S32(" + me.__represent__() + ")"
+routine S32.$diagnose() -> Text
+  return "S32(" + me.$represent() + ")"
 
-routine S32.__create__!(from_text: Text) -> S32
+routine S32.$create!(from_text: Text) -> S32
   var start = 0u64
   var negative = false
   if from_text.count() > 0u64

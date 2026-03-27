@@ -16,24 +16,24 @@ entity Integer obeys Integral, Divisible, Negatable, Ordered
 # ============================================================================
 
 # Create a new Integer initialized to zero
-routine Integer.__create__() -> Integer
+routine Integer.$create() -> Integer
   var int = Integer(handle: rf_bigint_new())
   return int
 
 # Create Integer from S64
-routine Integer.__create__(value: S64) -> Integer
+routine Integer.$create(value: S64) -> Integer
   var int = Integer(handle: rf_bigint_new())
   rf_bigint_set_i64(int.handle, value)
   return int
 
 # Create Integer from U64
-routine Integer.__create__(value: U64) -> Integer
+routine Integer.$create(value: U64) -> Integer
   var int = Integer(handle: rf_bigint_new())
   rf_bigint_set_u64(int.handle, value)
   return int
 
 # Create Integer from string with base (2-36)
-routine Integer.__create__!(text: Text, radix: S32 = 10) -> Integer
+routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
@@ -41,12 +41,12 @@ routine Integer.__create__!(text: Text, radix: S32 = 10) -> Integer
   return int
 
 # Destructor - frees the LibTomMath structure
-routine Integer.__destroy__()
+routine Integer.$destroy()
   rf_bigint_clear(me.handle)
   return
 
 # Copy creator
-routine Integer.__copy__(other: Integer) -> Integer
+routine Integer.$copy(other: Integer) -> Integer
   var int = Integer(handle: rf_bigint_new())
   rf_bigint_copy(int.handle, other.handle)
   return int
@@ -55,34 +55,34 @@ routine Integer.__copy__(other: Integer) -> Integer
 # Arithmetic Operations
 # ============================================================================
 
-routine Integer.__add__(other: Integer) -> Integer
+routine Integer.$add(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_add(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__sub__(other: Integer) -> Integer
+routine Integer.$sub(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_sub(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__mul__(other: Integer) -> Integer
+routine Integer.$mul(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_mul(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__floordiv__(other: Integer) -> Integer
+routine Integer.$floordiv(other: Integer) -> Integer
   var quotient = Integer(handle: rf_bigint_new())
   var remainder = Integer(handle: rf_bigint_new())
   rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
   rf_bigint_clear(remainder.handle)
   return quotient
 
-routine Integer.__rem__(other: Integer) -> Integer
+routine Integer.$rem(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_mod(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__neg__() -> Integer
+routine Integer.$neg() -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_neg(result.handle, me.handle)
   return result
@@ -91,10 +91,10 @@ routine Integer.__neg__() -> Integer
 # Comparison Operations
 # ============================================================================
 
-routine Integer.__eq__(you: Integer) -> Bool
+routine Integer.$eq(you: Integer) -> Bool
   return rf_bigint_cmp(me.handle, other.handle) == 0
 
-routine Integer.__cmp__(you: Integer) -> CompareSign
+routine Integer.$cmp(you: Integer) -> CompareSign
   var comparison_value = rf_bigint_cmp(me.handle, other.handle)
   if comparison_value < 0
     return LEFT_SMALL
@@ -107,27 +107,27 @@ routine Integer.__cmp__(you: Integer) -> CompareSign
 # Bitwise Operations
 # ============================================================================
 
-routine Integer.__and__(other: Integer) -> Integer
+routine Integer.$and(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_and(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__or__(other: Integer) -> Integer
+routine Integer.$or(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_or(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__xor__(other: Integer) -> Integer
+routine Integer.$xor(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_xor(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__shl__(bits: S32) -> Integer
+routine Integer.$shl(bits: S32) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_shl(result.handle, me.handle, bits)
   return result
 
-routine Integer.__shr__(bits: S32) -> Integer
+routine Integer.$shr(bits: S32) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_shr(result.handle, me.handle, bits)
   return result
@@ -141,7 +141,7 @@ routine Integer.abs() -> Integer
   rf_bigint_abs(result.handle, me.handle)
   return result
 
-routine Integer.__pow__(exp: U32) -> Integer
+routine Integer.$pow(exp: U32) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_pow(result.handle, me.handle, exp)
   return result
@@ -185,11 +185,11 @@ routine Integer.signum() -> S32
 # ============================================================================
 
 # Convert to S64 (may overflow/truncate for large values)
-routine S64.__create__!(from: Integer) -> S64
+routine S64.$create!(from: Integer) -> S64
   return rf_bigint_get_i64(from.handle)
 
 # Convert to U64 (may overflow/truncate for large values)
-routine U64.__create__!(from: Integer) -> U64
+routine U64.$create!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
 # Convert to string with specified radix (2-36)
@@ -204,7 +204,7 @@ routine Integer.to_text(radix: S32 = 10) -> Text
 # ============================================================================
 
 # Parse from decimal string - returns None on failure
-routine Integer.__create__!(text: Text) -> Integer
+routine Integer.$create!(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0

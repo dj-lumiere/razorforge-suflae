@@ -11,8 +11,8 @@ record LocalMoment
 # Creators
 # ============================================================================
 
-routine LocalMoment.__create__(moment: Moment, offset: Duration) -> LocalMoment
-  return LocalMoment(value: RazorForge/Core.LocalMoment.__create__(moment.value, offset.value))
+routine LocalMoment.$create(moment: Moment, offset: Duration) -> LocalMoment
+  return LocalMoment(value: RazorForge/Core.LocalMoment.$create(moment.value, offset.value))
 
 routine LocalMoment.from_local(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer, offset: Duration) -> LocalMoment
   return LocalMoment(value: RazorForge/Core.LocalMoment.from_local(year.value, month.value, day.value, hour.value, minute.value, second.value, offset.value))
@@ -101,8 +101,8 @@ routine LocalMoment.elapsed_since(earlier: LocalMoment) -> Duration
 # Comparison operators
 # ============================================================================
 
-routine LocalMoment.__eq__(you: LocalMoment) -> Bool
-  return me.value.__eq__(you.value)
+routine LocalMoment.$eq(you: LocalMoment) -> Bool
+  return me.value.$eq(you.value)
 
-routine LocalMoment.__cmp__(you: LocalMoment) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
+  return me.value.$cmp(you.value)

@@ -25,14 +25,14 @@ record LocalMoment obeys Ordered
 # ============================================================================
 
 # Create from a UTC Moment and an offset
-routine LocalMoment.__create__(moment: Moment, offset: Duration) -> LocalMoment
+routine LocalMoment.$create(moment: Moment, offset: Duration) -> LocalMoment
   return LocalMoment(moment: moment, offset: offset)
 
 # Create from civil date components in local time + offset
 # The components describe the local time, and the offset is used to
 # convert back to UTC internally.
 routine LocalMoment.from_local(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment
-  var local_moment = Moment.__create__(year, month, day, hour, minute, second)
+  var local_moment = Moment.$create(year, month, day, hour, minute, second)
   var utc_moment = local_moment.subtract_duration(offset)
   return LocalMoment(moment: utc_moment, offset: offset)
 
@@ -153,18 +153,18 @@ routine LocalMoment.elapsed_since(earlier: LocalMoment) -> Duration
 # ============================================================================
 
 @readonly
-routine LocalMoment.__eq__(you: LocalMoment) -> Bool
-  return me.moment.__eq__(you.moment)
+routine LocalMoment.$eq(you: LocalMoment) -> Bool
+  return me.moment.$eq(you.moment)
 
 @readonly
-routine LocalMoment.__cmp__(you: LocalMoment) -> ComparisonSign
-  return me.moment.__cmp__(you.moment)
+routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
+  return me.moment.$cmp(you.moment)
 
 # ============================================================================
 # Text representation
 # ============================================================================
 
-routine LocalMoment.__represent__() -> Text
+routine LocalMoment.$represent() -> Text
   var local = me.local_moment()
   var y = local.year()
   var mo = local.month()
@@ -183,5 +183,5 @@ routine LocalMoment.__represent__() -> Text
   var sign = if off.is_negative() then "-" else "+"
   return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours.abs()}:{off_minutes}"
 
-routine LocalMoment.__diagnose__() -> Text
-  return "LocalMoment(moment: " + me.moment.__diagnose__() + ", offset: " + me.offset.__diagnose__() + ")"
+routine LocalMoment.$diagnose() -> Text
+  return "LocalMoment(moment: " + me.moment.$diagnose() + ", offset: " + me.offset.$diagnose() + ")"

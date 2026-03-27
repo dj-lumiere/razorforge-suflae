@@ -19,13 +19,13 @@ routine Dict[K, V].add(key: K, item: V)
   me.value.add(key, item)
   return
 
-routine Dict[K, V].__setitem__(key: K, item: V)
-  me.value.__setitem__(key, item)
+routine Dict[K, V].$setitem(key: K, item: V)
+  me.value.$setitem(key, item)
   return
 
 # Retrieving
-routine Dict[K, V].__getitem__!(key: K) -> V
-  return me.value.__getitem__!(key)
+routine Dict[K, V].$getitem!(key: K) -> V
+  return me.value.$getitem!(key)
 
 routine Dict[K, V].get(key: K, default: V) -> V
   return me.value.get(key, default)

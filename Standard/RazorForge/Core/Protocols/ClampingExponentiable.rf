@@ -3,4 +3,4 @@ module Core
 
 protocol ClampingExponentiable
   @readonly
-  routine Me.__pow_clamp__(you: Me) -> Me
+  routine Me.$pow_clamp(you: Me) -> Me

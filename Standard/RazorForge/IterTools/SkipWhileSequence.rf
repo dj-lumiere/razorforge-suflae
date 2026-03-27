@@ -7,23 +7,23 @@ entity SkipWhileSequence[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret predicate: Routine[(T,), Bool]
 
-routine SkipWhileSequence[T].__iter__() -> SkipWhileEmitter[T]
-  return SkipWhileEmitter[T](source: me.source.__iter__(), predicate: me.predicate, skipping: true)
+routine SkipWhileSequence[T].$iter() -> SkipWhileEmitter[T]
+  return SkipWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, skipping: true)
 
 entity SkipWhileEmitter[T] obeys Iterator[T]
   secret source: Iterator[T]
   secret predicate: Routine[(T,), Bool]
   secret skipping: Bool
 
-emitting routine SkipWhileEmitter[T].__next__() -> T
+emitting routine SkipWhileEmitter[T].$next() -> T
   if me.skipping
     loop
-      var item = me.source.__next__()
+      var item = me.source.$next()
       if not me.predicate(item)
         me.skipping = false
         emit item
         return
-  emit me.source.__next__()
+  emit me.source.$next()
   return
 
 routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileSequence[T]

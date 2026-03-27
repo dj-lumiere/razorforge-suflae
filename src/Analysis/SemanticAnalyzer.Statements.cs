@@ -87,7 +87,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Look up the routine, trying overload disambiguation by AST parameter types.
-        // Without this, all overloaded routines (e.g., S32.__create__(from: S8) vs S32.__create__(from: U64))
+        // Without this, all overloaded routines (e.g., S32.$create(from: S8) vs S32.$create(from: U64))
         // would resolve to whichever was registered first, getting wrong parameter names/types.
         RoutineInfo? routineInfo = null;
         if (routine.Parameters.Count > 0)
@@ -1185,17 +1185,17 @@ public sealed partial class SemanticAnalyzer
         // #142: using target validation — must be a token (.view()/.hijack()/etc.) or disposable resource
         bool isTokenAccess = IsInlineOnlyTokenType(type: resourceType);
 
-        // #32: For non-token using targets, validate __enter__/__exit__ exist
+        // #32: For non-token using targets, validate $enter/$exit exist
         if (!isTokenAccess && _registry.Language == Language.RazorForge)
         {
-            bool hasEnter = _registry.LookupRoutine(fullName: $"{resourceType.Name}.__enter__") != null;
-            bool hasExit = _registry.LookupRoutine(fullName: $"{resourceType.Name}.__exit__") != null;
+            bool hasEnter = _registry.LookupRoutine(fullName: $"{resourceType.Name}.$enter") != null;
+            bool hasExit = _registry.LookupRoutine(fullName: $"{resourceType.Name}.$exit") != null;
 
             if (!hasEnter || !hasExit)
             {
                 ReportError(
                     SemanticDiagnosticCode.UsingTargetMissingEnterExit,
-                    $"Using target of type '{resourceType.Name}' must implement '__enter__' and '__exit__' for resource management, " +
+                    $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management, " +
                     "or be a token access expression (.view(), .hijack(), .inspect!(), .seize!()).",
                     usingStmt.Location);
             }

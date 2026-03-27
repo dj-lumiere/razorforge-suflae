@@ -200,7 +200,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Quotes an LLVM identifier if it contains characters that require quoting.
-    /// LLVM allows any characters in quoted identifiers: @"Snatched[Point].__eq__", %"Record.Snatched[Point]".
+    /// LLVM allows any characters in quoted identifiers: @"Snatched[Point].$eq", %"Record.Snatched[Point]".
     /// Unquoted identifiers only allow [a-zA-Z$._0-9-].
     /// </summary>
     private static string Q(string name)

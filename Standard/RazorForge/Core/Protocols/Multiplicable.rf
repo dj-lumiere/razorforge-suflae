@@ -3,4 +3,4 @@ module Core
 
 protocol Multiplicable
   @readonly
-  routine Me.__mul__(you: Me) -> Me
+  routine Me.$mul(you: Me) -> Me

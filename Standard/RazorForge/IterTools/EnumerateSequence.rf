@@ -8,15 +8,15 @@ entity EnumerateSequence[T] obeys Iterable[Tuple[S64, T]]
   secret source: Iterable[T]
   secret start: S64
 
-routine EnumerateSequence[T].__iter__() -> EnumerateEmitter[T]
-  return EnumerateEmitter[T](source: me.source.__iter__(), index: me.start)
+routine EnumerateSequence[T].$iter() -> EnumerateEmitter[T]
+  return EnumerateEmitter[T](source: me.source.$iter(), index: me.start)
 
 entity EnumerateEmitter[T] obeys Iterator[Tuple[S64, T]]
   secret source: Iterator[T]
   secret index: S64
 
-emitting routine EnumerateEmitter[T].__next__() -> Tuple[S64, T]
-  var item = me.source.__next__()
+emitting routine EnumerateEmitter[T].$next() -> Tuple[S64, T]
+  var item = me.source.$next()
   emit (me.index, item)
   me.index = me.index + 1s64
   return

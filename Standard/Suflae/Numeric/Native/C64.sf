@@ -8,24 +8,24 @@ record C64
   secret value: RazorForge/Core.C64
 
 # Arithmetic operators
-routine C64.__add__(you: C64) -> C64
-  return C64(value: me.value.__add__(you.value))
+routine C64.$add(you: C64) -> C64
+  return C64(value: me.value.$add(you.value))
 
-routine C64.__sub__(you: C64) -> C64
-  return C64(value: me.value.__sub__(you.value))
+routine C64.$sub(you: C64) -> C64
+  return C64(value: me.value.$sub(you.value))
 
-routine C64.__mul__(you: C64) -> C64
-  return C64(value: me.value.__mul__(you.value))
+routine C64.$mul(you: C64) -> C64
+  return C64(value: me.value.$mul(you.value))
 
-routine C64.__truediv__(you: C64) -> C64
-  return C64(value: me.value.__truediv__(you.value))
+routine C64.$truediv(you: C64) -> C64
+  return C64(value: me.value.$truediv(you.value))
 
-routine C64.__neg__() -> C64
-  return C64(value: me.value.__neg__())
+routine C64.$neg() -> C64
+  return C64(value: me.value.$neg())
 
 # Comparison
-routine C64.__eq__(you: C64) -> Bool
-  return me.value.__eq__(you.value)
+routine C64.$eq(you: C64) -> Bool
+  return me.value.$eq(you.value)
 
 # Complex-specific operations
 routine C64.real() -> F64

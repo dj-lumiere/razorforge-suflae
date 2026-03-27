@@ -72,11 +72,11 @@ routine Letter.to_lowercase() -> Letter
   return Letter(me.value.to_lowercase())
 
 # Comparison
-routine Letter.__eq__(other: Letter) -> Bool
-  return me.value.__eq__(other.value)
+routine Letter.$eq(other: Letter) -> Bool
+  return me.value.$eq(other.value)
 
-routine Letter.__cmp__(other: Letter) -> ComparisonSign
-  return me.value.__cmp__(other.value)
+routine Letter.$cmp(other: Letter) -> ComparisonSign
+  return me.value.$cmp(other.value)
 
 # Type conversions
 routine Letter.to_byte() -> Byte

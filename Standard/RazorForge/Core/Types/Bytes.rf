@@ -9,18 +9,18 @@ entity Bytes
 
 # Creators
 
-routine Bytes.__create__() -> Bytes
+routine Bytes.$create() -> Bytes
   return Bytes(letters: List[Byte]())
 
-routine Bytes.__create__(from_list: List[Byte]) -> Bytes
+routine Bytes.$create(from_list: List[Byte]) -> Bytes
   return Bytes(letters: from_list)
 
-routine Bytes.__create__(from_byte: Byte) -> Bytes
+routine Bytes.$create(from_byte: Byte) -> Bytes
   var list = List[Byte]()
   list.add_last(from_byte)
   return Bytes(letters: list)
 
-routine Bytes.__create__(ptr: Snatched[Byte]) -> Bytes
+routine Bytes.$create(ptr: Snatched[Byte]) -> Bytes
   var len: U64 = 0u64
   loop
     if ptr.offset(len).read() == BYTE_NULL
@@ -35,7 +35,7 @@ routine Bytes.__create__(ptr: Snatched[Byte]) -> Bytes
     i += 1u64
   return Bytes(letters: list)
 
-routine Bytes.__create__(ptr: CStr) -> Bytes
+routine Bytes.$create(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
@@ -59,17 +59,17 @@ routine Bytes.is_empty() -> Bool
 
 # Indexing
 
-routine Bytes.__getitem__[I obeys Integral](index: I) -> Byte
+routine Bytes.$getitem[I obeys Integral](index: I) -> Byte
   return me.letters[index]
 
-routine Bytes.__getitem__[I obeys Integral](index: BackIndex[I]) -> Byte
+routine Bytes.$getitem[I obeys Integral](index: BackIndex[I]) -> Byte
   return me.letters[index]
 
-routine Bytes.__getslice__[I obeys Integral](start: I, end: I) -> Bytes
+routine Bytes.$getslice[I obeys Integral](start: I, end: I) -> Bytes
   var sliced_list = me.letters[start til end]
   return Bytes(from_list: sliced_list)
 
-routine Bytes.__getslice__[I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Bytes
+routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Bytes
   var sliced_list = me.letters[start til end]
   return Bytes(from_list: sliced_list)
 
@@ -84,10 +84,10 @@ routine Bytes.concat(other: Bytes) -> Bytes
     result.add_last(other[i])
   return Bytes(from_list: result)
 
-routine Bytes.__add__(other: Bytes) -> Bytes
+routine Bytes.$add(other: Bytes) -> Bytes
   return me.concat(other)
 
-routine Bytes.__eq__(other: Bytes) -> Bool
+routine Bytes.$eq(other: Bytes) -> Bool
   if me.count() != other.count()
     return false
   var i: U64 = 0u64
@@ -98,7 +98,7 @@ routine Bytes.__eq__(other: Bytes) -> Bool
 
 # Conversion to modifiable list
 
-routine List[Byte].__create__(from: Bytes) -> List[Byte]
+routine List[Byte].$create(from: Bytes) -> List[Byte]
   return from.letters
 
 # Iteration
@@ -107,7 +107,7 @@ entity BytesIterator
   bytes: Bytes
   index: U64
 
-routine Bytes.__iter__() -> BytesIterator
+routine Bytes.$iter() -> BytesIterator
   return BytesIterator(bytes: me, index: 0u64)
 
 routine BytesIterator.next!() -> Byte
@@ -121,13 +121,13 @@ routine BytesIterator.next!() -> Byte
 # Display — hex format \xHH for each byte
 # ============================================================================
 
-routine Bytes.__represent__() -> Text
+routine Bytes.$represent() -> Text
   var result = List[Letter]()
   var i: U64 = 0u64
   loop
     if i >= me.count()
       break
-    var byte_text = me[i].__represent__()
+    var byte_text = me[i].$represent()
     var j: U64 = 0u64
     loop
       if j >= byte_text.count()
@@ -137,8 +137,8 @@ routine Bytes.__represent__() -> Text
     i += 1u64
   return Text(from_list: result)
 
-routine Bytes.__diagnose__() -> Text
-  return "Bytes(count: " + me.count().__represent__() + ", " + me.__represent__() + ")"
+routine Bytes.$diagnose() -> Text
+  return "Bytes(count: " + me.count().$represent() + ", " + me.$represent() + ")"
 
 # ============================================================================
 # Encoding Conversions

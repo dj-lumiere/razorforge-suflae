@@ -18,78 +18,78 @@ preset D128_ONE: D128 = 1.0_d128
 # Creators
 # ============================================================================
 
-routine D128.__create__(from: S8) -> D128
+routine D128.$create(from: S8) -> D128
   return rf_d128_from_s32(S32(from))
 
-routine D128.__create__(from: S16) -> D128
+routine D128.$create(from: S16) -> D128
   return rf_d128_from_s32(S32(from))
 
-routine D128.__create__(from: S32) -> D128
+routine D128.$create(from: S32) -> D128
   return rf_d128_from_s32(from)
 
-routine D128.__create__(from: S64) -> D128
+routine D128.$create(from: S64) -> D128
   return rf_d128_from_s64(from)
 
-routine D128.__create__(from: S128) -> D128
+routine D128.$create(from: S128) -> D128
   # Convert through S64 - may lose precision
   return from.S64!().D128()
 
-routine D128.__create__(from: U8) -> D128
+routine D128.$create(from: U8) -> D128
   return rf_d128_from_u32(U32(from))
 
-routine D128.__create__(from: U16) -> D128
+routine D128.$create(from: U16) -> D128
   return rf_d128_from_u32(U32(from))
 
-routine D128.__create__(from: U32) -> D128
+routine D128.$create(from: U32) -> D128
   return rf_d128_from_u32(from)
 
-routine D128.__create__(from: U64) -> D128
+routine D128.$create(from: U64) -> D128
   return rf_d128_from_u64(from)
 
-routine D128.__create__(from: U128) -> D128
+routine D128.$create(from: U128) -> D128
   # Convert through U64 - may lose precision
   return from.U64!().D128()
 
-routine D128.__create__(from: F16) -> D128
+routine D128.$create(from: F16) -> D128
   return from.F32().D128()
 
-routine D128.__create__(from: F32) -> D128
+routine D128.$create(from: F32) -> D128
   return rf_f32_to_d128(from)
 
-routine D128.__create__(from: F64) -> D128
+routine D128.$create(from: F64) -> D128
   return rf_f64_to_d128(from)
 
-routine D128.__create__(from: F128) -> D128
+routine D128.$create(from: F128) -> D128
   return from.F64!().D128()
 
-routine D128.__create__(from: D32) -> D128
+routine D128.$create(from: D32) -> D128
   var bits = from.to_bits()
   return rf_d32_to_d128(bits)
 
-routine D128.__create__(from: D64) -> D128
+routine D128.$create(from: D64) -> D128
   var bits = from.to_bits()
   return rf_d64_to_d128(bits)
 
-routine D128.__create__(from: D128) -> D128
+routine D128.$create(from: D128) -> D128
   return from
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-routine D128.__add__(you: D128) -> D128
+routine D128.$add(you: D128) -> D128
   return rf_d128_add(me.low, me.high, you.low, you.high)
 
-routine D128.__sub__(you: D128) -> D128
+routine D128.$sub(you: D128) -> D128
   return rf_d128_sub(me.low, me.high, you.low, you.high)
 
-routine D128.__mul__(you: D128) -> D128
+routine D128.$mul(you: D128) -> D128
   return rf_d128_mul(me.low, me.high, you.low, you.high)
 
-routine D128.__truediv__(you: D128) -> D128
+routine D128.$truediv(you: D128) -> D128
   return rf_d128_div(me.low, me.high, you.low, you.high)
 
-routine D128.__neg__() -> D128
+routine D128.$neg() -> D128
   var zero = D128_ZERO
   return rf_d128_sub(zero.low, zero.high, me.low, me.high)
 
@@ -97,10 +97,10 @@ routine D128.__neg__() -> D128
 # Comparison Operations
 # ============================================================================
 
-routine D128.__eq__(you: D128) -> Bool
+routine D128.$eq(you: D128) -> Bool
   return rf_d128_cmp(me.low, me.high, you.low, you.high) == 0
 
-routine D128.__cmp__(you: D128) -> ComparisonSign
+routine D128.$cmp(you: D128) -> ComparisonSign
   var cmp = rf_d128_cmp(me.low, me.high, you.low, you.high)
   if cmp < 0
     return ME_SMALL
@@ -253,13 +253,13 @@ routine D128.from_bits(low: U64, high: U64) -> D128
 # Text Representation and Parsing
 # ============================================================================
 
-routine D128.__represent__() -> Text
+routine D128.$represent() -> Text
   var cstr_result = rf_d128_to_string(me.low_bits(), me.high_bits())
   return Text(from: CStr(from_ptr: cstr_result))
 
-routine D128.__diagnose__() -> Text
-  return "D128(" + me.__represent__() + ")"
+routine D128.$diagnose() -> Text
+  return "D128(" + me.$represent() + ")"
 
-routine D128.__create__!(from_text: Text) -> D128
+routine D128.$create!(from_text: Text) -> D128
   var cstr_val = from_text.CStr()
   return rf_D128_from_string(cstr_val)

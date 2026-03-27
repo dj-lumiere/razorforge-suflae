@@ -17,126 +17,126 @@ preset U32_ONE: U32 = 1_u32
 # ============================================================================
 
 # From S8 - crashes if value is negative
-routine U32.__create__!(from: S8) -> U32
+routine U32.$create!(from: S8) -> U32
   if from < 0_s8
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return sext[S8, U32](from)
 
 # From S16 - crashes if value is negative
-routine U32.__create__!(from: S16) -> U32
+routine U32.$create!(from: S16) -> U32
   if from < 0_s16
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return sext[S16, U32](from)
 
 # From S32 - crashes if value is negative
-routine U32.__create__!(from: S32) -> U32
+routine U32.$create!(from: S32) -> U32
   if from < 0_s32
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return bitcast[S32, U32](from)
 
 # From S64 - crashes if value out of U32 range
-routine U32.__create__!(from: S64) -> U32
+routine U32.$create!(from: S64) -> U32
   if not (0_s64 <= from <= 4294967295_s64)
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return trunc[S64, U32](from)
 
 # From S128 - crashes if value out of U32 range
-routine U32.__create__!(from: S128) -> U32
+routine U32.$create!(from: S128) -> U32
   if not (0_s128 <= from <= 4294967295_s128)
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return trunc[S128, U32](from)
 
 # From U8 - always fits, no check needed
-routine U32.__create__!(from: U8) -> U32
+routine U32.$create!(from: U8) -> U32
   return zext[U8, U32](from)
 
 # From U16 - always fits, no check needed
-routine U32.__create__!(from: U16) -> U32
+routine U32.$create!(from: U16) -> U32
   return zext[U16, U32](from)
 
-routine U32.__create__(from: U32) -> U32
+routine U32.$create(from: U32) -> U32
   return from
 
 # From U64 - crashes if value > U32_MAX
-routine U32.__create__!(from: U64) -> U32
+routine U32.$create!(from: U64) -> U32
   if from > 4294967295_u64
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return trunc[U64, U32](from)
 
 # From U128 - crashes if value > U32_MAX
-routine U32.__create__!(from: U128) -> U32
+routine U32.$create!(from: U128) -> U32
   if from > 4294967295_u128
     throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
   return trunc[U128, U32](from)
 
 # From floating point - truncates
-routine U32.__create__!(from: F16) -> U32
+routine U32.$create!(from: F16) -> U32
   return from.F32().U32!()
 
-routine U32.__create__!(from: F32) -> U32
+routine U32.$create!(from: F32) -> U32
   return fptoui[F32, U32](from)
 
-routine U32.__create__!(from: F64) -> U32
+routine U32.$create!(from: F64) -> U32
   return fptoui[F64, U32](from)
 
-routine U32.__create__!(from: F128) -> U32
+routine U32.$create!(from: F128) -> U32
   return from.F64!().U32!()
 
 # From decimal - truncates fractional part and can overflow
-routine U32.__create__!(from: D32) -> U32
+routine U32.$create!(from: D32) -> U32
   return from.S64!().U32!()
 
-routine U32.__create__!(from: D64) -> U32
+routine U32.$create!(from: D64) -> U32
   return from.S64!().U32!()
 
-routine U32.__create__!(from: D128) -> U32
+routine U32.$create!(from: D128) -> U32
   return from.S64!().U32!()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
-routine U32.__add__!(you: U32) -> U32
+routine U32.$add!(you: U32) -> U32
   return add[U32](me, you)
 
-routine U32.__sub__!(you: U32) -> U32
+routine U32.$sub!(you: U32) -> U32
   return sub[U32](me, you)
 
-routine U32.__mul__!(you: U32) -> U32
+routine U32.$mul!(you: U32) -> U32
   return mul[U32](me, you)
 
-routine U32.__floordiv__!(you: U32) -> U32
+routine U32.$floordiv!(you: U32) -> U32
   if you == 0
     throw DivisionByZeroError()
   return udiv[U32](me, you)
 
-routine U32.__mod__!(you: U32) -> U32
+routine U32.$mod!(you: U32) -> U32
   return urem[U32](me, you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine U32.__add_wrap__(you: U32) -> U32
+routine U32.$add_wrap(you: U32) -> U32
   return add[U32](me, you)
 
-routine U32.__sub_wrap__(you: U32) -> U32
+routine U32.$sub_wrap(you: U32) -> U32
   return sub[U32](me, you)
 
-routine U32.__mul_wrap__(you: U32) -> U32
+routine U32.$mul_wrap(you: U32) -> U32
   return mul[U32](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine U32.__add_clamp__(you: U32) -> U32
+routine U32.$add_clamp(you: U32) -> U32
   return uadd_sat[U32](me, you)
 
-routine U32.__sub_clamp__(you: U32) -> U32
+routine U32.$sub_clamp(you: U32) -> U32
   return usub_sat[U32](me, you)
 
-routine U32.__mul_clamp__(you: U32) -> U32
+routine U32.$mul_clamp(you: U32) -> U32
   var wide = mul[U64](zext[U32, U64](me), zext[U32, U64](you))
   if icmp_ugt[U64](wide, 4294967295_u64)
     return U32_MAX
@@ -147,7 +147,7 @@ routine U32.__mul_clamp__(you: U32) -> U32
 # ============================================================================
 
 # Power operator (**) - can overflow
-routine U32.__pow__!(exp: U32) -> U32
+routine U32.$pow!(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
@@ -161,7 +161,7 @@ routine U32.__pow__!(exp: U32) -> U32
   return result
 
 # Wrapping power (**%)
-routine U32.__pow_wrap__!(exp: U32) -> U32
+routine U32.$pow_wrap!(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
@@ -175,7 +175,7 @@ routine U32.__pow_wrap__!(exp: U32) -> U32
   return result
 
 # Clamping power (**^)
-routine U32.__pow_clamp__!(exp: U32) -> U32
+routine U32.$pow_clamp!(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
@@ -183,8 +183,8 @@ routine U32.__pow_clamp__!(exp: U32) -> U32
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = result.__mul_clamp__(base)
-    base = base.__mul_clamp__(base)
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
     e = e >> 1
   return result
 
@@ -192,16 +192,16 @@ routine U32.__pow_clamp__!(exp: U32) -> U32
 # Bitwise Operations
 # ============================================================================
 
-routine U32.__and__(you: U32) -> U32
+routine U32.$and(you: U32) -> U32
   return bit_and[U32](me, you)
 
-routine U32.__or__(you: U32) -> U32
+routine U32.$or(you: U32) -> U32
   return bit_or[U32](me, you)
 
-routine U32.__xor__(you: U32) -> U32
+routine U32.$xor(you: U32) -> U32
   return xor[U32](me, you)
 
-routine U32.__not__() -> U32
+routine U32.$not() -> U32
   return xor[U32](me, -1)
 
 # ============================================================================
@@ -210,29 +210,29 @@ routine U32.__not__() -> U32
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
-routine U32.__ashl__(bits: U32) -> U32
+routine U32.$ashl(bits: U32) -> U32
   return shl[U32](me, bits)
 
 # Arithmetic right shift (>>) - for unsigned, same as logical
-routine U32.__ashr__(bits: U32) -> U32
+routine U32.$ashr(bits: U32) -> U32
   return lshr[U32](me, bits)
 
 # Logical left shift (<<<) - same as <<
-routine U32.__lshl__(bits: U32) -> U32
+routine U32.$lshl(bits: U32) -> U32
   return shl[U32](me, bits)
 
 # Logical right shift (>>>) - fills with zeros
-routine U32.__lshr__(bits: U32) -> U32
+routine U32.$lshr(bits: U32) -> U32
   return lshr[U32](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine U32.__eq__(you: U32) -> Bool
+routine U32.$eq(you: U32) -> Bool
   return icmp_eq[U32](me, you)
 
-routine U32.__cmp__(you: U32) -> ComparisonSign
+routine U32.$cmp(you: U32) -> ComparisonSign
   if icmp_ult[U32](me, you)
     return ME_SMALL
   if icmp_ugt[U32](me, you)
@@ -269,10 +269,10 @@ routine U32.trailing_zeros() -> U32
   return cttz[U32](me)
 
 routine U32.leading_ones() -> U32
-  return me.__not__().leading_zeros()
+  return me.$not().leading_zeros()
 
 routine U32.trailing_ones() -> U32
-  return me.__not__().trailing_zeros()
+  return me.$not().trailing_zeros()
 
 routine U32.reverse_bits() -> U32
   return bitreverse[U32](me)
@@ -301,7 +301,7 @@ routine U32.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine U32.__represent__() -> Text
+routine U32.$represent() -> Text
   if me == 0u32
     return "0"
   var digits = List[Letter]()
@@ -312,10 +312,10 @@ routine U32.__represent__() -> Text
     digits.add_first(Letter(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 
-routine U32.__diagnose__() -> Text
-  return "U32(" + me.__represent__() + ")"
+routine U32.$diagnose() -> Text
+  return "U32(" + me.$represent() + ")"
 
-routine U32.__create__!(from_text: Text) -> U32
+routine U32.$create!(from_text: Text) -> U32
   var result = 0u32
   var i = 0u64
   while i < from_text.count()

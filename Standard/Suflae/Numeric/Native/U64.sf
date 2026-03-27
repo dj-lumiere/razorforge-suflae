@@ -8,73 +8,73 @@ record U64
   secret value: RazorForge/Core.U64
 
 # Arithmetic operators
-routine U64.__add__!(you: U64) -> U64
-  return U64(value: me.value.__add__!(you.value))
+routine U64.$add!(you: U64) -> U64
+  return U64(value: me.value.$add!(you.value))
 
-routine U64.__sub__!(you: U64) -> U64
-  return U64(value: me.value.__sub__!(you.value))
+routine U64.$sub!(you: U64) -> U64
+  return U64(value: me.value.$sub!(you.value))
 
-routine U64.__mul__!(you: U64) -> U64
-  return U64(value: me.value.__mul__!(you.value))
+routine U64.$mul!(you: U64) -> U64
+  return U64(value: me.value.$mul!(you.value))
 
-routine U64.__floordiv__!(you: U64) -> U64
-  return U64(value: me.value.__floordiv__!(you.value))
+routine U64.$floordiv!(you: U64) -> U64
+  return U64(value: me.value.$floordiv!(you.value))
 
-routine U64.__mod__!(you: U64) -> U64
-  return U64(value: me.value.__mod__!(you.value))
+routine U64.$mod!(you: U64) -> U64
+  return U64(value: me.value.$mod!(you.value))
 
 # Wrapping arithmetic
-routine U64.__add_wrap__(you: U64) -> U64
-  return U64(value: me.value.__add_wrap__(you.value))
+routine U64.$add_wrap(you: U64) -> U64
+  return U64(value: me.value.$add_wrap(you.value))
 
-routine U64.__sub_wrap__(you: U64) -> U64
-  return U64(value: me.value.__sub_wrap__(you.value))
+routine U64.$sub_wrap(you: U64) -> U64
+  return U64(value: me.value.$sub_wrap(you.value))
 
-routine U64.__mul_wrap__(you: U64) -> U64
-  return U64(value: me.value.__mul_wrap__(you.value))
+routine U64.$mul_wrap(you: U64) -> U64
+  return U64(value: me.value.$mul_wrap(you.value))
 
 # Clamping arithmetic
-routine U64.__add_clamp__(you: U64) -> U64
-  return U64(value: me.value.__add_clamp__(you.value))
+routine U64.$add_clamp(you: U64) -> U64
+  return U64(value: me.value.$add_clamp(you.value))
 
-routine U64.__sub_clamp__(you: U64) -> U64
-  return U64(value: me.value.__sub_clamp__(you.value))
+routine U64.$sub_clamp(you: U64) -> U64
+  return U64(value: me.value.$sub_clamp(you.value))
 
-routine U64.__mul_clamp__(you: U64) -> U64
-  return U64(value: me.value.__mul_clamp__(you.value))
+routine U64.$mul_clamp(you: U64) -> U64
+  return U64(value: me.value.$mul_clamp(you.value))
 
 # Comparison
-routine U64.__eq__(you: U64) -> Bool
-  return me.value.__eq__(you.value)
+routine U64.$eq(you: U64) -> Bool
+  return me.value.$eq(you.value)
 
-routine U64.__cmp__(you: U64) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine U64.$cmp(you: U64) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Bitwise operations
-routine U64.__and__(you: U64) -> U64
-  return U64(value: me.value.__and__(you.value))
+routine U64.$bitand(you: U64) -> U64
+  return U64(value: me.value.$bitand(you.value))
 
-routine U64.__or__(you: U64) -> U64
-  return U64(value: me.value.__or__(you.value))
+routine U64.$bitor(you: U64) -> U64
+  return U64(value: me.value.$bitor(you.value))
 
-routine U64.__xor__(you: U64) -> U64
-  return U64(value: me.value.__xor__(you.value))
+routine U64.$bitxor(you: U64) -> U64
+  return U64(value: me.value.$bitxor(you.value))
 
-routine U64.__not__() -> U64
-  return U64(value: me.value.__not__())
+routine U64.$bitnot() -> U64
+  return U64(value: me.value.$bitnot())
 
 # Shift operations
-routine U64.__ashl__(bits: U64) -> U64
-  return U64(value: me.value.__ashl__(bits))
+routine U64.$ashl(bits: U64) -> U64
+  return U64(value: me.value.$ashl(bits))
 
-routine U64.__ashr__(bits: U64) -> U64
-  return U64(value: me.value.__ashr__(bits))
+routine U64.$ashr(bits: U64) -> U64
+  return U64(value: me.value.$ashr(bits))
 
-routine U64.__lshl__(bits: U64) -> U64
-  return U64(value: me.value.__lshl__(bits))
+routine U64.$lshl(bits: U64) -> U64
+  return U64(value: me.value.$lshl(bits))
 
-routine U64.__lshr__(bits: U64) -> U64
-  return U64(value: me.value.__lshr__(bits))
+routine U64.$lshr(bits: U64) -> U64
+  return U64(value: me.value.$lshr(bits))
 
 # Math operations
 routine U64.min(you: U64) -> U64
@@ -123,46 +123,46 @@ routine U64.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From smaller unsigned integers (widening - always fits)
-routine U64.__create__(from: U8) -> U64
-  return U64(value: RazorForge/Core.U64.__create__(from.value))
+routine U64.$create(from: U8) -> U64
+  return U64(value: RazorForge/Core.U64.$create(from.value))
 
-routine U64.__create__(from: U16) -> U64
-  return U64(value: RazorForge/Core.U64.__create__(from.value))
+routine U64.$create(from: U16) -> U64
+  return U64(value: RazorForge/Core.U64.$create(from.value))
 
-routine U64.__create__(from: U32) -> U64
-  return U64(value: RazorForge/Core.U64.__create__(from.value))
+routine U64.$create(from: U32) -> U64
+  return U64(value: RazorForge/Core.U64.$create(from.value))
 
 # From larger unsigned integers (narrowing - can overflow)
-routine U64.__create__!(from: U128) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: U128) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
 # From signed integers (can overflow for negative or out-of-range)
-routine U64.__create__!(from: S8) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: S8) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
-routine U64.__create__!(from: S16) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: S16) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
-routine U64.__create__!(from: S32) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: S32) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
-routine U64.__create__!(from: S64) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: S64) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
-routine U64.__create__!(from: S128) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: S128) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
 # From floating point (truncates, can overflow)
-routine U64.__create__!(from: F32) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: F32) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
-routine U64.__create__!(from: F64) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: F64) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))
 
 # From arbitrary precision (can overflow)
-routine U64.__create__!(from: Integer) -> U64
-  return U64(value: RazorForge/Core.U64.__create__!(from.value))
+routine U64.$create!(from: Integer) -> U64
+  return U64(value: RazorForge/Core.U64.$create!(from.value))

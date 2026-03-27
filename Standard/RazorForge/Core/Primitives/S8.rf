@@ -17,134 +17,134 @@ preset S8_ONE: S8 = 1_s8
 # Creators
 # ============================================================================
 
-routine S8.__create__(from: S8) -> S8
+routine S8.$create(from: S8) -> S8
   return from
 
 # From S16 - crashes if value out of S8 range
-routine S8.__create__!(from: S16) -> S8
+routine S8.$create!(from: S16) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[S16, S8](from)
 
 # From S32 - crashes if value out of S8 range
-routine S8.__create__!(from: S32) -> S8
+routine S8.$create!(from: S32) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[S32, S8](from)
 
 # From S64 - crashes if value out of S8 range
-routine S8.__create__!(from: S64) -> S8
+routine S8.$create!(from: S64) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[S64, S8](from)
 
 # From S128 - crashes if value out of S8 range
-routine S8.__create__!(from: S128) -> S8
+routine S8.$create!(from: S128) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[S128, S8](from)
 
 # From U8 - crashes if value > S8_MAX (bit 7 set)
-routine S8.__create__!(from: U8) -> S8
+routine S8.$create!(from: U8) -> S8
   if from > 127_u8
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return bitcast[U8, S8](from)
 
 # From U16 - crashes if value > S8_MAX
-routine S8.__create__!(from: U16) -> S8
+routine S8.$create!(from: U16) -> S8
   if from > 127_u16
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[U16, S8](from)
 
 # From U32 - crashes if value > S8_MAX
-routine S8.__create__!(from: U32) -> S8
+routine S8.$create!(from: U32) -> S8
   if from > 127_u32
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[U32, S8](from)
 
 # From U64 - crashes if value > S8_MAX
-routine S8.__create__!(from: U64) -> S8
+routine S8.$create!(from: U64) -> S8
   if from > 127_u64
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[U64, S8](from)
 
 # From U128 - crashes if value > S8_MAX
-routine S8.__create__!(from: U128) -> S8
+routine S8.$create!(from: U128) -> S8
   if from > 127_u128
     throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
   return trunc[U128, S8](from)
 
 # From floating point - truncates fractional part and crashes if overflow
-routine S8.__create__!(from: F16) -> S8
+routine S8.$create!(from: F16) -> S8
   return from.S32!().S8!()
 
-routine S8.__create__!(from: F32) -> S8
+routine S8.$create!(from: F32) -> S8
   return from.S32!().S8!()
 
-routine S8.__create__!(from: F64) -> S8
+routine S8.$create!(from: F64) -> S8
   return from.S32!().S8!()
 
-routine S8.__create__!(from: F128) -> S8
+routine S8.$create!(from: F128) -> S8
   return from.S32!().S8!()
 
 # From decimal - truncates fractional part and crashes if overflow
-routine S8.__create__!(from: D32) -> S8
+routine S8.$create!(from: D32) -> S8
   return from.S32!().S8!()
 
-routine S8.__create__!(from: D64) -> S8
+routine S8.$create!(from: D64) -> S8
   return from.S32!().S8!()
 
-routine S8.__create__!(from: D128) -> S8
+routine S8.$create!(from: D128) -> S8
   return from.S32!().S8!()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
-routine S8.__add__!(you: S8) -> S8
+routine S8.$add!(you: S8) -> S8
   return add[S8](me, you)
 
-routine S8.__sub__!(you: S8) -> S8
+routine S8.$sub!(you: S8) -> S8
   return sub[S8](me, you)
 
-routine S8.__mul__!(you: S8) -> S8
+routine S8.$mul!(you: S8) -> S8
   return mul[S8](me, you)
 
-routine S8.__floordiv__!(you: S8) -> S8
+routine S8.$floordiv!(you: S8) -> S8
   if you == 0
     throw DivisionByZeroError()
   return sdiv[S8](me, you)
 
-routine S8.__mod__!(you: S8) -> S8
+routine S8.$mod!(you: S8) -> S8
   return srem[S8](me, you)
 
-routine S8.__neg__!() -> S8
+routine S8.$neg!() -> S8
   return sub[S8](0, me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine S8.__add_wrap__(you: S8) -> S8
+routine S8.$add_wrap(you: S8) -> S8
   return add[S8](me, you)
 
-routine S8.__sub_wrap__(you: S8) -> S8
+routine S8.$sub_wrap(you: S8) -> S8
   return sub[S8](me, you)
 
-routine S8.__mul_wrap__(you: S8) -> S8
+routine S8.$mul_wrap(you: S8) -> S8
   return mul[S8](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine S8.__add_clamp__(you: S8) -> S8
+routine S8.$add_clamp(you: S8) -> S8
   return sadd_sat[S8](me, you)
 
-routine S8.__sub_clamp__(you: S8) -> S8
+routine S8.$sub_clamp(you: S8) -> S8
   return ssub_sat[S8](me, you)
 
-routine S8.__mul_clamp__(you: S8) -> S8
+routine S8.$mul_clamp(you: S8) -> S8
   var wide = mul[S16](sext[S8, S16](me), sext[S8, S16](you))
   if icmp_sgt[S16](wide, 127_s16)
     return S8_MAX
@@ -157,7 +157,7 @@ routine S8.__mul_clamp__(you: S8) -> S8
 # ============================================================================
 
 # Power operator (**) - can overflow
-routine S8.__pow__!(exp: S8) -> S8
+routine S8.$pow!(exp: S8) -> S8
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = exp
@@ -173,7 +173,7 @@ routine S8.__pow__!(exp: S8) -> S8
   return result
 
 # Wrapping power (**%)
-routine S8.__pow_wrap__!(exp: S8) -> S8
+routine S8.$pow_wrap!(exp: S8) -> S8
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = exp
@@ -189,7 +189,7 @@ routine S8.__pow_wrap__!(exp: S8) -> S8
   return result
 
 # Clamping power (**^)
-routine S8.__pow_clamp__!(exp: S8) -> S8
+routine S8.$pow_clamp!(exp: S8) -> S8
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = exp
@@ -199,8 +199,8 @@ routine S8.__pow_clamp__!(exp: S8) -> S8
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.__mul_clamp__(base)
-    base = base.__mul_clamp__(base)
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
     e = e >> 1
   return result
 
@@ -208,16 +208,16 @@ routine S8.__pow_clamp__!(exp: S8) -> S8
 # Bitwise Operations
 # ============================================================================
 
-routine S8.__and__(you: S8) -> S8
+routine S8.$bitand(you: S8) -> S8
   return bit_and[S8](me, you)
 
-routine S8.__or__(you: S8) -> S8
+routine S8.$bitor(you: S8) -> S8
   return bit_or[S8](me, you)
 
-routine S8.__xor__(you: S8) -> S8
+routine S8.$bitxor(you: S8) -> S8
   return xor[S8](me, you)
 
-routine S8.__not__() -> S8
+routine S8.$bitnot() -> S8
   return xor[S8](me, -1)
 
 # ============================================================================
@@ -225,29 +225,29 @@ routine S8.__not__() -> S8
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving
-routine S8.__ashl__(bits: U32) -> S8
+routine S8.$ashl(bits: U32) -> S8
   return shl[S8](me, bits)
 
 # Arithmetic right shift (>>) - preserves sign, always safe
-routine S8.__ashr__(bits: U32) -> S8
+routine S8.$ashr(bits: U32) -> S8
   return ashr[S8](me, bits)
 
 # Logical left shift (<<<) - same as << but explicit
-routine S8.__lshl__(bits: U32) -> S8
+routine S8.$lshl(bits: U32) -> S8
   return shl[S8](me, bits)
 
 # Logical right shift (>>>) - fills with zeros, ignores sign
-routine S8.__lshr__(bits: U32) -> S8
+routine S8.$lshr(bits: U32) -> S8
   return lshr[S8](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine S8.__eq__(you: S8) -> Bool
+routine S8.$eq(you: S8) -> Bool
   return icmp_eq[S8](me, you)
 
-routine S8.__cmp__(you: S8) -> ComparisonSign
+routine S8.$cmp(you: S8) -> ComparisonSign
   if icmp_slt[S8](me, you)
     return ME_SMALL
   if icmp_sgt[S8](me, you)
@@ -287,10 +287,10 @@ routine S8.trailing_zeros() -> S8
   return cttz[S8](me)
 
 routine S8.leading_ones() -> S8
-  return me.__not__().leading_zeros()
+  return me.$bitnot().leading_zeros()
 
 routine S8.trailing_ones() -> S8
-  return me.__not__().trailing_zeros()
+  return me.$bitnot().trailing_zeros()
 
 routine S8.reverse_bits() -> S8
   return bitreverse[S8](me)
@@ -325,13 +325,13 @@ routine S8.signum() -> S8
 # Text Representation and Parsing
 # ============================================================================
 
-routine S8.__represent__() -> Text
+routine S8.$represent() -> Text
   return S32(me).Text()
 
-routine S8.__diagnose__() -> Text
-  return "S8(" + me.__represent__() + ")"
+routine S8.$diagnose() -> Text
+  return "S8(" + me.$represent() + ")"
 
-routine S8.__create__!(from_text: Text) -> S8
+routine S8.$create!(from_text: Text) -> S8
   var start = 0u64
   var negative = false
   if from_text.count() > 0u64

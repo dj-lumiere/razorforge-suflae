@@ -3,4 +3,4 @@ module Core
 
 protocol Divisible
   @readonly
-  routine Me.__truediv__(you: Me) -> Me
+  routine Me.$truediv(you: Me) -> Me

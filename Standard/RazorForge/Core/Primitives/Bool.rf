@@ -4,7 +4,7 @@ module Core
 record Bool obeys Equatable, ConstCompatible
   pass
 
-routine Bool.__eq__(you: Bool) -> Bool
+routine Bool.$eq(you: Bool) -> Bool
   return icmp_eq[Bool](me, you)
 
 # ============================================================================
@@ -25,7 +25,7 @@ routine Bool.U8() -> U8
 # Diagnostics and Hashing
 # ============================================================================
 
-routine Bool.__diagnose__() -> Text
+routine Bool.$diagnose() -> Text
   if me
     return "Bool(true)"
   return "Bool(false)"
@@ -39,7 +39,7 @@ routine Bool.hash() -> U64
 # Text Representation
 # ============================================================================
 
-routine Bool.__represent__() -> Text
+routine Bool.$represent() -> Text
   if me
     return "true"
   return "false"

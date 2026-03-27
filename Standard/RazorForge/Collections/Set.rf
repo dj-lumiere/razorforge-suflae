@@ -28,7 +28,7 @@ needs T obeys Hashable, Comparable
 # Creators
 # ============================================================================
 
-routine Set[T].__create__() -> Set[T]
+routine Set[T].$create() -> Set[T]
   var set = Set[T](
     buckets: List[SortedSet[T]](SET_INITIAL_BUCKETS),
     count: 0u64
@@ -41,7 +41,7 @@ routine Set[T].__create__() -> Set[T]
     i = i + 1u64
   return set
 
-routine Set[T].__create__(capacity: U64) -> Set[T]
+routine Set[T].$create(capacity: U64) -> Set[T]
   # Calculate bucket count for desired capacity
   var bucket_count = if capacity < SET_INITIAL_BUCKETS then SET_INITIAL_BUCKETS else capacity
   var set = Set[T](
@@ -61,7 +61,7 @@ routine Set[T].__create__(capacity: U64) -> Set[T]
 
 routine Set[T].bucket_index(value: T) -> U64
   # Get bucket index for value using hash
-  var hash = value.__hash__()
+  var hash = value.$hash()
   return hash % me.buckets.count()
 
 routine Set[T].should_rehash() -> Bool
@@ -284,7 +284,7 @@ routine Set[T].to_list() -> List[T]
 # Iteration
 # ============================================================================
 
-routine Set[T].__iter__() -> SetIterator[T]
+routine Set[T].$iter() -> SetIterator[T]
   return SetIterator[T](
     set: me,
     bucket_idx: 0u64,
@@ -315,7 +315,7 @@ routine SetIterator[T].next!() -> T
 # Comparison
 # ============================================================================
 
-routine Set[T].__represent__() -> Text
+routine Set[T].$represent() -> Text
   var result = "{"
   var i = 0u64
   for v in me
@@ -326,18 +326,18 @@ routine Set[T].__represent__() -> Text
   result = result + "}"
   return result
 
-routine Set[T].__diagnose__() -> Text
+routine Set[T].$diagnose() -> Text
   var result = "Set{"
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__diagnose__()
+    result = result + v.$diagnose()
     i = i + 1u64
   result = result + "}"
   return result
 
-routine Set[T].__eq__(other: Set[T]) -> Bool
+routine Set[T].$eq(other: Set[T]) -> Bool
   if me.count != other.count
     return false
   return me.is_subset(other)

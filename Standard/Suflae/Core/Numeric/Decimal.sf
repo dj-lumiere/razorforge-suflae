@@ -8,30 +8,30 @@ entity Decimal
   secret value: RazorForge/Numeric.Decimal
 
 # Arithmetic operators
-routine Decimal.__add__(you: Decimal) -> Decimal
-  return Decimal(value: me.value.__add__(you.value))
+routine Decimal.$add(you: Decimal) -> Decimal
+  return Decimal(value: me.value.$add(you.value))
 
-routine Decimal.__sub__(you: Decimal) -> Decimal
-  return Decimal(value: me.value.__sub__(you.value))
+routine Decimal.$sub(you: Decimal) -> Decimal
+  return Decimal(value: me.value.$sub(you.value))
 
-routine Decimal.__mul__(you: Decimal) -> Decimal
-  return Decimal(value: me.value.__mul__(you.value))
+routine Decimal.$mul(you: Decimal) -> Decimal
+  return Decimal(value: me.value.$mul(you.value))
 
-routine Decimal.__truediv__(you: Decimal) -> Decimal
-  return Decimal(value: me.value.__truediv__(you.value))
+routine Decimal.$truediv(you: Decimal) -> Decimal
+  return Decimal(value: me.value.$truediv(you.value))
 
-routine Decimal.__neg__() -> Decimal
-  return Decimal(value: me.value.__neg__())
+routine Decimal.$neg() -> Decimal
+  return Decimal(value: me.value.$neg())
 
 routine Decimal.divide(you: Decimal, precision: Integer) -> Decimal
   return Decimal(value: me.value.divide(you.value, precision.value))
 
 # Comparison
-routine Decimal.__eq__(you: Decimal) -> Bool
-  return me.value.__eq__(you.value)
+routine Decimal.$eq(you: Decimal) -> Bool
+  return me.value.$eq(you.value)
 
-routine Decimal.__cmp__(you: Decimal) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine Decimal.$cmp(you: Decimal) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Math operations
 routine Decimal.abs() -> Decimal
@@ -126,48 +126,48 @@ routine Decimal.one() -> Decimal
   return Decimal(value: RazorForge/Numeric.Decimal.one())
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From native signed integers
-routine Decimal.__create__(from: S8) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: S8) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: S16) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: S16) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: S32) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: S32) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: S64) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: S64) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: S128) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: S128) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
 # From native unsigned integers
-routine Decimal.__create__(from: U8) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: U8) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: U16) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: U16) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: U32) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: U32) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: U64) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: U64) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: U128) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: U128) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
 # From floating point
-routine Decimal.__create__(from: F32) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: F32) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
-routine Decimal.__create__(from: F64) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: F64) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))
 
 # From integer
-routine Decimal.__create__(from: Integer) -> Decimal
-  return Decimal(value: RazorForge/Numeric.Decimal.__create__(from.value))
+routine Decimal.$create(from: Integer) -> Decimal
+  return Decimal(value: RazorForge/Numeric.Decimal.$create(from.value))

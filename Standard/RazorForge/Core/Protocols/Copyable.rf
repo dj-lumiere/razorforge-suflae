@@ -1,5 +1,5 @@
 # Copyable - Protocol for types that support explicit deep copying
-# Primarily for entity and resident types (records are value types with implicit copy)
+# Primarily for entity types (records are value types with implicit copy)
 module Core
 
 protocol Copyable

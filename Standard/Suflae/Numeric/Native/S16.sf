@@ -8,76 +8,76 @@ record S16
   secret value: RazorForge/Core.S16
 
 # Arithmetic operators
-routine S16.__add__!(you: S16) -> S16
-  return S16(value: me.value.__add__!(you.value))
+routine S16.$add!(you: S16) -> S16
+  return S16(value: me.value.$add!(you.value))
 
-routine S16.__sub__!(you: S16) -> S16
-  return S16(value: me.value.__sub__!(you.value))
+routine S16.$sub!(you: S16) -> S16
+  return S16(value: me.value.$sub!(you.value))
 
-routine S16.__mul__!(you: S16) -> S16
-  return S16(value: me.value.__mul__!(you.value))
+routine S16.$mul!(you: S16) -> S16
+  return S16(value: me.value.$mul!(you.value))
 
-routine S16.__floordiv__!(you: S16) -> S16
-  return S16(value: me.value.__floordiv__!(you.value))
+routine S16.$floordiv!(you: S16) -> S16
+  return S16(value: me.value.$floordiv!(you.value))
 
-routine S16.__mod__!(you: S16) -> S16
-  return S16(value: me.value.__mod__!(you.value))
+routine S16.$mod!(you: S16) -> S16
+  return S16(value: me.value.$mod!(you.value))
 
-routine S16.__neg__!() -> S16
-  return S16(value: me.value.__neg__!())
+routine S16.$neg!() -> S16
+  return S16(value: me.value.$neg!())
 
 # Wrapping arithmetic
-routine S16.__add_wrap__(you: S16) -> S16
-  return S16(value: me.value.__add_wrap__(you.value))
+routine S16.$add_wrap(you: S16) -> S16
+  return S16(value: me.value.$add_wrap(you.value))
 
-routine S16.__sub_wrap__(you: S16) -> S16
-  return S16(value: me.value.__sub_wrap__(you.value))
+routine S16.$sub_wrap(you: S16) -> S16
+  return S16(value: me.value.$sub_wrap(you.value))
 
-routine S16.__mul_wrap__(you: S16) -> S16
-  return S16(value: me.value.__mul_wrap__(you.value))
+routine S16.$mul_wrap(you: S16) -> S16
+  return S16(value: me.value.$mul_wrap(you.value))
 
 # Clamping arithmetic
-routine S16.__add_clamp__(you: S16) -> S16
-  return S16(value: me.value.__add_clamp__(you.value))
+routine S16.$add_clamp(you: S16) -> S16
+  return S16(value: me.value.$add_clamp(you.value))
 
-routine S16.__sub_clamp__(you: S16) -> S16
-  return S16(value: me.value.__sub_clamp__(you.value))
+routine S16.$sub_clamp(you: S16) -> S16
+  return S16(value: me.value.$sub_clamp(you.value))
 
-routine S16.__mul_clamp__(you: S16) -> S16
-  return S16(value: me.value.__mul_clamp__(you.value))
+routine S16.$mul_clamp(you: S16) -> S16
+  return S16(value: me.value.$mul_clamp(you.value))
 
 # Comparison
-routine S16.__eq__(you: S16) -> Bool
-  return me.value.__eq__(you.value)
+routine S16.$eq(you: S16) -> Bool
+  return me.value.$eq(you.value)
 
-routine S16.__cmp__(you: S16) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine S16.$cmp(you: S16) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Bitwise operations
-routine S16.__and__(you: S16) -> S16
-  return S16(value: me.value.__and__(you.value))
+routine S16.$bitand(you: S16) -> S16
+  return S16(value: me.value.$bitand(you.value))
 
-routine S16.__or__(you: S16) -> S16
-  return S16(value: me.value.__or__(you.value))
+routine S16.$bitor(you: S16) -> S16
+  return S16(value: me.value.$bitor(you.value))
 
-routine S16.__xor__(you: S16) -> S16
-  return S16(value: me.value.__xor__(you.value))
+routine S16.$bitxor(you: S16) -> S16
+  return S16(value: me.value.$bitxor(you.value))
 
-routine S16.__not__() -> S16
-  return S16(value: me.value.__not__())
+routine S16.$bitnot() -> S16
+  return S16(value: me.value.$bitnot())
 
 # Shift operations
-routine S16.__ashl__(bits: U16) -> S16
-  return S16(value: me.value.__ashl__(bits))
+routine S16.$ashl(bits: U16) -> S16
+  return S16(value: me.value.$ashl(bits))
 
-routine S16.__ashr__(bits: U16) -> S16
-  return S16(value: me.value.__ashr__(bits))
+routine S16.$ashr(bits: U16) -> S16
+  return S16(value: me.value.$ashr(bits))
 
-routine S16.__lshl__(bits: U16) -> S16
-  return S16(value: me.value.__lshl__(bits))
+routine S16.$lshl(bits: U16) -> S16
+  return S16(value: me.value.$lshl(bits))
 
-routine S16.__lshr__(bits: U16) -> S16
-  return S16(value: me.value.__lshr__(bits))
+routine S16.$lshr(bits: U16) -> S16
+  return S16(value: me.value.$lshr(bits))
 
 # Math operations
 routine S16.abs() -> S16
@@ -138,46 +138,46 @@ routine S16.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From smaller signed integers (widening - always fits)
-routine S16.__create__(from: S8) -> S16
-  return S16(value: RazorForge/Core.S16.__create__(from.value))
+routine S16.$create(from: S8) -> S16
+  return S16(value: RazorForge/Core.S16.$create(from.value))
 
 # From larger signed integers (narrowing - can overflow)
-routine S16.__create__!(from: S32) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: S32) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: S64) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: S64) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: S128) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: S128) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
 # From unsigned integers (can overflow)
-routine S16.__create__!(from: U8) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: U8) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: U16) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: U16) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: U32) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: U32) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: U64) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: U64) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: U128) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: U128) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
 # From floating point (truncates, can overflow)
-routine S16.__create__!(from: F32) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: F32) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
-routine S16.__create__!(from: F64) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: F64) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))
 
 # From arbitrary precision (can overflow)
-routine S16.__create__!(from: Integer) -> S16
-  return S16(value: RazorForge/Core.S16.__create__!(from.value))
+routine S16.$create!(from: Integer) -> S16
+  return S16(value: RazorForge/Core.S16.$create!(from.value))

@@ -7,17 +7,17 @@ entity TakeSequence[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret limit: U64
 
-routine TakeSequence[T].__iter__() -> TakeEmitter[T]
-  return TakeEmitter[T](source: me.source.__iter__(), remaining: me.limit)
+routine TakeSequence[T].$iter() -> TakeEmitter[T]
+  return TakeEmitter[T](source: me.source.$iter(), remaining: me.limit)
 
 entity TakeEmitter[T] obeys Iterator[T]
   secret source: Iterator[T]
   secret remaining: U64
 
-emitting routine TakeEmitter[T].__next__() -> T
+emitting routine TakeEmitter[T].$next() -> T
   if me.remaining == 0u64
     absent
-  emit me.source.__next__()
+  emit me.source.$next()
   me.remaining = me.remaining - 1u64
   return
 

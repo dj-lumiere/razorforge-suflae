@@ -17,96 +17,96 @@ preset U64_ONE: U64 = 1_u64
 # ============================================================================
 
 # From S8 - crashes if value is negative
-routine U64.__create__!(from: S8) -> U64
+routine U64.$create!(from: S8) -> U64
   if from < 0_s8
     throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
   return sext[S8, U64](from)
 
 # From S16 - crashes if value is negative
-routine U64.__create__!(from: S16) -> U64
+routine U64.$create!(from: S16) -> U64
   if from < 0_s16
     throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
   return sext[S16, U64](from)
 
 # From S32 - crashes if value is negative
-routine U64.__create__!(from: S32) -> U64
+routine U64.$create!(from: S32) -> U64
   if from < 0_s32
     throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
   return sext[S32, U64](from)
 
 # From S64 - crashes if value is negative
-routine U64.__create__!(from: S64) -> U64
+routine U64.$create!(from: S64) -> U64
   if from < 0_s64
     throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
   return bitcast[S64, U64](from)
 
 # From S128 - crashes if value out of U64 range
-routine U64.__create__!(from: S128) -> U64
+routine U64.$create!(from: S128) -> U64
   if not (0_s128 <= from <= 18446744073709551615_s128)
     throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
   return trunc[S128, U64](from)
 
 # From U8 - always fits, no check needed
-routine U64.__create__!(from: U8) -> U64
+routine U64.$create!(from: U8) -> U64
   return zext[U8, U64](from)
 
 # From U16 - always fits, no check needed
-routine U64.__create__!(from: U16) -> U64
+routine U64.$create!(from: U16) -> U64
   return zext[U16, U64](from)
 
 # From U32 - always fits, no check needed
-routine U64.__create__!(from: U32) -> U64
+routine U64.$create!(from: U32) -> U64
   return zext[U32, U64](from)
 
-routine U64.__create__(from: U64) -> U64
+routine U64.$create(from: U64) -> U64
   return from
 
 # From U128 - crashes if value > U64_MAX
-routine U64.__create__!(from: U128) -> U64
+routine U64.$create!(from: U128) -> U64
   if from > 18446744073709551615_u128
     throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
   return trunc[U128, U64](from)
 
 # From floating point - truncates
-routine U64.__create__!(from: F16) -> U64
+routine U64.$create!(from: F16) -> U64
   return from.F32().U64!()
 
-routine U64.__create__!(from: F32) -> U64
+routine U64.$create!(from: F32) -> U64
   return fptoui[F32, U64](from)
 
-routine U64.__create__!(from: F64) -> U64
+routine U64.$create!(from: F64) -> U64
   return fptoui[F64, U64](from)
 
-routine U64.__create__!(from: F128) -> U64
+routine U64.$create!(from: F128) -> U64
   return from.F64!().U64!()
 
 # From decimal - truncates fractional part and can overflow
-routine U64.__create__!(from: D32) -> U64
+routine U64.$create!(from: D32) -> U64
   return from.S64!().U64!()
 
-routine U64.__create__!(from: D64) -> U64
+routine U64.$create!(from: D64) -> U64
   return from.S64!().U64!()
 
-routine U64.__create__!(from: D128) -> U64
+routine U64.$create!(from: D128) -> U64
   return from.S64!().U64!()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
-routine U64.__add__!(you: U64) -> U64
+routine U64.$add!(you: U64) -> U64
   return add[U64](me, you)
 
-routine U64.__sub__!(you: U64) -> U64
+routine U64.$sub!(you: U64) -> U64
   return sub[U64](me, you)
 
-routine U64.__mul__!(you: U64) -> U64
+routine U64.$mul!(you: U64) -> U64
   return mul[U64](me, you)
 
-routine U64.__floordiv__!(you: U64) -> U64
+routine U64.$floordiv!(you: U64) -> U64
   return udiv[U64](me, you)
 
-routine U64.__mod__!(you: U64) -> U64
+routine U64.$mod!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
   return urem[U64](me, you)
@@ -115,26 +115,26 @@ routine U64.__mod__!(you: U64) -> U64
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-routine U64.__add_wrap__(you: U64) -> U64
+routine U64.$add_wrap(you: U64) -> U64
   return add[U64](me, you)
 
-routine U64.__sub_wrap__(you: U64) -> U64
+routine U64.$sub_wrap(you: U64) -> U64
   return sub[U64](me, you)
 
-routine U64.__mul_wrap__(you: U64) -> U64
+routine U64.$mul_wrap(you: U64) -> U64
   return mul[U64](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-routine U64.__add_clamp__(you: U64) -> U64
+routine U64.$add_clamp(you: U64) -> U64
   return uadd_sat[U64](me, you)
 
-routine U64.__sub_clamp__(you: U64) -> U64
+routine U64.$sub_clamp(you: U64) -> U64
   return usub_sat[U64](me, you)
 
-routine U64.__mul_clamp__(you: U64) -> U64
+routine U64.$mul_clamp(you: U64) -> U64
   var wide = mul[U128](zext[U64, U128](me), zext[U64, U128](you))
   if icmp_ugt[U128](wide, 18446744073709551615_u128)
     return U64_MAX
@@ -145,7 +145,7 @@ routine U64.__mul_clamp__(you: U64) -> U64
 # ============================================================================
 
 # Power operator (**) - can overflow
-routine U64.__pow__!(exp: U64) -> U64
+routine U64.$pow!(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = exp
@@ -159,7 +159,7 @@ routine U64.__pow__!(exp: U64) -> U64
   return result
 
 # Wrapping power (**%)
-routine U64.__pow_wrap__!(exp: U64) -> U64
+routine U64.$pow_wrap!(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = exp
@@ -173,7 +173,7 @@ routine U64.__pow_wrap__!(exp: U64) -> U64
   return result
 
 # Clamping power (**^)
-routine U64.__pow_clamp__!(exp: U64) -> U64
+routine U64.$pow_clamp!(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = exp
@@ -181,8 +181,8 @@ routine U64.__pow_clamp__!(exp: U64) -> U64
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = result.__mul_clamp__(base)
-    base = base.__mul_clamp__(base)
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
     e = e >> 1
   return result
 
@@ -190,16 +190,16 @@ routine U64.__pow_clamp__!(exp: U64) -> U64
 # Bitwise Operations
 # ============================================================================
 
-routine U64.__and__(you: U64) -> U64
+routine U64.$and(you: U64) -> U64
   return bit_and[U64](me, you)
 
-routine U64.__or__(you: U64) -> U64
+routine U64.$or(you: U64) -> U64
   return bit_or[U64](me, you)
 
-routine U64.__xor__(you: U64) -> U64
+routine U64.$xor(you: U64) -> U64
   return xor[U64](me, you)
 
-routine U64.__not__() -> U64
+routine U64.$not() -> U64
   return xor[U64](me, -1)
 
 # ============================================================================
@@ -208,29 +208,29 @@ routine U64.__not__() -> U64
 # ============================================================================
 
 # Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
-routine U64.__ashl__(bits: U32) -> U64
+routine U64.$ashl(bits: U32) -> U64
   return shl[U64](me, bits)
 
 # Arithmetic right shift (>>) - for unsigned, same as logical
-routine U64.__ashr__(bits: U32) -> U64
+routine U64.$ashr(bits: U32) -> U64
   return lshr[U64](me, bits)
 
 # Logical left shift (<<<) - same as <<
-routine U64.__lshl__(bits: U32) -> U64
+routine U64.$lshl(bits: U32) -> U64
   return shl[U64](me, bits)
 
 # Logical right shift (>>>) - fills with zeros
-routine U64.__lshr__(bits: U32) -> U64
+routine U64.$lshr(bits: U32) -> U64
   return lshr[U64](me, bits)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine U64.__eq__(you: U64) -> Bool
+routine U64.$eq(you: U64) -> Bool
   return icmp_eq[U64](me, you)
 
-routine U64.__cmp__(you: U64) -> ComparisonSign
+routine U64.$cmp(you: U64) -> ComparisonSign
   if icmp_ult[U64](me, you)
     return ME_SMALL
   if icmp_ugt[U64](me, you)
@@ -267,10 +267,10 @@ routine U64.trailing_zeros() -> U64
   return cttz[U64](me)
 
 routine U64.leading_ones() -> U64
-  return me.__not__().leading_zeros()
+  return me.$not().leading_zeros()
 
 routine U64.trailing_ones() -> U64
-  return me.__not__().trailing_zeros()
+  return me.$not().trailing_zeros()
 
 routine U64.reverse_bits() -> U64
   return bitreverse[U64](me)
@@ -311,7 +311,7 @@ routine U64.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine U64.__represent__() -> Text
+routine U64.$represent() -> Text
   if me == 0u64
     return "0"
   var digits = List[Letter]()
@@ -322,10 +322,10 @@ routine U64.__represent__() -> Text
     digits.add_first(Letter(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 
-routine U64.__diagnose__() -> Text
-  return "U64(" + me.__represent__() + ")"
+routine U64.$diagnose() -> Text
+  return "U64(" + me.$represent() + ")"
 
-routine U64.__create__!(from_text: Text) -> U64
+routine U64.$create!(from_text: Text) -> U64
   var result = 0u64
   var i = 0u64
   while i < from_text.count()

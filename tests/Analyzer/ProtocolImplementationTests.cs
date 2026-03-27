@@ -206,14 +206,14 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(other: Me) -> Me
+                          routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__add__(other: Point) -> Point
+                        routine Point.$add(other: Point) -> Point
                           return Point(x: me.x + other.x, y: me.y + other.y)
                         """;
 
@@ -226,14 +226,14 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(other: Me) -> Me
+                          routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__add__(other: S32) -> Point
+                        routine Point.$add(other: S32) -> Point
                           return Point(x: me.x, y: me.y)
                         """;
 

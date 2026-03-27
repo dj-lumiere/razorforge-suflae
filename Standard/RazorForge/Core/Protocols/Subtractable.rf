@@ -3,4 +3,4 @@ module Core
 
 protocol Subtractable
   @readonly
-  routine Me.__sub__(you: Me) -> Me
+  routine Me.$sub(you: Me) -> Me

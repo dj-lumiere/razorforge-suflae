@@ -3,10 +3,10 @@ module Core
 
 protocol Bitwiseable
   @readonly
-  routine Me.__and__(you: Me) -> Me
+  routine Me.$bitand(you: Me) -> Me
 
   @readonly
-  routine Me.__or__(you: Me) -> Me
+  routine Me.$bitor(you: Me) -> Me
 
   @readonly
-  routine Me.__xor__(you: Me) -> Me
+  routine Me.$bitxor(you: Me) -> Me

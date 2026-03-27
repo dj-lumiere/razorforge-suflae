@@ -3,7 +3,7 @@ module Core
 
 protocol Equatable
   @readonly
-  routine Me.__eq__(you: Me) -> Bool
+  routine Me.$eq(you: Me) -> Bool
 
   @[readonly, generated]
-  routine Me.__ne__(you: Me) -> Bool
+  routine Me.$ne(you: Me) -> Bool

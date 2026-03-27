@@ -5,7 +5,7 @@ module Core
 
 protocol FlagsType obeys Diagnosable, Hashable
   @[readonly, innate]
-  routine U64.__create__(from: Me) -> U64
+  routine U64.$create(from: Me) -> U64
 
   @[readonly, innate]
   routine Me.all_cases() -> List[Me]

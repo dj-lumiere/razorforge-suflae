@@ -14,12 +14,12 @@ public enum RoutineKind
     /// <summary>Member routine in a different file from the type (routine Type.name()).</summary>
     ExternalMemberRoutine,
 
-    /// <summary>Creator (__create__).</summary>
+    /// <summary>Creator ($create).</summary>
     Creator,
 
     /// <summary>External FFI function.</summary>
     External,
 
-    /// <summary>Operator overload (__add__, __sub__, etc.).</summary>
+    /// <summary>Operator overload ($add, $sub, etc.).</summary>
     Operator
 }

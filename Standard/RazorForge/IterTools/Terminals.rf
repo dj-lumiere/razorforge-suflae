@@ -26,12 +26,12 @@ routine Iterable[T].count() -> U64
   return n
 
 routine Iterable[T].first!() -> T
-  var emitter = me.__iter__()
-  return emitter.__next__()
+  var emitter = me.$iter()
+  return emitter.$next()
 
 routine Iterable[T].last!() -> T
-  var emitter = me.__iter__()
-  var latest = emitter.__next__()
+  var emitter = me.$iter()
+  var latest = emitter.$next()
   loop
     var item = emitter.try_next()
     when item

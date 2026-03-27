@@ -105,23 +105,23 @@ routine Duration.abs() -> Duration
 # Arithmetic operators
 # ============================================================================
 
-routine Duration.__add__!(you: Duration) -> Duration
-  return Duration(value: me.value.__add__!(you.value))
+routine Duration.$add!(you: Duration) -> Duration
+  return Duration(value: me.value.$add!(you.value))
 
-routine Duration.__sub__(you: Duration) -> Duration
-  return Duration(value: me.value.__sub__(you.value))
+routine Duration.$sub(you: Duration) -> Duration
+  return Duration(value: me.value.$sub(you.value))
 
-routine Duration.__neg__() -> Duration
-  return Duration(value: me.value.__neg__())
+routine Duration.$neg() -> Duration
+  return Duration(value: me.value.$neg())
 
 routine Duration.scale(factor: Integer) -> Duration
   return Duration(value: me.value.scale(factor.value))
 
-routine Duration.__floordiv__(you: Duration) -> Duration
-  return Duration(value: me.value.__floordiv__(you.value))
+routine Duration.$floordiv(you: Duration) -> Duration
+  return Duration(value: me.value.$floordiv(you.value))
 
-routine Duration.__mod__(you: Duration) -> Duration
-  return Duration(value: me.value.__mod__(you.value))
+routine Duration.$mod(you: Duration) -> Duration
+  return Duration(value: me.value.$mod(you.value))
 
 routine Duration.div_by(divisor: Integer) -> Duration
   return Duration(value: me.value.div_by(divisor.value))
@@ -130,8 +130,8 @@ routine Duration.div_by(divisor: Integer) -> Duration
 # Comparison operators
 # ============================================================================
 
-routine Duration.__eq__(you: Duration) -> Bool
-  return me.value.__eq__(you.value)
+routine Duration.$eq(you: Duration) -> Bool
+  return me.value.$eq(you.value)
 
-routine Duration.__cmp__(you: Duration) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine Duration.$cmp(you: Duration) -> ComparisonSign
+  return me.value.$cmp(you.value)

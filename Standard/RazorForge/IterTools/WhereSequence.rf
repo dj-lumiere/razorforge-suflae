@@ -8,17 +8,17 @@ entity WhereSequence[T] obeys Iterable[T]
   secret predicate: Routine[(T,), Bool]
   secret inverted: Bool
 
-routine WhereSequence[T].__iter__() -> WhereEmitter[T]
-  return WhereEmitter[T](source: me.source.__iter__(), predicate: me.predicate, inverted: me.inverted)
+routine WhereSequence[T].$iter() -> WhereEmitter[T]
+  return WhereEmitter[T](source: me.source.$iter(), predicate: me.predicate, inverted: me.inverted)
 
 entity WhereEmitter[T] obeys Iterator[T]
   secret source: Iterator[T]
   secret predicate: Routine[(T,), Bool]
   secret inverted: Bool
 
-emitting routine WhereEmitter[T].__next__() -> T
+emitting routine WhereEmitter[T].$next() -> T
   loop
-    var item = me.source.__next__()
+    var item = me.source.$next()
     var matches = me.predicate(item)
     if me.inverted
       matches = not matches

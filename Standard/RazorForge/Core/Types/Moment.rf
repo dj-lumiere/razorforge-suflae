@@ -107,7 +107,7 @@ routine days_to_day(days_since_epoch: S64) -> S64
 # Creators
 # ============================================================================
 
-routine Moment.__create__(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
   var d = ymd_to_days(year, month, day)
   var s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
   return Moment(seconds: s, nanoseconds: 0_u32)
@@ -199,7 +199,7 @@ routine Moment.add_duration(duration: Duration) -> Moment
 
 @readonly
 routine Moment.subtract_duration(duration: Duration) -> Moment
-  return me.add_duration(duration.__neg__())
+  return me.add_duration(duration.$neg())
 
 # Moment - Moment -> Duration
 @readonly
@@ -211,11 +211,11 @@ routine Moment.elapsed_since(earlier: Moment) -> Duration
 # ============================================================================
 
 @readonly
-routine Moment.__eq__(you: Moment) -> Bool
+routine Moment.$eq(you: Moment) -> Bool
   return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
 @readonly
-routine Moment.__cmp__(you: Moment) -> ComparisonSign
+routine Moment.$cmp(you: Moment) -> ComparisonSign
   if me.seconds < you.seconds
     return ME_SMALL
   if me.seconds > you.seconds
@@ -230,7 +230,7 @@ routine Moment.__cmp__(you: Moment) -> ComparisonSign
 # Text representation
 # ============================================================================
 
-routine Moment.__represent__() -> Text
+routine Moment.$represent() -> Text
   var y = me.year()
   var mo = me.month()
   var d = me.day()
@@ -239,5 +239,5 @@ routine Moment.__represent__() -> Text
   var s = me.second()
   return f"{y}-{mo}-{d} {h}:{mi}:{s}"
 
-routine Moment.__diagnose__() -> Text
-  return "Moment(seconds: " + me.seconds.__represent__() + ", nanoseconds: " + me.nanoseconds.__represent__() + ")"
+routine Moment.$diagnose() -> Text
+  return "Moment(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"

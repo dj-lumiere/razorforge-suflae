@@ -45,11 +45,11 @@ routine List[T].clear()
   return
 
 # Indexing
-routine List[T].__getitem__!(index: Integer) -> T
-  return me.value.__getitem__!(index.value)
+routine List[T].$getitem!(index: Integer) -> T
+  return me.value.$getitem!(index.value)
 
-routine List[T].__setitem__!(index: Integer, item: T)
-  me.value.__setitem__!(index.value, item)
+routine List[T].$setitem!(index: Integer, item: T)
+  me.value.$setitem!(index.value, item)
   return
 
 # Search

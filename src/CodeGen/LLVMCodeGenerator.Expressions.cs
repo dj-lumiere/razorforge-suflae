@@ -1237,8 +1237,8 @@ public partial class LLVMCodeGenerator
             if (calledType != null)
             {
                 // Direct named-field construction: when all arg names match field names exactly,
-                // emit struct construction directly (avoids __create__ infinite recursion).
-                // e.g., CStr(ptr: from_ptr) inside CStr.__create__ body
+                // emit struct construction directly (avoids $create infinite recursion).
+                // e.g., CStr(ptr: from_ptr) inside CStr.$create body
                 if (calledType is RecordTypeInfo record && record.MemberVariables.Count > 0
                     && arguments.Count == record.MemberVariables.Count
                     && arguments.All(a => a is NamedArgumentExpression named &&
@@ -1255,10 +1255,10 @@ public partial class LLVMCodeGenerator
                     return EmitEntityConstruction(sb, entity, arguments);
                 }
 
-                // Zero-arg entity construction → try __create__() first, then null
+                // Zero-arg entity construction → try $create() first, then null
                 if (calledType is EntityTypeInfo && arguments.Count == 0)
                 {
-                    string createName = $"{calledType.Name}.__create__";
+                    string createName = $"{calledType.Name}.$create";
                     var creator = _registry.LookupRoutineOverload(createName, new List<TypeInfo>());
                     if (creator != null && creator.Parameters.Count == 0)
                     {
@@ -1271,15 +1271,15 @@ public partial class LLVMCodeGenerator
                     }
                 }
 
-                // Try __create__ overload — this covers conversion constructors
-                // (e.g., CStr(from: text) → CStr.__create__(from: Text))
+                // Try $create overload — this covers conversion constructors
+                // (e.g., CStr(from: text) → CStr.$create(from: Text))
                 var semanticArgTypes = new List<TypeInfo>();
                 foreach (var arg in arguments)
                 {
                     TypeInfo? t = GetExpressionType(arg);
                     if (t != null) semanticArgTypes.Add(t);
                 }
-                routine = _registry.LookupRoutineOverload($"{calledType.Name}.__create__", semanticArgTypes);
+                routine = _registry.LookupRoutineOverload($"{calledType.Name}.$create", semanticArgTypes);
                 if (routine != null)
                 {
                     isCreatorCall = true;
@@ -1441,7 +1441,7 @@ public partial class LLVMCodeGenerator
         string methodName = member.PropertyName.EndsWith('!') ? member.PropertyName[..^1] : member.PropertyName;
         string methodFullName = $"{receiverType.Name}.{methodName}";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
-        // Also try with '!' suffix — failable methods may be registered as "name!" (e.g., __getitem__!)
+        // Also try with '!' suffix — failable methods may be registered as "name!" (e.g., $getitem!)
         if (method == null && !member.PropertyName.EndsWith('!'))
             method = _registry.LookupRoutine($"{receiverType.Name}.{methodName}!");
         if (method == null && member.PropertyName.EndsWith('!'))
@@ -1461,9 +1461,9 @@ public partial class LLVMCodeGenerator
                 ?? _registry.LookupMethod(receiverType, $"{methodName}!");
         }
 
-        // Representable pattern: obj.Text() → Text.__create__(from: obj)
+        // Representable pattern: obj.Text() → Text.$create(from: obj)
         // When the method name matches a registered type and no direct method exists,
-        // route to TypeName.__create__(from: receiver).
+        // route to TypeName.$create(from: receiver).
         if (method == null && arguments.Count == 0 && _registry.LookupType(member.PropertyName) != null)
         {
             // For @llvm primitive types, emit inline conversion (trunc/zext/sext/fpcast)
@@ -1474,7 +1474,7 @@ public partial class LLVMCodeGenerator
                 return EmitPrimitiveTypeConversion(sb, member.PropertyName, member.Object, targetType);
             }
 
-            string creatorName = $"{member.PropertyName}.__create__";
+            string creatorName = $"{member.PropertyName}.$create";
             var argTypes2 = new List<TypeInfo> { receiverType };
             RoutineInfo? creator = _registry.LookupRoutineOverload(creatorName, argTypes2);
             if (creator != null)
@@ -1486,7 +1486,7 @@ public partial class LLVMCodeGenerator
                     if (inferred != null)
                     {
                         var resolvedParamNames = argTypes2.Select(t => t.Name);
-                        string creatorMangledName = Q($"{creator.OwnerType?.FullName ?? member.PropertyName}.__create__#{string.Join(",", resolvedParamNames)}");
+                        string creatorMangledName = Q($"{creator.OwnerType?.FullName ?? member.PropertyName}.$create#{string.Join(",", resolvedParamNames)}");
 
                         GenerateFunctionDeclaration(creator);
                         RecordMonomorphization(creatorMangledName, creator, creator.OwnerType ?? receiverType, inferred);
@@ -1686,8 +1686,8 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  {result} = call {returnType} @{mangledName}({args})");
 
             // Unwrap Maybe[T] from emitting/failable routine calls (C74).
-            // EmitFor handles __next__() unwrapping directly, so this only fires for
-            // direct calls like `var item = me.source.__next__()` inside emitting bodies.
+            // EmitFor handles $next() unwrapping directly, so this only fires for
+            // direct calls like `var item = me.source.$next()` inside emitting bodies.
             if (isEmittingCall || isFailableCall)
             {
                 // Failable void routines: no value to unwrap, just discard the { i64, ptr }
@@ -1841,7 +1841,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates code for a binary operation.
     /// Only handles operators that are NOT desugared to method calls by the parser.
-    /// Arithmetic/comparison/bitwise operators are desugared to __add__, __eq__, etc.
+    /// Arithmetic/comparison/bitwise operators are desugared to $add, $eq, etc.
     /// </summary>
     private string EmitBinaryOp(StringBuilder sb, BinaryExpression binary)
     {
@@ -1853,8 +1853,8 @@ public partial class LLVMCodeGenerator
             BinaryOperator.NotIdentical => EmitIdentityComparison(sb, binary, "ne"),
             BinaryOperator.Assign => EmitBinaryAssign(sb, binary),
             BinaryOperator.But => EmitBitClear(sb, binary),
-            BinaryOperator.In => EmitContainsCall(sb, binary, "__contains__"),
-            BinaryOperator.NotIn => EmitContainsCall(sb, binary, "__notcontains__"),
+            BinaryOperator.In => EmitContainsCall(sb, binary, "$contains"),
+            BinaryOperator.NotIn => EmitContainsCall(sb, binary, "$notcontains"),
             BinaryOperator.Is => EmitChoiceIs(sb, binary, "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb, binary, "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant("true"),
@@ -1971,18 +1971,18 @@ public partial class LLVMCodeGenerator
         // Fall back to method call for types with software-implemented arithmetic (e.g., D32, D64, D128)
         string? methodName = binary.Operator switch
         {
-            BinaryOperator.Add => "__add__",
-            BinaryOperator.Subtract => "__sub__",
-            BinaryOperator.Multiply => "__mul__",
-            BinaryOperator.TrueDivide => "__truediv__",
-            BinaryOperator.FloorDivide => "__floordiv__",
-            BinaryOperator.Modulo => "__mod__",
-            BinaryOperator.Equal => "__eq__",
-            BinaryOperator.NotEqual => "__ne__",
-            BinaryOperator.Less => "__lt__",
-            BinaryOperator.LessEqual => "__le__",
-            BinaryOperator.Greater => "__gt__",
-            BinaryOperator.GreaterEqual => "__ge__",
+            BinaryOperator.Add => "$add",
+            BinaryOperator.Subtract => "$sub",
+            BinaryOperator.Multiply => "$mul",
+            BinaryOperator.TrueDivide => "$truediv",
+            BinaryOperator.FloorDivide => "$floordiv",
+            BinaryOperator.Modulo => "$mod",
+            BinaryOperator.Equal => "$eq",
+            BinaryOperator.NotEqual => "$ne",
+            BinaryOperator.Less => "$lt",
+            BinaryOperator.LessEqual => "$le",
+            BinaryOperator.Greater => "$gt",
+            BinaryOperator.GreaterEqual => "$ge",
             _ => null
         };
         if (methodName != null && leftType != null)
@@ -1990,7 +1990,7 @@ public partial class LLVMCodeGenerator
             var method = _registry.LookupMethod(leftType, methodName);
             if (method != null)
             {
-                // For generic resolutions (e.g., Snatched[Point].__eq__), use the concrete type name
+                // For generic resolutions (e.g., Snatched[Point].$eq), use the concrete type name
                 // and record monomorphization so the specialized function body gets generated
                 string funcName;
                 if (leftType.IsGenericResolution && method.OwnerType is { IsGenericDefinition: true })
@@ -2268,11 +2268,11 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits 'in' / 'notin' by calling the right operand's __contains__ / __notcontains__ method.
+    /// Emits 'in' / 'notin' by calling the right operand's $contains / $notcontains method.
     /// </summary>
     private string EmitContainsCall(StringBuilder sb, BinaryExpression binary, string methodName)
     {
-        // 'x in collection' → collection.__contains__(x)
+        // 'x in collection' → collection.$contains(x)
         string collection = EmitExpression(sb, binary.Right);
         string element = EmitExpression(sb, binary.Left);
 
@@ -2311,7 +2311,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates code for a unary operation.
-    /// Minus and BitwiseNot are emitted as method calls to __neg__ / __not__
+    /// Minus and BitwiseNot are emitted as method calls to $neg / $not
     /// so the stdlib bodies (which call LLVM intrinsics) do the actual work.
     /// </summary>
     private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
@@ -2319,7 +2319,7 @@ public partial class LLVMCodeGenerator
         return unary.Operator switch
         {
             UnaryOperator.Not => EmitLogicalNot(sb, unary),
-            UnaryOperator.Minus => EmitUnaryMethodCall(sb, unary, "__neg__"),
+            UnaryOperator.Minus => EmitUnaryMethodCall(sb, unary, "$neg"),
             UnaryOperator.BitwiseNot => EmitBitwiseNot(sb, unary),
             UnaryOperator.Steal => EmitExpression(sb, unary.Operand),
             UnaryOperator.ForceUnwrap => EmitForceUnwrap(sb, unary),
@@ -2356,11 +2356,11 @@ public partial class LLVMCodeGenerator
                 return result;
             }
         }
-        return EmitUnaryMethodCall(sb, unary, "__not__");
+        return EmitUnaryMethodCall(sb, unary, "$not");
     }
 
     /// <summary>
-    /// Emits a unary operator as a method call (e.g., -x → x.__neg__(), ~x → x.__not__()).
+    /// Emits a unary operator as a method call (e.g., -x → x.$neg(), ~x → x.$not()).
     /// </summary>
     private string EmitUnaryMethodCall(StringBuilder sb, UnaryExpression unary, string methodName)
     {
@@ -2469,22 +2469,22 @@ public partial class LLVMCodeGenerator
                     return cast;
                 }
 
-                // Zero-arg constructor: look up __create__() or return zeroinitializer
+                // Zero-arg constructor: look up $create() or return zeroinitializer
                 if (generic.Arguments.Count == 0)
                 {
                     // Use the already-resolved type from above
                     TypeInfo resolvedType = resolvedFullType;
 
-                    // Try to find __create__() — first on resolved type, then on generic definition
-                    string createName = $"{resolvedType.Name}.__create__";
+                    // Try to find $create() — first on resolved type, then on generic definition
+                    string createName = $"{resolvedType.Name}.$create";
                     RoutineInfo? creator = _registry.LookupRoutineOverload(createName, new List<TypeInfo>());
                     // If we got a non-zero-arg overload, it's not what we want for zero-arg construction
                     if (creator != null && creator.Parameters.Count > 0)
                         creator = null;
-                    // Fall back to generic definition's __create__
+                    // Fall back to generic definition's $create
                     if (creator == null)
                     {
-                        string genCreateName = $"{calledType.Name}.__create__";
+                        string genCreateName = $"{calledType.Name}.$create";
                         creator = _registry.LookupRoutineOverload(genCreateName, new List<TypeInfo>());
                         if (creator != null && creator.Parameters.Count > 0)
                             creator = null;
@@ -2495,7 +2495,7 @@ public partial class LLVMCodeGenerator
                         string funcName;
                         if (resolvedType.IsGenericResolution)
                         {
-                            funcName = Q($"{resolvedType.FullName}.__create__");
+                            funcName = Q($"{resolvedType.FullName}.$create");
                             // Record for monomorphization
                             RecordMonomorphization(funcName, creator, resolvedType);
                         }
@@ -2867,7 +2867,7 @@ public partial class LLVMCodeGenerator
                     {
                         RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                         EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-    
+
                         _ => null
                     };
                     if (genericBase == null)
@@ -3091,7 +3091,7 @@ public partial class LLVMCodeGenerator
                 {
                     RecordTypeInfo r => r.GenericDefinition,
                     EntityTypeInfo e => e.GenericDefinition,
-    
+
                     _ => null
                 };
                 if (ownerGenericDef?.GenericParameters != null)
@@ -3129,7 +3129,7 @@ public partial class LLVMCodeGenerator
                     {
                         RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
                         EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-    
+
                         _ => null
                     };
                     genericBase ??= returnType.Name.Contains('[')
@@ -3262,7 +3262,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Gets the return type of an index expression by looking up __getitem__ on the target type.
+    /// Gets the return type of an index expression by looking up $getitem on the target type.
     /// </summary>
     private TypeInfo? GetUnaryExpressionType(UnaryExpression unary)
     {
@@ -3291,14 +3291,14 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Gets the return type of an index expression by looking up __getitem__ on the target type.
+    /// Gets the return type of an index expression by looking up $getitem on the target type.
     /// </summary>
     private TypeInfo? GetIndexReturnType(IndexExpression index)
     {
         TypeInfo? targetType = GetExpressionType(index.Object);
         if (targetType == null) return null;
 
-        string methodFullName = $"{targetType.Name}.__getitem__";
+        string methodFullName = $"{targetType.Name}.$getitem";
         RoutineInfo? getItem = _registry.LookupRoutine(methodFullName);
         return getItem?.ReturnType;
     }
@@ -3345,7 +3345,7 @@ public partial class LLVMCodeGenerator
                             {
                                 RecordTypeInfo r => r.GenericDefinition,
                                 EntityTypeInfo e => e.GenericDefinition,
-                
+
                                 _ => null
                             };
                             if (ownerGenericDef?.GenericParameters != null)
@@ -3365,7 +3365,7 @@ public partial class LLVMCodeGenerator
                             {
                                 RecordTypeInfo r => r.GenericDefinition,
                                 EntityTypeInfo e => e.GenericDefinition,
-                
+
                                 _ => null
                             };
                             if (ownerGenericDef?.GenericParameters != null)
@@ -3431,7 +3431,7 @@ public partial class LLVMCodeGenerator
                         return method.ReturnType;
                     }
                 }
-                // Representable pattern: obj.TypeName() → TypeName.__create__(from: obj)
+                // Representable pattern: obj.TypeName() → TypeName.$create(from: obj)
                 // If the method name matches a registered type, the return type is that type
                 TypeInfo? representableType = _registry.LookupType(member.PropertyName);
                 if (representableType != null)
@@ -3454,7 +3454,7 @@ public partial class LLVMCodeGenerator
                 TypeInfo? calledType = LookupTypeInCurrentModule(id.Name);
                 if (calledType != null)
                 {
-                    var creator = _registry.LookupRoutine($"{calledType.Name}.__create__");
+                    var creator = _registry.LookupRoutine($"{calledType.Name}.$create");
                     return creator?.ReturnType ?? calledType;
                 }
                 return null;
@@ -3612,12 +3612,12 @@ public partial class LLVMCodeGenerator
         // Resolve target type to decide dispatch strategy
         TypeInfo? targetType = GetExpressionType(index.Object);
 
-        // If the type has a __getitem__ method, dispatch to it
+        // If the type has a $getitem method, dispatch to it
         if (targetType != null)
         {
-            string methodFullName = $"{targetType.Name}.__getitem__";
+            string methodFullName = $"{targetType.Name}.$getitem";
             RoutineInfo? getItem = _registry.LookupRoutine(methodFullName)
-                ?? _registry.LookupRoutine($"{targetType.Name}.__getitem__!");
+                ?? _registry.LookupRoutine($"{targetType.Name}.$getitem!");
 
             // For generic resolutions (e.g., List[S64]), also try the generic definition name
             if (getItem == null && targetType.IsGenericResolution)
@@ -3630,15 +3630,15 @@ public partial class LLVMCodeGenerator
                 };
                 if (genDefName != null)
                 {
-                    getItem = _registry.LookupRoutine($"{genDefName}.__getitem__")
-                        ?? _registry.LookupRoutine($"{genDefName}.__getitem__!");
+                    getItem = _registry.LookupRoutine($"{genDefName}.$getitem")
+                        ?? _registry.LookupRoutine($"{genDefName}.$getitem!");
                 }
             }
             if (getItem != null && (!getItem.IsGenericDefinition || targetType.IsGenericResolution))
             {
-                // Emit as method call: obj.__getitem__(index) or obj.__getitem__!(index)
+                // Emit as method call: obj.$getitem(index) or obj.$getitem!(index)
                 // Use the actual method name (may be failable with ! suffix).
-                // For generic definitions on generic resolution types (e.g., List[S64].__getitem__!),
+                // For generic definitions on generic resolution types (e.g., List[S64].$getitem!),
                 // EmitMethodCall handles monomorphization automatically.
                 var member = new MemberExpression(
                     Object: index.Object,
@@ -3648,7 +3648,7 @@ public partial class LLVMCodeGenerator
             }
 
             // For entity types with a list-like first field (e.g., Text has letters: List[Letter]),
-            // inline __getitem__ as: load list ptr → GEP data → load element
+            // inline $getitem as: load list ptr → GEP data → load element
             if (getItem != null && targetType is EntityTypeInfo entity && entity.MemberVariables.Count > 0)
             {
                 var firstField = entity.MemberVariables[0];
@@ -3720,7 +3720,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Generates code for a slice expression: obj[start to end] → __getslice__(start, end)
+    /// Generates code for a slice expression: obj[start to end] → $getslice(start, end)
     /// </summary>
     private string EmitSliceAccess(StringBuilder sb, SliceExpression slice)
     {
@@ -3734,7 +3734,7 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException("Cannot determine type for slice target");
         }
 
-        string methodFullName = $"{targetType.Name}.__getslice__";
+        string methodFullName = $"{targetType.Name}.$getslice";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
 
         var argValues = new List<string> { target, start, end };
@@ -3742,7 +3742,7 @@ public partial class LLVMCodeGenerator
 
         string mangledName = method != null
             ? MangleFunctionName(method)
-            : Q($"{targetType.Name}.__getslice__");
+            : Q($"{targetType.Name}.$getslice");
 
         string returnType = method?.ReturnType != null
             ? GetLLVMType(method.ReturnType)
@@ -4267,7 +4267,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits an f-string (InsertedTextExpression).
-    /// Concatenates text and expression parts via Text.__create__ and Text.concat calls.
+    /// Concatenates text and expression parts via Text.$create and Text.concat calls.
     /// </summary>
     private string EmitInsertedText(StringBuilder sb, InsertedTextExpression inserted)
     {
@@ -4336,18 +4336,18 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // Handle "!d" specifier: call __diagnose__() instead of Text.__create__
+        // Handle "!d" specifier: call $diagnose() instead of Text.$create
         if (formatSpec == "!d" || formatSpec == "d")
         {
             string typeName = exprType?.Name ?? "Data";
-            string debugName = $"{typeName}.__diagnose__";
+            string debugName = $"{typeName}.$diagnose";
             RoutineInfo? debugMethod = _registry.LookupRoutine(debugName);
             if (debugMethod != null)
                 GenerateFunctionDeclaration(debugMethod);
 
             string mangledDebug = debugMethod != null
                 ? MangleFunctionName(debugMethod)
-                : Q($"{typeName}.__diagnose__");
+                : Q($"{typeName}.$diagnose");
 
             string argType = exprType != null ? GetParameterLLVMType(exprType) : "i64";
             string result = NextTemp();
@@ -4418,17 +4418,17 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // Default: call Text.__create__(from: value)
+        // Default: call Text.$create(from: value)
         RoutineInfo? createMethod = type != null
-            ? _registry.LookupRoutineOverload("Text.__create__", [type])
-            : _registry.LookupRoutine("Text.__create__");
+            ? _registry.LookupRoutineOverload("Text.$create", [type])
+            : _registry.LookupRoutine("Text.$create");
         if (createMethod != null)
             GenerateFunctionDeclaration(createMethod);
 
         string llvmArgType = type != null ? GetLLVMType(type) : "i64";
         string mangledName = createMethod != null
             ? MangleFunctionName(createMethod)
-            : "Text.__create__";
+            : "Text.$create";
 
         string textResult = NextTemp();
         EmitLine(sb, $"  {textResult} = call ptr @{mangledName}({llvmArgType} {value})");
@@ -4465,8 +4465,8 @@ public partial class LLVMCodeGenerator
         // mangledListType is no longer needed — list type name used directly via Q()
 
         // Allocate the list via constructor or rf_alloc
-        // Try to find a __create__ or use a fallback allocation
-        string createName = $"{listTypeName}.__create__";
+        // Try to find a $create or use a fallback allocation
+        string createName = $"{listTypeName}.$create";
         RoutineInfo? createMethod = _registry.LookupRoutine(createName);
         string entityTypeName = listType is EntityTypeInfo eti ? GetEntityTypeName(eti) : $"%\"Entity.{listTypeName}\"";
 

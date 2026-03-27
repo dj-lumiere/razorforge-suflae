@@ -3,7 +3,7 @@ module Core
 
 protocol Identifiable
   @[readonly, innate]
-  routine Me.__same__(you: Me) -> Bool
+  routine Me.$same(you: Me) -> Bool
 
   @[readonly, innate]
-  routine Me.__notsame__(you: Me) -> Bool
+  routine Me.$notsame(you: Me) -> Bool

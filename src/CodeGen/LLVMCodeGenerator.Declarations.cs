@@ -281,8 +281,8 @@ public partial class LLVMCodeGenerator
         var paramTypes = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for __create__ routines (static factories)
-        bool isCreator = routine.Name.Contains("__create__");
+        // Skip 'me' for $create routines (static factories)
+        bool isCreator = routine.Name.Contains("$create");
         if (routine.OwnerType != null && !isCreator)
         {
             string meType = GetParameterLLVMType(routine.OwnerType);
@@ -429,8 +429,8 @@ public partial class LLVMCodeGenerator
         var paramList = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for __create__ routines (static factories)
-        bool isCreator = routineInfo.Name.Contains("__create__");
+        // Skip 'me' for $create routines (static factories)
+        bool isCreator = routineInfo.Name.Contains("$create");
         if (routineInfo.OwnerType != null && !isCreator)
         {
             string meType = GetParameterLLVMType(routineInfo.OwnerType);
@@ -506,8 +506,8 @@ public partial class LLVMCodeGenerator
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
 
-        // Register implicit 'me' parameter for methods (skip for __create__ static factories)
-        if (routine.OwnerType != null && !routine.Name.Contains("__create__"))
+        // Register implicit 'me' parameter for methods (skip for $create static factories)
+        if (routine.OwnerType != null && !routine.Name.Contains("$create"))
         {
             string meType = GetParameterLLVMType(routine.OwnerType);
             EmitLine(_functionDefinitions, $"  %me.addr = alloca {meType}");
@@ -648,8 +648,8 @@ public partial class LLVMCodeGenerator
         string typeName = routine.OwnerType.FullName;
         string baseName = $"{typeName}.{name}";
 
-        // Disambiguate __create__ overloads by first parameter type
-        if (name == "__create__" && routine.Parameters.Count > 0)
+        // Disambiguate $create overloads by first parameter type
+        if (name == "$create" && routine.Parameters.Count > 0)
         {
             string firstParamType = routine.Parameters[0].Type.Name;
             baseName = $"{baseName}#{firstParamType}";
@@ -887,7 +887,7 @@ public partial class LLVMCodeGenerator
                 continue;
 
             // Skip generic definitions, routines with error types,
-            // and routines on generic owner types (e.g., List[T].__diagnose__)
+            // and routines on generic owner types (e.g., List[T].$diagnose)
             if (routine.IsGenericDefinition || HasErrorTypes(routine)
                 || routine.OwnerType is { IsGenericDefinition: true })
                 continue;
@@ -907,34 +907,34 @@ public partial class LLVMCodeGenerator
 
             switch (routine.Name)
             {
-                case "__ne__":
+                case "$ne":
                     EmitSynthesizedNe(routine, funcName);
                     break;
-                case "__lt__":
+                case "$lt":
                     EmitSynthesizedCmpDerived(routine, funcName, -1, "eq");
                     break;
-                case "__le__":
+                case "$le":
                     EmitSynthesizedCmpDerived(routine, funcName, 1, "ne");
                     break;
-                case "__gt__":
+                case "$gt":
                     EmitSynthesizedCmpDerived(routine, funcName, 1, "eq");
                     break;
-                case "__ge__":
+                case "$ge":
                     EmitSynthesizedCmpDerived(routine, funcName, -1, "ne");
                     break;
-                case "__eq__":
+                case "$eq":
                     EmitSynthesizedEq(routine, funcName);
                     break;
-                case "__cmp__":
+                case "$cmp":
                     EmitSynthesizedCmp(routine, funcName);
                     break;
-                case "__represent__":
+                case "$represent":
                     EmitSynthesizedText(routine, funcName, includeSecret: false);
                     break;
-                case "__diagnose__":
+                case "$diagnose":
                     EmitSynthesizedText(routine, funcName, includeSecret: true);
                     break;
-                case "__hash__":
+                case "$hash":
                     EmitSynthesizedHash(routine, funcName);
                     break;
                 case "S64":
@@ -949,19 +949,19 @@ public partial class LLVMCodeGenerator
                 case "copy!":
                     EmitSynthesizedCopy(routine, funcName);
                     break;
-                case "__create__":
+                case "$create":
                     if (routine.OwnerType?.Name == "Data")
                         EmitSynthesizedDataCreate(routine, funcName);
                     else
                         EmitSynthesizedTextCreate(routine, funcName);
                     break;
-                case "__create__!":
+                case "$create!":
                     EmitSynthesizedChoiceCreateFromText(routine, funcName);
                     break;
-                case "__same__":
+                case "$same":
                     EmitSynthesizedSame(routine, funcName);
                     break;
-                case "__notsame__":
+                case "$notsame":
                     EmitSynthesizedNotSame(routine, funcName);
                     break;
                 case "all_on":
@@ -1050,7 +1050,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __ne__ routine: not __eq__(me, you).
+    /// Emits the body for a synthesized $ne routine: not $eq(me, you).
     /// </summary>
     private void EmitSynthesizedNe(RoutineInfo routine, string funcName)
     {
@@ -1066,8 +1066,8 @@ public partial class LLVMCodeGenerator
             ? routine.Parameters[0].Name
             : "you";
 
-        // Look up the __eq__ function name on the same owner type
-        string eqFuncName = Q($"{routine.OwnerType.Name}.__eq__");
+        // Look up the $eq function name on the same owner type
+        string eqFuncName = Q($"{routine.OwnerType.Name}.$eq");
 
         EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
         EmitLine(_functionDefinitions, "entry:");
@@ -1079,7 +1079,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __same__ routine: pointer identity comparison.
+    /// Emits the body for a synthesized $same routine: pointer identity comparison.
     /// </summary>
     private void EmitSynthesizedSame(RoutineInfo routine, string funcName)
     {
@@ -1099,7 +1099,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __notsame__ routine: not __same__(me, you).
+    /// Emits the body for a synthesized $notsame routine: not $same(me, you).
     /// </summary>
     private void EmitSynthesizedNotSame(RoutineInfo routine, string funcName)
     {
@@ -1119,8 +1119,8 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized comparison operator derived from __cmp__.
-    /// E.g., __lt__ = __cmp__(me, you) == -1 (ME_SMALL).
+    /// Emits the body for a synthesized comparison operator derived from $cmp.
+    /// E.g., $lt = $cmp(me, you) == -1 (ME_SMALL).
     /// </summary>
     private void EmitSynthesizedCmpDerived(RoutineInfo routine, string funcName, long tagValue, string cmpOp)
     {
@@ -1153,13 +1153,13 @@ public partial class LLVMCodeGenerator
             ? routine.Parameters[0].Name
             : "you";
 
-        // Ensure __cmp__ is declared/generated for the owner type
-        var cmpMethod = _registry.LookupMethod(routine.OwnerType, "__cmp__");
+        // Ensure $cmp is declared/generated for the owner type
+        var cmpMethod = _registry.LookupMethod(routine.OwnerType, "$cmp");
         string cmpFuncName;
         if (cmpMethod != null)
         {
             cmpFuncName = MangleFunctionName(cmpMethod);
-            // For synthesized __cmp__ (e.g., tuples), emit the define directly
+            // For synthesized $cmp (e.g., tuples), emit the define directly
             // since GenerateSynthesizedRoutines may have already iterated past it
             if (cmpMethod.IsSynthesized && !_generatedFunctions.Contains(cmpFuncName))
             {
@@ -1174,7 +1174,7 @@ public partial class LLVMCodeGenerator
         }
         else
         {
-            cmpFuncName = Q($"{routine.OwnerType.Name}.__cmp__");
+            cmpFuncName = Q($"{routine.OwnerType.Name}.$cmp");
         }
 
         EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {youType} %{youName}) {{");
@@ -1187,8 +1187,8 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __eq__ routine.
-    /// For records: AND chain of field-by-field __eq__ calls (or icmp for primitives).
+    /// Emits the body for a synthesized $eq routine.
+    /// For records: AND chain of field-by-field $eq calls (or icmp for primitives).
     /// For entities: field-by-field equality via GEP load + comparison.
     /// </summary>
     private void EmitSynthesizedEq(RoutineInfo routine, string funcName)
@@ -1354,7 +1354,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a field-level equality comparison.
-    /// For primitive/backend types: icmp eq. For complex types: call __eq__.
+    /// For primitive/backend types: icmp eq. For complex types: call $eq.
     /// </summary>
     private string EmitFieldEquality(TypeInfo fieldType, string llvmType, string meField, string youField)
     {
@@ -1380,15 +1380,15 @@ public partial class LLVMCodeGenerator
             return cmpResult;
         }
 
-        // Complex types: call their __eq__ method
-        string eqName = Q($"{fieldType.Name}.__eq__");
+        // Complex types: call their $eq method
+        string eqName = Q($"{fieldType.Name}.$eq");
         string result = NextTemp();
         EmitLine(_functionDefinitions, $"  {result} = call i1 @{eqName}({llvmType} {meField}, {llvmType} {youField})");
         return result;
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __cmp__ routine on tuples.
+    /// Emits the body for a synthesized $cmp routine on tuples.
     /// Lexicographic comparison: compare element-by-element, return first non-SAME result.
     /// </summary>
     private void EmitSynthesizedCmp(RoutineInfo routine, string funcName)
@@ -1424,11 +1424,11 @@ public partial class LLVMCodeGenerator
             EmitLine(_functionDefinitions, $"  {meElem} = extractvalue {tupleStructType} %me, {i}");
             EmitLine(_functionDefinitions, $"  {youElem} = extractvalue {tupleStructType} %you, {i}");
 
-            // Call element's __cmp__ (ensure it's declared)
-            var elemCmpMethod = _registry.LookupMethod(elemType, "__cmp__");
+            // Call element's $cmp (ensure it's declared)
+            var elemCmpMethod = _registry.LookupMethod(elemType, "$cmp");
             if (elemCmpMethod != null)
                 GenerateFunctionDeclaration(elemCmpMethod);
-            string cmpName = elemCmpMethod != null ? MangleFunctionName(elemCmpMethod) : Q($"{elemType.Name}.__cmp__");
+            string cmpName = elemCmpMethod != null ? MangleFunctionName(elemCmpMethod) : Q($"{elemType.Name}.$cmp");
             string cmpResult = NextTemp();
             EmitLine(_functionDefinitions, $"  {cmpResult} = call i64 @{cmpName}({elemLlvmType} {meElem}, {elemLlvmType} {youElem})");
 
@@ -1458,9 +1458,9 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __represent__() or __diagnose__() routine.
-    /// __represent__: "TypeName(field: val, ...)" — open+posted fields only.
-    /// __diagnose__: "TypeName(field: val, ...)" for records/SF entities,
+    /// Emits the body for a synthesized $represent() or $diagnose() routine.
+    /// $represent: "TypeName(field: val, ...)" — open+posted fields only.
+    /// $diagnose: "TypeName(field: val, ...)" for records/SF entities,
     ///               "TypeName@0xADDR(field: val, ...)" for RF entities (includes heap address).
     /// </summary>
     private void EmitSynthesizedText(RoutineInfo routine, string funcName, bool includeSecret)
@@ -1515,7 +1515,7 @@ public partial class LLVMCodeGenerator
                 string elemVal = NextTemp();
                 EmitLine(_functionDefinitions, $"  {elemVal} = extractvalue {tupleStructType} %me, {i}");
 
-                // Convert to Text (use __diagnose__ for diagnose mode)
+                // Convert to Text (use $diagnose for diagnose mode)
                 string elemText = EmitSynthesizedValueToText(elemTypeInfo, elemLlvmType, elemVal, useDiagnose: includeSecret);
 
                 // Concat
@@ -1545,7 +1545,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // Filter out secret fields for __represent__ (but include for __diagnose__)
+        // Filter out secret fields for $represent (but include for $diagnose)
         var visibleFields = new List<(MemberVariableInfo MV, int Index)>();
         for (int i = 0; i < fields.Count; i++)
         {
@@ -1553,7 +1553,7 @@ public partial class LLVMCodeGenerator
                 visibleFields.Add((fields[i], i));
         }
 
-        // Build "TypeName(field: val, ...)" or for RF entity __diagnose__:
+        // Build "TypeName(field: val, ...)" or for RF entity $diagnose:
         // "TypeName@0xADDR(field: val, ...)"
         bool emitAddress = includeSecret
                            && routine.OwnerType is EntityTypeInfo
@@ -1626,7 +1626,7 @@ public partial class LLVMCodeGenerator
                     break;
             }
 
-            // Convert field value to Text (use __diagnose__ for diagnose mode)
+            // Convert field value to Text (use $diagnose for diagnose mode)
             string fieldText = EmitSynthesizedValueToText(mv.Type, fieldType, fieldValue, useDiagnose: includeSecret);
 
             // Concat field text
@@ -1646,9 +1646,9 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits code to convert a value to Text for synthesized __represent__()/__diagnose__() routines.
-    /// When useDiagnose is false, calls Text.__create__(from: T) which delegates to T.__represent__().
-    /// When useDiagnose is true, calls T.__diagnose__() directly.
+    /// Emits code to convert a value to Text for synthesized $represent()/$diagnose() routines.
+    /// When useDiagnose is false, calls Text.$create(from: T) which delegates to T.$represent().
+    /// When useDiagnose is true, calls T.$diagnose() directly.
     /// </summary>
     private string EmitSynthesizedValueToText(TypeInfo fieldType, string llvmType, string value, bool useDiagnose = false)
     {
@@ -1658,8 +1658,8 @@ public partial class LLVMCodeGenerator
 
         if (useDiagnose)
         {
-            // Call T.__diagnose__() directly
-            RoutineInfo? diagRoutine = _registry.LookupRoutine($"{fieldType.FullName}.__diagnose__");
+            // Call T.$diagnose() directly
+            RoutineInfo? diagRoutine = _registry.LookupRoutine($"{fieldType.FullName}.$diagnose");
             if (diagRoutine != null)
             {
                 GenerateFunctionDeclaration(diagRoutine);
@@ -1668,17 +1668,17 @@ public partial class LLVMCodeGenerator
                 EmitLine(_functionDefinitions, $"  {diagResult} = call ptr @{diagName}({llvmType} {value})");
                 return diagResult;
             }
-            // Fall through to Text.__create__ if no __diagnose__ found
+            // Fall through to Text.$create if no $diagnose found
         }
 
-        // Look up the Text.__create__ overload for this specific parameter type
-        RoutineInfo? createRoutine = _registry.LookupRoutineOverload("Text.__create__", [fieldType])
-                                     ?? _registry.LookupRoutine("Text.__create__");
+        // Look up the Text.$create overload for this specific parameter type
+        RoutineInfo? createRoutine = _registry.LookupRoutineOverload("Text.$create", [fieldType])
+                                     ?? _registry.LookupRoutine("Text.$create");
         if (createRoutine != null)
             GenerateFunctionDeclaration(createRoutine);
         string createName = createRoutine != null
             ? MangleFunctionName(createRoutine)
-            : "Text.__create__";
+            : "Text.$create";
         string textResult = NextTemp();
         EmitLine(_functionDefinitions, $"  {textResult} = call ptr @{createName}({llvmType} {value})");
         return textResult;
@@ -1722,7 +1722,7 @@ public partial class LLVMCodeGenerator
             case RecordTypeInfo { IsSingleMemberVariableWrapper: true }:
             {
                 // Single-value: call hash on the value directly
-                string hashName = Q($"{routine.OwnerType.Name}.__hash__");
+                string hashName = Q($"{routine.OwnerType.Name}.$hash");
                 // For primitive wrappers, hash the underlying value
                 string result = NextTemp();
                 EmitLine(_functionDefinitions, $"  {result} = mul i64 %me, 2654435761");
@@ -1747,7 +1747,7 @@ public partial class LLVMCodeGenerator
                     EmitLine(_functionDefinitions, $"  {field} = extractvalue {typeName} %me, {i}");
 
                     // Call field.hash()
-                    string fieldHashName = Q($"{mv.Type.Name}.__hash__");
+                    string fieldHashName = Q($"{mv.Type.Name}.$hash");
                     string fieldHash = NextTemp();
                     EmitLine(_functionDefinitions, $"  {fieldHash} = call i64 @{fieldHashName}({fieldType} {field})");
 
@@ -1782,7 +1782,7 @@ public partial class LLVMCodeGenerator
                     string elem = NextTemp();
                     EmitLine(_functionDefinitions, $"  {elem} = extractvalue {tupleStructType} %me, {i}");
 
-                    string elemHashName = Q($"{elemType.Name}.__hash__");
+                    string elemHashName = Q($"{elemType.Name}.$hash");
                     string elemHash = NextTemp();
                     EmitLine(_functionDefinitions, $"  {elemHash} = call i64 @{elemHashName}({elemLlvmType} {elem})");
 
@@ -1885,7 +1885,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized Text.__create__(from: T) routine.
+    /// Emits the body for a synthesized Text.$create(from: T) routine.
     /// Calls T.Text() on the argument.
     /// </summary>
     private void EmitSynthesizedTextCreate(RoutineInfo routine, string funcName)
@@ -1896,14 +1896,14 @@ public partial class LLVMCodeGenerator
         string paramLlvmType = GetParameterLLVMType(paramType);
         string paramName = routine.Parameters[0].Name;
 
-        // Text.__create__(from: T) → T.__represent__()
-        // Look up and declare the __represent__() method so it gets generated
-        RoutineInfo? textMethod = _registry.LookupMethod(paramType, "__represent__");
+        // Text.$create(from: T) → T.$represent()
+        // Look up and declare the $represent() method so it gets generated
+        RoutineInfo? textMethod = _registry.LookupMethod(paramType, "$represent");
         if (textMethod != null)
             GenerateFunctionDeclaration(textMethod);
         string textMethodName = textMethod != null
             ? MangleFunctionName(textMethod)
-            : Q($"{paramType.Name}.__represent__");
+            : Q($"{paramType.Name}.$represent");
 
         EmitLine(_functionDefinitions, $"define ptr @{funcName}({paramLlvmType} %{paramName}) {{");
         EmitLine(_functionDefinitions, "entry:");
@@ -1915,7 +1915,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized Data.__create__(from: T) routine.
+    /// Emits the body for a synthesized Data.$create(from: T) routine.
     /// Boxes a value into a Data entity (type_id, size, data_ptr).
     /// </summary>
     private void EmitSynthesizedDataCreate(RoutineInfo routine, string funcName)
@@ -1965,7 +1965,7 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized __create__!(from: Text) on choice types.
+    /// Emits the body for a synthesized $create!(from: Text) on choice types.
     /// For now: traps (full text→tag requires runtime string comparison).
     /// </summary>
     private void EmitSynthesizedChoiceCreateFromText(RoutineInfo routine, string funcName)
@@ -2101,10 +2101,10 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates forwarding stubs for protocol method calls.
-    /// When monomorphized code calls a method on a protocol-typed field (e.g., me.source.__iter__()
-    /// where source: Iterable[S64]), the emitted call targets "Core.Iterable[S64].__iter__".
+    /// When monomorphized code calls a method on a protocol-typed field (e.g., me.source.$iter()
+    /// where source: Iterable[S64]), the emitted call targets "Core.Iterable[S64].$iter".
     /// This method generates a 'define' body that forwards to the concrete implementer
-    /// (e.g., Core.List[S64].__iter__).
+    /// (e.g., Core.List[S64].$iter).
     /// </summary>
     private void GenerateProtocolDispatchStubs()
     {
@@ -2781,8 +2781,8 @@ public partial class LLVMCodeGenerator
         TypeInfo dictTextData = _registry.GetOrCreateResolution(
             genericDef: dictDef, typeArguments: [textType, dataType]);
 
-        // Build names for Dict[Text, Data].__create__() and set(key, value)
-        string dictCreateName = Q($"{dictTextData.Name}.__create__");
+        // Build names for Dict[Text, Data].$create() and set(key, value)
+        string dictCreateName = Q($"{dictTextData.Name}.$create");
         string dictSetName = Q($"{dictTextData.Name}.set");
 
         // Data entity struct type for inline boxing
@@ -2793,7 +2793,7 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
         EmitLine(sb, "entry:");
 
-        // Allocate empty dict: %dict = call ptr @Dict_Text_Data_.__create__()
+        // Allocate empty dict: %dict = call ptr @Dict_Text_Data_.$create()
         string dictPtr = NextTemp();
         EmitLine(sb, $"  {dictPtr} = call ptr @{dictCreateName}()");
 
@@ -2841,7 +2841,7 @@ public partial class LLVMCodeGenerator
             string fieldVal = NextTemp();
             EmitLine(sb, $"  {fieldVal} = load {fieldLlvmType}, ptr {fieldPtr}");
 
-            // Inline Data boxing (avoids overload collision on Data___create__)
+            // Inline Data boxing (avoids overload collision on Data_$create)
             ulong fieldTypeId = ComputeTypeId(field.Type.FullName);
             long fieldDataSize = ComputeDataSize(field.Type);
 

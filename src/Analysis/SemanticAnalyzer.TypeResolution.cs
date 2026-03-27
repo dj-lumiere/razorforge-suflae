@@ -94,8 +94,8 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
-        // Handle tuple types from parser: __tuple__(T, U, ...)
-        if (typeExpr is { Name: "__tuple__", GenericArguments.Count: > 0 })
+        // Handle tuple types from parser: Tuple(T, U, ...)
+        if (typeExpr is { Name: "Tuple", GenericArguments.Count: > 0 })
         {
             var elementTypes = new List<TypeInfo>();
             foreach (TypeExpression argExpr in typeExpr.GenericArguments)

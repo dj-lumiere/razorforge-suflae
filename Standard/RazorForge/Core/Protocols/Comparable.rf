@@ -3,16 +3,16 @@ module Core
 
 protocol Comparable obeys Equatable
   @readonly
-  routine Me.__cmp__(you: Me) -> ComparisonSign
+  routine Me.$cmp(you: Me) -> ComparisonSign
 
   @[readonly, generated]
-  routine Me.__lt__(you: Me) -> Bool
+  routine Me.$lt(you: Me) -> Bool
 
   @[readonly, generated]
-  routine Me.__le__(you: Me) -> Bool
+  routine Me.$le(you: Me) -> Bool
 
   @[readonly, generated]
-  routine Me.__gt__(you: Me) -> Bool
+  routine Me.$gt(you: Me) -> Bool
 
   @[readonly, generated]
-  routine Me.__ge__(you: Me) -> Bool
+  routine Me.$ge(you: Me) -> Bool

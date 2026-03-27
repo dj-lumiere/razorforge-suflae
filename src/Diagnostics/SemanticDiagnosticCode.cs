@@ -387,8 +387,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine name uses reserved prefix (try_, check_, lookup_).</summary>
     ReservedRoutinePrefix = 409,
 
-    /// <summary>Routine name uses reserved dunder pattern (__name__) that is not a known operator method.</summary>
-    UnknownDunderMethod = 410,
+    /// <summary>Routine name uses reserved dunder pattern ($name) that is not a known operator method.</summary>
+    UnknownSpecialMemberRoutine = 410,
 
     /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
     OperatorWithoutProtocol = 411,
@@ -595,7 +595,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
     LambdaCaptureWithoutGiven = 610,
 
-    /// <summary>Using target must have __enter__/__exit__ for resource management.</summary>
+    /// <summary>Using target must have $enter/$exit for resource management.</summary>
     UsingTargetMissingEnterExit = 612,
 
     /// <summary>Using-bound token cannot escape the using block scope.</summary>
@@ -715,7 +715,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Variant member cannot be a nested variant, Result[T], Lookup[T], token, or duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
-    /// <summary>Index operators (__getitem__/__setitem__) are only valid on entities.</summary>
+    /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
     /// <summary>Cannot use compound assignment on a read-only token (Viewed or Inspected).</summary>

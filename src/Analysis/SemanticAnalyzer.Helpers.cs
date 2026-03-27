@@ -362,7 +362,7 @@ public sealed partial class SemanticAnalyzer
             return false;
         }
 
-        // Use LookupMethod which handles generic resolutions (e.g., Snatched[Point].__eq__)
+        // Use LookupMethod which handles generic resolutions (e.g., Snatched[Point].$eq)
         return _registry.LookupMethod(type: type, methodName: methodName) != null;
     }
 
@@ -395,29 +395,29 @@ public sealed partial class SemanticAnalyzer
     private static readonly HashSet<string> OperatorDunders =
     [
         // Arithmetic
-        "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__",
+        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
         // Wrapping arithmetic
-        "__add_wrap__", "__sub_wrap__", "__mul_wrap__", "__pow_wrap__",
+        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
         // Clamping arithmetic
-        "__add_clamp__", "__sub_clamp__", "__mul_clamp__", "__truediv_clamp__", "__pow_clamp__",
+        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
         // Comparison
-        "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
+        "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
         // Bitwise
-        "__and__", "__or__", "__xor__",
-        "__ashl__", "__ashr__", "__lshl__", "__lshr__",
+        "$and", "$or", "$xor",
+        "$ashl", "$ashr", "$lshl", "$lshr",
         // Unary
-        "__neg__", "__not__",
+        "$neg", "$not",
         // Membership
-        "__contains__", "__notcontains__",
+        "$contains", "$notcontains",
         // Indexing
-        "__getitem__", "__setitem__",
+        "$getitem", "$setitem",
         // Iteration
-        "__iter__", "__next__",
+        "$iter", "$next",
         // Context management
-        "__enter__", "__exit__"
+        "$enter", "$exit"
     ];
 
-    /// <summary>Returns true if the given method name is an operator dunder (e.g., <c>__add__</c>, <c>__eq__</c>).</summary>
+    /// <summary>Returns true if the given method name is an operator dunder (e.g., <c>$add</c>, <c>$eq</c>).</summary>
     private static bool IsOperatorDunder(string name)
     {
         return OperatorDunders.Contains(value: name);
@@ -568,8 +568,8 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
-    /// The type must implement the <c>Iterable</c> protocol, whose <c>__iter__</c> returns a <c>Iterator[T]</c>.
-    /// The element type is taken from the return type of the <c>__iter__</c> method or the type's first generic argument.
+    /// The type must implement the <c>Iterable</c> protocol, whose <c>$iter</c> returns a <c>Iterator[T]</c>.
+    /// The element type is taken from the return type of the <c>$iter</c> method or the type's first generic argument.
     /// Reports an error and returns <see cref="ErrorTypeInfo"/> if the type is not iterable or the element type cannot be determined.
     /// </summary>
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
@@ -577,10 +577,10 @@ public sealed partial class SemanticAnalyzer
         // Type must follow the Iterable protocol
         bool obeysIterable = ImplementsProtocol(type: iterableType, protocolName: "Iterable");
 
-        // For generic resolution types, also check if the generic definition has __iter__
+        // For generic resolution types, also check if the generic definition has $iter
         if (!obeysIterable && iterableType.IsGenericResolution)
         {
-            RoutineInfo? seqMethod = _registry.LookupMethod(type: iterableType, methodName: "__iter__");
+            RoutineInfo? seqMethod = _registry.LookupMethod(type: iterableType, methodName: "$iter");
             if (seqMethod != null)
                 obeysIterable = true;
         }
@@ -637,7 +637,7 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Strategy 2: Look for __iter__ method to get element type from Iterator[T] return type
+        // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
         RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__iter__");
 
         // Generic fallback: Range[S64].__iter__ → Range.__iter__ via LookupMethod

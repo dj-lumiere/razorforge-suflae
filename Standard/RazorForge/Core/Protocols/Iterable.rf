@@ -3,4 +3,4 @@ module Core
 
 protocol Iterable[T]
   @readonly
-  routine Me.__iter__() -> Iterator[T]
+  routine Me.$iter() -> Iterator[T]

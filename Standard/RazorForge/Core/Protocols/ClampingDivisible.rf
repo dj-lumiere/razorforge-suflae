@@ -3,4 +3,4 @@ module Core
 
 protocol ClampingDivisible
   @readonly
-  routine Me.__truediv_clamp__(you: Me) -> Me
+  routine Me.$truediv_clamp(you: Me) -> Me

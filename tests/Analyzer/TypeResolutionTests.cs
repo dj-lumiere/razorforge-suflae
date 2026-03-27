@@ -670,7 +670,7 @@ public class TypeResolutionTests
                           NOT_FOUND
 
                         @readonly
-                        routine HttpStatus.__add__(you: HttpStatus) -> HttpStatus
+                        routine HttpStatus.$add(you: HttpStatus) -> HttpStatus
                           return OK
                         """;
 

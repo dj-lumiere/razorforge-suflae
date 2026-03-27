@@ -1,6 +1,6 @@
 # RazorForge ComparisonSign - Result of three-way comparison
 #
-# Used as the return type for __cmp__ operator.
+# Used as the return type for $cmp operator.
 # ME_SMALL means `me < you`, SAME means `me == you`, ME_LARGE means `me > you`.
 
 module Core

@@ -343,7 +343,7 @@ public sealed partial class SemanticAnalyzer
         if (_currentType != null)
         {
             // Inside a type body
-            kind = routine.Name == "__create__"
+            kind = routine.Name == "$create"
                 ? RoutineKind.Creator
                 : RoutineKind.MemberRoutine;
         }
@@ -414,12 +414,12 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // Validate dunder patterns (__name__) are known operator methods
+        // Validate dunder patterns ($name) are known operator methods
         if (IsUnknownDunderMethod(name: baseName))
         {
-            ReportError(SemanticDiagnosticCode.UnknownDunderMethod,
+            ReportError(SemanticDiagnosticCode.UnknownSpecialMemberRoutine,
                 $"Routine name '{baseName}' uses reserved dunder pattern. " +
-                "Names matching '__name__' are reserved for operator methods.",
+                "Names matching '$name' are reserved for operator methods.",
                 routine.Location);
         }
 
@@ -440,8 +440,8 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // #66: Index operators (__getitem__/__setitem__) are only valid on entities
-        if (baseName is "__getitem__" or "__setitem__" && ownerType is not null &&
+        // #66: Index operators ($getitem/$setitem) are only valid on entities
+        if (baseName is "$getitem" or "$setitem" && ownerType is not null &&
             ownerType is not EntityTypeInfo)
         {
             ReportError(SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
@@ -551,47 +551,47 @@ public sealed partial class SemanticAnalyzer
     private static readonly HashSet<string> KnownDunderMethods =
     [
         // Creator
-        "__create__",
+        "$create",
 
         // Arithmetic operators
-        "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__",
+        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
 
         // Wrapping arithmetic
-        "__add_wrap__", "__sub_wrap__", "__mul_wrap__", "__pow_wrap__",
+        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
 
         // Clamping arithmetic
-        "__add_clamp__", "__sub_clamp__", "__mul_clamp__", "__truediv_clamp__", "__pow_clamp__",
+        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
 
         // Comparison operators
-        "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__cmp__",
+        "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
 
         // Bitwise operators
-        "__and__", "__or__", "__xor__",
-        "__ashl__", "__ashr__", "__lshl__", "__lshr__",
+        "$and", "$or", "$xor",
+        "$ashl", "$ashr", "$lshl", "$lshr",
 
         // Unary operators
-        "__neg__", "__not__",
+        "$neg", "$not",
 
         // Membership operators
-        "__contains__", "__notcontains__",
+        "$contains", "$notcontains",
 
         // Iteration
-        "__iter__", "__next__",
+        "$iter", "$next",
 
         // Indexing
-        "__getitem__", "__setitem__",
+        "$getitem", "$setitem",
 
         // Context management
-        "__enter__", "__exit__",
+        "$enter", "$exit",
 
         // Destructor/cleanup
-        "__destroy__",
+        "$destroy",
 
         // In-place compound assignment operators
-        "__iadd__", "__isub__", "__imul__", "__itruediv__", "__ifloordiv__", "__imod__",
-        "__ipow__",
-        "__iand__", "__ior__", "__ixor__",
-        "__iashl__", "__iashr__", "__ilshl__", "__ilshr__"
+        "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod",
+        "$ipow",
+        "$iand", "$ior", "$ixor",
+        "$iashl", "$iashr", "$ilshl", "$ilshr"
     ];
 
     /// <summary>
@@ -599,7 +599,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static bool IsUnknownDunderMethod(string name)
     {
-        // Check if it matches dunder pattern: __name__
+        // Check if it matches dunder pattern: $name
         if (!name.StartsWith(value: "__", comparisonType: StringComparison.Ordinal) ||
             !name.EndsWith(value: "__", comparisonType: StringComparison.Ordinal) ||
             name.Length <= 4) // Must have something between the underscores
@@ -618,75 +618,75 @@ public sealed partial class SemanticAnalyzer
     private static readonly Dictionary<string, string> DunderToProtocol = new()
     {
         // Arithmetic operators
-        ["__add__"] = "Addable",
-        ["__sub__"] = "Subtractable",
-        ["__mul__"] = "Multiplicable",
-        ["__truediv__"] = "Divisible",
-        ["__floordiv__"] = "FloorDivisible",
-        ["__mod__"] = "FloorDivisible",
-        ["__pow__"] = "Exponentiable",
+        ["$add"] = "Addable",
+        ["$sub"] = "Subtractable",
+        ["$mul"] = "Multiplicable",
+        ["$truediv"] = "Divisible",
+        ["$floordiv"] = "FloorDivisible",
+        ["$mod"] = "FloorDivisible",
+        ["$pow"] = "Exponentiable",
 
         // Wrapping arithmetic
-        ["__add_wrap__"] = "WrappingAddable",
-        ["__sub_wrap__"] = "WrappingSubtractable",
-        ["__mul_wrap__"] = "WrappingMultiplicable",
-        ["__pow_wrap__"] = "WrappingExponentiable",
+        ["$add_wrap"] = "WrappingAddable",
+        ["$sub_wrap"] = "WrappingSubtractable",
+        ["$mul_wrap"] = "WrappingMultiplicable",
+        ["$pow_wrap"] = "WrappingExponentiable",
 
         // Clamping arithmetic
-        ["__add_clamp__"] = "ClampingAddable",
-        ["__sub_clamp__"] = "ClampingSubtractable",
-        ["__mul_clamp__"] = "ClampingMultiplicable",
-        ["__truediv_clamp__"] = "ClampingDivisible",
-        ["__pow_clamp__"] = "ClampingExponentiable",
+        ["$add_clamp"] = "ClampingAddable",
+        ["$sub_clamp"] = "ClampingSubtractable",
+        ["$mul_clamp"] = "ClampingMultiplicable",
+        ["$truediv_clamp"] = "ClampingDivisible",
+        ["$pow_clamp"] = "ClampingExponentiable",
 
         // Comparison operators
-        ["__eq__"] = "Equatable",
-        ["__ne__"] = "Equatable",
-        ["__cmp__"] = "Comparable",
-        ["__lt__"] = "Comparable",
-        ["__le__"] = "Comparable",
-        ["__gt__"] = "Comparable",
-        ["__ge__"] = "Comparable",
+        ["$eq"] = "Equatable",
+        ["$ne"] = "Equatable",
+        ["$cmp"] = "Comparable",
+        ["$lt"] = "Comparable",
+        ["$le"] = "Comparable",
+        ["$gt"] = "Comparable",
+        ["$ge"] = "Comparable",
 
         // Bitwise operators
-        ["__and__"] = "Bitwiseable",
-        ["__or__"] = "Bitwiseable",
-        ["__xor__"] = "Bitwiseable",
+        ["$and"] = "Bitwiseable",
+        ["$or"] = "Bitwiseable",
+        ["$xor"] = "Bitwiseable",
 
         // Shift operators
-        ["__ashl__"] = "Shiftable",
-        ["__ashr__"] = "Shiftable",
-        ["__lshl__"] = "Shiftable",
-        ["__lshr__"] = "Shiftable",
+        ["$ashl"] = "Shiftable",
+        ["$ashr"] = "Shiftable",
+        ["$lshl"] = "Shiftable",
+        ["$lshr"] = "Shiftable",
         // Unary operators
-        ["__neg__"] = "Negatable",
-        ["__not__"] = "Invertible",
+        ["$neg"] = "Negatable",
+        ["$not"] = "Invertible",
 
         // Container operators
-        ["__contains__"] = "Container",
-        ["__notcontains__"] = "Container",
-        ["__getitem__"] = "Indexable",
-        ["__setitem__"] = "Indexable",
+        ["$contains"] = "Container",
+        ["$notcontains"] = "Container",
+        ["$getitem"] = "Indexable",
+        ["$setitem"] = "Indexable",
 
         // Sequence operators
-        ["__iter__"] = "Iterable",
-        ["__next__"] = "Iterator",
+        ["$iter"] = "Iterable",
+        ["$next"] = "Iterator",
 
         // In-place compound assignment operators
-        ["__iadd__"] = "InPlaceAddable",
-        ["__isub__"] = "InPlaceSubtractable",
-        ["__imul__"] = "InPlaceMultiplicable",
-        ["__itruediv__"] = "InPlaceDivisible",
-        ["__ifloordiv__"] = "InPlaceFloorDivisible",
-        ["__imod__"] = "InPlaceFloorDivisible",
-        ["__ipow__"] = "InPlaceExponentiable",
-        ["__iand__"] = "InPlaceBitwiseable",
-        ["__ior__"] = "InPlaceBitwiseable",
-        ["__ixor__"] = "InPlaceBitwiseable",
-        ["__iashl__"] = "InPlaceShiftable",
-        ["__iashr__"] = "InPlaceShiftable",
-        ["__ilshl__"] = "InPlaceShiftable",
-        ["__ilshr__"] = "InPlaceShiftable"
+        ["$iadd"] = "InPlaceAddable",
+        ["$isub"] = "InPlaceSubtractable",
+        ["$imul"] = "InPlaceMultiplicable",
+        ["$itruediv"] = "InPlaceDivisible",
+        ["$ifloordiv"] = "InPlaceFloorDivisible",
+        ["$imod"] = "InPlaceFloorDivisible",
+        ["$ipow"] = "InPlaceExponentiable",
+        ["$iand"] = "InPlaceBitwiseable",
+        ["$ior"] = "InPlaceBitwiseable",
+        ["$ixor"] = "InPlaceBitwiseable",
+        ["$iashl"] = "InPlaceShiftable",
+        ["$iashr"] = "InPlaceShiftable",
+        ["$ilshl"] = "InPlaceShiftable",
+        ["$ilshr"] = "InPlaceShiftable"
     };
 
     /// <summary>
@@ -1845,7 +1845,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Validates that a type obeys the required protocol when defining operator methods.
-    /// For example, defining __add__ requires the type to obey Addable.
+    /// For example, defining $add requires the type to obey Addable.
     /// </summary>
     private void ValidateOperatorProtocolConformance(RoutineInfo routineInfo,
         SourceLocation? location)
@@ -2082,8 +2082,8 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Auto-registers builder-generated member routine signatures for all user types.
-    /// These are default routines that every type of a given category gets (__hash__(), __eq__(), etc.).
-    /// __represent__ and __diagnose__ are auto-registered (overridable).
+    /// These are default routines that every type of a given category gets ($hash(), $eq(), etc.).
+    /// $represent and $diagnose are auto-registered (overridable).
     /// Only registers if the user hasn't already defined the routine.
     /// </summary>
     private void AutoRegisterBuiltinRoutines()
@@ -2138,15 +2138,15 @@ public sealed partial class SemanticAnalyzer
             List<RoutineInfo> existingMethods = _registry.GetMethodsForType(type: type)
                                                          .ToList();
 
-            // All types: __represent__(), __diagnose__() — auto-generated, overridable
+            // All types: $represent(), $diagnose() — auto-generated, overridable
             if (textType != null)
             {
                 MaybeRegisterBuiltin(owner: type,
-                    name: "__represent__",
+                    name: "$represent",
                     returnType: textType,
                     existingMethods: existingMethods);
                 MaybeRegisterBuiltin(owner: type,
-                    name: "__diagnose__",
+                    name: "$diagnose",
                     returnType: textType,
                     existingMethods: existingMethods);
             }
@@ -2237,12 +2237,12 @@ public sealed partial class SemanticAnalyzer
                 case TypeCategory.Record:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
-                            name: "__hash__",
+                            name: "$hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (boolType != null)
                         MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__eq__",
+                            name: "$eq",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
@@ -2272,19 +2272,19 @@ public sealed partial class SemanticAnalyzer
                     if (boolType != null)
                     {
                         MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__eq__",
+                            name: "$eq",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
                             existingMethods: existingMethods);
                         MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__same__",
+                            name: "$same",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
                             existingMethods: existingMethods);
                         MaybeRegisterBuiltinWithParam(owner: type,
-                            name: "__notsame__",
+                            name: "$notsame",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
@@ -2300,7 +2300,7 @@ public sealed partial class SemanticAnalyzer
                 case TypeCategory.Choice:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
-                            name: "__hash__",
+                            name: "$hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (s64Type != null)
@@ -2310,7 +2310,7 @@ public sealed partial class SemanticAnalyzer
                             existingMethods: existingMethods);
                     if (textType != null)
                         MaybeRegisterBuiltinFailable(owner: type,
-                            name: "__create__!",
+                            name: "$create!",
                             returnType: type,
                             existingMethods: existingMethods,
                             param: ("from", textType),
@@ -2331,7 +2331,7 @@ public sealed partial class SemanticAnalyzer
                 case TypeCategory.Flags:
                     if (u64Type != null)
                         MaybeRegisterBuiltin(owner: type,
-                            name: "__hash__",
+                            name: "$hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (u64Type != null)
@@ -2432,13 +2432,13 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Auto-register Text.__create__(from: T) for all concrete user types
+        // Auto-register Text.$create(from: T) for all concrete user types
         // This makes every type structurally satisfy Representable[T]
         if (textType != null)
         {
             List<RoutineInfo> textCreateMethods = _registry.GetMethodsForType(type: textType)
                                                            .Where(predicate: m =>
-                                                                m.Name == "__create__")
+                                                                m.Name == "$create")
                                                            .ToList();
 
             foreach (TypeSymbol type in _registry.GetAllTypes())
@@ -2452,7 +2452,7 @@ public sealed partial class SemanticAnalyzer
                     m.Parameters.Count == 1 && m.Parameters[0].Type.FullName == type.FullName);
                 if (alreadyDefined) continue;
 
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: "__create__")
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = textType,
@@ -2467,13 +2467,13 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Auto-register Data.__create__(from: T) for all concrete storable types
+        // Auto-register Data.$create(from: T) for all concrete storable types
         // This enables type-erased boxing: Data(42), Data(my_entity), etc.
         if (dataType != null)
         {
             List<RoutineInfo> dataCreateMethods = _registry.GetMethodsForType(type: dataType)
                                                            .Where(predicate: m =>
-                                                                m.Name == "__create__")
+                                                                m.Name == "$create")
                                                            .ToList();
 
             foreach (TypeSymbol type in _registry.GetAllTypes())
@@ -2496,7 +2496,7 @@ public sealed partial class SemanticAnalyzer
                     m.Parameters.Count == 1 && m.Parameters[0].Type.FullName == type.FullName);
                 if (alreadyDefined) continue;
 
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: "__create__")
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = dataType,
@@ -2559,7 +2559,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Registers a failable builtin routine if not already defined (for copy!, __create__!).
+    /// Registers a failable builtin routine if not already defined (for copy!, $create!).
     /// </summary>
     private void MaybeRegisterBuiltinFailable(TypeSymbol owner, string name, TypeSymbol returnType,
         List<RoutineInfo> existingMethods, (string name, TypeSymbol type)? param = null,
@@ -2611,7 +2611,7 @@ public sealed partial class SemanticAnalyzer
                 if (fieldRecord.ImplementedProtocols.Any(p => p.Name == "Hashable"))
                     continue;
                 // Check structurally: does it have hash()?
-                if (_registry.LookupMethod(type: fieldType, methodName: "__hash__") != null)
+                if (_registry.LookupMethod(type: fieldType, methodName: "$hash") != null)
                     continue;
                 return false;
             }
@@ -2628,7 +2628,7 @@ public sealed partial class SemanticAnalyzer
     #region Phase 2.6: Derived Operator Generation
 
     /// <summary>
-    /// Generates derived comparison operators from __eq__ and __cmp__ routines.
+    /// Generates derived comparison operators from $eq and $cmp routines.
     /// </summary>
     private void GenerateDerivedOperators()
     {
@@ -2647,15 +2647,15 @@ public sealed partial class SemanticAnalyzer
         IEnumerable<RoutineInfo> methods = _registry.GetMethodsForType(type: type);
         List<RoutineInfo> methodList = methods.ToList();
 
-        // Look for __eq__ method
-        RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "__eq__");
+        // Look for $eq method
+        RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "$eq");
         if (eqMethod != null)
         {
             GenerateNeFromEq(type: type, eqMethod: eqMethod, existingMethods: methodList);
         }
 
-        // Look for __cmp__ method
-        RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "__cmp__");
+        // Look for $cmp method
+        RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "$cmp");
         if (cmpMethod != null)
         {
             GenerateComparisonOperatorsFromCmp(type: type,
@@ -2665,14 +2665,14 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Generates __ne__ from __eq__.
-    /// __ne__(you) = not __eq__(you)
+    /// Generates $ne from $eq.
+    /// $ne(you) = not $eq(you)
     /// </summary>
     private void GenerateNeFromEq(TypeSymbol type, RoutineInfo eqMethod,
         List<RoutineInfo> existingMethods)
     {
         RoutineInfo? existingNe =
-            existingMethods.FirstOrDefault(predicate: m => m.Name == "__ne__");
+            existingMethods.FirstOrDefault(predicate: m => m.Name == "$ne");
 
         if (existingNe != null)
         {
@@ -2681,14 +2681,14 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Generate __ne__
+        // Generate $ne
         TypeSymbol? boolType = _registry.LookupType(name: "Bool");
         if (boolType == null)
         {
             return; // Bool type not available
         }
 
-        var neMethod = new RoutineInfo(name: "__ne__")
+        var neMethod = new RoutineInfo(name: "$ne")
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = type,
@@ -2708,11 +2708,11 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Generates __lt__, __le__, __gt__, __ge__ from __cmp__.
-    /// __lt__(you) = __cmp__(you) is ME_SMALL
-    /// __le__(you) = __cmp__(you) isnot ME_LARGE
-    /// __gt__(you) = __cmp__(you) is ME_LARGE
-    /// __ge__(you) = __cmp__(you) isnot ME_SMALL
+    /// Generates $lt, $le, $gt, $ge from $cmp.
+    /// $lt(you) = $cmp(you) is ME_SMALL
+    /// $le(you) = $cmp(you) isnot ME_LARGE
+    /// $gt(you) = $cmp(you) is ME_LARGE
+    /// $ge(you) = $cmp(you) isnot ME_SMALL
     /// </summary>
     private void GenerateComparisonOperatorsFromCmp(TypeSymbol type, RoutineInfo cmpMethod,
         List<RoutineInfo> existingMethods)
@@ -2726,10 +2726,10 @@ public sealed partial class SemanticAnalyzer
         // Define the derived operators
         var derivedOps = new[]
         {
-            ("__lt__", "ME_SMALL", true), // is ME_SMALL
-            ("__le__", "ME_LARGE", false), // isnot ME_LARGE
-            ("__gt__", "ME_LARGE", true), // is ME_LARGE
-            ("__ge__", "ME_SMALL", false) // isnot ME_SMALL
+            ("$lt", "ME_SMALL", true), // is ME_SMALL
+            ("$le", "ME_LARGE", false), // isnot ME_LARGE
+            ("$gt", "ME_LARGE", true), // is ME_LARGE
+            ("$ge", "ME_SMALL", false) // isnot ME_SMALL
         };
 
         foreach ((string opName, string _, bool _) in derivedOps)

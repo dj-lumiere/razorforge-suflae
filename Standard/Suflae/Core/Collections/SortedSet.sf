@@ -26,8 +26,8 @@ routine SortedSet[T].remove(item: T) -> Bool
   return me.value.remove(item)
 
 # Indexing
-routine SortedSet[T].__getitem__!(index: Integer) -> T
-  return me.value.__getitem__!(index.value)
+routine SortedSet[T].$getitem!(index: Integer) -> T
+  return me.value.$getitem!(index.value)
 
 # Search
 routine SortedSet[T].contains(item: T) -> Bool
@@ -55,5 +55,5 @@ routine SortedSet[T].to_list() -> List[T]
   return List[T](value: me.value.to_list())
 
 # Comparison
-routine SortedSet[T].__eq__(other: SortedSet[T]) -> Bool
-  return me.value.__eq__(other.value)
+routine SortedSet[T].$eq(other: SortedSet[T]) -> Bool
+  return me.value.$eq(other.value)

@@ -5,7 +5,7 @@ module Core
 
 protocol ChoiceType obeys Diagnosable, Hashable
   @[readonly, innate, generated]
-  routine S64.__create__(from: Me) -> S64
+  routine S64.$create(from: Me) -> S64
 
   @[readonly, innate, generated]
   routine Me.all_cases() -> List[Me]

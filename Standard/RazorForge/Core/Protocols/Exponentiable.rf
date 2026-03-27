@@ -3,4 +3,4 @@ module Core
 
 protocol Exponentiable
   @readonly
-  routine Me.__pow__(you: Me) -> Me
+  routine Me.$pow(you: Me) -> Me

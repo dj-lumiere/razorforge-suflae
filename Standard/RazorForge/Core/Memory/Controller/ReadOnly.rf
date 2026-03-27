@@ -8,7 +8,7 @@ module Core
 record ReadOnly obeys LockPolicy
   pass # Empty - no lock state needed for unmodifiable data
 
-routine ReadOnly.__create__() -> ReadOnly
+routine ReadOnly.$create() -> ReadOnly
   return ReadOnly()
 
 # No lock/unlock methods needed - data is unmodifiable

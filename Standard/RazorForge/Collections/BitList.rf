@@ -22,7 +22,7 @@ entity BitList
 # Creators
 # ============================================================================
 
-routine BitList.__create__() -> BitList
+routine BitList.$create() -> BitList
   # Create empty bit list with default capacity
   return BitList(
     data: snatched_none[Byte](),
@@ -30,7 +30,7 @@ routine BitList.__create__() -> BitList
     capacity: 0u64
   )
 
-routine BitList.__create__(capacity: U64) -> BitList
+routine BitList.$create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var byte_size = (capacity + 7u64) // 8u64  # Round up to nearest byte
   return BitList(
@@ -134,7 +134,7 @@ routine BitList.clear()
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine BitList.__getitem__![I](index: I) -> Bool
+routine BitList.$getitem![I](index: I) -> Bool
 needs I obeys Integral
   # Get bit at index - O(1)
   var idx = index.U64()
@@ -142,7 +142,7 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_bit_internal(U64(idx))
 
-routine BitList.__setitem__![I](index: I, value: Bool)
+routine BitList.$setitem![I](index: I, value: Bool)
 needs I obeys Integral
   # Set bit at index - O(1)
   var idx = index.U64()
@@ -155,13 +155,13 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine BitList.__getitem__![I](index: BackIndex[I]) -> Bool
+routine BitList.$getitem![I](index: BackIndex[I]) -> Bool
 needs I obeys Integral
   # Get bit from end - ^1 is last, ^2 is second-to-last
   var idx = index.resolve(me.count)
   return me.get_bit_internal(U64(idx))
 
-routine BitList.__setitem__![I](index: BackIndex[I], value: Bool)
+routine BitList.$setitem![I](index: BackIndex[I], value: Bool)
 needs I obeys Integral
   # Set bit from end - ^1 is last, ^2 is second-to-last
   var idx = index.resolve(me.count)
@@ -240,7 +240,7 @@ routine BitList.none() -> Bool
 # Bitwise Operations (returns new BitList)
 # ============================================================================
 
-routine BitList.__and__(other: BitList) -> BitList
+routine BitList.$bitand(other: BitList) -> BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
   var result = BitList(min_count)
@@ -252,7 +252,7 @@ routine BitList.__and__(other: BitList) -> BitList
     i = i + 1u64
   return result
 
-routine BitList.__or__(other: BitList) -> BitList
+routine BitList.$bitor(other: BitList) -> BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -265,7 +265,7 @@ routine BitList.__or__(other: BitList) -> BitList
     i = i + 1u64
   return result
 
-routine BitList.__xor__(other: BitList) -> BitList
+routine BitList.$bitxor(other: BitList) -> BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -278,7 +278,7 @@ routine BitList.__xor__(other: BitList) -> BitList
     i = i + 1u64
   return result
 
-routine BitList.__not__() -> BitList
+routine BitList.$bitnot() -> BitList
   # Bitwise NOT - returns new BitList with flipped bits
   var result = BitList(me.count)
 
@@ -292,7 +292,7 @@ routine BitList.__not__() -> BitList
 # Iteration Support
 # ============================================================================
 
-routine BitList.__iter__() -> BitListIterator
+routine BitList.$iter() -> BitListIterator
   return BitListIterator(
     list: me,
     index: 0u64
@@ -338,7 +338,7 @@ routine BitList.reverse() -> BitList
 # Comparison Operations
 # ============================================================================
 
-routine BitList.__eq__(other: BitList) -> Bool
+routine BitList.$eq(other: BitList) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
@@ -417,24 +417,24 @@ routine BitList.from_u32(value: U32) -> BitList
     i = i + 1u32
   return result
 
-routine BitList.__represent__() -> Text
+routine BitList.$represent() -> Text
   var result = "BitList["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__represent__()
+    result = result + v.$represent()
     i = i + 1u64
   result = result + "]"
   return result
 
-routine BitList.__diagnose__() -> Text
+routine BitList.$diagnose() -> Text
   var result = "BitList["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__diagnose__()
+    result = result + v.$diagnose()
     i = i + 1u64
   result = result + "]"
   return result

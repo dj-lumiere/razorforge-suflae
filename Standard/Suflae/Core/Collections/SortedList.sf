@@ -30,8 +30,8 @@ routine SortedList[T].remove_all(item: T) -> Integer
   return Integer(value: me.value.remove_all(item))
 
 # Indexing
-routine SortedList[T].__getitem__!(index: Integer) -> T
-  return me.value.__getitem__!(index.value)
+routine SortedList[T].$getitem!(index: Integer) -> T
+  return me.value.$getitem!(index.value)
 
 # Search
 routine SortedList[T].contains(item: T) -> Bool
@@ -62,5 +62,5 @@ routine SortedList[T].to_list() -> List[T]
   return List[T](value: me.value.to_list())
 
 # Comparison
-routine SortedList[T].__eq__(other: SortedList[T]) -> Bool
-  return me.value.__eq__(other.value)
+routine SortedList[T].$eq(other: SortedList[T]) -> Bool
+  return me.value.$eq(other.value)

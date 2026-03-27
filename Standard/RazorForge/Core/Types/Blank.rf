@@ -9,8 +9,8 @@ record Blank
 # Text Representation
 # ============================================================================
 
-routine Blank.__represent__() -> Text
+routine Blank.$represent() -> Text
   return "Blank"
 
-routine Blank.__diagnose__() -> Text
+routine Blank.$diagnose() -> Text
   return "Blank"

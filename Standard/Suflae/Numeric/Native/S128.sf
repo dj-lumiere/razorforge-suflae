@@ -8,76 +8,76 @@ record S128
   secret value: RazorForge/Core.S128
 
 # Arithmetic operators
-routine S128.__add__!(you: S128) -> S128
-  return S128(value: me.value.__add__!(you.value))
+routine S128.$add!(you: S128) -> S128
+  return S128(value: me.value.$add!(you.value))
 
-routine S128.__sub__!(you: S128) -> S128
-  return S128(value: me.value.__sub__!(you.value))
+routine S128.$sub!(you: S128) -> S128
+  return S128(value: me.value.$sub!(you.value))
 
-routine S128.__mul__!(you: S128) -> S128
-  return S128(value: me.value.__mul__!(you.value))
+routine S128.$mul!(you: S128) -> S128
+  return S128(value: me.value.$mul!(you.value))
 
-routine S128.__floordiv__!(you: S128) -> S128
-  return S128(value: me.value.__floordiv__!(you.value))
+routine S128.$floordiv!(you: S128) -> S128
+  return S128(value: me.value.$floordiv!(you.value))
 
-routine S128.__mod__!(you: S128) -> S128
-  return S128(value: me.value.__mod__!(you.value))
+routine S128.$mod!(you: S128) -> S128
+  return S128(value: me.value.$mod!(you.value))
 
-routine S128.__neg__!() -> S128
-  return S128(value: me.value.__neg__!())
+routine S128.$neg!() -> S128
+  return S128(value: me.value.$neg!())
 
 # Wrapping arithmetic
-routine S128.__add_wrap__(you: S128) -> S128
-  return S128(value: me.value.__add_wrap__(you.value))
+routine S128.$add_wrap(you: S128) -> S128
+  return S128(value: me.value.$add_wrap(you.value))
 
-routine S128.__sub_wrap__(you: S128) -> S128
-  return S128(value: me.value.__sub_wrap__(you.value))
+routine S128.$sub_wrap(you: S128) -> S128
+  return S128(value: me.value.$sub_wrap(you.value))
 
-routine S128.__mul_wrap__(you: S128) -> S128
-  return S128(value: me.value.__mul_wrap__(you.value))
+routine S128.$mul_wrap(you: S128) -> S128
+  return S128(value: me.value.$mul_wrap(you.value))
 
 # Clamping arithmetic
-routine S128.__add_clamp__(you: S128) -> S128
-  return S128(value: me.value.__add_clamp__(you.value))
+routine S128.$add_clamp(you: S128) -> S128
+  return S128(value: me.value.$add_clamp(you.value))
 
-routine S128.__sub_clamp__(you: S128) -> S128
-  return S128(value: me.value.__sub_clamp__(you.value))
+routine S128.$sub_clamp(you: S128) -> S128
+  return S128(value: me.value.$sub_clamp(you.value))
 
-routine S128.__mul_clamp__(you: S128) -> S128
-  return S128(value: me.value.__mul_clamp__(you.value))
+routine S128.$mul_clamp(you: S128) -> S128
+  return S128(value: me.value.$mul_clamp(you.value))
 
 # Comparison
-routine S128.__eq__(you: S128) -> Bool
-  return me.value.__eq__(you.value)
+routine S128.$eq(you: S128) -> Bool
+  return me.value.$eq(you.value)
 
-routine S128.__cmp__(you: S128) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine S128.$cmp(you: S128) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Bitwise operations
-routine S128.__and__(you: S128) -> S128
-  return S128(value: me.value.__and__(you.value))
+routine S128.$bitand(you: S128) -> S128
+  return S128(value: me.value.$bitand(you.value))
 
-routine S128.__or__(you: S128) -> S128
-  return S128(value: me.value.__or__(you.value))
+routine S128.$bitor(you: S128) -> S128
+  return S128(value: me.value.$bitor(you.value))
 
-routine S128.__xor__(you: S128) -> S128
-  return S128(value: me.value.__xor__(you.value))
+routine S128.$bitxor(you: S128) -> S128
+  return S128(value: me.value.$bitxor(you.value))
 
-routine S128.__not__() -> S128
-  return S128(value: me.value.__not__())
+routine S128.$bitnot() -> S128
+  return S128(value: me.value.$bitnot())
 
 # Shift operations
-routine S128.__ashl__(bits: U128) -> S128
-  return S128(value: me.value.__ashl__(bits))
+routine S128.$ashl(bits: U128) -> S128
+  return S128(value: me.value.$ashl(bits))
 
-routine S128.__ashr__(bits: U128) -> S128
-  return S128(value: me.value.__ashr__(bits))
+routine S128.$ashr(bits: U128) -> S128
+  return S128(value: me.value.$ashr(bits))
 
-routine S128.__lshl__(bits: U128) -> S128
-  return S128(value: me.value.__lshl__(bits))
+routine S128.$lshl(bits: U128) -> S128
+  return S128(value: me.value.$lshl(bits))
 
-routine S128.__lshr__(bits: U128) -> S128
-  return S128(value: me.value.__lshr__(bits))
+routine S128.$lshr(bits: U128) -> S128
+  return S128(value: me.value.$lshr(bits))
 
 # Math operations
 routine S128.abs() -> S128
@@ -138,45 +138,45 @@ routine S128.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From smaller signed integers (widening - always fits)
-routine S128.__create__(from: S8) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: S8) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__(from: S16) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: S16) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__(from: S32) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: S32) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__(from: S64) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: S64) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
 # From unsigned integers (can overflow for large values)
-routine S128.__create__(from: U8) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: U8) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__(from: U16) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: U16) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__(from: U32) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: U32) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__(from: U64) -> S128
-  return S128(value: RazorForge/Core.S128.__create__(from.value))
+routine S128.$create(from: U64) -> S128
+  return S128(value: RazorForge/Core.S128.$create(from.value))
 
-routine S128.__create__!(from: U128) -> S128
-  return S128(value: RazorForge/Core.S128.__create__!(from.value))
+routine S128.$create!(from: U128) -> S128
+  return S128(value: RazorForge/Core.S128.$create!(from.value))
 
 # From floating point (truncates, can overflow)
-routine S128.__create__!(from: F32) -> S128
-  return S128(value: RazorForge/Core.S128.__create__!(from.value))
+routine S128.$create!(from: F32) -> S128
+  return S128(value: RazorForge/Core.S128.$create!(from.value))
 
-routine S128.__create__!(from: F64) -> S128
-  return S128(value: RazorForge/Core.S128.__create__!(from.value))
+routine S128.$create!(from: F64) -> S128
+  return S128(value: RazorForge/Core.S128.$create!(from.value))
 
 # From arbitrary precision (can overflow)
-routine S128.__create__!(from: Integer) -> S128
-  return S128(value: RazorForge/Core.S128.__create__!(from.value))
+routine S128.$create!(from: Integer) -> S128
+  return S128(value: RazorForge/Core.S128.$create!(from.value))

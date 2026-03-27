@@ -9,7 +9,7 @@
 #   dict.add(1, "one")
 #   dict[3] = "three"
 #   var val = dict[1]     # "one"
-#   for (key, value) in dict.__iter__()
+#   for (key, value) in dict.$iter()
 #       # Iterates in sorted key order
 #   }
 
@@ -40,7 +40,7 @@ needs K obeys Comparable
 # Node Creators
 # ============================================================================
 
-routine BTreeDictNode[K, V].__create__(is_leaf: Bool) -> BTreeDictNode[K, V]
+routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
     entries: List[KVPair[K, V]](),
     children: List[BTreeDictNode[K, V]](),
@@ -51,7 +51,7 @@ routine BTreeDictNode[K, V].__create__(is_leaf: Bool) -> BTreeDictNode[K, V]
 # SortedDict Creators
 # ============================================================================
 
-routine SortedDict[K, V].__create__() -> SortedDict[K, V]
+routine SortedDict[K, V].$create() -> SortedDict[K, V]
   return SortedDict[K, V](
     root: None,
     count: 0u64
@@ -98,7 +98,7 @@ routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V]?, key: K) -> V
 # Indexing (by key)
 # ============================================================================
 
-routine SortedDict[K, V].__getitem__!(key: K) -> V
+routine SortedDict[K, V].$getitem!(key: K) -> V
   if me.root is None
     absent
   var result = me.search_node!(me.root, key)
@@ -106,7 +106,7 @@ routine SortedDict[K, V].__getitem__!(key: K) -> V
     absent
   return result
 
-routine SortedDict[K, V].__setitem__(key: K, value: V)
+routine SortedDict[K, V].$setitem(key: K, value: V)
   me.add(key, value)
   return
 
@@ -399,7 +399,7 @@ routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, ma
 # Iteration (in key order)
 # ============================================================================
 
-routine SortedDict[K, V].__iter__() -> SortedDictIterator[K, V]
+routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
   return SortedDictIterator[K, V](
     entries: me.to_list(),
     index: 0u64
@@ -438,7 +438,7 @@ routine SortedDictIterator[K, V].next!() -> KVPair[K, V]
 # Comparison
 # ============================================================================
 
-routine SortedDict[K, V].__represent__() -> Text
+routine SortedDict[K, V].$represent() -> Text
   var result = "SortedDict{"
   var ks = me.keys()
   var i = 0u64
@@ -451,7 +451,7 @@ routine SortedDict[K, V].__represent__() -> Text
   result = result + "}"
   return result
 
-routine SortedDict[K, V].__diagnose__() -> Text
+routine SortedDict[K, V].$diagnose() -> Text
   var result = "SortedDict{"
   var ks = me.keys()
   var i = 0u64
@@ -459,12 +459,12 @@ routine SortedDict[K, V].__diagnose__() -> Text
     if i > 0u64
       result = result + ", "
     var key = ks[i]
-    result = result + key.__diagnose__() + ": " + me[key].__diagnose__()
+    result = result + key.$diagnose() + ": " + me[key].$diagnose()
     i = i + 1u64
   result = result + "}"
   return result
 
-routine SortedDict[K, V].__eq__(other: SortedDict[K, V]) -> Bool
+routine SortedDict[K, V].$eq(other: SortedDict[K, V]) -> Bool
   if me.count != other.count
     return false
   var my_entries = me.to_list()

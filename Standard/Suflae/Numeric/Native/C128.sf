@@ -8,24 +8,24 @@ record C128
   secret value: RazorForge/Core.C128
 
 # Arithmetic operators
-routine C128.__add__(you: C128) -> C128
-  return C128(value: me.value.__add__(you.value))
+routine C128.$add(you: C128) -> C128
+  return C128(value: me.value.$add(you.value))
 
-routine C128.__sub__(you: C128) -> C128
-  return C128(value: me.value.__sub__(you.value))
+routine C128.$sub(you: C128) -> C128
+  return C128(value: me.value.$sub(you.value))
 
-routine C128.__mul__(you: C128) -> C128
-  return C128(value: me.value.__mul__(you.value))
+routine C128.$mul(you: C128) -> C128
+  return C128(value: me.value.$mul(you.value))
 
-routine C128.__truediv__(you: C128) -> C128
-  return C128(value: me.value.__truediv__(you.value))
+routine C128.$truediv(you: C128) -> C128
+  return C128(value: me.value.$truediv(you.value))
 
-routine C128.__neg__() -> C128
-  return C128(value: me.value.__neg__())
+routine C128.$neg() -> C128
+  return C128(value: me.value.$neg())
 
 # Comparison
-routine C128.__eq__(you: C128) -> Bool
-  return me.value.__eq__(you.value)
+routine C128.$eq(you: C128) -> Bool
+  return me.value.$eq(you.value)
 
 # Complex-specific operations
 routine C128.real() -> F128

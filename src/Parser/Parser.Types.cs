@@ -96,7 +96,8 @@ public partial class Parser
             if (Check(type: TokenType.RightParen))
             {
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
-                return new TypeExpression(Name: "__tuple__", GenericArguments: elementTypes, Location: location);
+                return new TypeExpression(Name: "Tuple", GenericArguments: elementTypes,
+                    Location: location);
             }
 
             // Multi-element tuple: (T, U, ...)
@@ -106,7 +107,8 @@ public partial class Parser
             } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightParen));
 
             Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
-            return new TypeExpression(Name: "__tuple__", GenericArguments: elementTypes, Location: location);
+            return new TypeExpression(Name: "Tuple", GenericArguments: elementTypes, Location:
+                location);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════

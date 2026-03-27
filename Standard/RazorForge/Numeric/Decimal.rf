@@ -20,36 +20,36 @@ entity Decimal obeys Numeric, Ordered
 # ============================================================================
 
 # Create a new Decimal initialized to zero
-routine Decimal.__create__() -> Decimal
+routine Decimal.$create() -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_i64(dec.handle, 0)
   return dec
 
 # Create Decimal from S64
-routine Decimal.__create__(value: S64) -> Decimal
+routine Decimal.$create(value: S64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_i64(dec.handle, value)
   return dec
 
 # Create Decimal from F64
-routine Decimal.__create__(value: F64) -> Decimal
+routine Decimal.$create(value: F64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_f64(dec.handle, value)
   return dec
 
 # Create Decimal from string
-routine Decimal.__create__!(text: Text) -> Decimal
+routine Decimal.$create!(text: Text) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   return dec
 
 # Destructor - frees the MAPM structure
-routine Decimal.__destroy__()
+routine Decimal.$destroy()
   rf_bigdec_free(me.handle)
   return
 
 # Copy creator
-routine Decimal.__copy__(other: Decimal) -> Decimal
+routine Decimal.$copy(other: Decimal) -> Decimal
   var dec = Decimal(handle: rf_bigdec_copy(other.handle))
   return dec
 
@@ -57,23 +57,23 @@ routine Decimal.__copy__(other: Decimal) -> Decimal
 # Arithmetic Operations
 # ============================================================================
 
-routine Decimal.__add__(other: Decimal) -> Decimal
+routine Decimal.$add(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_add(result.handle, me.handle, other.handle)
   return result
 
-routine Decimal.__sub__(other: Decimal) -> Decimal
+routine Decimal.$sub(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sub(result.handle, me.handle, other.handle)
   return result
 
-routine Decimal.__mul__(other: Decimal) -> Decimal
+routine Decimal.$mul(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_mul(result.handle, me.handle, other.handle)
   return result
 
 # Division with default precision
-routine Decimal.__truediv__(other: Decimal) -> Decimal
+routine Decimal.$truediv(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_div(result.handle, DECIMAL_DEFAULT_PRECISION, me.handle, other.handle)
   return result
@@ -84,7 +84,7 @@ routine Decimal.divide(other: Decimal, precision: S32) -> Decimal
   rf_bigdec_div(result.handle, precision, me.handle, other.handle)
   return result
 
-routine Decimal.__neg__() -> Decimal
+routine Decimal.$neg() -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_neg(result.handle, me.handle)
   return result
@@ -93,10 +93,10 @@ routine Decimal.__neg__() -> Decimal
 # Comparison Operations
 # ============================================================================
 
-routine Decimal.__eq__(other: Decimal) -> Bool
+routine Decimal.$eq(other: Decimal) -> Bool
   return rf_bigdec_cmp(me.handle, other.handle) == 0
 
-routine Decimal.__cmp__(you: Decimal) -> ComparisonSign
+routine Decimal.$cmp(you: Decimal) -> ComparisonSign
   var value = rf_bigdec_cmp(me.handle, other.handle)
   if value < 0
     return ME_SMALL

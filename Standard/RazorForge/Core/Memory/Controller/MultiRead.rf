@@ -8,7 +8,7 @@ record MultiRead obeys LockPolicy
   secret readers: Atomic[S32]  # Number of active readers
   secret writer: Atomic[Bool]  # Is a writer active?
 
-routine MultiRead.__create__() -> MultiRead
+routine MultiRead.$create() -> MultiRead
   return MultiRead(
     readers: Atomic(0),
     writer: Atomic(false)

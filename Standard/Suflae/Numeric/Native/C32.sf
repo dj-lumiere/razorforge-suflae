@@ -8,24 +8,24 @@ record C32
   secret value: RazorForge/Core.C32
 
 # Arithmetic operators
-routine C32.__add__(you: C32) -> C32
-  return C32(value: me.value.__add__(you.value))
+routine C32.$add(you: C32) -> C32
+  return C32(value: me.value.$add(you.value))
 
-routine C32.__sub__(you: C32) -> C32
-  return C32(value: me.value.__sub__(you.value))
+routine C32.$sub(you: C32) -> C32
+  return C32(value: me.value.$sub(you.value))
 
-routine C32.__mul__(you: C32) -> C32
-  return C32(value: me.value.__mul__(you.value))
+routine C32.$mul(you: C32) -> C32
+  return C32(value: me.value.$mul(you.value))
 
-routine C32.__truediv__(you: C32) -> C32
-  return C32(value: me.value.__truediv__(you.value))
+routine C32.$truediv(you: C32) -> C32
+  return C32(value: me.value.$truediv(you.value))
 
-routine C32.__neg__() -> C32
-  return C32(value: me.value.__neg__())
+routine C32.$neg() -> C32
+  return C32(value: me.value.$neg())
 
 # Comparison
-routine C32.__eq__(you: C32) -> Bool
-  return me.value.__eq__(you.value)
+routine C32.$eq(you: C32) -> Bool
+  return me.value.$eq(you.value)
 
 # Complex-specific operations
 routine C32.real() -> F32

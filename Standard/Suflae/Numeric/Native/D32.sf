@@ -8,27 +8,27 @@ record D32
   secret value: RazorForge/Core.D32
 
 # Arithmetic operators
-routine D32.__add__(you: D32) -> D32
-  return D32(value: me.value.__add__(you.value))
+routine D32.$add(you: D32) -> D32
+  return D32(value: me.value.$add(you.value))
 
-routine D32.__sub__(you: D32) -> D32
-  return D32(value: me.value.__sub__(you.value))
+routine D32.$sub(you: D32) -> D32
+  return D32(value: me.value.$sub(you.value))
 
-routine D32.__mul__(you: D32) -> D32
-  return D32(value: me.value.__mul__(you.value))
+routine D32.$mul(you: D32) -> D32
+  return D32(value: me.value.$mul(you.value))
 
-routine D32.__truediv__(you: D32) -> D32
-  return D32(value: me.value.__truediv__(you.value))
+routine D32.$truediv(you: D32) -> D32
+  return D32(value: me.value.$truediv(you.value))
 
-routine D32.__neg__() -> D32
-  return D32(value: me.value.__neg__())
+routine D32.$neg() -> D32
+  return D32(value: me.value.$neg())
 
 # Comparison
-routine D32.__eq__(you: D32) -> Bool
-  return me.value.__eq__(you.value)
+routine D32.$eq(you: D32) -> Bool
+  return me.value.$eq(you.value)
 
-routine D32.__cmp__(you: D32) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine D32.$cmp(you: D32) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Math operations
 routine D32.abs() -> D32
@@ -67,58 +67,58 @@ routine D32.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From signed integers
-routine D32.__create__(from: S8) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: S8) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: S16) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: S16) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: S32) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: S32) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: S64) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: S64) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: S128) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: S128) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
 # From unsigned integers
-routine D32.__create__(from: U8) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: U8) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: U16) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: U16) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: U32) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: U32) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: U64) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: U64) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: U128) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: U128) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
 # From binary floating point
-routine D32.__create__(from: F32) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: F32) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: F64) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: F64) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
 # From other decimal types
-routine D32.__create__(from: D64) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: D64) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: D128) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: D128) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
 # From arbitrary precision
-routine D32.__create__(from: Integer) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: Integer) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))
 
-routine D32.__create__(from: Decimal) -> D32
-  return D32(value: RazorForge/Core.D32.__create__(from.value))
+routine D32.$create(from: Decimal) -> D32
+  return D32(value: RazorForge/Core.D32.$create(from.value))

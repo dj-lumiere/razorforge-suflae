@@ -3,4 +3,4 @@ module Core
 
 protocol WrappingAddable
   @readonly
-  routine Me.__add_wrap__(you: Me) -> Me
+  routine Me.$add_wrap(you: Me) -> Me

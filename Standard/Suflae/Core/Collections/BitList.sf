@@ -34,11 +34,11 @@ routine BitList.reserve(new_capacity: Integer)
   return
 
 # Indexing
-routine BitList.__getitem__!(index: Integer) -> Bool
-  return me.value.__getitem__!(index.value)
+routine BitList.$getitem!(index: Integer) -> Bool
+  return me.value.$getitem!(index.value)
 
-routine BitList.__setitem__!(index: Integer, bit: Bool)
-  me.value.__setitem__!(index.value, bit)
+routine BitList.$setitem!(index: Integer, bit: Bool)
+  me.value.$setitem!(index.value, bit)
   return
 
 # Bit operations
@@ -70,17 +70,17 @@ routine BitList.none() -> Bool
   return me.value.none()
 
 # Bitwise operations
-routine BitList.__and__(other: BitList) -> BitList
-  return BitList(value: me.value.__and__(other.value))
+routine BitList.$bitand(other: BitList) -> BitList
+  return BitList(value: me.value.$bitand(other.value))
 
-routine BitList.__or__(other: BitList) -> BitList
-  return BitList(value: me.value.__or__(other.value))
+routine BitList.$bitor(other: BitList) -> BitList
+  return BitList(value: me.value.$bitor(other.value))
 
-routine BitList.__xor__(other: BitList) -> BitList
-  return BitList(value: me.value.__xor__(other.value))
+routine BitList.$bitxor(other: BitList) -> BitList
+  return BitList(value: me.value.$bitxor(other.value))
 
-routine BitList.__not__() -> BitList
-  return BitList(value: me.value.__not__())
+routine BitList.$bitnot() -> BitList
+  return BitList(value: me.value.$bitnot())
 
 # Utility
 routine BitList.first!() -> Bool
@@ -93,5 +93,5 @@ routine BitList.reverse() -> BitList
   return BitList(value: me.value.reverse())
 
 # Comparison
-routine BitList.__eq__(other: BitList) -> Bool
-  return me.value.__eq__(other.value)
+routine BitList.$eq(other: BitList) -> Bool
+  return me.value.$eq(other.value)

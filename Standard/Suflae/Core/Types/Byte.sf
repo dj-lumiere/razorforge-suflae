@@ -8,11 +8,11 @@ record Byte
   secret value: RazorForge/Text.Byte
 
 # Comparison operations
-routine Byte.__eq__(other: Byte) -> Bool
-  return me.value.__eq__(other.value)
+routine Byte.$eq(other: Byte) -> Bool
+  return me.value.$eq(other.value)
 
-routine Byte.__cmp__(other: Byte) -> ComparisonSign
-  return me.value.__cmp__(other.value)
+routine Byte.$cmp(other: Byte) -> ComparisonSign
+  return me.value.$cmp(other.value)
 
 # Range check
 routine Byte.in_range(low: U8, high: U8) -> Bool

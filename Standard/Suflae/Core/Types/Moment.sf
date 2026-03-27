@@ -11,8 +11,8 @@ record Moment
 # Creators
 # ============================================================================
 
-routine Moment.__create__(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer) -> Moment
-  return Moment(value: RazorForge/Core.Moment.__create__(year.value, month.value, day.value, hour.value, minute.value, second.value))
+routine Moment.$create(year: Integer, month: Integer, day: Integer, hour: Integer, minute: Integer, second: Integer) -> Moment
+  return Moment(value: RazorForge/Core.Moment.$create(year.value, month.value, day.value, hour.value, minute.value, second.value))
 
 routine Moment.epoch() -> Moment
   return Moment(value: RazorForge/Core.Moment.epoch())
@@ -88,8 +88,8 @@ routine Moment.elapsed_since(earlier: Moment) -> Duration
 # Comparison operators
 # ============================================================================
 
-routine Moment.__eq__(you: Moment) -> Bool
-  return me.value.__eq__(you.value)
+routine Moment.$eq(you: Moment) -> Bool
+  return me.value.$eq(you.value)
 
-routine Moment.__cmp__(you: Moment) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine Moment.$cmp(you: Moment) -> ComparisonSign
+  return me.value.$cmp(you.value)

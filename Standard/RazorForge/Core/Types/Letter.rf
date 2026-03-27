@@ -18,10 +18,10 @@ record Letter obeys ConstCompatible
 
 # Creators
 
-routine Letter.__create__(from: Letter) -> Letter
+routine Letter.$create(from: Letter) -> Letter
   return from
 
-routine Letter.__create__(from: U32) -> Letter
+routine Letter.$create(from: U32) -> Letter
   return bitcast[Letter](from)
 
 # Unicode constants
@@ -107,10 +107,10 @@ routine Letter.to_lowercase() -> Letter
 # Comparison operations
 # ============================================================================
 
-routine Letter.__eq__(other: Letter) -> Bool
+routine Letter.$eq(other: Letter) -> Bool
   return U32(me) == U32(other)
 
-routine Letter.__cmp__(other: Letter) -> ComparisonSign
+routine Letter.$cmp(other: Letter) -> ComparisonSign
   return U32(me) <=> U32(other)
 
 # ============================================================================
@@ -128,13 +128,13 @@ routine Letter.to_byte() -> Byte
 # Display — shows the letter itself
 # ============================================================================
 
-routine Letter.__represent__() -> Text
+routine Letter.$represent() -> Text
   var list = List[Letter]()
   list.add_last(me)
   return Text(from_list: list)
 
-routine Letter.__diagnose__() -> Text
-  return "Letter(" + me.__represent__() + ", " + U32(me).__represent__() + ")"
+routine Letter.$diagnose() -> Text
+  return "Letter(" + me.$represent() + ", " + U32(me).$represent() + ")"
 
 # ============================================================================
 # Utility methods

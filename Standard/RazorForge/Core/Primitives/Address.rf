@@ -18,12 +18,12 @@ record Address obeys UnsignedIntegral, Ordered, ConstCompatible
   pass
 
 # ============================================================================
-# No __create__ routines — Address has no implicit or explicit conversions.
+# No $create routines — Address has no implicit or explicit conversions.
 # Use Snatched[T] for converting between Address and other types.
 # ============================================================================
 
 # Identity conversion for protocol compatibility
-routine Address.__create__(from: Address) -> Address
+routine Address.$create(from: Address) -> Address
   return from
 
 # ============================================================================
@@ -31,13 +31,13 @@ routine Address.__create__(from: Address) -> Address
 # These explicitly wrap on overflow - the only arithmetic allowed on Address
 # ============================================================================
 
-routine Address.__add_wrap__(you: Address) -> Address
+routine Address.$add_wrap(you: Address) -> Address
   return add[Address](me, you)
 
-routine Address.__sub_wrap__(you: Address) -> Address
+routine Address.$sub_wrap(you: Address) -> Address
   return sub[Address](me, you)
 
-routine Address.__mul_wrap__(you: Address) -> Address
+routine Address.$mul_wrap(you: Address) -> Address
   return mul[Address](me, you)
 
 # ============================================================================
@@ -45,17 +45,17 @@ routine Address.__mul_wrap__(you: Address) -> Address
 # Address supports // (Euclidean quotient) but NOT %
 # ============================================================================
 
-routine Address.__floordiv__(you: Address) -> Address
+routine Address.$floordiv(you: Address) -> Address
   return udiv[Address](me, you)
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine Address.__eq__(you: Address) -> Bool
+routine Address.$eq(you: Address) -> Bool
   return icmp_eq[Address](me, you)
 
-routine Address.__cmp__(you: Address) -> ComparisonSign
+routine Address.$cmp(you: Address) -> ComparisonSign
   if icmp_ult[Address](me, you)
     return ME_SMALL
   if icmp_ugt[Address](me, you)
@@ -83,7 +83,7 @@ routine Address.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine Address.__represent__() -> Text
+routine Address.$represent() -> Text
   # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
   var digits = List[Letter]()
   digits.add_last(Letter(0x0030u32))
@@ -101,10 +101,10 @@ routine Address.__represent__() -> Text
     i = i + 1u32
   return Text(from_list: digits)
 
-routine Address.__diagnose__() -> Text
-  return "Address(" + me.__represent__() + ")"
+routine Address.$diagnose() -> Text
+  return "Address(" + me.$represent() + ")"
 
-routine Address.__create__!(from_text: Text) -> Address
+routine Address.$create!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
   var result = 0_addr
   var i = 0u64

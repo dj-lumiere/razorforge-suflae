@@ -8,27 +8,27 @@ record F128
   secret value: RazorForge/Core.F128
 
 # Arithmetic operators
-routine F128.__add__(you: F128) -> F128
-  return F128(value: me.value.__add__(you.value))
+routine F128.$add(you: F128) -> F128
+  return F128(value: me.value.$add(you.value))
 
-routine F128.__sub__(you: F128) -> F128
-  return F128(value: me.value.__sub__(you.value))
+routine F128.$sub(you: F128) -> F128
+  return F128(value: me.value.$sub(you.value))
 
-routine F128.__mul__(you: F128) -> F128
-  return F128(value: me.value.__mul__(you.value))
+routine F128.$mul(you: F128) -> F128
+  return F128(value: me.value.$mul(you.value))
 
-routine F128.__truediv__(you: F128) -> F128
-  return F128(value: me.value.__truediv__(you.value))
+routine F128.$truediv(you: F128) -> F128
+  return F128(value: me.value.$truediv(you.value))
 
-routine F128.__neg__() -> F128
-  return F128(value: me.value.__neg__())
+routine F128.$neg() -> F128
+  return F128(value: me.value.$neg())
 
 # Comparison
-routine F128.__eq__(you: F128) -> Bool
-  return me.value.__eq__(you.value)
+routine F128.$eq(you: F128) -> Bool
+  return me.value.$eq(you.value)
 
-routine F128.__cmp__(you: F128) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine F128.$cmp(you: F128) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Math operations
 routine F128.sqrt() -> F128

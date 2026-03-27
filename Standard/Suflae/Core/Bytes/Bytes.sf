@@ -15,23 +15,23 @@ routine Bytes.is_empty() -> Bool
   return me.value.is_empty()
 
 # Indexing
-routine Bytes.__getitem__!(index: Integer) -> Byte
-  return Byte(me.value.__getitem__(index.value))
+routine Bytes.$getitem!(index: Integer) -> Byte
+  return Byte(me.value.$getitem(index.value))
 
 # String operations
-routine Bytes.__add__(other: Bytes) -> Bytes
-  return Bytes(value: me.value.__add__(other.value))
+routine Bytes.$add(other: Bytes) -> Bytes
+  return Bytes(value: me.value.$add(other.value))
 
 routine Bytes.concat(other: Bytes) -> Bytes
   return Bytes(value: me.value.concat(other.value))
 
 # Comparison
-routine Bytes.__eq__(other: Bytes) -> Bool
-  return me.value.__eq__(other.value)
+routine Bytes.$eq(other: Bytes) -> Bool
+  return me.value.$eq(other.value)
 
 # Conversion
 routine Bytes.to_text() -> Text
   return Text(value: me.value.to_text())
 
-routine List[Byte].__create__(from: Bytes) -> List[Byte]
+routine List[Byte].$create(from: Bytes) -> List[Byte]
   return from.List()

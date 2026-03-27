@@ -31,7 +31,7 @@ routine ValueBitList[N].is_empty() -> Bool
 # Indexing (read-only, value semantics)
 # ============================================================================
 
-routine ValueBitList[N].__getitem__![I](index: I) -> Bool
+routine ValueBitList[N].$getitem![I](index: I) -> Bool
 needs I obeys Integral
   var idx = index.U64!()
   if idx >= N
@@ -42,7 +42,7 @@ needs I obeys Integral
   var byte_val = me.byte_at(byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
-routine ValueBitList[N].__getitem__![I](index: BackIndex[I]) -> Bool
+routine ValueBitList[N].$getitem![I](index: BackIndex[I]) -> Bool
 needs I obeys Integral
   var idx = index.resolve(N)
   return me[idx]

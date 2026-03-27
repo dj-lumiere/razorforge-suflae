@@ -36,7 +36,7 @@ needs T obeys Comparable
 # Node Creators
 # ============================================================================
 
-routine BTreeSetNode[T].__create__(is_leaf: Bool) -> BTreeSetNode[T]
+routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
   return BTreeSetNode[T](
     keys: List[T](),
     children: List[BTreeSetNode[T]](),
@@ -48,7 +48,7 @@ routine BTreeSetNode[T].__create__(is_leaf: Bool) -> BTreeSetNode[T]
 # SortedSet Creators
 # ============================================================================
 
-routine SortedSet[T].__create__() -> SortedSet[T]
+routine SortedSet[T].$create() -> SortedSet[T]
   return SortedSet[T](
     root: None,
     count: 0u64
@@ -309,14 +309,14 @@ routine SortedSet[T].get_predecessor(node: BTreeSetNode[T], idx: U64) -> T
 # Indexing - O(log n) access by position
 # ============================================================================
 
-routine SortedSet[T].__getitem__![I](index: I) -> T
+routine SortedSet[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!!, idx)
 
-routine SortedSet[T].__getitem__![I](index: BackIndex[I]) -> T
+routine SortedSet[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
@@ -411,7 +411,7 @@ routine SortedSet[T].last!() -> T
 # Iteration (in-order traversal)
 # ============================================================================
 
-routine SortedSet[T].__iter__() -> SortedSetIterator[T]
+routine SortedSet[T].$iter() -> SortedSetIterator[T]
   return SortedSetIterator[T](set: me, index: 0u64)
 
 routine SortedSet[T].to_list() -> List[T]
@@ -447,7 +447,7 @@ routine SortedSetIterator[T].next!() -> T
 # Comparison
 # ============================================================================
 
-routine SortedSet[T].__represent__() -> Text
+routine SortedSet[T].$represent() -> Text
   var result = "SortedSet{"
   var i = 0u64
   for v in me
@@ -458,18 +458,18 @@ routine SortedSet[T].__represent__() -> Text
   result = result + "}"
   return result
 
-routine SortedSet[T].__diagnose__() -> Text
+routine SortedSet[T].$diagnose() -> Text
   var result = "SortedSet{"
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__diagnose__()
+    result = result + v.$diagnose()
     i = i + 1u64
   result = result + "}"
   return result
 
-routine SortedSet[T].__eq__(other: SortedSet[T]) -> Bool
+routine SortedSet[T].$eq(other: SortedSet[T]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

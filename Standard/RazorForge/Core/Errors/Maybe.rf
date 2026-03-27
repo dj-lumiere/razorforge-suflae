@@ -15,12 +15,12 @@ routine Maybe[T].state() -> DataState
   return me.state
 
 # Coalescing (?? operator)
-routine Maybe[T].__unwrap__(default: T) -> T
+routine Maybe[T].$unwrap(default: T) -> T
   if me.is_none()
     return default
   return me.handle.unwrap()
 
-routine Maybe[T].__unwrap__(or_else: Routine[Me, T]) -> T
+routine Maybe[T].$unwrap(or_else: Routine[Me, T]) -> T
   if me.is_none()
     return or_else()
   return me.handle.unwrap()

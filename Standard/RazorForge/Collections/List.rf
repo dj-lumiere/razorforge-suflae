@@ -11,14 +11,14 @@ entity List[T] obeys Iterable[T]
 
 # Creators
 
-routine List[T].__create__() -> List[T]
+routine List[T].$create() -> List[T]
   return List[T](
     data: snatched_none[T](),
     count: 0u64,
     capacity: 0u64
   )
 
-routine List[T].__create__(capacity: U64) -> List[T]
+routine List[T].$create(capacity: U64) -> List[T]
   var byte_size = capacity * data_size[T]()
   var ptr = rf_allocate_dynamic(byte_size)
   return List[T](
@@ -28,7 +28,7 @@ routine List[T].__create__(capacity: U64) -> List[T]
   )
 
 # Destructor
-routine List[T].__destroy__()
+routine List[T].$destroy()
   if not me.data.is_none()
     danger!
       rf_invalidate(ptrtoint[T, Address](me.data))
@@ -119,7 +119,7 @@ routine List[T].remove_at!(index: U64) -> T
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine List[T].__getitem__![I](index: I) -> T
+routine List[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
@@ -127,7 +127,7 @@ needs I obeys Integral
   var byte_offset = idx * data_size[T]()
   return me.data.offset(byte_offset).read()
 
-routine List[T].__setitem__![I](index: I, value: T)
+routine List[T].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
@@ -140,13 +140,13 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine List[T].__getitem__![I](index: BackIndex[I]) -> T
+routine List[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var byte_offset = idx * data_size[T]()
   return me.data.offset(byte_offset).read()
 
-routine List[T].__setitem__![I](index: BackIndex[I], value: T)
+routine List[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var byte_offset = idx * data_size[T]()
@@ -157,7 +157,7 @@ needs I obeys Integral
 # Slicing with [a to b] syntax (forward index)
 # ============================================================================
 
-routine List[T].__getslice__![I](start: I, end: I) -> List[T]
+routine List[T].$getslice![I](start: I, end: I) -> List[T]
 needs I obeys Integral
   var s = start.U64()
   var e = end.U64()
@@ -180,7 +180,7 @@ needs I obeys Integral
 # Slicing with [a to b] syntax (backward index using ^)
 # ============================================================================
 
-routine List[T].__getslice__![I](start: BackIndex[I], end: BackIndex[I]) -> List[T]
+routine List[T].$getslice![I](start: BackIndex[I], end: BackIndex[I]) -> List[T]
 needs I obeys Integral
   var s = start.resolve(me.count)
   var e = end.resolve(me.count)
@@ -225,11 +225,11 @@ entity ListEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @readonly
-routine List[T].__iter__() -> ListEmitter[T]
+routine List[T].$iter() -> ListEmitter[T]
   return ListEmitter[T](list: me, index: 0u64)
 
 @writable
-emitting routine ListEmitter[T].__next__() -> T
+emitting routine ListEmitter[T].$next() -> T
   if me.index >= me.list.count()
     absent
 
@@ -237,7 +237,7 @@ emitting routine ListEmitter[T].__next__() -> T
   me.index = me.index + 1u64
   return
 
-routine List[T].__represent__() -> Text
+routine List[T].$represent() -> Text
   var result = "["
   var i = 0u64
   for v in me
@@ -248,13 +248,13 @@ routine List[T].__represent__() -> Text
   result = result + "]"
   return result
 
-routine List[T].__diagnose__() -> Text
+routine List[T].$diagnose() -> Text
   var result = "List["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__diagnose__()
+    result = result + v.$diagnose()
     i = i + 1u64
   result = result + "]"
   return result

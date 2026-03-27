@@ -9,7 +9,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for in-place compound assignment dispatch (#40).
 /// Compound assignments (+=, -=, etc.) dispatch to in-place dunders (__iadd__, etc.)
-/// first, then fall back to create-and-assign (__add__) for non-entity types.
+/// first, then fall back to create-and-assign ($add) for non-entity types.
 /// Entities require in-place dunders (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 public class CompoundAssignmentTests
@@ -64,7 +64,7 @@ public class CompoundAssignmentTests
 
     #endregion
 
-    #region Fallback Dispatch (record with only __add__)
+    #region Fallback Dispatch (record with only $add)
 
     [Fact]
     public void Analyze_RecordWithRegularDunder_FallsBack()
@@ -72,14 +72,14 @@ public class CompoundAssignmentTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x, y: me.y)
 
                         routine test()
@@ -103,13 +103,13 @@ public class CompoundAssignmentTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         entity Counter obeys Addable
                           value: S32
 
                         @readonly
-                        routine Counter.__add__(you: Counter) -> Counter
+                        routine Counter.$add(you: Counter) -> Counter
                           return Counter(value: me.value)
 
                         routine test()

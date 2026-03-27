@@ -27,7 +27,7 @@ record Atomic[T]
 ### Example:
 ###   var flag = Atomic(false)
 ###   var counter = Atomic(0)
-routine Atomic[T].__create__(initial: T) -> Atomic[T]
+routine Atomic[T].$create(initial: T) -> Atomic[T]
   return Atomic[T](value: initial)
 
 ### Atomically load the current value

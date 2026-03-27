@@ -7,15 +7,15 @@ entity ExtendSequence[T] obeys Iterable[T]
   secret first: Iterable[T]
   secret second: Iterable[T]
 
-routine ExtendSequence[T].__iter__() -> ExtendEmitter[T]
-  return ExtendEmitter[T](first: me.first.__iter__(), second: me.second.__iter__(), in_second: false)
+routine ExtendSequence[T].$iter() -> ExtendEmitter[T]
+  return ExtendEmitter[T](first: me.first.$iter(), second: me.second.$iter(), in_second: false)
 
 entity ExtendEmitter[T] obeys Iterator[T]
   secret first: Iterator[T]
   secret second: Iterator[T]
   secret in_second: Bool
 
-emitting routine ExtendEmitter[T].__next__() -> T
+emitting routine ExtendEmitter[T].$next() -> T
   if not me.in_second
     var result = me.first.try_next()
     when result
@@ -23,7 +23,7 @@ emitting routine ExtendEmitter[T].__next__() -> T
       else item =>
         emit item
         return
-  emit me.second.__next__()
+  emit me.second.$next()
   return
 
 routine Iterable[T].extend(other: Iterable[T]) -> ExtendSequence[T]

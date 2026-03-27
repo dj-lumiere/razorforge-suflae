@@ -22,13 +22,13 @@ routine SortedDict[K, V].clear()
 routine SortedDict[K, V].add(key: K, item: V) -> Bool
   return me.value.add(key, item)
 
-routine SortedDict[K, V].__setitem__(key: K, item: V)
-  me.value.__setitem__(key, item)
+routine SortedDict[K, V].$setitem(key: K, item: V)
+  me.value.$setitem(key, item)
   return
 
 # Retrieving
-routine SortedDict[K, V].__getitem__!(key: K) -> V
-  return me.value.__getitem__!(key)
+routine SortedDict[K, V].$getitem!(key: K) -> V
+  return me.value.$getitem!(key)
 
 # Removing
 routine SortedDict[K, V].remove(key: K) -> Bool
@@ -53,5 +53,5 @@ routine SortedDict[K, V].max_key!() -> K
   return me.value.max_key!()
 
 # Comparison
-routine SortedDict[K, V].__eq__(other: SortedDict[K, V]) -> Bool
-  return me.value.__eq__(other.value)
+routine SortedDict[K, V].$eq(other: SortedDict[K, V]) -> Bool
+  return me.value.$eq(other.value)

@@ -3,4 +3,4 @@ module Core
 
 protocol Addable
   @readonly
-  routine Me.__add__!(you: Me) -> Me
+  routine Me.$add!(you: Me) -> Me

@@ -40,7 +40,7 @@ record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible
 # Creators
 # ============================================================================
 
-routine ByteSize.__create__(bytes: U64) -> ByteSize
+routine ByteSize.$create(bytes: U64) -> ByteSize
   me.value = bytes
   return
 
@@ -108,21 +108,21 @@ routine ByteSize.gb_size() -> F64
 # ============================================================================
 
 @readonly
-routine ByteSize.__add__(you: ByteSize) -> ByteSize
+routine ByteSize.$add(you: ByteSize) -> ByteSize
   return ByteSize(me.value + you.value)
 
 @readonly
-routine ByteSize.__sub__(you: ByteSize) -> ByteSize
+routine ByteSize.$sub(you: ByteSize) -> ByteSize
   return ByteSize(me.value - you.value)
 
 # Scale by integer
 @readonly
-routine ByteSize.__mul__(factor: U64) -> ByteSize
+routine ByteSize.$mul(factor: U64) -> ByteSize
   return ByteSize(me.value *% factor)
 
 # Floor division: how many units fit
 @readonly
-routine ByteSize.__floordiv__(you: ByteSize) -> U64
+routine ByteSize.$floordiv(you: ByteSize) -> U64
   return me.value // you.value
 
 # Divide size evenly by integer
@@ -132,7 +132,7 @@ routine ByteSize.div_by(divisor: U64) -> ByteSize
 
 # Remainder after floor division
 @readonly
-routine ByteSize.__mod__(you: ByteSize) -> ByteSize
+routine ByteSize.$mod(you: ByteSize) -> ByteSize
   return ByteSize(me.value % you.value)
 
 # ============================================================================
@@ -140,11 +140,11 @@ routine ByteSize.__mod__(you: ByteSize) -> ByteSize
 # ============================================================================
 
 @readonly
-routine ByteSize.__eq__(you: ByteSize) -> Bool
+routine ByteSize.$eq(you: ByteSize) -> Bool
   return me.value == you.value
 
 @readonly
-routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
+routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
   if me.value < you.value
     return ME_SMALL
   if me.value > you.value
@@ -155,7 +155,7 @@ routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
 # Display
 # ============================================================================
 
-routine ByteSize.__represent__() -> Text
+routine ByteSize.$represent() -> Text
   if me.value >= BYTES_PER_GIB
     var gib = F64(me.value) / 1073741824.0
     return f"{gib} GiB"
@@ -167,5 +167,5 @@ routine ByteSize.__represent__() -> Text
     return f"{kib} KiB"
   return f"{me.value} bytes"
 
-routine ByteSize.__diagnose__() -> Text
-  return "ByteSize(" + me.value.__represent__() + ")"
+routine ByteSize.$diagnose() -> Text
+  return "ByteSize(" + me.value.$represent() + ")"

@@ -3,4 +3,4 @@ module Core
 
 protocol Container[T]
   @readonly
-  routine Me.__contains__(value: T) -> Bool
+  routine Me.$contains(value: T) -> Bool

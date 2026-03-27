@@ -60,7 +60,7 @@ routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
 # Creators
 # ============================================================================
 
-routine Duration.__create__(seconds: S64, nanoseconds: U32) -> Duration
+routine Duration.$create(seconds: S64, nanoseconds: U32) -> Duration
   return normalize_duration(seconds, S64(nanoseconds))
 
 # Zero duration
@@ -181,22 +181,22 @@ routine Duration.is_negative() -> Bool
 routine Duration.abs() -> Duration
   if me.seconds >= 0_s64
     return me
-  return me.__neg__()
+  return me.$neg()
 
 # ============================================================================
 # Arithmetic operators
 # ============================================================================
 
 @readonly
-routine Duration.__add__!(you: Duration) -> Duration
+routine Duration.$add!(you: Duration) -> Duration
   return normalize_duration(me.seconds + you.seconds, S64(me.nanoseconds) + S64(you.nanoseconds))
 
 @readonly
-routine Duration.__sub__(you: Duration) -> Duration
+routine Duration.$sub(you: Duration) -> Duration
   return normalize_duration(me.seconds - you.seconds, S64(me.nanoseconds) - S64(you.nanoseconds))
 
 @readonly
-routine Duration.__neg__() -> Duration
+routine Duration.$neg() -> Duration
   if me.nanoseconds == 0_u32
     return Duration(seconds: 0_s64 - me.seconds, nanoseconds: 0_u32)
   # -(s, ns) = (-s - 1, 1_000_000_000 - ns)
@@ -211,14 +211,14 @@ routine Duration.scale(factor: S64) -> Duration
 
 # Floor division: how many durations fit
 @readonly
-routine Duration.__floordiv__(you: Duration) -> Duration
+routine Duration.$floordiv(you: Duration) -> Duration
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
   return Duration.from_nanoseconds(me_ns // you_ns)
 
 # Remainder after floor division
 @readonly
-routine Duration.__mod__(you: Duration) -> Duration
+routine Duration.$mod(you: Duration) -> Duration
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
   return Duration.from_nanoseconds(me_ns % you_ns)
@@ -234,11 +234,11 @@ routine Duration.div_by(divisor: S64) -> Duration
 # ============================================================================
 
 @readonly
-routine Duration.__eq__(you: Duration) -> Bool
+routine Duration.$eq(you: Duration) -> Bool
   return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
 @readonly
-routine Duration.__cmp__(you: Duration) -> ComparisonSign
+routine Duration.$cmp(you: Duration) -> ComparisonSign
   if me.seconds < you.seconds
     return ME_SMALL
   if me.seconds > you.seconds
@@ -253,7 +253,7 @@ routine Duration.__cmp__(you: Duration) -> ComparisonSign
 # Display
 # ============================================================================
 
-routine Duration.__represent__() -> Text
+routine Duration.$represent() -> Text
   if me.is_zero()
     return "0s"
 
@@ -280,5 +280,5 @@ routine Duration.__represent__() -> Text
 
   return parts
 
-routine Duration.__diagnose__() -> Text
-  return "Duration(seconds: " + me.seconds.__represent__() + ", nanoseconds: " + me.nanoseconds.__represent__() + ")"
+routine Duration.$diagnose() -> Text
+  return "Duration(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"

@@ -15,22 +15,22 @@ routine Text.is_empty() -> Bool
   return me.value.is_empty()
 
 # Indexing
-routine Text.__getitem__!(index: Integer) -> Letter
-  return me.value.__getitem__!(index.value)
+routine Text.$getitem!(index: Integer) -> Letter
+  return me.value.$getitem!(index.value)
 
 # String operations
-routine Text.__add__(other: Text) -> Text
-  return Text(value: me.value.__add__(other.value))
+routine Text.$add(other: Text) -> Text
+  return Text(value: me.value.$add(other.value))
 
 routine Text.concat(other: Text) -> Text
   return Text(value: me.value.concat(other.value))
 
 # Comparison
-routine Text.__eq__(other: Text) -> Bool
-  return me.value.__eq__(other.value)
+routine Text.$eq(other: Text) -> Bool
+  return me.value.$eq(other.value)
 
-routine Text.__cmp__(other: Text) -> ComparisonSign
-  return me.value.__cmp__(other.value)
+routine Text.$cmp(other: Text) -> ComparisonSign
+  return me.value.$cmp(other.value)
 
 # Search
 routine Text.contains(substr: Text) -> Bool

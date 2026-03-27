@@ -432,7 +432,7 @@ public partial class LLVMCodeGenerator
                             }
                         }
 
-                        // For overloaded routines (e.g., __create__), try to find the
+                        // For overloaded routines (e.g., $create), try to find the
                         // specific overload matching this AST declaration's parameter types
                         if (routineInfo != null && routine.Parameters.Count > 0)
                         {
@@ -485,7 +485,7 @@ public partial class LLVMCodeGenerator
             // Phase B: Monomorphize generic methods (compile generic AST bodies with type substitutions)
             MonomorphizeGenericMethods();
 
-            // Phase C: Generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__, __represent__, __diagnose__)
+            // Phase C: Generate bodies for synthesized routines ($ne, $lt, $le, $gt, $ge, $represent, $diagnose)
             GenerateSynthesizedRoutines();
 
             // Phase D: Generate protocol dispatch stubs (forwarding from protocol method names to concrete implementations)
@@ -789,12 +789,12 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // Method-level generics on a non-generic owner (e.g., Text.__create__[T](from: List[T]))
+        // Method-level generics on a non-generic owner (e.g., Text.$create[T](from: List[T]))
         // Owner type is concrete (Text), but method itself has generic parameters
         if (methodTypeArgs != null && methodTypeArgs.Count > 0 && genericMethod.IsGenericDefinition)
         {
             var typeSubs3 = new Dictionary<string, TypeInfo>(methodTypeArgs);
-            string genericAstName3 = genericMethod.FullName; // e.g., "Text.__create__"
+            string genericAstName3 = genericMethod.FullName; // e.g., "Text.$create"
             _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
                 genericMethod, resolvedOwnerType, typeSubs3, genericAstName3, methodTypeArgs);
         }

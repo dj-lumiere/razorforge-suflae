@@ -21,59 +21,59 @@ preset F16_E: F16 = 2.71875_f16
 preset F16_SQRT_2: F16 = 1.414063_f16
 
 # Convert integers to F16 using LLVM intrinsics
-routine F16.__create__(from: S8) -> F16
+routine F16.$create(from: S8) -> F16
   return sitofp[S8, F16](from)
 
-routine F16.__create__(from: S16) -> F16
+routine F16.$create(from: S16) -> F16
   return sitofp[S16, F16](from)
 
-routine F16.__create__(from: S32) -> F16
+routine F16.$create(from: S32) -> F16
   return sitofp[S32, F16](from)
 
-routine F16.__create__(from: S64) -> F16
+routine F16.$create(from: S64) -> F16
   return sitofp[S64, F16](from)
 
-routine F16.__create__(from: S128) -> F16
+routine F16.$create(from: S128) -> F16
   return sitofp[S128, F16](from)
 
-routine F16.__create__(from: U8) -> F16
+routine F16.$create(from: U8) -> F16
   return uitofp[U8, F16](from)
 
-routine F16.__create__(from: U16) -> F16
+routine F16.$create(from: U16) -> F16
   return uitofp[U16, F16](from)
 
-routine F16.__create__(from: U32) -> F16
+routine F16.$create(from: U32) -> F16
   return uitofp[U32, F16](from)
 
-routine F16.__create__(from: U64) -> F16
+routine F16.$create(from: U64) -> F16
   return uitofp[U64, F16](from)
 
-routine F16.__create__(from: U128) -> F16
+routine F16.$create(from: U128) -> F16
   return uitofp[U128, F16](from)
 
-routine F16.__create__(from: F16) -> F16
+routine F16.$create(from: F16) -> F16
   return from
 
 # Truncate from larger float types using LLVM intrinsics
-routine F16.__create__(from: F32) -> F16
+routine F16.$create(from: F32) -> F16
   return fptrunc[F32, F16](from)
 
-routine F16.__create__(from: F64) -> F16
+routine F16.$create(from: F64) -> F16
   return fptrunc[F64, F16](from)
 
-routine F16.__create__(from: F128) -> F16
+routine F16.$create(from: F128) -> F16
   return fptrunc[F128, F16](from)
 
 # Convert from decimal types via native (no LLVM intrinsic for decimal)
-routine F16.__create__(from: D32) -> F16
+routine F16.$create(from: D32) -> F16
   var f32_val = rf_d32_to_f32(from.to_bits())
   return fptrunc[F32, F16](f32_val)
 
-routine F16.__create__(from: D64) -> F16
+routine F16.$create(from: D64) -> F16
   var f32_val = rf_d64_to_f32(from.to_bits())
   return fptrunc[F32, F16](f32_val)
 
-routine F16.__create__(from: D128) -> F16
+routine F16.$create(from: D128) -> F16
   var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
   return fptrunc[F32, F16](f32_val)
 
@@ -81,29 +81,29 @@ routine F16.__create__(from: D128) -> F16
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-routine F16.__add__(you: F16) -> F16
+routine F16.$add(you: F16) -> F16
   return fadd[F16](me, you)
 
-routine F16.__sub__(you: F16) -> F16
+routine F16.$sub(you: F16) -> F16
   return fsub[F16](me, you)
 
-routine F16.__mul__(you: F16) -> F16
+routine F16.$mul(you: F16) -> F16
   return fmul[F16](me, you)
 
-routine F16.__truediv__(you: F16) -> F16
+routine F16.$truediv(you: F16) -> F16
   return fdiv[F16](me, you)
 
-routine F16.__neg__() -> F16
+routine F16.$neg() -> F16
   return fneg[F16](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
-routine F16.__eq__(you: F16) -> Bool
+routine F16.$eq(you: F16) -> Bool
   return fcmp_oeq[F16](me, you)
 
-routine F16.__cmp__(you: F16) -> ComparisonSign
+routine F16.$cmp(you: F16) -> ComparisonSign
   if fcmp_olt[F16](me, you)
     return ME_SMALL
   if fcmp_ogt[F16](me, you)
@@ -179,13 +179,13 @@ routine F16.from_bits(bits: U16) -> F16
 # Text Representation and Parsing
 # ============================================================================
 
-routine F16.__represent__() -> Text
+routine F16.$represent() -> Text
   var cstr_result = rf_format_F16(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
-routine F16.__diagnose__() -> Text
-  return "F16(" + me.__represent__() + ")"
+routine F16.$diagnose() -> Text
+  return "F16(" + me.$represent() + ")"
 
-routine F16.__create__!(from_text: Text) -> F16
+routine F16.$create!(from_text: Text) -> F16
   var cstr_val = from_text.CStr()
   return rf_parse_F16(cstr_val)

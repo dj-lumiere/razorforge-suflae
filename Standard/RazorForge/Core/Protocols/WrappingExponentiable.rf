@@ -3,4 +3,4 @@ module Core
 
 protocol WrappingExponentiable
   @readonly
-  routine Me.__pow_wrap__(you: Me) -> Me
+  routine Me.$pow_wrap(you: Me) -> Me

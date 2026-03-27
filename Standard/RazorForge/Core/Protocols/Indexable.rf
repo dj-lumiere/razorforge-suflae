@@ -3,7 +3,7 @@ module Core
 
 protocol Indexable[K, V]
   @readonly
-  routine Me.__getitem__!(key: K) -> V
+  routine Me.$getitem!(key: K) -> V
 
   @writable
-  routine Me.__setitem__!(key: K, value: V)
+  routine Me.$setitem!(key: K, value: V)

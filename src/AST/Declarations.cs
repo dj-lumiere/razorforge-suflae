@@ -329,7 +329,7 @@ public record VariantDeclaration(
 /// Protocol declarations enable polymorphism and code reuse:
 /// <list type="bullet">
 /// <item>Interface contracts: protocol Drawable { routine Me.draw() }</item>
-/// <item>Generic protocols: protocol Comparable[T] { routine Me.__cmp__(you: Me) -> ComparisonSign }</item>
+/// <item>Generic protocols: protocol Comparable[T] { routine Me.$cmp(you: Me) -> ComparisonSign }</item>
 /// <item>Multiple implementation: types can implement multiple protocols</item>
 /// <item>Default methods: protocols can provide default implementations</item>
 /// <item>Protocol bounds: generic constraints (where T obeys Comparable)</item>

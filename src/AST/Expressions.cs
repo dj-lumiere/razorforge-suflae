@@ -213,8 +213,8 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
-/// The semantic analyzer dispatches this to either an in-place dunder method (__iadd__, etc.)
-/// or falls back to create-and-assign (a = a.__add__(b)) for records/primitives.
+/// The semantic analyzer dispatches this to either an in-place dunder method ($iadd, etc.)
+/// or falls back to create-and-assign (a = a.$add(b)) for records/primitives.
 /// Entities require the in-place dunder (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
@@ -304,7 +304,7 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 /// <item>Method calls: me.method(x, y)</item>
 /// <item>Creator calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
-/// <item>Operator method calls: me.__add__(you)</item>
+/// <item>Operator method calls: me.$add(you)</item>
 /// </list>
 /// </remarks>
 public record CallExpression(
@@ -498,7 +498,7 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
 
 /// <summary>
 /// Slice expression: obj[start to end]
-/// Desugars to obj.__getslice__(from: start, to: end).
+/// Desugars to obj.$getslice(from: start, to: end).
 /// Returns Sequence&lt;T&gt; (lazy). Both bounds required, exclusive end.
 /// </summary>
 /// <param name="Object">The collection being sliced</param>

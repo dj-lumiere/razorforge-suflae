@@ -30,11 +30,11 @@ record CWChar
 # ============================================================================
 
 @config(target: "windows")
-routine CWChar.__create__(value: U16) -> CWChar
+routine CWChar.$create(value: U16) -> CWChar
   return CWChar(value: value)
 
 @config(target: "windows")
-routine CWChar.__create__!(codepoint: U32) -> CWChar
+routine CWChar.$create!(codepoint: U32) -> CWChar
   if codepoint > 0xFFFFu32
     throw IntegerOverflowError()
   return CWChar(value: U16!(codepoint))
@@ -44,7 +44,7 @@ routine CWChar.__create__!(codepoint: U32) -> CWChar
 # ============================================================================
 
 @config(target: "unix")
-routine CWChar.__create__(value: U32) -> CWChar
+routine CWChar.$create(value: U32) -> CWChar
   return CWChar(value: value)
 
 # ============================================================================
@@ -52,21 +52,21 @@ routine CWChar.__create__(value: U32) -> CWChar
 # ============================================================================
 
 @config(target: "windows")
-routine CWChar.__eq__(you: CWChar) -> Bool
+routine CWChar.$eq(you: CWChar) -> Bool
   return me.value == you.value
 
 @config(target: "windows")
-routine CWChar.__cmp__(you: CWChar) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine CWChar.$cmp(you: CWChar) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # ============================================================================
 # Comparison (Unix)
 # ============================================================================
 
 @config(target: "unix")
-routine CWChar.__eq__(you: CWChar) -> Bool
+routine CWChar.$eq(you: CWChar) -> Bool
   return me.value == you.value
 
 @config(target: "unix")
-routine CWChar.__cmp__(you: CWChar) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine CWChar.$cmp(you: CWChar) -> ComparisonSign
+  return me.value.$cmp(you.value)

@@ -33,8 +33,8 @@ routine BackIndex[I obeys Integral].offset_u64() -> U64
   return me.offset.U64()
 
 # Comparison operations
-routine BackIndex[I obeys Integral].__eq__(other: BackIndex[I]) -> Bool
+routine BackIndex[I obeys Integral].$eq(other: BackIndex[I]) -> Bool
   return me.offset.U64() == other.offset.U64()
 
-routine BackIndex[I obeys Integral].__cmp__(other: BackIndex[I]) -> ComparisonSign
+routine BackIndex[I obeys Integral].$cmp(other: BackIndex[I]) -> ComparisonSign
   return -me.offset <=> -other.offset

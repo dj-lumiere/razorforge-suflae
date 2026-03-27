@@ -3,4 +3,4 @@ module Core
 
 protocol Iterator[T]
   @writable
-  emitting routine Me.__next__() -> T
+  emitting routine Me.$next() -> T

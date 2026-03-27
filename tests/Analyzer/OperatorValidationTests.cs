@@ -66,7 +66,7 @@ public class OperatorValidationTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(other: Me) -> Me
+                          routine Me.$add(other: Me) -> Me
                         routine test(a: S32, b: S32) -> S32
                           return a + b
                         """;

@@ -3,4 +3,4 @@ module Core
 
 protocol ClampingMultiplicable
   @readonly
-  routine Me.__mul_clamp__(you: Me) -> Me
+  routine Me.$mul_clamp(you: Me) -> Me

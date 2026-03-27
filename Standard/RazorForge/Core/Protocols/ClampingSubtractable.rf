@@ -3,4 +3,4 @@ module Core
 
 protocol ClampingSubtractable
   @readonly
-  routine Me.__sub_clamp__(you: Me) -> Me
+  routine Me.$sub_clamp(you: Me) -> Me

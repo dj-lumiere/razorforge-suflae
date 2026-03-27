@@ -26,15 +26,15 @@ preset C32_I: C32 = C32(real: 0.0_f32, imag: 1.0_f32)
 # ============================================================================
 
 ### Create a C32 from a real F32 value (imaginary part is zero)
-routine C32.__create__(from: F32) -> C32
+routine C32.$create(from: F32) -> C32
   return C32(real: from, imag: 0.0_f32)
 
 ### Create a C32 from a C64 by truncating both components (F64 -> F32)
-routine C32.__create__(from: C64) -> C32
+routine C32.$create(from: C64) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
 ### Create a C32 from a C128 by truncating both components (F128 -> F32)
-routine C32.__create__(from: C128) -> C32
+routine C32.$create(from: C128) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
 ### Create a C32 from polar coordinates (magnitude and angle)
@@ -53,24 +53,24 @@ routine C32.from_polar(r: F32, theta: F32) -> C32
 # ============================================================================
 
 ### Complex addition: (a+bi) + (c+di) = (a+c) + (b+d)i
-routine C32.__add__(you: C32) -> C32
+routine C32.$add(you: C32) -> C32
   return C32(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Complex subtraction: (a+bi) - (c+di) = (a-c) + (b-d)i
-routine C32.__sub__(you: C32) -> C32
+routine C32.$sub(you: C32) -> C32
   return C32(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-routine C32.__mul__(you: C32) -> C32
+routine C32.$mul(you: C32) -> C32
   return C32(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Complex division: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
-routine C32.__truediv__(you: C32) -> C32
+routine C32.$truediv(you: C32) -> C32
   var d = you.real * you.real + you.imag * you.imag
   return C32(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
 
 ### Complex negation: -(a+bi) = (-a) + (-b)i
-routine C32.__neg__() -> C32
+routine C32.$neg() -> C32
   return C32(real: -me.real, imag: -me.imag)
 
 # ============================================================================
@@ -78,7 +78,7 @@ routine C32.__neg__() -> C32
 # ============================================================================
 
 ### Component-wise equality (no ordering — complex numbers have no total order)
-routine C32.__eq__(you: C32) -> Bool
+routine C32.$eq(you: C32) -> Bool
   return me.real == you.real and me.imag == you.imag
 
 # ============================================================================

@@ -21,7 +21,7 @@ entity Deque[T]
 # Creators
 # ============================================================================
 
-routine Deque[T].__create__() -> Deque[T]
+routine Deque[T].$create() -> Deque[T]
   return Deque[T](
     data: snatched_none[U8](),
     start: 0u64,
@@ -29,7 +29,7 @@ routine Deque[T].__create__() -> Deque[T]
     capacity: 0u64
   )
 
-routine Deque[T].__create__(capacity: U64) -> Deque[T]
+routine Deque[T].$create(capacity: U64) -> Deque[T]
   var byte_size = capacity * data_size[T]()
   return Deque[T](
     data: Snatched[U8]( rf_allocate_dynamic(byte_size)),
@@ -167,7 +167,7 @@ routine Deque[T].reserve(new_capacity: U64)
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine Deque[T].__getitem__![I](index: I) -> T
+routine Deque[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
@@ -175,7 +175,7 @@ needs I obeys Integral
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
-routine Deque[T].__setitem__![I](index: I, value: T)
+routine Deque[T].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
@@ -188,13 +188,13 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-routine Deque[T].__getitem__![I](index: BackIndex[I]) -> T
+routine Deque[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
-routine Deque[T].__setitem__![I](index: BackIndex[I], value: T)
+routine Deque[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
@@ -231,7 +231,7 @@ routine Deque[T].rotate_right(n: U64)
 # ============================================================================
 
 @readonly
-routine Deque[T].__iter__() -> DequeEmitter[T]
+routine Deque[T].$iter() -> DequeEmitter[T]
   return DequeEmitter[T](deque: me, index: 0u64)
 
 entity DequeEmitter[T] obeys Iterator[T]
@@ -239,7 +239,7 @@ entity DequeEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @writable
-emitting routine DequeEmitter[T].__next__() -> T
+emitting routine DequeEmitter[T].$next() -> T
   if me.index >= me.deque.count()
     absent
   emit me.deque[me.index]
@@ -272,7 +272,7 @@ routine Deque[T].contains(value: T) -> Bool
 # Comparison Operations
 # ============================================================================
 
-routine Deque[T].__represent__() -> Text
+routine Deque[T].$represent() -> Text
   var result = "Deque["
   var i = 0u64
   for v in me
@@ -283,18 +283,18 @@ routine Deque[T].__represent__() -> Text
   result = result + "]"
   return result
 
-routine Deque[T].__diagnose__() -> Text
+routine Deque[T].$diagnose() -> Text
   var result = "Deque["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__diagnose__()
+    result = result + v.$diagnose()
     i = i + 1u64
   result = result + "]"
   return result
 
-routine Deque[T].__eq__(other: Deque[T]) -> Bool
+routine Deque[T].$eq(other: Deque[T]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

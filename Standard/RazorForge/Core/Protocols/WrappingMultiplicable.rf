@@ -3,4 +3,4 @@ module Core
 
 protocol WrappingMultiplicable
   @readonly
-  routine Me.__mul_wrap__(you: Me) -> Me
+  routine Me.$mul_wrap(you: Me) -> Me

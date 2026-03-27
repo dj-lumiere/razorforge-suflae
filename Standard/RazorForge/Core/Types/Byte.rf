@@ -18,10 +18,10 @@ record Byte obeys ConstCompatible
 
 # Creators
 
-routine Byte.__create__(from: Byte) -> Byte
+routine Byte.$create(from: Byte) -> Byte
   return from
 
-routine Byte.__create__(from: U8) -> Byte
+routine Byte.$create(from: U8) -> Byte
   return bitcast[Byte](from)
 
 # Common byte constants
@@ -40,10 +40,10 @@ routine Letter.byte_value() -> U8
 routine Byte.codepoint() -> U32
   return U32(U8(me))
 
-routine Byte.__eq__(other: Byte) -> Bool
+routine Byte.$eq(other: Byte) -> Bool
   return U8(me) == U8(other)
 
-routine Byte.__cmp__(other: Byte) -> ComparisonSign
+routine Byte.$cmp(other: Byte) -> ComparisonSign
   return U8(me) <=> U8(other)
 
 # ============================================================================
@@ -87,7 +87,7 @@ routine Byte.hex_value!() -> U8
 # Display — always \xHH format (raw bytes have no encoding)
 # ============================================================================
 
-routine Byte.__represent__() -> Text
+routine Byte.$represent() -> Text
   var digits = List[Letter]()
   digits.add_last(Letter(0x005Cu32))  # \
   digits.add_last(Letter(0x0078u32))  # x
@@ -104,5 +104,5 @@ routine Byte.__represent__() -> Text
     digits.add_last(Letter(0x0041u32 + low - 10u32))
   return Text(from_list: digits)
 
-routine Byte.__diagnose__() -> Text
-  return "Byte(" + U8(me).__represent__() + ", " + me.__represent__() + ")"
+routine Byte.$diagnose() -> Text
+  return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"

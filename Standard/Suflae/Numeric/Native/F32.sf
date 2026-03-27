@@ -8,27 +8,27 @@ record F32
   secret value: RazorForge/Core.F32
 
 # Arithmetic operators
-routine F32.__add__(you: F32) -> F32
-  return F32(value: me.value.__add__(you.value))
+routine F32.$add(you: F32) -> F32
+  return F32(value: me.value.$add(you.value))
 
-routine F32.__sub__(you: F32) -> F32
-  return F32(value: me.value.__sub__(you.value))
+routine F32.$sub(you: F32) -> F32
+  return F32(value: me.value.$sub(you.value))
 
-routine F32.__mul__(you: F32) -> F32
-  return F32(value: me.value.__mul__(you.value))
+routine F32.$mul(you: F32) -> F32
+  return F32(value: me.value.$mul(you.value))
 
-routine F32.__truediv__(you: F32) -> F32
-  return F32(value: me.value.__truediv__(you.value))
+routine F32.$truediv(you: F32) -> F32
+  return F32(value: me.value.$truediv(you.value))
 
-routine F32.__neg__() -> F32
-  return F32(value: me.value.__neg__())
+routine F32.$neg() -> F32
+  return F32(value: me.value.$neg())
 
 # Comparison
-routine F32.__eq__(you: F32) -> Bool
-  return me.value.__eq__(you.value)
+routine F32.$eq(you: F32) -> Bool
+  return me.value.$eq(you.value)
 
-routine F32.__cmp__(you: F32) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine F32.$cmp(you: F32) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Math operations
 routine F32.sqrt() -> F32
@@ -97,54 +97,54 @@ routine F32.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From signed integers
-routine F32.__create__(from: S8) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: S8) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: S16) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: S16) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: S32) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: S32) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: S64) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: S64) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: S128) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: S128) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
 # From unsigned integers
-routine F32.__create__(from: U8) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: U8) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: U16) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: U16) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: U32) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: U32) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: U64) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: U64) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: U128) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: U128) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
 # From other floating point types
-routine F32.__create__(from: F64) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: F64) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
 # From arbitrary precision
-routine F32.__create__(from: Integer) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: Integer) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
-routine F32.__create__(from: Decimal) -> F32
-  return F32(value: RazorForge/Core.F32.__create__(from.value))
+routine F32.$create(from: Decimal) -> F32
+  return F32(value: RazorForge/Core.F32.$create(from.value))
 
 # Bit representation
-routine F32.__create_from_bits__(bits: U32) -> F32
+routine F32.$create_from_bits(bits: U32) -> F32
   return F32(value: RazorForge/Core.F32.from_bits(bits.value))
 
 routine F32.to_bits() -> U32

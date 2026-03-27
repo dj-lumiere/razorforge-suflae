@@ -92,8 +92,8 @@ internal static class UnaryOperatorExtensions
         {
             return op switch
             {
-                UnaryOperator.Minus => "__neg__",
-                UnaryOperator.BitwiseNot => "__not__",
+                UnaryOperator.Minus => "$neg",
+                UnaryOperator.BitwiseNot => "$bitnot",
                 _ => null
             };
         }

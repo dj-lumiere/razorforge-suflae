@@ -25,15 +25,15 @@ preset C64_I: C64 = C64(real: 0.0_f64, imag: 1.0_f64)
 # ============================================================================
 
 ### Create a C64 from a real F64 value (imaginary part is zero)
-routine C64.__create__(from: F64) -> C64
+routine C64.$create(from: F64) -> C64
   return C64(real: from, imag: 0.0_f64)
 
 ### Create a C64 from a C32 by extending both components (F32 -> F64)
-routine C64.__create__(from: C32) -> C64
+routine C64.$create(from: C32) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
 ### Create a C64 from a C128 by truncating both components (F128 -> F64)
-routine C64.__create__(from: C128) -> C64
+routine C64.$create(from: C128) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
 ### Create a C64 from polar coordinates (magnitude and angle)
@@ -52,24 +52,24 @@ routine C64.from_polar(r: F64, theta: F64) -> C64
 # ============================================================================
 
 ### Complex addition: (a+bi) + (c+di) = (a+c) + (b+d)i
-routine C64.__add__(you: C64) -> C64
+routine C64.$add(you: C64) -> C64
   return C64(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Complex subtraction: (a+bi) - (c+di) = (a-c) + (b-d)i
-routine C64.__sub__(you: C64) -> C64
+routine C64.$sub(you: C64) -> C64
   return C64(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-routine C64.__mul__(you: C64) -> C64
+routine C64.$mul(you: C64) -> C64
   return C64(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Complex division: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
-routine C64.__truediv__(you: C64) -> C64
+routine C64.$truediv(you: C64) -> C64
   var d = you.real * you.real + you.imag * you.imag
   return C64(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
 
 ### Complex negation: -(a+bi) = (-a) + (-b)i
-routine C64.__neg__() -> C64
+routine C64.$neg() -> C64
   return C64(real: -me.real, imag: -me.imag)
 
 # ============================================================================
@@ -77,7 +77,7 @@ routine C64.__neg__() -> C64
 # ============================================================================
 
 ### Component-wise equality (no ordering — complex numbers have no total order)
-routine C64.__eq__(you: C64) -> Bool
+routine C64.$eq(you: C64) -> Bool
   return me.real == you.real and me.imag == you.imag
 
 # ============================================================================

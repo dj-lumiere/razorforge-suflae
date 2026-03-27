@@ -28,7 +28,7 @@ needs K obeys Hashable, Comparable
 # Creators
 # ============================================================================
 
-routine Dict[K, V].__create__() -> Dict[K, V]
+routine Dict[K, V].$create() -> Dict[K, V]
   var buckets = List[SortedDict[K, V]](DICT_INITIAL_BUCKETS)
   var dict = Dict[K, V](
     buckets: buckets,
@@ -41,7 +41,7 @@ routine Dict[K, V].__create__() -> Dict[K, V]
     i = i + 1u64
   return dict
 
-routine Dict[K, V].__create__(capacity: U64) -> Dict[K, V]
+routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
   var bucket_count = if capacity < DICT_INITIAL_BUCKETS then DICT_INITIAL_BUCKETS else capacity
   var buckets = List[SortedDict[K, V]](bucket_count)
   var dict = Dict[K, V](
@@ -60,7 +60,7 @@ routine Dict[K, V].__create__(capacity: U64) -> Dict[K, V]
 # ============================================================================
 
 routine Dict[K, V].bucket_index(key: K) -> U64
-  var hash = key.__hash__()
+  var hash = key.$hash()
   return hash % me.buckets.count()
 
 routine Dict[K, V].should_rehash() -> Bool
@@ -150,10 +150,10 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
-routine Dict[K, V].__getitem__!(key: K) -> V
+routine Dict[K, V].$getitem!(key: K) -> V
   return me.get!(key)
 
-routine Dict[K, V].__setitem__(key: K, value: V)
+routine Dict[K, V].$setitem(key: K, value: V)
   var idx = me.bucket_index(key)
   me.buckets[idx][key] = value
   return
@@ -204,7 +204,7 @@ routine Dict[K, V].entries() -> List[Tuple[K, V]]
 # Iteration
 # ============================================================================
 
-routine Dict[K, V].__iter__() -> DictIterator[K, V]
+routine Dict[K, V].$iter() -> DictIterator[K, V]
   return DictIterator[K, V](
     dict: me,
     bucket_idx: 0u64,
@@ -236,7 +236,7 @@ routine DictIterator[K, V].next!() -> Tuple[K, V]
 # Comparison
 # ============================================================================
 
-routine Dict[K, V].__represent__() -> Text
+routine Dict[K, V].$represent() -> Text
   var result = "{"
   var ks = me.keys()
   var i = 0u64
@@ -249,7 +249,7 @@ routine Dict[K, V].__represent__() -> Text
   result = result + "}"
   return result
 
-routine Dict[K, V].__diagnose__() -> Text
+routine Dict[K, V].$diagnose() -> Text
   var result = "Dict{"
   var ks = me.keys()
   var i = 0u64
@@ -257,12 +257,12 @@ routine Dict[K, V].__diagnose__() -> Text
     if i > 0u64
       result = result + ", "
     var key = ks[i]
-    result = result + key.__diagnose__() + ": " + me.get!(key).__diagnose__()
+    result = result + key.$diagnose() + ": " + me.get!(key).$diagnose()
     i = i + 1u64
   result = result + "}"
   return result
 
-routine Dict[K, V].__eq__(other: Dict[K, V]) -> Bool
+routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
   if me.count != other.count
     return false
 

@@ -26,15 +26,15 @@ preset C128_I: C128 = C128(real: 0.0_f128, imag: 1.0_f128)
 # ============================================================================
 
 ### Create a C128 from a real F128 value (imaginary part is zero)
-routine C128.__create__(from: F128) -> C128
+routine C128.$create(from: F128) -> C128
   return C128(real: from, imag: 0.0_f128)
 
 ### Create a C128 from a C32 by extending both components (F32 -> F128)
-routine C128.__create__(from: C32) -> C128
+routine C128.$create(from: C32) -> C128
   return C128(real: F128(from.real), imag: F128(from.imag))
 
 ### Create a C128 from a C64 by extending both components (F64 -> F128)
-routine C128.__create__(from: C64) -> C128
+routine C128.$create(from: C64) -> C128
   return C128(real: F128(from.real), imag: F128(from.imag))
 
 ### Create a C128 from polar coordinates (magnitude and angle)
@@ -53,28 +53,28 @@ routine C128.from_polar(r: F128, theta: F128) -> C128
 # ============================================================================
 
 ### Complex addition: (a+bi) + (c+di) = (a+c) + (b+d)i
-routine C128.__add__(you: C128) -> C128
+routine C128.$add(you: C128) -> C128
   return C128(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Complex subtraction: (a+bi) - (c+di) = (a-c) + (b-d)i
-routine C128.__sub__(you: C128) -> C128
+routine C128.$sub(you: C128) -> C128
   return C128(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-routine C128.__mul__(you: C128) -> C128
+routine C128.$mul(you: C128) -> C128
   return C128(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Complex division: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
-routine C128.__truediv__(you: C128) -> C128
+routine C128.$truediv(you: C128) -> C128
   var d = you.real * you.real + you.imag * you.imag
   return C128(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
 
 ### Complex exponentiation: z^w = exp(w · log(z))
-routine C128.__pow__(you: C128) -> C128
+routine C128.$pow(you: C128) -> C128
   return (you * me.log()).exp()
 
 ### Complex negation: -(a+bi) = (-a) + (-b)i
-routine C128.__neg__() -> C128
+routine C128.$neg() -> C128
   return C128(real: -me.real, imag: -me.imag)
 
 # ============================================================================
@@ -82,7 +82,7 @@ routine C128.__neg__() -> C128
 # ============================================================================
 
 ### Component-wise equality (no ordering — complex numbers have no total order)
-routine C128.__eq__(you: C128) -> Bool
+routine C128.$eq(you: C128) -> Bool
   return me.real == you.real and me.imag == you.imag
 
 # ============================================================================

@@ -8,21 +8,21 @@ record Bool
   secret value: RazorForge/Core.Bool
 
 # Comparison
-routine Bool.__eq__(you: Bool) -> Bool
-  return Bool(value: me.value.__eq__(you.value))
+routine Bool.$eq(you: Bool) -> Bool
+  return Bool(value: me.value.$eq(you.value))
 
 # Logical operations
-routine Bool.__and__(you: Bool) -> Bool
-  return Bool(value: me.value.__and__(you.value))
+routine Bool.$bitand(you: Bool) -> Bool
+  return Bool(value: me.value.$bitand(you.value))
 
-routine Bool.__or__(you: Bool) -> Bool
-  return Bool(value: me.value.__or__(you.value))
+routine Bool.$bitor(you: Bool) -> Bool
+  return Bool(value: me.value.$bitor(you.value))
 
-routine Bool.__not__() -> Bool
-  return Bool(value: me.value.__not__())
+routine Bool.$bitnot() -> Bool
+  return Bool(value: me.value.$bitnot())
 
 # String conversion
-routine Bool.__represent__() -> Text
+routine Bool.$represent() -> Text
   if me
     return "true"
   return "false"

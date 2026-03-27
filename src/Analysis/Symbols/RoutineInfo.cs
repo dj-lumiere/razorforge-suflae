@@ -28,14 +28,14 @@ public sealed class RoutineInfo
         }
     }
 
-    /// <summary>The module-qualified name (e.g., "Core.S8.__add__", "IO/Console.show").</summary>
+    /// <summary>The module-qualified name (e.g., "Core.S8.$add", "IO/Console.show").</summary>
     public string QualifiedName
     {
         get
         {
             if (OwnerType != null)
             {
-                // Method: Module.OwnerType.Method (e.g., "Core.S8.__add__")
+                // Method: Module.OwnerType.Method (e.g., "Core.S8.$add")
                 return $"{OwnerType.FullName}.{Name}";
             }
             // Standalone: same as FullName (already Module.Function)

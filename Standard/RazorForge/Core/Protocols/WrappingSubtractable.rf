@@ -3,4 +3,4 @@ module Core
 
 protocol WrappingSubtractable
   @readonly
-  routine Me.__sub_wrap__(you: Me) -> Me
+  routine Me.$sub_wrap(you: Me) -> Me

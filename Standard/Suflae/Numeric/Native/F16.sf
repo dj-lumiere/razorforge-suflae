@@ -8,27 +8,27 @@ record F16
   secret value: RazorForge/Core.F16
 
 # Arithmetic operators
-routine F16.__add__(you: F16) -> F16
-  return F16(value: me.value.__add__(you.value))
+routine F16.$add(you: F16) -> F16
+  return F16(value: me.value.$add(you.value))
 
-routine F16.__sub__(you: F16) -> F16
-  return F16(value: me.value.__sub__(you.value))
+routine F16.$sub(you: F16) -> F16
+  return F16(value: me.value.$sub(you.value))
 
-routine F16.__mul__(you: F16) -> F16
-  return F16(value: me.value.__mul__(you.value))
+routine F16.$mul(you: F16) -> F16
+  return F16(value: me.value.$mul(you.value))
 
-routine F16.__truediv__(you: F16) -> F16
-  return F16(value: me.value.__truediv__(you.value))
+routine F16.$truediv(you: F16) -> F16
+  return F16(value: me.value.$truediv(you.value))
 
-routine F16.__neg__() -> F16
-  return F16(value: me.value.__neg__())
+routine F16.$neg() -> F16
+  return F16(value: me.value.$neg())
 
 # Comparison
-routine F16.__eq__(you: F16) -> Bool
-  return me.value.__eq__(you.value)
+routine F16.$eq(you: F16) -> Bool
+  return me.value.$eq(you.value)
 
-routine F16.__cmp__(you: F16) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine F16.$cmp(you: F16) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Math operations
 routine F16.sqrt() -> F16

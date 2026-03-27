@@ -303,7 +303,7 @@ public partial class LLVMCodeGenerator
     {
         TypeInfo? targetType = GetExpressionType(index.Object);
 
-        // Dispatch to __setitem__ if the type has one
+        // Dispatch to $setitem if the type has one
         RoutineInfo? setItem = LookupSetItemMethod(index);
         if (setItem != null && targetType != null &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
@@ -387,15 +387,15 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Looks up the __setitem__ method for an indexed target, handling failable names and generic types.
+    /// Looks up the $setitem method for an indexed target, handling failable names and generic types.
     /// </summary>
     private RoutineInfo? LookupSetItemMethod(IndexExpression index)
     {
         TypeInfo? targetType = GetExpressionType(index.Object);
         if (targetType == null) return null;
 
-        RoutineInfo? setItem = _registry.LookupRoutine($"{targetType.Name}.__setitem__")
-            ?? _registry.LookupRoutine($"{targetType.Name}.__setitem__!");
+        RoutineInfo? setItem = _registry.LookupRoutine($"{targetType.Name}.$setitem")
+            ?? _registry.LookupRoutine($"{targetType.Name}.$setitem!");
 
         // For generic resolutions (e.g., List[S64]), also try the generic definition name
         if (setItem == null && targetType.IsGenericResolution)
@@ -408,8 +408,8 @@ public partial class LLVMCodeGenerator
             };
             if (genDefName != null)
             {
-                setItem = _registry.LookupRoutine($"{genDefName}.__setitem__")
-                    ?? _registry.LookupRoutine($"{genDefName}.__setitem__!");
+                setItem = _registry.LookupRoutine($"{genDefName}.$setitem")
+                    ?? _registry.LookupRoutine($"{genDefName}.$setitem!");
             }
         }
 
@@ -814,8 +814,8 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits code for a for loop.
     /// for x in iterable { body } becomes:
-    ///   iterator = iterable.__iter__()
-    ///   while iterator.__has_next__() { x = iterator.__next__(); body }
+    ///   iterator = iterable.$iter()
+    ///   while iterator.$has_next() { x = iterator.$next(); body }
     /// </summary>
     private void EmitFor(StringBuilder sb, ForStatement forStmt)
     {
@@ -826,7 +826,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // General iterator protocol: seq.__iter__() → emitter, emitter.__next__() → Maybe[T]
+        // General iterator protocol: seq.$iter() → emitter, emitter.$next() → Maybe[T]
         // Maybe layout: { i64 (DataState), ptr (Snatched handle) }
         // DataState: VALID=1 → has value, ABSENT=0 → done
 
@@ -840,14 +840,14 @@ public partial class LLVMCodeGenerator
         string iterValue = EmitExpression(sb, forStmt.Iterable);
         TypeInfo? iterType = GetExpressionType(forStmt.Iterable);
 
-        // Call __iter__() to get the emitter
+        // Call $iter() to get the emitter
         string emitterValue;
         TypeInfo? emitterType = null;
 
         if (iterType != null)
         {
-            // Look up __iter__ method — LookupMethod handles generic type fallback
-            RoutineInfo? iterMethod = _registry.LookupMethod(iterType, "__iter__");
+            // Look up $iter method — LookupMethod handles generic type fallback
+            RoutineInfo? iterMethod = _registry.LookupMethod(iterType, "$iter");
 
             if (iterMethod != null)
             {
@@ -857,7 +857,7 @@ public partial class LLVMCodeGenerator
                     (iterMethod.OwnerType.IsGenericDefinition || iterMethod.OwnerType is ProtocolTypeInfo) &&
                     iterType.IsGenericResolution)
                 {
-                    iterMangled = Q($"{iterType.FullName}.__iter__");
+                    iterMangled = Q($"{iterType.FullName}.$iter");
                     RecordMonomorphization(iterMangled, iterMethod, iterType);
                 }
                 else
@@ -948,7 +948,7 @@ public partial class LLVMCodeGenerator
             }
             else
             {
-                // No __iter__ found, use seqValue directly as the emitter
+                // No $iter found, use seqValue directly as the emitter
                 emitterValue = iterValue;
                 emitterType = iterType;
             }
@@ -964,13 +964,13 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {emitterAddr} = alloca {emitterLlvmType}");
         EmitLine(sb, $"  store {emitterLlvmType} {emitterValue}, ptr {emitterAddr}");
 
-        // Determine element type from __next__() return type (preferred) or emitter type arguments (fallback).
-        // __next__() is preferred because the yielded type may differ from the emitter's type argument
-        // (e.g., EnumerateEmitter[S64].__next__() yields Tuple[U64, S64], not S64).
+        // Determine element type from $next() return type (preferred) or emitter type arguments (fallback).
+        // $next() is preferred because the yielded type may differ from the emitter's type argument
+        // (e.g., EnumerateEmitter[S64].$next() yields Tuple[U64, S64], not S64).
         TypeInfo? elemType = null;
         if (emitterType != null)
         {
-            RoutineInfo? nextLookup = _registry.LookupMethod(emitterType, "__next__");
+            RoutineInfo? nextLookup = _registry.LookupMethod(emitterType, "$next");
             // Skip protocol-typed return values — they need further resolution
             if (nextLookup?.ReturnType is ErrorHandlingTypeInfo { ValueType: not null } errType
                 && errType.ValueType is not ProtocolTypeInfo)
@@ -1025,15 +1025,15 @@ public partial class LLVMCodeGenerator
 
         EmitLine(sb, $"  br label %{condLabel}");
 
-        // Condition block: call __next__() → Maybe[T] = { i64, ptr }
+        // Condition block: call $next() → Maybe[T] = { i64, ptr }
         EmitLine(sb, $"{condLabel}:");
         string emitterLoad = NextTemp();
         EmitLine(sb, $"  {emitterLoad} = load {emitterLlvmType}, ptr {emitterAddr}");
 
-        // Call __next__() on the emitter (emitting routine, always returns { i64, ptr })
+        // Call $next() on the emitter (emitting routine, always returns { i64, ptr })
         // LookupMethod handles generic type fallback (e.g., RangeEmitter[S64] → RangeEmitter[T])
         RoutineInfo? nextMethod = emitterType != null
-            ? _registry.LookupMethod(emitterType, "__next__")
+            ? _registry.LookupMethod(emitterType, "$next")
             : null;
 
         string maybeResult;
@@ -1046,7 +1046,7 @@ public partial class LLVMCodeGenerator
                 (nextMethod.OwnerType.IsGenericDefinition || nextMethod.OwnerType is ProtocolTypeInfo) &&
                 emitterType != null && emitterType.IsGenericResolution)
             {
-                nextMangled = Q($"{emitterType.FullName}.__next__");
+                nextMangled = Q($"{emitterType.FullName}.$next");
                 RecordMonomorphization(nextMangled, nextMethod, emitterType);
             }
             else
@@ -1073,8 +1073,8 @@ public partial class LLVMCodeGenerator
         {
             // Fallback: construct the call name from the type
             string fallbackName = emitterType != null
-                ? Q($"{emitterType.FullName}.__next__")
-                : "__next__";
+                ? Q($"{emitterType.FullName}.$next")
+                : "$next";
             maybeResult = NextTemp();
             EmitLine(sb, $"  {maybeResult} = call {{ i64, ptr }} @{fallbackName}({emitterLlvmType} {emitterLoad})");
         }
@@ -1566,9 +1566,9 @@ public partial class LLVMCodeGenerator
 
         if (isText)
         {
-            // Text comparison via Text.__eq__(me, other) -> Bool (i1)
-            RoutineInfo? textEq = _registry.LookupRoutine("Text.__eq__");
-            string eqFuncName = textEq != null ? MangleFunctionName(textEq) : "Text___eq__";
+            // Text comparison via Text.$eq(me, other) -> Bool (i1)
+            RoutineInfo? textEq = _registry.LookupRoutine("Text.$eq");
+            string eqFuncName = textEq != null ? MangleFunctionName(textEq) : "Text$_eq";
             EmitLine(sb, $"  {result} = call i1 @{eqFuncName}(ptr {subject}, ptr {litValue})");
         }
         else if (isFloat)
@@ -2191,7 +2191,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits code for a using statement.
     /// using name = resource { body }
-    /// If the resource type has __enter__/__exit__, calls them around the body.
+    /// If the resource type has $enter/$exit, calls them around the body.
     /// Otherwise, just binds the resource to the name and emits the body (token path).
     /// </summary>
     private void EmitUsing(StringBuilder sb, UsingStatement usingStmt)
@@ -2201,9 +2201,9 @@ public partial class LLVMCodeGenerator
         TypeInfo? resourceType = GetExpressionType(usingStmt.Resource);
         string llvmType = resourceType != null ? GetLLVMType(resourceType) : "ptr";
 
-        // Check if __enter__ exists for this type
+        // Check if $enter exists for this type
         string? enterMethodName = resourceType != null
-            ? $"{resourceType.Name}.__enter__"
+            ? $"{resourceType.Name}.$enter"
             : null;
         RoutineInfo? enterMethod = enterMethodName != null
             ? _registry.LookupRoutine(enterMethodName)
@@ -2214,7 +2214,7 @@ public partial class LLVMCodeGenerator
 
         if (enterMethod != null)
         {
-            // Resource path: call __enter__(), bind result (or resource if void)
+            // Resource path: call $enter(), bind result (or resource if void)
             string enterMangled = MangleFunctionName(enterMethod);
             string receiverType = GetParameterLLVMType(resourceType!);
 
@@ -2254,10 +2254,10 @@ public partial class LLVMCodeGenerator
         // Emit the body
         EmitStatement(sb, usingStmt.Body);
 
-        // Call __exit__ if __enter__ was available
+        // Call $exit if $enter was available
         if (enterMethod != null)
         {
-            string exitMethodName = $"{resourceType!.Name}.__exit__";
+            string exitMethodName = $"{resourceType!.Name}.$exit";
             RoutineInfo? exitMethod = _registry.LookupRoutine(exitMethodName);
             if (exitMethod != null)
             {

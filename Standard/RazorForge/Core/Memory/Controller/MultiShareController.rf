@@ -8,7 +8,7 @@ entity MultiShareController
   secret weak_count: Atomic[S32]
 
 # Create new reference count controller with initial counts of 0
-routine MultiShareController.__create__() -> MultiShareController
+routine MultiShareController.$create() -> MultiShareController
   return MultiShareController(
     strong_count: Atomic(0),
     weak_count: Atomic(0)

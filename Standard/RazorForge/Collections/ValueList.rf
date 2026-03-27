@@ -23,7 +23,7 @@ needs N is U64
 # Indexing with Integral (forward index) - read only
 # ============================================================================
 
-routine ValueList[T, N].__getitem__![I](index: I) -> T
+routine ValueList[T, N].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64!()
   if idx >= N
@@ -34,7 +34,7 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^) - read only
 # ============================================================================
 
-routine ValueList[T, N].__getitem__![I](index: BackIndex[I]) -> T
+routine ValueList[T, N].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(N)
   return me[idx]

@@ -3,4 +3,4 @@ module Core
 
 protocol Invertible
   @readonly
-  routine Me.__not__() -> Me
+  routine Me.$bitnot() -> Me

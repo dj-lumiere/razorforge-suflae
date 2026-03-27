@@ -17,69 +17,69 @@ preset D64_ONE: D64 = 1.0_d64
 # Creators
 # ============================================================================
 
-routine D64.__create__(from: S8) -> D64
+routine D64.$create(from: S8) -> D64
   var bits = rf_d64_from_s32(S32(from))
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: S16) -> D64
+routine D64.$create(from: S16) -> D64
   var bits = rf_d64_from_s32(S32(from))
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: S32) -> D64
+routine D64.$create(from: S32) -> D64
   var bits = rf_d64_from_s32(from)
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: S64) -> D64
+routine D64.$create(from: S64) -> D64
   var bits = rf_d64_from_s64(from)
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: S128) -> D64
+routine D64.$create(from: S128) -> D64
   # Convert through S64 - may lose precision
   return from.S64!().D64()
 
-routine D64.__create__(from: U8) -> D64
+routine D64.$create(from: U8) -> D64
   var bits = rf_d64_from_u32(U32(from))
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: U16) -> D64
+routine D64.$create(from: U16) -> D64
   var bits = rf_d64_from_u32(U32(from))
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: U32) -> D64
+routine D64.$create(from: U32) -> D64
   var bits = rf_d64_from_u32(from)
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: U64) -> D64
+routine D64.$create(from: U64) -> D64
   var bits = rf_d64_from_u64(from)
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: U128) -> D64
+routine D64.$create(from: U128) -> D64
   # Convert through U64 - may lose precision
   return from.U64!().D64()
 
-routine D64.__create__(from: F16) -> D64
+routine D64.$create(from: F16) -> D64
   return from.F32().D64()
 
-routine D64.__create__(from: F32) -> D64
+routine D64.$create(from: F32) -> D64
   var bits = rf_f32_to_d64(from)
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: F64) -> D64
+routine D64.$create(from: F64) -> D64
   var bits = rf_f64_to_d64(from)
   return bitcast[U64, D64](bits)
 
-routine D64.__create__(from: F128) -> D64
+routine D64.$create(from: F128) -> D64
   return from.F64!().D64()
 
-routine D64.__create__(from: D32) -> D64
+routine D64.$create(from: D32) -> D64
   var bits = from.to_bits()
   var result_bits = rf_d32_to_d64(bits)
   return bitcast[U64, D64](result_bits)
 
-routine D64.__create__(from: D64) -> D64
+routine D64.$create(from: D64) -> D64
   return from
 
-routine D64.__create__(from: D128) -> D64
+routine D64.$create(from: D128) -> D64
   var result_bits = rf_d128_to_d64(from.low_bits(), from.high_bits())
   return bitcast[U64, D64](result_bits)
 
@@ -87,31 +87,31 @@ routine D64.__create__(from: D128) -> D64
 # Arithmetic Operations
 # ============================================================================
 
-routine D64.__add__(you: D64) -> D64
+routine D64.$add(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_add(a_bits, b_bits)
   return bitcast[U64, D64](result)
 
-routine D64.__sub__(you: D64) -> D64
+routine D64.$sub(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_sub(a_bits, b_bits)
   return bitcast[U64, D64](result)
 
-routine D64.__mul__(you: D64) -> D64
+routine D64.$mul(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_mul(a_bits, b_bits)
   return bitcast[U64, D64](result)
 
-routine D64.__truediv__(you: D64) -> D64
+routine D64.$truediv(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_div(a_bits, b_bits)
   return bitcast[U64, D64](result)
 
-routine D64.__neg__() -> D64
+routine D64.$neg() -> D64
   var zero_bits = bitcast[D64, U64](D64_ZERO)
   var me_bits = bitcast[D64, U64](me)
   var result = rf_d64_sub(zero_bits, me_bits)
@@ -121,12 +121,12 @@ routine D64.__neg__() -> D64
 # Comparison Operations
 # ============================================================================
 
-routine D64.__eq__(you: D64) -> Bool
+routine D64.$eq(you: D64) -> Bool
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   return rf_d64_cmp(a_bits, b_bits) == 0
 
-routine D64.__cmp__(you: D64) -> ComparisonSign
+routine D64.$cmp(you: D64) -> ComparisonSign
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var cmp = rf_d64_cmp(a_bits, b_bits)
@@ -208,7 +208,7 @@ routine D64.signum() -> D64
   var cmp = rf_d64_cmp(me_bits, zero_bits)
   return when
     cmp > 0 => D64_ONE
-    cmp < 0 => me.__neg__()
+    cmp < 0 => me.$neg()
     else => D64_ZERO
 
 # Reinterpret bits as U64 (type punning)
@@ -223,15 +223,15 @@ routine D64.from_bits(bits: U64) -> D64
 # Text Representation and Parsing
 # ============================================================================
 
-routine D64.__represent__() -> Text
+routine D64.$represent() -> Text
   var bits = bitcast[D64, U64](me)
   var cstr_result = rf_d64_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
-routine D64.__diagnose__() -> Text
-  return "D64(" + me.__represent__() + ")"
+routine D64.$diagnose() -> Text
+  return "D64(" + me.$represent() + ")"
 
-routine D64.__create__!(from_text: Text) -> D64
+routine D64.$create!(from_text: Text) -> D64
   var cstr_val = from_text.CStr()
   var bits = rf_D64_from_string(cstr_val)
   return bitcast[U64, D64](bits)

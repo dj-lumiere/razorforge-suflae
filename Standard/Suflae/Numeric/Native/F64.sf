@@ -8,27 +8,27 @@ record F64
   secret value: RazorForge/Core.F64
 
 # Arithmetic operators
-routine F64.__add__(you: F64) -> F64
-  return F64(value: me.value.__add__(you.value))
+routine F64.$add(you: F64) -> F64
+  return F64(value: me.value.$add(you.value))
 
-routine F64.__sub__(you: F64) -> F64
-  return F64(value: me.value.__sub__(you.value))
+routine F64.$sub(you: F64) -> F64
+  return F64(value: me.value.$sub(you.value))
 
-routine F64.__mul__(you: F64) -> F64
-  return F64(value: me.value.__mul__(you.value))
+routine F64.$mul(you: F64) -> F64
+  return F64(value: me.value.$mul(you.value))
 
-routine F64.__truediv__(you: F64) -> F64
-  return F64(value: me.value.__truediv__(you.value))
+routine F64.$truediv(you: F64) -> F64
+  return F64(value: me.value.$truediv(you.value))
 
-routine F64.__neg__() -> F64
-  return F64(value: me.value.__neg__())
+routine F64.$neg() -> F64
+  return F64(value: me.value.$neg())
 
 # Comparison
-routine F64.__eq__(you: F64) -> Bool
-  return me.value.__eq__(you.value)
+routine F64.$eq(you: F64) -> Bool
+  return me.value.$eq(you.value)
 
-routine F64.__cmp__(you: F64) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine F64.$cmp(you: F64) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Math operations
 routine F64.sqrt() -> F64
@@ -97,54 +97,54 @@ routine F64.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From signed integers
-routine F64.__create__(from: S8) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: S8) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: S16) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: S16) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: S32) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: S32) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: S64) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: S64) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: S128) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: S128) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
 # From unsigned integers
-routine F64.__create__(from: U8) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: U8) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: U16) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: U16) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: U32) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: U32) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: U64) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: U64) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: U128) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: U128) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
 # From other floating point types
-routine F64.__create__(from: F32) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: F32) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
 # From arbitrary precision
-routine F64.__create__(from: Integer) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: Integer) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
-routine F64.__create__(from: Decimal) -> F64
-  return F64(value: RazorForge/Core.F64.__create__(from.value))
+routine F64.$create(from: Decimal) -> F64
+  return F64(value: RazorForge/Core.F64.$create(from.value))
 
 # Bit representation
-routine F64.__create_from_bits__(bits: U64) -> F64
+routine F64.$create_from_bits(bits: U64) -> F64
   return F64(value: RazorForge/Core.F64.from_bits(bits.value))
 
 routine F64.to_bits() -> U64

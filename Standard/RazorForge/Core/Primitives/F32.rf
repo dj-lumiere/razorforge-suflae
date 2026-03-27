@@ -22,86 +22,86 @@ preset F32_SQRT_2: F32 = 1.4142135_f32
 preset F32_LN_2: F32 = 0.6931472_f32
 preset F32_LN_10: F32 = 2.3025851_f32
 
-routine F32.__create__(from: S8) -> F32
+routine F32.$create(from: S8) -> F32
   return sitofp[S8, F32](from)
 
-routine F32.__create__(from: S16) -> F32
+routine F32.$create(from: S16) -> F32
   return sitofp[S16, F32](from)
 
-routine F32.__create__(from: S32) -> F32
+routine F32.$create(from: S32) -> F32
   return sitofp[S32, F32](from)
 
-routine F32.__create__(from: S64) -> F32
+routine F32.$create(from: S64) -> F32
   return sitofp[S64, F32](from)
 
-routine F32.__create__(from: S128) -> F32
+routine F32.$create(from: S128) -> F32
   return sitofp[S128, F32](from)
 
-routine F32.__create__(from: U8) -> F32
+routine F32.$create(from: U8) -> F32
   return uitofp[U8, F32](from)
 
-routine F32.__create__(from: U16) -> F32
+routine F32.$create(from: U16) -> F32
   return uitofp[U16, F32](from)
 
-routine F32.__create__(from: U32) -> F32
+routine F32.$create(from: U32) -> F32
   return uitofp[U32, F32](from)
 
-routine F32.__create__(from: U64) -> F32
+routine F32.$create(from: U64) -> F32
   return uitofp[U64, F32](from)
 
-routine F32.__create__(from: U128) -> F32
+routine F32.$create(from: U128) -> F32
   return uitofp[U128, F32](from)
 
-routine F32.__create__(from: F16) -> F32
+routine F32.$create(from: F16) -> F32
   return fpext[F16, F32](from)
 
-routine F32.__create__(from: F32) -> F32
+routine F32.$create(from: F32) -> F32
   return from
 
-routine F32.__create__(from: F64) -> F32
+routine F32.$create(from: F64) -> F32
   return fptrunc[F64, F32](from)
 
-routine F32.__create__(from: F128) -> F32
+routine F32.$create(from: F128) -> F32
   return fptrunc[F128, F32](from)
 
-routine F32.__create__(from: D32) -> F32
+routine F32.$create(from: D32) -> F32
   var bits = bitcast[D32, U32](from)
   return rf_d32_to_f32(bits)
 
-routine F32.__create__(from: D64) -> F32
+routine F32.$create(from: D64) -> F32
   var bits = bitcast[D64, U64](from)
   return rf_d64_to_f32(bits)
 
-routine F32.__create__(from: D128) -> F32
+routine F32.$create(from: D128) -> F32
   return rf_d128_to_f32(from.low_bits(), from.high_bits())
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-routine F32.__add__(you: F32) -> F32
+routine F32.$add(you: F32) -> F32
   return fadd[F32](me, you)
 
-routine F32.__sub__(you: F32) -> F32
+routine F32.$sub(you: F32) -> F32
   return fsub[F32](me, you)
 
-routine F32.__mul__(you: F32) -> F32
+routine F32.$mul(you: F32) -> F32
   return fmul[F32](me, you)
 
-routine F32.__truediv__(you: F32) -> F32
+routine F32.$truediv(you: F32) -> F32
   return fdiv[F32](me, you)
 
-routine F32.__neg__() -> F32
+routine F32.$neg() -> F32
   return fneg[F32](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
-routine F32.__eq__(you: F32) -> Bool
+routine F32.$eq(you: F32) -> Bool
   return fcmp_oeq[F32](me, you)
 
-routine F32.__cmp__(you: F32) -> ComparisonSign
+routine F32.$cmp(you: F32) -> ComparisonSign
   if fcmp_olt[F32](me, you)
     return ME_SMALL
   if fcmp_ogt[F32](me, you)
@@ -197,14 +197,14 @@ routine F32.from_bits(bits: U32) -> F32
 # Text Representation and Parsing
 # ============================================================================
 
-routine F32.__represent__() -> Text
+routine F32.$represent() -> Text
   var cstr_result = rf_format_F32(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
-routine F32.__diagnose__() -> Text
+routine F32.$diagnose() -> Text
   var cstr_result = rf_format_F32(me)
   return "F32(" + Text(from: CStr(from_ptr: cstr_result)) + ")"
 
-routine F32.__create__!(from_text: Text) -> F32
+routine F32.$create!(from_text: Text) -> F32
   var cstr_val = from_text.CStr()
   return rf_parse_F32(cstr_val)

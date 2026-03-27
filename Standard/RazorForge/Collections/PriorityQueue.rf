@@ -25,12 +25,12 @@ needs TPriority obeys Comparable
 # Creators
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].__create__() -> PriorityQueue[TElement, TPriority]
+routine PriorityQueue[TElement, TPriority].$create() -> PriorityQueue[TElement, TPriority]
   return PriorityQueue[TElement, TPriority](
     heap: List[PQEntry[TElement, TPriority]]()
   )
 
-routine PriorityQueue[TElement, TPriority].__create__(capacity: U64) -> PriorityQueue[TElement, TPriority]
+routine PriorityQueue[TElement, TPriority].$create(capacity: U64) -> PriorityQueue[TElement, TPriority]
   return PriorityQueue[TElement, TPriority](
     heap: List[PQEntry[TElement, TPriority]](capacity)
   )
@@ -189,13 +189,13 @@ routine PriorityQueue[TElement, TPriority].to_list() -> List[PQEntry[TElement, T
 # Iteration (heap order, NOT priority order)
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].__iter__() -> PriorityQueueIterator[TElement, TPriority]
+routine PriorityQueue[TElement, TPriority].$iter() -> PriorityQueueIterator[TElement, TPriority]
   return PriorityQueueIterator[TElement, TPriority](
     queue: me,
     index: 0u64
   )
 
-routine PriorityQueue[TElement, TPriority].__represent__() -> Text
+routine PriorityQueue[TElement, TPriority].$represent() -> Text
   var result = "PriorityQueue["
   var i = 0u64
   for entry in me
@@ -206,13 +206,13 @@ routine PriorityQueue[TElement, TPriority].__represent__() -> Text
   result = result + "]"
   return result
 
-routine PriorityQueue[TElement, TPriority].__diagnose__() -> Text
+routine PriorityQueue[TElement, TPriority].$diagnose() -> Text
   var result = "PriorityQueue["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + "(" + entry.element.__diagnose__() + ", " + entry.priority.__diagnose__() + ")"
+    result = result + "(" + entry.element.$diagnose() + ", " + entry.priority.$diagnose() + ")"
     i = i + 1u64
   result = result + "]"
   return result

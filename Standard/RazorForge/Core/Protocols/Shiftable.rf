@@ -3,13 +3,13 @@ module Core
 
 protocol Shiftable
   @readonly
-  routine Me.__ashl__(amount: Integral) -> Me
+  routine Me.$ashl(amount: Integral) -> Me
 
   @readonly
-  routine Me.__ashr__(amount: Integral) -> Me
+  routine Me.$ashr(amount: Integral) -> Me
 
   @readonly
-  routine Me.__lshl__(amount: Integral) -> Me
+  routine Me.$lshl(amount: Integral) -> Me
 
   @readonly
-  routine Me.__lshr__(amount: Integral) -> Me
+  routine Me.$lshr(amount: Integral) -> Me

@@ -8,76 +8,76 @@ record S8
   secret value: RazorForge/Core.S8
 
 # Arithmetic operators
-routine S8.__add__!(you: S8) -> S8
-  return S8(value: me.value.__add__!(you.value))
+routine S8.$add!(you: S8) -> S8
+  return S8(value: me.value.$add!(you.value))
 
-routine S8.__sub__!(you: S8) -> S8
-  return S8(value: me.value.__sub__!(you.value))
+routine S8.$sub!(you: S8) -> S8
+  return S8(value: me.value.$sub!(you.value))
 
-routine S8.__mul__!(you: S8) -> S8
-  return S8(value: me.value.__mul__!(you.value))
+routine S8.$mul!(you: S8) -> S8
+  return S8(value: me.value.$mul!(you.value))
 
-routine S8.__floordiv__!(you: S8) -> S8
-  return S8(value: me.value.__floordiv__!(you.value))
+routine S8.$floordiv!(you: S8) -> S8
+  return S8(value: me.value.$floordiv!(you.value))
 
-routine S8.__mod__!(you: S8) -> S8
-  return S8(value: me.value.__mod__!(you.value))
+routine S8.$mod!(you: S8) -> S8
+  return S8(value: me.value.$mod!(you.value))
 
-routine S8.__neg__!() -> S8
-  return S8(value: me.value.__neg__!())
+routine S8.$neg!() -> S8
+  return S8(value: me.value.$neg!())
 
 # Wrapping arithmetic
-routine S8.__add_wrap__(you: S8) -> S8
-  return S8(value: me.value.__add_wrap__(you.value))
+routine S8.$add_wrap(you: S8) -> S8
+  return S8(value: me.value.$add_wrap(you.value))
 
-routine S8.__sub_wrap__(you: S8) -> S8
-  return S8(value: me.value.__sub_wrap__(you.value))
+routine S8.$sub_wrap(you: S8) -> S8
+  return S8(value: me.value.$sub_wrap(you.value))
 
-routine S8.__mul_wrap__(you: S8) -> S8
-  return S8(value: me.value.__mul_wrap__(you.value))
+routine S8.$mul_wrap(you: S8) -> S8
+  return S8(value: me.value.$mul_wrap(you.value))
 
 # Clamping arithmetic
-routine S8.__add_clamp__(you: S8) -> S8
-  return S8(value: me.value.__add_clamp__(you.value))
+routine S8.$add_clamp(you: S8) -> S8
+  return S8(value: me.value.$add_clamp(you.value))
 
-routine S8.__sub_clamp__(you: S8) -> S8
-  return S8(value: me.value.__sub_clamp__(you.value))
+routine S8.$sub_clamp(you: S8) -> S8
+  return S8(value: me.value.$sub_clamp(you.value))
 
-routine S8.__mul_clamp__(you: S8) -> S8
-  return S8(value: me.value.__mul_clamp__(you.value))
+routine S8.$mul_clamp(you: S8) -> S8
+  return S8(value: me.value.$mul_clamp(you.value))
 
 # Comparison
-routine S8.__eq__(you: S8) -> Bool
-  return me.value.__eq__(you.value)
+routine S8.$eq(you: S8) -> Bool
+  return me.value.$eq(you.value)
 
-routine S8.__cmp__(you: S8) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine S8.$cmp(you: S8) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Bitwise operations
-routine S8.__and__(you: S8) -> S8
-  return S8(value: me.value.__and__(you.value))
+routine S8.$bitand(you: S8) -> S8
+  return S8(value: me.value.$bitand(you.value))
 
-routine S8.__or__(you: S8) -> S8
-  return S8(value: me.value.__or__(you.value))
+routine S8.$bitor(you: S8) -> S8
+  return S8(value: me.value.$bitor(you.value))
 
-routine S8.__xor__(you: S8) -> S8
-  return S8(value: me.value.__xor__(you.value))
+routine S8.$bitxor(you: S8) -> S8
+  return S8(value: me.value.$bitxor(you.value))
 
-routine S8.__not__() -> S8
-  return S8(value: me.value.__not__())
+routine S8.$bitnot() -> S8
+  return S8(value: me.value.$bitnot())
 
 # Shift operations
-routine S8.__ashl__(bits: U8) -> S8
-  return S8(value: me.value.__ashl__(bits))
+routine S8.$ashl(bits: U8) -> S8
+  return S8(value: me.value.$ashl(bits))
 
-routine S8.__ashr__(bits: U8) -> S8
-  return S8(value: me.value.__ashr__(bits))
+routine S8.$ashr(bits: U8) -> S8
+  return S8(value: me.value.$ashr(bits))
 
-routine S8.__lshl__(bits: U8) -> S8
-  return S8(value: me.value.__lshl__(bits))
+routine S8.$lshl(bits: U8) -> S8
+  return S8(value: me.value.$lshl(bits))
 
-routine S8.__lshr__(bits: U8) -> S8
-  return S8(value: me.value.__lshr__(bits))
+routine S8.$lshr(bits: U8) -> S8
+  return S8(value: me.value.$lshr(bits))
 
 # Math operations
 routine S8.abs() -> S8
@@ -135,45 +135,45 @@ routine S8.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From larger signed integers (narrowing - can overflow)
-routine S8.__create__!(from: S16) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: S16) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: S32) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: S32) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: S64) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: S64) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: S128) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: S128) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
 # From unsigned integers (can overflow)
-routine S8.__create__!(from: U8) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: U8) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: U16) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: U16) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: U32) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: U32) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: U64) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: U64) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: U128) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: U128) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
 # From floating point (truncates, can overflow)
-routine S8.__create__!(from: F32) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: F32) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
-routine S8.__create__!(from: F64) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: F64) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))
 
 # From arbitrary precision (can overflow)
-routine S8.__create__!(from: Integer) -> S8
-  return S8(value: RazorForge/Core.S8.__create__!(from.value))
+routine S8.$create!(from: Integer) -> S8
+  return S8(value: RazorForge/Core.S8.$create!(from.value))

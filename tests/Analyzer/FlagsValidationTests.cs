@@ -351,7 +351,7 @@ public class FlagsValidationTests
                           WRITE
 
                         @readonly
-                        routine Permissions.__add__(you: Permissions) -> Permissions
+                        routine Permissions.$add(you: Permissions) -> Permissions
                           return me
                         """;
 

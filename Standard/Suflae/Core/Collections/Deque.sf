@@ -45,11 +45,11 @@ routine Deque[T].last!() -> T
   return me.value.last!()
 
 # Indexing
-routine Deque[T].__getitem__!(index: Integer) -> T
-  return me.value.__getitem__!(index.value)
+routine Deque[T].$getitem!(index: Integer) -> T
+  return me.value.$getitem!(index.value)
 
-routine Deque[T].__setitem__!(index: Integer, item: T)
-  me.value.__setitem__!(index.value, item)
+routine Deque[T].$setitem!(index: Integer, item: T)
+  me.value.$setitem!(index.value, item)
   return
 
 # Rotation
@@ -70,5 +70,5 @@ routine Deque[T].contains(item: T) -> Bool
   return me.value.contains(item)
 
 # Comparison
-routine Deque[T].__eq__(other: Deque[T]) -> Bool
-  return me.value.__eq__(other.value)
+routine Deque[T].$eq(other: Deque[T]) -> Bool
+  return me.value.$eq(other.value)

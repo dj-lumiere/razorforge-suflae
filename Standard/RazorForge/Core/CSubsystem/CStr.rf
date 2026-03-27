@@ -40,12 +40,12 @@ preset CSTR_NULL: CStr = CStr(ptr: 0_addr)
 
 # Create CStr from raw pointer (wraps existing memory, does NOT copy)
 # WARNING: The pointed-to memory must remain valid for the lifetime of this CStr
-routine CStr.__create__(from_ptr: Address) -> CStr
+routine CStr.$create(from_ptr: Address) -> CStr
   return CStr(ptr: from_ptr)
 
 # Create CStr from Bytes (allocates NEW memory with null terminator)
 # The caller is responsible for freeing this memory when done
-routine CStr.__create__(from: Bytes) -> CStr
+routine CStr.$create(from: Bytes) -> CStr
   var len = from.count()
   var buffer = Snatched[U8](rf_allocate_dynamic(len + 1u64))
 
@@ -62,7 +62,7 @@ routine CStr.__create__(from: Bytes) -> CStr
 
 # Create CStr from Text (encodes UTF-32 codepoints to UTF-8 with null terminator)
 # The caller is responsible for freeing this memory when done
-routine CStr.__create__(from: Text) -> CStr
+routine CStr.$create(from: Text) -> CStr
   var len = from.count()
   if len == 0u64
     var buffer = Snatched[U8](rf_allocate_dynamic(1u64))
@@ -130,17 +130,17 @@ routine CStr.is_empty() -> Bool
 # ============================================================================
 
 # Get Byte at index (no bounds checking in danger zone)
-routine CStr.__getitem__!(index: U64) -> U8
+routine CStr.$getitem!(index: U64) -> U8
   return Snatched[U8](me.ptr + index).read()
 
 # ============================================================================
 # Comparison
 # ============================================================================
 
-routine CStr.__eq__(you: CStr) -> Bool
+routine CStr.$eq(you: CStr) -> Bool
   return rf_cstr_compare(me.ptr, you.ptr) == 0s32
 
-routine CStr.__cmp__(you: CStr) -> ComparisonSign
+routine CStr.$cmp(you: CStr) -> ComparisonSign
   var cmp = rf_cstr_compare(me.ptr, you.ptr)
   if cmp < 0s32
     return ME_SMALL

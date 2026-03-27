@@ -1017,7 +1017,7 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
     /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
-    /// in the parser (e.g., a + b → a.__add__(b)). This method only handles operators that
+    /// in the parser (e.g., a + b → a.$add(b)). This method only handles operators that
     /// are NOT desugared:
     /// - Assignment (=)
     /// - Logical operators (and, or) — require short-circuit evaluation
@@ -1341,8 +1341,8 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Analyzes a compound assignment expression (e.g., a += b).
-    /// Dispatch order: (0) verify target is var, (1) try in-place dunder (__iadd__) → Blank,
-    /// (2) fallback to create-and-assign (__add__) for non-entity types, (3) error if neither.
+    /// Dispatch order: (0) verify target is var, (1) try in-place dunder ($iadd) → Blank,
+    /// (2) fallback to create-and-assign ($add) for non-entity types, (3) error if neither.
     /// </summary>
     private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound)
     {
@@ -1445,7 +1445,7 @@ public sealed partial class SemanticAnalyzer
         string? regularMethod = compound.Operator.GetMethodName();
         bool isEntity = targetType is EntityTypeInfo;
 
-        // Step 1: Try in-place dunder (__iadd__, etc.)
+        // Step 1: Try in-place dunder ($iadd, etc.)
         if (inPlaceMethod != null)
         {
             RoutineInfo? inPlaceRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
@@ -1462,7 +1462,7 @@ public sealed partial class SemanticAnalyzer
             RoutineInfo? regularRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{regularMethod}");
             if (regularRoutine != null)
             {
-                // Create-and-assign: a = a.__add__(b) — returns target type
+                // Create-and-assign: a = a.$add(b) — returns target type
                 TypeSymbol returnType = regularRoutine.ReturnType ?? targetType;
                 if (!IsAssignableTo(source: returnType, target: targetType))
                 {
@@ -1866,9 +1866,9 @@ public sealed partial class SemanticAnalyzer
                         call.Location);
                 }
 
-                // #68: Real-to-Complex promotion — only __add__/__sub__ allow float↔complex cross-type
+                // #68: Real-to-Complex promotion — only $add/$sub allow float↔complex cross-type
                 if (IsOperatorDunder(name: member.PropertyName)
-                    && member.PropertyName is not ("__add__" or "__sub__" or "__iadd__" or "__isub__")
+                    && member.PropertyName is not ("$add" or "$sub" or "$iadd" or "$isub")
                     && call.Arguments.Count > 0
                     && method.Parameters.Count > 0)
                 {
@@ -2058,7 +2058,7 @@ public sealed partial class SemanticAnalyzer
             }
             else
             {
-                // #78: Method-chain constructor — "42".S32!() → S32.__create__!(from: "42")
+                // #78: Method-chain constructor — "42".S32!() → S32.$create!(from: "42")
                 string propName = member.PropertyName;
                 bool isFailable = propName.EndsWith(value: '!');
                 string potentialTypeName = isFailable ? propName[..^1] : propName;
@@ -2067,7 +2067,7 @@ public sealed partial class SemanticAnalyzer
                 if (targetType != null)
                 {
                     // Look up the creator on the target type
-                    string creatorName = isFailable ? "__create__!" : "__create__";
+                    string creatorName = isFailable ? "$create!" : "$create";
                     RoutineInfo? creator = _registry.LookupRoutine(fullName: $"{potentialTypeName}.{creatorName}");
 
                     if (creator != null)

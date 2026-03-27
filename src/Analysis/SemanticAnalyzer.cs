@@ -142,10 +142,10 @@ public sealed partial class SemanticAnalyzer
         // Phase 2.54: Apply implicit marker protocol conformance (record → RecordType, etc.)
         ApplyImplicitMarkerConformance();
 
-        // Phase 2.55: Auto-register builder-generated member routines (Text, hash, __eq__, etc.)
+        // Phase 2.55: Auto-register builder-generated member routines ($represent, $hash, $eq, etc.)
         AutoRegisterBuiltinRoutines();
 
-        // Phase 2.6: Generate derived comparison operators (__ne__ from __eq__, __lt__/__le__/__gt__/__ge__ from __cmp__)
+        // Phase 2.6: Generate derived comparison operators ($ne from $eq, $lt/$le/$gt/$ge from $cmp)
         GenerateDerivedOperators();
 
         // Phase 2.7: Validate protocol implementations (ensure types implement all required protocol methods)

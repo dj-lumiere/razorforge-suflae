@@ -7,18 +7,18 @@ entity SkipSequence[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret count: U64
 
-routine SkipSequence[T].__iter__() -> SkipEmitter[T]
-  return SkipEmitter[T](source: me.source.__iter__(), remaining: me.count)
+routine SkipSequence[T].$iter() -> SkipEmitter[T]
+  return SkipEmitter[T](source: me.source.$iter(), remaining: me.count)
 
 entity SkipEmitter[T] obeys Iterator[T]
   secret source: Iterator[T]
   secret remaining: U64
 
-emitting routine SkipEmitter[T].__next__() -> T
+emitting routine SkipEmitter[T].$next() -> T
   while me.remaining > 0u64
-    me.source.__next__()
+    me.source.$next()
     me.remaining = me.remaining - 1u64
-  emit me.source.__next__()
+  emit me.source.$next()
   return
 
 routine Iterable[T].skip(count: U64) -> SkipSequence[T]

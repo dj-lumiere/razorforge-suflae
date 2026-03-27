@@ -3,4 +3,4 @@ module Core
 
 protocol Diagnosable obeys Representable
   @[readonly, generated]
-  routine Me.__diagnose__() -> Text
+  routine Me.$diagnose() -> Text

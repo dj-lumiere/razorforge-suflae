@@ -23,86 +23,86 @@ preset F128_LN_2: F128 = 0.693147180559945309417232121458176568_f128
 preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
 
 # Convert integers to F128 using LLVM intrinsics (lossless for all integer sizes)
-routine F128.__create__(from: S8) -> F128
+routine F128.$create(from: S8) -> F128
   return sitofp[S8, F128](from)
 
-routine F128.__create__(from: S16) -> F128
+routine F128.$create(from: S16) -> F128
   return sitofp[S16, F128](from)
 
-routine F128.__create__(from: S32) -> F128
+routine F128.$create(from: S32) -> F128
   return sitofp[S32, F128](from)
 
-routine F128.__create__(from: S64) -> F128
+routine F128.$create(from: S64) -> F128
   return sitofp[S64, F128](from)
 
-routine F128.__create__(from: S128) -> F128
+routine F128.$create(from: S128) -> F128
   return sitofp[S128, F128](from)
 
-routine F128.__create__(from: U8) -> F128
+routine F128.$create(from: U8) -> F128
   return uitofp[U8, F128](from)
 
-routine F128.__create__(from: U16) -> F128
+routine F128.$create(from: U16) -> F128
   return uitofp[U16, F128](from)
 
-routine F128.__create__(from: U32) -> F128
+routine F128.$create(from: U32) -> F128
   return uitofp[U32, F128](from)
 
-routine F128.__create__(from: U64) -> F128
+routine F128.$create(from: U64) -> F128
   return uitofp[U64, F128](from)
 
-routine F128.__create__(from: U128) -> F128
+routine F128.$create(from: U128) -> F128
   return uitofp[U128, F128](from)
 
 # Extend from smaller float types using LLVM intrinsics (lossless widening)
-routine F128.__create__(from: F16) -> F128
+routine F128.$create(from: F16) -> F128
   return fpext[F16, F128](from)
 
-routine F128.__create__(from: F32) -> F128
+routine F128.$create(from: F32) -> F128
   return fpext[F32, F128](from)
 
-routine F128.__create__(from: F64) -> F128
+routine F128.$create(from: F64) -> F128
   return fpext[F64, F128](from)
 
-routine F128.__create__(from: F128) -> F128
+routine F128.$create(from: F128) -> F128
   return from
 
 # Convert from decimal types via native runtime (no LLVM intrinsic for decimal)
-routine F128.__create__(from: D32) -> F128
+routine F128.$create(from: D32) -> F128
   return rf_d32_to_f128(from.to_bits())
 
-routine F128.__create__(from: D64) -> F128
+routine F128.$create(from: D64) -> F128
   return rf_d64_to_f128(from.to_bits())
 
-routine F128.__create__(from: D128) -> F128
+routine F128.$create(from: D128) -> F128
   return rf_d128_to_f128(from.low_bits(), from.high_bits())
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-routine F128.__add__(you: F128) -> F128
+routine F128.$add(you: F128) -> F128
   return fadd[F128](me, you)
 
-routine F128.__sub__(you: F128) -> F128
+routine F128.$sub(you: F128) -> F128
   return fsub[F128](me, you)
 
-routine F128.__mul__(you: F128) -> F128
+routine F128.$mul(you: F128) -> F128
   return fmul[F128](me, you)
 
-routine F128.__truediv__(you: F128) -> F128
+routine F128.$truediv(you: F128) -> F128
   return fdiv[F128](me, you)
 
-routine F128.__neg__() -> F128
+routine F128.$neg() -> F128
   return fneg[F128](me)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
-routine F128.__eq__(you: F128) -> Bool
+routine F128.$eq(you: F128) -> Bool
   return fcmp_oeq[F128](me, you)
 
-routine F128.__cmp__(you: F128) -> ComparisonSign
+routine F128.$cmp(you: F128) -> ComparisonSign
   if fcmp_olt[F128](me, you)
     return ME_SMALL
   if fcmp_ogt[F128](me, you)
@@ -289,31 +289,31 @@ routine F128.is_subnormal() -> Bool
 # Clamping Arithmetic
 # ============================================================================
 
-routine F128.__add_clamp__(you: F128) -> F128
+routine F128.$add_clamp(you: F128) -> F128
   var result = fadd[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
-routine F128.__sub_clamp__(you: F128) -> F128
+routine F128.$sub_clamp(you: F128) -> F128
   var result = fsub[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
-routine F128.__mul_clamp__(you: F128) -> F128
+routine F128.$mul_clamp(you: F128) -> F128
   var result = fmul[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
-routine F128.__truediv_clamp__(you: F128) -> F128
+routine F128.$truediv_clamp(you: F128) -> F128
   var result = fdiv[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
-routine F128.__pow_clamp__(exp: F128) -> F128
+routine F128.$pow_clamp(exp: F128) -> F128
   var result = rf_f128_pow(me, exp)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
@@ -343,7 +343,7 @@ routine F128.F64() -> F64
 # Diagnostics and Hashing
 # ============================================================================
 
-routine F128.__diagnose__() -> Text
+routine F128.$diagnose() -> Text
   return Text(from: me)
 
 routine F128.hash() -> U64
@@ -362,10 +362,10 @@ routine F128.hash() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
-routine F128.__represent__() -> Text
+routine F128.$represent() -> Text
   var cstr_result = rf_format_F128(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
-routine F128.__create__!(from_text: Text) -> F128
+routine F128.$create!(from_text: Text) -> F128
   var cstr_val = from_text.CStr()
   return rf_parse_F128(cstr_val)

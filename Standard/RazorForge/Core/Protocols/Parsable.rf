@@ -3,4 +3,4 @@
 module Core
 
 protocol Parsable
-  routine Me.__create__!(from: Text) -> Me
+  routine Me.$create!(from: Text) -> Me

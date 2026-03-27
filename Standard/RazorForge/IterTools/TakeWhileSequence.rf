@@ -7,18 +7,18 @@ entity TakeWhileSequence[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret predicate: Routine[(T,), Bool]
 
-routine TakeWhileSequence[T].__iter__() -> TakeWhileEmitter[T]
-  return TakeWhileEmitter[T](source: me.source.__iter__(), predicate: me.predicate, done: false)
+routine TakeWhileSequence[T].$iter() -> TakeWhileEmitter[T]
+  return TakeWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, done: false)
 
 entity TakeWhileEmitter[T] obeys Iterator[T]
   secret source: Iterator[T]
   secret predicate: Routine[(T,), Bool]
   secret done: Bool
 
-emitting routine TakeWhileEmitter[T].__next__() -> T
+emitting routine TakeWhileEmitter[T].$next() -> T
   if me.done
     absent
-  var item = me.source.__next__()
+  var item = me.source.$next()
   if not me.predicate(item)
     me.done = true
     absent

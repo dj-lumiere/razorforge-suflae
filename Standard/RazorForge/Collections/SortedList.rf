@@ -32,7 +32,7 @@ needs T obeys Comparable
 # Node Creators
 # ============================================================================
 
-routine BTreeListNode[T].__create__(is_leaf: Bool) -> BTreeListNode[T]
+routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: List[T](),
     children: List[BTreeListNode[T]](),
@@ -44,7 +44,7 @@ routine BTreeListNode[T].__create__(is_leaf: Bool) -> BTreeListNode[T]
 # SortedList Creators
 # ============================================================================
 
-routine SortedList[T].__create__() -> SortedList[T]
+routine SortedList[T].$create() -> SortedList[T]
   return SortedList[T](
     root: None,
     count: 0u64
@@ -312,14 +312,14 @@ routine SortedList[T].remove_all(value: T) -> U64
 # Indexing - O(log n) access by position
 # ============================================================================
 
-routine SortedList[T].__getitem__![I](index: I) -> T
+routine SortedList[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!!, idx)
 
-routine SortedList[T].__getitem__![I](index: BackIndex[I]) -> T
+routine SortedList[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
@@ -406,7 +406,7 @@ routine SortedList[T].last!() -> T
 # Iteration
 # ============================================================================
 
-routine SortedList[T].__iter__() -> SortedListIterator[T]
+routine SortedList[T].$iter() -> SortedListIterator[T]
   return SortedListIterator[T](list: me, index: 0u64)
 
 routine SortedList[T].to_list() -> List[T]
@@ -442,29 +442,29 @@ routine SortedListIterator[T].next!() -> T
 # Comparison
 # ============================================================================
 
-routine SortedList[T].__represent__() -> Text
+routine SortedList[T].$represent() -> Text
   var result = "SortedList["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__represent__()
+    result = result + v.$represent()
     i = i + 1u64
   result = result + "]"
   return result
 
-routine SortedList[T].__diagnose__() -> Text
+routine SortedList[T].$diagnose() -> Text
   var result = "SortedList["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.__diagnose__()
+    result = result + v.$diagnose()
     i = i + 1u64
   result = result + "]"
   return result
 
-routine SortedList[T].__eq__(other: SortedList[T]) -> Bool
+routine SortedList[T].$eq(other: SortedList[T]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

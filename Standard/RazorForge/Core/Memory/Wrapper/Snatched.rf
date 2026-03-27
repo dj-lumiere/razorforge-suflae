@@ -28,7 +28,7 @@ record Snatched[T]
 dangerous routine T.get_address() -> Address
   return ptrtoint[T, Address](me)
 
-dangerous routine Snatched[T].__create__(from: Address) -> Snatched[T]
+dangerous routine Snatched[T].$create(from: Address) -> Snatched[T]
   return inttoptr[Address, T](from)
 
 # Create snatched pointer from any object (danger! only)
@@ -79,7 +79,7 @@ routine Snatched[T].offset(bytes: ByteSize) -> Snatched[T]
   return Snatched[T](addr + bytes.value)
 
 # Compare addresses
-routine Snatched[T].__eq__(you: Snatched[T]) -> Bool
+routine Snatched[T].$eq(you: Snatched[T]) -> Bool
   return icmp_eq[Snatched[T]](me, you)
 
 # NOTE: All operations on Snatched[T] are inherently unsafe

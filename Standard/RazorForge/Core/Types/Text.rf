@@ -23,18 +23,18 @@ entity Text
 
 # Creators
 
-routine Text.__create__() -> Text
+routine Text.$create() -> Text
   return Text(letters: List[Letter]())
 
-routine Text.__create__(from_list: List[Letter]) -> Text
+routine Text.$create(from_list: List[Letter]) -> Text
   return Text(letters: from_list)
 
-routine Text.__create__(from_letter: Letter) -> Text
+routine Text.$create(from_letter: Letter) -> Text
   var list = List[Letter]()
   list.add_last(from_letter)
   return Text(letters: list)
 
-routine Text.__create__(from: CStr) -> Text
+routine Text.$create(from: CStr) -> Text
   if from.is_null()
     return Text()
   danger!
@@ -82,7 +82,7 @@ routine Text.__create__(from: CStr) -> Text
 
 # Convert CWStr to Text (decodes UTF-16 surrogate pairs to codepoints)
 # Handles surrogate pairs correctly for supplementary characters
-routine Text.__create__(from: CWStr) -> Text
+routine Text.$create(from: CWStr) -> Text
   danger!
     var len = from.count()
     if len == 0u64
@@ -130,17 +130,17 @@ routine Text.is_empty() -> Bool
 
 # Indexing
 
-routine Text.__getitem__![I obeys Integral](index: I) -> Letter
+routine Text.$getitem![I obeys Integral](index: I) -> Letter
   return me.letters[index]
 
-routine Text.__getitem__![I obeys Integral](index: BackIndex[I]) -> Letter
+routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Letter
   return me.letters[index]
 
-routine Text.__getslice__![I obeys Integral](start: I, end: I) -> Text
+routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
   var sliced_list = me.letters[start til end]
   return Text(from_list: sliced_list)
 
-routine Text.__getslice__![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
+routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
   var sliced_list = me.letters[start til end]
   return Text(from_list: sliced_list)
 
@@ -162,10 +162,10 @@ routine Text.concat(other: Text) -> Text
     i += 1u64
   return Text(from_list: result)
 
-routine Text.__add__(other: Text) -> Text
+routine Text.$add(other: Text) -> Text
   return me.concat(other)
 
-routine Text.__eq__(other: Text) -> Bool
+routine Text.$eq(other: Text) -> Bool
   if me.count() != other.count()
     return false
   var i: U64 = 0u64
@@ -179,7 +179,7 @@ routine Text.__eq__(other: Text) -> Bool
 
 # Conversion to modifiable list
 
-routine List[Letter].__create__(from: Text) -> List[Letter]
+routine List[Letter].$create(from: Text) -> List[Letter]
   return from.letters
 
 # Iteration
@@ -188,7 +188,7 @@ entity TextIterator
   text: Text
   index: U64
 
-routine Text.__iter__() -> TextIterator
+routine Text.$iter() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 
 routine TextIterator.next!() -> Letter

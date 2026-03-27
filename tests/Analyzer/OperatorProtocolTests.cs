@@ -21,14 +21,14 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
@@ -92,22 +92,22 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         protocol Subtractable
                           @readonly
-                          routine Me.__sub__(you: Me) -> Me
+                          routine Me.$sub(you: Me) -> Me
 
                         record Complex obeys Addable, Subtractable
                           real: F64
                           imag: F64
 
                         @readonly
-                        routine Complex.__add__(you: Complex) -> Complex
+                        routine Complex.$add(you: Complex) -> Complex
                           return Complex(real: me.real + you.real, imag: me.imag + you.imag)
 
                         @readonly
-                        routine Complex.__sub__(you: Complex) -> Complex
+                        routine Complex.$sub(you: Complex) -> Complex
                           return Complex(real: me.real - you.real, imag: me.imag - you.imag)
                         """;
 
@@ -125,14 +125,14 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
@@ -140,7 +140,7 @@ public class OperatorProtocolTests
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Addable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__add__",
+            filter: e => e.Message.Contains(value: "$add",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Addable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -267,14 +267,14 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         entity Vector obeys Addable
                           x: Integer
                           y: Integer
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
@@ -288,14 +288,14 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector
                           x: Integer
                           y: Integer
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
@@ -303,7 +303,7 @@ public class OperatorProtocolTests
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Addable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__add__",
+            filter: e => e.Message.Contains(value: "$add",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Addable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));

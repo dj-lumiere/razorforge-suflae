@@ -8,73 +8,73 @@ record U8
   secret value: RazorForge/Core.U8
 
 # Arithmetic operators
-routine U8.__add__!(you: U8) -> U8
-  return U8(value: me.value.__add__!(you.value))
+routine U8.$add!(you: U8) -> U8
+  return U8(value: me.value.$add!(you.value))
 
-routine U8.__sub__!(you: U8) -> U8
-  return U8(value: me.value.__sub__!(you.value))
+routine U8.$sub!(you: U8) -> U8
+  return U8(value: me.value.$sub!(you.value))
 
-routine U8.__mul__!(you: U8) -> U8
-  return U8(value: me.value.__mul__!(you.value))
+routine U8.$mul!(you: U8) -> U8
+  return U8(value: me.value.$mul!(you.value))
 
-routine U8.__floordiv__!(you: U8) -> U8
-  return U8(value: me.value.__floordiv__!(you.value))
+routine U8.$floordiv!(you: U8) -> U8
+  return U8(value: me.value.$floordiv!(you.value))
 
-routine U8.__mod__!(you: U8) -> U8
-  return U8(value: me.value.__mod__!(you.value))
+routine U8.$mod!(you: U8) -> U8
+  return U8(value: me.value.$mod!(you.value))
 
 # Wrapping arithmetic
-routine U8.__add_wrap__(you: U8) -> U8
-  return U8(value: me.value.__add_wrap__(you.value))
+routine U8.$add_wrap(you: U8) -> U8
+  return U8(value: me.value.$add_wrap(you.value))
 
-routine U8.__sub_wrap__(you: U8) -> U8
-  return U8(value: me.value.__sub_wrap__(you.value))
+routine U8.$sub_wrap(you: U8) -> U8
+  return U8(value: me.value.$sub_wrap(you.value))
 
-routine U8.__mul_wrap__(you: U8) -> U8
-  return U8(value: me.value.__mul_wrap__(you.value))
+routine U8.$mul_wrap(you: U8) -> U8
+  return U8(value: me.value.$mul_wrap(you.value))
 
 # Clamping arithmetic
-routine U8.__add_clamp__(you: U8) -> U8
-  return U8(value: me.value.__add_clamp__(you.value))
+routine U8.$add_clamp(you: U8) -> U8
+  return U8(value: me.value.$add_clamp(you.value))
 
-routine U8.__sub_clamp__(you: U8) -> U8
-  return U8(value: me.value.__sub_clamp__(you.value))
+routine U8.$sub_clamp(you: U8) -> U8
+  return U8(value: me.value.$sub_clamp(you.value))
 
-routine U8.__mul_clamp__(you: U8) -> U8
-  return U8(value: me.value.__mul_clamp__(you.value))
+routine U8.$mul_clamp(you: U8) -> U8
+  return U8(value: me.value.$mul_clamp(you.value))
 
 # Comparison
-routine U8.__eq__(you: U8) -> Bool
-  return me.value.__eq__(you.value)
+routine U8.$eq(you: U8) -> Bool
+  return me.value.$eq(you.value)
 
-routine U8.__cmp__(you: U8) -> ComparisonSign
-  return me.value.__cmp__(you.value)
+routine U8.$cmp(you: U8) -> ComparisonSign
+  return me.value.$cmp(you.value)
 
 # Bitwise operations
-routine U8.__and__(you: U8) -> U8
-  return U8(value: me.value.__and__(you.value))
+routine U8.$bitand(you: U8) -> U8
+  return U8(value: me.value.$bitand(you.value))
 
-routine U8.__or__(you: U8) -> U8
-  return U8(value: me.value.__or__(you.value))
+routine U8.$bitor(you: U8) -> U8
+  return U8(value: me.value.$bitor(you.value))
 
-routine U8.__xor__(you: U8) -> U8
-  return U8(value: me.value.__xor__(you.value))
+routine U8.$bitxor(you: U8) -> U8
+  return U8(value: me.value.$bitxor(you.value))
 
-routine U8.__not__() -> U8
-  return U8(value: me.value.__not__())
+routine U8.$bitnot() -> U8
+  return U8(value: me.value.$bitnot())
 
 # Shift operations
-routine U8.__ashl__(bits: U8) -> U8
-  return U8(value: me.value.__ashl__(bits))
+routine U8.$ashl(bits: U8) -> U8
+  return U8(value: me.value.$ashl(bits))
 
-routine U8.__ashr__(bits: U8) -> U8
-  return U8(value: me.value.__ashr__(bits))
+routine U8.$ashr(bits: U8) -> U8
+  return U8(value: me.value.$ashr(bits))
 
-routine U8.__lshl__(bits: U8) -> U8
-  return U8(value: me.value.__lshl__(bits))
+routine U8.$lshl(bits: U8) -> U8
+  return U8(value: me.value.$lshl(bits))
 
-routine U8.__lshr__(bits: U8) -> U8
-  return U8(value: me.value.__lshr__(bits))
+routine U8.$lshr(bits: U8) -> U8
+  return U8(value: me.value.$lshr(bits))
 
 # Math operations
 routine U8.min(you: U8) -> U8
@@ -120,45 +120,45 @@ routine U8.to_text() -> Text
   return me.value.to_text()
 
 # ============================================================================
-# Factory creators (__create__ pattern)
+# Factory creators ($create pattern)
 # ============================================================================
 
 # From other unsigned integers (narrowing - can overflow)
-routine U8.__create__!(from: U16) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: U16) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: U32) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: U32) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: U64) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: U64) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: U128) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: U128) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
 # From signed integers (can overflow)
-routine U8.__create__!(from: S8) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: S8) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: S16) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: S16) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: S32) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: S32) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: S64) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: S64) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: S128) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: S128) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
 # From floating point (truncates, can overflow)
-routine U8.__create__!(from: F32) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: F32) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
-routine U8.__create__!(from: F64) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: F64) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))
 
 # From arbitrary precision (can overflow)
-routine U8.__create__!(from: Integer) -> U8
-  return U8(value: RazorForge/Core.U8.__create__!(from.value))
+routine U8.$create!(from: Integer) -> U8
+  return U8(value: RazorForge/Core.U8.$create!(from.value))

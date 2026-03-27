@@ -254,50 +254,50 @@ public static class BinaryOperatorExtensions
             return op switch
             {
                 // Arithmetic
-                BinaryOperator.Add => "__add__",
-                BinaryOperator.Subtract => "__sub__",
-                BinaryOperator.Multiply => "__mul__",
-                BinaryOperator.TrueDivide => "__truediv__",
-                BinaryOperator.FloorDivide => "__floordiv__",
-                BinaryOperator.Modulo => "__mod__",
-                BinaryOperator.Power => "__pow__",
+                BinaryOperator.Add => "$add",
+                BinaryOperator.Subtract => "$sub",
+                BinaryOperator.Multiply => "$mul",
+                BinaryOperator.TrueDivide => "$truediv",
+                BinaryOperator.FloorDivide => "$floordiv",
+                BinaryOperator.Modulo => "$mod",
+                BinaryOperator.Power => "$pow",
 
                 // Wrapping arithmetic
-                BinaryOperator.AddWrap => "__add_wrap__",
-                BinaryOperator.SubtractWrap => "__sub_wrap__",
-                BinaryOperator.MultiplyWrap => "__mul_wrap__",
-                BinaryOperator.PowerWrap => "__pow_wrap__",
+                BinaryOperator.AddWrap => "$add_wrap",
+                BinaryOperator.SubtractWrap => "$sub_wrap",
+                BinaryOperator.MultiplyWrap => "$mul_wrap",
+                BinaryOperator.PowerWrap => "$pow_wrap",
 
                 // Clamping arithmetic
-                BinaryOperator.AddClamp => "__add_clamp__",
-                BinaryOperator.SubtractClamp => "__sub_clamp__",
-                BinaryOperator.MultiplyClamp => "__mul_clamp__",
-                BinaryOperator.TrueDivClamp => "__truediv_clamp__",
-                BinaryOperator.PowerClamp => "__pow_clamp__",
+                BinaryOperator.AddClamp => "$add_clamp",
+                BinaryOperator.SubtractClamp => "$sub_clamp",
+                BinaryOperator.MultiplyClamp => "$mul_clamp",
+                BinaryOperator.TrueDivClamp => "$truediv_clamp",
+                BinaryOperator.PowerClamp => "$pow_clamp",
 
                 // Ordering (overloadable)
-                BinaryOperator.Equal => "__eq__",
-                BinaryOperator.NotEqual => "__ne__",
-                BinaryOperator.Less => "__lt__",
-                BinaryOperator.LessEqual => "__le__",
-                BinaryOperator.Greater => "__gt__",
-                BinaryOperator.GreaterEqual => "__ge__",
-                BinaryOperator.ThreeWayComparator => "__cmp__",
+                BinaryOperator.Equal => "$eq",
+                BinaryOperator.NotEqual => "$ne",
+                BinaryOperator.Less => "$lt",
+                BinaryOperator.LessEqual => "$le",
+                BinaryOperator.Greater => "$gt",
+                BinaryOperator.GreaterEqual => "$ge",
+                BinaryOperator.ThreeWayComparator => "$cmp",
 
                 // Bitwise
-                BinaryOperator.BitwiseAnd => "__and__",
-                BinaryOperator.BitwiseOr => "__or__",
-                BinaryOperator.BitwiseXor => "__xor__",
-                BinaryOperator.ArithmeticLeftShift => "__ashl__",
-                BinaryOperator.ArithmeticRightShift => "__ashr__",
-                BinaryOperator.LogicalLeftShift => "__lshl__",
-                BinaryOperator.LogicalRightShift => "__lshr__",
+                BinaryOperator.BitwiseAnd => "$bitand",
+                BinaryOperator.BitwiseOr => "$bitor",
+                BinaryOperator.BitwiseXor => "$bitxor",
+                BinaryOperator.ArithmeticLeftShift => "$ashl",
+                BinaryOperator.ArithmeticRightShift => "$ashr",
+                BinaryOperator.LogicalLeftShift => "$lshl",
+                BinaryOperator.LogicalRightShift => "$lshr",
 
                 // Membership (note: operands are reversed in desugaring)
-                // x in coll → coll.__contains__(x)
-                // x notin coll → coll.__notcontains__(x)
-                BinaryOperator.In => "__contains__",
-                BinaryOperator.NotIn => "__notcontains__",
+                // x in coll → coll.$contains(x)
+                // x notin coll → coll.$notcontains(x)
+                BinaryOperator.In => "$contains",
+                BinaryOperator.NotIn => "$notcontains",
 
                 // Non-overloadable operators return null
                 _ => null
@@ -314,24 +314,24 @@ public static class BinaryOperatorExtensions
             return op switch
             {
                 // Arithmetic
-                BinaryOperator.Add => "__iadd__",
-                BinaryOperator.Subtract => "__isub__",
-                BinaryOperator.Multiply => "__imul__",
-                BinaryOperator.TrueDivide => "__itruediv__",
-                BinaryOperator.FloorDivide => "__ifloordiv__",
-                BinaryOperator.Modulo => "__imod__",
-                BinaryOperator.Power => "__ipow__",
+                BinaryOperator.Add => "$iadd",
+                BinaryOperator.Subtract => "$isub",
+                BinaryOperator.Multiply => "$imul",
+                BinaryOperator.TrueDivide => "$itruediv",
+                BinaryOperator.FloorDivide => "$ifloordiv",
+                BinaryOperator.Modulo => "$imod",
+                BinaryOperator.Power => "$ipow",
 
                 // Bitwise
-                BinaryOperator.BitwiseAnd => "__iand__",
-                BinaryOperator.BitwiseOr => "__ior__",
-                BinaryOperator.BitwiseXor => "__ixor__",
+                BinaryOperator.BitwiseAnd => "$ibitand",
+                BinaryOperator.BitwiseOr => "$ibitor",
+                BinaryOperator.BitwiseXor => "$ibitxor",
 
                 // Shift
-                BinaryOperator.ArithmeticLeftShift => "__iashl__",
-                BinaryOperator.ArithmeticRightShift => "__iashr__",
-                BinaryOperator.LogicalLeftShift => "__ilshl__",
-                BinaryOperator.LogicalRightShift => "__ilshr__",
+                BinaryOperator.ArithmeticLeftShift => "$iashl",
+                BinaryOperator.ArithmeticRightShift => "$iashr",
+                BinaryOperator.LogicalLeftShift => "$ilshl",
+                BinaryOperator.LogicalRightShift => "$ilshr",
 
                 // Overflow variants and other operators have no in-place form
                 _ => null

@@ -737,24 +737,11 @@ public sealed class TypeRegistry
         var newType = new TupleTypeInfo(elementTypes: elementTypes);
         _resolutions[key: key] = newType;
 
-        // Auto-register Text.__create__(from: TupleType) and TupleType.__represent__()
+        // Auto-register TupleType.$represent()
         TypeInfo? textType = LookupType("Text");
         if (textType != null)
         {
-            RegisterRoutine(new RoutineInfo(name: "__create__")
-            {
-                Kind = RoutineKind.Creator,
-                OwnerType = textType,
-                Parameters = [new ParameterInfo(name: "from", type: newType)],
-                ReturnType = textType,
-                IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
-                Visibility = VisibilityModifier.Open,
-                IsSynthesized = true
-            });
-
-            RegisterRoutine(new RoutineInfo(name: "__represent__")
+            RegisterRoutine(new RoutineInfo(name: "$represent")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -767,7 +754,7 @@ public sealed class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(new RoutineInfo(name: "__diagnose__")
+            RegisterRoutine(new RoutineInfo(name: "$diagnose")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -781,13 +768,13 @@ public sealed class TypeRegistry
             });
         }
 
-        // Auto-register __eq__ and __ne__ (always — element-wise equality)
+        // Auto-register $eq and $ne (always — element-wise equality)
         TypeInfo? boolType = LookupType("Bool");
         if (boolType != null)
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(new RoutineInfo(name: "__eq__")
+            RegisterRoutine(new RoutineInfo(name: "$eq")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -800,7 +787,7 @@ public sealed class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(new RoutineInfo(name: "__ne__")
+            RegisterRoutine(new RoutineInfo(name: "$ne")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -814,11 +801,11 @@ public sealed class TypeRegistry
             });
         }
 
-        // Auto-register __hash__ if ALL element types support __hash__
+        // Auto-register $hash if ALL element types support $hash
         TypeInfo? u64Type = LookupType("U64");
-        if (u64Type != null && elementTypes.All(et => LookupMethod(et, "__hash__") != null))
+        if (u64Type != null && elementTypes.All(et => LookupMethod(et, "$hash") != null))
         {
-            RegisterRoutine(new RoutineInfo(name: "__hash__")
+            RegisterRoutine(new RoutineInfo(name: "$hash")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -832,14 +819,14 @@ public sealed class TypeRegistry
             });
         }
 
-        // Auto-register __cmp__ + derived operators if ALL element types support __cmp__
+        // Auto-register $cmp + derived operators if ALL element types support $cmp
         TypeInfo? comparisonSignType = LookupType("ComparisonSign");
         if (boolType != null && comparisonSignType != null &&
-            elementTypes.All(et => LookupMethod(et, "__cmp__") != null))
+            elementTypes.All(et => LookupMethod(et, "$cmp") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(new RoutineInfo(name: "__cmp__")
+            RegisterRoutine(new RoutineInfo(name: "$cmp")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -852,8 +839,8 @@ public sealed class TypeRegistry
                 IsSynthesized = true
             });
 
-            // Derived: __lt__, __le__, __gt__, __ge__
-            foreach (string opName in new[] { "__lt__", "__le__", "__gt__", "__ge__" })
+            // Derived: $lt, $le, $gt, $ge
+            foreach (string opName in new[] { "$lt", "$le", "$gt", "$ge" })
             {
                 RegisterRoutine(new RoutineInfo(name: opName)
                 {
@@ -1085,7 +1072,7 @@ public sealed class TypeRegistry
     }
 
     /// <summary>
-    /// Looks up a routine by its module-qualified name (e.g., "Core.S8.__add__").
+    /// Looks up a routine by its module-qualified name (e.g., "Core.S8.$add").
     /// </summary>
     public RoutineInfo? LookupRoutineByQualifiedName(string qualifiedName)
     {

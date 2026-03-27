@@ -8,7 +8,7 @@ entity SingleShareController
   secret weak_count: S32
 
 # Create new reference count controller with initial counts of 0
-routine SingleShareController.__create__() -> SingleShareController
+routine SingleShareController.$create() -> SingleShareController
   return SingleShareController(
     strong_count: 0,
     weak_count: 0

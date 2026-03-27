@@ -3,4 +3,4 @@ module Core
 
 protocol ClampingAddable
   @readonly
-  routine Me.__add_clamp__(you: Me) -> Me
+  routine Me.$add_clamp(you: Me) -> Me
