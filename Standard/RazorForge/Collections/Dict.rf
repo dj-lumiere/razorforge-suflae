@@ -19,7 +19,7 @@ preset DICT_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
 preset DICT_LOAD_FACTOR: U64 = 75u64
 
-entity Dict[K, V]
+entity Dict[K, V] obeys Iterable[Tuple[K, V]]
 needs K obeys Hashable, Comparable
   secret buckets: List[SortedDict[K, V]]
   secret count: U64
@@ -64,7 +64,7 @@ routine Dict[K, V].bucket_index(key: K) -> U64
   return hash % me.buckets.count()
 
 routine Dict[K, V].should_rehash() -> Bool
-  var load = (me.count * 100u64) / me.buckets.count()
+  var load = (me.count * 100u64) // me.buckets.count()
   return load > DICT_LOAD_FACTOR
 
 routine Dict[K, V].rehash()
@@ -136,10 +136,6 @@ routine Dict[K, V].remove(key: K) -> Bool
     return true
   return false
 
-routine Dict[K, V].get!(key: K) -> V
-  var idx = me.bucket_index(key)
-  return me.buckets[idx][key]
-
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
   var idx = me.bucket_index(key)
   if me.buckets[idx].contains_key(key)
@@ -151,7 +147,8 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # ============================================================================
 
 routine Dict[K, V].$getitem!(key: K) -> V
-  return me.get!(key)
+  var idx = me.bucket_index(key)
+  return me.buckets[idx][key]
 
 routine Dict[K, V].$setitem(key: K, value: V)
   var idx = me.bucket_index(key)
@@ -204,6 +201,7 @@ routine Dict[K, V].entries() -> List[Tuple[K, V]]
 # Iteration
 # ============================================================================
 
+@readonly
 routine Dict[K, V].$iter() -> DictIterator[K, V]
   return DictIterator[K, V](
     dict: me,
@@ -212,14 +210,14 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
     current_keys: List[K]()
   )
 
-entity DictIterator[K, V]
+entity DictIterator[K, V] obeys Iterator[Tuple[K, V]]
   dict: Dict[K, V]
   bucket_idx: U64
   entry_idx: U64
   current_keys: List[K]
 
-routine DictIterator[K, V].next!() -> Tuple[K, V]
-  # Advance to next non-empty bucket if needed
+@writable
+emitting routine DictIterator[K, V].$next() -> Tuple[K, V]
   while me.entry_idx >= me.current_keys.count()
     if me.bucket_idx >= me.dict.buckets.count()
       absent
@@ -230,13 +228,16 @@ routine DictIterator[K, V].next!() -> Tuple[K, V]
   var key = me.current_keys[me.entry_idx]
   var value = me.dict.get!(key)
   me.entry_idx = me.entry_idx + 1u64
-  return (key, value)
+  emit (key, value)
+  return
 
 # ============================================================================
 # Comparison
 # ============================================================================
 
 routine Dict[K, V].$represent() -> Text
+  if me.is_empty()
+    return "{:}"
   var result = "{"
   var ks = me.keys()
   var i = 0u64
@@ -244,22 +245,24 @@ routine Dict[K, V].$represent() -> Text
     if i > 0u64
       result = result + ", "
     var key = ks[i]
-    result = result + key.Text() + ": " + me.get!(key).Text()
+    result = result + key.$represent() + ": " + me[key].$represent()
     i = i + 1u64
   result = result + "}"
   return result
 
 routine Dict[K, V].$diagnose() -> Text
-  var result = "Dict{"
+  if me.is_empty()
+    return me.type_name() + "(count: 0, {:})"
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var ks = me.keys()
   var i = 0u64
   while i < ks.count()
     if i > 0u64
       result = result + ", "
     var key = ks[i]
-    result = result + key.$diagnose() + ": " + me.get!(key).$diagnose()
+    result = result + key.$represent() + ": " + me[key].$represent()
     i = i + 1u64
-  result = result + "}"
+  result = result + "})"
   return result
 
 routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool

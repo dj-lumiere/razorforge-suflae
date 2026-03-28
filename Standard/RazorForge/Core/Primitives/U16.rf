@@ -304,7 +304,7 @@ routine U16.is_odd() -> Bool
 # ============================================================================
 
 routine U16.$represent() -> Text
-  return U32(me).Text()
+  return U32(me).$represent()
 
 routine U16.$diagnose() -> Text
   return "U16(" + me.$represent() + ")"

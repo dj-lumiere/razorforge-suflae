@@ -11,8 +11,8 @@
 
 module Collections
 
-entity Deque[T]
-  secret data: Snatched[U8]    # Circular buffer (raw storage for T elements)
+entity Deque[T] obeys Iterable[T]
+  secret data: Snatched[T]    # Circular buffer (raw storage for T elements)
   secret start: U64          # Index of first element
   secret count: U64          # Number of elements
   secret capacity: U64       # Total allocated slots
@@ -32,7 +32,7 @@ routine Deque[T].$create() -> Deque[T]
 routine Deque[T].$create(capacity: U64) -> Deque[T]
   var byte_size = capacity * data_size[T]()
   return Deque[T](
-    data: Snatched[U8]( rf_allocate_dynamic(byte_size)),
+    data: Snatched[T](rf_allocate_dynamic(byte_size)),
     start: 0u64,
     count: 0u64,
     capacity: capacity
@@ -147,7 +147,7 @@ routine Deque[T].reserve(new_capacity: U64)
     return
 
   var new_byte_size = new_capacity * data_size[T]()
-  var new_data = Snatched[U8]( rf_allocate_dynamic(new_byte_size))
+  var new_data = Snatched[T]( rf_allocate_dynamic(new_byte_size))
 
   # Copy elements in logical order (unwrap the ring)
   var i = 0u64
@@ -278,20 +278,20 @@ routine Deque[T].$represent() -> Text
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.Text()
+    result = result + v.$represent()
     i = i + 1u64
   result = result + "]"
   return result
 
 routine Deque[T].$diagnose() -> Text
-  var result = "Deque["
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$diagnose()
+    result = result + v.$represent()
     i = i + 1u64
-  result = result + "]"
+  result = result + "])"
   return result
 
 routine Deque[T].$eq(other: Deque[T]) -> Bool

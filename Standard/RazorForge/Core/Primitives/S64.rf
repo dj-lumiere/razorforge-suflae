@@ -340,8 +340,8 @@ routine S64.$represent() -> Text
   if me == 0s64
     return "0"
   if me > 0s64
-    return U64(me).Text()
-  return "-" + U64(0u64 - U64(me)).Text()
+    return U64(me).$represent()
+  return "-" + U64(0u64 - U64(me)).$represent()
 
 routine S64.$diagnose() -> Text
   return "S64(" + me.$represent() + ")"

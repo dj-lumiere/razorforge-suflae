@@ -184,6 +184,12 @@ routine List[Letter].$create(from: Text) -> List[Letter]
 
 # Iteration
 
+routine Text.$represent() -> Text
+  return me
+
+routine Text.$diagnose() -> Text
+  return f"Text(count: {me.count()}, \"{me}\")"
+
 entity TextIterator
   text: Text
   index: U64
@@ -191,7 +197,7 @@ entity TextIterator
 routine Text.$iter() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 
-routine TextIterator.next!() -> Letter
+routine TextIterator.$next!() -> Letter
   if me.index >= me.text.count()
     absent
   var value = me.text[me.index]

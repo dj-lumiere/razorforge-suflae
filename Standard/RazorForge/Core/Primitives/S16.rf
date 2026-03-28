@@ -324,7 +324,7 @@ routine S16.signum() -> S16
 # ============================================================================
 
 routine S16.$represent() -> Text
-  return S32(me).Text()
+  return S32(me).$represent()
 
 routine S16.$diagnose() -> Text
   return "S16(" + me.$represent() + ")"

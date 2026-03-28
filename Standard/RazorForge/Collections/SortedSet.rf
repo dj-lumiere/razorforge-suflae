@@ -27,7 +27,7 @@ needs T obeys Comparable
   subtree_size: U64                 # Total elements in this subtree
   is_leaf: Bool
 
-entity SortedSet[T]
+entity SortedSet[T] obeys Iterable[T]
 needs T obeys Comparable
   secret root: BTreeSetNode[T]?
   secret count: U64
@@ -411,6 +411,7 @@ routine SortedSet[T].last!() -> T
 # Iteration (in-order traversal)
 # ============================================================================
 
+@readonly
 routine SortedSet[T].$iter() -> SortedSetIterator[T]
   return SortedSetIterator[T](set: me, index: 0u64)
 
@@ -432,16 +433,17 @@ routine SortedSet[T].collect_inorder(node: BTreeSetNode[T], result: List[T])
     me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
-entity SortedSetIterator[T]
+entity SortedSetIterator[T] obeys Iterator[T]
   set: SortedSet[T]
   index: U64
 
-routine SortedSetIterator[T].next!() -> T
+@writable
+emitting routine SortedSetIterator[T].$next() -> T
   if me.index >= me.set.count()
     absent
-  var value = me.set[me.index]
+  emit me.set[me.index]
   me.index = me.index + 1u64
-  return value
+  return
 
 # ============================================================================
 # Comparison
@@ -453,20 +455,20 @@ routine SortedSet[T].$represent() -> Text
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.Text()
+    result = result + v.$represent()
     i = i + 1u64
   result = result + "}"
   return result
 
 routine SortedSet[T].$diagnose() -> Text
-  var result = "SortedSet{"
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$diagnose()
+    result = result + v.$represent()
     i = i + 1u64
-  result = result + "}"
+  result = result + "})"
   return result
 
 routine SortedSet[T].$eq(other: SortedSet[T]) -> Bool

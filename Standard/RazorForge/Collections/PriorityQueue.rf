@@ -17,7 +17,7 @@ needs TPriority obeys Comparable
   element: TElement
   priority: TPriority
 
-entity PriorityQueue[TElement, TPriority]
+entity PriorityQueue[TElement, TPriority] obeys Iterable[PQEntry[TElement, TPriority]]
 needs TPriority obeys Comparable
   secret heap: List[PQEntry[TElement, TPriority]]
 
@@ -189,6 +189,7 @@ routine PriorityQueue[TElement, TPriority].to_list() -> List[PQEntry[TElement, T
 # Iteration (heap order, NOT priority order)
 # ============================================================================
 
+@readonly
 routine PriorityQueue[TElement, TPriority].$iter() -> PriorityQueueIterator[TElement, TPriority]
   return PriorityQueueIterator[TElement, TPriority](
     queue: me,
@@ -201,30 +202,30 @@ routine PriorityQueue[TElement, TPriority].$represent() -> Text
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + "(" + entry.element.Text() + ", " + entry.priority.Text() + ")"
+    result = result + entry.priority.$represent() + ": " + entry.element.$represent()
     i = i + 1u64
   result = result + "]"
   return result
 
 routine PriorityQueue[TElement, TPriority].$diagnose() -> Text
-  var result = "PriorityQueue["
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + "(" + entry.element.$diagnose() + ", " + entry.priority.$diagnose() + ")"
+    result = result + entry.priority.$represent() + ": " + entry.element.$represent()
     i = i + 1u64
-  result = result + "]"
+  result = result + "])"
   return result
 
-entity PriorityQueueIterator[TElement, TPriority]
+entity PriorityQueueIterator[TElement, TPriority] obeys Iterator[PQEntry[TElement, TPriority]]
   queue: PriorityQueue[TElement, TPriority]
   index: U64
 
-routine PriorityQueueIterator[TElement, TPriority].next!() ->
-PQEntry[TElement, TPriority]
+@writable
+emitting routine PriorityQueueIterator[TElement, TPriority].$next() -> PQEntry[TElement, TPriority]
   if me.index >= me.queue.count()
     absent
-  var entry = me.queue.heap[me.index]
+  emit me.queue.heap[me.index]
   me.index = me.index + 1u64
-  return entry
+  return

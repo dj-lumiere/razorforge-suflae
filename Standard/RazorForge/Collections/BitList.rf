@@ -13,7 +13,7 @@
 
 module Collections
 
-entity BitList
+entity BitList obeys Iterable[Bool]
   secret data: Snatched[Byte]    # Heap-allocated byte array (8 bits per Byte)
   secret count: U64              # Current number of bits
   secret capacity: U64           # Total bit capacity (in bits, not bytes)
@@ -292,22 +292,24 @@ routine BitList.$bitnot() -> BitList
 # Iteration Support
 # ============================================================================
 
+@readonly
 routine BitList.$iter() -> BitListIterator
   return BitListIterator(
     list: me,
     index: 0u64
   )
 
-entity BitListIterator
+entity BitListIterator obeys Iterator[Bool]
   list: BitList
   index: U64
 
-routine BitListIterator.next!() -> Bool
+@writable
+emitting routine BitListIterator.$next() -> Bool
   if me.index >= me.list.count()
     absent
-  var value = me.list[me.index]
+  emit me.list[me.index]
   me.index = me.index + 1u64
-  return value
+  return
 
 # ============================================================================
 # Utility Operations
@@ -429,14 +431,14 @@ routine BitList.$represent() -> Text
   return result
 
 routine BitList.$diagnose() -> Text
-  var result = "BitList["
+  var result = "BitList(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$diagnose()
+    result = result + v.$represent()
     i = i + 1u64
-  result = result + "]"
+  result = result + "])"
   return result
 
 routine BitList.from_u64(value: U64) -> BitList

@@ -19,7 +19,7 @@ routine List[T].$create() -> List[T]
   )
 
 routine List[T].$create(capacity: U64) -> List[T]
-  var byte_size = capacity * data_size[T]()
+  var byte_size = capacity * T.data_size()
   var ptr = rf_allocate_dynamic(byte_size)
   return List[T](
     data: Snatched[T](ptr),
@@ -243,18 +243,18 @@ routine List[T].$represent() -> Text
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.Text()
+    result = result + v.$represent()
     i = i + 1u64
   result = result + "]"
   return result
 
 routine List[T].$diagnose() -> Text
-  var result = "List["
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$diagnose()
+    result = result + v.$represent()
     i = i + 1u64
-  result = result + "]"
+  result = result + "])"
   return result

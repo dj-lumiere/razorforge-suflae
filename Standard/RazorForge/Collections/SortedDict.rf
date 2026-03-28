@@ -31,7 +31,7 @@ needs K obeys Comparable
   children: List[BTreeDictNode[K, V]]      # Child pointers (empty for leaf)
   is_leaf: Bool
 
-entity SortedDict[K, V]
+entity SortedDict[K, V] obeys Iterable[KVPair[K, V]]
 needs K obeys Comparable
   secret root: BTreeDictNode[K, V]?
   secret count: U64
@@ -79,9 +79,9 @@ routine SortedDict[K, V].clear()
 routine SortedDict[K, V].contains_key(key: K) -> Bool
   if me.root is None
     return false
-  return me.search_node!(me.root, key) isnot None
+  return me.try_search_node(me.root!!, key) isnot None
 
-routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V]?, key: K) -> V
+routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V], key: K) -> V
   var i = 0u64
   while i < node.entries.count() and key > node.entries[i].key
     i = i + 1u64
@@ -94,6 +94,19 @@ routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V]?, key: K) -> V
 
   return me.search_node!(node.children[i], key)
 
+routine SortedDict[K, V].try_search_node(node: BTreeDictNode[K, V], key: K) -> Maybe[V]
+  var i = 0u64
+  while i < node.entries.count() and key > node.entries[i].key
+    i = i + 1u64
+
+  if i < node.entries.count() and key == node.entries[i].key
+    return node.entries[i].value
+
+  if node.is_leaf
+    return None
+
+  return me.try_search_node(node.children[i], key)
+
 # ============================================================================
 # Indexing (by key)
 # ============================================================================
@@ -101,10 +114,10 @@ routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V]?, key: K) -> V
 routine SortedDict[K, V].$getitem!(key: K) -> V
   if me.root is None
     absent
-  var result = me.search_node!(me.root, key)
+  var result = me.try_search_node(me.root!!, key)
   if result is None
     absent
-  return result
+  return result!!
 
 routine SortedDict[K, V].$setitem(key: K, value: V)
   me.add(key, value)
@@ -399,6 +412,7 @@ routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, ma
 # Iteration (in key order)
 # ============================================================================
 
+@readonly
 routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
   return SortedDictIterator[K, V](
     entries: me.to_list(),
@@ -423,22 +437,25 @@ routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List
     me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
-entity SortedDictIterator[K, V]
+entity SortedDictIterator[K, V] obeys Iterator[KVPair[K, V]]
   entries: List[KVPair[K, V]]
   index: U64
 
-routine SortedDictIterator[K, V].next!() -> KVPair[K, V]
+@writable
+emitting routine SortedDictIterator[K, V].$next() -> KVPair[K, V]
   if me.index >= me.entries.count()
     absent
-  var entry = me.entries[me.index]
+  emit me.entries[me.index]
   me.index = me.index + 1u64
-  return entry
+  return
 
 # ============================================================================
 # Comparison
 # ============================================================================
 
 routine SortedDict[K, V].$represent() -> Text
+  if me.is_empty()
+    return "SortedDict{:}"
   var result = "SortedDict{"
   var ks = me.keys()
   var i = 0u64
@@ -446,22 +463,24 @@ routine SortedDict[K, V].$represent() -> Text
     if i > 0u64
       result = result + ", "
     var key = ks[i]
-    result = result + key.Text() + ": " + me[key].Text()
+    result = result + key.$represent() + ": " + me[key].$represent()
     i = i + 1u64
   result = result + "}"
   return result
 
 routine SortedDict[K, V].$diagnose() -> Text
-  var result = "SortedDict{"
+  if me.is_empty()
+    return me.type_name() + "(count: 0, {:})"
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var ks = me.keys()
   var i = 0u64
   while i < ks.count()
     if i > 0u64
       result = result + ", "
     var key = ks[i]
-    result = result + key.$diagnose() + ": " + me[key].$diagnose()
+    result = result + key.$represent() + ": " + me[key].$represent()
     i = i + 1u64
-  result = result + "}"
+  result = result + "})"
   return result
 
 routine SortedDict[K, V].$eq(other: SortedDict[K, V]) -> Bool

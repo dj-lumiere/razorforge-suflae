@@ -326,7 +326,7 @@ routine S8.signum() -> S8
 # ============================================================================
 
 routine S8.$represent() -> Text
-  return S32(me).Text()
+  return S32(me).$represent()
 
 routine S8.$diagnose() -> Text
   return "S8(" + me.$represent() + ")"

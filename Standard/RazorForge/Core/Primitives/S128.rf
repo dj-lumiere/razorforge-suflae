@@ -320,8 +320,8 @@ routine S128.$represent() -> Text
   if me == 0s128
     return "0"
   if me > 0s128
-    return U128(me).Text()
-  return "-" + U128(0u128 - U128(me)).Text()
+    return U128(me).$represent()
+  return "-" + U128(0u128 - U128(me)).$represent()
 
 routine S128.$diagnose() -> Text
   return "S128(" + me.$represent() + ")"

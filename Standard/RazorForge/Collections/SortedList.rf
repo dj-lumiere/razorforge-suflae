@@ -23,7 +23,7 @@ needs T obeys Comparable
   subtree_size: U64                  # Total elements in this subtree
   is_leaf: Bool
 
-entity SortedList[T]
+entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
   secret root: BTreeListNode[T]?
   secret count: U64
@@ -406,6 +406,7 @@ routine SortedList[T].last!() -> T
 # Iteration
 # ============================================================================
 
+@readonly
 routine SortedList[T].$iter() -> SortedListIterator[T]
   return SortedListIterator[T](list: me, index: 0u64)
 
@@ -427,16 +428,17 @@ routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
     me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
-entity SortedListIterator[T]
+entity SortedListIterator[T] obeys Iterator[T]
   list: SortedList[T]
   index: U64
 
-routine SortedListIterator[T].next!() -> T
+@writable
+emitting routine SortedListIterator[T].$next() -> T
   if me.index >= me.list.count()
     absent
-  var value = me.list[me.index]
+  emit me.list[me.index]
   me.index = me.index + 1u64
-  return value
+  return
 
 # ============================================================================
 # Comparison
@@ -454,14 +456,14 @@ routine SortedList[T].$represent() -> Text
   return result
 
 routine SortedList[T].$diagnose() -> Text
-  var result = "SortedList["
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$diagnose()
+    result = result + v.$represent()
     i = i + 1u64
-  result = result + "]"
+  result = result + "])"
   return result
 
 routine SortedList[T].$eq(other: SortedList[T]) -> Bool

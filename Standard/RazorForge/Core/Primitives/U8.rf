@@ -335,7 +335,7 @@ routine U8.is_odd() -> Bool
 # ============================================================================
 
 routine U8.$represent() -> Text
-  return U32(me).Text()
+  return U32(me).$represent()
 
 routine U8.$diagnose() -> Text
   return "U8(" + me.$represent() + ")"

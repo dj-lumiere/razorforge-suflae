@@ -110,7 +110,7 @@ entity BytesIterator
 routine Bytes.$iter() -> BytesIterator
   return BytesIterator(bytes: me, index: 0u64)
 
-routine BytesIterator.next!() -> Byte
+routine BytesIterator.$next!() -> Byte
   if me.index >= me.bytes.count()
     absent
   var value = me.bytes[me.index]

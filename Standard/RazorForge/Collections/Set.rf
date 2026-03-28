@@ -66,7 +66,7 @@ routine Set[T].bucket_index(value: T) -> U64
 
 routine Set[T].should_rehash() -> Bool
   # Check if load factor exceeds threshold
-  var load = (me.count * 100u64) / me.buckets.count()
+  var load = (me.count * 100u64) // me.buckets.count()
   return load > SET_LOAD_FACTOR
 
 routine Set[T].rehash()
@@ -284,6 +284,7 @@ routine Set[T].to_list() -> List[T]
 # Iteration
 # ============================================================================
 
+@readonly
 routine Set[T].$iter() -> SetIterator[T]
   return SetIterator[T](
     set: me,
@@ -292,14 +293,14 @@ routine Set[T].$iter() -> SetIterator[T]
     current_elements: List[T]()
   )
 
-entity SetIterator[T]
+entity SetIterator[T] obeys Iterator[T]
   set: Set[T]
   bucket_idx: U64
   element_idx: U64
   current_elements: List[T]
 
-routine SetIterator[T].next!() -> T
-  # Advance to next non-empty bucket if needed
+@writable
+emitting routine SetIterator[T].$next() -> T
   while me.element_idx >= me.current_elements.count()
     if me.bucket_idx >= me.set.buckets.count()
       absent
@@ -307,9 +308,9 @@ routine SetIterator[T].next!() -> T
     me.element_idx = 0u64
     me.bucket_idx = me.bucket_idx + 1u64
 
-  var value = me.current_elements[me.element_idx]
+  emit me.current_elements[me.element_idx]
   me.element_idx = me.element_idx + 1u64
-  return value
+  return
 
 # ============================================================================
 # Comparison
@@ -321,20 +322,20 @@ routine Set[T].$represent() -> Text
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.Text()
+    result = result + v.$represent()
     i = i + 1u64
   result = result + "}"
   return result
 
 routine Set[T].$diagnose() -> Text
-  var result = "Set{"
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$diagnose()
+    result = result + v.$represent()
     i = i + 1u64
-  result = result + "}"
+  result = result + "})"
   return result
 
 routine Set[T].$eq(other: Set[T]) -> Bool
