@@ -2100,27 +2100,19 @@ public sealed partial class SemanticAnalyzer
             ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [textType])
             : null;
 
-        // Create or look up FieldInfo record type for member_variable_info()
+        // Look up BuilderService helper types (from stdlib or previous registration)
         TypeSymbol? fieldInfoType = _registry.LookupType(name: "FieldInfo");
-        if (fieldInfoType == null && textType != null && u64Type != null)
-        {
-            fieldInfoType = new RecordTypeInfo(name: "FieldInfo")
-            {
-                MemberVariables =
-                [
-                    new MemberVariableInfo(name: "name", type: textType) { Index = 0 },
-                    new MemberVariableInfo(name: "type_name", type: textType) { Index = 1 },
-                    new MemberVariableInfo(name: "visibility", type: u64Type) { Index = 2 },
-                    new MemberVariableInfo(name: "index", type: u64Type) { Index = 3 }
-                ],
-                Visibility = VisibilityModifier.Open,
-                Module = "Core"
-            };
-            _registry.RegisterType(type: fieldInfoType);
-        }
+        TypeSymbol? protocolInfoType = _registry.LookupType(name: "ProtocolInfo");
+        TypeSymbol? routineInfoType = _registry.LookupType(name: "RoutineInfo");
 
         TypeSymbol? listFieldInfoType = listDef != null && fieldInfoType != null
             ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [fieldInfoType])
+            : null;
+        TypeSymbol? listProtocolInfoType = listDef != null && protocolInfoType != null
+            ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [protocolInfoType])
+            : null;
+        TypeSymbol? listRoutineInfoType = listDef != null && routineInfoType != null
+            ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [routineInfoType])
             : null;
 
         // Look up Dict[Text, Data] for all_fields() / open_fields()
@@ -2149,85 +2141,12 @@ public sealed partial class SemanticAnalyzer
             }
 
             // All types: BuilderService metadata routines
-            if (textType != null)
-            {
-                MaybeRegisterWired(owner: type,
-                    name: "type_name",
-                    returnType: textType,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "module_name",
-                    returnType: textType,
-                    existingMethods: existingMethods);
-            }
-
-            if (u64Type != null)
-            {
-                MaybeRegisterWired(owner: type,
-                    name: "type_kind",
-                    returnType: u64Type,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "type_id",
-                    returnType: u64Type,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "field_count",
-                    returnType: u64Type,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "data_size",
-                    returnType: u64Type,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "align_size",
-                    returnType: u64Type,
-                    existingMethods: existingMethods);
-            }
-
-            if (boolType != null)
-            {
-                MaybeRegisterWired(owner: type,
-                    name: "is_generic",
-                    returnType: boolType,
-                    existingMethods: existingMethods);
-            }
-
-            if (listFieldInfoType != null)
-            {
-                MaybeRegisterWired(owner: type,
-                    name: "member_variable_info",
-                    returnType: listFieldInfoType,
-                    existingMethods: existingMethods);
-            }
-
-            if (listTextType != null)
-            {
-                MaybeRegisterWired(owner: type,
-                    name: "protocols",
-                    returnType: listTextType,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "routine_names",
-                    returnType: listTextType,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "annotations",
-                    returnType: listTextType,
-                    existingMethods: existingMethods);
-            }
-
-            if (dictTextDataType != null)
-            {
-                MaybeRegisterWired(owner: type,
-                    name: "all_fields",
-                    returnType: dictTextDataType,
-                    existingMethods: existingMethods);
-                MaybeRegisterWired(owner: type,
-                    name: "open_fields",
-                    returnType: dictTextDataType,
-                    existingMethods: existingMethods);
-            }
+            BuilderInfoProvider.RegisterRoutinesOnType(
+                type, existingMethods, _registry,
+                textType, boolType, u64Type, s64Type,
+                listTextType, listFieldInfoType,
+                listProtocolInfoType, listRoutineInfoType,
+                dictTextDataType);
 
             switch (type.Category)
             {
@@ -2359,75 +2278,11 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Source location standalone routines (injected at call site by codegen)
-        if (textType != null)
-        {
-            foreach (string name in new[] { "source_file", "source_routine", "source_module" })
-            {
-                if (_registry.LookupRoutine(fullName: name) == null)
-                {
-                    _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
-                    {
-                        Kind = RoutineKind.Function,
-                        OwnerType = null,
-                        Parameters = [],
-                        ReturnType = textType,
-                        IsFailable = false,
-                        DeclaredModification = ModificationCategory.Readonly,
-                        ModificationCategory = ModificationCategory.Readonly,
-                        Visibility = VisibilityModifier.Open,
-                        IsSynthesized = true
-                    });
-                }
-            }
-        }
-
-        if (u64Type != null)
-        {
-            foreach (string name in new[] { "source_line", "source_column" })
-            {
-                if (_registry.LookupRoutine(fullName: name) == null)
-                {
-                    _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
-                    {
-                        Kind = RoutineKind.Function,
-                        OwnerType = null,
-                        Parameters = [],
-                        ReturnType = u64Type,
-                        IsFailable = false,
-                        DeclaredModification = ModificationCategory.Readonly,
-                        ModificationCategory = ModificationCategory.Readonly,
-                        Visibility = VisibilityModifier.Open,
-                        IsSynthesized = true
-                    });
-                }
-            }
-        }
+        // Source location and caller standalone routines (injected at call site by codegen)
+        BuilderInfoProvider.RegisterStandaloneRoutines(_registry, textType, s64Type);
 
         // Synthesize BuilderService record type with platform/build info member routines
-        if (_registry.LookupType(name: "BuilderService") == null && textType != null && u64Type != null)
-        {
-            var builderServiceType = new RecordTypeInfo(name: "BuilderService")
-            {
-                MemberVariables = [],
-                Visibility = VisibilityModifier.Open,
-                Module = "Core"
-            };
-            _registry.RegisterType(type: builderServiceType);
-
-            var bsMethods = new List<RoutineInfo>();
-            foreach (string name in new[] { "target_os", "target_arch", "version", "build_mode", "timestamp" })
-            {
-                MaybeRegisterWired(owner: builderServiceType, name: name,
-                    returnType: textType, existingMethods: bsMethods);
-            }
-
-            foreach (string name in new[] { "page_size", "cache_line", "word_size" })
-            {
-                MaybeRegisterWired(owner: builderServiceType, name: name,
-                    returnType: u64Type, existingMethods: bsMethods);
-            }
-        }
+        BuilderInfoProvider.RegisterModuleRoutines(_registry, textType, u64Type, s64Type);
 
         // Auto-register Text.$create(from: T) for all concrete user types
         // This makes every type structurally satisfy Representable[T]
