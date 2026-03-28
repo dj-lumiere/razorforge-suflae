@@ -1,0 +1,47 @@
+# RazorForge BuilderService - Build-time metadata at runtime
+#
+# Provides compile-time type introspection and build environment info.
+# All routines are zero-overhead (constant-folded at compile time).
+# Requires 'import BuilderService' to use.
+
+module BuilderService
+
+choice TypeKind
+  RECORD
+  ENTITY
+  CHOICE
+  VARIANT
+  FLAGS
+  ROUTINE
+  MEMBER_ROUTINE
+  PROTOCOL
+
+choice Visibility
+  OPEN
+  POSTED
+  SECRET
+
+choice BuildMode
+  DEBUG
+  RELEASE
+  TEST
+
+entity FieldInfo
+  name: Text
+  type_name: Text
+  visibility: Visibility
+  offset: U64
+
+entity ProtocolInfo
+  name: Text
+  routine_names: List[Text]
+  is_generated: Bool
+
+entity RoutineInfo
+  name: Text
+  param_types: List[Text]
+  param_names: List[Text]
+  return_type: Text
+  is_crashable: Bool
+  is_generated: Bool
+  visibility: Visibility
