@@ -11,6 +11,8 @@
 
 module Collections
 
+import BuilderService
+
 entity Deque[T] obeys Iterable[T]
   secret data: Snatched[T]    # Circular buffer (raw storage for T elements)
   secret start: U64          # Index of first element
@@ -30,7 +32,7 @@ routine Deque[T].$create() -> Deque[T]
   )
 
 routine Deque[T].$create(capacity: U64) -> Deque[T]
-  var byte_size = capacity * data_size[T]()
+  var byte_size = capacity * T.data_size()
   return Deque[T](
     data: Snatched[T](rf_allocate_dynamic(byte_size)),
     start: 0u64,
@@ -53,12 +55,12 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
   return me.wrap_index(me.start + logical_index)
 
 routine Deque[T].read_at(physical_idx: U64) -> T
-  var byte_offset = physical_idx * data_size[T]()
+  var byte_offset = physical_idx * T.data_size()
   var ptr = Snatched[T](me.data.get_address() + byte_offset)
   return ptr.read()
 
 routine Deque[T].write_at(physical_idx: U64, value: T)
-  var byte_offset = physical_idx * data_size[T]()
+  var byte_offset = physical_idx * T.data_size()
   var ptr = Snatched[T](me.data.get_address() + byte_offset)
   ptr.write(value)
   return
@@ -146,7 +148,7 @@ routine Deque[T].reserve(new_capacity: U64)
   if new_capacity <= me.capacity
     return
 
-  var new_byte_size = new_capacity * data_size[T]()
+  var new_byte_size = new_capacity * T.data_size()
   var new_data = Snatched[T]( rf_allocate_dynamic(new_byte_size))
 
   # Copy elements in logical order (unwrap the ring)
@@ -154,7 +156,7 @@ routine Deque[T].reserve(new_capacity: U64)
   while i < me.count
     var old_idx = me.physical_index(i)
     var value = me.read_at(old_idx)
-    var new_byte_offset = i * data_size[T]()
+    var new_byte_offset = i * T.data_size()
     Snatched[T]( new_data.get_address() + new_byte_offset).write(value)
     i = i + 1u64
 

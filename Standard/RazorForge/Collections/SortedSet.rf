@@ -14,6 +14,8 @@
 
 module Collections
 
+import BuilderService
+
 # B-tree order (max children per node)
 # B = 32 means each node has 16-31 keys (except root)
 preset B: U64 = 32u64

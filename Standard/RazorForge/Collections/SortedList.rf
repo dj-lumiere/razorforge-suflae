@@ -12,6 +12,8 @@
 
 module Collections
 
+import BuilderService
+
 # B-tree order (max children per node)
 preset B_LIST: U64 = 32u64
 

@@ -15,6 +15,8 @@
 
 module Collections
 
+import BuilderService
+
 # B-tree order
 preset B_DICT: U64 = 32u64
 

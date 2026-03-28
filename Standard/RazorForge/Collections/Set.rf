@@ -14,6 +14,8 @@ import Collections.SortedSet
 
 module Core
 
+import BuilderService
+
 # Initial number of buckets
 preset SET_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)

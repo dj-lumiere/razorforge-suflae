@@ -4,6 +4,8 @@
 
 module Core
 
+import BuilderService
+
 entity List[T] obeys Iterable[T]
   secret data: Snatched[T]       # Pointer to heap-allocated array
   secret count: U64              # Current number of elements
@@ -50,7 +52,7 @@ routine List[T].add_last(value: T)
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
     me.reserve(new_capacity)
 
-  var byte_offset = me.count * data_size[T]()
+  var byte_offset = me.count * T.data_size()
   me.data.offset(byte_offset).write(value)
   me.count = me.count + 1u64
   return
@@ -60,7 +62,7 @@ routine List[T].remove_last!() -> T
     absent
 
   me.count = me.count - 1u64
-  var byte_offset = me.count * data_size[T]()
+  var byte_offset = me.count * T.data_size()
   return me.data.offset(byte_offset).read()
 
 routine List[T].add_first(value: T)
@@ -80,13 +82,13 @@ routine List[T].add_at!(index: U64, value: T)
   loop
     if i <= index
       break
-    var src_offset = (i - 1u64) * data_size[T]()
-    var dst_offset = i * data_size[T]()
+    var src_offset = (i - 1u64) * T.data_size()
+    var dst_offset = i * T.data_size()
     var val = me.data.offset(src_offset).read()
     me.data.offset(dst_offset).write(val)
     i = i - 1u64
 
-  var byte_offset = index * data_size[T]()
+  var byte_offset = index * T.data_size()
   me.data.offset(byte_offset).write(value)
   me.count = me.count + 1u64
   return
@@ -98,7 +100,7 @@ routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
-  var byte_offset = index * data_size[T]()
+  var byte_offset = index * T.data_size()
   var value = me.data.offset(byte_offset).read()
 
   # Shift elements left
@@ -106,8 +108,8 @@ routine List[T].remove_at!(index: U64) -> T
   loop
     if i >= me.count - 1u64
       break
-    var src_offset = (i + 1u64) * data_size[T]()
-    var dst_offset = i * data_size[T]()
+    var src_offset = (i + 1u64) * T.data_size()
+    var dst_offset = i * T.data_size()
     var val = me.data.offset(src_offset).read()
     me.data.offset(dst_offset).write(val)
     i = i + 1u64
@@ -124,7 +126,7 @@ needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
-  var byte_offset = idx * data_size[T]()
+  var byte_offset = idx * T.data_size()
   return me.data.offset(byte_offset).read()
 
 routine List[T].$setitem![I](index: I, value: T)
@@ -132,7 +134,7 @@ needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
-  var byte_offset = idx * data_size[T]()
+  var byte_offset = idx * T.data_size()
   me.data.offset(byte_offset).write(value)
   return
 
@@ -143,13 +145,13 @@ needs I obeys Integral
 routine List[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
-  var byte_offset = idx * data_size[T]()
+  var byte_offset = idx * T.data_size()
   return me.data.offset(byte_offset).read()
 
 routine List[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
-  var byte_offset = idx * data_size[T]()
+  var byte_offset = idx * T.data_size()
   me.data.offset(byte_offset).write(value)
   return
 
@@ -170,7 +172,7 @@ needs I obeys Integral
   loop
     if i >= e
       break
-    var byte_offset = i * data_size[T]()
+    var byte_offset = i * T.data_size()
     result.add_last(me.data.offset(byte_offset).read())
     i = i + 1u64
 
@@ -190,7 +192,7 @@ needs I obeys Integral
   loop
     if i >= e
       break
-    var byte_offset = i * data_size[T]()
+    var byte_offset = i * T.data_size()
     result.add_last(me.data.offset(byte_offset).read())
     i = i + 1u64
 
@@ -198,7 +200,7 @@ needs I obeys Integral
 
 routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
-    var new_byte_size = new_capacity * data_size[T]()
+    var new_byte_size = new_capacity * T.data_size()
 
     if me.data.is_none()
       danger!

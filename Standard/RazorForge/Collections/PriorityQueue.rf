@@ -11,6 +11,8 @@
 
 module Collections
 
+import BuilderService
+
 # Element with priority
 record PQEntry[TElement, TPriority]
 needs TPriority obeys Comparable
