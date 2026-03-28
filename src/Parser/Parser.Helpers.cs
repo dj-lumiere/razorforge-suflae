@@ -265,11 +265,19 @@ public partial class Parser
     /// Parse set or dict literal: {expr, expr, ...} or {key: value, ...}
     /// The opening '{' has already been consumed.
     /// Disambiguation: If the first element contains ':', it's a dict; otherwise it's a set.
-    /// Empty {} is treated as an empty set.
+    /// Empty {} is an empty set, {:} is an empty dict.
     /// </summary>
     private Expression ParseSetOrDictLiteral(SourceLocation location)
     {
-        // Empty braces -> empty set
+        // {:} -> empty dict
+        if (Check(type: TokenType.Colon))
+        {
+            Advance(); // consume ':'
+            Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after '{:'");
+            return new DictLiteralExpression(Pairs: [], KeyType: null, ValueType: null, Location: location);
+        }
+
+        // {} -> empty set
         if (Match(type: TokenType.RightBrace))
         {
             return new SetLiteralExpression(Elements: [], ElementType: null, Location: location);

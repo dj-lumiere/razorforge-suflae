@@ -43,8 +43,8 @@ public sealed partial class SemanticAnalyzer
             RangeExpression range => AnalyzeRangeExpression(range: range),
             CreatorExpression creator => AnalyzeCreatorExpression(creator: creator),
             ListLiteralExpression list => AnalyzeListLiteralExpression(list: list, expectedType: expectedType),
-            SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set),
-            DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict),
+            SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set, expectedType: expectedType),
+            DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict, expectedType: expectedType),
             TupleLiteralExpression tuple => AnalyzeTupleLiteralExpression(tuple: tuple),
             TypeConversionExpression conv => AnalyzeTypeConversionExpression(conv: conv),
             ChainedComparisonExpression chain => AnalyzeChainedComparisonExpression(chain: chain),
@@ -1629,6 +1629,16 @@ public sealed partial class SemanticAnalyzer
 
             if (routine != null)
             {
+                // Import-gating: BuilderService standalone routines require 'import BuilderService'
+                if (routine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceStandalone(routine.Name)
+                    && !_importedModules.Contains("BuilderService"))
+                {
+                    ReportError(SemanticDiagnosticCode.BuilderServiceImportRequired,
+                        $"'{routine.Name}()' requires 'import BuilderService'.",
+                        call.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+
                 // Track failable calls for error handling variant generation
                 if (routine.IsFailable && _currentRoutine != null)
                 {
@@ -1773,6 +1783,16 @@ public sealed partial class SemanticAnalyzer
 
             if (routine != null)
             {
+                // Import-gating: BuilderService standalone routines require 'import BuilderService'
+                if (routine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceStandalone(routine.Name)
+                    && !_importedModules.Contains("BuilderService"))
+                {
+                    ReportError(SemanticDiagnosticCode.BuilderServiceImportRequired,
+                        $"'{routine.Name}()' requires 'import BuilderService'.",
+                        call.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+
                 // Track failable calls for error handling variant generation
                 if (routine.IsFailable && _currentRoutine != null)
                 {
@@ -1860,6 +1880,16 @@ public sealed partial class SemanticAnalyzer
 
             if (method != null)
             {
+                // Import-gating: BuilderService routines require 'import BuilderService'
+                if (method.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(method.Name)
+                    && !_importedModules.Contains("BuilderService"))
+                {
+                    ReportError(SemanticDiagnosticCode.BuilderServiceImportRequired,
+                        $"'{method.Name}()' requires 'import BuilderService'.",
+                        call.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+
                 // Track failable calls for error handling variant generation
                 if (method.IsFailable && _currentRoutine != null)
                 {
@@ -3004,8 +3034,16 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeSetLiteralExpression(SetLiteralExpression set)
+    private TypeSymbol AnalyzeSetLiteralExpression(SetLiteralExpression set, TypeSymbol? expectedType = null)
     {
+        // Extract expected element type from Set[X] expected type
+        TypeSymbol? expectedElementType = null;
+        if (expectedType is { IsGenericResolution: true, TypeArguments.Count: 1 } &&
+            expectedType.Name.StartsWith("Set["))
+        {
+            expectedElementType = expectedType.TypeArguments![0];
+        }
+
         TypeSymbol? elementType = null;
 
         if (set.ElementType != null)
@@ -3014,7 +3052,12 @@ public sealed partial class SemanticAnalyzer
         }
         else if (set.Elements.Count > 0)
         {
-            elementType = AnalyzeExpression(expression: set.Elements[0]);
+            elementType = AnalyzeExpression(expression: set.Elements[0], expectedType: expectedElementType);
+        }
+        else if (expectedElementType != null)
+        {
+            // Empty set with expected type from context — use it
+            elementType = expectedElementType;
         }
         else
         {
@@ -3038,8 +3081,18 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict)
+    private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict, TypeSymbol? expectedType = null)
     {
+        // Extract expected key/value types from Dict[K, V] expected type
+        TypeSymbol? expectedKeyType = null;
+        TypeSymbol? expectedValueType = null;
+        if (expectedType is { IsGenericResolution: true, TypeArguments.Count: 2 } &&
+            expectedType.Name.StartsWith("Dict["))
+        {
+            expectedKeyType = expectedType.TypeArguments![0];
+            expectedValueType = expectedType.TypeArguments![1];
+        }
+
         TypeSymbol? keyType = null;
         TypeSymbol? valueType = null;
 
@@ -3050,8 +3103,14 @@ public sealed partial class SemanticAnalyzer
         }
         else if (dict.Pairs.Count > 0)
         {
-            keyType = AnalyzeExpression(expression: dict.Pairs[0].Key);
-            valueType = AnalyzeExpression(expression: dict.Pairs[0].Value);
+            keyType = AnalyzeExpression(expression: dict.Pairs[0].Key, expectedType: expectedKeyType);
+            valueType = AnalyzeExpression(expression: dict.Pairs[0].Value, expectedType: expectedValueType);
+        }
+        else if (expectedKeyType != null && expectedValueType != null)
+        {
+            // Empty dict with expected types from context — use them
+            keyType = expectedKeyType;
+            valueType = expectedValueType;
         }
         else
         {
@@ -3581,7 +3640,7 @@ public sealed partial class SemanticAnalyzer
 
     private TypeSymbol AnalyzeGenericMemberExpression(GenericMemberExpression genericMember)
     {
-        AnalyzeExpression(expression: genericMember.Object);
+        TypeSymbol objectType = AnalyzeExpression(expression: genericMember.Object);
 
         // Resolve type arguments
         foreach (TypeExpression typeArg in genericMember.TypeArguments)
@@ -3589,8 +3648,48 @@ public sealed partial class SemanticAnalyzer
             ResolveType(typeExpr: typeArg);
         }
 
-        // Look up the member with type arguments
-        // TODO: Implement proper generic member resolution
+        // Look up the member on the object type
+        if (objectType is TypeInfo objTypeInfo)
+        {
+            IReadOnlyList<MemberVariableInfo>? memberVars = objTypeInfo switch
+            {
+                EntityTypeInfo e => e.MemberVariables,
+                RecordTypeInfo r => r.MemberVariables,
+                _ => null
+            };
+            var memberVar = memberVars?.FirstOrDefault(mv => mv.Name == genericMember.MemberName);
+            if (memberVar != null)
+            {
+                // Member found — the [args] are indexing into the member's value.
+                // Analyze the "type arguments" as expressions (they're actually index values).
+                foreach (TypeExpression typeArg in genericMember.TypeArguments)
+                {
+                    // The type arg's Name is actually a variable name — analyze it as identifier
+                    if (typeArg.Name != null)
+                    {
+                        AnalyzeExpression(expression: new IdentifierExpression(Name: typeArg.Name, Location: typeArg.Location));
+                    }
+                }
+
+                // Determine the element type of the member's collection type
+                TypeInfo? memberType = memberVar.Type;
+                if (memberType is { TypeArguments: { Count: > 0 } })
+                {
+                    // e.g., List[SortedDict[K,V]] ��� element is SortedDict[K,V]
+                    return memberType.TypeArguments[0];
+                }
+
+                // If the member type has a $getitem method, use its return type
+                RoutineInfo? getItem = _registry.LookupMethod(memberType, "$getitem")
+                    ?? _registry.LookupMethod(memberType, "$getitem!");
+                if (getItem?.ReturnType != null)
+                {
+                    return getItem.ReturnType;
+                }
+
+                return memberType ?? ErrorTypeInfo.Instance;
+            }
+        }
 
         return ErrorTypeInfo.Instance;
     }
