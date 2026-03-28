@@ -853,6 +853,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Channel send() makes source variable a deadref.</summary>
     ChannelSendOwnershipTransfer = 915,
 
+    /// <summary>BuilderService routine called without 'import BuilderService'.</summary>
+    BuilderServiceImportRequired = 950,
+
 }
 
 public static class SemanticDiagnosticCodeExtensions
