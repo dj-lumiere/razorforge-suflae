@@ -228,7 +228,7 @@ public partial class LLVMCodeGenerator
                 break;
 
             case MemberExpression member:
-                EmitMemberVariableAssignment(sb, member, value);
+                EmitMemberVariableAssignment(sb, member, value, GetExpressionType(assign.Value));
                 break;
 
             case IndexExpression index:
@@ -258,7 +258,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits a store to a member variable.
     /// </summary>
-    private void EmitMemberVariableAssignment(StringBuilder sb, MemberExpression member, string value)
+    private void EmitMemberVariableAssignment(StringBuilder sb, MemberExpression member, string value, TypeInfo? valueType = null)
     {
         // Evaluate the object
         string target = EmitExpression(sb, member.Object);
@@ -266,7 +266,7 @@ public partial class LLVMCodeGenerator
 
         if (targetType is EntityTypeInfo entity)
         {
-            EmitEntityMemberVariableWrite(sb, target, entity, member.PropertyName, value);
+            EmitEntityMemberVariableWrite(sb, target, entity, member.PropertyName, value, valueType);
         }
         // Wrapper type forwarding: Hijacked[T], Seized[T], etc. — write through to inner entity
         else if (targetType is RecordTypeInfo wrapperRecord
@@ -288,7 +288,7 @@ public partial class LLVMCodeGenerator
                 innerPtr = NextTemp();
                 EmitLine(sb, $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
             }
-            EmitEntityMemberVariableWrite(sb, innerPtr, innerEntity, member.PropertyName, value);
+            EmitEntityMemberVariableWrite(sb, innerPtr, innerEntity, member.PropertyName, value, valueType);
         }
         else
         {
@@ -359,8 +359,9 @@ public partial class LLVMCodeGenerator
             string valueLlvm = indexType != null ? GetLLVMType(indexType) : "i64"; // placeholder
 
             // Use type arguments to resolve the value parameter type
+            // For List[T]: value is TypeArguments[0]; for Dict[K, V]: value is TypeArguments[^1]
             if (targetType.TypeArguments is { Count: > 0 })
-                valueLlvm = GetLLVMType(targetType.TypeArguments[0]); // T in List[T]
+                valueLlvm = GetLLVMType(targetType.TypeArguments[^1]);
             else if (setItem.Parameters.Count >= 2)
                 valueLlvm = GetLLVMType(setItem.Parameters[^1].Type);
 
@@ -490,15 +491,62 @@ public partial class LLVMCodeGenerator
             // Failable routines wrap the return value in { i64, ptr } with tag=1 (VALID)
             if (_currentRoutineIsFailable)
             {
-                int size = GetTypeSize(retType);
-                string handle = NextTemp();
-                EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                EmitLine(sb, $"  store {llvmType} {value}, ptr {handle}");
                 string v0 = NextTemp();
                 EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
-                string v1 = NextTemp();
-                EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
-                EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+
+                if (retType is EntityTypeInfo)
+                {
+                    // Entity types are already pointers — store directly, no heap allocation
+                    string v1 = NextTemp();
+                    EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
+                    EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                }
+                else
+                {
+                    int size = GetTypeSize(retType);
+                    string handle = NextTemp();
+                    EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
+                    EmitLine(sb, $"  store {llvmType} {value}, ptr {handle}");
+                    string v1 = NextTemp();
+                    EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                    EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                }
+            }
+            // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T
+            else if (IsMaybeType(retType) && value != "zeroinitializer")
+            {
+                TypeInfo? exprType = GetExpressionType(ret.Value);
+                if (exprType == null || !IsMaybeType(exprType))
+                {
+                    // Wrap: build { i64 1, ptr handle }
+                    TypeInfo innerType = retType is ErrorHandlingTypeInfo eh ? eh.ValueType
+                        : (retType.TypeArguments is { Count: > 0 } ? retType.TypeArguments[0] : retType);
+                    string v0 = NextTemp();
+                    EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
+
+                    if (innerType is EntityTypeInfo)
+                    {
+                        // Entity types are already pointers — store directly, no heap allocation
+                        string v1 = NextTemp();
+                        EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
+                        EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                    }
+                    else
+                    {
+                        string innerLlvm = GetLLVMType(innerType);
+                        int size = GetTypeSize(innerType);
+                        string handle = NextTemp();
+                        EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
+                        EmitLine(sb, $"  store {innerLlvm} {value}, ptr {handle}");
+                        string v1 = NextTemp();
+                        EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                        EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                    }
+                }
+                else
+                {
+                    EmitLine(sb, $"  ret {llvmType} {value}");
+                }
             }
             else
             {
@@ -515,6 +563,8 @@ public partial class LLVMCodeGenerator
     {
         if (expr is CreatorExpression) return true;
         if (expr is ListLiteralExpression) return true;
+        if (expr is SetLiteralExpression) return true;
+        if (expr is DictLiteralExpression) return true;
         if (expr is CallExpression { Callee: IdentifierExpression id })
         {
             return _registry.LookupType(id.Name) is EntityTypeInfo;

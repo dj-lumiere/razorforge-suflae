@@ -275,6 +275,16 @@ public partial class LLVMCodeGenerator
         {
             return;
         }
+
+        // Skip declarations that reference unresolved generic parameter types —
+        // these produce invalid LLVM IR (e.g., Maybe[BTreeDictNode[K, V]] instead of concrete types)
+        if (routine.Parameters.Any(p => p.Type != null && ContainsGenericParameter(p.Type))
+            || (routine.ReturnType != null && ContainsGenericParameter(routine.ReturnType))
+            || (routine.OwnerType != null && ContainsGenericParameter(routine.OwnerType)))
+        {
+            return;
+        }
+
         _generatedFunctions.Add(funcName);
 
         // Build parameter list
@@ -297,6 +307,17 @@ public partial class LLVMCodeGenerator
             string t = GetParameterLLVMType(param.Type);
             return isCExtern && t == "half" ? "i16" : t;
         }));
+
+        // Ensure record type definitions exist for parameter and return types
+        foreach (var param in routine.Parameters)
+        {
+            if (param.Type is RecordTypeInfo paramRecord && !paramRecord.HasDirectBackendType
+                && !paramRecord.IsSingleMemberVariableWrapper && !paramRecord.IsGenericDefinition)
+                GenerateRecordType(paramRecord);
+        }
+        if (routine.ReturnType is RecordTypeInfo returnRecord && !returnRecord.HasDirectBackendType
+            && !returnRecord.IsSingleMemberVariableWrapper && !returnRecord.IsGenericDefinition)
+            GenerateRecordType(returnRecord);
 
         // Get return type
         string returnType = routine.ReturnType != null
@@ -692,9 +713,19 @@ public partial class LLVMCodeGenerator
                     continue;
 
                 // Find the generic AST body in stdlib programs
-                RoutineDeclaration? astRoutine = FindGenericAstRoutine(entry.GenericAstName);
+                RoutineDeclaration? astRoutine = FindGenericAstRoutine(entry.GenericAstName, entry.GenericMethod.Parameters.Count);
                 if (astRoutine == null)
+                {
+                    // Synthesized routines (type_name, $ne, etc.) have no AST body —
+                    // emit their bodies directly for the monomorphized type
+                    if (entry.GenericMethod.IsSynthesized)
+                    {
+                        var synthInfo = BuildResolvedRoutineInfo(entry);
+                        EmitSynthesizedRoutineBody(synthInfo, mangledName);
+                        _generatedFunctionDefs.Add(mangledName);
+                    }
                     continue;
+                }
 
                 // Build a resolved RoutineInfo with the correct owner type and substituted types
                 var resolvedInfo = BuildResolvedRoutineInfo(entry);
@@ -710,6 +741,19 @@ public partial class LLVMCodeGenerator
                     GenerateEntityType(ownerEntity);
                 else if (entry.ResolvedOwnerType is RecordTypeInfo ownerRecord)
                     GenerateRecordType(ownerRecord);
+
+                // Also ensure return type and parameter record types are defined
+                if (resolvedInfo.ReturnType is RecordTypeInfo returnRecord
+                    && !returnRecord.HasDirectBackendType && !returnRecord.IsSingleMemberVariableWrapper
+                    && !returnRecord.IsGenericDefinition)
+                    GenerateRecordType(returnRecord);
+                foreach (var param in resolvedInfo.Parameters)
+                {
+                    if (param.Type is RecordTypeInfo paramRecord
+                        && !paramRecord.HasDirectBackendType && !paramRecord.IsSingleMemberVariableWrapper
+                        && !paramRecord.IsGenericDefinition)
+                        GenerateRecordType(paramRecord);
+                }
 
                 // Keep _typeSubstitutions as fallback for ResolvedType metadata
                 _typeSubstitutions = entry.TypeSubstitutions;
@@ -735,7 +779,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     /// <param name="genericAstName">The generic AST name (e.g., "List[T].add_last").</param>
     /// <returns>The routine declaration if found, null otherwise.</returns>
-    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName)
+    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName, int expectedParamCount = -1)
     {
         // Check if we need a generic routine specifically (name ends with [generic] marker)
         bool requireGeneric = genericAstName.EndsWith("[generic]");
@@ -752,6 +796,8 @@ public partial class LLVMCodeGenerator
                 {
                     if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
                         continue;
+                    if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount)
+                        continue;
                     return routine;
                 }
             }
@@ -765,10 +811,16 @@ public partial class LLVMCodeGenerator
                 {
                     if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
                         continue;
+                    if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount)
+                        continue;
                     return routine;
                 }
             }
         }
+
+        // If no exact parameter match found and we filtered by count, retry without filter
+        if (expectedParamCount >= 0)
+            return FindGenericAstRoutine(genericAstName, -1);
 
         return null;
     }
@@ -905,147 +957,177 @@ public partial class LLVMCodeGenerator
             // Mark in declarations set to prevent declare/define conflicts
             _generatedFunctions.Add(funcName);
 
-            switch (routine.Name)
-            {
-                case "$ne":
-                    EmitSynthesizedNe(routine, funcName);
-                    break;
-                case "$lt":
-                    EmitSynthesizedCmpDerived(routine, funcName, -1, "eq");
-                    break;
-                case "$le":
-                    EmitSynthesizedCmpDerived(routine, funcName, 1, "ne");
-                    break;
-                case "$gt":
-                    EmitSynthesizedCmpDerived(routine, funcName, 1, "eq");
-                    break;
-                case "$ge":
-                    EmitSynthesizedCmpDerived(routine, funcName, -1, "ne");
-                    break;
-                case "$eq":
-                    EmitSynthesizedEq(routine, funcName);
-                    break;
-                case "$cmp":
-                    EmitSynthesizedCmp(routine, funcName);
-                    break;
-                case "$represent":
-                    EmitSynthesizedText(routine, funcName, includeSecret: false);
-                    break;
-                case "$diagnose":
-                    EmitSynthesizedText(routine, funcName, includeSecret: true);
-                    break;
-                case "$hash":
-                    EmitSynthesizedHash(routine, funcName);
-                    break;
-                case "S64":
-                    EmitSynthesizedIdentityCast(routine, funcName, "i64");
-                    break;
-                case "U64":
-                    EmitSynthesizedIdentityCast(routine, funcName, "i64");
-                    break;
-                case "id":
-                    EmitSynthesizedId(routine, funcName);
-                    break;
-                case "copy!":
-                    EmitSynthesizedCopy(routine, funcName);
-                    break;
-                case "$create":
-                    if (routine.OwnerType?.Name == "Data")
-                        EmitSynthesizedDataCreate(routine, funcName);
-                    else
-                        EmitSynthesizedTextCreate(routine, funcName);
-                    break;
-                case "$create!":
-                    EmitSynthesizedChoiceCreateFromText(routine, funcName);
-                    break;
-                case "$same":
-                    EmitSynthesizedSame(routine, funcName);
-                    break;
-                case "$notsame":
-                    EmitSynthesizedNotSame(routine, funcName);
-                    break;
-                case "all_on":
-                    EmitSynthesizedAllOn(routine, funcName);
-                    break;
-                case "all_off":
-                    EmitSynthesizedAllOff(routine, funcName);
-                    break;
-                case "all_cases":
-                    EmitSynthesizedAllCases(routine, funcName);
-                    break;
-                case "type_name":
-                    EmitSynthesizedTypeName(routine, funcName);
-                    break;
-                case "type_kind":
-                    EmitSynthesizedTypeKind(routine, funcName);
-                    break;
-                case "type_id":
-                    EmitSynthesizedTypeId(routine, funcName);
-                    break;
-                case "module_name":
-                    EmitSynthesizedModuleName(routine, funcName);
-                    break;
-                case "field_count":
-                    EmitSynthesizedFieldCount(routine, funcName);
-                    break;
-                case "is_generic":
-                    EmitSynthesizedIsGeneric(routine, funcName);
-                    break;
-                case "protocols":
-                    EmitSynthesizedProtocols(routine, funcName);
-                    break;
-                case "routine_names":
-                    EmitSynthesizedRoutineNames(routine, funcName);
-                    break;
-                case "annotations":
-                    EmitSynthesizedAnnotations(routine, funcName);
-                    break;
-                case "data_size":
-                    EmitSynthesizedDataSize(routine, funcName);
-                    break;
-                case "align_size":
-                    EmitSynthesizedAlignSize(routine, funcName);
-                    break;
-                case "member_variable_info":
-                    EmitSynthesizedMemberVariableInfo(routine, funcName);
-                    break;
-                case "all_fields":
-                    EmitSynthesizedAllFields(routine, funcName);
-                    break;
-                case "open_fields":
-                    EmitSynthesizedOpenFields(routine, funcName);
-                    break;
-                // BuilderService platform/build info
-                case "page_size":
-                    EmitSynthesizedBuilderServiceU64(routine, funcName, 4096);
-                    break;
-                case "cache_line":
-                    EmitSynthesizedBuilderServiceU64(routine, funcName, 64);
-                    break;
-                case "word_size":
-                    EmitSynthesizedBuilderServiceU64(routine, funcName, _pointerBitWidth / 8);
-                    break;
-                case "target_os":
-                    EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetOS());
-                    break;
-                case "target_arch":
-                    EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetArch());
-                    break;
-                case "version":
-                    EmitSynthesizedBuilderServiceText(routine, funcName, "0.1.0");
-                    break;
-                case "build_mode":
+            EmitSynthesizedRoutineBody(routine, funcName);
+        }
+    }
+
+    /// <summary>
+    /// Emits the LLVM IR body for a single synthesized routine.
+    /// Used by both GenerateSynthesizedRoutines (for non-generic types) and
+    /// MonomorphizeGenericMethods (for monomorphized generic types).
+    /// </summary>
+    private void EmitSynthesizedRoutineBody(RoutineInfo routine, string funcName)
+    {
+        switch (routine.Name)
+        {
+            case "$ne":
+                EmitSynthesizedNe(routine, funcName);
+                break;
+            case "$lt":
+                EmitSynthesizedCmpDerived(routine, funcName, -1, "eq");
+                break;
+            case "$le":
+                EmitSynthesizedCmpDerived(routine, funcName, 1, "ne");
+                break;
+            case "$gt":
+                EmitSynthesizedCmpDerived(routine, funcName, 1, "eq");
+                break;
+            case "$ge":
+                EmitSynthesizedCmpDerived(routine, funcName, -1, "ne");
+                break;
+            case "$eq":
+                EmitSynthesizedEq(routine, funcName);
+                break;
+            case "$cmp":
+                EmitSynthesizedCmp(routine, funcName);
+                break;
+            case "$represent":
+                EmitSynthesizedText(routine, funcName, includeSecret: false);
+                break;
+            case "$diagnose":
+                EmitSynthesizedText(routine, funcName, includeSecret: true);
+                break;
+            case "$hash":
+                EmitSynthesizedHash(routine, funcName);
+                break;
+            case "S64":
+                EmitSynthesizedIdentityCast(routine, funcName, "i64");
+                break;
+            case "U64":
+                EmitSynthesizedIdentityCast(routine, funcName, "i64");
+                break;
+            case "id":
+                EmitSynthesizedId(routine, funcName);
+                break;
+            case "copy!":
+                EmitSynthesizedCopy(routine, funcName);
+                break;
+            case "$create":
+                if (routine.OwnerType?.Name == "Data")
+                    EmitSynthesizedDataCreate(routine, funcName);
+                else
+                    EmitSynthesizedTextCreate(routine, funcName);
+                break;
+            case "$create!":
+                EmitSynthesizedChoiceCreateFromText(routine, funcName);
+                break;
+            case "$same":
+                EmitSynthesizedSame(routine, funcName);
+                break;
+            case "$notsame":
+                EmitSynthesizedNotSame(routine, funcName);
+                break;
+            case "all_on":
+                EmitSynthesizedAllOn(routine, funcName);
+                break;
+            case "all_off":
+                EmitSynthesizedAllOff(routine, funcName);
+                break;
+            case "all_cases":
+                EmitSynthesizedAllCases(routine, funcName);
+                break;
+            case "type_name":
+                EmitSynthesizedTypeName(routine, funcName);
+                break;
+            case "type_kind":
+                EmitSynthesizedTypeKind(routine, funcName);
+                break;
+            case "type_id":
+                EmitSynthesizedTypeId(routine, funcName);
+                break;
+            case "module_name":
+                EmitSynthesizedModuleName(routine, funcName);
+                break;
+            case "member_variable_count":
+                EmitSynthesizedFieldCount(routine, funcName);
+                break;
+            case "is_generic":
+                EmitSynthesizedIsGeneric(routine, funcName);
+                break;
+            case "protocols":
+                EmitSynthesizedProtocols(routine, funcName);
+                break;
+            case "routine_names":
+                EmitSynthesizedRoutineNames(routine, funcName);
+                break;
+            case "annotations":
+                EmitSynthesizedAnnotations(routine, funcName);
+                break;
+            case "data_size":
+                EmitSynthesizedDataSize(routine, funcName);
+                break;
+            case "member_variable_info":
+                EmitSynthesizedMemberVariableInfo(routine, funcName);
+                break;
+            case "all_member_variables":
+                EmitSynthesizedAllFields(routine, funcName);
+                break;
+            case "open_member_variables":
+                EmitSynthesizedOpenFields(routine, funcName);
+                break;
+            // BuilderService platform/build info
+            case "page_size":
+                EmitSynthesizedBuilderServiceU64(routine, funcName, 4096);
+                break;
+            case "cache_line":
+                EmitSynthesizedBuilderServiceU64(routine, funcName, 64);
+                break;
+            case "word_size":
+                EmitSynthesizedBuilderServiceU64(routine, funcName, _pointerBitWidth / 8);
+                break;
+            case "target_os":
+                EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetOS());
+                break;
+            case "target_arch":
+                EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetArch());
+                break;
+            case "builder_version":
+                EmitSynthesizedBuilderServiceText(routine, funcName, "0.1.0");
+                break;
+            case "build_mode":
 #if DEBUG
-                    EmitSynthesizedBuilderServiceText(routine, funcName, "debug");
+                EmitSynthesizedBuilderServiceU64(routine, funcName, 0); // BuildMode.DEBUG
 #else
-                    EmitSynthesizedBuilderServiceText(routine, funcName, "release");
+                EmitSynthesizedBuilderServiceU64(routine, funcName, 1); // BuildMode.RELEASE
 #endif
-                    break;
-                case "timestamp":
-                    EmitSynthesizedBuilderServiceText(routine, funcName,
-                        DateTime.UtcNow.ToString("o"));
-                    break;
-            }
+                break;
+            case "build_timestamp":
+                EmitSynthesizedBuilderServiceText(routine, funcName,
+                    DateTime.UtcNow.ToString("o"));
+                break;
+            // New BuilderService per-type routines
+            case "generic_args":
+                EmitSynthesizedGenericArgs(routine, funcName);
+                break;
+            case "origin_module":
+                EmitSynthesizedModuleName(routine, funcName);
+                break;
+            case "protocol_info":
+                EmitSynthesizedProtocolInfo(routine, funcName);
+                break;
+            case "routine_info":
+                EmitSynthesizedRoutineInfoList(routine, funcName);
+                break;
+            case "dependencies":
+                EmitSynthesizedDependencies(routine, funcName);
+                break;
+            case "member_type_id":
+                EmitSynthesizedMemberTypeId(routine, funcName);
+                break;
+            case "var_name":
+                // var_name() is inlined at call site, emit a fallback returning "<unknown>"
+                EmitSynthesizedBuilderServiceTextNoOwner(routine, funcName, "<unknown>");
+                break;
         }
     }
 
@@ -1488,13 +1570,18 @@ public partial class LLVMCodeGenerator
             _ => null
         };
 
-        // Tuples: emit "(item0, item1, ...)" for represent, "TypeName(item0, item1, ...)" for diagnose
+        // Tuples: emit "(item0, item1, ...)" for represent, "ValueTuple/Tuple[T1, T2, ...](item0, item1, ...)" for diagnose
         if (routine.OwnerType is TupleTypeInfo tuple)
         {
             string tupleStructType = GetTupleTypeName(tuple);
 
-            // Start with "(" for represent, "Tuple[T1, T2, ...](" for diagnose
-            string openLiteral = includeSecret ? $"{typeName}(" : "(";
+            // Determine ValueTuple vs Tuple: any entity element → Tuple, all value types → ValueTuple
+            bool isValueTuple = tuple.ElementTypes.All(t => t is not EntityTypeInfo);
+            string tuplePrefix = isValueTuple ? "ValueTuple" : "Tuple";
+            string tupleDisplayName = $"{tuplePrefix}[{string.Join(", ", tuple.ElementTypes.Select(t => t.Name))}]";
+
+            // Start with "(" for represent, "ValueTuple/Tuple[T1, T2, ...](" for diagnose
+            string openLiteral = includeSecret ? $"{tupleDisplayName}(" : "(";
             string tupleCur = EmitSynthesizedStringLiteral(openLiteral);
 
             for (int i = 0; i < tuple.ElementTypes.Count; i++)
@@ -1515,8 +1602,8 @@ public partial class LLVMCodeGenerator
                 string elemVal = NextTemp();
                 EmitLine(_functionDefinitions, $"  {elemVal} = extractvalue {tupleStructType} %me, {i}");
 
-                // Convert to Text (use $diagnose for diagnose mode)
-                string elemText = EmitSynthesizedValueToText(elemTypeInfo, elemLlvmType, elemVal, useDiagnose: includeSecret);
+                // Always use $represent for inner values (diagnose shows envelope, represent for contents)
+                string elemText = EmitSynthesizedValueToText(elemTypeInfo, elemLlvmType, elemVal, useDiagnose: false);
 
                 // Concat
                 string withElem = NextTemp();
@@ -2614,26 +2701,8 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized align_size() routine.
-    /// Returns the alignment requirement of the type.
-    /// </summary>
-    private void EmitSynthesizedAlignSize(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType == null) return;
-
-        string meType = GetParameterLLVMType(routine.OwnerType);
-        long align = ComputeAlignSize(routine.OwnerType);
-
-        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
-        EmitLine(_functionDefinitions, "entry:");
-        EmitLine(_functionDefinitions, $"  ret i64 {align}");
-        EmitLine(_functionDefinitions, "}");
-        EmitLine(_functionDefinitions, "");
-    }
-
-    /// <summary>
     /// Emits the body for a synthesized member_variable_info() routine.
-    /// Returns a List[FieldInfo] where FieldInfo = { ptr name, ptr type_name, i64 visibility, i64 index }.
+    /// Returns a List[FieldInfo] where FieldInfo = { ptr name, ptr type_name, i64 visibility, i64 offset }.
     /// </summary>
     private void EmitSynthesizedMemberVariableInfo(RoutineInfo routine, string funcName)
     {
@@ -2651,7 +2720,7 @@ public partial class LLVMCodeGenerator
         fields ??= [];
         int count = fields.Count;
 
-        // FieldInfo layout: { ptr name, ptr type_name, i64 visibility, i64 index }
+        // FieldInfo layout: { ptr name, ptr type_name, i64 visibility, i64 offset }
         // Each element is 32 bytes (8 + 8 + 8 + 8)
         int elemSize = 32;
 
@@ -2682,13 +2751,17 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
         EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
 
-        // Store each FieldInfo { ptr name, ptr type_name, i64 visibility, i64 index }
+        // Compute field byte offsets
+        var fieldOffsets = ComputeFieldOffsets(routine.OwnerType);
+
+        // Store each FieldInfo { ptr name, ptr type_name, i64 visibility, i64 offset }
         for (int i = 0; i < count; i++)
         {
             var field = fields[i];
             string nameStr = EmitSynthesizedStringLiteral(field.Name);
             string typeNameStr = EmitSynthesizedStringLiteral(field.Type.Name);
             long visibility = (long)field.Visibility;
+            long offset = i < fieldOffsets.Count ? fieldOffsets[i] : 0;
 
             // GEP to element i in the data array (each element is { ptr, ptr, i64, i64 })
             string elemPtr = NextTemp();
@@ -2709,10 +2782,10 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  {visSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 2");
             EmitLine(sb, $"  store i64 {visibility}, ptr {visSlot}");
 
-            // Store index (field 3)
-            string idxSlot = NextTemp();
-            EmitLine(sb, $"  {idxSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 3");
-            EmitLine(sb, $"  store i64 {i}, ptr {idxSlot}");
+            // Store offset (field 3)
+            string offSlot = NextTemp();
+            EmitLine(sb, $"  {offSlot} = getelementptr {{ ptr, ptr, i64, i64 }}, ptr {elemPtr}, i32 0, i32 3");
+            EmitLine(sb, $"  store i64 {offset}, ptr {offSlot}");
         }
 
         EmitLine(sb, $"  ret ptr {listPtr}");
@@ -2883,12 +2956,17 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private long ComputeDataSize(TypeInfo type)
     {
+        // Entities are always pointer-referenced — their storage size is pointer size,
+        // not the entity struct size. This matters for collections (e.g., List[Entity])
+        // where elements are stored as pointers in the data buffer.
+        if (type is EntityTypeInfo)
+            return _pointerBitWidth / 8;
+
         IReadOnlyList<MemberVariableInfo>? fields = type switch
         {
             RecordTypeInfo { HasDirectBackendType: true } rec => null, // Use backend type size
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } => null, // Use underlying size
             RecordTypeInfo rec => rec.MemberVariables,
-            EntityTypeInfo ent => ent.MemberVariables,
             _ => null
         };
 
@@ -3027,30 +3105,160 @@ public partial class LLVMCodeGenerator
         };
     }
 
-    #endregion
+    /// <summary>
+    /// Computes byte offsets for each field in a type (for FieldInfo.offset).
+    /// </summary>
+    private List<long> ComputeFieldOffsets(TypeInfo type)
+    {
+        IReadOnlyList<MemberVariableInfo>? fields = type switch
+        {
+            RecordTypeInfo rec => rec.MemberVariables,
+            EntityTypeInfo ent => ent.MemberVariables,
+            _ => null
+        };
 
-    #region BuilderService Platform/Build Info
+        if (fields == null || fields.Count == 0) return [];
+
+        var offsets = new List<long>();
+        long currentOffset = 0;
+
+        foreach (var field in fields)
+        {
+            long fieldSize = ComputeDataSize(field.Type);
+            long fieldAlign = ComputeAlignSize(field.Type);
+            if (fieldAlign > 0)
+            {
+                long remainder = currentOffset % fieldAlign;
+                if (remainder != 0) currentOffset += fieldAlign - remainder;
+            }
+            offsets.Add(currentOffset);
+            currentOffset += fieldSize;
+        }
+
+        return offsets;
+    }
 
     /// <summary>
-    /// Emits a BuilderService member routine that returns a U64 constant.
+    /// Emits the body for a synthesized generic_args() routine.
+    /// Returns a List[Text] of generic type argument names.
     /// </summary>
-    private void EmitSynthesizedBuilderServiceU64(RoutineInfo routine, string funcName, long value)
+    private void EmitSynthesizedGenericArgs(RoutineInfo routine, string funcName)
     {
         if (routine.OwnerType == null) return;
 
         string meType = GetParameterLLVMType(routine.OwnerType);
 
-        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
-        EmitLine(_functionDefinitions, "entry:");
-        EmitLine(_functionDefinitions, $"  ret i64 {value}");
-        EmitLine(_functionDefinitions, "}");
-        EmitLine(_functionDefinitions, "");
+        var args = routine.OwnerType.TypeArguments?.Select(t => t.Name).ToList()
+                   ?? routine.OwnerType.GenericParameters?.ToList()
+                   ?? [];
+        EmitSynthesizedStringList(funcName, meType, args);
     }
 
     /// <summary>
-    /// Emits a BuilderService member routine that returns a Text constant.
+    /// Emits the body for a synthesized protocol_info() routine.
+    /// Returns a List[ProtocolInfo] where ProtocolInfo = { ptr name, ptr routine_names_list, i1 is_generated }.
+    /// Currently emits a simplified version returning an empty list (full entity allocation deferred).
     /// </summary>
-    private void EmitSynthesizedBuilderServiceText(RoutineInfo routine, string funcName, string value)
+    private void EmitSynthesizedProtocolInfo(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        // For now, emit an empty list — full ProtocolInfo entity allocation is complex
+        // and will be implemented when the BuilderService stdlib types are fully parsed
+        EmitSynthesizedStringList(funcName, meType, []);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized routine_info() routine.
+    /// Returns a List[RoutineInfo] — currently emits empty list (entity allocation deferred).
+    /// </summary>
+    private void EmitSynthesizedRoutineInfoList(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        // For now, emit an empty list — full RoutineInfo entity allocation is complex
+        // and will be implemented when the BuilderService stdlib types are fully parsed
+        EmitSynthesizedStringList(funcName, meType, []);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized dependencies() routine.
+    /// Returns a List[Text] of module dependencies — currently empty.
+    /// </summary>
+    private void EmitSynthesizedDependencies(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        EmitSynthesizedStringList(funcName, meType, []);
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized member_type_id(member_name: Text) routine.
+    /// Returns the type ID (FNV-1a hash) for a named member variable, or 0 if not found.
+    /// </summary>
+    private void EmitSynthesizedMemberTypeId(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
+        {
+            RecordTypeInfo rec => rec.MemberVariables,
+            EntityTypeInfo ent => ent.MemberVariables,
+            _ => null
+        };
+        fields ??= [];
+
+        var sb = _functionDefinitions;
+        EmitLine(sb, $"define i64 @{funcName}({meType} %me, ptr %member_name) {{");
+        EmitLine(sb, "entry:");
+
+        if (fields.Count == 0)
+        {
+            EmitLine(sb, "  ret i64 0");
+        }
+        else
+        {
+            // For each field, compare the member_name string and return the type ID
+            for (int i = 0; i < fields.Count; i++)
+            {
+                var field = fields[i];
+                string nameStr = EmitSynthesizedStringLiteral(field.Name);
+                ulong typeId = ComputeTypeId(field.Type.FullName);
+
+                string cmpResult = NextTemp();
+                EmitLine(sb, $"  {cmpResult} = call i1 @rf_text_equal(ptr %member_name, ptr {nameStr})");
+                string nextLabel = i < fields.Count - 1 ? $"check_{i + 1}" : "not_found";
+                EmitLine(sb, $"  br i1 {cmpResult}, label %found_{i}, label %{nextLabel}");
+
+                EmitLine(sb, $"found_{i}:");
+                EmitLine(sb, $"  ret i64 {unchecked((long)typeId)}");
+
+                if (i < fields.Count - 1)
+                {
+                    EmitLine(sb, $"check_{i + 1}:");
+                }
+            }
+
+            EmitLine(sb, "not_found:");
+            EmitLine(sb, "  ret i64 0");
+        }
+
+        EmitLine(sb, "}");
+        EmitLine(sb, "");
+    }
+
+    /// <summary>
+    /// Emits a synthesized routine that returns a Text constant (no owner type required).
+    /// Used for var_name() fallback.
+    /// </summary>
+    private void EmitSynthesizedBuilderServiceTextNoOwner(RoutineInfo routine, string funcName, string value)
     {
         if (routine.OwnerType == null) return;
 
@@ -3058,6 +3266,36 @@ public partial class LLVMCodeGenerator
         string strConst = EmitSynthesizedStringLiteral(value);
 
         EmitLine(_functionDefinitions, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret ptr {strConst}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    #endregion
+
+    #region BuilderService Platform/Build Info
+
+    /// <summary>
+    /// Emits a BuilderService standalone routine that returns a U64 constant.
+    /// </summary>
+    private void EmitSynthesizedBuilderServiceU64(RoutineInfo routine, string funcName, long value)
+    {
+        EmitLine(_functionDefinitions, $"define i64 @{funcName}() {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  ret i64 {value}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits a BuilderService standalone routine that returns a Text constant.
+    /// </summary>
+    private void EmitSynthesizedBuilderServiceText(RoutineInfo routine, string funcName, string value)
+    {
+        string strConst = EmitSynthesizedStringLiteral(value);
+
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}() {{");
         EmitLine(_functionDefinitions, "entry:");
         EmitLine(_functionDefinitions, $"  ret ptr {strConst}");
         EmitLine(_functionDefinitions, "}");

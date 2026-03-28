@@ -16,8 +16,40 @@ public partial class LLVMCodeGenerator
     /// <returns>The LLVM type string.</returns>
     private TypeInfo ResolveTypeSubstitution(TypeInfo type)
     {
-        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(type.Name, out var sub))
+        if (_typeSubstitutions == null) return type;
+
+        // Direct generic parameter substitution (e.g., K → S64)
+        if (_typeSubstitutions.TryGetValue(type.Name, out var sub))
             return sub;
+
+        // Parameterized types with unresolved args (e.g., KVPair[K, V] → KVPair[S64, Text])
+        if (type.TypeArguments is { Count: > 0 })
+        {
+            bool anyResolved = false;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (var ta in type.TypeArguments)
+            {
+                var resolved = ResolveTypeSubstitution(ta);
+                resolvedArgs.Add(resolved);
+                if (resolved != ta) anyResolved = true;
+            }
+            if (anyResolved)
+            {
+                TypeInfo? genericBase = type switch
+                {
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                    ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
+                    _ => null
+                };
+                genericBase ??= type.Name.Contains('[')
+                    ? _registry.LookupType(type.Name[..type.Name.IndexOf('[')])
+                    : null;
+                if (genericBase != null)
+                    return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
+            }
+        }
+
         return type;
     }
 
@@ -48,6 +80,11 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo { MemberVariables.Count: 0 } record when record.Name.Contains('[') &&
                 _registry.LookupType(record.Name[..record.Name.IndexOf('[')]) is RecordTypeInfo { HasDirectBackendType: true } baseRecord
                 => baseRecord.LlvmType,
+
+            // Error handling records (Maybe[T], Result[T], Lookup[T]) → always anonymous { i64, ptr }
+            // This ensures consistency between RecordTypeInfo and ErrorHandlingTypeInfo representations.
+            RecordTypeInfo record when record.Name.StartsWith("Maybe[") || record.Name.StartsWith("Result[") || record.Name.StartsWith("Lookup[")
+                => "{ i64, ptr }",
 
             // Multi-member-variable records → LLVM struct type
             RecordTypeInfo record => GetRecordTypeName(record),
@@ -148,7 +185,9 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetErrorHandlingTypeName(ErrorHandlingTypeInfo errorType)
     {
-        return $"%{Q($"ErrorHandling.{errorType.Name}")}";
+        // All error handling types (Maybe, Result, Lookup) share the same { i64, ptr } layout.
+        // Using the anonymous struct avoids naming conflicts between Record and ErrorHandling prefixes.
+        return "{ i64, ptr }";
     }
 
     /// <summary>

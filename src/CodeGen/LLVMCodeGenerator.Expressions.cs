@@ -304,19 +304,28 @@ public partial class LLVMCodeGenerator
         if (memberType != null && ownerType is { IsGenericResolution: true, TypeArguments: not null })
             memberType = ResolveGenericMemberType(memberType, ownerType);
 
+        // Determine the wrapper LLVM type (Maybe[T]) and inner value type
+        string wrapperLlvmType = memberType != null ? GetLLVMType(memberType) : "{ i64, ptr }";
+        TypeInfo? valueType = memberType switch
+        {
+            ErrorHandlingTypeInfo eh => eh.ValueType,
+            RecordTypeInfo r when r.Name.StartsWith("Maybe[") && r.TypeArguments is { Count: > 0 } => r.TypeArguments[0],
+            _ => null
+        };
+
         // Declare llvm.trap if not already declared
         if (_declaredNativeFunctions.Add("llvm.trap"))
             EmitLine(_functionDeclarations, "declare void @llvm.trap() noreturn nounwind");
 
-        // Alloca and store the { i64, ptr } value
+        // Alloca and store the Maybe value using its proper LLVM type
         string allocaPtr = NextTemp();
-        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
-        EmitLine(sb, $"  store {{ i64, ptr }} {maybeValue}, ptr {allocaPtr}");
+        EmitLine(sb, $"  {allocaPtr} = alloca {wrapperLlvmType}");
+        EmitLine(sb, $"  store {wrapperLlvmType} {maybeValue}, ptr {allocaPtr}");
 
         // Extract tag
         string tagPtr = NextTemp();
         string tag = NextTemp();
-        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tagPtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 0");
         EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
 
         string isValid = NextTemp();
@@ -337,16 +346,16 @@ public partial class LLVMCodeGenerator
         _currentBlock = okLabel;
         string handlePtr = NextTemp();
         string handleVal = NextTemp();
-        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handlePtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 1");
         EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
 
         // For entity types, the value IS the pointer; for records, load from the pointer
-        if (memberType is EntityTypeInfo)
+        if (valueType is EntityTypeInfo)
         {
             return handleVal;
         }
 
-        string llvmValueType = memberType != null ? GetLLVMType(memberType) : "ptr";
+        string llvmValueType = valueType != null ? GetLLVMType(valueType) : "ptr";
         string result = NextTemp();
         EmitLine(sb, $"  {result} = load {llvmValueType}, ptr {handleVal}");
         return result;
@@ -360,6 +369,9 @@ public partial class LLVMCodeGenerator
     {
         // Refresh stale generic resolutions (member variables may be empty or missing the target member)
         entity = RefreshEntityMemberVariables(entity, memberVariableName);
+
+        // Ensure entity type struct definition exists in LLVM IR
+        GenerateEntityType(entity);
 
         // Find member variable index
         int memberVariableIndex = -1;
@@ -448,7 +460,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates code to write a member variable on an entity.
     /// </summary>
-    private void EmitEntityMemberVariableWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName, string value)
+    private void EmitEntityMemberVariableWrite(StringBuilder sb, string entityPtr, EntityTypeInfo entity, string memberVariableName, string value, TypeInfo? valueType = null)
     {
         // Refresh stale generic resolutions
         entity = RefreshEntityMemberVariables(entity, memberVariableName);
@@ -474,12 +486,78 @@ public partial class LLVMCodeGenerator
         string typeName = GetEntityTypeName(entity);
         string memberVariableType = GetLLVMType(memberVariable.Type);
 
+        // Auto-wrap non-Maybe values into Maybe when assigning to nullable member variables.
+        // Skip wrapping if: value is already a Maybe type, or value is zeroinitializer (None literal).
+        if (IsMaybeType(memberVariable.Type)
+            && !(valueType != null && IsMaybeType(valueType))
+            && value != "zeroinitializer")
+        {
+            string wrapped = NextTemp();
+            EmitLine(sb, $"  {wrapped} = insertvalue {{ i64, ptr }} {{ i64 1, ptr null }}, ptr {value}, 1");
+            value = wrapped;
+        }
+
         // GEP to get member variable pointer
         string memberVariablePtr = NextTemp();
         EmitLine(sb, $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
 
         // Store the value
         EmitLine(sb, $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
+    }
+
+    /// <summary>
+    /// Checks if a type is a Maybe/nullable type (Maybe[T], or error handling Maybe).
+    /// </summary>
+    /// <summary>
+    /// Resolves a TypeExpression to a TypeInfo, handling parameterized types
+    /// like SortedDict[K, V] by recursively resolving inner type arguments
+    /// via _typeSubstitutions during monomorphization.
+    /// </summary>
+    private TypeInfo? ResolveTypeArgument(TypeExpression ta)
+    {
+        // Direct substitution (e.g., T → S64)
+        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ta.Name, out var sub))
+            return sub;
+
+        // If the type argument itself has generic arguments (e.g., SortedDict[K, V]),
+        // resolve those recursively and create the concrete type
+        if (ta.GenericArguments is { Count: > 0 })
+        {
+            TypeInfo? baseType = _registry.LookupType(ta.Name);
+            if (baseType != null)
+            {
+                var innerArgs = new List<TypeInfo>();
+                foreach (var innerTa in ta.GenericArguments)
+                {
+                    TypeInfo? innerResolved = ResolveTypeArgument(innerTa);
+                    if (innerResolved != null)
+                        innerArgs.Add(innerResolved);
+                }
+                if (innerArgs.Count == (baseType.GenericParameters?.Count ?? 0))
+                    return _registry.GetOrCreateResolution(baseType, innerArgs);
+            }
+        }
+
+        // Try module-qualified lookup and type substitution values
+        // (handles rewritten names like "SortedDict[S64, S64]" from GenericAstRewriter)
+        var fromModule = LookupTypeInCurrentModule(ta.Name);
+        if (fromModule != null) return fromModule;
+
+        if (_typeSubstitutions != null)
+        {
+            foreach (var sub2 in _typeSubstitutions.Values)
+            {
+                if (sub2.Name == ta.Name) return sub2;
+            }
+        }
+
+        return _registry.LookupType(ta.Name);
+    }
+
+    private static bool IsMaybeType(TypeInfo type)
+    {
+        return type is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe }
+            || (type is RecordTypeInfo r && r.Name.StartsWith("Maybe["));
     }
 
     #endregion
@@ -545,11 +623,14 @@ public partial class LLVMCodeGenerator
             GenericMethodCallExpression generic => EmitGenericMethodCall(sb, generic),
             InsertedTextExpression inserted => EmitInsertedText(sb, inserted),
             ListLiteralExpression list => EmitListLiteral(sb, list),
+            SetLiteralExpression set => EmitSetLiteral(sb, set),
+            DictLiteralExpression dict => EmitDictLiteral(sb, dict),
             FlagsTestExpression flagsTest => EmitFlagsTest(sb, flagsTest),
             ChainedComparisonExpression chain => EmitChainedComparison(sb, chain),
             CompoundAssignmentExpression compound => EmitCompoundAssignment(sb, compound),
             IsPatternExpression isPattern => EmitIsPattern(sb, isPattern),
             NamedArgumentExpression named => EmitExpression(sb, named.Value),
+            GenericMemberExpression gme => EmitGenericMemberExpression(sb, gme),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
     }
@@ -1061,7 +1142,8 @@ public partial class LLVMCodeGenerator
     /// Returns true if the function name is a source location routine that should be inlined at call site.
     /// </summary>
     private static bool IsSourceLocationRoutine(string name) =>
-        name is "source_file" or "source_line" or "source_column" or "source_routine" or "source_module";
+        name is "source_file" or "source_line" or "source_column" or "source_routine" or "source_module"
+            or "source_text" or "caller_file" or "caller_line" or "caller_routine";
 
     /// <summary>
     /// Emits a source location routine inline as a constant from the call site location.
@@ -1080,6 +1162,11 @@ public partial class LLVMCodeGenerator
                 _currentEmittingRoutine?.OwnerType?.Module
                 ?? _currentEmittingRoutine?.Module
                 ?? "<unknown>"),
+            "source_text" => EmitSynthesizedStringLiteral("<expr>"),
+            "caller_file" => EmitSynthesizedStringLiteral(location.FileName),
+            "caller_line" => $"{location.Line}",
+            "caller_routine" => EmitSynthesizedStringLiteral(
+                _currentEmittingRoutine?.Name ?? "<unknown>"),
             _ => "undef"
         };
     }
@@ -1336,6 +1423,36 @@ public partial class LLVMCodeGenerator
             ? MangleFunctionName(routine)
             : SanitizeLLVMName(functionName);
 
+        // Inside monomorphized bodies, calls to routines on generic types need the resolved owner type.
+        // e.g., Snatched[T].$create(from: addr) inside Snatched[T].offset → when T=SortedDict[S64,S64],
+        // the call should target Snatched[SortedDict[S64,S64]].$create#Address, not Snatched.$create#Address.
+        if (_typeSubstitutions != null && routine?.OwnerType is { IsGenericDefinition: true, GenericParameters: not null })
+        {
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (var param in routine.OwnerType.GenericParameters)
+            {
+                if (_typeSubstitutions.TryGetValue(param, out var sub))
+                    resolvedArgs.Add(sub);
+                else
+                    break;
+            }
+            if (resolvedArgs.Count == routine.OwnerType.GenericParameters.Count)
+            {
+                var resolvedOwnerType = _registry.GetOrCreateResolution(routine.OwnerType, resolvedArgs);
+                string resolvedOwnerName = resolvedOwnerType.FullName;
+                string paramSuffix = routine.Parameters.Count > 0 ? $"#{routine.Parameters[0].Type.Name}" : "";
+                mangledName = Q($"{resolvedOwnerName}.{SanitizeLLVMName(routine.Name)}{paramSuffix}");
+
+                // Record monomorphization so the body gets generated
+                if (!_pendingMonomorphizations.ContainsKey(mangledName) && !_generatedFunctionDefs.Contains(mangledName))
+                {
+                    var genericAstName = $"{routine.OwnerType.Name}.{routine.Name}";
+                    _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
+                        routine, resolvedOwnerType, _typeSubstitutions, genericAstName);
+                }
+            }
+        }
+
         // Ensure the function is declared (generates 'declare' and tracks in _generatedFunctions)
         if (routine != null)
         {
@@ -1427,9 +1544,33 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitMethodCall(StringBuilder sb, MemberExpression member, List<Expression> arguments)
     {
+        // Intercept var_name() — inline the variable name from the receiver expression
+        if (member.PropertyName == "var_name" && arguments.Count == 0)
+        {
+            string varName = member.Object is IdentifierExpression varId ? varId.Name : "<expr>";
+            return EmitSynthesizedStringLiteral(varName);
+        }
+
         // Evaluate the receiver (becomes 'me' parameter)
-        string receiver = EmitExpression(sb, member.Object);
-        TypeInfo? receiverType = GetExpressionType(member.Object);
+        // Handle type-level method calls (e.g., S64.data_size() from monomorphized T.data_size()).
+        // After GenericAstRewriter substitutes T→S64 in IdentifierExpression, the type name
+        // appears as a receiver but has no runtime value — use a dummy zeroinitializer.
+        string receiver;
+        TypeInfo? receiverType;
+        if (member.Object is IdentifierExpression typeId
+            && !_localVariables.ContainsKey(typeId.Name)
+            && ResolveTypeNameAsReceiver(typeId.Name) is { } typeAsReceiver)
+        {
+            receiverType = typeAsReceiver;
+            string llvmType = GetLLVMType(receiverType);
+            receiver = llvmType.StartsWith('%') || llvmType.StartsWith('{') ? "zeroinitializer"
+                     : llvmType == "ptr" ? "null" : "0";
+        }
+        else
+        {
+            receiver = EmitExpression(sb, member.Object);
+            receiverType = GetExpressionType(member.Object);
+        }
 
         if (receiverType == null)
         {
@@ -1748,6 +1889,12 @@ public partial class LLVMCodeGenerator
         string handleVal = NextTemp();
         EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
 
+        // For entity types, the value IS the pointer (no boxing) — return directly
+        if (valueType is EntityTypeInfo)
+        {
+            return handleVal;
+        }
+
         string unwrappedType = valueType != null ? GetLLVMType(valueType) : "i64";
         string unwrappedVal = NextTemp();
         EmitLine(sb, $"  {unwrappedVal} = load {unwrappedType}, ptr {handleVal}");
@@ -2019,6 +2166,38 @@ public partial class LLVMCodeGenerator
     /// Emits an 'is' pattern expression (e.g., 'value is None', 'value isnot None').
     /// For Maybe/ErrorHandling types, checks the tag field.
     /// </summary>
+    /// <summary>
+    /// Handles GenericMemberExpression — the parser produces this for ambiguous expr.member[args]
+    /// patterns. In most cases this is actually member access followed by indexing (e.g.,
+    /// me.buckets[i].clear()), not a generic type reference. Desugar to member access + index access.
+    /// </summary>
+    private string EmitGenericMemberExpression(StringBuilder sb, GenericMemberExpression gme)
+    {
+        // Build the member access: gme.Object.gme.MemberName
+        var memberExpr = new MemberExpression(
+            Object: gme.Object,
+            PropertyName: gme.MemberName,
+            Location: gme.Location);
+
+        // The "type arguments" are actually index expressions. Use the first one.
+        if (gme.TypeArguments.Count > 0)
+        {
+            var indexExpr = new IdentifierExpression(
+                Name: gme.TypeArguments[0].Name,
+                Location: gme.TypeArguments[0].Location);
+
+            var indexAccess = new IndexExpression(
+                Object: memberExpr,
+                Index: indexExpr,
+                Location: gme.Location);
+
+            return EmitIndexAccess(sb, indexAccess);
+        }
+
+        // No type arguments — just emit as member access
+        return EmitMemberVariableAccess(sb, memberExpr);
+    }
+
     private string EmitIsPattern(StringBuilder sb, IsPatternExpression isPattern)
     {
         string operand = EmitExpression(sb, isPattern.Expression);
@@ -2214,7 +2393,7 @@ public partial class LLVMCodeGenerator
         }
         else if (binary.Left is MemberExpression member)
         {
-            EmitMemberVariableAssignment(sb, member, value);
+            EmitMemberVariableAssignment(sb, member, value, GetExpressionType(binary.Right));
         }
         else if (binary.Left is IndexExpression index)
         {
@@ -2416,11 +2595,7 @@ public partial class LLVMCodeGenerator
                 var resolvedTypeArgs = new List<TypeInfo>();
                 foreach (var ta in generic.TypeArguments)
                 {
-                    // Check type substitutions first (e.g., T → Letter during monomorphization)
-                    TypeInfo? resolved = null;
-                    if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ta.Name, out var sub))
-                        resolved = sub;
-                    resolved ??= _registry.LookupType(ta.Name);
+                    TypeInfo? resolved = ResolveTypeArgument(ta);
                     if (resolved != null) resolvedTypeArgs.Add(resolved);
                 }
 
@@ -2429,21 +2604,91 @@ public partial class LLVMCodeGenerator
                 if (calledType.IsGenericDefinition && resolvedTypeArgs.Count == calledType.GenericParameters!.Count)
                     resolvedFullType = _registry.GetOrCreateResolution(calledType, resolvedTypeArgs);
 
-                // Multi-arg named construction: Entity[T](field1: val1, field2: val2, ...)
+                // Named-field construction: Type[T](field1: val1, field2: val2, ...)
                 // e.g., List[T](data: ..., count: ..., capacity: ...) during monomorphization
                 if (generic.Arguments.Count > 1 && resolvedFullType is EntityTypeInfo resolvedEntity)
                 {
                     return EmitEntityConstruction(sb, resolvedEntity, generic.Arguments.Cast<Expression>().ToList());
                 }
+                if (generic.Arguments.Count > 1 && resolvedFullType is RecordTypeInfo resolvedRecord)
+                {
+                    return EmitRecordConstruction(sb, resolvedRecord, generic.Arguments.Cast<Expression>().ToList());
+                }
 
-                // For @llvm types (like Snatched[T] → ptr), the constructor is identity
+                // Single-field named construction: Type[T](field: val)
+                // Only when the single named arg matches the entity/record's single field
+                if (generic.Arguments.Count == 1 && generic.Arguments[0] is NamedArgumentExpression singleNamed)
+                {
+                    if (resolvedFullType is EntityTypeInfo singleEntity
+                        && singleEntity.MemberVariables.Count == 1
+                        && singleEntity.MemberVariables[0].Name == singleNamed.Name)
+                    {
+                        return EmitEntityConstruction(sb, singleEntity, generic.Arguments.Cast<Expression>().ToList());
+                    }
+                    if (resolvedFullType is RecordTypeInfo singleRecord
+                        && singleRecord.MemberVariables.Count == 1
+                        && singleRecord.MemberVariables[0].Name == singleNamed.Name)
+                    {
+                        return EmitRecordConstruction(sb, singleRecord, generic.Arguments.Cast<Expression>().ToList());
+                    }
+                }
+
+                // For single-arg generic type calls, try $create first (e.g., List[T](capacity))
                 if (generic.Arguments.Count == 1)
                 {
-                    // Use resolved type for the target LLVM type
+                    // Try $create overload (e.g., List[SortedDict[S64, Text]].$create(capacity: U64))
+                    TypeInfo? singleArgType = GetExpressionType(generic.Arguments[0]);
+                    if (singleArgType != null)
+                    {
+                        var singleArgTypes = new List<TypeInfo> { singleArgType };
+                        string createNameFull = $"{resolvedFullType.Name}.$create";
+                        RoutineInfo? creator = _registry.LookupRoutineOverload(createNameFull, singleArgTypes);
+                        // Fall back to generic definition's $create
+                        if (creator == null && calledType.IsGenericDefinition)
+                        {
+                            string createNameBase = $"{calledType.Name}.$create";
+                            creator = _registry.LookupRoutineOverload(createNameBase, singleArgTypes);
+                        }
+                        if (creator != null)
+                        {
+                            // Unwrap named argument for emission
+                            var argExpr = generic.Arguments[0] is NamedArgumentExpression namedArg
+                                ? namedArg.Value : (Expression)generic.Arguments[0];
+                            string argVal = EmitExpression(sb, argExpr);
+                            string argLlvm = GetLLVMType(singleArgType);
+
+                            // Use resolved type name for generic resolutions (same as zero-arg path)
+                            string funcName;
+                            string firstParamType = creator.Parameters.Count > 0 ? creator.Parameters[0].Type.Name : "";
+                            if (resolvedFullType.IsGenericResolution)
+                            {
+                                funcName = Q($"{resolvedFullType.FullName}.$create#{firstParamType}");
+                                RecordMonomorphization(funcName, creator, resolvedFullType);
+                            }
+                            else
+                            {
+                                funcName = MangleFunctionName(creator);
+                            }
+
+                            // Ensure declared
+                            string retType = resolvedFullType is EntityTypeInfo ? "ptr" :
+                                (creator.ReturnType != null ? GetLLVMType(ResolveTypeSubstitution(creator.ReturnType)) : "ptr");
+                            if (!_generatedFunctions.Contains(funcName))
+                            {
+                                EmitLine(_functionDeclarations, $"declare {retType} @{funcName}({argLlvm})");
+                                _generatedFunctions.Add(funcName);
+                            }
+                            string createResult = NextTemp();
+                            EmitLine(sb, $"  {createResult} = call {retType} @{funcName}({argLlvm} {argVal})");
+                            return createResult;
+                        }
+                    }
+
+                    // For @llvm types (like Snatched[T] → ptr), the constructor is identity
                     string argValue = EmitExpression(sb, generic.Arguments[0]);
                     string targetType = GetLLVMType(resolvedFullType);
-                    TypeInfo? argType = GetExpressionType(generic.Arguments[0]);
-                    string argLlvmType = argType != null ? GetLLVMType(argType) : targetType;
+                    TypeInfo? argTypeForCast = GetExpressionType(generic.Arguments[0]);
+                    string argLlvmType = argTypeForCast != null ? GetLLVMType(argTypeForCast) : targetType;
 
                     // If types match, identity. Otherwise, cast.
                     if (argLlvmType == targetType)
@@ -2562,13 +2807,6 @@ public partial class LLVMCodeGenerator
         // snatched_none[T]() → null pointer
         if (baseName == "snatched_none" && generic.Arguments.Count == 0)
             return "null";
-
-        // data_size[T]() → sizeof(T) as i64
-        if (baseName == "data_size" && generic.Arguments.Count == 0 && typeArg != null)
-        {
-            int bytes = GetTypeSize(typeArg);
-            return Math.Max(bytes, 1).ToString();
-        }
 
         // Resolve the receiver type and look up the method
         TypeInfo? receiverType = GetExpressionType(generic.Object);
@@ -2972,6 +3210,22 @@ public partial class LLVMCodeGenerator
             return GetLLVMType(type);
         }
 
+        // Try module-qualified lookup (e.g., SortedDict → Collections.SortedDict)
+        type = LookupTypeInCurrentModule(typeExpr.Name);
+        if (type != null)
+            return GetLLVMType(type);
+
+        // During monomorphization, the AST rewriter may produce rewritten type names
+        // (e.g., SortedDict[S64, S64]) that match a type substitution value
+        if (_typeSubstitutions != null)
+        {
+            foreach (var sub2 in _typeSubstitutions.Values)
+            {
+                if (sub2.Name == typeExpr.Name)
+                    return GetLLVMType(sub2);
+            }
+        }
+
         // Fall back: return the name as-is (assumes it's already an LLVM type name)
         return typeExpr.Name;
     }
@@ -2995,9 +3249,7 @@ public partial class LLVMCodeGenerator
                     var typeArgs = new List<TypeInfo>();
                     foreach (var ta in generic.TypeArguments)
                     {
-                        TypeInfo? resolved = null;
-                        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(ta.Name, out var sub))
-                            resolved = sub;
+                        TypeInfo? resolved = ResolveTypeArgument(ta);
                         resolved ??= _registry.LookupType(ta.Name);
                         if (resolved != null) typeArgs.Add(resolved);
                     }
@@ -3177,6 +3429,33 @@ public partial class LLVMCodeGenerator
                     resolvedArgs.Add(innerResolved);
                     if (innerResolved != ta) needsResolution = true;
                 }
+                else if (ta is { IsGenericDefinition: true, GenericParameters: not null } and not EntityTypeInfo)
+                {
+                    // Generic definition with resolvable params (e.g., KVPair in List[KVPair]
+                    // when _typeSubstitutions has {K: S64, V: Text} → resolve to KVPair[S64, Text]).
+                    // Skip entity types — they are always ptr and resolution is unnecessary.
+                    bool canResolve = true;
+                    var innerArgs = new List<TypeInfo>();
+                    foreach (var param in ta.GenericParameters)
+                    {
+                        if (_typeSubstitutions.TryGetValue(param, out var paramSub))
+                            innerArgs.Add(paramSub);
+                        else
+                        {
+                            canResolve = false;
+                            break;
+                        }
+                    }
+                    if (canResolve)
+                    {
+                        resolvedArgs.Add(_registry.GetOrCreateResolution(ta, innerArgs));
+                        needsResolution = true;
+                    }
+                    else
+                    {
+                        resolvedArgs.Add(ta);
+                    }
+                }
                 else
                 {
                     resolvedArgs.Add(ta);
@@ -3227,10 +3506,44 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Resolves a type name that appears as a method receiver after monomorphization.
+    /// E.g., after GenericAstRewriter substitutes T→S64, "S64.data_size()" needs to resolve "S64" as a type.
+    /// Checks: registry lookup, module-qualified lookup, and type substitution values.
+    /// </summary>
+    private TypeInfo? ResolveTypeNameAsReceiver(string name)
+    {
+        // Direct registry lookup (handles simple names like S64, Text, Letter)
+        var type = LookupTypeInCurrentModule(name);
+        if (type != null) return type;
+
+        // During monomorphization, check if this name matches any substituted type
+        // (handles generic instances like SortedDict[S64, S64] that may not be in the registry by bare name)
+        if (_typeSubstitutions != null)
+        {
+            foreach (var sub in _typeSubstitutions.Values)
+            {
+                if (sub.Name == name) return sub;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Gets the type of an expression (from semantic analysis metadata).
     /// </summary>
     private TypeInfo? GetExpressionType(Expression expr)
     {
+        // For index expressions during monomorphization, prefer structure-based inference.
+        // ResolvedType may contain ambiguous generic params (e.g., T) that map to the wrong
+        // substitution when the collection's element type differs from the outer type param.
+        if (expr is IndexExpression indexExpr && _typeSubstitutions != null)
+        {
+            var structureType = GetIndexReturnType(indexExpr);
+            if (structureType != null)
+                return structureType;
+        }
+
         // First, check if the semantic analyzer has already resolved the type
         if (expr.ResolvedType != null)
         {
@@ -3257,6 +3570,7 @@ public partial class LLVMCodeGenerator
             IndexExpression index => GetIndexReturnType(index),
             NamedArgumentExpression named => GetExpressionType(named.Value),
             ConditionalExpression cond => GetExpressionType(cond.TrueExpression),
+            GenericMemberExpression gme => GetGenericMemberExpressionType(gme),
             _ => null
         };
     }
@@ -3291,6 +3605,36 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Gets the type of a GenericMemberExpression (member access + indexing).
+    /// </summary>
+    private TypeInfo? GetGenericMemberExpressionType(GenericMemberExpression gme)
+    {
+        // Get the type of the object
+        TypeInfo? objType = GetExpressionType(gme.Object);
+        if (objType == null) return null;
+
+        // Find the member variable
+        IReadOnlyList<MemberVariableInfo>? memberVars = objType switch
+        {
+            EntityTypeInfo e => e.MemberVariables,
+            RecordTypeInfo r => r.MemberVariables,
+            _ => null
+        };
+        var memberVar = memberVars?.FirstOrDefault(mv => mv.Name == gme.MemberName);
+        if (memberVar?.Type == null) return null;
+
+        // The member's type has type arguments — the first one is the element type
+        TypeInfo memberType = memberVar.Type;
+        if (memberType.TypeArguments is { Count: > 0 })
+            return memberType.TypeArguments[0];
+
+        // Try $getitem on the member type
+        RoutineInfo? getItem = _registry.LookupRoutine($"{memberType.Name}.$getitem")
+            ?? _registry.LookupRoutine($"{memberType.Name}.$getitem!");
+        return getItem?.ReturnType;
+    }
+
+    /// <summary>
     /// Gets the return type of an index expression by looking up $getitem on the target type.
     /// </summary>
     private TypeInfo? GetIndexReturnType(IndexExpression index)
@@ -3298,9 +3642,38 @@ public partial class LLVMCodeGenerator
         TypeInfo? targetType = GetExpressionType(index.Object);
         if (targetType == null) return null;
 
-        string methodFullName = $"{targetType.Name}.$getitem";
-        RoutineInfo? getItem = _registry.LookupRoutine(methodFullName);
-        return getItem?.ReturnType;
+        // Try exact name, then with ! suffix, then generic base name
+        string typeName = targetType.Name;
+        RoutineInfo? getItem = _registry.LookupRoutine($"{typeName}.$getitem")
+            ?? _registry.LookupRoutine($"{typeName}.$getitem!");
+        if (getItem == null && typeName.Contains('['))
+        {
+            string baseName = typeName[..typeName.IndexOf('[')];
+            getItem = _registry.LookupRoutine($"{baseName}.$getitem")
+                ?? _registry.LookupRoutine($"{baseName}.$getitem!");
+        }
+
+        if (getItem?.ReturnType == null) return null;
+
+        // Substitute generic return type params with concrete types from the target.
+        // Prefer target type arguments over _typeSubstitutions to avoid ambiguous param names
+        // (e.g., List[BTreeListNode[S64]].$getitem returns T, but the outer T maps to S64 —
+        //  the correct resolution is BTreeListNode[S64] from the list's type args, not S64).
+        TypeInfo returnType = getItem.ReturnType;
+        if (targetType.TypeArguments is { Count: > 0 } && getItem.OwnerType?.GenericParameters is { Count: > 0 })
+        {
+            // Map generic params to concrete args (e.g., T → BTreeListNode[S64] for List[BTreeListNode[S64]].$getitem)
+            var genParams = getItem.OwnerType.GenericParameters;
+            for (int i = 0; i < genParams.Count && i < targetType.TypeArguments.Count; i++)
+            {
+                if (returnType.Name == genParams[i])
+                    return targetType.TypeArguments[i];
+            }
+        }
+        // Fallback: use _typeSubstitutions for simple generic params
+        if (_typeSubstitutions != null && _typeSubstitutions.TryGetValue(returnType.Name, out var sub))
+            return sub;
+        return returnType;
     }
 
     /// <summary>
@@ -3634,7 +4007,7 @@ public partial class LLVMCodeGenerator
                         ?? _registry.LookupRoutine($"{genDefName}.$getitem!");
                 }
             }
-            if (getItem != null && (!getItem.IsGenericDefinition || targetType.IsGenericResolution))
+            if (getItem != null)
             {
                 // Emit as method call: obj.$getitem(index) or obj.$getitem!(index)
                 // Use the actual method name (may be failable with ! suffix).
@@ -3705,8 +4078,8 @@ public partial class LLVMCodeGenerator
 
         string fallbackElemType = targetType switch
         {
-            RecordTypeInfo r when r.TypeArguments.Count > 0 => GetLLVMType(r.TypeArguments[0]),
-            EntityTypeInfo e when e.TypeArguments.Count > 0 => GetLLVMType(e.TypeArguments[0]),
+            RecordTypeInfo r when r.TypeArguments is { Count: > 0 } => GetLLVMType(r.TypeArguments[0]),
+            EntityTypeInfo e when e.TypeArguments is { Count: > 0 } => GetLLVMType(e.TypeArguments[0]),
             _ => throw new InvalidOperationException(
                 $"Cannot determine element type for indexing on type: {targetType?.Name}")
         };
@@ -3890,15 +4263,18 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException("'??' operator requires ErrorHandlingTypeInfo on the left");
         }
 
-        // Alloca and store the { i64, ptr } value
+        // Use proper LLVM type for the maybe/error-handling value
+        string maybeType = GetLLVMType(leftType);
+
+        // Alloca and store the maybe value
         string allocaPtr = NextTemp();
-        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
-        EmitLine(sb, $"  store {{ i64, ptr }} {left}, ptr {allocaPtr}");
+        EmitLine(sb, $"  {allocaPtr} = alloca {maybeType}");
+        EmitLine(sb, $"  store {maybeType} {left}, ptr {allocaPtr}");
 
         // Extract tag (field 0)
         string tagPtr = NextTemp();
         string tag = NextTemp();
-        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
         EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
 
         // Check tag == 1 (VALID)
@@ -3917,7 +4293,7 @@ public partial class LLVMCodeGenerator
         _currentBlock = valLabel;
         string handlePtr = NextTemp();
         string handleVal = NextTemp();
-        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
         EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
 
         // Determine the value type T
@@ -3979,15 +4355,16 @@ public partial class LLVMCodeGenerator
             EmitLine(_functionDeclarations, "declare void @llvm.trap() noreturn nounwind");
         }
 
-        // Alloca and store the { i64, ptr } value
+        // Alloca and store the maybe/error-handling value using its proper LLVM type
+        string maybeType = operandType != null ? GetLLVMType(operandType) : "{ i64, ptr }";
         string allocaPtr = NextTemp();
-        EmitLine(sb, $"  {allocaPtr} = alloca {{ i64, ptr }}");
-        EmitLine(sb, $"  store {{ i64, ptr }} {operand}, ptr {allocaPtr}");
+        EmitLine(sb, $"  {allocaPtr} = alloca {maybeType}");
+        EmitLine(sb, $"  store {maybeType} {operand}, ptr {allocaPtr}");
 
         // Extract tag (field 0)
         string tagPtr = NextTemp();
         string tag = NextTemp();
-        EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
         EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
 
         // Check tag == 1 (VALID)
@@ -4010,10 +4387,16 @@ public partial class LLVMCodeGenerator
         _currentBlock = okLabel;
         string handlePtr = NextTemp();
         string handleVal = NextTemp();
-        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
         EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
 
-        // Load T from the handle pointer
+        // For entity types, the value IS the pointer (no boxing) — return directly
+        if (valueType is EntityTypeInfo)
+        {
+            return handleVal;
+        }
+
+        // For value types, load T from the handle pointer (heap-allocated storage)
         string llvmValueType = GetLLVMType(valueType);
         string result = NextTemp();
         EmitLine(sb, $"  {result} = load {llvmValueType}, ptr {handleVal}");
@@ -4505,6 +4888,124 @@ public partial class LLVMCodeGenerator
         }
 
         return listPtr;
+    }
+
+    private string EmitSetLiteral(StringBuilder sb, SetLiteralExpression set)
+    {
+        TypeInfo? setType = set.ResolvedType;
+        string setTypeName = setType?.Name ?? "Set";
+
+        string setPtr = EmitCollectionCreate(sb, setType, setTypeName);
+
+        // Add each element via .add(element)
+        foreach (var elem in set.Elements)
+        {
+            string elemValue = EmitExpression(sb, elem);
+            TypeInfo? elemType = GetExpressionType(elem);
+            string elemLLVMType = elemType != null ? GetLLVMType(elemType) : "i64";
+
+            string addName = $"{setTypeName}.add";
+            RoutineInfo? addMethod = _registry.LookupRoutine(addName);
+            if (addMethod != null)
+            {
+                string mangledAdd = MangleFunctionName(addMethod);
+                EmitLine(sb, $"  call i1 @{mangledAdd}(ptr {setPtr}, {elemLLVMType} {elemValue})");
+            }
+        }
+
+        return setPtr;
+    }
+
+    private string EmitDictLiteral(StringBuilder sb, DictLiteralExpression dict)
+    {
+        TypeInfo? dictType = dict.ResolvedType;
+        string dictTypeName = dictType?.Name ?? "Dict";
+
+        string dictPtr = EmitCollectionCreate(sb, dictType, dictTypeName);
+
+        // Add each pair via .add(key, value)
+        foreach (var (key, value) in dict.Pairs)
+        {
+            string keyValue = EmitExpression(sb, key);
+            string valValue = EmitExpression(sb, value);
+
+            TypeInfo? keyType = GetExpressionType(key);
+            TypeInfo? valueType = GetExpressionType(value);
+            string keyLLVMType = keyType != null ? GetLLVMType(keyType) : "i64";
+            string valueLLVMType = valueType != null ? GetLLVMType(valueType) : "i64";
+
+            string addName = $"{dictTypeName}.add";
+            RoutineInfo? addMethod = _registry.LookupRoutine(addName);
+            if (addMethod != null)
+            {
+                string mangledAdd = MangleFunctionName(addMethod);
+                EmitLine(sb, $"  call i1 @{mangledAdd}(ptr {dictPtr}, {keyLLVMType} {keyValue}, {valueLLVMType} {valValue})");
+            }
+        }
+
+        return dictPtr;
+    }
+
+    /// <summary>
+    /// Emits a zero-arg $create() call for a collection type, handling monomorphization.
+    /// </summary>
+    private string EmitCollectionCreate(StringBuilder sb, TypeInfo? resolvedType, string typeName)
+    {
+        if (resolvedType == null)
+            return "null";
+
+        // Look up $create on the resolved type first, then fall back to generic definition
+        string createName = $"{resolvedType.Name}.$create";
+        RoutineInfo? creator = _registry.LookupRoutineOverload(createName, new List<TypeInfo>());
+        if (creator != null && creator.Parameters.Count > 0)
+            creator = null;
+
+        // Fall back to generic definition's $create
+        if (creator == null)
+        {
+            TypeInfo? genericDef = resolvedType switch
+            {
+                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                _ => null
+            };
+            if (genericDef != null)
+            {
+                string genCreateName = $"{genericDef.Name}.$create";
+                creator = _registry.LookupRoutineOverload(genCreateName, new List<TypeInfo>());
+                if (creator != null && creator.Parameters.Count > 0)
+                    creator = null;
+            }
+        }
+
+        if (creator != null)
+        {
+            string funcName;
+            if (resolvedType.IsGenericResolution)
+            {
+                funcName = Q($"{resolvedType.FullName}.$create");
+                RecordMonomorphization(funcName, creator, resolvedType);
+            }
+            else
+            {
+                funcName = MangleFunctionName(creator);
+            }
+
+            // Ensure declared
+            if (!_generatedFunctions.Contains(funcName))
+            {
+                EmitLine(_functionDeclarations, $"declare ptr @{funcName}()");
+                _generatedFunctions.Add(funcName);
+            }
+            string result = NextTemp();
+            EmitLine(sb, $"  {result} = call ptr @{funcName}()");
+            return result;
+        }
+
+        // Last resort: direct allocation with zeroed fields
+        string ptr = NextTemp();
+        EmitLine(sb, $"  {ptr} = call ptr @rf_allocate_dynamic(i64 24)");
+        return ptr;
     }
 
     #endregion

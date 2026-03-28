@@ -252,18 +252,8 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Generate error handling types (Result[T], Lookup[T], Maybe[T] → { i64, ptr })
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.ErrorHandling))
-        {
-            if (type is ErrorHandlingTypeInfo errorHandling)
-            {
-                string typeName = GetErrorHandlingTypeName(errorHandling);
-                if (_generatedTypes.Add(typeName))
-                {
-                    EmitLine(_typeDeclarations, $"{typeName} = type {{ i64, ptr }}");
-                }
-            }
-        }
+        // Error handling types (Result[T], Lookup[T], Maybe[T]) use anonymous { i64, ptr }
+        // so no named struct definitions are needed.
 
         // Generate variant types (tagged unions → tag + payload record)
         foreach (var type in _registry.GetTypesByCategory(TypeCategory.Variant))

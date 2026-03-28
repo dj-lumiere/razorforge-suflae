@@ -245,8 +245,14 @@ internal static class GenericAstRewriter
                 Subject = RewriteExpression(fte.Subject, subs)
             },
 
+            // Identifier expressions: substitute type parameter names
+            // e.g., T → S64 when T is used as a receiver in T.data_size()
+            IdentifierExpression id => subs.TryGetValue(id.Name, out var idSub)
+                ? id with { Name = idSub }
+                : id,
+
             // Leaf nodes — no children to rewrite
-            LiteralExpression or IdentifierExpression => expr,
+            LiteralExpression => expr,
 
             _ => expr // Unknown expression type — return as-is
         };
