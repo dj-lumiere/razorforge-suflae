@@ -194,10 +194,10 @@ public class AttributeTests
         string source = """
                         protocol Identifiable
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$same(you: Me) -> Bool
 
                           @readonly
-                          routine Me.__notsame__(you: Me) -> Bool
+                          routine Me.$notsame(you: Me) -> Bool
                         """;
 
         AssertParses(source: source);

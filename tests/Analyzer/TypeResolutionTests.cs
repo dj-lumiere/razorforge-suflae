@@ -322,7 +322,7 @@ public class TypeResolutionTests
         string source = """
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         record Wrapper[T]
                         needs T obeys Comparable
@@ -583,7 +583,7 @@ public class TypeResolutionTests
                           F64
 
                         @readonly
-                        routine Shape.__eq__(you: Shape) -> Bool
+                        routine Shape.$eq(you: Shape) -> Bool
                           return false
                         """;
 
@@ -924,13 +924,13 @@ public class TypeResolutionTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                         record Wrapper[T] obeys Equatable
                           value: T
 
                         @readonly
-                        routine Wrapper.__eq__(you: Wrapper) -> Bool
+                        routine Wrapper.$eq(you: Wrapper) -> Bool
                           return true
 
                         routine test(a: Wrapper[S32], b: Wrapper[S32]) -> Bool

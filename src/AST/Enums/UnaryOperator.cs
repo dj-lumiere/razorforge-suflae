@@ -62,7 +62,7 @@ public enum UnaryOperator
 
 /// <summary>
 /// Extension methods for the <see cref="UnaryOperator"/> enum, providing string representations
-/// and operator overloading support via dunder method names.
+/// and operator overloading support via wired method names.
 /// </summary>
 internal static class UnaryOperatorExtensions
 {
@@ -85,7 +85,7 @@ internal static class UnaryOperatorExtensions
             };
         }
         /// <summary>
-        /// Gets the dunder method name for operator overloading.
+        /// Gets the wired method name for operator overloading.
         /// Returns null if the operator is not overloadable.
         /// </summary>
         public string? GetMethodName()

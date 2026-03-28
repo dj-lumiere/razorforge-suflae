@@ -143,7 +143,7 @@ public sealed partial class SemanticAnalyzer
         ApplyImplicitMarkerConformance();
 
         // Phase 2.55: Auto-register builder-generated member routines ($represent, $hash, $eq, etc.)
-        AutoRegisterBuiltinRoutines();
+        AutoRegisterWiredRoutines();
 
         // Phase 2.6: Generate derived comparison operators ($ne from $eq, $lt/$le/$gt/$ge from $cmp)
         GenerateDerivedOperators();
@@ -182,7 +182,7 @@ public sealed partial class SemanticAnalyzer
         // Run global phases that stdlib body analysis depends on
         // (StdlibLoader registered types and routines, but these phases were not run)
         ApplyImplicitMarkerConformance();
-        AutoRegisterBuiltinRoutines();
+        AutoRegisterWiredRoutines();
         GenerateDerivedOperators();
 
         foreach (var (program, filePath, module) in _registry.StdlibPrograms)
@@ -276,7 +276,7 @@ public sealed partial class SemanticAnalyzer
 
         // Global passes (once, registry-only — no per-file import scoping needed)
         ApplyImplicitMarkerConformance();
-        AutoRegisterBuiltinRoutines();
+        AutoRegisterWiredRoutines();
         GenerateDerivedOperators();
         ValidateProtocolImplementations();
 

@@ -50,7 +50,7 @@ public partial class Parser
 
         value = ParseAssignment();
 
-        // Base operators with in-place dunder support -> CompoundAssignmentExpression
+        // Base operators with in-place wired support -> CompoundAssignmentExpression
         if (compoundOp.Value.GetInPlaceMethodName() != null)
         {
             return new CompoundAssignmentExpression(

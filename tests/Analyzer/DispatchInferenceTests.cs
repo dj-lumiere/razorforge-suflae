@@ -32,12 +32,12 @@ public class DispatchInferenceTests
     {
         string source = """
                         protocol Comparable
-                          routine __cmp__(you: Me) -> S32
+                          routine $cmp(you: Me) -> S32
                         routine max_of[T](values...: T) -> T needs T obeys Comparable
                           return values[0]
                         record Score obeys Comparable
                           value: S32
-                        routine Score.__cmp__(you: Score) -> S32
+                        routine Score.$cmp(you: Score) -> S32
                           return me.value
                         routine test() -> Score
                           preset a = Score(value: 1)

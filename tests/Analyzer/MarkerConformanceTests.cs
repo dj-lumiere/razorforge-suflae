@@ -136,14 +136,14 @@ public class MarkerConformanceTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
@@ -158,13 +158,13 @@ public class MarkerConformanceTests
         string source = """
                         protocol Identifiable
                           @[readonly, innate]
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$same(you: Me) -> Bool
 
                         entity Widget obeys Identifiable
                           name: Text
 
                         @readonly
-                        routine Widget.__same__(you: Widget) -> Bool
+                        routine Widget.$same(you: Widget) -> Bool
                           return me.name == you.name
                         """;
 

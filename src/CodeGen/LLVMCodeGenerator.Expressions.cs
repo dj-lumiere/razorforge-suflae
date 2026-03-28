@@ -2311,7 +2311,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates code for a unary operation.
-    /// Minus and BitwiseNot are emitted as method calls to $neg / $not
+    /// Minus and BitwiseNot are emitted as method calls to $neg / $bitnot
     /// so the stdlib bodies (which call LLVM intrinsics) do the actual work.
     /// </summary>
     private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
@@ -2356,11 +2356,11 @@ public partial class LLVMCodeGenerator
                 return result;
             }
         }
-        return EmitUnaryMethodCall(sb, unary, "$not");
+        return EmitUnaryMethodCall(sb, unary, "$bitnot");
     }
 
     /// <summary>
-    /// Emits a unary operator as a method call (e.g., -x → x.$neg(), ~x → x.$not()).
+    /// Emits a unary operator as a method call (e.g., -x → x.$neg(), ~x → x.$bitnot()).
     /// </summary>
     private string EmitUnaryMethodCall(StringBuilder sb, UnaryExpression unary, string methodName)
     {
@@ -4313,6 +4313,8 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a single expression part of an f-string, handling format specifiers.
+    /// Valid specifiers: null (default → $represent), "=" (name prefix + $represent),
+    /// "?" ($diagnose), "=?" (name prefix + $diagnose).
     /// </summary>
     private string EmitInsertedTextPart(StringBuilder sb, ExpressionPart exprPart)
     {
@@ -4320,15 +4322,20 @@ public partial class LLVMCodeGenerator
         TypeInfo? exprType = GetExpressionType(exprPart.Expression);
         string? formatSpec = exprPart.FormatSpec;
 
-        // Handle "=" specifier: emit "name=value" (variable name prefix)
-        if (formatSpec == "=")
+        bool hasName = formatSpec != null && formatSpec.Contains('=');
+        bool hasDiagnose = formatSpec != null && formatSpec.Contains('?');
+
+        // Resolve the text value via $diagnose or $represent
+        string valueText = hasDiagnose
+            ? EmitDiagnoseCall(sb, exprValue, exprType)
+            : EmitRepresentCall(sb, exprValue, exprType);
+
+        // Prepend "name=" prefix if = specifier is present
+        if (hasName)
         {
-            // Emit the variable name as a prefix: "varname="
             string varName = exprPart.Expression is IdentifierExpression id ? id.Name : "expr";
             string prefix = EmitStringLiteral(sb, $"{varName}=");
-            string valueText = EmitValueToText(sb, exprValue, exprType, null);
 
-            // Concat: prefix + valueText via native rf_text_concat
             if (_declaredNativeFunctions.Add("rf_text_concat"))
                 EmitLine(_functionDeclarations, "declare ptr @rf_text_concat(ptr, ptr)");
             string result = NextTemp();
@@ -4336,103 +4343,61 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // Handle "!d" specifier: call $diagnose() instead of Text.$create
-        if (formatSpec == "!d" || formatSpec == "d")
-        {
-            string typeName = exprType?.Name ?? "Data";
-            string debugName = $"{typeName}.$diagnose";
-            RoutineInfo? debugMethod = _registry.LookupRoutine(debugName);
-            if (debugMethod != null)
-                GenerateFunctionDeclaration(debugMethod);
-
-            string mangledDebug = debugMethod != null
-                ? MangleFunctionName(debugMethod)
-                : Q($"{typeName}.$diagnose");
-
-            string argType = exprType != null ? GetParameterLLVMType(exprType) : "i64";
-            string result = NextTemp();
-            EmitLine(sb, $"  {result} = call ptr @{mangledDebug}({argType} {exprValue})");
-            return result;
-        }
-
-        // For all other format specifiers (D2, E3, b, h, etc.): call rf_format with spec string
-        // If no spec or Text type, use default conversion
-        return EmitValueToText(sb, exprValue, exprType, formatSpec);
+        return valueText;
     }
 
     /// <summary>
-    /// Converts a value to Text, optionally applying a format specifier.
+    /// Emits a call to Type.$represent() to convert a value to Text.
     /// </summary>
-    private string EmitValueToText(StringBuilder sb, string value, TypeInfo? type, string? formatSpec)
+    private string EmitRepresentCall(StringBuilder sb, string value, TypeInfo? type)
     {
         // If already Text, return directly
         if (type?.Name == "Text")
-        {
             return value;
-        }
 
-        // If format spec is provided, call rf_format(value, spec_ptr) runtime function
-        if (formatSpec != null)
-        {
-            // TODO: No hardcoding allowed.
-            if (_declaredNativeFunctions.Add("rf_format"))
-            {
-                EmitLine(_functionDeclarations, "declare ptr @rf_format(i64, ptr)");
-            }
+        string typeName = type?.Name ?? "Data";
+        string representName = $"{typeName}.$represent";
+        RoutineInfo? representMethod = _registry.LookupRoutine(representName);
+        if (representMethod != null)
+            GenerateFunctionDeclaration(representMethod);
 
-            string specPtr = EmitStringLiteral(sb, formatSpec);
+        string mangledName = representMethod != null
+            ? MangleFunctionName(representMethod)
+            : Q($"{typeName}.$represent");
 
-            // Bitcast/extend value to i64 for the generic format call
-            string argType = type != null ? GetLLVMType(type) : "i64";
-            string i64Value;
-            if (argType == "i64")
-            {
-                i64Value = value;
-            }
-            else if (argType is "i1" or "i8" or "i16" or "i32")
-            {
-                i64Value = NextTemp();
-                EmitLine(sb, $"  {i64Value} = sext {argType} {value} to i64");
-            }
-            else if (argType is "float")
-            {
-                string dbl = NextTemp();
-                EmitLine(sb, $"  {dbl} = fpext float {value} to double");
-                i64Value = NextTemp();
-                EmitLine(sb, $"  {i64Value} = bitcast double {dbl} to i64");
-            }
-            else if (argType is "double")
-            {
-                i64Value = NextTemp();
-                EmitLine(sb, $"  {i64Value} = bitcast double {value} to i64");
-            }
-            else
-            {
-                // ptr or other: ptrtoint
-                i64Value = NextTemp();
-                EmitLine(sb, $"  {i64Value} = ptrtoint ptr {value} to i64");
-            }
+        string argType = type != null ? GetParameterLLVMType(type) : "i64";
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = call ptr @{mangledName}({argType} {value})");
+        return result;
+    }
 
-            string result = NextTemp();
-            EmitLine(sb, $"  {result} = call ptr @rf_format(i64 {i64Value}, ptr {specPtr})");
-            return result;
-        }
+    /// <summary>
+    /// Emits a call to Type.$diagnose() to convert a value to its diagnostic Text.
+    /// </summary>
+    private string EmitDiagnoseCall(StringBuilder sb, string value, TypeInfo? type)
+    {
+        string typeName = type?.Name ?? "Data";
+        string diagnoseName = $"{typeName}.$diagnose";
+        RoutineInfo? diagnoseMethod = _registry.LookupRoutine(diagnoseName);
+        if (diagnoseMethod != null)
+            GenerateFunctionDeclaration(diagnoseMethod);
 
-        // Default: call Text.$create(from: value)
-        RoutineInfo? createMethod = type != null
-            ? _registry.LookupRoutineOverload("Text.$create", [type])
-            : _registry.LookupRoutine("Text.$create");
-        if (createMethod != null)
-            GenerateFunctionDeclaration(createMethod);
+        string mangledName = diagnoseMethod != null
+            ? MangleFunctionName(diagnoseMethod)
+            : Q($"{typeName}.$diagnose");
 
-        string llvmArgType = type != null ? GetLLVMType(type) : "i64";
-        string mangledName = createMethod != null
-            ? MangleFunctionName(createMethod)
-            : "Text.$create";
+        string argType = type != null ? GetParameterLLVMType(type) : "i64";
+        string result = NextTemp();
+        EmitLine(sb, $"  {result} = call ptr @{mangledName}({argType} {value})");
+        return result;
+    }
 
-        string textResult = NextTemp();
-        EmitLine(sb, $"  {textResult} = call ptr @{mangledName}({llvmArgType} {value})");
-        return textResult;
+    /// <summary>
+    /// Converts a value to Text using $represent. Used by non-f-text contexts.
+    /// </summary>
+    private string EmitValueToText(StringBuilder sb, string value, TypeInfo? type, string? formatSpec)
+    {
+        return EmitRepresentCall(sb, value, type);
     }
 
     #endregion

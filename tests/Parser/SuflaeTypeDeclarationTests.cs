@@ -242,7 +242,7 @@ public class SuflaeTypeDeclarationTests
     {
         string source = """
                         protocol Ordered obeys Comparable
-                          routine __cmp__(other: Me) -> ComparisonSign
+                          routine $cmp(other: Me) -> ComparisonSign
                         """;
 
         Program program = AssertParsesSuflae(source: source);

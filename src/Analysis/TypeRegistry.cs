@@ -1222,7 +1222,7 @@ public sealed class TypeRegistry
                     OwnerType = type,
                     ReturnType = resolvedReturn,
                     IsFailable = protoMethod.IsFailable,
-                    AsyncStatus = protoMethod.Name == "__next__"
+                    AsyncStatus = protoMethod.Name == "$next"
                         ? AsyncStatus.Emitting
                         : AsyncStatus.None
                 };

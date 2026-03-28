@@ -1158,6 +1158,44 @@ public sealed partial class SemanticAnalyzer
             return rightType;
         }
 
+        // Validate RHS type against the operator method's parameter type
+        {
+            string? methodName = binary.Operator.GetMethodName();
+            if (methodName != null)
+            {
+                RoutineInfo? method = _registry.LookupMethod(type: leftType, methodName: methodName);
+                if (method is { Parameters.Count: > 0 })
+                {
+                    TypeSymbol paramType = method.Parameters[0].Type;
+
+                    // Substitute Me → leftType for protocol-sourced methods
+                    if (paramType is ProtocolSelfTypeInfo)
+                        paramType = leftType;
+
+                    // Substitute generic type parameters (e.g., List[S32].$add → T becomes S32)
+                    if (leftType is { IsGenericResolution: true, TypeArguments: not null })
+                        paramType = SubstituteTypeParameters(type: paramType, genericType: leftType);
+
+                    if (!IsAssignableTo(source: rightType, target: paramType))
+                    {
+                        ReportError(
+                            SemanticDiagnosticCode.ArgumentTypeMismatch,
+                            $"Operator '{binary.Operator.ToStringRepresentation()}': cannot convert '{rightType.Name}' to '{paramType.Name}'.",
+                            binary.Location);
+                        return ErrorTypeInfo.Instance;
+                    }
+
+                    // Return the method's actual return type instead of blindly returning leftType
+                    TypeSymbol returnType = method.ReturnType ?? leftType;
+                    if (returnType is ProtocolSelfTypeInfo)
+                        returnType = leftType;
+                    if (leftType is { IsGenericResolution: true, TypeArguments: not null })
+                        returnType = SubstituteTypeParameters(type: returnType, genericType: leftType);
+                    return returnType;
+                }
+            }
+        }
+
         // Default: return left type
         // This handles any edge cases that might slip through
         return leftType;
@@ -1341,7 +1379,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Analyzes a compound assignment expression (e.g., a += b).
-    /// Dispatch order: (0) verify target is var, (1) try in-place dunder ($iadd) → Blank,
+    /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) → Blank,
     /// (2) fallback to create-and-assign ($add) for non-entity types, (3) error if neither.
     /// </summary>
     private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound)
@@ -1445,7 +1483,7 @@ public sealed partial class SemanticAnalyzer
         string? regularMethod = compound.Operator.GetMethodName();
         bool isEntity = targetType is EntityTypeInfo;
 
-        // Step 1: Try in-place dunder ($iadd, etc.)
+        // Step 1: Try in-place wired ($iadd, etc.)
         if (inPlaceMethod != null)
         {
             RoutineInfo? inPlaceRoutine = _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
@@ -1540,6 +1578,18 @@ public sealed partial class SemanticAnalyzer
         {
             // Strip '!' suffix for failable calls (e.g., "stop!" → "stop")
             string callName = id.Name.EndsWith('!') ? id.Name[..^1] : id.Name;
+
+            // Wired routines ($-prefixed) cannot be called directly by user code
+            if (callName.StartsWith(value: '$'))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.DirectWiredRoutineCall,
+                    $"Wired routine '{callName}' cannot be called directly. " +
+                    "Use the corresponding language construct instead (e.g., '==' for $eq, 'for' for $iter).",
+                    call.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
             RoutineInfo? routine = _registry.LookupRoutine(fullName: callName);
             // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
             if (routine == null && _currentModuleName != null && !callName.Contains('.'))
@@ -1761,8 +1811,8 @@ public sealed partial class SemanticAnalyzer
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-            // Choice types cannot use any operator dunders
-            if (objectType is ChoiceTypeInfo && IsOperatorDunder(name: member.PropertyName))
+            // Choice types cannot use any operator wired methods
+            if (objectType is ChoiceTypeInfo && IsOperatorWired(name: member.PropertyName))
             {
                 ReportError(
                     SemanticDiagnosticCode.ArithmeticOnChoiceType,
@@ -1772,13 +1822,24 @@ public sealed partial class SemanticAnalyzer
                 return ErrorTypeInfo.Instance;
             }
 
-            // #134/#135: Flags types cannot use any operator dunders
-            if (objectType is FlagsTypeInfo && IsOperatorDunder(name: member.PropertyName))
+            // #134/#135: Flags types cannot use any operator wired methods
+            if (objectType is FlagsTypeInfo && IsOperatorWired(name: member.PropertyName))
             {
                 ReportError(
                     SemanticDiagnosticCode.ArithmeticOnFlagsType,
                     $"Operator '{member.PropertyName}' cannot be used with flags type '{objectType.Name}'. " +
                     "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
+                    call.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
+            // Wired routines ($-prefixed) cannot be called directly by user code
+            if (member.PropertyName.StartsWith(value: '$'))
+            {
+                ReportError(
+                    SemanticDiagnosticCode.DirectWiredRoutineCall,
+                    $"Wired routine '{member.PropertyName}' cannot be called directly. " +
+                    "Use the corresponding language construct instead (e.g., '==' for $eq, 'for' for $iter).",
                     call.Location);
                 return ErrorTypeInfo.Instance;
             }
@@ -1867,7 +1928,7 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 // #68: Real-to-Complex promotion — only $add/$sub allow float↔complex cross-type
-                if (IsOperatorDunder(name: member.PropertyName)
+                if (IsOperatorWired(name: member.PropertyName)
                     && member.PropertyName is not ("$add" or "$sub" or "$iadd" or "$isub")
                     && call.Arguments.Count > 0
                     && method.Parameters.Count > 0)
@@ -2082,7 +2143,7 @@ public sealed partial class SemanticAnalyzer
                             ReportError(
                                 SemanticDiagnosticCode.MethodChainMultiArg,
                                 $"Method-chain constructor '{potentialTypeName}' requires exactly one non-'me' parameter, " +
-                                $"but '__create__' has {nonMeParams.Count}.",
+                                $"but '$create' has {nonMeParams.Count}.",
                                 call.Location);
                             return ErrorTypeInfo.Instance;
                         }
@@ -2309,8 +2370,8 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         AnalyzeExpression(expression: index.Index);
 
-        // Look for __getitem__ method — LookupMethod handles generic resolutions
-        RoutineInfo? getItem = _registry.LookupMethod(type: objectType, methodName: "__getitem__");
+        // Look for $getitem method — LookupMethod handles generic resolutions
+        RoutineInfo? getItem = _registry.LookupMethod(type: objectType, methodName: "$getitem");
         if (getItem?.ReturnType != null)
         {
             TypeSymbol itemReturnType = getItem.ReturnType;
@@ -2334,8 +2395,8 @@ public sealed partial class SemanticAnalyzer
         AnalyzeExpression(expression: slice.Start);
         AnalyzeExpression(expression: slice.End);
 
-        // Look for __getslice__ method — LookupMethod handles generic resolutions
-        RoutineInfo? getSlice = _registry.LookupMethod(type: objectType, methodName: "__getslice__");
+        // Look for $getslice method — LookupMethod handles generic resolutions
+        RoutineInfo? getSlice = _registry.LookupMethod(type: objectType, methodName: "$getslice");
         if (getSlice?.ReturnType != null)
         {
             TypeSymbol sliceReturnType = getSlice.ReturnType;
@@ -3633,10 +3694,35 @@ public sealed partial class SemanticAnalyzer
                 // (identifiers, literals, member access, calls) are allowed
                 ValidateFTextExpression(expression: exprPart.Expression, location: exprPart.Location);
                 AnalyzeExpression(expression: exprPart.Expression);
+                ValidateFTextFormatSpec(formatSpec: exprPart.FormatSpec, location: exprPart.Location);
             }
         }
 
         return _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Validates that an f-text format specifier is one of the allowed values.
+    /// Valid: null (none), "=", "?", "=?". Invalid: "?=" (wrong order), anything else.
+    /// </summary>
+    private void ValidateFTextFormatSpec(string? formatSpec, SourceLocation location)
+    {
+        if (formatSpec is null or "=" or "?" or "=?")
+            return;
+
+        if (formatSpec == "?=")
+        {
+            ReportError(
+                SemanticDiagnosticCode.InvalidFTextFormatSpec,
+                "Invalid f-text format specifier '?='. The correct order is '=?' (name display first, then diagnose).",
+                location);
+            return;
+        }
+
+        ReportError(
+            SemanticDiagnosticCode.InvalidFTextFormatSpec,
+            $"Invalid f-text format specifier '{formatSpec}'. F-text only supports '=' (name display), '?' (diagnose), and '=?' (combined).",
+            location);
     }
 
     /// <summary>

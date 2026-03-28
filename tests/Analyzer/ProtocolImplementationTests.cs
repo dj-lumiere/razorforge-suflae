@@ -132,7 +132,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
                           value: S32
@@ -142,7 +142,7 @@ public class ProtocolImplementationTests
                           return "value"
 
                         @readonly
-                        routine Value.__cmp__(other: Value) -> S32
+                        routine Value.$cmp(other: Value) -> S32
                           return me.value - other.value
                         """;
 
@@ -159,7 +159,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
                           value: S32
@@ -410,18 +410,18 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                           @generated
                           @readonly
-                          routine Me.__ne__(you: Me) -> Bool
+                          routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
@@ -436,7 +436,7 @@ public class ProtocolImplementationTests
                         protocol Identifiable
                           @innate
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$same(you: Me) -> Bool
 
                         entity Widget obeys Identifiable
                           name: Text
@@ -457,13 +457,13 @@ public class ProtocolImplementationTests
                         protocol Identifiable
                           @innate
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$same(you: Me) -> Bool
 
                         entity Widget obeys Identifiable
                           name: Text
 
                         @readonly
-                        routine Widget.__same__(you: Widget) -> Bool
+                        routine Widget.$same(you: Widget) -> Bool
                           return false
                         """;
 
@@ -478,7 +478,7 @@ public class ProtocolImplementationTests
                         protocol Identifiable
                           @innate
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$same(you: Me) -> Bool
 
                         entity Widget obeys Identifiable
                           name: Text
@@ -498,22 +498,22 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                           @generated
                           @readonly
-                          routine Me.__ne__(you: Me) -> Bool
+                          routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
 
                         @readonly
-                        routine Point.__ne__(you: Point) -> Bool
+                        routine Point.$ne(you: Point) -> Bool
                           return me.x != you.x or me.y != you.y
                         """;
 
@@ -527,18 +527,18 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                           @generated
                           @readonly
-                          routine Me.__ne__(you: Me) -> Bool
+                          routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
@@ -585,7 +585,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         routine foo[T obeys Displayable, Comparable](item: T) -> Text
                           return item.display()
@@ -605,7 +605,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
                           return item.display()

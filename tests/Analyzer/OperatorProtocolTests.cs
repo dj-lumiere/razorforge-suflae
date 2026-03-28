@@ -42,14 +42,14 @@ public class OperatorProtocolTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
@@ -68,13 +68,13 @@ public class OperatorProtocolTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(you: Me) -> ComparisonSign
+                          routine Me.$cmp(you: Me) -> ComparisonSign
 
                         record Score obeys Comparable
                           value: S32
 
                         @readonly
-                        routine Score.__cmp__(you: Score) -> ComparisonSign
+                        routine Score.$cmp(you: Score) -> ComparisonSign
                           if me.value < you.value
                             return ME_SMALL
                           if me.value > you.value
@@ -152,14 +152,14 @@ public class OperatorProtocolTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                         record Point
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
@@ -167,7 +167,7 @@ public class OperatorProtocolTests
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Equatable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__eq__",
+            filter: e => e.Message.Contains(value: "$eq",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Equatable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -184,13 +184,13 @@ public class OperatorProtocolTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(you: Me) -> ComparisonSign
+                          routine Me.$cmp(you: Me) -> ComparisonSign
 
                         record Score
                           value: S32
 
                         @readonly
-                        routine Score.__cmp__(you: Score) -> ComparisonSign
+                        routine Score.$cmp(you: Score) -> ComparisonSign
                           return SAME
                         """;
 
@@ -198,7 +198,7 @@ public class OperatorProtocolTests
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Comparable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__cmp__",
+            filter: e => e.Message.Contains(value: "$cmp",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Comparable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -216,7 +216,7 @@ public class OperatorProtocolTests
                           x: S32
                           y: S32
 
-                        routine Point.__create__() -> Point
+                        routine Point.$create() -> Point
                           return Point(x: 0, y: 0)
                         """;
 
@@ -231,7 +231,7 @@ public class OperatorProtocolTests
                         entity Resource
                           handle: S32
 
-                        routine Resource.__destroy__()
+                        routine Resource.$destroy()
                           pass
                           return
                         """;

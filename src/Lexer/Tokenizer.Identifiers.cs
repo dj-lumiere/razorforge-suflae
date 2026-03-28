@@ -8,7 +8,7 @@ namespace Compiler.Lexer;
 /// Identifiers follow the same rules in both RazorForge and Suflae:
 /// </para>
 /// <list type="bullet">
-///   <item><description>Must start with a letter or underscore</description></item>
+///   <item><description>Must start with a letter, underscore, or dollar sign ($)</description></item>
 ///   <item><description>Can contain letters, digits, and underscores</description></item>
 ///   <item><description>Optional single ? suffix for failable types (e.g., Integer?)</description></item>
 /// </list>

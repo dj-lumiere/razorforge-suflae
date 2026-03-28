@@ -308,7 +308,7 @@ public class TypeDeclarationTests
         string source = """
                         protocol Ordered obeys Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> ComparisonSign
+                          routine Me.$cmp(other: Me) -> ComparisonSign
                         """;
 
         Program program = AssertParses(source: source);

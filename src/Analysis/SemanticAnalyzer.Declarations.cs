@@ -381,9 +381,9 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // Validate that choice types cannot define any operator dunders
+        // Validate that choice types cannot define any operator wired methods
         if (ownerType is ChoiceTypeInfo && kind == RoutineKind.MemberRoutine &&
-            IsOperatorDunder(name: routineName))
+            IsOperatorWired(name: routineName))
         {
             ReportError(SemanticDiagnosticCode.ArithmeticOnChoiceType,
                 $"Choice type '{ownerType.Name}' cannot define operator '{routineName}'. " +
@@ -391,9 +391,9 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // #135: Flags types cannot define any operator dunders
+        // #135: Flags types cannot define any operator wired methods
         if (ownerType is FlagsTypeInfo && kind == RoutineKind.MemberRoutine &&
-            IsOperatorDunder(name: routineName))
+            IsOperatorWired(name: routineName))
         {
             ReportError(SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
                 $"Flags type '{ownerType.Name}' cannot define operator '{routineName}'. " +
@@ -414,12 +414,12 @@ public sealed partial class SemanticAnalyzer
                 routine.Location);
         }
 
-        // Validate dunder patterns ($name) are known operator methods
-        if (IsUnknownDunderMethod(name: baseName))
+        // Validate $ prefixed names are known built-in methods
+        if (IsUnknownWiredMethod(name: baseName))
         {
-            ReportError(SemanticDiagnosticCode.UnknownSpecialMemberRoutine,
-                $"Routine name '{baseName}' uses reserved dunder pattern. " +
-                "Names matching '$name' are reserved for operator methods.",
+            ReportError(SemanticDiagnosticCode.UnknownWiredRoutine,
+                $"Routine name '{baseName}' uses reserved '$' prefix. " +
+                "Names starting with '$' are reserved for built-in methods.",
                 routine.Location);
         }
 
@@ -546,9 +546,9 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Known dunder methods that are valid operator/special methods.
+    /// Known wired methods that are valid operator/special methods.
     /// </summary>
-    private static readonly HashSet<string> KnownDunderMethods =
+    private static readonly HashSet<string> KnownWiredMethods =
     [
         // Creator
         "$create",
@@ -566,11 +566,11 @@ public sealed partial class SemanticAnalyzer
         "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
 
         // Bitwise operators
-        "$and", "$or", "$xor",
+        "$bitand", "$bitor", "$bitxor",
         "$ashl", "$ashr", "$lshl", "$lshr",
 
         // Unary operators
-        "$neg", "$not",
+        "$neg", "$bitnot",
 
         // Membership operators
         "$contains", "$notcontains",
@@ -590,32 +590,29 @@ public sealed partial class SemanticAnalyzer
         // In-place compound assignment operators
         "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod",
         "$ipow",
-        "$iand", "$ior", "$ixor",
+        "$ibitand", "$ibitor", "$ibitxor",
         "$iashl", "$iashr", "$ilshl", "$ilshr"
     ];
 
     /// <summary>
-    /// Checks if a routine name uses the dunder pattern but is not a known operator method.
+    /// Checks if a routine name uses the $ prefix but is not a known built-in method.
     /// </summary>
-    private static bool IsUnknownDunderMethod(string name)
+    private static bool IsUnknownWiredMethod(string name)
     {
-        // Check if it matches dunder pattern: $name
-        if (!name.StartsWith(value: "__", comparisonType: StringComparison.Ordinal) ||
-            !name.EndsWith(value: "__", comparisonType: StringComparison.Ordinal) ||
-            name.Length <= 4) // Must have something between the underscores
+        if (!name.StartsWith(value: "$", comparisonType: StringComparison.Ordinal) ||
+            name.Length <= 1)
         {
             return false;
         }
 
-        // It's a dunder pattern - check if it's known
-        return !KnownDunderMethods.Contains(value: name);
+        return !KnownWiredMethods.Contains(value: name);
     }
 
     /// <summary>
-    /// Maps operator dunder methods to their required protocols.
+    /// Maps operator wired methods to their required protocols.
     /// Types must follow the protocol to define the operator method.
     /// </summary>
-    private static readonly Dictionary<string, string> DunderToProtocol = new()
+    private static readonly Dictionary<string, string> WiredToProtocol = new()
     {
         // Arithmetic operators
         ["$add"] = "Addable",
@@ -649,9 +646,9 @@ public sealed partial class SemanticAnalyzer
         ["$ge"] = "Comparable",
 
         // Bitwise operators
-        ["$and"] = "Bitwiseable",
-        ["$or"] = "Bitwiseable",
-        ["$xor"] = "Bitwiseable",
+        ["$bitand"] = "Bitwiseable",
+        ["$bitor"] = "Bitwiseable",
+        ["$bitxor"] = "Bitwiseable",
 
         // Shift operators
         ["$ashl"] = "Shiftable",
@@ -660,7 +657,7 @@ public sealed partial class SemanticAnalyzer
         ["$lshr"] = "Shiftable",
         // Unary operators
         ["$neg"] = "Negatable",
-        ["$not"] = "Invertible",
+        ["$bitnot"] = "Invertible",
 
         // Container operators
         ["$contains"] = "Container",
@@ -680,9 +677,9 @@ public sealed partial class SemanticAnalyzer
         ["$ifloordiv"] = "InPlaceFloorDivisible",
         ["$imod"] = "InPlaceFloorDivisible",
         ["$ipow"] = "InPlaceExponentiable",
-        ["$iand"] = "InPlaceBitwiseable",
-        ["$ior"] = "InPlaceBitwiseable",
-        ["$ixor"] = "InPlaceBitwiseable",
+        ["$ibitand"] = "InPlaceBitwiseable",
+        ["$ibitor"] = "InPlaceBitwiseable",
+        ["$ibitxor"] = "InPlaceBitwiseable",
         ["$iashl"] = "InPlaceShiftable",
         ["$iashr"] = "InPlaceShiftable",
         ["$ilshl"] = "InPlaceShiftable",
@@ -690,11 +687,11 @@ public sealed partial class SemanticAnalyzer
     };
 
     /// <summary>
-    /// Gets the required protocol for a dunder method, or null if no protocol is required.
+    /// Gets the required protocol for a wired method, or null if no protocol is required.
     /// </summary>
-    private static string? GetRequiredProtocol(string dunderName)
+    private static string? GetRequiredProtocol(string wiredName)
     {
-        return DunderToProtocol.GetValueOrDefault(key: dunderName);
+        return WiredToProtocol.GetValueOrDefault(key: wiredName);
     }
 
     private void CollectExternalDeclaration(ExternalDeclaration external)
@@ -1687,7 +1684,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Validate operator protocol conformance for dunder methods
+        // Validate operator protocol conformance for wired methods
         ValidateOperatorProtocolConformance(routineInfo: updatedRoutineInfo,
             location: routine.Location);
 
@@ -1856,8 +1853,8 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        // Get the required protocol for this dunder method
-        string? requiredProtocol = GetRequiredProtocol(dunderName: routineInfo.Name);
+        // Get the required protocol for this wired method
+        string? requiredProtocol = GetRequiredProtocol(wiredName: routineInfo.Name);
         if (requiredProtocol == null)
         {
             return; // Not an operator method or no protocol required
@@ -2086,7 +2083,7 @@ public sealed partial class SemanticAnalyzer
     /// $represent and $diagnose are auto-registered (overridable).
     /// Only registers if the user hasn't already defined the routine.
     /// </summary>
-    private void AutoRegisterBuiltinRoutines()
+    private void AutoRegisterWiredRoutines()
     {
         // Look up required types (bail on each if not available)
         TypeSymbol? textType = _registry.LookupType(name: "Text");
@@ -2141,11 +2138,11 @@ public sealed partial class SemanticAnalyzer
             // All types: $represent(), $diagnose() — auto-generated, overridable
             if (textType != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "$represent",
                     returnType: textType,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "$diagnose",
                     returnType: textType,
                     existingMethods: existingMethods);
@@ -2154,11 +2151,11 @@ public sealed partial class SemanticAnalyzer
             // All types: BuilderService metadata routines
             if (textType != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "type_name",
                     returnType: textType,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "module_name",
                     returnType: textType,
                     existingMethods: existingMethods);
@@ -2166,23 +2163,23 @@ public sealed partial class SemanticAnalyzer
 
             if (u64Type != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "type_kind",
                     returnType: u64Type,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "type_id",
                     returnType: u64Type,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "field_count",
                     returnType: u64Type,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "data_size",
                     returnType: u64Type,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "align_size",
                     returnType: u64Type,
                     existingMethods: existingMethods);
@@ -2190,7 +2187,7 @@ public sealed partial class SemanticAnalyzer
 
             if (boolType != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "is_generic",
                     returnType: boolType,
                     existingMethods: existingMethods);
@@ -2198,7 +2195,7 @@ public sealed partial class SemanticAnalyzer
 
             if (listFieldInfoType != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "member_variable_info",
                     returnType: listFieldInfoType,
                     existingMethods: existingMethods);
@@ -2206,15 +2203,15 @@ public sealed partial class SemanticAnalyzer
 
             if (listTextType != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "protocols",
                     returnType: listTextType,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "routine_names",
                     returnType: listTextType,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "annotations",
                     returnType: listTextType,
                     existingMethods: existingMethods);
@@ -2222,11 +2219,11 @@ public sealed partial class SemanticAnalyzer
 
             if (dictTextDataType != null)
             {
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "all_fields",
                     returnType: dictTextDataType,
                     existingMethods: existingMethods);
-                MaybeRegisterBuiltin(owner: type,
+                MaybeRegisterWired(owner: type,
                     name: "open_fields",
                     returnType: dictTextDataType,
                     existingMethods: existingMethods);
@@ -2236,12 +2233,12 @@ public sealed partial class SemanticAnalyzer
             {
                 case TypeCategory.Record:
                     if (u64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "$hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (boolType != null)
-                        MaybeRegisterBuiltinWithParam(owner: type,
+                        MaybeRegisterWiredWithParam(owner: type,
                             name: "$eq",
                             paramName: "you",
                             paramType: type,
@@ -2265,25 +2262,25 @@ public sealed partial class SemanticAnalyzer
 
                 case TypeCategory.Entity:
                     if (s64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "id",
                             returnType: s64Type,
                             existingMethods: existingMethods);
                     if (boolType != null)
                     {
-                        MaybeRegisterBuiltinWithParam(owner: type,
+                        MaybeRegisterWiredWithParam(owner: type,
                             name: "$eq",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
                             existingMethods: existingMethods);
-                        MaybeRegisterBuiltinWithParam(owner: type,
+                        MaybeRegisterWiredWithParam(owner: type,
                             name: "$same",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
                             existingMethods: existingMethods);
-                        MaybeRegisterBuiltinWithParam(owner: type,
+                        MaybeRegisterWiredWithParam(owner: type,
                             name: "$notsame",
                             paramName: "you",
                             paramType: type,
@@ -2291,7 +2288,7 @@ public sealed partial class SemanticAnalyzer
                             existingMethods: existingMethods);
                     }
 
-                    MaybeRegisterBuiltinFailable(owner: type,
+                    MaybeRegisterWiredFailable(owner: type,
                         name: "copy!",
                         returnType: type,
                         existingMethods: existingMethods);
@@ -2299,17 +2296,17 @@ public sealed partial class SemanticAnalyzer
 
                 case TypeCategory.Choice:
                     if (u64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "$hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (s64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "S64",
                             returnType: s64Type,
                             existingMethods: existingMethods);
                     if (textType != null)
-                        MaybeRegisterBuiltinFailable(owner: type,
+                        MaybeRegisterWiredFailable(owner: type,
                             name: "$create!",
                             returnType: type,
                             existingMethods: existingMethods,
@@ -2320,7 +2317,7 @@ public sealed partial class SemanticAnalyzer
                         TypeSymbol listMeType = _registry.GetOrCreateResolution(
                             genericDef: listDef,
                             typeArguments: [type]);
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "all_cases",
                             returnType: listMeType,
                             existingMethods: existingMethods);
@@ -2330,20 +2327,20 @@ public sealed partial class SemanticAnalyzer
 
                 case TypeCategory.Flags:
                     if (u64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "$hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                     if (u64Type != null)
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "U64",
                             returnType: u64Type,
                             existingMethods: existingMethods);
-                    MaybeRegisterBuiltin(owner: type,
+                    MaybeRegisterWired(owner: type,
                         name: "all_on",
                         returnType: type,
                         existingMethods: existingMethods);
-                    MaybeRegisterBuiltin(owner: type,
+                    MaybeRegisterWired(owner: type,
                         name: "all_off",
                         returnType: type,
                         existingMethods: existingMethods);
@@ -2352,7 +2349,7 @@ public sealed partial class SemanticAnalyzer
                         TypeSymbol listMeType = _registry.GetOrCreateResolution(
                             genericDef: listDef,
                             typeArguments: [type]);
-                        MaybeRegisterBuiltin(owner: type,
+                        MaybeRegisterWired(owner: type,
                             name: "all_cases",
                             returnType: listMeType,
                             existingMethods: existingMethods);
@@ -2421,13 +2418,13 @@ public sealed partial class SemanticAnalyzer
             var bsMethods = new List<RoutineInfo>();
             foreach (string name in new[] { "target_os", "target_arch", "version", "build_mode", "timestamp" })
             {
-                MaybeRegisterBuiltin(owner: builderServiceType, name: name,
+                MaybeRegisterWired(owner: builderServiceType, name: name,
                     returnType: textType, existingMethods: bsMethods);
             }
 
             foreach (string name in new[] { "page_size", "cache_line", "word_size" })
             {
-                MaybeRegisterBuiltin(owner: builderServiceType, name: name,
+                MaybeRegisterWired(owner: builderServiceType, name: name,
                     returnType: u64Type, existingMethods: bsMethods);
             }
         }
@@ -2513,9 +2510,9 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Registers a no-parameter readonly builtin routine if not already defined.
+    /// Registers a no-parameter readonly wired routine if not already defined.
     /// </summary>
-    private void MaybeRegisterBuiltin(TypeSymbol owner, string name, TypeSymbol returnType,
+    private void MaybeRegisterWired(TypeSymbol owner, string name, TypeSymbol returnType,
         List<RoutineInfo> existingMethods)
     {
         if (existingMethods.Any(predicate: m => m.Name == name))
@@ -2536,9 +2533,9 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Registers a single-parameter readonly builtin routine if not already defined.
+    /// Registers a single-parameter readonly wired routine if not already defined.
     /// </summary>
-    private void MaybeRegisterBuiltinWithParam(TypeSymbol owner, string name, string paramName,
+    private void MaybeRegisterWiredWithParam(TypeSymbol owner, string name, string paramName,
         TypeSymbol paramType, TypeSymbol returnType, List<RoutineInfo> existingMethods)
     {
         if (existingMethods.Any(predicate: m => m.Name == name))
@@ -2559,9 +2556,9 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Registers a failable builtin routine if not already defined (for copy!, $create!).
+    /// Registers a failable wired routine if not already defined (for copy!, $create!).
     /// </summary>
-    private void MaybeRegisterBuiltinFailable(TypeSymbol owner, string name, TypeSymbol returnType,
+    private void MaybeRegisterWiredFailable(TypeSymbol owner, string name, TypeSymbol returnType,
         List<RoutineInfo> existingMethods, (string name, TypeSymbol type)? param = null,
         RoutineKind kind = RoutineKind.MemberRoutine)
     {

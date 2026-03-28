@@ -213,9 +213,9 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
-/// The semantic analyzer dispatches this to either an in-place dunder method ($iadd, etc.)
+/// The semantic analyzer dispatches this to either an in-place wired method ($iadd, etc.)
 /// or falls back to create-and-assign (a = a.$add(b)) for records/primitives.
-/// Entities require the in-place dunder (no fallback, since bare entity assignment is prohibited).
+/// Entities require the in-place wired (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
 /// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>

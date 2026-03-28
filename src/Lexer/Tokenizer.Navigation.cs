@@ -157,10 +157,10 @@ public partial class Tokenizer
     /// Determines whether a character can start an identifier.
     /// </summary>
     /// <param name="c">The character to check.</param>
-    /// <returns><c>true</c> if the character is a letter or underscore.</returns>
+    /// <returns><c>true</c> if the character is a letter, underscore, or dollar sign.</returns>
     private static bool IsIdentifierStart(char c)
     {
-        return char.IsLetter(c: c) || c == '_';
+        return char.IsLetter(c: c) || c == '_' || c == '$';
     }
 
     /// <summary>

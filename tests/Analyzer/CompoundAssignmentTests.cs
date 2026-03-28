@@ -8,25 +8,25 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for in-place compound assignment dispatch (#40).
-/// Compound assignments (+=, -=, etc.) dispatch to in-place dunders (__iadd__, etc.)
+/// Compound assignments (+=, -=, etc.) dispatch to in-place wired methods ($iadd, etc.)
 /// first, then fall back to create-and-assign ($add) for non-entity types.
-/// Entities require in-place dunders (no fallback, since bare entity assignment is prohibited).
+/// Entities require in-place wired methods (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 public class CompoundAssignmentTests
 {
-    #region In-Place Dispatch (type defines __iadd__)
+    #region In-Place Dispatch (type defines $iadd)
 
     [Fact]
-    public void Analyze_RecordWithInPlaceDunder_NoError()
+    public void Analyze_RecordWithInPlaceWired_NoError()
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.__iadd__(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> Blank
 
                         record Counter obeys InPlaceAddable
                           value: S32
 
-                        routine Counter.__iadd__(from: Counter) -> Blank
+                        routine Counter.$iadd(from: Counter) -> Blank
 
                         routine test()
                           var c = Counter(value: 0)
@@ -40,16 +40,16 @@ public class CompoundAssignmentTests
     }
 
     [Fact]
-    public void Analyze_EntityWithInPlaceDunder_NoError()
+    public void Analyze_EntityWithInPlaceWired_NoError()
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.__iadd__(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> Blank
 
                         entity Accumulator obeys InPlaceAddable
                           value: S32
 
-                        routine Accumulator.__iadd__(from: Accumulator) -> Blank
+                        routine Accumulator.$iadd(from: Accumulator) -> Blank
 
                         routine test()
                           var acc = Accumulator(value: 0)
@@ -67,7 +67,7 @@ public class CompoundAssignmentTests
     #region Fallback Dispatch (record with only $add)
 
     [Fact]
-    public void Analyze_RecordWithRegularDunder_FallsBack()
+    public void Analyze_RecordWithRegularWired_FallsBack()
     {
         string source = """
                         protocol Addable
@@ -95,10 +95,10 @@ public class CompoundAssignmentTests
 
     #endregion
 
-    #region Entity Without In-Place Dunder (no fallback)
+    #region Entity Without In-Place Wired (no fallback)
 
     [Fact]
-    public void Analyze_EntityWithoutInPlaceDunder_ReportsError()
+    public void Analyze_EntityWithoutInPlaceWired_ReportsError()
     {
         string source = """
                         protocol Addable
@@ -125,10 +125,10 @@ public class CompoundAssignmentTests
 
     #endregion
 
-    #region Neither Dunder Exists
+    #region Neither Wired Exists
 
     [Fact]
-    public void Analyze_NoDundersDefined_ReportsError()
+    public void Analyze_NoWiredsDefined_ReportsError()
     {
         string source = """
                         record Pair
@@ -156,12 +156,12 @@ public class CompoundAssignmentTests
         // var is mutable, so compound assignment should not produce immutable errors
         string source = """
                         protocol InPlaceAddable
-                          routine Me.__iadd__(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> Blank
 
                         record Counter obeys InPlaceAddable
                           value: S32
 
-                        routine Counter.__iadd__(from: Counter) -> Blank
+                        routine Counter.$iadd(from: Counter) -> Blank
 
                         routine test()
                           var c = Counter(value: 0)
@@ -207,12 +207,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceSubtractable
-                          routine Me.__isub__(from: Me) -> Blank
+                          routine Me.$isub(from: Me) -> Blank
 
                         record Counter obeys InPlaceSubtractable
                           value: S32
 
-                        routine Counter.__isub__(from: Counter) -> Blank
+                        routine Counter.$isub(from: Counter) -> Blank
 
                         routine test()
                           var c = Counter(value: 10)
@@ -230,12 +230,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceBitwiseable
-                          routine Me.__iand__(from: Me) -> Blank
+                          routine Me.$ibitand(from: Me) -> Blank
 
                         record Flags obeys InPlaceBitwiseable
                           bits: S32
 
-                        routine Flags.__iand__(from: Flags) -> Blank
+                        routine Flags.$ibitand(from: Flags) -> Blank
 
                         routine test()
                           var f = Flags(bits: 255)
@@ -255,7 +255,7 @@ public class CompoundAssignmentTests
     [Fact]
     public void Analyze_PrimitiveVarCompoundAssignment_NoError()
     {
-        // Primitives like S32 don't have __iadd__ registered in tests (no stdlib loaded),
+        // Primitives like S32 don't have $iadd registered in tests (no stdlib loaded),
         // but the test verifies parsing and analysis don't crash.
         string source = """
                         routine test()

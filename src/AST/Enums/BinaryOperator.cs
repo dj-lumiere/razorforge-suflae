@@ -246,7 +246,7 @@ public static class BinaryOperatorExtensions
             };
         }
         /// <summary>
-        /// Gets the dunder method name for operator overloading.
+        /// Gets the wired method name for operator overloading.
         /// Returns null if the operator is not overloadable.
         /// </summary>
         public string? GetMethodName()
@@ -305,7 +305,7 @@ public static class BinaryOperatorExtensions
         }
 
         /// <summary>
-        /// Gets the in-place dunder method name for compound assignment dispatch.
+        /// Gets the in-place wired method name for compound assignment dispatch.
         /// Returns null if the operator has no in-place variant (overflow, comparison, etc.).
         /// In-place methods modify the receiver and return Blank.
         /// </summary>

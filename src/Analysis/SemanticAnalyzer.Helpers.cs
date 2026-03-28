@@ -389,10 +389,10 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Operator dunder methods that choices are NOT allowed to define or call.
+    /// Operator wired methods that choices are NOT allowed to define or call.
     /// Choices do not support any operators — use 'is' for case matching.
     /// </summary>
-    private static readonly HashSet<string> OperatorDunders =
+    private static readonly HashSet<string> OperatorWiredMethods =
     [
         // Arithmetic
         "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
@@ -403,10 +403,10 @@ public sealed partial class SemanticAnalyzer
         // Comparison
         "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
         // Bitwise
-        "$and", "$or", "$xor",
+        "$bitand", "$bitor", "$bitxor",
         "$ashl", "$ashr", "$lshl", "$lshr",
         // Unary
-        "$neg", "$not",
+        "$neg", "$bitnot",
         // Membership
         "$contains", "$notcontains",
         // Indexing
@@ -417,10 +417,10 @@ public sealed partial class SemanticAnalyzer
         "$enter", "$exit"
     ];
 
-    /// <summary>Returns true if the given method name is an operator dunder (e.g., <c>$add</c>, <c>$eq</c>).</summary>
-    private static bool IsOperatorDunder(string name)
+    /// <summary>Returns true if the given method name is an operator wired (e.g., <c>$add</c>, <c>$eq</c>).</summary>
+    private static bool IsOperatorWired(string name)
     {
-        return OperatorDunders.Contains(value: name);
+        return OperatorWiredMethods.Contains(value: name);
     }
 
     /// <summary>
@@ -638,12 +638,12 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
-        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.__iter__");
+        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.$iter");
 
-        // Generic fallback: Range[S64].__iter__ → Range.__iter__ via LookupMethod
+        // Generic fallback: Range[S64].$iter → Range.$iter via LookupMethod
         if (seqMethod2 == null)
         {
-            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "__iter__");
+            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "$iter");
         }
 
         if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
@@ -668,7 +668,7 @@ public sealed partial class SemanticAnalyzer
             return returnTypeArg;
         }
 
-        // Fallback to type arguments if __iter__ method not found but protocol is implemented
+        // Fallback to type arguments if $iter method not found but protocol is implemented
         if (iterableType.TypeArguments is { Count: > 0 })
         {
             return iterableType.TypeArguments[0];
@@ -676,7 +676,7 @@ public sealed partial class SemanticAnalyzer
 
         ReportError(
             SemanticDiagnosticCode.TypeNotIterable,
-            $"Cannot determine element type for '{iterableType.Name}'. The __iter__ method must return Iterator[T].",
+            $"Cannot determine element type for '{iterableType.Name}'. The $iter method must return Iterator[T].",
             location);
         return ErrorTypeInfo.Instance;
     }

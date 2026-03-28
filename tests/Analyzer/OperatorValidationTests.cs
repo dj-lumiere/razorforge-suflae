@@ -23,11 +23,11 @@ public class OperatorValidationTests
         string source = """
                         protocol Indexable
                           @readonly
-                          routine Me.__getitem__(index: S32) -> S32
+                          routine Me.$getitem(index: S32) -> S32
                         entity Grid obeys Indexable
                           size: S32
                         @readonly
-                        routine Grid.__getitem__(index: S32) -> S32
+                        routine Grid.$getitem(index: S32) -> S32
                           return 0_s32
                         """;
 
@@ -42,12 +42,12 @@ public class OperatorValidationTests
         string source = """
                         protocol Indexable
                           @readonly
-                          routine Me.__getitem__(index: S32) -> S32
+                          routine Me.$getitem(index: S32) -> S32
                         record Pair obeys Indexable
                           x: S32
                           y: S32
                         @readonly
-                        routine Pair.__getitem__(index: S32) -> S32
+                        routine Pair.$getitem(index: S32) -> S32
                           return 0_s32
                         """;
 
@@ -119,6 +119,36 @@ public class OperatorValidationTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
+    }
+
+    #endregion
+
+    #region S201: Binary operator type mismatch
+
+    [Fact]
+    public void Analyze_TextPlusList_ReportsArgumentTypeMismatch()
+    {
+        string source = """
+                        routine test(t: Text, xs: List[S64]) -> Text
+                          return t + xs
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
+    }
+
+    [Fact]
+    public void Analyze_TextPlusText_NoError()
+    {
+        string source = """
+                        routine test(a: Text, b: Text) -> Text
+                          return a + b
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
 
     #endregion

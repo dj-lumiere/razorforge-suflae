@@ -104,7 +104,7 @@ public class GenericResolutionTests
 
     #endregion
 
-    #region S193 — __eq__ on generic record types
+    #region S193 — $eq on generic record types
 
     [Fact]
     public void Analyze_GenericRecordMethodLookup_WorksOnResolution()

@@ -387,8 +387,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine name uses reserved prefix (try_, check_, lookup_).</summary>
     ReservedRoutinePrefix = 409,
 
-    /// <summary>Routine name uses reserved dunder pattern ($name) that is not a known operator method.</summary>
-    UnknownSpecialMemberRoutine = 410,
+    /// <summary>Routine name uses reserved '$' prefix but is not a known wired method.</summary>
+    UnknownWiredRoutine = 410,
 
     /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
     OperatorWithoutProtocol = 411,
@@ -492,6 +492,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Common routine called on object or vice versa.</summary>
     CommonRoutineMismatch = 459,
+
+    /// <summary>Wired routine ($-prefixed) called directly by user code.</summary>
+    DirectWiredRoutineCall = 460,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CALL AND ARGUMENT ERRORS (RF-S500 - RF-S549)
@@ -787,6 +790,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Only Level 3 expressions (identifiers, literals, member access, calls) allowed in f-text.</summary>
     FTextExpressionLevelRestriction = 815,
+
+    /// <summary>Invalid f-text format specifier.</summary>
+    InvalidFTextFormatSpec = 816,
 
     /// <summary>Lazy Sequence[T] cannot escape the scope of the token it was created from.</summary>
     SequenceScopeEscape = 820,
