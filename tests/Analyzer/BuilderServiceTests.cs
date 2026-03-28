@@ -21,7 +21,7 @@ public class BuilderServiceTests
                           x: S64
                           y: S64
 
-                        func test()
+                        routine test()
                           var p = Point(x: 1, y: 2)
                           var name = p.type_name()
                           return
@@ -42,7 +42,7 @@ public class BuilderServiceTests
                           x: S64
                           y: S64
 
-                        func test()
+                        routine test()
                           var p = Point(x: 1, y: 2)
                           var name = p.type_name()
                           return
@@ -61,7 +61,7 @@ public class BuilderServiceTests
                           a: S64
                           b: S64
 
-                        func test()
+                        routine test()
                           var p = Pair(a: 1, b: 2)
                           var sz = p.data_size()
                           return
@@ -82,7 +82,7 @@ public class BuilderServiceTests
                           a: S64
                           b: S64
 
-                        func test()
+                        routine test()
                           var p = Pair(a: 1, b: 2)
                           var sz = p.data_size()
                           return
@@ -101,7 +101,7 @@ public class BuilderServiceTests
     public void SourceFile_WithoutImport_ReportsError()
     {
         string source = """
-                        func test()
+                        routine test()
                           var f = source_file()
                           return
                         """;
@@ -117,7 +117,7 @@ public class BuilderServiceTests
         string source = """
                         import BuilderService
 
-                        func test()
+                        routine test()
                           var f = source_file()
                           return
                         """;
@@ -131,7 +131,7 @@ public class BuilderServiceTests
     public void SourceLine_WithoutImport_ReportsError()
     {
         string source = """
-                        func test()
+                        routine test()
                           var ln = source_line()
                           return
                         """;
@@ -145,7 +145,7 @@ public class BuilderServiceTests
     public void CallerFile_WithoutImport_ReportsError()
     {
         string source = """
-                        func test()
+                        routine test()
                           var f = caller_file()
                           return
                         """;
@@ -167,7 +167,7 @@ public class BuilderServiceTests
                           x: S64
                           y: S64
 
-                        func test()
+                        routine test()
                           var p = Point(x: 1, y: 2)
                           var s = f"{p}"
                           return
@@ -186,7 +186,7 @@ public class BuilderServiceTests
                           x: S64
                           y: S64
 
-                        func test()
+                        routine test()
                           var a = Point(x: 1, y: 2)
                           var b = Point(x: 3, y: 4)
                           var eq = a == b
@@ -212,7 +212,7 @@ public class BuilderServiceTests
                           x: S64
                           y: S64
 
-                        func test()
+                        routine test()
                           var p = Pair(x: 1, y: 2)
                           var name = p.type_name()
                           var kind = p.type_kind()
@@ -220,7 +220,6 @@ public class BuilderServiceTests
                           var mod = p.module_name()
                           var gen = p.is_generic()
                           var sz = p.data_size()
-                          var al = p.align_size()
                           var cnt = p.member_variable_count()
                           return
                         """;
@@ -240,7 +239,7 @@ public class BuilderServiceTests
                           x: S64
                           y: S64
 
-                        func test()
+                        routine test()
                           var p = Pair(x: 1, y: 2)
                           var protos = p.protocols()
                           var names = p.routine_names()
@@ -261,7 +260,7 @@ public class BuilderServiceTests
         string source = """
                         import BuilderService
 
-                        func test()
+                        routine test()
                           var f = source_file()
                           var r = source_routine()
                           var m = source_module()
