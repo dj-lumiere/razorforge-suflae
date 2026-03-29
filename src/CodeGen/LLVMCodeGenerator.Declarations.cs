@@ -2751,14 +2751,25 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits the body for a synthesized type_kind() routine.
-    /// Returns the TypeCategory enum value as a U64 constant.
+    /// Returns the TypeKind choice ordinal as an i64 constant.
     /// </summary>
     private void EmitSynthesizedTypeKind(RoutineInfo routine, string funcName)
     {
         if (routine.OwnerType == null) return;
 
         string meType = GetParameterLLVMType(routine.OwnerType);
-        long kindValue = (long)routine.OwnerType.Category;
+        // Map TypeCategory enum → TypeKind choice ordinals (from BuilderService.rf)
+        long kindValue = routine.OwnerType.Category switch
+        {
+            TypeCategory.Record => 0,    // TypeKind.RECORD
+            TypeCategory.Entity => 1,    // TypeKind.ENTITY
+            TypeCategory.Choice => 2,    // TypeKind.CHOICE
+            TypeCategory.Variant => 3,   // TypeKind.VARIANT
+            TypeCategory.Flags => 4,     // TypeKind.FLAGS
+            TypeCategory.Routine => 5,   // TypeKind.ROUTINE
+            TypeCategory.Protocol => 7,  // TypeKind.PROTOCOL
+            _ => 0                       // Default RECORD for internal types (Tuple, Wrapper, etc.)
+        };
 
         EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
         EmitLine(_functionDefinitions, "entry:");

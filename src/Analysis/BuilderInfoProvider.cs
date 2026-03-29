@@ -87,10 +87,11 @@ public static class BuilderInfoProvider
             MaybeRegister(type, "member_variable_count", s64Type, existingMethods, registry);
         }
 
-        // type_kind returns S64 (choice ordinal)
-        if (s64Type != null)
+        // type_kind returns TypeKind choice (fall back to S64 if BS not loaded)
         {
-            MaybeRegister(type, "type_kind", s64Type, existingMethods, registry);
+            TypeSymbol? typeKindType = registry.LookupType("TypeKind") ?? s64Type;
+            if (typeKindType != null)
+                MaybeRegister(type, "type_kind", typeKindType, existingMethods, registry);
         }
 
         // Bool-returning routines
@@ -188,9 +189,12 @@ public static class BuilderInfoProvider
         foreach (string name in new[] { "target_os", "target_arch", "builder_version", "build_timestamp" })
             RegisterStandalone(registry, name, textType);
 
-        // build_mode returns S64 (choice ordinal)
-        if (s64Type != null)
-            RegisterStandalone(registry, "build_mode", s64Type);
+        // build_mode returns BuildMode choice (fall back to S64 if BS not loaded)
+        {
+            TypeSymbol? buildModeType = registry.LookupType("BuildMode") ?? s64Type;
+            if (buildModeType != null)
+                RegisterStandalone(registry, "build_mode", buildModeType);
+        }
 
         // U64-returning standalone routines
         foreach (string name in new[] { "page_size", "cache_line", "word_size" })
