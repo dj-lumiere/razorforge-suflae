@@ -175,7 +175,19 @@ public partial class Parser
         }
 
         // Regular positional argument
-        return ParseExpression();
+        Expression expr = ParseExpression();
+
+        // Check for dict entry literal: expr:expr (e.g., 1:2 in Dict(1:2, 3:4))
+        // Named arguments (identifier: expr) are already handled above,
+        // so this catches non-identifier keys like literals: 1:2, "key":val
+        if (Check(type: TokenType.Colon))
+        {
+            Advance(); // consume colon
+            Expression value = ParseExpression();
+            return new DictEntryLiteralExpression(Key: expr, Value: value, Location: location);
+        }
+
+        return expr;
     }
 
     /// <summary>

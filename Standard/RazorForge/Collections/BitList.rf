@@ -431,7 +431,7 @@ routine BitList.$represent() -> Text
   return result
 
 routine BitList.$diagnose() -> Text
-  var result = "BitList(count: " + me.count().$represent() + ", ["
+  var result = "BitList(count: " + me.count().$represent() + ", ones: " + me.count_ones().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64

@@ -208,6 +208,12 @@ internal static class GenericAstRewriter
                 Value = RewriteExpression(nae.Value, subs)
             },
 
+            DictEntryLiteralExpression del => del with
+            {
+                Key = RewriteExpression(del.Key, subs),
+                Value = RewriteExpression(del.Value, subs)
+            },
+
             StealExpression steal => steal with
             {
                 Operand = RewriteExpression(steal.Operand, subs)

@@ -311,7 +311,7 @@ public partial class Parser
         {
             if (HasNestedBrackets())
             {
-                // Nested generics: parse as type expressions (e.g., List[KVPair[K, V]])
+                // Nested generics: parse as type expressions (e.g., List[DictEntry[K, V]])
                 var typeArgs = new List<string>();
                 do
                 {
@@ -1516,7 +1516,7 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Checks whether the current bracket content contains nested generics (e.g., KVPair[K, V]).
+    /// Checks whether the current bracket content contains nested generics (e.g., DictEntry[K, V]).
     /// Must be called after consuming the opening '['.
     /// Uses lookahead without advancing the parser position.
     /// </summary>
@@ -1553,7 +1553,7 @@ public partial class Parser
 
     /// <summary>
     /// Serializes a TypeExpression back to its string form.
-    /// e.g., TypeExpression("KVPair", [TypeExpression("K"), TypeExpression("V")]) -> "KVPair[K, V]"
+    /// e.g., TypeExpression("DictEntry", [TypeExpression("K"), TypeExpression("V")]) -> "DictEntry[K, V]"
     /// </summary>
     private static string SerializeTypeExpression(TypeExpression type)
     {

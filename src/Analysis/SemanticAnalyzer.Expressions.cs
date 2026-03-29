@@ -15,6 +15,16 @@ using TypeSymbol = Types.TypeInfo;
 /// </summary>
 public sealed partial class SemanticAnalyzer
 {
+    /// <summary>
+    /// Collection types that support literal constructor syntax: TypeName(elem1, elem2, ...)
+    /// </summary>
+    private static readonly HashSet<string> CollectionLiteralTypes = new(StringComparer.Ordinal)
+    {
+        "List", "Set", "Dict", "Deque", "BitList",
+        "SortedSet", "SortedList", "SortedDict",
+        "ValueList", "ValueBitList", "PriorityQueue"
+    };
+
     #region Expression Analysis
 
     /// <summary>
@@ -51,6 +61,7 @@ public sealed partial class SemanticAnalyzer
             BlockExpression block => AnalyzeBlockExpression(block: block),
             WithExpression with => AnalyzeWithExpression(with: with),
             NamedArgumentExpression named => AnalyzeExpression(expression: named.Value),
+            DictEntryLiteralExpression dictEntry => AnalyzeDictEntryLiteralExpression(dictEntry: dictEntry),
             GenericMethodCallExpression generic => AnalyzeGenericMethodCallExpression(generic: generic),
             GenericMemberExpression genericMember => AnalyzeGenericMemberExpression(genericMember: genericMember),
             IsPatternExpression isPat => AnalyzeIsPatternExpression(isPat: isPat),
@@ -1681,17 +1692,56 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol? type = LookupTypeWithImports(name: id.Name);
             if (type != null)
             {
+                // Collection literal constructor: List(1, 2, 3), Set(1, 2), Dict(1:2, 3:4), etc.
+                // Detected when: type name is a known collection AND args are positional/DictEntry (not named field inits)
+                if (CollectionLiteralTypes.Contains(id.Name)
+                    && call.Arguments.Count > 0
+                    && call.Arguments.All(a => a is not NamedArgumentExpression))
+                {
+                    call.IsCollectionLiteral = true;
+
+                    // Analyze all arguments
+                    var argTypes = new List<TypeSymbol>();
+                    foreach (Expression arg in call.Arguments)
+                        argTypes.Add(item: AnalyzeExpression(expression: arg));
+
+                    // Infer generic type arguments from elements and resolve collection type
+                    if (type.IsGenericDefinition)
+                    {
+                        bool isMapType = id.Name is "Dict" or "SortedDict";
+                        TypeSymbol resolvedType;
+
+                        if (isMapType && call.Arguments[0] is DictEntryLiteralExpression firstEntry)
+                        {
+                            // K, V from first DictEntry
+                            TypeSymbol keyType = firstEntry.Key.ResolvedType ?? ErrorTypeInfo.Instance;
+                            TypeSymbol valueType = firstEntry.Value.ResolvedType ?? ErrorTypeInfo.Instance;
+                            resolvedType = _registry.GetOrCreateResolution(genericDef: type, typeArguments: [keyType, valueType]);
+                        }
+                        else
+                        {
+                            // T from first positional arg
+                            TypeSymbol elemType = argTypes[0];
+                            resolvedType = _registry.GetOrCreateResolution(genericDef: type, typeArguments: [elemType]);
+                        }
+
+                        return resolvedType;
+                    }
+
+                    return type;
+                }
+
                 // Creator call - analyze arguments and validate
-                var argTypes = new List<TypeSymbol>();
+                var creatorArgTypes = new List<TypeSymbol>();
                 foreach (Expression arg in call.Arguments)
                 {
-                    argTypes.Add(item: AnalyzeExpression(expression: arg));
+                    creatorArgTypes.Add(item: AnalyzeExpression(expression: arg));
                 }
 
                 // #115: Data boxing restrictions — certain types cannot be boxed to Data
-                if (id.Name == "Data" && argTypes.Count > 0)
+                if (id.Name == "Data" && creatorArgTypes.Count > 0)
                 {
-                    TypeSymbol argType = argTypes[0];
+                    TypeSymbol argType = creatorArgTypes[0];
                     if (argType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup }
                         or VariantTypeInfo
                         or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
@@ -2800,6 +2850,11 @@ public sealed partial class SemanticAnalyzer
                 CollectIdentifiersRecursive(expression: named.Value, identifiers: identifiers);
                 break;
 
+            case DictEntryLiteralExpression dictEntry:
+                CollectIdentifiersRecursive(expression: dictEntry.Key, identifiers: identifiers);
+                CollectIdentifiersRecursive(expression: dictEntry.Value, identifiers: identifiers);
+                break;
+
             case GenericMethodCallExpression generic:
                 CollectIdentifiersRecursive(expression: generic.Object, identifiers: identifiers);
                 foreach (Expression arg in generic.Arguments)
@@ -3151,6 +3206,21 @@ public sealed partial class SemanticAnalyzer
         if (dictDef != null && keyType != null && valueType != null)
         {
             return _registry.GetOrCreateResolution(genericDef: dictDef, typeArguments: [keyType, valueType]);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
+    private TypeSymbol AnalyzeDictEntryLiteralExpression(DictEntryLiteralExpression dictEntry)
+    {
+        TypeSymbol keyType = AnalyzeExpression(expression: dictEntry.Key);
+        TypeSymbol valueType = AnalyzeExpression(expression: dictEntry.Value);
+
+        // Resolve to DictEntry[K, V]
+        TypeSymbol? dictEntryDef = _registry.LookupType(name: "DictEntry");
+        if (dictEntryDef != null)
+        {
+            return _registry.GetOrCreateResolution(genericDef: dictEntryDef, typeArguments: [keyType, valueType]);
         }
 
         return ErrorTypeInfo.Instance;
@@ -3519,6 +3589,37 @@ public sealed partial class SemanticAnalyzer
             foreach (Expression arg in generic.Arguments)
             {
                 AnalyzeExpression(expression: arg);
+            }
+
+            // Collection literal constructor with explicit type args: List[S64](1, 2, 3)
+            if (CollectionLiteralTypes.Contains(typeId.Name)
+                && generic.Arguments.Count > 0
+                && generic.Arguments.All(a => a is not NamedArgumentExpression))
+            {
+                generic.IsCollectionLiteral = true;
+
+                // ValueList[T, N] / ValueBitList[N] — argument count must match N
+                if (typeId.Name == "ValueList" && typeArgs.Count >= 2)
+                {
+                    // N is the second type arg (a numeric constant type)
+                    string nStr = typeArgs[1].Name;
+                    if (ulong.TryParse(nStr, out ulong n) && (ulong)generic.Arguments.Count != n)
+                    {
+                        ReportError(SemanticDiagnosticCode.ArgumentCountMismatch,
+                            $"ValueList[{typeArgs[0].Name}, {n}] constructor requires exactly {n} arguments, got {generic.Arguments.Count}.",
+                            generic.Location);
+                    }
+                }
+                else if (typeId.Name == "ValueBitList" && typeArgs.Count >= 1)
+                {
+                    string nStr = typeArgs[0].Name;
+                    if (ulong.TryParse(nStr, out ulong n) && (ulong)generic.Arguments.Count != n)
+                    {
+                        ReportError(SemanticDiagnosticCode.ArgumentCountMismatch,
+                            $"ValueBitList[{n}] constructor requires exactly {n} arguments, got {generic.Arguments.Count}.",
+                            generic.Location);
+                    }
+                }
             }
 
             ValidateExclusiveTokenUniqueness(arguments: generic.Arguments, location: generic.Location);

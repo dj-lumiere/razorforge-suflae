@@ -2397,7 +2397,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits the body for a synthesized all_cases() routine on flags/choice types.
     /// Returns a List[Me] containing all cases.
-    /// Layout: { i64 count, i64 capacity, ptr data } where data is an array of i64 values.
+    /// Layout: { ptr data, i64 count, i64 capacity } matching List[T] entity field order.
     /// </summary>
     private void EmitSynthesizedAllCases(RoutineInfo routine, string funcName)
     {
@@ -2432,7 +2432,7 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"define ptr @{funcName}() {{");
         EmitLine(sb, "entry:");
 
-        // Allocate list header: { i64 count, i64 capacity, ptr data }
+        // Allocate list header: { ptr data, i64 count, i64 capacity }
         string listPtr = NextTemp();
         EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
@@ -2440,20 +2440,20 @@ public partial class LLVMCodeGenerator
         string dataPtr = NextTemp();
         EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * elemSize})");
 
-        // Store count
+        // Store data pointer (field 0)
+        string dataPtrSlot = NextTemp();
+        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+        // Store count (field 1)
         string countPtr = NextTemp();
-        EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {countPtr} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 1");
         EmitLine(sb, $"  store i64 {count}, ptr {countPtr}");
 
-        // Store capacity
+        // Store capacity (field 2)
         string capPtr = NextTemp();
-        EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {capPtr} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 2");
         EmitLine(sb, $"  store i64 {count}, ptr {capPtr}");
-
-        // Store data pointer
-        string dataPtrSlot = NextTemp();
-        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
-        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
 
         // Store each case value into the data array
         for (int i = 0; i < count; i++)
@@ -2874,7 +2874,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a List[Text] constant containing the given string values.
-    /// Layout: { i64 count, i64 capacity, ptr data } where data is an array of ptr (Text strings).
+    /// Layout: { ptr data, i64 count, i64 capacity } matching List[T] entity field order.
     /// </summary>
     private void EmitSynthesizedStringList(string funcName, string meType, IReadOnlyList<string> values)
     {
@@ -2884,7 +2884,7 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
         EmitLine(sb, "entry:");
 
-        // Allocate list header: { i64 count, i64 capacity, ptr data }
+        // Allocate list header: { ptr data, i64 count, i64 capacity }
         string listPtr = NextTemp();
         EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
@@ -2892,20 +2892,20 @@ public partial class LLVMCodeGenerator
         string dataPtr = NextTemp();
         EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * 8})");
 
-        // Store count
+        // Store data pointer (field 0)
+        string dataPtrSlot = NextTemp();
+        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+        // Store count (field 1)
         string countPtr = NextTemp();
-        EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {countPtr} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 1");
         EmitLine(sb, $"  store i64 {count}, ptr {countPtr}");
 
-        // Store capacity
+        // Store capacity (field 2)
         string capPtr = NextTemp();
-        EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {capPtr} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 2");
         EmitLine(sb, $"  store i64 {count}, ptr {capPtr}");
-
-        // Store data pointer
-        string dataPtrSlot = NextTemp();
-        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
-        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
 
         // Store each string pointer into the data array
         for (int i = 0; i < count; i++)
@@ -3021,7 +3021,7 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"define ptr @{funcName}({meType} %me) {{");
         EmitLine(sb, "entry:");
 
-        // Allocate list header: { i64 count, i64 capacity, ptr data }
+        // Allocate list header: { ptr data, i64 count, i64 capacity }
         string listPtr = NextTemp();
         EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
 
@@ -3029,20 +3029,20 @@ public partial class LLVMCodeGenerator
         string dataPtr = NextTemp();
         EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * elemSize})");
 
-        // Store count
+        // Store data pointer (field 0)
+        string dataPtrSlot = NextTemp();
+        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
+
+        // Store count (field 1)
         string countPtr = NextTemp();
-        EmitLine(sb, $"  {countPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 0");
+        EmitLine(sb, $"  {countPtr} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 1");
         EmitLine(sb, $"  store i64 {count}, ptr {countPtr}");
 
-        // Store capacity
+        // Store capacity (field 2)
         string capPtr = NextTemp();
-        EmitLine(sb, $"  {capPtr} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 1");
+        EmitLine(sb, $"  {capPtr} = getelementptr {{ ptr, i64, i64 }}, ptr {listPtr}, i32 0, i32 2");
         EmitLine(sb, $"  store i64 {count}, ptr {capPtr}");
-
-        // Store data pointer
-        string dataPtrSlot = NextTemp();
-        EmitLine(sb, $"  {dataPtrSlot} = getelementptr {{ i64, i64, ptr }}, ptr {listPtr}, i32 0, i32 2");
-        EmitLine(sb, $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
 
         // Compute field byte offsets
         var fieldOffsets = ComputeFieldOffsets(routine.OwnerType);

@@ -337,6 +337,12 @@ public record CallExpression(
     /// When set, the codegen should use this instead of performing its own lookup.
     /// </summary>
     public SemanticAnalysis.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
+
+    /// <summary>
+    /// When true, this call is a collection literal constructor (e.g., List(1, 2, 3), Set(1, 2, 3)).
+    /// Codegen should emit $create() + repeated add/add_last calls instead of a normal function call.
+    /// </summary>
+    public bool IsCollectionLiteral { get; set; }
 }
 
 /// <summary>
@@ -362,6 +368,23 @@ public record NamedArgumentExpression(string Name, Expression Value, SourceLocat
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitNamedArgumentExpression(node: this);
+    }
+}
+
+/// <summary>
+/// Expression representing a dict entry literal (key:value pair) in argument context.
+/// Used in collection literal constructors: Dict(1:10, 2:20), SortedDict("a":"b")
+/// </summary>
+/// <param name="Key">The key expression</param>
+/// <param name="Value">The value expression</param>
+/// <param name="Location">Source location information</param>
+public record DictEntryLiteralExpression(Expression Key, Expression Value, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitDictEntryLiteralExpression(node: this);
     }
 }
 
@@ -788,6 +811,12 @@ public record GenericMethodCallExpression(
     {
         return visitor.VisitGenericMethodCallExpression(node: this);
     }
+
+    /// <summary>
+    /// When true, this call is a collection literal constructor (e.g., List[S64](1, 2, 3)).
+    /// Codegen should emit $create() + repeated add/add_last calls instead of a normal type constructor.
+    /// </summary>
+    public bool IsCollectionLiteral { get; set; }
 }
 
 /// <summary>

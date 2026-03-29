@@ -22,7 +22,7 @@ public partial class LLVMCodeGenerator
         if (_typeSubstitutions.TryGetValue(type.Name, out var sub))
             return sub;
 
-        // Parameterized types with unresolved args (e.g., KVPair[K, V] → KVPair[S64, Text])
+        // Parameterized types with unresolved args (e.g., DictEntry[K, V] → DictEntry[S64, Text])
         if (type.TypeArguments is { Count: > 0 })
         {
             bool anyResolved = false;

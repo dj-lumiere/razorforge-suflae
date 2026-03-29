@@ -21,7 +21,7 @@ preset DICT_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
 preset DICT_LOAD_FACTOR: U64 = 75u64
 
-entity Dict[K, V] obeys Iterable[Tuple[K, V]]
+entity Dict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Hashable, Comparable
   secret buckets: List[SortedDict[K, V]]
   secret count: U64
@@ -186,8 +186,8 @@ routine Dict[K, V].values() -> List[V]
     i = i + 1u64
   return result
 
-routine Dict[K, V].entries() -> List[Tuple[K, V]]
-  var result = List[Tuple[K, V]](me.count)
+routine Dict[K, V].entries() -> List[DictEntry[K, V]]
+  var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
   while i < me.buckets.count()
     var bucket_keys = me.buckets[i].keys()
@@ -195,7 +195,7 @@ routine Dict[K, V].entries() -> List[Tuple[K, V]]
     while j < bucket_keys.count()
       var key = bucket_keys[j]
       var value = me.buckets[i].get!(key)
-      result.add_last((key, value))
+      result.add_last(DictEntry[K, V](key: key, value: value))
       j = j + 1u64
     i = i + 1u64
   return result
@@ -213,14 +213,14 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
     current_keys: List[K]()
   )
 
-entity DictIterator[K, V] obeys Iterator[Tuple[K, V]]
+entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
   dict: Dict[K, V]
   bucket_idx: U64
   entry_idx: U64
   current_keys: List[K]
 
 @writable
-emitting routine DictIterator[K, V].$next() -> Tuple[K, V]
+emitting routine DictIterator[K, V].$next() -> DictEntry[K, V]
   while me.entry_idx >= me.current_keys.count()
     if me.bucket_idx >= me.dict.buckets.count()
       absent
@@ -231,7 +231,7 @@ emitting routine DictIterator[K, V].$next() -> Tuple[K, V]
   var key = me.current_keys[me.entry_idx]
   var value = me.dict.get!(key)
   me.entry_idx = me.entry_idx + 1u64
-  emit (key, value)
+  emit DictEntry[K, V](key: key, value: value)
   return
 
 # ============================================================================

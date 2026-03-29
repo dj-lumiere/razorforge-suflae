@@ -645,6 +645,7 @@ public partial class LLVMCodeGenerator
             CompoundAssignmentExpression compound => EmitCompoundAssignment(sb, compound),
             IsPatternExpression isPattern => EmitIsPattern(sb, isPattern),
             NamedArgumentExpression named => EmitExpression(sb, named.Value),
+            DictEntryLiteralExpression dictEntry => EmitDictEntryLiteral(sb, dictEntry),
             GenericMemberExpression gme => EmitGenericMemberExpression(sb, gme),
             _ => throw new NotImplementedException($"Expression type not implemented: {expr.GetType().Name}")
         };
@@ -1154,6 +1155,10 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, "  unreachable");
             return "undef";
         }
+
+        // Collection literal constructor: List(1, 2, 3), Set(1, 2), Dict(1:2, 3:4), etc.
+        if (call.IsCollectionLiteral && call.ResolvedType != null)
+            return EmitCollectionLiteralConstructor(sb, call.ResolvedType, call.Arguments);
 
         // Intercept source location routines — emit constants from call site, no actual call
         if (call.Callee is IdentifierExpression { Name: var name } && IsSourceLocationRoutine(name))
@@ -2754,6 +2759,14 @@ public partial class LLVMCodeGenerator
                 if (calledType.IsGenericDefinition && resolvedTypeArgs.Count == calledType.GenericParameters!.Count)
                     resolvedFullType = _registry.GetOrCreateResolution(calledType, resolvedTypeArgs);
 
+                // Collection literal constructor: List[S64](1, 2, 3), Dict[S64, Text](1:"a"), etc.
+                // Prefer SA-resolved type (handles const generics like ValueList[S64, 4] correctly)
+                if (generic.IsCollectionLiteral)
+                {
+                    TypeInfo collType = (generic.ResolvedType as TypeInfo) ?? resolvedFullType;
+                    return EmitCollectionLiteralConstructor(sb, collType, generic.Arguments);
+                }
+
                 // Named-field construction: Type[T](field1: val1, field2: val2, ...)
                 // e.g., List[T](data: ..., count: ..., capacity: ...) during monomorphization
                 if (generic.Arguments.Count > 1 && resolvedFullType is EntityTypeInfo resolvedEntity)
@@ -3593,8 +3606,8 @@ public partial class LLVMCodeGenerator
                 }
                 else if (ta is { IsGenericDefinition: true, GenericParameters: not null } and not EntityTypeInfo)
                 {
-                    // Generic definition with resolvable params (e.g., KVPair in List[KVPair]
-                    // when _typeSubstitutions has {K: S64, V: Text} → resolve to KVPair[S64, Text]).
+                    // Generic definition with resolvable params (e.g., DictEntry in List[DictEntry]
+                    // when _typeSubstitutions has {K: S64, V: Text} → resolve to DictEntry[S64, Text]).
                     // Skip entity types — they are always ptr and resolution is unnecessary.
                     bool canResolve = true;
                     var innerArgs = new List<TypeInfo>();
@@ -3796,6 +3809,7 @@ public partial class LLVMCodeGenerator
             GenericMethodCallExpression generic => GetGenericMethodCallReturnType(generic),
             IndexExpression index => GetIndexReturnType(index),
             NamedArgumentExpression named => GetExpressionType(named.Value),
+            DictEntryLiteralExpression dictEntry => dictEntry.ResolvedType,
             ConditionalExpression cond => GetExpressionType(cond.TrueExpression),
             GenericMemberExpression gme => GetGenericMemberExpressionType(gme),
             _ => null
@@ -4995,6 +5009,10 @@ public partial class LLVMCodeGenerator
             mangledName = Q($"{prefix}{typeName}.$represent");
         }
 
+        // Ensure the monomorphized body is compiled for generic types
+        if (type != null && representMethod != null && type.IsGenericResolution)
+            RecordMonomorphization(mangledName, representMethod, type);
+
         string argType = type != null ? GetParameterLLVMType(type) : "i64";
         string result = NextTemp();
         EmitLine(sb, $"  {result} = call ptr @{mangledName}({argType} {value})");
@@ -5029,6 +5047,10 @@ public partial class LLVMCodeGenerator
             string prefix = module != "" ? $"{module}." : "";
             mangledName = Q($"{prefix}{typeName}.$diagnose");
         }
+
+        // Ensure the monomorphized body is compiled for generic types
+        if (type != null && diagnoseMethod != null && type.IsGenericResolution)
+            RecordMonomorphization(mangledName, diagnoseMethod, type);
 
         string argType = type != null ? GetParameterLLVMType(type) : "i64";
         string result = NextTemp();
@@ -5267,6 +5289,316 @@ public partial class LLVMCodeGenerator
         string ptr = NextTemp();
         EmitLine(sb, $"  {ptr} = call ptr @rf_allocate_dynamic(i64 24)");
         return ptr;
+    }
+
+    /// <summary>
+    /// Emits a standalone DictEntry literal (key:value used outside a collection constructor).
+    /// Constructs a DictEntry[K, V] record via insertvalue.
+    /// </summary>
+    private string EmitDictEntryLiteral(StringBuilder sb, DictEntryLiteralExpression dictEntry)
+    {
+        string keyVal = EmitExpression(sb, dictEntry.Key);
+        string valVal = EmitExpression(sb, dictEntry.Value);
+
+        TypeInfo? entryType = dictEntry.ResolvedType;
+        if (entryType == null)
+            return "undef";
+
+        string llvmType = GetLLVMType(entryType);
+        string tmp1 = NextTemp();
+        string tmp2 = NextTemp();
+        TypeInfo? keyType = GetExpressionType(dictEntry.Key);
+        TypeInfo? valueType = GetExpressionType(dictEntry.Value);
+        string keyLlvm = keyType != null ? GetLLVMType(keyType) : "i64";
+        string valLlvm = valueType != null ? GetLLVMType(valueType) : "i64";
+
+        EmitLine(sb, $"  {tmp1} = insertvalue {llvmType} undef, {keyLlvm} {keyVal}, 0");
+        EmitLine(sb, $"  {tmp2} = insertvalue {llvmType} {tmp1}, {valLlvm} {valVal}, 1");
+        return tmp2;
+    }
+
+    /// <summary>
+    /// Emits a collection literal constructor: List(1, 2, 3), Set(1, 2), Dict(1:2), etc.
+    /// Creates collection via $create(), then adds elements via add/add_last.
+    /// For ValueList/ValueBitList, uses insertvalue for inline array construction.
+    /// </summary>
+    private string EmitCollectionLiteralConstructor(StringBuilder sb, TypeInfo resolvedType, List<Expression> arguments)
+    {
+        string typeName = resolvedType.Name;
+        // Extract base type name (e.g., "List" from "List[S64]")
+        string baseName = typeName.Contains('[') ? typeName[..typeName.IndexOf('[')] : typeName;
+
+        // ValueList[T, N]: inline array construction via insertvalue
+        if (baseName == "ValueList")
+        {
+            string llvmType = GetLLVMType(resolvedType);
+            string current = "zeroinitializer";
+            for (int i = 0; i < arguments.Count; i++)
+            {
+                string elemVal = EmitExpression(sb, arguments[i]);
+                TypeInfo? elemType = GetExpressionType(arguments[i]);
+                string elemLlvm = elemType != null ? GetLLVMType(elemType) : "i64";
+                string next = NextTemp();
+                EmitLine(sb, $"  {next} = insertvalue {llvmType} {current}, {elemLlvm} {elemVal}, {i}");
+                current = next;
+            }
+            return current;
+        }
+
+        // ValueBitList[N]: inline bit-packed array construction
+        if (baseName == "ValueBitList")
+        {
+            string llvmType = GetLLVMType(resolvedType);
+            // Calculate byte count from number of bits
+            int bitCount = arguments.Count;
+            int byteCount = (bitCount + 7) / 8;
+
+            // Pack bits into bytes, then insertvalue each byte
+            string current = "zeroinitializer";
+            for (int byteIdx = 0; byteIdx < byteCount; byteIdx++)
+            {
+                int byteVal = 0;
+                for (int bitIdx = 0; bitIdx < 8 && byteIdx * 8 + bitIdx < bitCount; bitIdx++)
+                {
+                    // Evaluate the boolean argument
+                    // For literal bools, we can read the value directly
+                    if (arguments[byteIdx * 8 + bitIdx] is LiteralExpression { Value: true })
+                    {
+                        byteVal |= (1 << bitIdx);
+                    }
+                    else if (arguments[byteIdx * 8 + bitIdx] is LiteralExpression { Value: false })
+                    {
+                        // bit is already 0
+                    }
+                    else
+                    {
+                        // Non-literal: evaluate at runtime and OR into byte
+                        // For simplicity, fall back to runtime construction for non-literal bools
+                        return EmitValueBitListRuntime(sb, resolvedType, arguments);
+                    }
+                }
+                string next = NextTemp();
+                EmitLine(sb, $"  {next} = insertvalue {llvmType} {current}, i8 {byteVal}, {byteIdx}");
+                current = next;
+            }
+            return current;
+        }
+
+        // PriorityQueue[TPriority, TElement]: $create() + add(element, priority) from tuple args
+        if (baseName == "PriorityQueue")
+        {
+            return EmitPriorityQueueLiteral(sb, resolvedType, typeName, arguments);
+        }
+
+        // Entity collections: $create() + add/add_last calls
+        string collectionPtr = EmitCollectionCreate(sb, resolvedType, typeName);
+
+        // Determine the add method name
+        string addMethodName;
+        bool isMapType = baseName is "Dict" or "SortedDict";
+        bool isSequenceType = baseName is "List" or "Deque" or "BitList";
+
+        if (isSequenceType)
+            addMethodName = "add_last";
+        else
+            addMethodName = "add";
+
+        // Look up the add method
+        string fullAddName = $"{typeName}.{addMethodName}";
+        RoutineInfo? addMethod = _registry.LookupRoutine(fullAddName);
+
+        // Fall back to generic definition
+        if (addMethod == null)
+        {
+            TypeInfo? genericDef = resolvedType switch
+            {
+                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                _ => null
+            };
+            if (genericDef != null)
+            {
+                string genAddName = $"{genericDef.Name}.{addMethodName}";
+                addMethod = _registry.LookupRoutine(genAddName);
+            }
+        }
+
+        if (addMethod == null)
+            return collectionPtr;
+
+        // Determine mangled name and handle monomorphization
+        string mangledAdd;
+        if (resolvedType.IsGenericResolution)
+        {
+            mangledAdd = Q($"{resolvedType.FullName}.{addMethodName}");
+            RecordMonomorphization(mangledAdd, addMethod, resolvedType);
+        }
+        else
+        {
+            mangledAdd = MangleFunctionName(addMethod);
+        }
+
+        // Emit add calls for each element
+        if (isMapType)
+        {
+            // Dict/SortedDict: extract key and value from DictEntry arguments
+            foreach (var arg in arguments)
+            {
+                if (arg is DictEntryLiteralExpression entry)
+                {
+                    string keyVal = EmitExpression(sb, entry.Key);
+                    string valVal = EmitExpression(sb, entry.Value);
+                    TypeInfo? keyType = GetExpressionType(entry.Key);
+                    TypeInfo? valueType = GetExpressionType(entry.Value);
+                    string keyLlvm = keyType != null ? GetLLVMType(keyType) : "i64";
+                    string valLlvm = valueType != null ? GetLLVMType(valueType) : "i64";
+
+                    // Declare the add function if not yet declared
+                    if (!_generatedFunctions.Contains(mangledAdd))
+                    {
+                        EmitLine(_functionDeclarations, $"declare i1 @{mangledAdd}(ptr, {keyLlvm}, {valLlvm})");
+                        _generatedFunctions.Add(mangledAdd);
+                    }
+                    EmitLine(sb, $"  call i1 @{mangledAdd}(ptr {collectionPtr}, {keyLlvm} {keyVal}, {valLlvm} {valVal})");
+                }
+            }
+        }
+        else
+        {
+            // Sequence/unique: add each element
+            foreach (var arg in arguments)
+            {
+                string elemVal = EmitExpression(sb, arg);
+                TypeInfo? elemType = GetExpressionType(arg);
+                string elemLlvm = elemType != null ? GetLLVMType(elemType) : "i64";
+
+                // Declare the add function if not yet declared
+                if (!_generatedFunctions.Contains(mangledAdd))
+                {
+                    // add returns Bool for Set/SortedSet, void for others
+                    string retType = baseName is "Set" or "SortedSet" ? "i1" : "void";
+                    EmitLine(_functionDeclarations, $"declare {retType} @{mangledAdd}(ptr, {elemLlvm})");
+                    _generatedFunctions.Add(mangledAdd);
+                }
+
+                string retType2 = baseName is "Set" or "SortedSet" ? "i1" : "void";
+                string callPrefix = retType2 == "void" ? "" : $"  {NextTemp()} = ";
+                // For void returns, we just call. For non-void, we discard the result.
+                if (retType2 == "void")
+                    EmitLine(sb, $"  call void @{mangledAdd}(ptr {collectionPtr}, {elemLlvm} {elemVal})");
+                else
+                    EmitLine(sb, $"  call i1 @{mangledAdd}(ptr {collectionPtr}, {elemLlvm} {elemVal})");
+            }
+        }
+
+        return collectionPtr;
+    }
+
+    /// <summary>
+    /// Runtime fallback for ValueBitList construction when arguments are non-literal.
+    /// Evaluates each bool at runtime and packs into bytes.
+    /// </summary>
+    private string EmitValueBitListRuntime(StringBuilder sb, TypeInfo resolvedType, List<Expression> arguments)
+    {
+        string llvmType = GetLLVMType(resolvedType);
+        int bitCount = arguments.Count;
+        int byteCount = (bitCount + 7) / 8;
+
+        string current = "zeroinitializer";
+        for (int byteIdx = 0; byteIdx < byteCount; byteIdx++)
+        {
+            // Start with 0, OR in each bit
+            string byteAccum = "0";
+            for (int bitIdx = 0; bitIdx < 8 && byteIdx * 8 + bitIdx < bitCount; bitIdx++)
+            {
+                string boolVal = EmitExpression(sb, arguments[byteIdx * 8 + bitIdx]);
+                // zext i1 to i8, shift left by bitIdx, OR into accumulator
+                string extended = NextTemp();
+                EmitLine(sb, $"  {extended} = zext i1 {boolVal} to i8");
+                if (bitIdx > 0)
+                {
+                    string shifted = NextTemp();
+                    EmitLine(sb, $"  {shifted} = shl i8 {extended}, {bitIdx}");
+                    extended = shifted;
+                }
+                string ored = NextTemp();
+                EmitLine(sb, $"  {ored} = or i8 {byteAccum}, {extended}");
+                byteAccum = ored;
+            }
+            string next = NextTemp();
+            EmitLine(sb, $"  {next} = insertvalue {llvmType} {current}, i8 {byteAccum}, {byteIdx}");
+            current = next;
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// Emits PriorityQueue literal constructor: PriorityQueue[S32, Text]((1, "high"), (10, "low"))
+    /// Each argument is a tuple (priority, element) unpacked into add(element: element, priority: priority).
+    /// </summary>
+    private string EmitPriorityQueueLiteral(StringBuilder sb, TypeInfo resolvedType, string typeName, List<Expression> arguments)
+    {
+        string pqPtr = EmitCollectionCreate(sb, resolvedType, typeName);
+
+        // Look up add(element, priority) method
+        string addName = $"{typeName}.add";
+        RoutineInfo? addMethod = _registry.LookupRoutine(addName);
+
+        if (addMethod == null)
+        {
+            TypeInfo? genericDef = resolvedType switch
+            {
+                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                _ => null
+            };
+            if (genericDef != null)
+            {
+                string genAddName = $"{genericDef.Name}.add";
+                addMethod = _registry.LookupRoutine(genAddName);
+            }
+        }
+
+        if (addMethod == null)
+            return pqPtr;
+
+        string mangledAdd;
+        if (resolvedType.IsGenericResolution)
+        {
+            mangledAdd = Q($"{resolvedType.FullName}.add");
+            RecordMonomorphization(mangledAdd, addMethod, resolvedType);
+        }
+        else
+        {
+            mangledAdd = MangleFunctionName(addMethod);
+        }
+
+        // Resolve priority and element types from type arguments
+        // PriorityQueue[TPriority, TElement] — args are (priority, element) tuples
+        TypeInfo? priorityType = resolvedType.TypeArguments?.Count >= 1 ? resolvedType.TypeArguments[0] : null;
+        TypeInfo? elementType = resolvedType.TypeArguments?.Count >= 2 ? resolvedType.TypeArguments[1] : null;
+        string priorityLlvm = priorityType != null ? GetLLVMType(priorityType) : "i32";
+        string elementLlvm = elementType != null ? GetLLVMType(elementType) : "ptr";
+
+        foreach (var arg in arguments)
+        {
+            // Each arg should be a TupleLiteralExpression (priority, element)
+            if (arg is TupleLiteralExpression tuple && tuple.Elements.Count == 2)
+            {
+                string priorityVal = EmitExpression(sb, tuple.Elements[0]);
+                string elementVal = EmitExpression(sb, tuple.Elements[1]);
+
+                // add(element: TElement, priority: TPriority)
+                // Note: PQ.add signature is add(element, priority) — element first, priority second
+                if (!_generatedFunctions.Contains(mangledAdd))
+                {
+                    EmitLine(_functionDeclarations, $"declare void @{mangledAdd}(ptr, {elementLlvm}, {priorityLlvm})");
+                    _generatedFunctions.Add(mangledAdd);
+                }
+                EmitLine(sb, $"  call void @{mangledAdd}(ptr {pqPtr}, {elementLlvm} {elementVal}, {priorityLlvm} {priorityVal})");
+            }
+        }
+
+        return pqPtr;
     }
 
     #endregion

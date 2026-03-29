@@ -561,6 +561,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Set element type mismatch.</summary>
     SetElementTypeMismatch = 556,
 
+    /// <summary>Collection literal constructor argument count mismatch (e.g., ValueList[S64, 4] given 3 args).</summary>
+    ArgumentCountMismatch = 557,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMORY TOKEN ERRORS - RAZORFORGE SPECIFIC (RF-S600 - RF-S649)
     // ═══════════════════════════════════════════════════════════════════════════

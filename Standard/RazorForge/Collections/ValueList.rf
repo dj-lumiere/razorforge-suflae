@@ -103,7 +103,7 @@ routine ValueListIterator[T, N].$next!() -> T
 # ============================================================================
 
 routine ValueList[T, N].$represent() -> Text
-  var result = "["
+  var result = "ValueList["
   for i in 0 til N
     if i > 0u64
       result = result + ", "

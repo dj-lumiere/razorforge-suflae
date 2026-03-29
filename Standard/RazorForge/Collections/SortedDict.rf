@@ -20,20 +20,14 @@ import BuilderService
 # B-tree order
 preset B_DICT: U64 = 32u64
 
-# Key-value pair
-record KVPair[K, V]
-needs K obeys Comparable
-  key: K
-  value: V
-
 # B-tree node for SortedDict
 entity BTreeDictNode[K, V]
 needs K obeys Comparable
-  entries: List[KVPair[K, V]]              # Key-value pairs in this node
+  entries: List[DictEntry[K, V]]              # Key-value pairs in this node
   children: List[BTreeDictNode[K, V]]      # Child pointers (empty for leaf)
   is_leaf: Bool
 
-entity SortedDict[K, V] obeys Iterable[KVPair[K, V]]
+entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Comparable
   secret root: BTreeDictNode[K, V]?
   secret count: U64
@@ -44,7 +38,7 @@ needs K obeys Comparable
 
 routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
-    entries: List[KVPair[K, V]](),
+    entries: List[DictEntry[K, V]](),
     children: List[BTreeDictNode[K, V]](),
     is_leaf: is_leaf
   )
@@ -135,7 +129,7 @@ routine SortedDict[K, V].add(key: K, value: V) -> Bool
 
   if me.root is None
     me.root = BTreeDictNode[K, V](is_leaf: true)
-    me.root!!.entries.add_last(KVPair[K, V](key: key, value: value))
+    me.root!!.entries.add_last(DictEntry[K, V](key: key, value: value))
     me.count = 1u64
     return true
 
@@ -162,7 +156,7 @@ routine SortedDict[K, V].find_and_update(node: BTreeDictNode[K, V], key: K, valu
     i = i + 1u64
 
   if i < node.entries.count() and key == node.entries[i].key
-    node.entries[i] = KVPair[K, V](key: key, value: value)
+    node.entries[i] = DictEntry[K, V](key: key, value: value)
     return true
 
   if node.is_leaf
@@ -176,12 +170,12 @@ routine SortedDict[K, V].insert_non_full(node: BTreeDictNode[K, V], key: K, valu
   if node.is_leaf
     while i > 0u64 and key < node.entries[i - 1u64].key
       i = i - 1u64
-    var entries_copy = List[KVPair[K, V]]()
+    var entries_copy = List[DictEntry[K, V]]()
     var j = 0u64
     while j < i
       entries_copy.add_last(node.entries[j])
       j = j + 1u64
-    entries_copy.add_last(KVPair[K, V](key: key, value: value))
+    entries_copy.add_last(DictEntry[K, V](key: key, value: value))
     while j < node.entries.count()
       entries_copy.add_last(node.entries[j])
       j = j + 1u64
@@ -217,7 +211,7 @@ routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx
 
   var mid_entry = child.entries[mid]
 
-  var left_entries = List[KVPair[K, V]]()
+  var left_entries = List[DictEntry[K, V]]()
   i = 0u64
   while i < mid
     left_entries.add_last(child.entries[i])
@@ -232,7 +226,7 @@ routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx
       i = i + 1u64
     child.children = left_children
 
-  var new_entries = List[KVPair[K, V]]()
+  var new_entries = List[DictEntry[K, V]]()
   var new_children = List[BTreeDictNode[K, V]]()
 
   i = 0u64
@@ -284,7 +278,7 @@ routine SortedDict[K, V].remove_from_node(node: BTreeDictNode[K, V], key: K)
 
   if i < node.entries.count() and key == node.entries[i].key
     if node.is_leaf
-      var new_entries = List[KVPair[K, V]]()
+      var new_entries = List[DictEntry[K, V]]()
       var j = 0u64
       while j < node.entries.count()
         if j != i
@@ -301,7 +295,7 @@ routine SortedDict[K, V].remove_from_node(node: BTreeDictNode[K, V], key: K)
     me.remove_from_node(node.children[i], key)
   return
 
-routine SortedDict[K, V].get_predecessor(node: BTreeDictNode[K, V], idx: U64) -> KVPair[K, V]
+routine SortedDict[K, V].get_predecessor(node: BTreeDictNode[K, V], idx: U64) -> DictEntry[K, V]
   var current = node.children[idx]
   while not current.is_leaf
     current = current.children[current.children.count() - 1u64]
@@ -367,7 +361,7 @@ routine SortedDict[K, V].max_key!() -> K
     node = node.children[node.children.count() - 1u64]
   return node.entries[node.entries.count() - 1u64].key
 
-routine SortedDict[K, V].first!() -> KVPair[K, V]
+routine SortedDict[K, V].first!() -> DictEntry[K, V]
   if me.is_empty()
     absent
   var node = me.root!!
@@ -375,7 +369,7 @@ routine SortedDict[K, V].first!() -> KVPair[K, V]
     node = node.children[0]
   return node.entries[0]
 
-routine SortedDict[K, V].last!() -> KVPair[K, V]
+routine SortedDict[K, V].last!() -> DictEntry[K, V]
   if me.is_empty()
     absent
   var node = me.root!!
@@ -387,14 +381,14 @@ routine SortedDict[K, V].last!() -> KVPair[K, V]
 # Range Queries
 # ============================================================================
 
-routine SortedDict[K, V].range(min_key: K, max_key: K) -> List[KVPair[K, V]]
-  var result = List[KVPair[K, V]]()
+routine SortedDict[K, V].range(min_key: K, max_key: K) -> List[DictEntry[K, V]]
+  var result = List[DictEntry[K, V]]()
   if me.root is None
     return result
   me.range_collect(me.root!!, min_key, max_key, result)
   return result
 
-routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, max_key: K, result: List[KVPair[K, V]])
+routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, max_key: K, result: List[DictEntry[K, V]])
   var i = 0u64
 
   while i < node.entries.count()
@@ -422,14 +416,14 @@ routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
     index: 0u64
   )
 
-routine List[KVPair[K, V]].$create(from: SortedDict[K, V]) -> List[KVPair[K, V]]
-  var result = List[KVPair[K, V]](from.count)
+routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> List[DictEntry[K, V]]
+  var result = List[DictEntry[K, V]](from.count)
   if from.root is None
     return result
   from.collect_inorder(from.root!!, result)
   return result
 
-routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List[KVPair[K, V]])
+routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List[DictEntry[K, V]])
   var i = 0u64
   while i < node.entries.count()
     if not node.is_leaf
@@ -440,12 +434,12 @@ routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List
     me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
-entity SortedDictIterator[K, V] obeys Iterator[KVPair[K, V]]
-  entries: List[KVPair[K, V]]
+entity SortedDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+  entries: List[DictEntry[K, V]]
   index: U64
 
 @writable
-emitting routine SortedDictIterator[K, V].$next() -> KVPair[K, V]
+emitting routine SortedDictIterator[K, V].$next() -> DictEntry[K, V]
   if me.index >= me.entries.count()
     absent
   emit me.entries[me.index]

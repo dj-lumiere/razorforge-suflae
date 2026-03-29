@@ -162,6 +162,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the named argument expression</returns>
     T VisitNamedArgumentExpression(NamedArgumentExpression node);
 
+    /// <summary>Visits a dict entry literal expression node (key:value pair in collection constructor)</summary>
+    /// <param name="node">The dict entry literal expression to visit</param>
+    /// <returns>Result of visiting the dict entry literal expression</returns>
+    T VisitDictEntryLiteralExpression(DictEntryLiteralExpression node);
+
     /// <summary>Visits a creator expression node (Type(memberVar: value) syntax)</summary>
     /// <param name="node">The creator expression to visit</param>
     /// <returns>Result of visiting the creator expression</returns>
