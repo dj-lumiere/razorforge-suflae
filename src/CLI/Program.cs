@@ -825,9 +825,47 @@ internal class Program
         string? exeDir = Path.GetDirectoryName(typeof(Program).Assembly.Location);
         string runtimeLibDir = Path.Combine(exeDir ?? ".", "native", "build", "lib");
 
+        // Run opt with mem2reg + sroa passes on the .ll file
+        string optFile = Path.ChangeExtension(llFile, ".opt.ll");
+        var optArgs = $"-S -passes=mem2reg,sroa \"{llFile}\" -o \"{optFile}\"";
+        var optPsi = new ProcessStartInfo
+        {
+            FileName = "opt",
+            Arguments = optArgs,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        try
+        {
+            using var optProcess = Process.Start(optPsi);
+            if (optProcess != null)
+            {
+                string optStderr = optProcess.StandardError.ReadToEnd();
+                optProcess.WaitForExit();
+
+                if (optProcess.ExitCode != 0)
+                {
+                    // opt failed — fall back to unoptimized .ll
+                    Console.Error.WriteLine($"opt warning: {optStderr.Trim()}");
+                    optFile = llFile;
+                }
+            }
+            else
+            {
+                optFile = llFile;
+            }
+        }
+        catch
+        {
+            // opt not available — fall back to unoptimized .ll
+            optFile = llFile;
+        }
+
         // Compile .ll → .exe using clang
         string exeFile = Path.ChangeExtension(llFile, ".exe");
-        var clangArgs = $"-o \"{exeFile}\" \"{llFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime";
+        var clangArgs = $"-o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime";
 
         var clangPsi = new ProcessStartInfo
         {
