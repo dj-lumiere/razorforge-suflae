@@ -145,7 +145,7 @@ routine Bytes.$diagnose() -> Text
 # ============================================================================
 
 # Text (UTF-32) -> Bytes (UTF-8)
-routine Text.to_utf8() -> Bytes
+routine Text.encode_as_utf8() -> Bytes
   var result = List[Byte]()
   var len = me.count()
   for i in 0 til len
@@ -234,7 +234,7 @@ routine Bytes.to_cstr() -> Address
 
 # Text -> null-terminated C string (UTF-8 encoded)
 routine Text.to_cstr() -> Address
-  var bytes = me.to_utf8()
+  var bytes = me.encode_as_utf8()
   return bytes.to_cstr()
 
 # ============================================================================
@@ -242,7 +242,7 @@ routine Text.to_cstr() -> Address
 # ============================================================================
 
 # Text (UTF-32) -> List[U16] (UTF-16)
-routine Text.to_utf16() -> List[U16]
+routine Text.encode_as_utf16() -> List[U16]
   var result = List[U16]()
   var len = me.count()
   var i: U64 = 0u64
@@ -260,19 +260,19 @@ routine Text.to_utf16() -> List[U16]
   return result
 
 # List[U16] (UTF-16) -> Text (UTF-32)
-routine Text.from_utf16(utf16: List[U16]) -> Text
+routine List[U16].decode_as_utf16() -> Text
   var result = List[Letter]()
-  var len = utf16.count()
+  var len = me.count()
   var i: U64 = 0u64
   loop
     if i >= len
       break
-    var w1 = U32(utf16[i])
+    var w1 = U32(me[i])
     if w1 < 0xD800u32 or w1 > 0xDFFFu32
       result.add_last(Letter(w1))
       i += 1u64
     elseif 0xD800u32 <= w1 <= 0xDBFFu32 and i + 1u64 < len
-      var w2 = U32(utf16[i + 1u64])
+      var w2 = U32(me[i + 1u64])
       if 0xDC00u32 <= w2 <= 0xDFFFu32
         var codepoint = ((w1 - 0xD800u32) << 10u32) + (w2 - 0xDC00u32) + 0x10000u32
         result.add_last(Letter(codepoint))
