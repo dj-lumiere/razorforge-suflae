@@ -309,12 +309,29 @@ public partial class Parser
         // Check for type-level generic params BEFORE the dot (e.g., "List[T].append")
         if (Match(type: TokenType.LeftBracket))
         {
-            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
-            genericParams = result.genericParams;
-            inlineConstraints = result.inlineConstraints;
-            hasGenericParams = true;
+            if (HasNestedBrackets())
+            {
+                // Nested generics: parse as type expressions (e.g., List[KVPair[K, V]])
+                var typeArgs = new List<string>();
+                do
+                {
+                    TypeExpression typeArg = ParseTypeOrConstGeneric();
+                    typeArgs.Add(item: SerializeTypeExpression(typeArg));
+                } while (Match(type: TokenType.Comma));
 
-            Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+                genericParams = typeArgs;
+                hasGenericParams = true;
+                Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+            }
+            else
+            {
+                (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
+                genericParams = result.genericParams;
+                inlineConstraints = result.inlineConstraints;
+                hasGenericParams = true;
+
+                Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+            }
         }
 
         // ===============================================================================
@@ -346,30 +363,55 @@ public partial class Parser
             // e.g., "List[T].get[I]" - the [I] belongs to the method
             if (Match(type: TokenType.LeftBracket))
             {
-                    (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
-
-                    // Merge type-level and method-level generic parameters
-                    if (genericParams is { Count: > 0 })
+                    if (HasNestedBrackets())
                     {
-                        genericParams = new List<string>(collection: genericParams);
-                        genericParams.AddRange(collection: result.genericParams);
-                        if (inlineConstraints != null && result.inlineConstraints != null)
+                        // Nested generics in method-level params
+                        var typeArgs = new List<string>();
+                        do
                         {
-                            inlineConstraints = new List<GenericConstraintDeclaration>(collection: inlineConstraints);
-                            inlineConstraints.AddRange(collection: result.inlineConstraints);
-                        }
-                        else if (result.inlineConstraints != null)
+                            TypeExpression typeArg = ParseTypeOrConstGeneric();
+                            typeArgs.Add(item: SerializeTypeExpression(typeArg));
+                        } while (Match(type: TokenType.Comma));
+
+                        if (genericParams is { Count: > 0 })
                         {
-                            inlineConstraints = result.inlineConstraints;
+                            genericParams = new List<string>(collection: genericParams);
+                            genericParams.AddRange(collection: typeArgs);
                         }
+                        else
+                        {
+                            genericParams = typeArgs;
+                        }
+
+                        Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
                     }
                     else
                     {
-                        genericParams = result.genericParams;
-                        inlineConstraints = result.inlineConstraints;
-                    }
+                        (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) result = ParseGenericParametersWithConstraints();
 
-                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+                        // Merge type-level and method-level generic parameters
+                        if (genericParams is { Count: > 0 })
+                        {
+                            genericParams = new List<string>(collection: genericParams);
+                            genericParams.AddRange(collection: result.genericParams);
+                            if (inlineConstraints != null && result.inlineConstraints != null)
+                            {
+                                inlineConstraints = new List<GenericConstraintDeclaration>(collection: inlineConstraints);
+                                inlineConstraints.AddRange(collection: result.inlineConstraints);
+                            }
+                            else if (result.inlineConstraints != null)
+                            {
+                                inlineConstraints = result.inlineConstraints;
+                            }
+                        }
+                        else
+                        {
+                            genericParams = result.genericParams;
+                            inlineConstraints = result.inlineConstraints;
+                        }
+
+                        Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic parameters");
+                    }
             }
         }
 
@@ -1471,5 +1513,53 @@ public partial class Parser
         }
 
         return (visibility, storage);
+    }
+
+    /// <summary>
+    /// Checks whether the current bracket content contains nested generics (e.g., KVPair[K, V]).
+    /// Must be called after consuming the opening '['.
+    /// Uses lookahead without advancing the parser position.
+    /// </summary>
+    private bool HasNestedBrackets()
+    {
+        int offset = 0;
+        int depth = 0;
+
+        while (true)
+        {
+            Token token = PeekToken(offset: offset);
+            if (token.Type == TokenType.Eof)
+                break;
+
+            if (token.Type == TokenType.LeftBracket)
+            {
+                // A '[' at depth 0 means nested generics (we're already inside the outer '[')
+                if (depth == 0)
+                    return true;
+                depth++;
+            }
+            else if (token.Type == TokenType.RightBracket)
+            {
+                if (depth == 0)
+                    break; // End of outer brackets
+                depth--;
+            }
+
+            offset++;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Serializes a TypeExpression back to its string form.
+    /// e.g., TypeExpression("KVPair", [TypeExpression("K"), TypeExpression("V")]) -> "KVPair[K, V]"
+    /// </summary>
+    private static string SerializeTypeExpression(TypeExpression type)
+    {
+        if (type.GenericArguments is not { Count: > 0 })
+            return type.Name;
+
+        return type.Name + "[" + string.Join(", ", type.GenericArguments.Select(SerializeTypeExpression)) + "]";
     }
 }

@@ -973,6 +973,9 @@ public partial class LLVMCodeGenerator
             case "$ne":
                 EmitSynthesizedNe(routine, funcName);
                 break;
+            case "$notcontains":
+                EmitSynthesizedNotContains(routine, funcName);
+                break;
             case "$lt":
                 EmitSynthesizedCmpDerived(routine, funcName, -1, "eq");
                 break;
@@ -1156,6 +1159,33 @@ public partial class LLVMCodeGenerator
         EmitLine(_functionDefinitions, $"  %eq = call i1 @{eqFuncName}({meType} %me, {youType} %{youName})");
         EmitLine(_functionDefinitions, "  %ne = xor i1 %eq, true");
         EmitLine(_functionDefinitions, "  ret i1 %ne");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized $notcontains routine: not $contains(me, item).
+    /// </summary>
+    private void EmitSynthesizedNotContains(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+
+        string itemType = routine.Parameters.Count > 0
+            ? GetParameterLLVMType(routine.Parameters[0].Type)
+            : meType;
+        string itemName = routine.Parameters.Count > 0
+            ? routine.Parameters[0].Name
+            : "item";
+
+        string containsFuncName = Q($"{routine.OwnerType.Name}.$contains");
+
+        EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {itemType} %{itemName}) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        EmitLine(_functionDefinitions, $"  %contains = call i1 @{containsFuncName}({meType} %me, {itemType} %{itemName})");
+        EmitLine(_functionDefinitions, "  %notcontains = xor i1 %contains, true");
+        EmitLine(_functionDefinitions, "  ret i1 %notcontains");
         EmitLine(_functionDefinitions, "}");
         EmitLine(_functionDefinitions, "");
     }

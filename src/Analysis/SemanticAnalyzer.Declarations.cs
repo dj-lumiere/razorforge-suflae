@@ -2514,6 +2514,13 @@ public sealed partial class SemanticAnalyzer
                 cmpMethod: cmpMethod,
                 existingMethods: methodList);
         }
+
+        // Look for $contains method
+        RoutineInfo? containsMethod = methodList.FirstOrDefault(predicate: m => m.Name == "$contains");
+        if (containsMethod != null)
+        {
+            GenerateNotContainsFromContains(type: type, containsMethod: containsMethod, existingMethods: methodList);
+        }
     }
 
     /// <summary>
@@ -2557,6 +2564,46 @@ public sealed partial class SemanticAnalyzer
         };
 
         _registry.RegisterRoutine(routine: neMethod);
+    }
+
+    /// <summary>
+    /// Generates $notcontains from $contains.
+    /// $notcontains(item) = not $contains(item)
+    /// </summary>
+    private void GenerateNotContainsFromContains(TypeSymbol type, RoutineInfo containsMethod,
+        List<RoutineInfo> existingMethods)
+    {
+        RoutineInfo? existingNotContains =
+            existingMethods.FirstOrDefault(predicate: m => m.Name == "$notcontains");
+
+        if (existingNotContains != null)
+        {
+            return;
+        }
+
+        TypeSymbol? boolType = _registry.LookupType(name: "Bool");
+        if (boolType == null)
+        {
+            return;
+        }
+
+        var notContainsMethod = new RoutineInfo(name: "$notcontains")
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = type,
+            Parameters = containsMethod.Parameters,
+            ReturnType = boolType,
+            IsFailable = false,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
+            Visibility = containsMethod.Visibility,
+            Location = containsMethod.Location,
+            Module = containsMethod.Module,
+            Annotations = ["readonly"],
+            IsSynthesized = true
+        };
+
+        _registry.RegisterRoutine(routine: notContainsMethod);
     }
 
     /// <summary>
