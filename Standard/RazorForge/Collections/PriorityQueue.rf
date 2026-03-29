@@ -1,12 +1,12 @@
-# RazorForge PriorityQueue[TElement, TPriority] - Binary min-heap
+# RazorForge PriorityQueue[TPriority, TElement] - Binary min-heap
 # Entity type with heap allocation
 # O(log n) add, O(log n) pop, O(1) peek
 # Lower priority values are extracted first (min-heap)
 #
 # Usage:
-#   var tasks = PriorityQueue[Task, S32]()
-#   tasks.add(high_priority_task, 1)    # Priority 1 (high)
-#   tasks.add(low_priority_task, 10)    # Priority 10 (low)
+#   var tasks = PriorityQueue[S32, Task]()
+#   tasks.add(element: high_priority_task, priority: 1)    # Priority 1 (high)
+#   tasks.add(element: low_priority_task, priority: 10)    # Priority 10 (low)
 #   var next = tasks.remove!()              # Gets priority 1 task first
 
 module Collections
@@ -14,49 +14,49 @@ module Collections
 import BuilderService
 
 # Element with priority
-record PQEntry[TElement, TPriority]
+record PQEntry[TPriority, TElement]
 needs TPriority obeys Comparable
   element: TElement
   priority: TPriority
 
-entity PriorityQueue[TElement, TPriority] obeys Iterable[PQEntry[TElement, TPriority]]
+entity PriorityQueue[TPriority, TElement] obeys Iterable[PQEntry[TPriority, TElement]]
 needs TPriority obeys Comparable
-  secret heap: List[PQEntry[TElement, TPriority]]
+  secret heap: List[PQEntry[TPriority, TElement]]
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].$create() -> PriorityQueue[TElement, TPriority]
-  return PriorityQueue[TElement, TPriority](
-    heap: List[PQEntry[TElement, TPriority]]()
+routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority, TElement]
+  return PriorityQueue[TPriority, TElement](
+    heap: List[PQEntry[TPriority, TElement]]()
   )
 
-routine PriorityQueue[TElement, TPriority].$create(capacity: U64) -> PriorityQueue[TElement, TPriority]
-  return PriorityQueue[TElement, TPriority](
-    heap: List[PQEntry[TElement, TPriority]](capacity)
+routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
+  return PriorityQueue[TPriority, TElement](
+    heap: List[PQEntry[TPriority, TElement]](capacity)
   )
 
 # ============================================================================
 # Internal Heap Operations
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].parent_index(index: U64) -> U64
+routine PriorityQueue[TPriority, TElement].parent_index(index: U64) -> U64
   return (index - 1u64) // 2u64
 
-routine PriorityQueue[TElement, TPriority].left_child(index: U64) -> U64
+routine PriorityQueue[TPriority, TElement].left_child(index: U64) -> U64
   return 2u64 * index + 1u64
 
-routine PriorityQueue[TElement, TPriority].right_child(index: U64) -> U64
+routine PriorityQueue[TPriority, TElement].right_child(index: U64) -> U64
   return 2u64 * index + 2u64
 
-routine PriorityQueue[TElement, TPriority].swap(i: U64, j: U64)
+routine PriorityQueue[TPriority, TElement].swap(i: U64, j: U64)
   var temp = me.heap[i]
   me.heap[i] = me.heap[j]
   me.heap[j] = temp
   return
 
-routine PriorityQueue[TElement, TPriority].sift_up(index: U64)
+routine PriorityQueue[TPriority, TElement].sift_up(index: U64)
   var i = index
   while i > 0u64
     var p = me.parent_index(i)
@@ -67,7 +67,7 @@ routine PriorityQueue[TElement, TPriority].sift_up(index: U64)
       break
   return
 
-routine PriorityQueue[TElement, TPriority].sift_down(index: U64)
+routine PriorityQueue[TPriority, TElement].sift_down(index: U64)
   var i = index
   var size = me.heap.count()
 
@@ -93,23 +93,23 @@ routine PriorityQueue[TElement, TPriority].sift_down(index: U64)
 # Core Operations
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].count() -> U64
+routine PriorityQueue[TPriority, TElement].count() -> U64
   return me.heap.count()
 
-routine PriorityQueue[TElement, TPriority].is_empty() -> Bool
+routine PriorityQueue[TPriority, TElement].is_empty() -> Bool
   return me.heap.is_empty()
 
-routine PriorityQueue[TElement, TPriority].clear()
+routine PriorityQueue[TPriority, TElement].clear()
   me.heap.clear()
   return
 
-routine PriorityQueue[TElement, TPriority].add(element: TElement, priority: TPriority)
+routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPriority)
   # Add element with priority - O(log n)
-  me.heap.add_last(PQEntry[TElement, TPriority](element: element, priority: priority))
+  me.heap.add_last(PQEntry[TPriority, TElement](element: element, priority: priority))
   me.sift_up(me.heap.count() - 1u64)
   return
 
-routine PriorityQueue[TElement, TPriority].remove!() -> TElement
+routine PriorityQueue[TPriority, TElement].remove!() -> TElement
   # Remove and return element with lowest priority - O(log n)
   if me.is_empty()
     absent
@@ -127,19 +127,19 @@ routine PriorityQueue[TElement, TPriority].remove!() -> TElement
 
   return result
 
-routine PriorityQueue[TElement, TPriority].peek!() -> TElement
+routine PriorityQueue[TPriority, TElement].peek!() -> TElement
   # View element with lowest priority without removing - O(1)
   if me.is_empty()
     absent
   return me.heap[0u64].element
 
-routine PriorityQueue[TElement, TPriority].peek_priority!() -> TPriority
+routine PriorityQueue[TPriority, TElement].peek_priority!() -> TPriority
   # View lowest priority value without removing - O(1)
   if me.is_empty()
     absent
   return me.heap[0u64].priority
 
-routine PriorityQueue[TElement, TPriority].peek_entry!() -> PQEntry[TElement, TPriority]
+routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, TElement]
   # View element and priority without removing - O(1)
   if me.is_empty()
     absent
@@ -149,7 +149,7 @@ routine PriorityQueue[TElement, TPriority].peek_entry!() -> PQEntry[TElement, TP
 # Bulk Operations
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].add_all(elements: List[TElement], priorities: List[TPriority])
+routine PriorityQueue[TPriority, TElement].add_all(elements: List[TElement], priorities: List[TPriority])
   # Add multiple elements with their priorities
   var i = 0u64
   var count = if elements.count() < priorities.count() then elements.count() else priorities.count()
@@ -158,7 +158,7 @@ routine PriorityQueue[TElement, TPriority].add_all(elements: List[TElement], pri
     i = i + 1u64
   return
 
-routine PriorityQueue[TElement, TPriority].drain() -> List[TElement]
+routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
   # Remove all elements in priority order
   var result = List[TElement](me.count())
   while not me.is_empty()
@@ -170,7 +170,7 @@ routine PriorityQueue[TElement, TPriority].drain() -> List[TElement]
 # ============================================================================
 
 @readonly
-routine PriorityQueue[TElement, TPriority].$contains(element: TElement) -> Bool
+routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
   # O(n) search - heap doesn't support efficient search
   var i = 0u64
   while i < me.heap.count()
@@ -179,9 +179,9 @@ routine PriorityQueue[TElement, TPriority].$contains(element: TElement) -> Bool
     i = i + 1u64
   return false
 
-routine List[PQEntry[TElement, TPriority]].$create(from: PriorityQueue[TElement, TPriority]) -> List[PQEntry[TElement, TPriority]]
+routine List[PQEntry[TPriority, TElement]].$create(from: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
   # Get all entries (not in priority order, heap order)
-  var result = List[PQEntry[TElement, TPriority]](from.count())
+  var result = List[PQEntry[TPriority, TElement]](from.count())
   var i = 0u64
   while i < from.heap.count()
     result.add_last(from.heap[i])
@@ -193,13 +193,13 @@ routine List[PQEntry[TElement, TPriority]].$create(from: PriorityQueue[TElement,
 # ============================================================================
 
 @readonly
-routine PriorityQueue[TElement, TPriority].$iter() -> PriorityQueueIterator[TElement, TPriority]
-  return PriorityQueueIterator[TElement, TPriority](
+routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPriority, TElement]
+  return PriorityQueueIterator[TPriority, TElement](
     queue: me,
     index: 0u64
   )
 
-routine PriorityQueue[TElement, TPriority].$represent() -> Text
+routine PriorityQueue[TPriority, TElement].$represent() -> Text
   var result = "PriorityQueue["
   var i = 0u64
   for entry in me
@@ -210,7 +210,7 @@ routine PriorityQueue[TElement, TPriority].$represent() -> Text
   result = result + "]"
   return result
 
-routine PriorityQueue[TElement, TPriority].$diagnose() -> Text
+routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for entry in me
@@ -221,12 +221,12 @@ routine PriorityQueue[TElement, TPriority].$diagnose() -> Text
   result = result + "])"
   return result
 
-entity PriorityQueueIterator[TElement, TPriority] obeys Iterator[PQEntry[TElement, TPriority]]
-  queue: PriorityQueue[TElement, TPriority]
+entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriority, TElement]]
+  queue: PriorityQueue[TPriority, TElement]
   index: U64
 
 @writable
-emitting routine PriorityQueueIterator[TElement, TPriority].$next() -> PQEntry[TElement, TPriority]
+emitting routine PriorityQueueIterator[TPriority, TElement].$next() -> PQEntry[TPriority, TElement]
   if me.index >= me.queue.count()
     absent
   emit me.queue.heap[me.index]
