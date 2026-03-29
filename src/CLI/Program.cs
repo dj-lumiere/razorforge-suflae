@@ -69,28 +69,25 @@ internal class Program
                 return GenerateCode(sourceFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
 
             case "build":
-                if (args.Length < 2)
-                {
-                    Console.WriteLine("Error: build command requires an entry file path");
-                    return 1;
-                }
-                return BuildMultiFile(entryFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
+            {
+                var (entryFile, projectRoot, outputFile2) = ResolveEntryFile(args, needsOutputArg: true);
+                if (entryFile == null) return 1;
+                return BuildMultiFile(entryFile: entryFile, outputFile: outputFile2, projectRoot: projectRoot);
+            }
 
             case "buildandrun":
-                if (args.Length < 2)
-                {
-                    Console.WriteLine("Error: buildandrun command requires an entry file path");
-                    return 1;
-                }
-                return BuildAndRun(entryFile: args[1]);
+            {
+                var (entryFile, projectRoot, _) = ResolveEntryFile(args, needsOutputArg: false);
+                if (entryFile == null) return 1;
+                return BuildAndRun(entryFile: entryFile, projectRoot: projectRoot);
+            }
 
             case "check":
-                if (args.Length < 2)
-                {
-                    Console.WriteLine("Error: check command requires an entry file path");
-                    return 1;
-                }
-                return CheckMultiFile(entryFile: args[1]);
+            {
+                var (entryFile, projectRoot, _) = ResolveEntryFile(args, needsOutputArg: false);
+                if (entryFile == null) return 1;
+                return CheckMultiFile(entryFile: entryFile, projectRoot: projectRoot);
+            }
 
             case "validate-stdlib":
             {
@@ -110,6 +107,96 @@ internal class Program
     }
 
     /// <summary>
+    /// Resolves the entry file, project root, and optional output file for build/buildandrun/check commands.
+    /// When no explicit entry file is given, searches for a razorforge.toml manifest.
+    /// Supports --target to select a specific target from the manifest.
+    /// Returns (entryFile, projectRoot, outputFile) — entryFile is null on error.
+    /// </summary>
+    private static (string? EntryFile, string? ProjectRoot, string? OutputFile) ResolveEntryFile(string[] args, bool needsOutputArg)
+    {
+        // args[0] is the command name (build/buildandrun/check)
+        string? targetName = null;
+        string? explicitEntry = null;
+        string? outputFile = null;
+
+        // Parse remaining args
+        int i = 1;
+        while (i < args.Length)
+        {
+            if (args[i] == "--target" && i + 1 < args.Length)
+            {
+                targetName = args[i + 1];
+                i += 2;
+            }
+            else if (!args[i].StartsWith("-"))
+            {
+                if (explicitEntry == null)
+                    explicitEntry = args[i];
+                else if (needsOutputArg && outputFile == null)
+                    outputFile = args[i];
+                i++;
+            }
+            else
+            {
+                i++;
+            }
+        }
+
+        // Explicit entry file given — use it directly
+        if (explicitEntry != null)
+        {
+            if (!File.Exists(explicitEntry))
+            {
+                Console.WriteLine($"Error: File '{explicitEntry}' not found.");
+                return (null, null, null);
+            }
+            string projectRoot = Path.GetDirectoryName(Path.GetFullPath(explicitEntry)) ?? ".";
+            return (explicitEntry, projectRoot, outputFile);
+        }
+
+        // No explicit entry — search for manifest
+        string? manifestPath = ManifestLoader.FindManifest(Environment.CurrentDirectory);
+        if (manifestPath == null)
+        {
+            Console.WriteLine("Error: No entry file specified and no razorforge.toml found.");
+            Console.WriteLine("Either provide an entry file or create a razorforge.toml manifest.");
+            return (null, null, null);
+        }
+
+        try
+        {
+            var manifest = ManifestLoader.Load(manifestPath);
+
+            TargetInfo? target;
+            if (targetName != null)
+            {
+                target = manifest.Targets.Find(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase));
+                if (target == null)
+                {
+                    Console.WriteLine($"Error: Target '{targetName}' not found in {ManifestLoader.ManifestFileName}.");
+                    Console.WriteLine($"Available targets: {string.Join(", ", manifest.Targets.Select(t => t.Name))}");
+                    return (null, null, null);
+                }
+            }
+            else
+            {
+                // Use first executable target, or first target if none is executable
+                target = manifest.Targets.Find(t => t.Type == "executable") ?? manifest.Targets[0];
+            }
+
+            Console.WriteLine($"Using manifest: {manifestPath}");
+            Console.WriteLine($"Target: {target.Name} ({target.Type})");
+
+            return (target.Entry, manifest.ManifestDirectory, outputFile);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
+            return (null, null, null);
+        }
+    }
+
+    /// <summary>
     /// Prints the CLI usage instructions to standard output.
     /// </summary>
     private static void PrintUsage()
@@ -117,17 +204,22 @@ internal class Program
         Console.WriteLine("RazorForge Builder");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  RazorForge <source-file>                    - Parse file and show AST summary");
-        Console.WriteLine("  RazorForge parse <source-file>              - Parse file and show AST summary");
-        Console.WriteLine("  RazorForge tokenize <source-file>           - Tokenize file and show tokens");
-        Console.WriteLine("  RazorForge codegen <source-file> [out.ll]   - Generate LLVM IR (single file)");
-        Console.WriteLine("  RazorForge build <entry-file> [out.ll]      - Build multi-file project");
-        Console.WriteLine("  RazorForge buildandrun <entry-file>          - Build and execute via lli");
-        Console.WriteLine("  RazorForge check <entry-file>                - Type-check only (no codegen)");
-        Console.WriteLine("  RazorForge validate-stdlib [rf|sf]           - Validate stdlib routine bodies");
-        Console.WriteLine("  RazorForge help                             - Show this help");
+        Console.WriteLine("  RazorForge <source-file>                        - Parse file and show AST summary");
+        Console.WriteLine("  RazorForge parse <source-file>                  - Parse file and show AST summary");
+        Console.WriteLine("  RazorForge tokenize <source-file>               - Tokenize file and show tokens");
+        Console.WriteLine("  RazorForge codegen <source-file> [out.ll]       - Generate LLVM IR (single file)");
+        Console.WriteLine("  RazorForge build [entry-file] [out.ll]          - Build multi-file project");
+        Console.WriteLine("  RazorForge build --target <name> [out.ll]       - Build a specific manifest target");
+        Console.WriteLine("  RazorForge buildandrun [entry-file]             - Build and execute");
+        Console.WriteLine("  RazorForge buildandrun --target <name>          - Build and execute manifest target");
+        Console.WriteLine("  RazorForge check [entry-file]                   - Type-check only (no codegen)");
+        Console.WriteLine("  RazorForge check --target <name>                - Type-check manifest target");
+        Console.WriteLine("  RazorForge validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
+        Console.WriteLine("  RazorForge help                                 - Show this help");
         Console.WriteLine();
         Console.WriteLine("  <source-file>: .rf file for RazorForge or .sf file for Suflae");
+        Console.WriteLine("  If no entry file is given, searches for razorforge.toml in the current");
+        Console.WriteLine("  directory and parent directories.");
     }
 
     /// <summary>Returns true if the given file path has a <c>.sf</c> extension (Suflae source file).</summary>
@@ -511,7 +603,7 @@ internal class Program
     /// → SemanticAnalyzer.AnalyzeMultiple → LLVMCodeGenerator with multiple user programs.
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
-    private static int BuildMultiFile(string entryFile, string? outputFile)
+    private static int BuildMultiFile(string entryFile, string? outputFile, string? projectRoot = null)
     {
         if (!File.Exists(entryFile))
         {
@@ -532,8 +624,8 @@ internal class Program
 
         try
         {
-            // Determine project root (directory containing the entry file) and stdlib path
-            string projectRoot = Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
+            // Use provided project root (from manifest) or fall back to entry file directory
+            projectRoot ??= Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
             string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
 
             // Phase 1: Parse all files and resolve dependencies
@@ -680,7 +772,7 @@ internal class Program
     /// Runs the multi-file build pipeline through semantic analysis only (no codegen).
     /// Reports errors and warnings. Returns 0 if type-checking succeeds, 1 otherwise.
     /// </summary>
-    private static int CheckMultiFile(string entryFile)
+    private static int CheckMultiFile(string entryFile, string? projectRoot = null)
     {
         if (!File.Exists(entryFile))
         {
@@ -696,7 +788,7 @@ internal class Program
 
         try
         {
-            string projectRoot = Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
+            projectRoot ??= Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
             string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
 
             // Phase 1: Parse all files and resolve dependencies
@@ -811,11 +903,11 @@ internal class Program
     /// Builds a multi-file project and executes the resulting LLVM IR via lli.
     /// Returns 0 on success or 1 if build or execution fails.
     /// </summary>
-    private static int BuildAndRun(string entryFile)
+    private static int BuildAndRun(string entryFile, string? projectRoot = null)
     {
         // Build first (to a temp .ll file)
         string llFile = Path.ChangeExtension(entryFile, ".ll");
-        int buildResult = BuildMultiFile(entryFile: entryFile, outputFile: llFile);
+        int buildResult = BuildMultiFile(entryFile: entryFile, outputFile: llFile, projectRoot: projectRoot);
         if (buildResult != 0)
         {
             return buildResult;
