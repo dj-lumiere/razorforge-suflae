@@ -125,6 +125,13 @@ public sealed partial class SemanticAnalyzer
             return new GenericParameterTypeInfo(name: typeExpr.Name);
         }
 
+        // Check for const generic literal values (e.g., 4, 8u64, true/false)
+        // These come from ParseTypeOrConstGeneric in the parser
+        if (TryParseConstGenericLiteral(typeExpr.Name, out long constValue, out string? explicitType))
+        {
+            return new ConstGenericValueTypeInfo(typeExpr.Name, constValue, explicitType);
+        }
+
         // Type not found
         ReportError(
             SemanticDiagnosticCode.UnknownType,
@@ -539,6 +546,19 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
+        // Const generic literal values (e.g., 4, 8u64) — validate typed literals match
+        if (typeArg is ConstGenericValueTypeInfo constVal)
+        {
+            if (constVal.ExplicitTypeName != null && constVal.ExplicitTypeName != requiredTypeName)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                    $"Const generic '{constraint.ParameterName}' requires type '{requiredTypeName}', got '{constVal.ExplicitTypeName}'.",
+                    location);
+            }
+            return; // Accept — literal value satisfies const generic constraint
+        }
+
         // Verify the type argument matches the expected const type
         if (typeArg.Name != requiredTypeName)
         {
@@ -587,6 +607,50 @@ public sealed partial class SemanticAnalyzer
             SemanticDiagnosticCode.TypeEqualityConstraintViolation,
             $"Type '{typeArg.Name}' is not in [{allowedTypesList}] for constraint on '{constraint.ParameterName}'.",
             location);
+    }
+
+    /// <summary>
+    /// Tries to parse a type expression name as a const generic literal value.
+    /// Handles untyped integers (4), typed integers (4u64, 8s32), and booleans (true, false).
+    /// </summary>
+    private static bool TryParseConstGenericLiteral(string name, out long value, out string? explicitType)
+    {
+        value = 0;
+        explicitType = null;
+
+        // Boolean literals
+        if (name == "true") { value = 1; explicitType = "Bool"; return true; }
+        if (name == "false") { value = 0; explicitType = "Bool"; return true; }
+
+        // Untyped integer literal (e.g., "4", "128")
+        if (long.TryParse(name, out value))
+        {
+            return true; // No explicit type — inferred from constraint
+        }
+
+        // Typed integer literals (e.g., "4u64", "8s32")
+        // Try common suffixes
+        (string suffix, string typeName)[] suffixes =
+        [
+            ("u64", "U64"), ("s64", "S64"),
+            ("u32", "U32"), ("s32", "S32"),
+            ("u16", "U16"), ("s16", "S16"),
+            ("u8", "U8"), ("s8", "S8"),
+            ("u128", "U128"), ("s128", "S128"),
+            ("addr", "Address")
+        ];
+
+        foreach (var (suffix, typeName) in suffixes)
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(name[..^suffix.Length], out value))
+            {
+                explicitType = typeName;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     #endregion

@@ -132,11 +132,171 @@ public sealed class RecordTypeInfo : TypeInfo
             ImplementedProtocols = ImplementedProtocols, // TODO: substitute protocol type args
             TypeArguments = typeArguments,
             GenericDefinition = this,
-            BackendType = BackendType,
+            BackendType = ResolveBackendTypeTemplate(BackendType, GenericParameters, typeArguments),
             Visibility = Visibility,
             Location = Location,
             Module = Module
         };
+    }
+
+    /// <summary>
+    /// Resolves template holes in a BackendType string during generic instantiation.
+    /// Template holes: {N} for const generic values, {T} for type LLVM types,
+    /// {(N+7)//8} for arithmetic expressions over const generics.
+    /// Returns the template unchanged if it contains no holes.
+    /// </summary>
+    private static string? ResolveBackendTypeTemplate(string? template, IReadOnlyList<string>? genericParams,
+        IReadOnlyList<TypeInfo> typeArguments)
+    {
+        if (template == null || genericParams == null || !template.Contains('{'))
+            return template;
+
+        var paramMap = new Dictionary<string, TypeInfo>();
+        for (int i = 0; i < genericParams.Count && i < typeArguments.Count; i++)
+            paramMap[genericParams[i]] = typeArguments[i];
+
+        var result = new System.Text.StringBuilder();
+        int pos = 0;
+        while (pos < template.Length)
+        {
+            int open = template.IndexOf('{', pos);
+            if (open < 0)
+            {
+                result.Append(template, pos, template.Length - pos);
+                break;
+            }
+            result.Append(template, pos, open - pos);
+            int close = template.IndexOf('}', open + 1);
+            if (close < 0)
+            {
+                result.Append(template, open, template.Length - open);
+                break;
+            }
+            string hole = template[(open + 1)..close].Trim();
+            result.Append(ResolveHole(hole, paramMap));
+            pos = close + 1;
+        }
+        return result.ToString();
+    }
+
+    private static string ResolveHole(string hole, Dictionary<string, TypeInfo> paramMap)
+    {
+        // Simple parameter name: {N} or {T}
+        if (paramMap.TryGetValue(hole, out TypeInfo? typeArg))
+            return SubstituteTypeArg(typeArg);
+
+        // Arithmetic expression: {(N+7)//8}
+        var constValues = new Dictionary<string, long>();
+        foreach (var (name, ti) in paramMap)
+        {
+            if (ti is ConstGenericValueTypeInfo constVal)
+                constValues[name] = constVal.Value;
+        }
+        if (constValues.Count > 0)
+            return EvaluateConstExpr(hole, constValues).ToString();
+
+        return hole; // fallback: return as-is
+    }
+
+    private static string SubstituteTypeArg(TypeInfo typeArg)
+    {
+        if (typeArg is ConstGenericValueTypeInfo constVal)
+            return constVal.Value.ToString();
+        if (typeArg is RecordTypeInfo record)
+            return record.LlvmType;
+        return "ptr"; // entities, protocols, etc. are pointers
+    }
+
+    /// <summary>
+    /// Evaluates a simple arithmetic expression with const generic parameter values.
+    /// Supports: integer literals, parameter references, +, -, *, // (integer division), parentheses.
+    /// </summary>
+    private static long EvaluateConstExpr(string expr, Dictionary<string, long> paramValues)
+    {
+        int pos = 0;
+        long result = ParseAddSub(expr, ref pos, paramValues);
+        return result;
+    }
+
+    private static long ParseAddSub(string expr, ref int pos, Dictionary<string, long> paramValues)
+    {
+        long left = ParseMulDiv(expr, ref pos, paramValues);
+        while (pos < expr.Length)
+        {
+            SkipWhitespace(expr, ref pos);
+            if (pos < expr.Length && expr[pos] == '+')
+            {
+                pos++;
+                left += ParseMulDiv(expr, ref pos, paramValues);
+            }
+            else if (pos < expr.Length && expr[pos] == '-')
+            {
+                pos++;
+                left -= ParseMulDiv(expr, ref pos, paramValues);
+            }
+            else break;
+        }
+        return left;
+    }
+
+    private static long ParseMulDiv(string expr, ref int pos, Dictionary<string, long> paramValues)
+    {
+        long left = ParseAtom(expr, ref pos, paramValues);
+        while (pos < expr.Length)
+        {
+            SkipWhitespace(expr, ref pos);
+            if (pos + 1 < expr.Length && expr[pos] == '/' && expr[pos + 1] == '/')
+            {
+                pos += 2;
+                left /= ParseAtom(expr, ref pos, paramValues);
+            }
+            else if (pos < expr.Length && expr[pos] == '*')
+            {
+                pos++;
+                left *= ParseAtom(expr, ref pos, paramValues);
+            }
+            else break;
+        }
+        return left;
+    }
+
+    private static long ParseAtom(string expr, ref int pos, Dictionary<string, long> paramValues)
+    {
+        SkipWhitespace(expr, ref pos);
+        if (pos < expr.Length && expr[pos] == '(')
+        {
+            pos++;
+            long val = ParseAddSub(expr, ref pos, paramValues);
+            SkipWhitespace(expr, ref pos);
+            if (pos < expr.Length && expr[pos] == ')')
+                pos++;
+            return val;
+        }
+        if (pos < expr.Length && char.IsDigit(expr[pos]))
+        {
+            int start = pos;
+            while (pos < expr.Length && char.IsDigit(expr[pos]))
+                pos++;
+            return long.Parse(expr[start..pos]);
+        }
+        if (pos < expr.Length && char.IsLetter(expr[pos]))
+        {
+            int start = pos;
+            while (pos < expr.Length && (char.IsLetterOrDigit(expr[pos]) || expr[pos] == '_'))
+                pos++;
+            string name = expr[start..pos];
+            if (paramValues.TryGetValue(name, out long val))
+                return val;
+            throw new InvalidOperationException($"Unknown parameter '{name}' in @llvm template expression");
+        }
+        throw new InvalidOperationException(
+            $"Unexpected character in @llvm template expression at position {pos}: '{expr}'");
+    }
+
+    private static void SkipWhitespace(string expr, ref int pos)
+    {
+        while (pos < expr.Length && char.IsWhiteSpace(expr[pos]))
+            pos++;
     }
 
     /// <summary>

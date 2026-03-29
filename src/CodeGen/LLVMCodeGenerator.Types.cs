@@ -61,8 +61,8 @@ public partial class LLVMCodeGenerator
             // Intrinsic types map directly to LLVM
             IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic),
 
-            // Records with @llvm annotation → use backend type directly
-            RecordTypeInfo { HasDirectBackendType: true } record => record.LlvmType,
+            // Records with @llvm annotation → use backend type directly (skip generic definitions with template holes)
+            RecordTypeInfo { HasDirectBackendType: true, IsGenericDefinition: false } record => record.LlvmType,
 
             // Legacy single-member-variable wrappers → unwrap to underlying intrinsic
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
@@ -98,6 +98,9 @@ public partial class LLVMCodeGenerator
             // Choices → underlying integer type (S64)
             ChoiceTypeInfo => "i64",
 
+            // Flags → underlying bitmask type (U64)
+            FlagsTypeInfo => "i64",
+
             // Tuples → always inline struct
             TupleTypeInfo tuple => GetTupleTypeName(tuple),
 
@@ -109,6 +112,9 @@ public partial class LLVMCodeGenerator
 
             // Protocols → type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
             ProtocolTypeInfo => "ptr",
+
+            // Const generic values — map to the underlying integer type
+            ConstGenericValueTypeInfo => "i64",
 
             // Generic parameters — use ptr as fallback (should be resolved before reaching codegen)
             GenericParameterTypeInfo => "ptr",
@@ -278,7 +284,7 @@ public partial class LLVMCodeGenerator
         return type switch
         {
             IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic),
-            RecordTypeInfo { HasDirectBackendType: true } record =>
+            RecordTypeInfo { HasDirectBackendType: true, IsGenericDefinition: false } record =>
                 GetTypeSizeFromLlvmType(record.BackendType!),
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetTypeSize(record.UnderlyingIntrinsic!),
@@ -321,6 +327,15 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static int GetTypeSizeFromLlvmType(string llvmType)
     {
+        // Array types: [N x elemType]
+        if (llvmType.StartsWith("[") && llvmType.Contains(" x "))
+        {
+            var parts = llvmType[1..^1].Split(" x ", 2);
+            int count = int.Parse(parts[0].Trim());
+            int elemSize = GetTypeSizeFromLlvmType(parts[1].Trim());
+            return count * elemSize;
+        }
+
         return llvmType switch
         {
             "i1" => 1,

@@ -459,6 +459,20 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
+        // Membership operators (in, notin): check that right has $contains accepting left
+        if (op is BinaryOperator.In or BinaryOperator.NotIn)
+        {
+            RoutineInfo? containsMethod = _registry.LookupMethod(type: right, methodName: "$contains");
+            if (containsMethod == null)
+            {
+                ReportError(
+                    SemanticDiagnosticCode.IncompatibleComparisonTypes,
+                    $"Type '{right.Name}' does not support 'in'/'notin' (no $contains method).",
+                    location);
+            }
+            return;
+        }
+
         // Check that types are compatible (same type or error type)
         if (!IsAssignableTo(source: left, target: right) && !IsAssignableTo(source: right, target: left))
         {

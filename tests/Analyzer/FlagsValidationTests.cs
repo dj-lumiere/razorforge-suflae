@@ -420,4 +420,49 @@ public class FlagsValidationTests
     }
 
     #endregion
+
+    #region Member Access (C98)
+
+    [Fact]
+    public void Flags_MemberAccess_AsValue()
+    {
+        string source = """
+                        flags Permissions
+                          READ
+                          WRITE
+                          EXECUTE
+
+                        routine test()
+                          var f = Permissions.READ
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
+    }
+
+    [Fact]
+    public void Flags_MemberAccess_InvalidMember()
+    {
+        string source = """
+                        flags Permissions
+                          READ
+                          WRITE
+
+                        routine test()
+                          var f = Permissions.EXECUTE
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+
+    #endregion
 }

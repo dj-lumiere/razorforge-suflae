@@ -2347,6 +2347,26 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // Choice case member access: Color.RED → ChoiceTypeInfo
+        if (objectType is ChoiceTypeInfo choice)
+        {
+            ChoiceCaseInfo? caseInfo = choice.Cases.FirstOrDefault(c => c.Name == member.PropertyName);
+            if (caseInfo != null)
+                return choice; // Color.RED has type Color
+
+            // Fall through to method lookup — choice types can have methods
+        }
+
+        // Flags member access: Permissions.READ → FlagsTypeInfo
+        if (objectType is FlagsTypeInfo flags)
+        {
+            FlagsMemberInfo? memberInfo = flags.Members.FirstOrDefault(m => m.Name == member.PropertyName);
+            if (memberInfo != null)
+                return flags; // Permissions.READ has type Permissions
+
+            // Fall through to method lookup — flags types can have builder service methods
+        }
+
         // Could be a method reference - use LookupMethod which handles generic resolutions
         // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
         // The parser stores '!' in PropertyName, but routine declarations strip it (IsFailable = true)

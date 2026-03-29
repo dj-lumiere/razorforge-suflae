@@ -1052,7 +1052,7 @@ public partial class Parser
                 var typeArgs = new List<TypeExpression>();
                 do
                 {
-                    typeArgs.Add(item: ParseType());
+                    typeArgs.Add(item: ParseTypeOrConstGeneric());
                 } while (Match(type: TokenType.Comma));
 
                 Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after generic type arguments");
@@ -2060,7 +2060,16 @@ public partial class Parser
             {
                 return false; // Unclosed or multi-line brackets — not generic
             }
-            else if (depth == 1 && tt is not TokenType.Identifier and not TokenType.Comma and not TokenType.Question)
+            else if (depth == 1 && tt is not TokenType.Identifier and not TokenType.Comma and not TokenType.Question
+                     // Allow integer literals for const generic arguments (e.g., ValueList[S64, 4], ValueBitList[8])
+                     and not TokenType.Integer
+                     and not TokenType.S64Literal and not TokenType.U64Literal
+                     and not TokenType.S32Literal and not TokenType.U32Literal
+                     and not TokenType.S16Literal and not TokenType.U16Literal
+                     and not TokenType.S8Literal and not TokenType.U8Literal
+                     and not TokenType.S128Literal and not TokenType.U128Literal
+                     and not TokenType.AddressLiteral
+                     and not TokenType.True and not TokenType.False)
             {
                 // Content at top level doesn't look like type arguments (has numbers, operators, etc.)
                 return false;

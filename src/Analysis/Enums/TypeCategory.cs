@@ -62,5 +62,8 @@ public enum TypeCategory
     Tuple,
 
     /// <summary>Builder-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).</summary>
-    Wrapper
+    Wrapper,
+
+    /// <summary>Compile-time constant value used as a generic argument (e.g., 4 in ValueList[S64, 4]).</summary>
+    ConstGenericValue
 }

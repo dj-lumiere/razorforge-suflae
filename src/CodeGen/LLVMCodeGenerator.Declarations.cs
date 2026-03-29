@@ -1621,10 +1621,26 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // For choice/flags, just return the type name + tag value as text
-        if (routine.OwnerType is ChoiceTypeInfo or FlagsTypeInfo || fields == null)
+        // Choice: $represent → "CASE_NAME", $diagnose → "TypeName(CASE_NAME, value: N)"
+        if (routine.OwnerType is ChoiceTypeInfo choiceOwner)
         {
-            // Return "TypeName"
+            EmitChoiceRepresent(choiceOwner, includeSecret);
+            EmitLine(_functionDefinitions, "}");
+            EmitLine(_functionDefinitions, "");
+            return;
+        }
+
+        // Flags: $represent → "FLAG1 and FLAG2", $diagnose → "TypeName(FLAG1 and FLAG2, value: N)"
+        if (routine.OwnerType is FlagsTypeInfo flagsOwner)
+        {
+            EmitFlagsRepresent(flagsOwner, includeSecret);
+            EmitLine(_functionDefinitions, "}");
+            EmitLine(_functionDefinitions, "");
+            return;
+        }
+
+        if (fields == null)
+        {
             string nameStr = EmitSynthesizedStringLiteral(typeName);
             EmitLine(_functionDefinitions, $"  ret ptr {nameStr}");
             EmitLine(_functionDefinitions, "}");
@@ -1769,6 +1785,181 @@ public partial class LLVMCodeGenerator
         string textResult = NextTemp();
         EmitLine(_functionDefinitions, $"  {textResult} = call ptr @{createName}({llvmType} {value})");
         return textResult;
+    }
+
+    /// <summary>
+    /// Emits choice $represent/$diagnose body.
+    /// $represent: switch on value, return case name string (e.g., "READ").
+    /// $diagnose: "TypeName(CASE_NAME, value: N)".
+    /// </summary>
+    private void EmitChoiceRepresent(ChoiceTypeInfo choice, bool includeSecret)
+    {
+        var sb = _functionDefinitions;
+        string typeName = choice.FullName;
+
+        if (choice.Cases.Count == 0)
+        {
+            string fallback = includeSecret
+                ? EmitSynthesizedStringLiteral($"{typeName}(<unknown>, value: 0)")
+                : EmitSynthesizedStringLiteral("<unknown>");
+            EmitLine(sb, $"  ret ptr {fallback}");
+            return;
+        }
+
+        // Switch on %me to get case name
+        string defaultLabel = "sw.default";
+        EmitLine(sb, $"  switch i64 %me, label %{defaultLabel} [");
+        for (int i = 0; i < choice.Cases.Count; i++)
+            EmitLine(sb, $"    i64 {choice.Cases[i].ComputedValue}, label %sw.case.{i}");
+        EmitLine(sb, "  ]");
+
+        // Emit each case block
+        for (int i = 0; i < choice.Cases.Count; i++)
+        {
+            var c = choice.Cases[i];
+            EmitLine(sb, $"sw.case.{i}:");
+            if (includeSecret)
+            {
+                // $diagnose: "TypeName(CASE, value: N)"
+                string diagStr = EmitSynthesizedStringLiteral(
+                    $"{typeName}({c.Name}, value: {c.ComputedValue})");
+                EmitLine(sb, $"  ret ptr {diagStr}");
+            }
+            else
+            {
+                // $represent: just "CASE"
+                string caseStr = EmitSynthesizedStringLiteral(c.Name);
+                EmitLine(sb, $"  ret ptr {caseStr}");
+            }
+        }
+
+        // Default: unknown value — convert to text
+        EmitLine(sb, $"{defaultLabel}:");
+        if (includeSecret)
+        {
+            string prefix = EmitSynthesizedStringLiteral($"{typeName}(<unknown>, value: ");
+            string suffix = EmitSynthesizedStringLiteral(")");
+            string valText = EmitSynthesizedValueToText(
+                _registry.LookupType("S64") ?? new RecordTypeInfo("S64"), "i64", "%me");
+            string cat1 = NextTemp();
+            EmitLine(sb, $"  {cat1} = call ptr @rf_text_concat(ptr {prefix}, ptr {valText})");
+            string cat2 = NextTemp();
+            EmitLine(sb, $"  {cat2} = call ptr @rf_text_concat(ptr {cat1}, ptr {suffix})");
+            EmitLine(sb, $"  ret ptr {cat2}");
+        }
+        else
+        {
+            string valText = EmitSynthesizedValueToText(
+                _registry.LookupType("S64") ?? new RecordTypeInfo("S64"), "i64", "%me");
+            EmitLine(sb, $"  ret ptr {valText}");
+        }
+    }
+
+    /// <summary>
+    /// Emits flags $represent/$diagnose body.
+    /// $represent: "FLAG1 and FLAG2" (active flags concatenated with " and ").
+    /// $diagnose: "TypeName(FLAG1 and FLAG2, value: N)".
+    /// </summary>
+    private void EmitFlagsRepresent(FlagsTypeInfo flags, bool includeSecret)
+    {
+        var sb = _functionDefinitions;
+        string typeName = flags.FullName;
+
+        if (flags.Members.Count == 0)
+        {
+            string fallback = includeSecret
+                ? EmitSynthesizedStringLiteral($"{typeName}(<none>, value: 0)")
+                : EmitSynthesizedStringLiteral("<none>");
+            EmitLine(sb, $"  ret ptr {fallback}");
+            return;
+        }
+
+        // Build the flag names string by checking each bit
+        string emptyStr = EmitSynthesizedStringLiteral("");
+        string andSep = EmitSynthesizedStringLiteral(" and ");
+        string current = emptyStr;
+        string isFirst = "1"; // i1 tracking whether we've added any flag yet (1 = still first)
+
+        for (int i = 0; i < flags.Members.Count; i++)
+        {
+            var member = flags.Members[i];
+            long mask = 1L << member.BitPosition;
+
+            // Check if this bit is set: (%me & mask) != 0
+            string masked = NextTemp();
+            EmitLine(sb, $"  {masked} = and i64 %me, {mask}");
+            string isSet = NextTemp();
+            EmitLine(sb, $"  {isSet} = icmp ne i64 {masked}, 0");
+
+            // Branch: if set, add this name
+            string setLabel = $"flag.set.{i}";
+            string skipLabel = $"flag.skip.{i}";
+            string mergeLabel = $"flag.merge.{i}";
+            EmitLine(sb, $"  br i1 {isSet}, label %{setLabel}, label %{skipLabel}");
+
+            // Set branch: concat separator + name
+            EmitLine(sb, $"{setLabel}:");
+            string nameStr = EmitSynthesizedStringLiteral(member.Name);
+
+            // If not first, prepend " and "
+            string needsSep = NextTemp();
+            EmitLine(sb, $"  {needsSep} = icmp eq ptr {current}, {emptyStr}");
+            string withSep = NextTemp();
+            EmitLine(sb, $"  br i1 {needsSep}, label %{setLabel}.nosep, label %{setLabel}.sep");
+
+            EmitLine(sb, $"{setLabel}.sep:");
+            string catSep = NextTemp();
+            EmitLine(sb, $"  {catSep} = call ptr @rf_text_concat(ptr {current}, ptr {andSep})");
+            string catName1 = NextTemp();
+            EmitLine(sb, $"  {catName1} = call ptr @rf_text_concat(ptr {catSep}, ptr {nameStr})");
+            EmitLine(sb, $"  br label %{mergeLabel}");
+
+            EmitLine(sb, $"{setLabel}.nosep:");
+            string catName2 = NextTemp();
+            EmitLine(sb, $"  {catName2} = call ptr @rf_text_concat(ptr {current}, ptr {nameStr})");
+            EmitLine(sb, $"  br label %{mergeLabel}");
+
+            // Skip branch
+            EmitLine(sb, $"{skipLabel}:");
+            EmitLine(sb, $"  br label %{mergeLabel}");
+
+            // Merge: phi to pick the right string
+            EmitLine(sb, $"{mergeLabel}:");
+            string merged = NextTemp();
+            EmitLine(sb, $"  {merged} = phi ptr [ {catName1}, %{setLabel}.sep ], [ {catName2}, %{setLabel}.nosep ], [ {current}, %{skipLabel} ]");
+            current = merged;
+        }
+
+        // Handle zero value (no flags set)
+        string isZero = NextTemp();
+        EmitLine(sb, $"  {isZero} = icmp eq ptr {current}, {emptyStr}");
+        string noneStr = EmitSynthesizedStringLiteral("<none>");
+        string finalName = NextTemp();
+        EmitLine(sb, $"  {finalName} = select i1 {isZero}, ptr {noneStr}, ptr {current}");
+
+        if (includeSecret)
+        {
+            // $diagnose: "TypeName(FLAGS, value: N)"
+            string prefix = EmitSynthesizedStringLiteral($"{typeName}(");
+            string midStr = EmitSynthesizedStringLiteral(", value: ");
+            string suffix = EmitSynthesizedStringLiteral(")");
+            string valText = EmitSynthesizedValueToText(
+                _registry.LookupType("S64") ?? new RecordTypeInfo("S64"), "i64", "%me");
+            string cat1 = NextTemp();
+            EmitLine(sb, $"  {cat1} = call ptr @rf_text_concat(ptr {prefix}, ptr {finalName})");
+            string cat2 = NextTemp();
+            EmitLine(sb, $"  {cat2} = call ptr @rf_text_concat(ptr {cat1}, ptr {midStr})");
+            string cat3 = NextTemp();
+            EmitLine(sb, $"  {cat3} = call ptr @rf_text_concat(ptr {cat2}, ptr {valText})");
+            string cat4 = NextTemp();
+            EmitLine(sb, $"  {cat4} = call ptr @rf_text_concat(ptr {cat3}, ptr {suffix})");
+            EmitLine(sb, $"  ret ptr {cat4}");
+        }
+        else
+        {
+            // $represent: just the flag names
+            EmitLine(sb, $"  ret ptr {finalName}");
+        }
     }
 
     /// <summary>
@@ -3225,6 +3416,12 @@ public partial class LLVMCodeGenerator
         }
         else
         {
+            // Ensure Text.$eq is available for string comparison
+            RoutineInfo? textEq = _registry.LookupRoutine("Text.$eq");
+            string eqFuncName = textEq != null ? MangleFunctionName(textEq) : "Text$_eq";
+            // Add to _generatedFunctions so the synthesized pass emits its body
+            _generatedFunctions.Add(eqFuncName);
+
             // For each field, compare the member_name string and return the type ID
             for (int i = 0; i < fields.Count; i++)
             {
@@ -3233,7 +3430,7 @@ public partial class LLVMCodeGenerator
                 ulong typeId = ComputeTypeId(field.Type.FullName);
 
                 string cmpResult = NextTemp();
-                EmitLine(sb, $"  {cmpResult} = call i1 @rf_text_equal(ptr %member_name, ptr {nameStr})");
+                EmitLine(sb, $"  {cmpResult} = call i1 @{eqFuncName}(ptr %member_name, ptr {nameStr})");
                 string nextLabel = i < fields.Count - 1 ? $"check_{i + 1}" : "not_found";
                 EmitLine(sb, $"  br i1 {cmpResult}, label %found_{i}, label %{nextLabel}");
 

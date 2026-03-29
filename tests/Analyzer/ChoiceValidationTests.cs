@@ -225,4 +225,70 @@ public class ChoiceValidationTests
     }
 
     #endregion
+
+    #region Member Access (C98)
+
+    [Fact]
+    public void Choice_MemberAccess_AsValue()
+    {
+        string source = """
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
+
+                        routine test()
+                          var c = Color.RED
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
+    }
+
+    [Fact]
+    public void Choice_MemberAccess_InvalidCase()
+    {
+        string source = """
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
+
+                        routine test()
+                          var c = Color.PURPLE
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+
+    [Fact]
+    public void Choice_MemberAccess_Assignment_And_Comparison()
+    {
+        string source = """
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
+
+                        routine test()
+                          var c = Color.RED
+                          var same = (c == Color.BLUE)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
+    }
+
+    #endregion
 }
