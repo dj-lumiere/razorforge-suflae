@@ -13,3 +13,6 @@ routine ReadOnly.$create() -> ReadOnly
 
 # No lock/unlock methods needed - data is unmodifiable
 # Direct member variable access is allowed for Shared[T, ReadOnly]
+
+routine ReadOnly.state() -> LockState
+  return IDLE

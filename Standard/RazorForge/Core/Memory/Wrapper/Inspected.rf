@@ -36,3 +36,17 @@ record Inspected[T]
 # Multiple threads can hold read locks simultaneously (MultiRead semantics)
 #
 # Lock acquisition can fail (e.g., poisoned lock) - use observing! for fallible acquisition
+
+# ============================================================================
+# Display (transparent - delegates to inner value, lock already held)
+# ============================================================================
+
+@readonly
+routine Inspected[T].$represent() -> Text
+  danger!
+    return me.ptr.read().$represent()
+
+@readonly
+routine Inspected[T].$diagnose() -> Text
+  danger!
+    return me.type_name() + "(state: " + READING.$represent() + ", " + me.ptr.read().$diagnose() + ")"

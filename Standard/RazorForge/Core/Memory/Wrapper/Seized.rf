@@ -39,3 +39,17 @@ record Seized[T]
 # Only ONE thread can hold a write lock at a time
 #
 # Lock acquisition can fail (e.g., poisoned lock) - use seizing! for fallible acquisition
+
+# ============================================================================
+# Display (transparent - delegates to inner value, lock already held)
+# ============================================================================
+
+@readonly
+routine Seized[T].$represent() -> Text
+  danger!
+    return me.ptr.read().$represent()
+
+@readonly
+routine Seized[T].$diagnose() -> Text
+  danger!
+    return me.type_name() + "(state: " + WRITING.$represent() + ", " + me.ptr.read().$diagnose() + ")"

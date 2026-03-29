@@ -27,6 +27,22 @@ record Viewed[T]
 routine T.view() -> Viewed[T]
   return Viewed[T](me.snatch())
 
-# NOTE: No creators, no methods - all operations handled by compiler
+# NOTE: No creators, no manual methods - all operations handled by compiler
 # The address member variable is managed internally by the viewing syntax implementation
 # Users should NEVER create Viewed[T] values directly
+
+# ============================================================================
+# Display (transparent - delegates to inner value)
+# ============================================================================
+
+@readonly
+routine Viewed[T].$represent() -> Text
+  danger!
+    var snatched = Snatched[T](me)
+    return snatched.read().$represent()
+
+@readonly
+routine Viewed[T].$diagnose() -> Text
+  danger!
+    var snatched = Snatched[T](me)
+    return me.type_name() + "(" + snatched.read().$diagnose() + ")"

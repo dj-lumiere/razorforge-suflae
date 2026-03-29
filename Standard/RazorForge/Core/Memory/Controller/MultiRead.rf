@@ -92,4 +92,10 @@ routine MultiRead.reader_count() -> S32
 
 routine MultiRead.is_write_locked() -> Bool
   return me.writer.load()
-  return
+
+routine MultiRead.state() -> LockState
+  if me.writer.load()
+    return WRITING
+  if me.readers.load() > 0
+    return READING
+  return IDLE

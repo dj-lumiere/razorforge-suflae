@@ -54,3 +54,19 @@ routine Watched[T].strong_count() -> S32
 routine Watched[T].weak_count() -> S32
   danger!
     return me.controller.weak_count()
+
+# ============================================================================
+# Display (opaque - no inner value access)
+# ============================================================================
+
+@readonly
+routine Watched[T].$represent() -> Text
+  return me.type_name()
+
+@readonly
+routine Watched[T].$diagnose() -> Text
+  danger!
+    var rc = me.controller.strong_count()
+    var weak = me.controller.weak_count()
+    var alive = rc > 0
+    return me.type_name() + "(rc: " + rc.$represent() + ", weak: " + weak.$represent() + ", alive: " + alive.$represent() + ")"

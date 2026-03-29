@@ -28,3 +28,8 @@ routine Exclusive.release()
 # Check if locked (for debugging)
 routine Exclusive.is_locked() -> Bool
   return me.locked.load()
+
+routine Exclusive.state() -> LockState
+  if me.locked.load()
+    return WRITING
+  return IDLE

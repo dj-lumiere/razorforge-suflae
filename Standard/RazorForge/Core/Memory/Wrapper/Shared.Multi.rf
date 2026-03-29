@@ -63,3 +63,21 @@ routine Shared[T, P].weak_count() -> S32
 
 # Access to data is done through inspecting/seizing scoped blocks
 # which handle lock acquisition and release automatically
+
+# ============================================================================
+# Display (opaque - no inner value access without lock)
+# ============================================================================
+
+@readonly
+routine Shared[T, P].$represent() -> Text
+  return me.type_name()
+
+@readonly
+routine Shared[T, P].$diagnose() -> Text
+  danger!
+    var arc = me.controller.strong_count()
+    var weak = me.controller.weak_count()
+    var data_addr = me.data.get_address()
+    var lock_addr = me.lock.get_address()
+    var lock_state = me.lock.read().state()
+    return me.type_name() + "(arc: " + arc.$represent() + ", weak: " + weak.$represent() + ", state: " + lock_state.$represent() + ", data_addr: " + data_addr.$represent() + ", lock_addr: " + lock_addr.$represent() + ")"

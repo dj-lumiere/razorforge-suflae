@@ -95,3 +95,17 @@ routine Snatched[T].$eq(you: Snatched[T]) -> Bool
 # - Implementing low-level memory allocators
 # - Performance-critical code with manual safety verification
 # - You absolutely know what you're doing
+
+# ============================================================================
+# Display (opaque - address only, no inner value access)
+# ============================================================================
+
+@readonly
+routine Snatched[T].$represent() -> Text
+  return me.type_name()
+
+@readonly
+routine Snatched[T].$diagnose() -> Text
+  var addr = ptrtoint[Snatched[T], Address](me)
+  var none = me.is_none()
+  return me.type_name() + "(addr: " + addr.$represent() + ", none: " + none.$represent() + ")"

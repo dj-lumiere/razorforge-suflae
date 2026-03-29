@@ -57,3 +57,22 @@ routine Tracked[T, P].strong_count() -> S32
 routine Tracked[T, P].weak_count() -> S32
   danger!
     return me.controller.weak_count()
+
+# ============================================================================
+# Display (opaque - no inner value access without lock)
+# ============================================================================
+
+@readonly
+routine Tracked[T, P].$represent() -> Text
+  return me.type_name()
+
+@readonly
+routine Tracked[T, P].$diagnose() -> Text
+  danger!
+    var arc = me.controller.strong_count()
+    var weak = me.controller.weak_count()
+    var alive = arc > 0
+    var data_addr = me.data.get_address()
+    var lock_addr = me.lock.get_address()
+    var lock_state = me.lock.read().state()
+    return me.type_name() + "(arc: " + arc.$represent() + ", weak: " + weak.$represent() + ", alive: " + alive.$represent() + ", state: " + lock_state.$represent() + ", data_addr: " + data_addr.$represent() + ", lock_addr: " + lock_addr.$represent() + ")"

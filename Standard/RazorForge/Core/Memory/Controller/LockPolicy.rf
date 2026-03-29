@@ -1,4 +1,9 @@
 module Core
 
+choice LockState
+  IDLE
+  READING
+  WRITING
+
 protocol LockPolicy
-  pass
+  routine Me.state() -> LockState
