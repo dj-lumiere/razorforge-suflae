@@ -295,8 +295,14 @@ public partial class LLVMCodeGenerator
         bool isCreator = routine.Name.Contains("$create");
         if (routine.OwnerType != null && !isCreator)
         {
-            string meType = GetParameterLLVMType(routine.OwnerType);
-            paramTypes.Add(meType);
+            // $setitem! on records: me is passed by pointer so mutations propagate to caller
+            if (IsRecordSetItem(routine))
+                paramTypes.Add("ptr");
+            else
+            {
+                string meType = GetParameterLLVMType(routine.OwnerType);
+                paramTypes.Add(meType);
+            }
         }
 
         // Add explicit parameters
@@ -454,8 +460,15 @@ public partial class LLVMCodeGenerator
         bool isCreator = routineInfo.Name.Contains("$create");
         if (routineInfo.OwnerType != null && !isCreator)
         {
-            string meType = GetParameterLLVMType(routineInfo.OwnerType);
-            paramList.Add($"{meType} %me");
+            // $setitem! on records: me is passed by pointer (named %me.addr)
+            // so mutations propagate to the caller's alloca
+            if (IsRecordSetItem(routineInfo))
+                paramList.Add("ptr %me.addr");
+            else
+            {
+                string meType = GetParameterLLVMType(routineInfo.OwnerType);
+                paramList.Add($"{meType} %me");
+            }
         }
 
         // Add explicit parameters
@@ -530,10 +543,19 @@ public partial class LLVMCodeGenerator
         // Register implicit 'me' parameter for methods (skip for $create static factories)
         if (routine.OwnerType != null && !routine.Name.Contains("$create"))
         {
-            string meType = GetParameterLLVMType(routine.OwnerType);
-            EmitLine(_functionDefinitions, $"  %me.addr = alloca {meType}");
-            EmitLine(_functionDefinitions, $"  store {meType} %me, ptr %me.addr");
-            _localVariables["me"] = routine.OwnerType;
+            if (IsRecordSetItem(routine))
+            {
+                // $setitem! on records: %me.addr IS the function parameter (caller's alloca pointer)
+                // No alloca/store needed — mutations go directly to the caller's variable
+                _localVariables["me"] = routine.OwnerType;
+            }
+            else
+            {
+                string meType = GetParameterLLVMType(routine.OwnerType);
+                EmitLine(_functionDefinitions, $"  %me.addr = alloca {meType}");
+                EmitLine(_functionDefinitions, $"  store {meType} %me, ptr %me.addr");
+                _localVariables["me"] = routine.OwnerType;
+            }
         }
 
         // Register parameters as local variables
@@ -577,7 +599,10 @@ public partial class LLVMCodeGenerator
         EmitLine(_functionDefinitions, "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)
         {
-            EmitLine(_functionDefinitions, "  ret void");
+            if (_currentRoutineIsFailable)
+                EmitLine(_functionDefinitions, "  ret { i64, ptr } { i64 0, ptr null }");
+            else
+                EmitLine(_functionDefinitions, "  ret void");
         }
         else
         {
@@ -590,6 +615,12 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Checks if the StringBuilder ends with a terminator instruction.
     /// </summary>
+    /// <summary>
+    /// Whether this routine is a $setitem on a record type (needs pass-by-pointer for me).
+    /// </summary>
+    private static bool IsRecordSetItem(RoutineInfo routine)
+        => routine.OwnerType is RecordTypeInfo && routine.Name.Contains("$setitem");
+
     private static bool EndsWithTerminator(StringBuilder sb)
     {
         string content = sb.ToString();
@@ -713,7 +744,18 @@ public partial class LLVMCodeGenerator
                     continue;
 
                 // Find the generic AST body in stdlib programs
-                RoutineDeclaration? astRoutine = FindGenericAstRoutine(entry.GenericAstName, entry.GenericMethod.Parameters.Count);
+                // For $create overloads, pass first param type for disambiguation (e.g., SortedSet[T] vs U64)
+                string? firstParamGenericType = null;
+                if (entry.GenericMethod.Name == "$create" && entry.GenericMethod.Parameters.Count > 0)
+                {
+                    TypeInfo paramType = entry.GenericMethod.Parameters[0].Type;
+                    // Reverse-substitute concrete types back to generic params for AST matching
+                    // e.g., SortedSet[S64] → SortedSet (the base name is enough to disambiguate)
+                    firstParamGenericType = paramType.Name.Contains('[')
+                        ? paramType.Name[..paramType.Name.IndexOf('[')]
+                        : paramType.Name;
+                }
+                RoutineDeclaration? astRoutine = FindGenericAstRoutine(entry.GenericAstName, entry.GenericMethod.Parameters.Count, firstParamGenericType);
                 if (astRoutine == null)
                 {
                     // Synthesized routines (type_name, $ne, etc.) have no AST body —
@@ -779,7 +821,8 @@ public partial class LLVMCodeGenerator
     /// </summary>
     /// <param name="genericAstName">The generic AST name (e.g., "List[T].add_last").</param>
     /// <returns>The routine declaration if found, null otherwise.</returns>
-    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName, int expectedParamCount = -1)
+    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName, int expectedParamCount = -1,
+        string? firstParamTypeHint = null)
     {
         // Check if we need a generic routine specifically (name ends with [generic] marker)
         bool requireGeneric = genericAstName.EndsWith("[generic]");
@@ -787,18 +830,34 @@ public partial class LLVMCodeGenerator
             ? genericAstName[..genericAstName.IndexOf("[generic]")]
             : genericAstName;
 
+        // Collect all matching candidates (when disambiguating by param type)
+        RoutineDeclaration? firstMatch = null;
+
+        bool MatchesRoutine(RoutineDeclaration routine)
+        {
+            if (routine.Name != baseName) return false;
+            if (requireGeneric && routine.GenericParameters is not { Count: > 0 }) return false;
+            if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount) return false;
+            return true;
+        }
+
+        bool MatchesParamType(RoutineDeclaration routine)
+        {
+            if (firstParamTypeHint == null || routine.Parameters.Count == 0) return true;
+            string astParamType = routine.Parameters[0].Type.Name;
+            return astParamType.StartsWith(firstParamTypeHint);
+        }
+
         // Search user programs first, then stdlib
         foreach (var (userProgram, _, _) in _userPrograms)
         {
             foreach (var decl in userProgram.Declarations)
             {
-                if (decl is RoutineDeclaration routine && routine.Name == baseName)
+                if (decl is RoutineDeclaration routine && MatchesRoutine(routine))
                 {
-                    if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
-                        continue;
-                    if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount)
-                        continue;
-                    return routine;
+                    firstMatch ??= routine;
+                    if (MatchesParamType(routine))
+                        return routine;
                 }
             }
         }
@@ -807,20 +866,22 @@ public partial class LLVMCodeGenerator
         {
             foreach (var decl in program.Declarations)
             {
-                if (decl is RoutineDeclaration routine && routine.Name == baseName)
+                if (decl is RoutineDeclaration routine && MatchesRoutine(routine))
                 {
-                    if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
-                        continue;
-                    if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount)
-                        continue;
-                    return routine;
+                    firstMatch ??= routine;
+                    if (MatchesParamType(routine))
+                        return routine;
                 }
             }
         }
 
+        // If param type hint didn't match any, fall back to first match
+        if (firstMatch != null)
+            return firstMatch;
+
         // If no exact parameter match found and we filtered by count, retry without filter
         if (expectedParamCount >= 0)
-            return FindGenericAstRoutine(genericAstName, -1);
+            return FindGenericAstRoutine(genericAstName, -1, firstParamTypeHint);
 
         return null;
     }
@@ -1179,7 +1240,7 @@ public partial class LLVMCodeGenerator
             ? routine.Parameters[0].Name
             : "item";
 
-        string containsFuncName = Q($"{routine.OwnerType.Name}.$contains");
+        string containsFuncName = Q($"{routine.OwnerType.FullName}.$contains");
 
         EmitLine(_functionDefinitions, $"define i1 @{funcName}({meType} %me, {itemType} %{itemName}) {{");
         EmitLine(_functionDefinitions, "entry:");

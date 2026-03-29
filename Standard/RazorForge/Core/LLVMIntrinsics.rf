@@ -245,3 +245,19 @@ external("llvm") routine atomic_xor[T](ptr: Snatched[T], value: T) -> T
 external("llvm") routine atomic_exchange[T](ptr: Snatched[T], value: T) -> T
 @llvm_ir("{result} = cmpxchg ptr {ptr}, {T} {expected}, {T} {desired} seq_cst seq_cst")
 external("llvm") routine atomic_compare_and_exchange[T](ptr: Snatched[T], expected: T, desired: T) -> (T, Bool)
+
+# ============================================================================
+# Array element access (alloca + GEP pattern for [N x T] record types)
+# ============================================================================
+
+@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
+external("llvm") routine byte_at[Array](array: Array, index: U64) -> U8
+
+@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
+external("llvm") routine set_byte_at[Array](array: Array, index: U64, value: U8) -> Array
+
+@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\n{result} = load {T}, ptr {prev}")
+external("llvm") routine element_at[Array, T](array: Array, index: U64) -> T
+
+@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore {T} {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
+external("llvm") routine set_element_at[Array, T](array: Array, index: U64, value: T) -> Array

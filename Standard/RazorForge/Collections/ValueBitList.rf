@@ -41,7 +41,7 @@ needs I obeys Integral
   # Access bit at index within packed bytes
   var byte_idx = idx // 8u64
   var bit_off = U8(idx % 8u64)
-  var byte_val = me.byte_at(byte_idx)
+  var byte_val = byte_at[ValueBitList[N]](me,byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
 routine ValueBitList[N].$getitem![I](index: BackIndex[I]) -> Bool
@@ -61,11 +61,11 @@ routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
   # Modify the bit in the copy
   var byte_idx = index // 8u64
   var bit_off = U8(index % 8u64)
-  var byte_val = result.byte_at(byte_idx)
+  var byte_val = byte_at[ValueBitList[N]](result,byte_idx)
   if value
-    result = result.set_byte_at(byte_idx, byte_val | (1u8 << bit_off))
+    result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val | (1u8 << bit_off))
   else
-    result = result.set_byte_at(byte_idx, byte_val & ~(1u8 << bit_off))
+    result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val & ~(1u8 << bit_off))
   return result
 
 routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
@@ -115,20 +115,6 @@ routine ValueBitList[N].$contains(value: Bool) -> Bool
   if value
     return me.any()
   return not me.all()
-
-# ============================================================================
-# Internal byte access (compiler-intrinsic for packed layout)
-# ============================================================================
-
-@llvm("extractvalue")
-routine ValueBitList[N].byte_at(index: U64) -> U8
-  # Compiler intrinsic: read byte at index from packed i64 storage
-  pass
-
-@llvm("insertvalue")
-routine ValueBitList[N].set_byte_at(index: U64, value: U8) -> ValueBitList[N]
-  # Compiler intrinsic: write byte at index in packed i64 storage, returns new copy
-  pass
 
 # ============================================================================
 # Display

@@ -1471,7 +1471,12 @@ public partial class LLVMCodeGenerator
             {
                 var resolvedOwnerType = _registry.GetOrCreateResolution(routine.OwnerType, resolvedArgs);
                 string resolvedOwnerName = resolvedOwnerType.FullName;
-                string paramSuffix = routine.Parameters.Count > 0 ? $"#{routine.Parameters[0].Type.Name}" : "";
+                string paramSuffix = "";
+                if (routine.Name == "$create" && routine.Parameters.Count > 0)
+                {
+                    TypeInfo resolvedParamType = ResolveSubstitutedType(routine.Parameters[0].Type, _typeSubstitutions);
+                    paramSuffix = $"#{resolvedParamType.Name}";
+                }
                 mangledName = Q($"{resolvedOwnerName}.{SanitizeLLVMName(routine.Name)}{paramSuffix}");
 
                 // Record monomorphization so the body gets generated
@@ -1673,14 +1678,59 @@ public partial class LLVMCodeGenerator
                     }
                 }
 
+                // Owner-level generics: resolve from argument types and monomorphize.
+                // e.g., List[T].$create(from: SortedSet[T]) called with SortedSet[S64]
+                //        → infer T=S64, emit List[S64].$create#SortedSet[S64]
+                if (creator.OwnerType is { IsGenericDefinition: true, GenericParameters: not null }
+                    && receiverType.IsGenericResolution && receiverType.TypeArguments != null)
+                {
+                    // Match the argument's type args against the creator param's type args to infer owner generics
+                    TypeInfo paramType = creator.Parameters[0].Type;
+                    if (paramType is { IsGenericResolution: true, TypeArguments: not null }
+                        && paramType.TypeArguments.Count == receiverType.TypeArguments.Count)
+                    {
+                        var ownerSubs = new Dictionary<string, TypeInfo>();
+                        for (int i = 0; i < paramType.TypeArguments.Count; i++)
+                        {
+                            if (paramType.TypeArguments[i] is GenericParameterTypeInfo gp)
+                                ownerSubs[gp.Name] = receiverType.TypeArguments[i];
+                        }
+
+                        // Resolve the owner type (e.g., List[T] → List[S64])
+                        var resolvedOwnerArgs = new List<TypeInfo>();
+                        foreach (string gp in creator.OwnerType.GenericParameters)
+                        {
+                            if (ownerSubs.TryGetValue(gp, out var resolved))
+                                resolvedOwnerArgs.Add(resolved);
+                            else
+                                break;
+                        }
+
+                        if (resolvedOwnerArgs.Count == creator.OwnerType.GenericParameters.Count)
+                        {
+                            var resolvedOwner = _registry.GetOrCreateResolution(creator.OwnerType, resolvedOwnerArgs);
+                            string resolvedFuncName = Q($"{resolvedOwner.FullName}.$create#{receiverType.Name}");
+
+                            GenerateFunctionDeclaration(creator);
+                            RecordMonomorphization(resolvedFuncName, creator, resolvedOwner);
+
+                            string retType2 = "ptr";
+                            string receiverLlvm2 = GetLLVMType(receiverType);
+                            string result2 = NextTemp();
+                            EmitLine(sb, $"  {result2} = call {retType2} @{resolvedFuncName}({receiverLlvm2} {receiver})");
+                            return result2;
+                        }
+                    }
+                }
+
                 // Non-generic path
                 string funcName = MangleFunctionName(creator);
                 GenerateFunctionDeclaration(creator);
-                string retType2 = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
-                string receiverLlvm2 = GetLLVMType(receiverType);
-                string result2 = NextTemp();
-                EmitLine(sb, $"  {result2} = call {retType2} @{funcName}({receiverLlvm2} {receiver})");
-                return result2;
+                string retType3 = creator.ReturnType != null ? GetLLVMType(creator.ReturnType) : "ptr";
+                string receiverLlvm3 = GetLLVMType(receiverType);
+                string result3 = NextTemp();
+                EmitLine(sb, $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiver})");
+                return result3;
             }
         }
 
@@ -1698,40 +1748,6 @@ public partial class LLVMCodeGenerator
                 record.MemberVariables.Any(mv => mv.Name == member.PropertyName))
             {
                 return EmitRecordMemberVariableRead(sb, receiver, record, member.PropertyName);
-            }
-        }
-
-        // Array-backed record intrinsics: byte_at and set_byte_at via alloca + GEP
-        if (receiverType is RecordTypeInfo { HasDirectBackendType: true } vblRecord
-            && vblRecord.BackendType!.StartsWith("[") && arguments.Count >= 1)
-        {
-            string arrayType = vblRecord.BackendType!;
-            string indexArg = EmitExpression(sb, arguments[0]);
-            if (methodName == "byte_at")
-            {
-                // byte_at(index): alloca array, store receiver, GEP to element, load byte
-                string tmp = NextTemp();
-                string ptr = NextTemp();
-                string result = NextTemp();
-                EmitLine(sb, $"  {tmp} = alloca {arrayType}");
-                EmitLine(sb, $"  store {arrayType} {receiver}, ptr {tmp}");
-                EmitLine(sb, $"  {ptr} = getelementptr {arrayType}, ptr {tmp}, i32 0, i64 {indexArg}");
-                EmitLine(sb, $"  {result} = load i8, ptr {ptr}");
-                return result;
-            }
-            if (methodName == "set_byte_at" && arguments.Count >= 2)
-            {
-                // set_byte_at(index, value): alloca array, store receiver, GEP, store byte, load back
-                string valueArg = EmitExpression(sb, arguments[1]);
-                string tmp = NextTemp();
-                string ptr = NextTemp();
-                string resultVal = NextTemp();
-                EmitLine(sb, $"  {tmp} = alloca {arrayType}");
-                EmitLine(sb, $"  store {arrayType} {receiver}, ptr {tmp}");
-                EmitLine(sb, $"  {ptr} = getelementptr {arrayType}, ptr {tmp}, i32 0, i64 {indexArg}");
-                EmitLine(sb, $"  store i8 {valueArg}, ptr {ptr}");
-                EmitLine(sb, $"  {resultVal} = load {arrayType}, ptr {tmp}");
-                return resultVal;
             }
         }
 
@@ -3040,6 +3056,7 @@ public partial class LLVMCodeGenerator
         string[] lines = mold.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         string? lastResult = null;
         string? prevResult = null;
+        string? firstResult = null;
 
         foreach (string rawLine in lines)
         {
@@ -3058,6 +3075,10 @@ public partial class LLVMCodeGenerator
             // {prev} → previous line's {result}
             if (prevResult != null)
                 substituted = substituted.Replace("{prev}", prevResult);
+
+            // {first} → first line's {result} (useful for alloca patterns)
+            if (firstResult != null)
+                substituted = substituted.Replace("{first}", firstResult);
 
             // Named type parameters from GenericParameters: {T}, {From}, {To}, etc.
             // Must be done before parameter names to avoid collisions (e.g. {T} vs {type})
@@ -3088,6 +3109,7 @@ public partial class LLVMCodeGenerator
 
             if (hasResult)
             {
+                firstResult ??= currentResult;
                 prevResult = currentResult;
                 lastResult = currentResult;
             }
@@ -3326,6 +3348,12 @@ public partial class LLVMCodeGenerator
             // If this is a generic definition with generic arguments, resolve them
             if (type.IsGenericDefinition && typeExpr.GenericArguments is { Count: > 0 })
             {
+                // Try full-name lookup first (handles const generic args like ValueBitList[8])
+                string fullName = $"{typeExpr.Name}[{string.Join(", ", typeExpr.GenericArguments.Select(g => g.Name))}]";
+                TypeInfo? fullType = _registry.LookupType(fullName);
+                if (fullType != null)
+                    return GetLLVMType(fullType);
+
                 var resolvedArgs = new List<TypeInfo>();
                 foreach (var ga in typeExpr.GenericArguments)
                 {
@@ -3613,6 +3641,28 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Generic definition with resolvable params at top level (e.g., List when _typeSubstitutions
+        // has {T: S64} → List[S64]). This happens when the semantic analyzer assigns a bare generic
+        // definition as a variable's type instead of a generic resolution (e.g., return type of
+        // conversion constructor in a generic body).
+        if (type is { IsGenericDefinition: true, GenericParameters: not null })
+        {
+            bool canResolve = true;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (var param in type.GenericParameters)
+            {
+                if (_typeSubstitutions.TryGetValue(param, out var paramSub))
+                    resolvedArgs.Add(paramSub);
+                else
+                {
+                    canResolve = false;
+                    break;
+                }
+            }
+            if (canResolve && resolvedArgs.Count > 0)
+                return _registry.GetOrCreateResolution(type, resolvedArgs);
+        }
+
         // Tuple types with unresolved generic params in element types (e.g., Tuple[U64, T] → Tuple[U64, S64])
         if (type is TupleTypeInfo tuple)
         {
@@ -3646,10 +3696,10 @@ public partial class LLVMCodeGenerator
     private TypeInfo? ResolveIdentifierType(IdentifierExpression id)
     {
         if (_localVariables.TryGetValue(id.Name, out var varType))
-            return varType;
+            return ApplyTypeSubstitutions(varType);
         var regVar = _registry.LookupVariable(id.Name);
         if (regVar != null)
-            return regVar.Type;
+            return ApplyTypeSubstitutions(regVar.Type);
         // Const generic values after AST rewriting: "8", "4u64", etc.
         if (id.Name.Length > 0 && char.IsDigit(id.Name[0])
             && _typeSubstitutions != null)

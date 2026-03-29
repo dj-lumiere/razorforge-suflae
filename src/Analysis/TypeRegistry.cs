@@ -1032,6 +1032,29 @@ public sealed class TypeRegistry
             return overload;
         }
 
+        // Try matching generic overloads by reconstructing the generic parameter pattern.
+        // e.g., arg SortedSet[S64] → its generic def is SortedSet with GenericParameters ["T"]
+        //        → try key "List.$create#SortedSet[T]" which matches the registered generic overload.
+        foreach (TypeInfo argType in argTypes)
+        {
+            if (!argType.IsGenericResolution) continue;
+            TypeInfo? genericDef = argType switch
+            {
+                RecordTypeInfo r => r.GenericDefinition,
+                EntityTypeInfo e => e.GenericDefinition,
+                ProtocolTypeInfo p => p.GenericDefinition,
+                _ => null
+            };
+            if (genericDef?.GenericParameters == null) continue;
+
+            string genericArgName = $"{genericDef.Name}[{string.Join(", ", genericDef.GenericParameters)}]";
+            string genericOverloadKey = $"{fullName}#{genericArgName}";
+            if (_routines.TryGetValue(key: genericOverloadKey, value: out RoutineInfo? genericOverload))
+            {
+                return genericOverload;
+            }
+        }
+
         // Fall back to default lookup
         return LookupRoutine(fullName: fullName);
     }

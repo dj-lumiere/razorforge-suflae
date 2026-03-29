@@ -308,7 +308,22 @@ public partial class LLVMCodeGenerator
         if (setItem != null && targetType != null &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
-            string receiver = EmitExpression(sb, index.Object);
+            // For record $setitem!: pass alloca pointer so mutations propagate
+            string receiver;
+            string receiverLlvm;
+            bool isRecordSetItem = targetType is RecordTypeInfo && setItem.Name.Contains("$setitem");
+            if (isRecordSetItem && index.Object is IdentifierExpression recId)
+            {
+                string llvmName = _localVarLLVMNames.TryGetValue(recId.Name, out var unique) ? unique : recId.Name;
+                receiver = $"%{llvmName}.addr";
+                receiverLlvm = "ptr";
+            }
+            else
+            {
+                receiver = EmitExpression(sb, index.Object);
+                receiverLlvm = GetParameterLLVMType(targetType);
+            }
+
             string indexValue = EmitExpression(sb, index.Index);
             TypeInfo? indexType = GetExpressionType(index.Index);
 
@@ -353,8 +368,7 @@ public partial class LLVMCodeGenerator
 
             GenerateFunctionDeclaration(setItem);
 
-            // Build argument types — resolve from the method's substituted signature
-            string receiverLlvm = GetParameterLLVMType(targetType);
+            // Build argument types
             string indexLlvm = indexType != null ? GetLLVMType(indexType) : "i64";
             string valueLlvm = indexType != null ? GetLLVMType(indexType) : "i64"; // placeholder
 

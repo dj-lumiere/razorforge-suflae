@@ -1,13 +1,11 @@
 # RazorForge ValueList[T, N] - Fixed-size inline array with value semantics
-# Record type - N elements of T stored inline, unmodifiable, copied on assignment
+# Record type - N elements of T stored inline, copied on assignment
 #
 # Usage:
 #   var coords: ValueList[F64, 3] = [1.0, 2.0, 3.0]
 #   var x = coords[0]          # Read element
+#   coords[0] = 5.0            # Modify element in-place
 #   var copy = coords          # Full copy (value semantics)
-#
-#   # To "modify", use with statement or create new:
-#   var moved = coords with [0] = 5.0
 
 module Collections
 
@@ -23,7 +21,7 @@ needs N is U64
   pass
 
 # ============================================================================
-# Indexing with Integral (forward index) - read only
+# Indexing with Integral (forward index)
 # ============================================================================
 
 routine ValueList[T, N].$getitem![I](index: I) -> T
@@ -31,10 +29,17 @@ needs I obeys Integral
   var idx = index.U64!()
   if idx >= N
     throw IndexOutOfBoundsError(index: idx, count: N)
-  return me[idx]
+  return element_at[ValueList[T, N], T](me, idx)
+
+routine ValueList[T, N].$setitem![I](index: I, value: T)
+needs I obeys Integral
+  var idx = index.U64!()
+  if idx >= N
+    throw IndexOutOfBoundsError(index: idx, count: N)
+  me = set_element_at[ValueList[T, N], T](me, idx, value)
 
 # ============================================================================
-# Indexing with BackIndex (backward index using ^) - read only
+# Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
 routine ValueList[T, N].$getitem![I](index: BackIndex[I]) -> T
@@ -55,12 +60,12 @@ routine ValueList[T, N].is_empty() -> Bool
 routine ValueList[T, N].first!() -> T
   if N == 0u64
     absent
-  return me[0]
+  return element_at[ValueList[T, N], T](me, 0u64)
 
 routine ValueList[T, N].last!() -> T
   if N == 0u64
     absent
-  return me[^1]
+  return element_at[ValueList[T, N], T](me, N - 1u64)
 
 @readonly
 routine ValueList[T, N].$contains(value: T) -> Bool
