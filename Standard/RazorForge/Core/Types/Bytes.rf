@@ -169,7 +169,7 @@ routine Text.to_utf8() -> Bytes
   return Bytes(from_list: result)
 
 # Bytes (UTF-8) -> Text (UTF-32)
-routine Bytes.to_text() -> Text
+routine Bytes.as_utf8_text() -> Text
   var result = List[Letter]()
   var len = me.count()
   var i: U64 = 0u64

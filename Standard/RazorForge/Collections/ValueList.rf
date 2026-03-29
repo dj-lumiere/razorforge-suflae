@@ -11,8 +11,11 @@
 
 module Core
 
+import BuilderService
+
 # Fixed-size array with value semantics
-# Compiler lays out N elements of T inline
+# Layout: N elements of T inline as [N x <T>]
+@llvm("[{N} x {T}]")
 record ValueList[T, N]
 needs T is RecordType
 needs N is U64
@@ -59,7 +62,8 @@ routine ValueList[T, N].last!() -> T
     absent
   return me[^1]
 
-routine ValueList[T, N].contains(value: T) -> Bool
+@readonly
+routine ValueList[T, N].$contains(value: T) -> Bool
   for i in 0 til N
     if me[i] == value
       return true
@@ -88,5 +92,27 @@ routine ValueListIterator[T, N].$next!() -> T
   var value = me.list[me.index]
   me.index = me.index + 1u64
   return value
+
+# ============================================================================
+# Display
+# ============================================================================
+
+routine ValueList[T, N].$represent() -> Text
+  var result = "["
+  for i in 0 til N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+  result = result + "]"
+  return result
+
+routine ValueList[T, N].$diagnose() -> Text
+  var result = me.type_name() + "(count: " + N.$represent() + ", ["
+  for i in 0 til N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+  result = result + "])"
+  return result
 
 # Comparison (==, !=) is auto-generated using memcmp for records

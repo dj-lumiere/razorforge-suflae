@@ -262,7 +262,8 @@ routine Deque[T].last_or_default(default_value: T) -> T
     return default_value
   return me.last!()
 
-routine Deque[T].contains(value: T) -> Bool
+@readonly
+routine Deque[T].$contains(value: T) -> Bool
   var i = 0u64
   while i < me.count
     if me[i] == value

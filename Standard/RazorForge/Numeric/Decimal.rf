@@ -236,23 +236,19 @@ routine Decimal.signum() -> S32
 # ============================================================================
 
 # Convert to S64 (truncates decimal part)
-routine Decimal.to_s64() -> S64
-  return rf_bigdec_get_i64(me.handle)
+routine S64.$create(from: Decimal) -> S64
+  return rf_bigdec_get_i64(from.handle)
 
 # Convert to F64 (may lose precision)
-routine Decimal.to_f64() -> F64
-  return rf_bigdec_get_f64(me.handle)
+routine F64.$create(from: Decimal) -> F64
+  return rf_bigdec_get_f64(from.handle)
 
-# Convert to string with specified decimal places
-routine Decimal.to_text(decimal_places: S32 = 10) -> Text
+# String representation with specified decimal places
+routine Decimal.$represent(decimal_places: S32 = 10) -> Text
   var CStr = rf_bigdec_get_str(me.handle, decimal_places)
   var text = Text.from_cstr(CStr)
   rf_invalidate(CStr)
   return text
-
-# Default string conversion
-routine Decimal.to_string() -> Text
-  return me.to_text(10)
 
 # ============================================================================
 # Constants (computed with high precision)

@@ -88,7 +88,7 @@ routine Set[T].rehash()
   i = 0u64
   while i < old_buckets.count()
     var bucket = old_buckets[i]
-    var elements = bucket.to_list()
+    var elements = bucket.List()
     var j = 0u64
     while j < elements.count()
       me.add(elements[j])
@@ -114,9 +114,10 @@ routine Set[T].clear()
   me.count = 0u64
   return
 
-routine Set[T].contains(value: T) -> Bool
+@readonly
+routine Set[T].$contains(value: T) -> Bool
   var idx = me.bucket_index(value)
-  return me.buckets[idx].contains(value)
+  return value in me.buckets[idx]
 
 routine Set[T].add(value: T) -> Bool
   # Returns true if inserted, false if already exists
@@ -148,7 +149,7 @@ routine Set[T].union(other: Set[T]) -> Set[T]
   # Add all from me
   var i = 0u64
   while i < me.buckets.count()
-    var elements = me.buckets[i].to_list()
+    var elements = me.buckets[i].List()
     var j = 0u64
     while j < elements.count()
       result.add(elements[j])
@@ -158,7 +159,7 @@ routine Set[T].union(other: Set[T]) -> Set[T]
   # Add all from other
   i = 0u64
   while i < other.buckets.count()
-    var elements = other.buckets[i].to_list()
+    var elements = other.buckets[i].List()
     var j = 0u64
     while j < elements.count()
       result.add(elements[j])
@@ -177,10 +178,10 @@ routine Set[T].intersection(other: Set[T]) -> Set[T]
 
   var i = 0u64
   while i < smaller.buckets.count()
-    var elements = smaller.buckets[i].to_list()
+    var elements = smaller.buckets[i].List()
     var j = 0u64
     while j < elements.count()
-      if larger.contains(elements[j])
+      if elements[j] in larger
         result.add(elements[j])
       j = j + 1u64
     i = i + 1u64
@@ -193,10 +194,10 @@ routine Set[T].difference(other: Set[T]) -> Set[T]
 
   var i = 0u64
   while i < me.buckets.count()
-    var elements = me.buckets[i].to_list()
+    var elements = me.buckets[i].List()
     var j = 0u64
     while j < elements.count()
-      if not other.contains(elements[j])
+      if elements[j] notin other
         result.add(elements[j])
       j = j + 1u64
     i = i + 1u64
@@ -210,10 +211,10 @@ routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
   # Add elements from me not in other
   var i = 0u64
   while i < me.buckets.count()
-    var elements = me.buckets[i].to_list()
+    var elements = me.buckets[i].List()
     var j = 0u64
     while j < elements.count()
-      if not other.contains(elements[j])
+      if elements[j] notin other
         result.add(elements[j])
       j = j + 1u64
     i = i + 1u64
@@ -221,10 +222,10 @@ routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
   # Add elements from other not in me
   i = 0u64
   while i < other.buckets.count()
-    var elements = other.buckets[i].to_list()
+    var elements = other.buckets[i].List()
     var j = 0u64
     while j < elements.count()
-      if not me.contains(elements[j])
+      if elements[j] notin me
         result.add(elements[j])
       j = j + 1u64
     i = i + 1u64
@@ -238,10 +239,10 @@ routine Set[T].is_subset(other: Set[T]) -> Bool
 
   var i = 0u64
   while i < me.buckets.count()
-    var elements = me.buckets[i].to_list()
+    var elements = me.buckets[i].List()
     var j = 0u64
     while j < elements.count()
-      if not other.contains(elements[j])
+      if elements[j] notin other
         return false
       j = j + 1u64
     i = i + 1u64
@@ -257,10 +258,10 @@ routine Set[T].is_disjoint(other: Set[T]) -> Bool
 
   var i = 0u64
   while i < smaller.buckets.count()
-    var elements = smaller.buckets[i].to_list()
+    var elements = smaller.buckets[i].List()
     var j = 0u64
     while j < elements.count()
-      if larger.contains(elements[j])
+      if elements[j] in larger
         return false
       j = j + 1u64
     i = i + 1u64
@@ -270,11 +271,11 @@ routine Set[T].is_disjoint(other: Set[T]) -> Bool
 # Conversion
 # ============================================================================
 
-routine Set[T].to_list() -> List[T]
-  var result = List[T](me.count)
+routine List[T].$create(from: Set[T]) -> List[T]
+  var result = List[T](from.count)
   var i = 0u64
-  while i < me.buckets.count()
-    var elements = me.buckets[i].to_list()
+  while i < from.buckets.count()
+    var elements = from.buckets[i].List()
     var j = 0u64
     while j < elements.count()
       result.add_last(elements[j])
@@ -306,7 +307,7 @@ emitting routine SetIterator[T].$next() -> T
   while me.element_idx >= me.current_elements.count()
     if me.bucket_idx >= me.set.buckets.count()
       absent
-    me.current_elements = me.set.buckets[me.bucket_idx].to_list()
+    me.current_elements = me.set.buckets[me.bucket_idx].List()
     me.element_idx = 0u64
     me.bucket_idx = me.bucket_idx + 1u64
 

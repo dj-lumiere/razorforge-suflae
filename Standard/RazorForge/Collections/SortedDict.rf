@@ -78,7 +78,8 @@ routine SortedDict[K, V].clear()
 # Search
 # ============================================================================
 
-routine SortedDict[K, V].contains_key(key: K) -> Bool
+@readonly
+routine SortedDict[K, V].$contains(key: K) -> Bool
   if me.root is None
     return false
   return me.try_search_node(me.root!!, key) isnot None
@@ -262,7 +263,7 @@ routine SortedDict[K, V].remove(key: K) -> Bool
   if me.root is None
     return false
 
-  if not me.contains_key(key)
+  if key notin me
     return false
 
   me.remove_from_node(me.root!!, key)
@@ -417,15 +418,15 @@ routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, ma
 @readonly
 routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
   return SortedDictIterator[K, V](
-    entries: me.to_list(),
+    entries: me.List(),
     index: 0u64
   )
 
-routine SortedDict[K, V].to_list() -> List[KVPair[K, V]]
-  var result = List[KVPair[K, V]](me.count)
-  if me.root is None
+routine List[KVPair[K, V]].$create(from: SortedDict[K, V]) -> List[KVPair[K, V]]
+  var result = List[KVPair[K, V]](from.count)
+  if from.root is None
     return result
-  me.collect_inorder(me.root!!, result)
+  from.collect_inorder(from.root!!, result)
   return result
 
 routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List[KVPair[K, V]])
@@ -488,8 +489,8 @@ routine SortedDict[K, V].$diagnose() -> Text
 routine SortedDict[K, V].$eq(other: SortedDict[K, V]) -> Bool
   if me.count != other.count
     return false
-  var my_entries = me.to_list()
-  var other_entries = other.to_list()
+  var my_entries = me.List()
+  var other_entries = other.List()
   var i = 0u64
   while i < me.count
     if my_entries[i].key != other_entries[i].key

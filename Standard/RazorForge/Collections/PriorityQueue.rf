@@ -169,7 +169,8 @@ routine PriorityQueue[TElement, TPriority].drain() -> List[TElement]
 # Utility Operations
 # ============================================================================
 
-routine PriorityQueue[TElement, TPriority].contains(element: TElement) -> Bool
+@readonly
+routine PriorityQueue[TElement, TPriority].$contains(element: TElement) -> Bool
   # O(n) search - heap doesn't support efficient search
   var i = 0u64
   while i < me.heap.count()
@@ -178,12 +179,12 @@ routine PriorityQueue[TElement, TPriority].contains(element: TElement) -> Bool
     i = i + 1u64
   return false
 
-routine PriorityQueue[TElement, TPriority].to_list() -> List[PQEntry[TElement, TPriority]]
+routine List[PQEntry[TElement, TPriority]].$create(from: PriorityQueue[TElement, TPriority]) -> List[PQEntry[TElement, TPriority]]
   # Get all entries (not in priority order, heap order)
-  var result = List[PQEntry[TElement, TPriority]](me.count())
+  var result = List[PQEntry[TElement, TPriority]](from.count())
   var i = 0u64
-  while i < me.heap.count()
-    result.add_last(me.heap[i])
+  while i < from.heap.count()
+    result.add_last(from.heap[i])
     i = i + 1u64
   return result
 

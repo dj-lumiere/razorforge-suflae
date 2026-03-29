@@ -71,7 +71,8 @@ routine SortedList[T].clear()
 # Search
 # ============================================================================
 
-routine SortedList[T].contains(value: T) -> Bool
+@readonly
+routine SortedList[T].$contains(value: T) -> Bool
   if me.root is None
     return false
   return me.search_node(me.root!!, value)
@@ -255,7 +256,7 @@ routine SortedList[T].remove(value: T) -> Bool
   if me.root is None
     return false
 
-  if not me.contains(value)
+  if value notin me
     return false
 
   me.remove_from_node(me.root!!, value)
@@ -412,11 +413,11 @@ routine SortedList[T].last!() -> T
 routine SortedList[T].$iter() -> SortedListIterator[T]
   return SortedListIterator[T](list: me, index: 0u64)
 
-routine SortedList[T].to_list() -> List[T]
-  var result = List[T](me.count)
-  if me.root is None
+routine List[T].$create(from: SortedList[T]) -> List[T]
+  var result = List[T](from.count)
+  if from.root is None
     return result
-  me.collect_inorder(me.root!!, result)
+  from.collect_inorder(from.root!!, result)
   return result
 
 routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])

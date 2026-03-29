@@ -45,9 +45,8 @@ routine LocalMoment.now_utc() -> LocalMoment
 # ============================================================================
 
 # Get the underlying UTC moment
-@readonly
-routine LocalMoment.to_moment() -> Moment
-  return me.moment
+routine Moment.$create(from: LocalMoment) -> Moment
+  return from.moment
 
 # Get the UTC offset
 @readonly

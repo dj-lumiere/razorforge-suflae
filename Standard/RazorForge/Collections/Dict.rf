@@ -113,9 +113,10 @@ routine Dict[K, V].clear()
   me.count = 0u64
   return
 
-routine Dict[K, V].contains_key(key: K) -> Bool
+@readonly
+routine Dict[K, V].$contains(key: K) -> Bool
   var idx = me.bucket_index(key)
-  return me.buckets[idx].contains_key(key)
+  return key in me.buckets[idx]
 
 routine Dict[K, V].add(key: K, value: V) -> Bool
   # Returns true if inserted new, false if updated existing
@@ -123,7 +124,7 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
     me.rehash()
 
   var idx = me.bucket_index(key)
-  var existed = me.buckets[idx].contains_key(key)
+  var existed = key in me.buckets[idx]
   me.buckets[idx].add(key, value)
   if not existed
     me.count = me.count + 1u64
@@ -140,7 +141,7 @@ routine Dict[K, V].remove(key: K) -> Bool
 
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
   var idx = me.bucket_index(key)
-  if me.buckets[idx].contains_key(key)
+  if key in me.buckets[idx]
     return me.buckets[idx][key]
   return default_value
 
@@ -277,7 +278,7 @@ routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
     var j = 0u64
     while j < bucket_keys.count()
       var key = bucket_keys[j]
-      if not other.contains_key(key)
+      if key notin other
         return false
       if me.get!(key) != other.get!(key)
         return false

@@ -192,8 +192,8 @@ routine S64.$create!(from: Integer) -> S64
 routine U64.$create!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
-# Convert to string with specified radix (2-36)
-routine Integer.to_text(radix: S32 = 10) -> Text
+# String representation with specified radix (2-36)
+routine Integer.$represent(radix: S32 = 10) -> Text
   var CStr = rf_bigint_get_str(me.handle, radix)
   var text = Text.from_cstr(CStr)
   rf_invalidate(CStr)

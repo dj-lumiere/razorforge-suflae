@@ -10,11 +10,13 @@
 
 module Core
 
+import BuilderService
+
 # Fixed-size bit vector with value semantics
-# Compiler lays out ceil(N/8) bytes inline
+# Layout: ceil(N/8) bytes as [ceil(N/8) x i8]
+@llvm("[{(N+7)//8} x i8]")
 record ValueBitList[N]
 needs N is U64
-  # ceil(N/8) bytes stored inline by compiler
   pass
 
 # ============================================================================
@@ -61,9 +63,9 @@ routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
   var bit_off = U8(index % 8u64)
   var byte_val = result.byte_at(byte_idx)
   if value
-    result.set_byte_at(byte_idx, byte_val | (1u8 << bit_off))
+    result = result.set_byte_at(byte_idx, byte_val | (1u8 << bit_off))
   else
-    result.set_byte_at(byte_idx, byte_val & ~(1u8 << bit_off))
+    result = result.set_byte_at(byte_idx, byte_val & ~(1u8 << bit_off))
   return result
 
 routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
@@ -108,18 +110,50 @@ routine ValueBitList[N].all() -> Bool
 routine ValueBitList[N].none() -> Bool
   return not me.any()
 
+@readonly
+routine ValueBitList[N].$contains(value: Bool) -> Bool
+  if value
+    return me.any()
+  return not me.all()
+
 # ============================================================================
 # Internal byte access (compiler-intrinsic for packed layout)
 # ============================================================================
 
 @llvm("extractvalue")
 routine ValueBitList[N].byte_at(index: U64) -> U8
-  # Compiler intrinsic: read byte at index from packed storage
+  # Compiler intrinsic: read byte at index from packed i64 storage
   pass
 
 @llvm("insertvalue")
-routine ValueBitList[N].set_byte_at(index: U64, value: U8)
-  # Compiler intrinsic: write byte at index in packed storage
+routine ValueBitList[N].set_byte_at(index: U64, value: U8) -> ValueBitList[N]
+  # Compiler intrinsic: write byte at index in packed i64 storage, returns new copy
   pass
+
+# ============================================================================
+# Display
+# ============================================================================
+
+routine ValueBitList[N].$represent() -> Text
+  var result = "ValueBitList["
+  var i = 0u64
+  while i < N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+    i = i + 1u64
+  result = result + "]"
+  return result
+
+routine ValueBitList[N].$diagnose() -> Text
+  var result = me.type_name() + "(count: " + N.$represent() + ", ones: " + me.count_ones().$represent() + ", ["
+  var i = 0u64
+  while i < N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+    i = i + 1u64
+  result = result + "])"
+  return result
 
 # Comparison (==, !=) is auto-generated using memcmp for records

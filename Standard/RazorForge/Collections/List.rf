@@ -239,6 +239,15 @@ emitting routine ListEmitter[T].$next() -> T
   me.index = me.index + 1u64
   return
 
+@readonly
+routine List[T].$contains(value: T) -> Bool
+  var i = 0u64
+  while i < me.count()
+    if me[i] == value
+      return true
+    i = i + 1u64
+  return false
+
 routine List[T].$represent() -> Text
   var result = "["
   var i = 0u64
