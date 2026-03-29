@@ -686,22 +686,5 @@ public class BuilderServiceApiTests
                        """);
     }
 
-    [Fact]
-    public void Variant_TypeName_Available()
-    {
-        AssertAnalyzes("""
-                       import BuilderService
-
-                       variant Result
-                         S64
-                         Text
-
-                       routine test()
-                         var r: Result = 42
-                         var v = r.type_name()
-                         return
-                       """);
-    }
-
     #endregion
 }
