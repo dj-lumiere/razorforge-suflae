@@ -1014,9 +1014,6 @@ public sealed class TypeRegistry
     /// </summary>
     private static string GetOverloadKey(RoutineInfo routine)
     {
-        if (routine.Parameters.Count == 0)
-            return routine.FullName;
-
         var paramTypes = string.Join(",", routine.Parameters.Select(p => p.Type.Name));
         return $"{routine.FullName}#{paramTypes}";
     }
