@@ -9,7 +9,7 @@
 #   # To "modify", use with statement or create new:
 #   var moved = coords with [0] = 5.0
 
-module Core
+module Collections
 
 import BuilderService
 
