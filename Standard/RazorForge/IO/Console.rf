@@ -125,14 +125,13 @@ routine ask_letters(count: U64) -> Text
 # Read all lines separated by newline
 routine ask_lines() -> List[Text]
   var all = ask_all()
-  # TODO: Implement split by newline
-  throw NotImplementedError("ask_lines")
+  var normalized = all.replace("\r\n", "\n")
+  return normalized.split(LETTER_NEWLINE)
 
 # Read all words separated by whitespace
 routine ask_words() -> List[Text]
   var all = ask_all()
-  # TODO: Implement split by whitespace
-  throw NotImplementedError("ask_words")
+  return all.words()
 
 # ============================================================================
 # Input: Bytes functions (opt-in)

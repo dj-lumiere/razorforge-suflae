@@ -109,6 +109,79 @@ routine Bytes.$eq(other: Bytes) -> Bool
       return false
   return true
 
+# Search
+
+routine Bytes.contains(byte: Byte) -> Bool
+  for i in 0 til me.count()
+    if me[i] == byte
+      return true
+  return false
+
+routine Bytes.starts_with(prefix: Bytes) -> Bool
+  if prefix.count() > me.count()
+    return false
+  for i in 0 til prefix.count()
+    if me[i] != prefix[i]
+      return false
+  return true
+
+routine Bytes.ends_with(suffix: Bytes) -> Bool
+  if suffix.count() > me.count()
+    return false
+  var offset = me.count() - suffix.count()
+  for i in 0 til suffix.count()
+    if me[offset + i] != suffix[i]
+      return false
+  return true
+
+routine Bytes.find!(byte: Byte) -> U64
+  for i in 0 til me.count()
+    if me[i] == byte
+      return i
+  absent
+
+routine Bytes.count(byte: Byte) -> U64
+  var result: U64 = 0u64
+  for i in 0 til me.count()
+    if me[i] == byte
+      result += 1u64
+  return result
+
+# Split
+
+routine Bytes.split(separator: Byte) -> List[Bytes]
+  var parts = List[Bytes]()
+  var current = List[Byte]()
+  for i in 0 til me.count()
+    if me[i] == separator
+      parts.add_last(Bytes(from_list: current))
+      current = List[Byte]()
+    else
+      current.add_last(me[i])
+  parts.add_last(Bytes(from_list: current))
+  return parts
+
+# Transform
+
+routine Bytes.reverse() -> Bytes
+  var result = List[Byte]()
+  var i = me.count()
+  loop
+    if i == 0u64
+      break
+    i -= 1u64
+    result.add_last(me[i])
+  return Bytes(from_list: result)
+
+routine Bytes.repeat(times: U64) -> Bytes
+  if times == 0u64
+    return Bytes()
+  var result = List[Byte]()
+  for t in 0 til times
+    for i in 0 til me.count()
+      result.add_last(me[i])
+  return Bytes(from_list: result)
+
 # Conversion to modifiable list
 
 routine List[Byte].$create(from: Bytes) -> List[Byte]

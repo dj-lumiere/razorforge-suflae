@@ -177,6 +177,293 @@ routine Text.$eq(other: Text) -> Bool
     i += 1u64
   return true
 
+# Comparison
+
+routine Text.$cmp(other: Text) -> ComparisonSign
+  var min_len = me.count()
+  if other.count() < min_len
+    min_len = other.count()
+  for i in 0 til min_len
+    if me[i] < other[i]
+      return ComparisonSign.ME_SMALL
+    if me[i] > other[i]
+      return ComparisonSign.ME_LARGE
+  if me.count() < other.count()
+    return ComparisonSign.ME_SMALL
+  if me.count() > other.count()
+    return ComparisonSign.ME_LARGE
+  return ComparisonSign.SAME
+
+# Search
+
+routine Text.contains(letter: Letter) -> Bool
+  for i in 0 til me.count()
+    if me[i] == letter
+      return true
+  return false
+
+routine Text.contains(other: Text) -> Bool
+  if other.is_empty()
+    return true
+  if other.count() > me.count()
+    return false
+  var limit = me.count() - other.count() + 1u64
+  for i in 0 til limit
+    var found = true
+    for j in 0 til other.count()
+      if me[i + j] != other[j]
+        found = false
+        break
+    if found
+      return true
+  return false
+
+routine Text.starts_with(prefix: Text) -> Bool
+  if prefix.count() > me.count()
+    return false
+  for i in 0 til prefix.count()
+    if me[i] != prefix[i]
+      return false
+  return true
+
+routine Text.ends_with(suffix: Text) -> Bool
+  if suffix.count() > me.count()
+    return false
+  var offset = me.count() - suffix.count()
+  for i in 0 til suffix.count()
+    if me[offset + i] != suffix[i]
+      return false
+  return true
+
+routine Text.find!(letter: Letter) -> U64
+  for i in 0 til me.count()
+    if me[i] == letter
+      return i
+  absent
+
+routine Text.find!(other: Text) -> U64
+  if other.is_empty()
+    return 0u64
+  if other.count() > me.count()
+    absent
+  var limit = me.count() - other.count() + 1u64
+  for i in 0 til limit
+    var found = true
+    for j in 0 til other.count()
+      if me[i + j] != other[j]
+        found = false
+        break
+    if found
+      return i
+  absent
+
+routine Text.count(letter: Letter) -> U64
+  var result: U64 = 0u64
+  for i in 0 til me.count()
+    if me[i] == letter
+      result += 1u64
+  return result
+
+# Transform
+
+routine Text.to_uppercase() -> Text
+  var result = List[Letter]()
+  for i in 0 til me.count()
+    result.add_last(me[i].to_uppercase())
+  return Text(from_list: result)
+
+routine Text.to_lowercase() -> Text
+  var result = List[Letter]()
+  for i in 0 til me.count()
+    result.add_last(me[i].to_lowercase())
+  return Text(from_list: result)
+
+routine Text.trim() -> Text
+  var start: U64 = 0u64
+  loop
+    if start >= me.count()
+      return Text()
+    if not me[start].is_whitespace()
+      break
+    start += 1u64
+  var end_idx = me.count()
+  loop
+    if end_idx <= start
+      break
+    if not me[end_idx - 1u64].is_whitespace()
+      break
+    end_idx -= 1u64
+  return me[start til end_idx]
+
+routine Text.trim_start() -> Text
+  var start: U64 = 0u64
+  loop
+    if start >= me.count()
+      return Text()
+    if not me[start].is_whitespace()
+      break
+    start += 1u64
+  return me[start til me.count()]
+
+routine Text.trim_end() -> Text
+  if me.is_empty()
+    return me
+  var end_idx = me.count()
+  loop
+    if end_idx == 0u64
+      return Text()
+    if not me[end_idx - 1u64].is_whitespace()
+      break
+    end_idx -= 1u64
+  return me[0 til end_idx]
+
+routine Text.replace(old: Text, with: Text) -> Text
+  if old.is_empty()
+    return me
+  var result = List[Letter]()
+  var i: U64 = 0u64
+  loop
+    if i >= me.count()
+      break
+    var found = false
+    if i + old.count() <= me.count()
+      found = true
+      for j in 0 til old.count()
+        if me[i + j] != old[j]
+          found = false
+          break
+    if found
+      for j in 0 til with.count()
+        result.add_last(with[j])
+      i += old.count()
+    else
+      result.add_last(me[i])
+      i += 1u64
+  return Text(from_list: result)
+
+routine Text.remove_prefix(prefix: Text) -> Text
+  if me.starts_with(prefix)
+    return me[prefix.count() til me.count()]
+  return me
+
+routine Text.remove_suffix(suffix: Text) -> Text
+  if me.ends_with(suffix)
+    return me[0 til me.count() - suffix.count()]
+  return me
+
+routine Text.repeat(times: U64) -> Text
+  if times == 0u64
+    return Text()
+  var result = List[Letter]()
+  for t in 0 til times
+    for i in 0 til me.count()
+      result.add_last(me[i])
+  return Text(from_list: result)
+
+routine Text.reverse() -> Text
+  var result = List[Letter]()
+  var i = me.count()
+  loop
+    if i == 0u64
+      break
+    i -= 1u64
+    result.add_last(me[i])
+  return Text(from_list: result)
+
+routine Text.pad_start(width: U64, fill: Letter) -> Text
+  if me.count() >= width
+    return me
+  var result = List[Letter]()
+  var pad_count = width - me.count()
+  for p in 0 til pad_count
+    result.add_last(fill)
+  for i in 0 til me.count()
+    result.add_last(me[i])
+  return Text(from_list: result)
+
+routine Text.pad_end(width: U64, fill: Letter) -> Text
+  if me.count() >= width
+    return me
+  var result = List[Letter]()
+  for i in 0 til me.count()
+    result.add_last(me[i])
+  var pad_count = width - me.count()
+  for p in 0 til pad_count
+    result.add_last(fill)
+  return Text(from_list: result)
+
+# Split/Join
+
+routine Text.split(separator: Letter) -> List[Text]
+  var parts = List[Text]()
+  var current = List[Letter]()
+  for i in 0 til me.count()
+    if me[i] == separator
+      parts.add_last(Text(from_list: current))
+      current = List[Letter]()
+    else
+      current.add_last(me[i])
+  parts.add_last(Text(from_list: current))
+  return parts
+
+routine Text.split(separator: Text) -> List[Text]
+  if separator.is_empty()
+    var parts = List[Text]()
+    for i in 0 til me.count()
+      parts.add_last(Text(from_letter: me[i]))
+    return parts
+  var parts = List[Text]()
+  var start: U64 = 0u64
+  var i: U64 = 0u64
+  loop
+    if i + separator.count() > me.count()
+      break
+    var found = true
+    for j in 0 til separator.count()
+      if me[i + j] != separator[j]
+        found = false
+        break
+    if found
+      parts.add_last(me[start til i])
+      i += separator.count()
+      start = i
+    else
+      i += 1u64
+  parts.add_last(me[start til me.count()])
+  return parts
+
+routine Text.join(parts: List[Text]) -> Text
+  if parts.is_empty()
+    return Text()
+  var result = List[Letter]()
+  var first = true
+  for part in parts
+    if not first
+      for i in 0 til me.count()
+        result.add_last(me[i])
+    for i in 0 til part.count()
+      result.add_last(part[i])
+    first = false
+  return Text(from_list: result)
+
+routine Text.lines() -> List[Text]
+  var normalized = me.replace("\r\n", "\n")
+  return normalized.split(LETTER_NEWLINE)
+
+routine Text.words() -> List[Text]
+  var parts = List[Text]()
+  var current = List[Letter]()
+  for i in 0 til me.count()
+    if me[i].is_whitespace()
+      if not current.is_empty()
+        parts.add_last(Text(from_list: current))
+        current = List[Letter]()
+    else
+      current.add_last(me[i])
+  if not current.is_empty()
+    parts.add_last(Text(from_list: current))
+  return parts
+
 # Conversion to modifiable list
 
 routine List[Letter].$create(from: Text) -> List[Letter]
