@@ -856,6 +856,9 @@ public enum SemanticDiagnosticCode
     /// <summary>BuilderService routine called without 'import BuilderService'.</summary>
     BuilderServiceImportRequired = 950,
 
+    /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
+    UnresolvedRoutineBody = 951,
+
 }
 
 public static class SemanticDiagnosticCodeExtensions

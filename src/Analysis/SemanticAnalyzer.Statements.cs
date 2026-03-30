@@ -77,6 +77,15 @@ public sealed partial class SemanticAnalyzer
             string typeName = routine.Name[..dotIndex];
             string methodName = routine.Name[(dotIndex + 1)..];
             TypeSymbol? ownerType = LookupTypeWithImports(name: typeName);
+
+            // If the type name contains generic params (e.g., "Box[T]"), strip them
+            // and look up the generic definition (e.g., "Box") — mirrors CollectFunctionDeclaration
+            if (ownerType == null && typeName.Contains('['))
+            {
+                string baseTypeName = typeName[..typeName.IndexOf('[')];
+                ownerType = LookupTypeWithImports(name: baseTypeName);
+            }
+
             fullName = ownerType != null ? $"{ownerType.Name}.{methodName}" : routine.Name;
         }
         else
@@ -101,6 +110,10 @@ public sealed partial class SemanticAnalyzer
         routineInfo ??= _registry.LookupRoutine(fullName: fullName);
         if (routineInfo == null)
         {
+            ReportError(
+                SemanticDiagnosticCode.UnresolvedRoutineBody,
+                $"Routine '{fullName}' body could not be matched to a registered declaration.",
+                routine.Location);
             return;
         }
 
