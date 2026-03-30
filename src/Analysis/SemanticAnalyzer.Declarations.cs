@@ -1206,7 +1206,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Update the registered type with resolved members
-        if (_registry.LookupType(variant.Name) is VariantTypeInfo variantType)
+        if (LookupTypeInCurrentModule(name: variant.Name) is VariantTypeInfo variantType)
         {
             var updated = new VariantTypeInfo(name: variant.Name)
             {
