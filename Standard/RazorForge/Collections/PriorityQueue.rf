@@ -16,8 +16,8 @@ import BuilderService
 # Element with priority
 record PQEntry[TPriority, TElement]
 needs TPriority obeys Comparable
-  element: TElement
   priority: TPriority
+  element: TElement
 
 entity PriorityQueue[TPriority, TElement] obeys Iterable[PQEntry[TPriority, TElement]]
 needs TPriority obeys Comparable
@@ -36,6 +36,12 @@ routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQue
   return PriorityQueue[TPriority, TElement](
     heap: List[PQEntry[TPriority, TElement]](capacity)
   )
+
+routine PriorityQueue[TPriority, TElement].$create(entries...: DictEntry[TPriority, TElement]) -> PriorityQueue[TPriority, TElement]
+  var result = PriorityQueue[TPriority, TElement]()
+  for e in entries
+    result.add(element: e.value, priority: e.key)
+  return result
 
 # ============================================================================
 # Internal Heap Operations
@@ -105,7 +111,7 @@ routine PriorityQueue[TPriority, TElement].clear()
 
 routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPriority)
   # Add element with priority - O(log n)
-  me.heap.add_last(PQEntry[TPriority, TElement](element: element, priority: priority))
+  me.heap.add_last(PQEntry[TPriority, TElement](priority: priority, element: element))
   me.sift_up(me.heap.count() - 1u64)
   return
 

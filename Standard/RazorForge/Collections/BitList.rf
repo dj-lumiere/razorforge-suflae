@@ -39,6 +39,12 @@ routine BitList.$create(capacity: U64) -> BitList
     capacity: capacity
   )
 
+routine BitList.$create(values...: Bool) -> BitList
+  var result = BitList()
+  for v in values
+    result.add_last(v)
+  return result
+
 # ============================================================================
 # Internal Helpers
 # ============================================================================

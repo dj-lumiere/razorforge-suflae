@@ -53,6 +53,12 @@ routine SortedDict[K, V].$create() -> SortedDict[K, V]
     count: 0u64
   )
 
+routine SortedDict[K, V].$create(entries...: DictEntry[K, V]) -> SortedDict[K, V]
+  var result = SortedDict[K, V]()
+  for e in entries
+    result.add(e.key, e.value)
+  return result
+
 # ============================================================================
 # Core Operations
 # ============================================================================

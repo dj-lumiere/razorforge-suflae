@@ -49,6 +49,19 @@ routine Bytes.$create(ptr: CStr) -> Bytes
     i += 1u64
   return Bytes(from_list: list)
 
+routine Bytes.$create(ptr: Address, count: U64) -> Bytes
+  if count == 0u64
+    return Bytes()
+  var list = List[Byte]()
+  var i: U64 = 0u64
+  loop
+    if i >= count
+      break
+    var byte_val = Snatched[Byte](ptr + i).read()
+    list.add_last(byte_val)
+    i += 1u64
+  return Bytes(from_list: list)
+
 # Core operations
 
 routine Bytes.count() -> U64

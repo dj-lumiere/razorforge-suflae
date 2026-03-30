@@ -34,6 +34,16 @@ routine show[T](value: T, end: Text = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
+routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
+  var first = true
+  for v in values
+    if not first
+      show(sep, end: "")
+    show(v, end: "")
+    first = false
+  show("", end: end)
+  return
+
 # ============================================================================
 # Output: alert() - Standard Error (stderr)
 # ============================================================================
@@ -60,6 +70,16 @@ routine alert[T](value: T, end: Text = "\n")
   rf_console_alert(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
   rf_console_alert(end_cstr.ptr, end_cstr.count())
+  return
+
+routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
+  var first = true
+  for v in values
+    if not first
+      alert(sep, end: "")
+    alert(v, end: "")
+    first = false
+  alert("", end: end)
   return
 
 # ============================================================================

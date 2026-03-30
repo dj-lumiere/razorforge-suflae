@@ -57,6 +57,12 @@ routine Set[T].$create(capacity: U64) -> Set[T]
     i = i + 1u64
   return set
 
+routine Set[T].$create(values...: T) -> Set[T]
+  var result = Set[T]()
+  for v in values
+    result.add(v)
+  return result
+
 # ============================================================================
 # Internal Operations
 # ============================================================================

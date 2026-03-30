@@ -52,6 +52,12 @@ routine SortedList[T].$create() -> SortedList[T]
     count: 0u64
   )
 
+routine SortedList[T].$create(values...: T) -> SortedList[T]
+  var result = SortedList[T]()
+  for v in values
+    result.add(v)
+  return result
+
 # ============================================================================
 # Core Operations
 # ============================================================================

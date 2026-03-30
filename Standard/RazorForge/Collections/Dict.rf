@@ -57,6 +57,12 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
     i = i + 1u64
   return dict
 
+routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
+  var result = Dict[K, V]()
+  for e in entries
+    result.add(e.key, e.value)
+  return result
+
 # ============================================================================
 # Internal Operations
 # ============================================================================

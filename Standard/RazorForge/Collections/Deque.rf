@@ -40,6 +40,12 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
     capacity: capacity
   )
 
+routine Deque[T].$create(values...: T) -> Deque[T]
+  var result = Deque[T]()
+  for v in values
+    result.add_last(v)
+  return result
+
 # ============================================================================
 # Internal Helpers
 # ============================================================================

@@ -29,6 +29,12 @@ routine List[T].$create(capacity: U64) -> List[T]
     capacity: capacity
   )
 
+routine List[T].$create(values...: T) -> List[T]
+  var result = List[T]()
+  for v in values
+    result.add_last(v)
+  return result
+
 # Destructor
 routine List[T].$destroy()
   if not me.data.is_none()

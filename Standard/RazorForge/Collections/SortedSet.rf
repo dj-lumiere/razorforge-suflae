@@ -56,6 +56,12 @@ routine SortedSet[T].$create() -> SortedSet[T]
     count: 0u64
   )
 
+routine SortedSet[T].$create(values...: T) -> SortedSet[T]
+  var result = SortedSet[T]()
+  for v in values
+    result.add(v)
+  return result
+
 # ============================================================================
 # Core Operations
 # ============================================================================
