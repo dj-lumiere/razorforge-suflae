@@ -1,0 +1,157 @@
+# FileSystem - existence checks, directory ops, copy/move/remove, path utilities, permissions
+
+module IO/FileSystem
+import IO/Errors
+
+# ============================================================================
+# Existence checks (pure, no crash)
+# ============================================================================
+
+routine exists(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_exists(cstr.ptr, cstr.count().S32())
+
+routine is_file(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_is_file(cstr.ptr, cstr.count().S32())
+
+routine is_directory(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_is_directory(cstr.ptr, cstr.count().S32())
+
+# ============================================================================
+# Directory operations (failable)
+# ============================================================================
+
+routine create_dir!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_create_dir(cstr.ptr, cstr.count().S32())
+  if result == -1
+    throw IOError(message: f"Cannot create directory: {path}")
+  return
+
+routine create_dir_all!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_create_dir_all(cstr.ptr, cstr.count().S32())
+  if result == -1
+    throw IOError(message: f"Cannot create directories: {path}")
+  return
+
+# ============================================================================
+# File operations (failable)
+# ============================================================================
+
+routine copy!(source: Text, destination: Text)
+  var src_cstr = CStr(from: source)
+  var dst_cstr = CStr(from: destination)
+  var result = rf_fs_copy(src_cstr.ptr, src_cstr.count().S32(), dst_cstr.ptr, dst_cstr.count().S32())
+  if result == -1
+    throw IOError(message: f"Cannot copy '{source}' to '{destination}'")
+  return
+
+routine move!(source: Text, destination: Text)
+  var src_cstr = CStr(from: source)
+  var dst_cstr = CStr(from: destination)
+  var result = rf_fs_move(src_cstr.ptr, src_cstr.count().S32(), dst_cstr.ptr, dst_cstr.count().S32())
+  if result == -1
+    throw IOError(message: f"Cannot move '{source}' to '{destination}'")
+  return
+
+routine delete_path!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_remove(cstr.ptr, cstr.count().S32())
+  if result == -1
+    throw IOError(message: "Cannot remove path")
+  return
+
+routine delete_path_all!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_remove_all(cstr.ptr, cstr.count().S32())
+  if result == -1
+    throw IOError(message: "Cannot remove directory tree")
+  return
+
+# ============================================================================
+# Path utilities (pure, no OS calls)
+# ============================================================================
+
+routine join_path(a: Text, b: Text) -> Text
+  var a_cstr = CStr(from: a)
+  var b_cstr = CStr(from: b)
+  var ptr = rf_fs_join_path(a_cstr.ptr, a_cstr.count().S32(), b_cstr.ptr, b_cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+routine parent_path(path: Text) -> Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_parent_path(cstr.ptr, cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+routine file_name(path: Text) -> Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_file_name(cstr.ptr, cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+routine file_stem(path: Text) -> Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_file_stem(cstr.ptr, cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+routine extension(path: Text) -> Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_extension(cstr.ptr, cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+# ============================================================================
+# Path resolution (OS calls, failable)
+# ============================================================================
+
+routine absolute_path!(path: Text) -> Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_absolute_path(cstr.ptr, cstr.count().S32())
+  var len = rf_get_result_len()
+  if ptr == Address(0)
+    throw IOError(message: f"Cannot resolve absolute path: {path}")
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+routine canonical_path!(path: Text) -> Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_canonical_path(cstr.ptr, cstr.count().S32())
+  var len = rf_get_result_len()
+  if ptr == Address(0)
+    throw IOError(message: f"Cannot resolve canonical path: {path}")
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+# ============================================================================
+# Permissions
+# ============================================================================
+
+routine can_read(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_can_read(cstr.ptr, cstr.count().S32())
+
+routine can_write(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_can_write(cstr.ptr, cstr.count().S32())
+
+routine can_execute(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_can_execute(cstr.ptr, cstr.count().S32())
+
+routine set_readonly!(path: Text, readonly: Bool = true)
+  var cstr = CStr(from: path)
+  var result = rf_fs_set_readonly(cstr.ptr, cstr.count().S32(), readonly)
+  if result == -1
+    throw IOError(message: f"Cannot set readonly on: {path}")
+  return

@@ -74,6 +74,7 @@ add_library(razorforge_runtime SHARED
     runtime/f128_functions.c
     runtime/text_functions.c
     runtime/csharp_interop.c
+    runtime/file_functions.c
     runtime/types.h
 )
 

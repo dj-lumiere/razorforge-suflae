@@ -1,0 +1,112 @@
+# File I/O - FileHandle entity with open/read/write/close operations
+# Uses explicit open!/close pattern. Closeable/using support deferred.
+
+module IO/File
+import IO/Errors
+
+# ============================================================================
+# FileMode choice
+# ============================================================================
+
+choice FileMode
+  READ
+  WRITE
+  APPEND
+
+# ============================================================================
+# FileHandle entity
+# ============================================================================
+
+entity FileHandle
+  secret fd: S32
+  secret mode: FileMode
+
+# ============================================================================
+# Core operations
+# ============================================================================
+
+# Open file — failable (crash on failure)
+routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
+  var cstr = CStr(from: path)
+  var mode_val = mode.S32()
+  var fd = rf_file_open(cstr.ptr, cstr.count().S32(), mode_val)
+  if fd == -1
+    throw IOError(message: f"Cannot open file: {path}")
+  return FileHandle(fd: fd, mode: mode)
+
+# Close file
+routine FileHandle.close()
+  rf_file_close(me.fd)
+  return
+
+# Read entire file as Text
+routine FileHandle.read_all() -> Text
+  var ptr = rf_file_read_all(me.fd)
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+# Read one line
+routine FileHandle.read_line() -> Text
+  var ptr = rf_file_read_line(me.fd)
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.as_utf8_text()
+
+# Read up to n bytes
+routine FileHandle.read_bytes(count: U64) -> Bytes
+  var ptr = rf_file_read_bytes(me.fd, count)
+  var len = rf_get_result_len()
+  return Bytes(ptr: ptr, count: len)
+
+# Write text to file
+routine FileHandle.write(value: Text, end: Text = "\n")
+  var cstr = CStr(from: value)
+  rf_file_write(me.fd, cstr.ptr, cstr.count())
+  var end_cstr = CStr(from: end)
+  rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
+  return
+
+# Write generic representable
+routine FileHandle.write[T](value: T, end: Text = "\n")
+  var text = value.$represent()
+  me.write(text, end: end)
+  return
+
+# Write bytes directly
+routine FileHandle.write(value: Bytes, end: Text = "")
+  rf_file_write(me.fd, value.ptr, value.count())
+  if end.count() > 0
+    var end_cstr = CStr(from: end)
+    rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
+  return
+
+# Flush
+routine FileHandle.flush()
+  rf_file_flush(me.fd)
+  return
+
+# Check EOF
+routine FileHandle.is_eof() -> Bool
+  return rf_file_is_eof(me.fd)
+
+# ============================================================================
+# Convenience one-shot functions
+# ============================================================================
+
+routine read_all!(path: Text) -> Text
+  var file = open!(path, mode: FileMode.READ)
+  var content = file.read_all()
+  file.close()
+  return content
+
+routine write_all!(path: Text, content: Text)
+  var file = open!(path, mode: FileMode.WRITE)
+  file.write(content, end: "")
+  file.close()
+  return
+
+routine append_all!(path: Text, content: Text)
+  var file = open!(path, mode: FileMode.APPEND)
+  file.close()
+  return

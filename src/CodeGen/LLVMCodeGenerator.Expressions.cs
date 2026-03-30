@@ -4187,6 +4187,9 @@ public partial class LLVMCodeGenerator
     private TypeInfo? GetMemberType(MemberExpression member)
     {
         TypeInfo? targetType = GetExpressionType(member.Object);
+        // Fallback: if SA didn't set ResolvedType (type-as-identifier), try type lookup by name
+        if (targetType == null && member.Object is IdentifierExpression typeId)
+            targetType = LookupTypeInCurrentModule(typeId.Name);
         if (targetType == null) return null;
 
         // Refresh stale generic entity resolutions for member variable lookup

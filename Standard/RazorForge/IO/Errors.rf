@@ -1,0 +1,7 @@
+module IO/Errors
+
+entity IOError obeys Crashable
+  message: Text
+
+routine IOError.crash_message() -> Text
+  return me.message

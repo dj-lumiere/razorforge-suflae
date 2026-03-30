@@ -412,3 +412,43 @@ external("C") routine rf_format_F16(value: F16) -> Address
 external("C") routine rf_format_F32(value: F32) -> Address
 external("C") routine rf_format_F64(value: F64) -> Address
 external("C") routine rf_format_F128(value: F128) -> Address
+
+# ============================================================================
+# File I/O
+# ============================================================================
+
+external("C") routine rf_get_result_len() -> U64
+external("C") routine rf_file_open(path: Address, path_len: S32, mode: S32) -> S32
+external("C") routine rf_file_close(fd: S32)
+external("C") routine rf_file_read_all(fd: S32) -> Address
+external("C") routine rf_file_read_line(fd: S32) -> Address
+external("C") routine rf_file_read_bytes(fd: S32, count: U64) -> Address
+external("C") routine rf_file_write(fd: S32, ptr: Address, len: U64) -> U64
+external("C") routine rf_file_flush(fd: S32)
+external("C") routine rf_file_is_eof(fd: S32) -> Bool
+
+# ============================================================================
+# FileSystem
+# ============================================================================
+
+external("C") routine rf_fs_exists(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_is_file(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_is_directory(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_create_dir(path: Address, len: S32) -> S32
+external("C") routine rf_fs_create_dir_all(path: Address, len: S32) -> S32
+external("C") routine rf_fs_remove(path: Address, len: S32) -> S32
+external("C") routine rf_fs_remove_all(path: Address, len: S32) -> S32
+external("C") routine rf_fs_copy(src: Address, src_len: S32, dst: Address, dst_len: S32) -> S32
+external("C") routine rf_fs_move(src: Address, src_len: S32, dst: Address, dst_len: S32) -> S32
+external("C") routine rf_fs_file_size(path: Address, len: S32) -> S64
+external("C") routine rf_fs_join_path(a: Address, a_len: S32, b: Address, b_len: S32) -> Address
+external("C") routine rf_fs_parent_path(path: Address, len: S32) -> Address
+external("C") routine rf_fs_file_name(path: Address, len: S32) -> Address
+external("C") routine rf_fs_file_stem(path: Address, len: S32) -> Address
+external("C") routine rf_fs_extension(path: Address, len: S32) -> Address
+external("C") routine rf_fs_absolute_path(path: Address, len: S32) -> Address
+external("C") routine rf_fs_canonical_path(path: Address, len: S32) -> Address
+external("C") routine rf_fs_can_read(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_can_write(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_can_execute(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_set_readonly(path: Address, len: S32, readonly_flag: Bool) -> S32
