@@ -7,6 +7,8 @@ public sealed class PackageInfo
     public List<string>? Authors { get; set; }
     public string? License { get; set; }
     public string? Description { get; set; }
+    public string? Repository { get; set; }
+    public string? RazorForgeVersion { get; set; }
 }
 
 public sealed class TargetInfo

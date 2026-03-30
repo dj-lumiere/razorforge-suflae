@@ -87,6 +87,10 @@ public static class ManifestLoader
             pkg.Description = description?.ToString();
         if (table.TryGetValue("authors", out object? authorsObj) && authorsObj is TomlArray authorsArray)
             pkg.Authors = authorsArray.Select(a => a?.ToString() ?? "").ToList();
+        if (table.TryGetValue("repository", out object? repository))
+            pkg.Repository = repository?.ToString();
+        if (table.TryGetValue("razorforge-version", out object? rfVersion))
+            pkg.RazorForgeVersion = rfVersion?.ToString();
 
         return pkg;
     }
