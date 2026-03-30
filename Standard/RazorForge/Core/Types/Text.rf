@@ -317,7 +317,7 @@ routine Text.trim_end() -> Text
     end_idx -= 1u64
   return me[0 til end_idx]
 
-routine Text.replace(old: Text, with: Text) -> Text
+routine Text.replace(old: Text, new: Text) -> Text
   if old.is_empty()
     return me
   var result = List[Letter]()
@@ -333,8 +333,8 @@ routine Text.replace(old: Text, with: Text) -> Text
           found = false
           break
     if found
-      for j in 0 til with.count()
-        result.add_last(with[j])
+      for j in 0 til new.count()
+        result.add_last(new[j])
       i += old.count()
     else
       result.add_last(me[i])
