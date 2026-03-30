@@ -55,20 +55,20 @@ void rf_console_show(const char* ptr, rf_address count) { fwrite(ptr, 1, count, 
 // Count-based print to stderr (preferred - no null-termination required)
 void rf_console_alert(const char* ptr, rf_address count)
 {
-    fwrite("\033[91m", 1, 5, stderr);
+    fwrite("\033[95m", 1, 5, stderr);
     fwrite(ptr, 1, count, stderr);
     fwrite("\033[0m", 1, 4, stderr);
     fflush(stderr);
 }
 
-// Input operations - get single character
-char rf_console_get_char()
+// Input operations - ask single character
+char rf_console_ask_char()
 {
     return getchar();
 }
 
-// Input operations - get line (allocates buffer, returns null-terminated string)
-char* rf_console_get_line()
+// Input operations - ask line (allocates buffer, returns null-terminated string)
+char* rf_console_ask_line()
 {
     fflush(stdout);
     int c;
@@ -115,8 +115,8 @@ char* rf_console_get_line()
     return buffer;
 }
 
-// Input operations - get word (whitespace-delimited)
-char* rf_console_get_word()
+// Input operations - ask word (whitespace-delimited)
+char* rf_console_ask_word()
 {
     fflush(stdout);
     int c;
@@ -163,8 +163,8 @@ char* rf_console_get_word()
     return buffer;
 }
 
-// Input operations - get exactly n characters
-char* rf_console_get_letters(rf_address count)
+// Input operations - ask exactly n characters
+char* rf_console_ask_letters(rf_address count)
 {
     fflush(stdout);
     char* buffer = malloc(count + 1);
@@ -175,8 +175,8 @@ char* rf_console_get_letters(rf_address count)
     return buffer;
 }
 
-// Input operations - get all input until EOF
-char* rf_console_get_all()
+// Input operations - ask all input until EOF
+char* rf_console_ask_all()
 {
     fflush(stdout);
     size_t capacity = 1024;

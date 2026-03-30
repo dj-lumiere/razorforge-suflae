@@ -24,30 +24,21 @@ needs T obeys Diagnosable
   return
 
 # Input: Text functions (default)
-routine Console.get_line() -> Text
-  return RazorForge/IO.Console.get_line()
+routine Console.ask_line() -> Text
+  return RazorForge/IO.Console.ask_line()
 
-routine Console.get_word() -> Text
-  return RazorForge/IO.Console.get_word()
+routine Console.ask_word() -> Text
+  return RazorForge/IO.Console.ask_word()
 
-routine Console.get_all() -> Text
-  return RazorForge/IO.Console.get_all()
+routine Console.ask_all() -> Text
+  return RazorForge/IO.Console.ask_all()
 
-routine Console.get_letters(count: U64) -> Text
-  return RazorForge/IO.Console.get_letters(count)
+routine Console.ask_letters(count: U64) -> Text
+  return RazorForge/IO.Console.ask_letters(count)
 
 # Input: Bytes functions (opt-in)
-routine Console.get_raw() -> Bytes
-  return RazorForge/IO.Console.get_raw()
+routine Console.ask_raw() -> Bytes
+  return RazorForge/IO.Console.ask_raw()
 
-routine Console.get_bytes(count: U64) -> Bytes
-  return RazorForge/IO.Console.get_bytes(count)
-
-# Utility Functions
-routine Console.flush()
-  RazorForge/IO.Console.flush()
-  return
-
-routine Console.clear()
-  RazorForge/IO.Console.clear()
-  return
+routine Console.ask_bytes(count: U64) -> Bytes
+  return RazorForge/IO.Console.ask_bytes(count)
