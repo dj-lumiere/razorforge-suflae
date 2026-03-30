@@ -55,13 +55,13 @@ public sealed partial class SemanticAnalyzer
             ListLiteralExpression list => AnalyzeListLiteralExpression(list: list, expectedType: expectedType),
             SetLiteralExpression set => AnalyzeSetLiteralExpression(set: set, expectedType: expectedType),
             DictLiteralExpression dict => AnalyzeDictLiteralExpression(dict: dict, expectedType: expectedType),
-            TupleLiteralExpression tuple => AnalyzeTupleLiteralExpression(tuple: tuple),
+            TupleLiteralExpression tuple => AnalyzeTupleLiteralExpression(tuple: tuple, expectedType: expectedType),
             TypeConversionExpression conv => AnalyzeTypeConversionExpression(conv: conv),
             ChainedComparisonExpression chain => AnalyzeChainedComparisonExpression(chain: chain),
             BlockExpression block => AnalyzeBlockExpression(block: block),
             WithExpression with => AnalyzeWithExpression(with: with),
             NamedArgumentExpression named => AnalyzeExpression(expression: named.Value),
-            DictEntryLiteralExpression dictEntry => AnalyzeDictEntryLiteralExpression(dictEntry: dictEntry),
+            DictEntryLiteralExpression dictEntry => AnalyzeDictEntryLiteralExpression(dictEntry: dictEntry, expectedType: expectedType),
             GenericMethodCallExpression generic => AnalyzeGenericMethodCallExpression(generic: generic),
             GenericMemberExpression genericMember => AnalyzeGenericMemberExpression(genericMember: genericMember),
             IsPatternExpression isPat => AnalyzeIsPatternExpression(isPat: isPat),
@@ -184,7 +184,7 @@ public sealed partial class SemanticAnalyzer
         // Parse and validate deferred numeric types using native libraries
         if (literal.Value is string rawValue)
         {
-            ParsedLiteral? parsed = ParseDeferredLiteral(literal: literal, rawValue: rawValue);
+            ParsedLiteral? parsed = ParseDeferredLiteral(literal: literal, rawValue: rawValue, resolvedTypeName: typeName);
             if (parsed != null)
             {
                 _parsedLiterals[literal.Location] = parsed;
@@ -279,8 +279,9 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     /// <param name="literal">The literal expression.</param>
     /// <param name="rawValue">The raw string value to parse.</param>
+    /// <param name="resolvedTypeName">The resolved type name (may differ from literal type due to contextual inference).</param>
     /// <returns>The parsed literal, or null if parsing failed.</returns>
-    private ParsedLiteral? ParseDeferredLiteral(LiteralExpression literal, string rawValue)
+    private ParsedLiteral? ParseDeferredLiteral(LiteralExpression literal, string rawValue, string resolvedTypeName)
     {
         try
         {
@@ -290,7 +291,7 @@ public sealed partial class SemanticAnalyzer
                 TokenType.S8Literal => ParseSignedIntLiteral(literal, rawValue, "S8", sbyte.MinValue, sbyte.MaxValue),
                 TokenType.S16Literal => ParseSignedIntLiteral(literal, rawValue, "S16", short.MinValue, short.MaxValue),
                 TokenType.S32Literal => ParseSignedIntLiteral(literal, rawValue, "S32", int.MinValue, int.MaxValue),
-                TokenType.S64Literal => ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
+                TokenType.S64Literal => ParseIntegerByResolvedType(literal, rawValue, resolvedTypeName),
                 TokenType.S128Literal => ParseS128Literal(literal, rawValue),
                 // Fixed-width unsigned integers
                 TokenType.U8Literal => ParseUnsignedIntLiteral(literal, rawValue, "U8", byte.MaxValue),
@@ -313,9 +314,10 @@ public sealed partial class SemanticAnalyzer
 
                 // RazorForge uses fixed-width types (S64, F64) for unsuffixed literals
                 // Suflae uses arbitrary precision types (Integer, Decimal)
+                // Use resolvedTypeName to pick the right parser when contextual inference changed the type
                 TokenType.Integer => _registry.Language == Language.Suflae
                     ? ParseIntegerLiteral(literal: literal, rawValue: rawValue)
-                    : ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
+                    : ParseIntegerByResolvedType(literal, rawValue, resolvedTypeName),
                 TokenType.Decimal => _registry.Language == Language.Suflae
                     ? ParseDecimalLiteral(literal: literal, rawValue: rawValue)
                     : ParseF64Literal(literal, rawValue),
@@ -450,6 +452,27 @@ public sealed partial class SemanticAnalyzer
 
         ReportError(SemanticDiagnosticCode.InvalidIntegerLiteral, $"Invalid S128 literal: '{rawValue}'", literal.Location);
         return null;
+    }
+
+    /// <summary>
+    /// Routes unsuffixed integer literal parsing based on the contextually resolved type name.
+    /// </summary>
+    private ParsedLiteral? ParseIntegerByResolvedType(LiteralExpression literal, string rawValue, string resolvedTypeName)
+    {
+        return resolvedTypeName switch
+        {
+            "S8" => ParseSignedIntLiteral(literal, rawValue, "S8", sbyte.MinValue, sbyte.MaxValue),
+            "S16" => ParseSignedIntLiteral(literal, rawValue, "S16", short.MinValue, short.MaxValue),
+            "S32" => ParseSignedIntLiteral(literal, rawValue, "S32", int.MinValue, int.MaxValue),
+            "S128" => ParseS128Literal(literal, rawValue),
+            "U8" => ParseUnsignedIntLiteral(literal, rawValue, "U8", byte.MaxValue),
+            "U16" => ParseUnsignedIntLiteral(literal, rawValue, "U16", ushort.MaxValue),
+            "U32" => ParseUnsignedIntLiteral(literal, rawValue, "U32", uint.MaxValue),
+            "U64" => ParseUnsignedIntLiteral(literal, rawValue, "U64", ulong.MaxValue),
+            "U128" => ParseU128Literal(literal, rawValue),
+            "Address" => ParseUnsignedIntLiteral(literal, rawValue, "Address", ulong.MaxValue, "addr"),
+            _ => ParseSignedIntLiteral(literal, rawValue, "S64", long.MinValue, long.MaxValue),
+        };
     }
 
     /// <summary>
@@ -3211,10 +3234,19 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeDictEntryLiteralExpression(DictEntryLiteralExpression dictEntry)
+    private TypeSymbol AnalyzeDictEntryLiteralExpression(DictEntryLiteralExpression dictEntry, TypeSymbol? expectedType = null)
     {
-        TypeSymbol keyType = AnalyzeExpression(expression: dictEntry.Key);
-        TypeSymbol valueType = AnalyzeExpression(expression: dictEntry.Value);
+        // Extract expected key/value types from tuple expected type (used by collection constructors)
+        TypeSymbol? expectedKeyType = null;
+        TypeSymbol? expectedValueType = null;
+        if (expectedType is TupleTypeInfo { ElementTypes.Count: 2 } expectedTuple)
+        {
+            expectedKeyType = expectedTuple.ElementTypes[0];
+            expectedValueType = expectedTuple.ElementTypes[1];
+        }
+
+        TypeSymbol keyType = AnalyzeExpression(expression: dictEntry.Key, expectedType: expectedKeyType);
+        TypeSymbol valueType = AnalyzeExpression(expression: dictEntry.Value, expectedType: expectedValueType);
 
         // Resolve to DictEntry[K, V]
         TypeSymbol? dictEntryDef = _registry.LookupType(name: "DictEntry");
@@ -3226,13 +3258,21 @@ public sealed partial class SemanticAnalyzer
         return ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeTupleLiteralExpression(TupleLiteralExpression tuple)
+    private TypeSymbol AnalyzeTupleLiteralExpression(TupleLiteralExpression tuple, TypeSymbol? expectedType = null)
     {
+        // Extract per-element expected types from tuple expected type
+        IReadOnlyList<TypeInfo>? expectedElementTypes = null;
+        if (expectedType is TupleTypeInfo expectedTuple && expectedTuple.ElementTypes.Count == tuple.Elements.Count)
+        {
+            expectedElementTypes = expectedTuple.ElementTypes;
+        }
+
         // Analyze all element expressions
         var elementTypes = new List<TypeSymbol>();
-        foreach (Expression element in tuple.Elements)
+        for (int i = 0; i < tuple.Elements.Count; i++)
         {
-            TypeSymbol elementType = AnalyzeExpression(expression: element);
+            TypeSymbol? elemExpected = expectedElementTypes?[i];
+            TypeSymbol elementType = AnalyzeExpression(expression: tuple.Elements[i], expectedType: elemExpected);
             elementTypes.Add(item: elementType);
         }
 
@@ -3585,10 +3625,18 @@ public sealed partial class SemanticAnalyzer
             TypeInfo resolvedType = _registry.GetOrCreateResolution(
                 genericDef: typeInfo, typeArguments: typeArgs.Cast<TypeInfo>().ToList());
 
+            // Build expected element type from explicit generic type args
+            TypeSymbol? expectedElemType = null;
+            bool isMapType = typeId.Name is "Dict" or "SortedDict" or "PriorityQueue";
+            if (isMapType && typeArgs.Count >= 2)
+                expectedElemType = _registry.GetOrCreateTupleType(elementTypes: [(TypeInfo)typeArgs[0], (TypeInfo)typeArgs[1]]);
+            else if (typeArgs.Count >= 1)
+                expectedElemType = typeArgs[0];
+
             // Analyze constructor arguments
             foreach (Expression arg in generic.Arguments)
             {
-                AnalyzeExpression(expression: arg);
+                AnalyzeExpression(expression: arg, expectedType: expectedElemType);
             }
 
             // Collection literal constructor with explicit type args: List[S64](1, 2, 3)
