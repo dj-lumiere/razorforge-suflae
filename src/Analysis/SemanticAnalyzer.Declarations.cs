@@ -1241,24 +1241,37 @@ public sealed partial class SemanticAnalyzer
         }
 
         var cases = new List<ChoiceCaseInfo>();
-        long autoValue = 0;
+        int autoValue = 0;
 
         foreach (ChoiceCase caseDecl in choice.Cases)
         {
-            long? explicitValue = null;
+            int? explicitValue = null;
 
             // Evaluate explicit value if provided
             if (caseDecl.Value != null)
             {
-                explicitValue = TryEvaluateChoiceCaseValue(expression: caseDecl.Value,
+                var longValue = TryEvaluateChoiceCaseValue(expression: caseDecl.Value,
                     choice: choice,
                     caseName: caseDecl.Name,
                     location: caseDecl.Location);
+                if (longValue.HasValue)
+                {
+                    if (longValue.Value < int.MinValue || longValue.Value > int.MaxValue)
+                    {
+                        ReportError(SemanticDiagnosticCode.ChoiceCaseValueOverflow,
+                            $"Choice '{choice.Name}' case '{caseDecl.Name}': explicit value {longValue.Value} exceeds S32 range.",
+                            caseDecl.Location);
+                    }
+                    else
+                    {
+                        explicitValue = (int)longValue.Value;
+                    }
+                }
                 if (explicitValue.HasValue)
                 {
                     autoValue = explicitValue.Value;
                     // Check auto-increment overflow
-                    if (autoValue == long.MaxValue)
+                    if (autoValue == int.MaxValue)
                     {
                         // Next auto-increment would overflow; only report if there are more cases after this
                         // The overflow will be caught when the next case tries to use autoValue + 1
@@ -1270,7 +1283,7 @@ public sealed partial class SemanticAnalyzer
                 }
             }
 
-            long computedValue;
+            int computedValue;
             if (explicitValue.HasValue)
             {
                 computedValue = explicitValue.Value;
@@ -1278,10 +1291,10 @@ public sealed partial class SemanticAnalyzer
             else
             {
                 computedValue = autoValue;
-                if (autoValue == long.MaxValue)
+                if (autoValue == int.MaxValue)
                 {
                     ReportError(SemanticDiagnosticCode.ChoiceCaseValueOverflow,
-                        $"Choice '{choice.Name}' case '{caseDecl.Name}': auto-assigned value would overflow S64 range.",
+                        $"Choice '{choice.Name}' case '{caseDecl.Name}': auto-assigned value would overflow S32 range.",
                         caseDecl.Location);
                 }
                 else

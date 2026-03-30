@@ -95,8 +95,8 @@ public partial class LLVMCodeGenerator
             // Wrappers (Viewed, Hijacked, Snatched, etc.) → all pointers at LLVM level
             WrapperTypeInfo => "ptr",
 
-            // Choices → underlying integer type (S64)
-            ChoiceTypeInfo => "i64",
+            // Choices → underlying integer type (S32)
+            ChoiceTypeInfo => "i32",
 
             // Flags → underlying bitmask type (U64)
             FlagsTypeInfo => "i64",
@@ -295,7 +295,7 @@ public partial class LLVMCodeGenerator
             EntityTypeInfo => 8, // Entities are heap-allocated, stored as pointers
             TupleTypeInfo tuple => CalculateTupleSize(tuple),
             WrapperTypeInfo => 8, // Pointer size
-            ChoiceTypeInfo => 8, // i64 tag
+            ChoiceTypeInfo => 4, // i32 tag
             VariantTypeInfo variant => CalculateVariantSize(variant),
             _ => 8 // Default to pointer size
         };

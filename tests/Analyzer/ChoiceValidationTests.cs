@@ -8,7 +8,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for choice type validation.
-/// Choices are S64-backed enums with all-or-nothing explicit values,
+/// Choices are S32-backed enums with all-or-nothing explicit values,
 /// duplicate value detection, and range validation.
 /// </summary>
 public class ChoiceValidationTests
@@ -70,9 +70,9 @@ public class ChoiceValidationTests
     }
 
     [Fact]
-    public void Analyze_ChoiceWithLargeS64Values_NoErrors()
+    public void Analyze_ChoiceWithLargeValues_OverflowError()
     {
-        // Values exceeding S32 range but within S64
+        // Values exceeding S32 range should produce overflow errors
         string source = """
                         choice BigValues
                           SMALL: 0
@@ -81,10 +81,8 @@ public class ChoiceValidationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseValueOverflow);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
     }
 
     #endregion

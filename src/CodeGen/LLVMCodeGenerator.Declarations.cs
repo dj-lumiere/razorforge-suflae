@@ -189,8 +189,8 @@ public partial class LLVMCodeGenerator
         }
         _generatedTypes.Add(typeName);
 
-        // Choice is just an i64 (tag value)
-        EmitLine(_typeDeclarations, $"{typeName} = type {{ i64 }}");
+        // Choice is just an i32 (tag value)
+        EmitLine(_typeDeclarations, $"{typeName} = type {{ i32 }}");
 
         // Add case values as comments
         var sb = new StringBuilder();
@@ -1066,16 +1066,24 @@ public partial class LLVMCodeGenerator
             case "$hash":
                 EmitSynthesizedHash(routine, funcName);
                 break;
+            case "S32":
+                // TODO: this should be a creation
+                EmitSynthesizedIdentityCast(routine, funcName, "i32");
+                break;
             case "S64":
+                // TODO: this should be a creation
                 EmitSynthesizedIdentityCast(routine, funcName, "i64");
                 break;
             case "U64":
+                // TODO: this should be a creation
                 EmitSynthesizedIdentityCast(routine, funcName, "i64");
                 break;
             case "id":
+                // TODO: Remove this at all
                 EmitSynthesizedId(routine, funcName);
                 break;
             case "copy!":
+                // TODO: Remove this for entity
                 EmitSynthesizedCopy(routine, funcName);
                 break;
             case "$create":
@@ -1102,6 +1110,7 @@ public partial class LLVMCodeGenerator
             case "all_cases":
                 EmitSynthesizedAllCases(routine, funcName);
                 break;
+            // BuilderService infos
             case "type_name":
                 EmitSynthesizedTypeName(routine, funcName);
                 break;
@@ -1158,9 +1167,11 @@ public partial class LLVMCodeGenerator
                 EmitSynthesizedBuilderServiceText(routine, funcName, DetectTargetArch());
                 break;
             case "builder_version":
+                // TODO: What the fuck?
                 EmitSynthesizedBuilderServiceText(routine, funcName, "0.1.0");
                 break;
             case "build_mode":
+                // TODO: There is only four modes: DEBUG, RELEASE, RELEASE-TIME, RELEASE-SPACE
 #if DEBUG
                 EmitSynthesizedBuilderServiceU64(routine, funcName, 0); // BuildMode.DEBUG
 #else
@@ -1880,9 +1891,9 @@ public partial class LLVMCodeGenerator
 
         // Switch on %me to get case name
         string defaultLabel = "sw.default";
-        EmitLine(sb, $"  switch i64 %me, label %{defaultLabel} [");
+        EmitLine(sb, $"  switch i32 %me, label %{defaultLabel} [");
         for (int i = 0; i < choice.Cases.Count; i++)
-            EmitLine(sb, $"    i64 {choice.Cases[i].ComputedValue}, label %sw.case.{i}");
+            EmitLine(sb, $"    i32 {choice.Cases[i].ComputedValue}, label %sw.case.{i}");
         EmitLine(sb, "  ]");
 
         // Emit each case block
@@ -1912,7 +1923,7 @@ public partial class LLVMCodeGenerator
             string prefix = EmitSynthesizedStringLiteral($"{typeName}(<unknown>, value: ");
             string suffix = EmitSynthesizedStringLiteral(")");
             string valText = EmitSynthesizedValueToText(
-                _registry.LookupType("S64") ?? new RecordTypeInfo("S64"), "i64", "%me");
+                _registry.LookupType("S32") ?? new RecordTypeInfo("S32"), "i32", "%me");
             string cat1 = NextTemp();
             EmitLine(sb, $"  {cat1} = call ptr @rf_text_concat(ptr {prefix}, ptr {valText})");
             string cat2 = NextTemp();
@@ -1922,7 +1933,7 @@ public partial class LLVMCodeGenerator
         else
         {
             string valText = EmitSynthesizedValueToText(
-                _registry.LookupType("S64") ?? new RecordTypeInfo("S64"), "i64", "%me");
+                _registry.LookupType("S32") ?? new RecordTypeInfo("S32"), "i32", "%me");
             EmitLine(sb, $"  ret ptr {valText}");
         }
     }
@@ -2061,6 +2072,15 @@ public partial class LLVMCodeGenerator
         switch (routine.OwnerType)
         {
             case ChoiceTypeInfo:
+            {
+                // Choice is i32 — extend to i64 for hash, then hash = me * 2654435761
+                string ext = NextTemp();
+                EmitLine(_functionDefinitions, $"  {ext} = sext i32 %me to i64");
+                string result = NextTemp();
+                EmitLine(_functionDefinitions, $"  {result} = mul i64 {ext}, 2654435761");
+                EmitLine(_functionDefinitions, $"  ret i64 {result}");
+                break;
+            }
             case FlagsTypeInfo:
             {
                 // hash = me * 2654435761 (Knuth multiplicative hash constant)
@@ -2161,8 +2181,8 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized S64() or U64() routine.
-    /// Choice/Flags are backed by i64, so just return %me directly.
+    /// Emits the body for a synthesized S32() or S64() identity cast routine.
+    /// Choice is backed by i32, Flags by i64 — just return %me directly.
     /// </summary>
     private void EmitSynthesizedIdentityCast(RoutineInfo routine, string funcName, string llvmRetType)
     {
@@ -2385,8 +2405,9 @@ public partial class LLVMCodeGenerator
     {
         if (routine.OwnerType == null) return;
 
-        // Collect all case values as i64 constants
+        // Collect all case values as constants
         var caseValues = new List<long>();
+        bool isChoice = routine.OwnerType is ChoiceTypeInfo;
 
         if (routine.OwnerType is ChoiceTypeInfo choiceType)
         {
@@ -2408,7 +2429,8 @@ public partial class LLVMCodeGenerator
         }
 
         int count = caseValues.Count;
-        int elemSize = 8; // i64
+        int elemSize = isChoice ? 4 : 8; // i32 for choice, i64 for flags
+        string elemType = isChoice ? "i32" : "i64";
 
         var sb = _functionDefinitions;
         EmitLine(sb, $"define ptr @{funcName}() {{");
@@ -2441,8 +2463,8 @@ public partial class LLVMCodeGenerator
         for (int i = 0; i < count; i++)
         {
             string elemPtr = NextTemp();
-            EmitLine(sb, $"  {elemPtr} = getelementptr i64, ptr {dataPtr}, i64 {i}");
-            EmitLine(sb, $"  store i64 {caseValues[i]}, ptr {elemPtr}");
+            EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {dataPtr}, i64 {i}");
+            EmitLine(sb, $"  store {elemType} {caseValues[i]}, ptr {elemPtr}");
         }
 
         EmitLine(sb, $"  ret ptr {listPtr}");
@@ -2733,7 +2755,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits the body for a synthesized type_kind() routine.
-    /// Returns the TypeKind choice ordinal as an i64 constant.
+    /// Returns the TypeKind choice ordinal as an i32 constant.
     /// </summary>
     private void EmitSynthesizedTypeKind(RoutineInfo routine, string funcName)
     {
@@ -2741,7 +2763,7 @@ public partial class LLVMCodeGenerator
 
         string meType = GetParameterLLVMType(routine.OwnerType);
         // Map TypeCategory enum → TypeKind choice ordinals (from BuilderService.rf)
-        long kindValue = routine.OwnerType.Category switch
+        int kindValue = routine.OwnerType.Category switch
         {
             TypeCategory.Record => 0,    // TypeKind.RECORD
             TypeCategory.Entity => 1,    // TypeKind.ENTITY
@@ -2753,9 +2775,9 @@ public partial class LLVMCodeGenerator
             _ => 0                       // Default RECORD for internal types (Tuple, Wrapper, etc.)
         };
 
-        EmitLine(_functionDefinitions, $"define i64 @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, $"define i32 @{funcName}({meType} %me) {{");
         EmitLine(_functionDefinitions, "entry:");
-        EmitLine(_functionDefinitions, $"  ret i64 {kindValue}");
+        EmitLine(_functionDefinitions, $"  ret i32 {kindValue}");
         EmitLine(_functionDefinitions, "}");
         EmitLine(_functionDefinitions, "");
     }
@@ -3273,7 +3295,7 @@ public partial class LLVMCodeGenerator
             {
                 RecordTypeInfo { HasDirectBackendType: true } rec => LlvmTypeSizeBytes(rec.LlvmType),
                 RecordTypeInfo { IsSingleMemberVariableWrapper: true } rec => LlvmTypeSizeBytes(rec.LlvmType),
-                ChoiceTypeInfo => 8, // i64
+                ChoiceTypeInfo => 4, // i32
                 FlagsTypeInfo => 8,  // i64
                 _ => _pointerBitWidth / 8 // Default to pointer size
             };
@@ -3322,7 +3344,7 @@ public partial class LLVMCodeGenerator
                 RecordTypeInfo { HasDirectBackendType: true } rec => LlvmTypeAlignment(rec.LlvmType),
                 RecordTypeInfo { IsSingleMemberVariableWrapper: true } rec =>
                     LlvmTypeAlignment(rec.LlvmType),
-                ChoiceTypeInfo => 8,
+                ChoiceTypeInfo => 4,
                 FlagsTypeInfo => 8,
                 _ => _pointerBitWidth / 8
             };

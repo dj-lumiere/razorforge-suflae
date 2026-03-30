@@ -2492,7 +2492,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits choice case comparison (is / isnot).
-    /// Left operand is a choice value (i64 tag), right operand is a choice case identifier.
+    /// Left operand is a choice value (i32 tag), right operand is a choice case identifier.
     /// </summary>
     private string EmitChoiceIs(StringBuilder sb, BinaryExpression binary, string cmpOp)
     {
@@ -2505,7 +2505,7 @@ public partial class LLVMCodeGenerator
             if (choiceCase != null)
             {
                 string result = NextTemp();
-                EmitLine(sb, $"  {result} = icmp {cmpOp} i64 {left}, {choiceCase.Value.CaseInfo.ComputedValue}");
+                EmitLine(sb, $"  {result} = icmp {cmpOp} i32 {left}, {choiceCase.Value.CaseInfo.ComputedValue}");
                 return result;
             }
         }
@@ -2513,7 +2513,7 @@ public partial class LLVMCodeGenerator
         // Fallback: evaluate RHS as an expression (e.g., qualified access Direction.NORTH)
         string right = EmitExpression(sb, binary.Right);
         string fallbackResult = NextTemp();
-        EmitLine(sb, $"  {fallbackResult} = icmp {cmpOp} i64 {left}, {right}");
+        EmitLine(sb, $"  {fallbackResult} = icmp {cmpOp} i32 {left}, {right}");
         return fallbackResult;
     }
 

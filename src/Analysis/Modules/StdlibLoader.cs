@@ -1001,22 +1001,22 @@ public sealed class StdlibLoader
 
         // Build cases list upfront
         var cases = new List<ChoiceCaseInfo>();
-        long autoValue = 0;
+        int autoValue = 0;
         foreach (var caseDecl in choice.Cases)
         {
-            long? explicitValue = null;
+            int? explicitValue = null;
             if (caseDecl.Value is LiteralExpression { Value: string valStr })
             {
-                if (long.TryParse(valStr, out long v))
+                if (int.TryParse(valStr, out int v))
                     explicitValue = v;
             }
             else if (caseDecl.Value is UnaryExpression { Operator: UnaryOperator.Minus, Operand: LiteralExpression { Value: string negStr } })
             {
-                if (long.TryParse(negStr, out long v))
+                if (int.TryParse(negStr, out int v))
                     explicitValue = -v;
             }
 
-            long computedValue;
+            int computedValue;
             if (explicitValue.HasValue)
             {
                 computedValue = explicitValue.Value;

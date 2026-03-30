@@ -11,10 +11,10 @@ public sealed class ChoiceCaseInfo
     public string Name { get; }
 
     /// <summary>The explicit integer value, if specified.</summary>
-    public long? Value { get; init; }
+    public int? Value { get; init; }
 
     /// <summary>The computed integer value (either explicit or auto-assigned).</summary>
-    public long ComputedValue { get; init; }
+    public int ComputedValue { get; init; }
 
     /// <summary>Source location where this case is defined.</summary>
     public SourceLocation? Location { get; init; }
