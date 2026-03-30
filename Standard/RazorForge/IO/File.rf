@@ -1,5 +1,5 @@
 # File I/O - FileHandle entity with open/read/write/close operations
-# Uses explicit open!/close pattern. Closeable/using support deferred.
+# Supports both explicit open!/close and `using` pattern for automatic cleanup.
 
 module IO/File
 import IO/Errors
@@ -91,6 +91,17 @@ routine FileHandle.is_eof() -> Bool
   return rf_file_is_eof(me.fd)
 
 # ============================================================================
+# Resource management — enables `using open!(path) as f`
+# ============================================================================
+
+routine FileHandle.$enter()
+  return
+
+routine FileHandle.$exit()
+  me.close()
+  return
+
+# ============================================================================
 # Convenience one-shot functions
 # ============================================================================
 
@@ -108,5 +119,6 @@ routine write_all!(path: Text, content: Text)
 
 routine append_all!(path: Text, content: Text)
   var file = open!(path, mode: FileMode.APPEND)
+  file.write(content, end: "")
   file.close()
   return

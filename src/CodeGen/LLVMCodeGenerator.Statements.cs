@@ -2279,6 +2279,7 @@ public partial class LLVMCodeGenerator
         if (enterMethod != null)
         {
             // Resource path: call $enter(), bind result (or resource if void)
+            GenerateFunctionDeclaration(enterMethod);
             string enterMangled = MangleFunctionName(enterMethod);
             string receiverType = GetParameterLLVMType(resourceType!);
 
@@ -2325,6 +2326,7 @@ public partial class LLVMCodeGenerator
             RoutineInfo? exitMethod = _registry.LookupRoutine(exitMethodName);
             if (exitMethod != null)
             {
+                GenerateFunctionDeclaration(exitMethod);
                 string exitMangled = MangleFunctionName(exitMethod);
                 string receiverType = GetParameterLLVMType(resourceType);
                 EmitLine(sb, $"  call void @{exitMangled}({receiverType} {resourceValue})");

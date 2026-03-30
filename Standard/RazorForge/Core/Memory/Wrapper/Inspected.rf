@@ -38,6 +38,17 @@ record Inspected[T]
 # Lock acquisition can fail (e.g., poisoned lock) - use observing! for fallible acquisition
 
 # ============================================================================
+# Resource management — enables `using shared.inspect!() as obs`
+# ============================================================================
+
+routine Inspected[T].$enter()
+  return
+
+routine Inspected[T].$exit()
+  # TODO: release lock_guard when lock runtime is implemented
+  return
+
+# ============================================================================
 # Display (transparent - delegates to inner value, lock already held)
 # ============================================================================
 

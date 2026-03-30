@@ -30,6 +30,16 @@ routine T.hijack() -> Hijacked[T]
 # Users should NEVER create Hijacked[T] values directly
 
 # ============================================================================
+# Resource management — enables `using entity.hijack() as h`
+# ============================================================================
+
+routine Hijacked[T].$enter()
+  return
+
+routine Hijacked[T].$exit()
+  return
+
+# ============================================================================
 # Display (transparent - delegates to inner value)
 # ============================================================================
 

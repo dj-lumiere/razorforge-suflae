@@ -32,6 +32,16 @@ routine T.view() -> Viewed[T]
 # Users should NEVER create Viewed[T] values directly
 
 # ============================================================================
+# Resource management — enables `using entity.view() as v`
+# ============================================================================
+
+routine Viewed[T].$enter()
+  return
+
+routine Viewed[T].$exit()
+  return
+
+# ============================================================================
 # Display (transparent - delegates to inner value)
 # ============================================================================
 

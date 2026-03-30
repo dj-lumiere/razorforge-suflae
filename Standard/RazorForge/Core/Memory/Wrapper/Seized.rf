@@ -41,6 +41,17 @@ record Seized[T]
 # Lock acquisition can fail (e.g., poisoned lock) - use seizing! for fallible acquisition
 
 # ============================================================================
+# Resource management — enables `using shared.seize!() as s`
+# ============================================================================
+
+routine Seized[T].$enter()
+  return
+
+routine Seized[T].$exit()
+  # TODO: release lock_guard when lock runtime is implemented
+  return
+
+# ============================================================================
 # Display (transparent - delegates to inner value, lock already held)
 # ============================================================================
 
