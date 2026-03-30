@@ -3,14 +3,14 @@
 module Core
 
 record Retained[T]
-  secret controller: Snatched[SingleShareController]
+  secret controller: Snatched[RetainController]
   secret data: Snatched[T]
 
 # Create shared reference from owned value
 routine T.retain() -> Retained[T]
   danger!
     # Allocate controller
-    var controller = SingleShareController().snatch()
+    var controller = RetainController().snatch()
     controller.increase_strong_count!()
 
     # Create Retained record

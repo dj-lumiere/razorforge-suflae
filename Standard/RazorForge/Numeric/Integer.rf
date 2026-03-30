@@ -4,8 +4,6 @@ module Numerics
 # Powered by LibTomMath (https://github.com/libtom/libtommath)
 # License: Public Domain (Unlicense)
 
-import Text.Text
-
 # Opaque handle to LibTomMath mp_int structure
 # The actual memory is managed by the native runtime
 entity Integer obeys Integral, Divisible, Negatable, Ordered

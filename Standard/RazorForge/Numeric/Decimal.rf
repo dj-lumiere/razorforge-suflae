@@ -5,8 +5,6 @@ module Numerics
 # https://github.com/LuaDist/mapm
 # License: Freeware
 
-import Text.Text
-
 # Default precision for operations (decimal places)
 preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 

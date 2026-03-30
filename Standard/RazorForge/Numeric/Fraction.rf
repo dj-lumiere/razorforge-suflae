@@ -1,5 +1,0 @@
-module Numerics
-
-entity Fraction obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Ordered
-  secret numerator: Integer
-  secret denominator: Integer

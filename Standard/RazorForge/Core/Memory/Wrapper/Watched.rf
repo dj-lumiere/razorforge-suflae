@@ -3,7 +3,7 @@
 module Core
 
 record Watched[T]
-  secret controller: Snatched[SingleShareController]
+  secret controller: Snatched[RetainController]
   secret data: Snatched[T]
 
 # Create weak reference from Retained[T]

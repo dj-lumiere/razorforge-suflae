@@ -4,7 +4,7 @@ module Core
 
 record Shared[T, P]
 needs P obeys LockPolicy
-  secret controller: Snatched[MultiShareController]
+  secret controller: Snatched[ShareController]
   secret data: Snatched[T]
   secret lock: Snatched[P]
 
@@ -13,7 +13,7 @@ routine T.share[P]() -> Shared[T, P]
 needs P obeys LockPolicy
   danger!
     # Allocate control block with atomic ref counting
-    var controller = MultiShareController().snatch()
+    var controller = ShareController().snatch()
     controller.increase_strong_count!()
 
     # Allocate policy-specific lock
