@@ -215,9 +215,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Type is not in the allowed set for type equality constraint.</summary>
     TypeEqualityConstraintViolation = 160,
 
-    /// <summary>Type does not satisfy 'from' constraint.</summary>
-    FromConstraintViolation = 161,
-
     /// <summary>Type parameter in constraint is not declared on the type or function.</summary>
     UnknownTypeParameterInConstraint = 163,
 

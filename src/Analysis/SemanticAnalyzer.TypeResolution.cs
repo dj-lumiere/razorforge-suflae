@@ -358,42 +358,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that a type argument satisfies a <c>from</c> constraint by being equal to
-    /// or a subtype of the required base type specified in the constraint.
-    /// </summary>
-    private void ValidateFromConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
-    {
-        if (constraint.ConstraintTypes == null || constraint.ConstraintTypes.Count == 0)
-        {
-            return;
-        }
-
-        TypeExpression baseTypeExpr = constraint.ConstraintTypes[0];
-        TypeSymbol? baseType = LookupTypeWithImports(name: baseTypeExpr.Name);
-        if (baseType == null)
-        {
-            return; // Base type not found, error already reported
-        }
-
-        // Check if typeArg is or inherits from baseType
-        // For exact match
-        if (typeArg.Name == baseType.Name || GetBaseTypeName(typeName: typeArg.Name) == baseType.Name)
-        {
-            return;
-        }
-
-        // TODO: Check inheritance chain when entity inheritance is fully implemented
-        // For now, just check exact type match
-        ReportError(
-            SemanticDiagnosticCode.FromConstraintViolation,
-            $"Type '{typeArg.Name}' is not '{baseType.Name}' required by constraint on '{constraint.ParameterName}'.",
-            location);
-    }
-
-    /// <summary>
     /// Validates that a type argument satisfies a <c>valuetype</c> constraint,
     /// requiring the argument to be a record (value type).
     /// </summary>
