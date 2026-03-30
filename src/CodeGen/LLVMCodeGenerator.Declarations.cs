@@ -1173,8 +1173,8 @@ public partial class LLVMCodeGenerator
             case "generic_args":
                 EmitSynthesizedGenericArgs(routine, funcName);
                 break;
-            case "origin_module":
-                EmitSynthesizedModuleName(routine, funcName);
+            case "full_type_name":
+                EmitSynthesizedFullTypeName(routine, funcName);
                 break;
             case "protocol_info":
                 EmitSynthesizedProtocolInfo(routine, funcName);
@@ -1632,9 +1632,8 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits the body for a synthesized $represent() or $diagnose() routine.
-    /// $represent: "TypeName(field: val, ...)" — open+posted fields only.
-    /// $diagnose: "TypeName(field: val, ...)" for records/SF entities,
-    ///               "TypeName@0xADDR(field: val, ...)" for RF entities (includes heap address).
+    /// $represent: "TypeName(field: val, ...)" — bare name, open+posted fields only.
+    /// $diagnose: "Module/Path.TypeName([secret] field: val, ...)" — fully qualified name, all fields.
     /// </summary>
     private void EmitSynthesizedText(RoutineInfo routine, string funcName, bool includeSecret)
     {
@@ -1651,7 +1650,8 @@ public partial class LLVMCodeGenerator
 
         int savedTempCounter = _tempCounter;
 
-        string typeName = routine.OwnerType.FullName;
+        // $represent uses bare type name, $diagnose uses fully qualified name
+        string typeName = includeSecret ? routine.OwnerType.FullName : routine.OwnerType.Name;
 
         // Get fields to include
         IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
@@ -1747,30 +1747,8 @@ public partial class LLVMCodeGenerator
                 visibleFields.Add((fields[i], i));
         }
 
-        // Build "TypeName(field: val, ...)" or for RF entity $diagnose:
-        // "TypeName@0xADDR(field: val, ...)"
-        bool emitAddress = includeSecret
-                           && routine.OwnerType is EntityTypeInfo
-                           && _registry.Language == Language.RazorForge;
-
+        // Build "TypeName(field: val, ...)"
         string current;
-        if (emitAddress)
-        {
-            // Emit "TypeName@0x" prefix, then format the pointer as hex
-            if (_declaredNativeFunctions.Add("rf_format_address"))
-                EmitLine(_functionDeclarations, "declare ptr @rf_format_address(ptr)");
-
-            string typePrefix = EmitSynthesizedStringLiteral($"{typeName}@");
-            string addrText = NextTemp();
-            EmitLine(_functionDefinitions, $"  {addrText} = call ptr @rf_format_address(ptr %me)");
-            string withAddr = NextTemp();
-            EmitLine(_functionDefinitions, $"  {withAddr} = call ptr @rf_text_concat(ptr {typePrefix}, ptr {addrText})");
-            string openParen = EmitSynthesizedStringLiteral("(");
-            string withParen = NextTemp();
-            EmitLine(_functionDefinitions, $"  {withParen} = call ptr @rf_text_concat(ptr {withAddr}, ptr {openParen})");
-            current = withParen;
-        }
-        else
         {
             string prefix = $"{typeName}(";
             current = EmitSynthesizedStringLiteral(prefix);
@@ -1886,7 +1864,8 @@ public partial class LLVMCodeGenerator
     private void EmitChoiceRepresent(ChoiceTypeInfo choice, bool includeSecret)
     {
         var sb = _functionDefinitions;
-        string typeName = choice.FullName;
+        // $represent uses bare type name, $diagnose uses fully qualified name
+        string typeName = includeSecret ? choice.FullName : choice.Name;
 
         if (choice.Cases.Count == 0)
         {
@@ -1954,7 +1933,8 @@ public partial class LLVMCodeGenerator
     private void EmitFlagsRepresent(FlagsTypeInfo flags, bool includeSecret)
     {
         var sb = _functionDefinitions;
-        string typeName = flags.FullName;
+        // $represent uses bare type name, $diagnose uses fully qualified name
+        string typeName = includeSecret ? flags.FullName : flags.Name;
 
         if (flags.Members.Count == 0)
         {
@@ -2811,6 +2791,27 @@ public partial class LLVMCodeGenerator
         EmitLine(_functionDefinitions, "entry:");
         string moduleStr = EmitSynthesizedStringLiteral(moduleName);
         EmitLine(_functionDefinitions, $"  ret ptr {moduleStr}");
+        EmitLine(_functionDefinitions, "}");
+        EmitLine(_functionDefinitions, "");
+    }
+
+    /// <summary>
+    /// Emits the body for a synthesized full_type_name() routine.
+    /// Returns "Module/Path.TypeName" as a Text constant.
+    /// </summary>
+    private void EmitSynthesizedFullTypeName(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null) return;
+
+        string meType = GetParameterLLVMType(routine.OwnerType);
+        string moduleName = routine.OwnerType.Module ?? "";
+        string typeName = routine.OwnerType.Name;
+        string fullName = string.IsNullOrEmpty(moduleName) ? typeName : $"{moduleName}.{typeName}";
+
+        EmitLine(_functionDefinitions, $"define ptr @{funcName}({meType} %me) {{");
+        EmitLine(_functionDefinitions, "entry:");
+        string fullNameStr = EmitSynthesizedStringLiteral(fullName);
+        EmitLine(_functionDefinitions, $"  ret ptr {fullNameStr}");
         EmitLine(_functionDefinitions, "}");
         EmitLine(_functionDefinitions, "");
     }

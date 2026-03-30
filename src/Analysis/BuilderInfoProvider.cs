@@ -23,7 +23,7 @@ public static class BuilderInfoProvider
         "routine_names", "routine_info",
         "annotations",
         "data_size",
-        "origin_module", "dependencies",
+        "full_type_name", "dependencies",
         "member_type_id",
         "var_name"
     };
@@ -68,7 +68,7 @@ public static class BuilderInfoProvider
         {
             MaybeRegister(type, "type_name", textType, existingMethods, registry);
             MaybeRegister(type, "module_name", textType, existingMethods, registry);
-            MaybeRegister(type, "origin_module", textType, existingMethods, registry);
+            MaybeRegister(type, "full_type_name", textType, existingMethods, registry);
             MaybeRegister(type, "var_name", textType, existingMethods, registry);
         }
 

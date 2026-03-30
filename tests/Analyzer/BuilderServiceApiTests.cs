@@ -231,7 +231,7 @@ public class BuilderServiceApiTests
 
                        routine test()
                          var p = Point(x: 1, y: 2)
-                         var v = p.origin_module()
+                         var v = p.full_type_name()
                          return
                        """);
     }
@@ -345,7 +345,7 @@ public class BuilderServiceApiTests
     [InlineData("routine_names")]
     [InlineData("annotations")]
     [InlineData("dependencies")]
-    [InlineData("origin_module")]
+    [InlineData("full_type_name")]
     public void PerTypeRoutine_WithoutImport_ReportsError(string routineName)
     {
         string source = $$"""
@@ -377,7 +377,7 @@ public class BuilderServiceApiTests
     [InlineData("routine_names")]
     [InlineData("annotations")]
     [InlineData("dependencies")]
-    [InlineData("origin_module")]
+    [InlineData("full_type_name")]
     public void PerTypeRoutine_WithImport_NoError(string routineName)
     {
         string source = $$"""
@@ -557,7 +557,7 @@ public class BuilderServiceApiTests
                          var j = p.routine_names()
                          var k = p.annotations()
                          var l = p.dependencies()
-                         var m = p.origin_module()
+                         var m = p.full_type_name()
                          return
                        """);
     }
