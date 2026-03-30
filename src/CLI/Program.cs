@@ -1010,12 +1010,14 @@ internal class Program
         Console.WriteLine();
         Console.WriteLine("=== EXECUTION ===");
 
+        bool stdinIsPiped = Console.IsInputRedirected;
         var psi = new ProcessStartInfo
         {
             FileName = Path.GetFullPath(exeFile),
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = stdinIsPiped,
         };
 
         try
@@ -1025,6 +1027,12 @@ internal class Program
             {
                 Console.WriteLine("Error: Failed to start the compiled executable.");
                 return 1;
+            }
+
+            if (stdinIsPiped)
+            {
+                Console.OpenStandardInput().CopyTo(process.StandardInput.BaseStream);
+                process.StandardInput.Close();
             }
 
             string stdout = process.StandardOutput.ReadToEnd();

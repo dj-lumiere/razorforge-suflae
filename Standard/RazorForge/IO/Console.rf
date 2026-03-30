@@ -88,25 +88,37 @@ routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
 
 # Read text until newline (single line)
 routine get_line() -> Text
-  var ptr = rf_console_get_line()
+  var addr = rf_console_get_line()
+  var ptr = Snatched[Byte](addr)
+  if ptr.is_none()
+    return ""
   var bytes = Bytes(ptr: ptr)
   return bytes.as_utf8_text()
 
 # Read text until whitespace (single word)
 routine get_word() -> Text
-  var ptr = rf_console_get_word()
+  var addr = rf_console_get_word()
+  var ptr = Snatched[Byte](addr)
+  if ptr.is_none()
+    return ""
   var bytes = Bytes(ptr: ptr)
   return bytes.as_utf8_text()
 
 # Read all text until EOF
 routine get_all() -> Text
-  var ptr = rf_console_get_all()
+  var addr = rf_console_get_all()
+  var ptr = Snatched[Byte](addr)
+  if ptr.is_none()
+    return ""
   var bytes = Bytes(ptr: ptr)
   return bytes.as_utf8_text()
 
 # Read exactly n codepoints from input
 routine get_letters(count: U64) -> Text
-  var ptr = rf_console_get_letters(count)
+  var addr = rf_console_get_letters(count)
+  var ptr = Snatched[Byte](addr)
+  if ptr.is_none()
+    return ""
   var bytes = Bytes(ptr: ptr)
   return bytes.as_utf8_text()
 
@@ -128,22 +140,16 @@ routine get_words() -> List[Text]
 
 # Read all remaining input as raw bytes
 routine get_raw() -> Bytes
-  var ptr = rf_console_get_all()
+  var addr = rf_console_get_all()
+  var ptr = Snatched[Byte](addr)
+  if ptr.is_none()
+    return Bytes()
   return Bytes(ptr: ptr)
 
 # Read up to n bytes
 routine get_bytes(count: U64) -> Bytes
-  var ptr = rf_console_get_bytes(count)
+  var addr = rf_console_get_bytes(count)
+  var ptr = Snatched[Byte](addr)
+  if ptr.is_none()
+    return Bytes()
   return Bytes(ptr: ptr)
-
-# ============================================================================
-# Utility Functions
-# ============================================================================
-
-routine flush()
-  rf_console_flush()
-  return
-
-routine clear()
-  rf_console_clear()
-  return
