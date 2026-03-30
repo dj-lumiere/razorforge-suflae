@@ -1056,6 +1056,23 @@ public sealed class TypeRegistry
             }
         }
 
+        // For generic instances (e.g., List[Byte].$create), try the generic definition
+        // (e.g., List[T].$create#U64) since overloads are registered on the generic definition.
+        int bracketIdx = fullName.IndexOf('[');
+        if (bracketIdx >= 0)
+        {
+            int closeBracketIdx = fullName.IndexOf("].", bracketIdx);
+            if (closeBracketIdx >= 0)
+            {
+                string genericDefName = fullName[..bracketIdx] + fullName[(closeBracketIdx + 1)..];
+                string genericOverloadKey = $"{genericDefName}#{paramTypeNames}";
+                if (_routines.TryGetValue(key: genericOverloadKey, value: out RoutineInfo? genericDefOverload))
+                {
+                    return genericDefOverload;
+                }
+            }
+        }
+
         // Fall back to default lookup
         return LookupRoutine(fullName: fullName);
     }
