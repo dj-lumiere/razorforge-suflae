@@ -826,6 +826,15 @@ public sealed class StdlibLoader
         foreach (var param in routine.Parameters)
         {
             var paramType = ResolveSimpleType(registry, param.Type, ctx, moduleName);
+
+            // Wrap variadic params as List[T] (mirrors SA Phase 2 wrapping)
+            if (param.IsVariadic && paramType != null)
+            {
+                var listDef = registry.LookupType("List");
+                if (listDef != null)
+                    paramType = registry.GetOrCreateResolution(listDef, [paramType]);
+            }
+
             parameters.Add(new SemanticAnalysis.Symbols.ParameterInfo(param.Name,
                 paramType ?? ErrorTypeInfo.Instance)
             {
@@ -848,6 +857,7 @@ public sealed class StdlibLoader
             Module = moduleName,
             Location = routine.Location,
             IsFailable = routine.IsFailable,
+            IsVariadic = routine.Parameters.Any(p => p.IsVariadic),
             GenericParameters = routine.GenericParameters,
             AsyncStatus = routine.Async,
             Annotations = routine.Annotations,

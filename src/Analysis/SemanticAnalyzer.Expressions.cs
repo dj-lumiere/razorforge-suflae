@@ -1661,6 +1661,20 @@ public sealed partial class SemanticAnalyzer
                 }
             }
 
+            // Variadic fallback: if resolved routine is non-variadic but has too many args,
+            // try a variadic generic overload (e.g., show("a","b","c") → show[T](values...: T))
+            if (routine != null && !routine.IsVariadic
+                && call.Arguments.Count > routine.Parameters.Count)
+            {
+                RoutineInfo? variadicGeneric = _registry.LookupVariadicGenericOverload(callName);
+                if (variadicGeneric != null)
+                {
+                    var inferred = InferGenericTypeArguments(variadicGeneric, call.Arguments);
+                    routine = inferred != null ? variadicGeneric.CreateInstance(inferred) : variadicGeneric;
+                    call.ResolvedRoutine = routine;
+                }
+            }
+
             if (routine != null)
             {
                 // Import-gating: BuilderService standalone routines require 'import BuilderService'
@@ -1715,6 +1729,46 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol? type = LookupTypeWithImports(name: id.Name);
             if (type != null)
             {
+                // Analyze all arguments once before branching
+                var argTypes = new List<TypeSymbol>();
+                foreach (Expression arg in call.Arguments)
+                    argTypes.Add(item: AnalyzeExpression(expression: arg));
+
+                // C95: Try $create overload match first
+                // e.g., BitList(capacity: 32u64) → BitList.$create(capacity: U64)
+                // e.g., BitList(32u64) → BitList.$create(capacity: U64) instead of collection literal
+                if (call.Arguments.Count > 0)
+                {
+                    RoutineInfo? creator = _registry.LookupRoutineOverload(
+                        $"{type.Name}.$create", argTypes);
+
+                    // Fall back to generic definition's $create for resolved generic types
+                    if ((creator == null || creator.Parameters.Count != argTypes.Count)
+                        && type.IsGenericResolution)
+                    {
+                        TypeSymbol? genDef = type switch
+                        {
+                            EntityTypeInfo e => e.GenericDefinition,
+                            RecordTypeInfo r => r.GenericDefinition,
+                            _ => null
+                        };
+                        if (genDef != null)
+                        {
+                            var genCreator = _registry.LookupRoutineOverload(
+                                $"{genDef.Name}.$create", argTypes);
+                            if (genCreator != null && genCreator.Parameters.Count == argTypes.Count)
+                                creator = genCreator;
+                        }
+                    }
+
+                    if (creator != null && creator.Parameters.Count == argTypes.Count
+                        && !creator.Parameters.Any(p => p.IsVariadicParam))
+                    {
+                        call.ResolvedRoutine = creator;
+                        return creator.ReturnType ?? type;
+                    }
+                }
+
                 // Collection literal constructor: List(1, 2, 3), Set(1, 2), Dict(1:2, 3:4), etc.
                 // Detected when: type name is a known collection AND args are positional/DictEntry (not named field inits)
                 if (CollectionLiteralTypes.Contains(id.Name)
@@ -1722,11 +1776,6 @@ public sealed partial class SemanticAnalyzer
                     && call.Arguments.All(a => a is not NamedArgumentExpression))
                 {
                     call.IsCollectionLiteral = true;
-
-                    // Analyze all arguments
-                    var argTypes = new List<TypeSymbol>();
-                    foreach (Expression arg in call.Arguments)
-                        argTypes.Add(item: AnalyzeExpression(expression: arg));
 
                     // Infer generic type arguments from elements and resolve collection type
                     if (type.IsGenericDefinition)
@@ -1754,17 +1803,10 @@ public sealed partial class SemanticAnalyzer
                     return type;
                 }
 
-                // Creator call - analyze arguments and validate
-                var creatorArgTypes = new List<TypeSymbol>();
-                foreach (Expression arg in call.Arguments)
-                {
-                    creatorArgTypes.Add(item: AnalyzeExpression(expression: arg));
-                }
-
                 // #115: Data boxing restrictions — certain types cannot be boxed to Data
-                if (id.Name == "Data" && creatorArgTypes.Count > 0)
+                if (id.Name == "Data" && argTypes.Count > 0)
                 {
-                    TypeSymbol argType = creatorArgTypes[0];
+                    TypeSymbol argType = argTypes[0];
                     if (argType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup }
                         or VariantTypeInfo
                         or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
@@ -1817,7 +1859,7 @@ public sealed partial class SemanticAnalyzer
             // Try module-prefixed routine lookup (e.g., Core.normalize_duration)
             // This is done after type creator check to avoid shadowing type creators
             // with identically-named convenience functions (e.g., "routine U32(from: U8)")
-            routine = LookupRoutineWithImports(name: id.Name);
+            routine = LookupRoutineWithImports(name: callName);
 
             // Overload resolution for import-resolved routines (e.g., show[T] from IO/Console)
             if (routine != null && !routine.IsGenericDefinition
@@ -1841,7 +1883,7 @@ public sealed partial class SemanticAnalyzer
                     }
                     else
                     {
-                        RoutineInfo? genericImport = _registry.LookupGenericOverload(id.Name);
+                        RoutineInfo? genericImport = _registry.LookupGenericOverload(callName);
                         if (genericImport != null)
                         {
                             var inferredImport = InferGenericTypeArguments(genericImport, call.Arguments);
@@ -1851,6 +1893,19 @@ public sealed partial class SemanticAnalyzer
                             call.ResolvedRoutine = routine;
                         }
                     }
+                }
+            }
+
+            // Variadic fallback for import-resolved routines
+            if (routine != null && !routine.IsVariadic
+                && call.Arguments.Count > routine.Parameters.Count)
+            {
+                RoutineInfo? variadicGeneric = _registry.LookupVariadicGenericOverload(callName);
+                if (variadicGeneric != null)
+                {
+                    var inferred = InferGenericTypeArguments(variadicGeneric, call.Arguments);
+                    routine = inferred != null ? variadicGeneric.CreateInstance(inferred) : variadicGeneric;
+                    call.ResolvedRoutine = routine;
                 }
             }
 
@@ -3565,6 +3620,14 @@ public sealed partial class SemanticAnalyzer
         for (int i = 0; i < argCount; i++)
         {
             TypeSymbol paramType = genericRoutine.Parameters[i].Type;
+
+            // For variadic params, unwrap List[T] to get T for inference
+            if (genericRoutine.Parameters[i].IsVariadicParam
+                && paramType is { IsGenericResolution: true, TypeArguments: [var elemType, ..] })
+            {
+                paramType = elemType;
+            }
+
             if (paramType is GenericParameterTypeInfo)
             {
                 int idx = genericRoutine.GenericParameters.ToList().IndexOf(paramType.Name);

@@ -132,7 +132,19 @@ public sealed partial class SemanticAnalyzer
                         arg.Location);
                 }
 
-                if (positionalIndex < totalParams)
+                // For variadic routines: once we reach the varargs parameter,
+                // all subsequent positional args are varargs (don't advance past it).
+                // Trailing params (sep, end) are only filled via named args or defaults.
+                bool inVariadicSlot = routine.IsVariadic && positionalIndex > 0
+                    && positionalIndex - 1 < totalParams
+                    && parameters[positionalIndex - 1].IsVariadicParam;
+
+                if (inVariadicSlot)
+                {
+                    // Variadic extra argument — just analyze it
+                    AnalyzeExpression(expression: arg);
+                }
+                else if (positionalIndex < totalParams)
                 {
                     if (boundParams.ContainsKey(key: positionalIndex))
                     {
@@ -158,7 +170,8 @@ public sealed partial class SemanticAnalyzer
                     AnalyzeExpression(expression: arg);
                 }
 
-                positionalIndex++;
+                if (!inVariadicSlot)
+                    positionalIndex++;
             }
         }
 
@@ -210,6 +223,12 @@ public sealed partial class SemanticAnalyzer
 
             ParameterInfo param = parameters[binding.Key];
             TypeSymbol paramType = param.Type;
+
+            // For variadic parameters, type-check against the element type T, not List[T]
+            if (param.IsVariadicParam && paramType is { IsGenericResolution: true, TypeArguments: [var elemType, ..] })
+            {
+                paramType = elemType;
+            }
 
             // Substitute generic type parameters when calling methods on generic resolutions
             // (e.g., Snatched[Point].write(value: T) → T becomes Point)

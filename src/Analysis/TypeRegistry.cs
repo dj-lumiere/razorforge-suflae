@@ -1049,7 +1049,8 @@ public sealed class TypeRegistry
 
             string genericArgName = $"{genericDef.Name}[{string.Join(", ", genericDef.GenericParameters)}]";
             string genericOverloadKey = $"{fullName}#{genericArgName}";
-            if (_routines.TryGetValue(key: genericOverloadKey, value: out RoutineInfo? genericOverload))
+            if (_routines.TryGetValue(key: genericOverloadKey, value: out RoutineInfo? genericOverload)
+                && !genericOverload.IsVariadic) // Skip variadic overloads — handled by variadic fallback
             {
                 return genericOverload;
             }
@@ -1118,9 +1119,29 @@ public sealed class TypeRegistry
     /// </summary>
     public RoutineInfo? LookupGenericOverload(string name)
     {
+        // Prefer non-variadic generic overloads (e.g., show[T](value: T) over show[T](values...: T))
+        RoutineInfo? fallback = null;
         foreach (var routine in _routines.Values)
         {
             if (routine.Name == name && routine.OwnerType == null && routine.IsGenericDefinition)
+            {
+                if (!routine.IsVariadic)
+                    return routine;
+                fallback ??= routine;
+            }
+        }
+        return fallback;
+    }
+
+    /// <summary>
+    /// Finds a variadic generic overload of a free function by name (e.g., show[T](values...: T) for "show").
+    /// </summary>
+    public RoutineInfo? LookupVariadicGenericOverload(string name)
+    {
+        foreach (var routine in _routines.Values)
+        {
+            if (routine.Name == name && routine.OwnerType == null
+                && routine.IsGenericDefinition && routine.IsVariadic)
                 return routine;
         }
         return null;

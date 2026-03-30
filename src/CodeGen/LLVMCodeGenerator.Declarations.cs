@@ -690,7 +690,9 @@ public partial class LLVMCodeGenerator
             if (routine.TypeArguments is { Count: > 0 })
             {
                 string typeArgSuffix = string.Join(",", routine.TypeArguments.Select(t => t.Name));
-                fullName = $"{fullName}#{typeArgSuffix}";
+                // Disambiguate variadic overloads (e.g., show...#Text vs show#Text)
+                string variadicMarker = routine.IsVariadic ? "..." : "";
+                fullName = $"{fullName}{variadicMarker}#{typeArgSuffix}";
             }
 
             return Q(fullName);

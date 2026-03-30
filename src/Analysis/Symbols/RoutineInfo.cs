@@ -269,6 +269,16 @@ public sealed class RoutineInfo
                 .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
                 .ToList();
 
+            // Use GenericDefinition to create the new resolution (not the resolution itself)
+            if (type is Types.EntityTypeInfo { GenericDefinition: not null } entityType)
+                return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            if (type is Types.RecordTypeInfo { GenericDefinition: not null } recordType)
+                return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            if (type is Types.ProtocolTypeInfo { GenericDefinition: not null } protocolType)
+                return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            if (type is Types.ErrorHandlingTypeInfo { GenericDefinition: not null } errorType)
+                return errorType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+
             return type.CreateInstance(typeArguments: newArgs);
         }
 

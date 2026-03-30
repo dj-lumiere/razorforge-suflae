@@ -242,6 +242,9 @@ public partial class LLVMCodeGenerator
 
         // Choice/Flags member access: emit constant value directly (no target expression to evaluate)
         TypeInfo? earlyObjectType = GetExpressionType(expr.Object);
+        // Fallback: if SA didn't set ResolvedType (type-as-identifier), try type lookup by name
+        if (earlyObjectType == null && expr.Object is IdentifierExpression typeId)
+            earlyObjectType = LookupTypeInCurrentModule(typeId.Name);
         if (earlyObjectType is ChoiceTypeInfo choice)
         {
             ChoiceCaseInfo? caseInfo = choice.Cases.FirstOrDefault(c => c.Name == propertyName);
@@ -1454,6 +1457,66 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Inside monomorphized body: if the resolved routine's param types don't match
+        // the actual arg types, look for a matching generic overload and instantiate it.
+        // This handles cases like show(v, end: "") inside monomorphized show[T=S64] body,
+        // where registry lookup finds concrete show(Text,Text) instead of show[T](T,Text).
+        if (_typeSubstitutions != null && routine != null
+            && routine.GenericDefinition == null && !routine.IsGenericDefinition
+            && argValues.Count > 0 && routine.Parameters.Count > 0)
+        {
+            string expectedLlvm = GetLLVMType(routine.Parameters[0].Type);
+            if (argTypes[0] != expectedLlvm)
+            {
+                var genericOverload = _registry.LookupGenericOverload(routine.Name);
+                if (genericOverload != null)
+                {
+                    TypeInfo? firstArgType = GetExpressionType(arguments[0]);
+                    if (firstArgType != null && genericOverload.GenericParameters is { Count: > 0 })
+                    {
+                        var typeArgs = new List<TypeInfo> { firstArgType };
+                        // Pad with remaining generic params if needed (use same type)
+                        for (int i = 1; i < genericOverload.GenericParameters.Count; i++)
+                            typeArgs.Add(firstArgType);
+                        routine = genericOverload.CreateInstance(typeArgs);
+
+                        // Re-supply default arguments for the new routine
+                        while (argValues.Count > arguments.Count)
+                        {
+                            argValues.RemoveAt(argValues.Count - 1);
+                            argTypes.RemoveAt(argTypes.Count - 1);
+                        }
+                        for (int i = argValues.Count; i < routine.Parameters.Count; i++)
+                        {
+                            var param = routine.Parameters[i];
+                            if (param.HasDefaultValue)
+                            {
+                                string value = EmitExpression(sb, param.DefaultValue!);
+                                argValues.Add(value);
+                                argTypes.Add(GetLLVMType(param.Type));
+                            }
+                        }
+
+                        // Record monomorphization
+                        string monoName = MangleFunctionName(routine);
+                        if (!_pendingMonomorphizations.ContainsKey(monoName))
+                        {
+                            var typeSubs = new Dictionary<string, TypeInfo>();
+                            for (int i = 0; i < genericOverload.GenericParameters.Count; i++)
+                                typeSubs[genericOverload.GenericParameters[i]] = (TypeInfo)routine.TypeArguments![i];
+                            string genericAstName = $"{genericOverload.Name}[generic]";
+                            _pendingMonomorphizations[monoName] = new MonomorphizationEntry(
+                                genericOverload, null!, typeSubs, genericAstName);
+                        }
+                    }
+                }
+            }
+        }
+
+        // C105: Pack variadic arguments into List[T]
+        if (routine is { IsVariadic: true })
+            PackVariadicArgs(sb, routine, arguments, ref argValues, ref argTypes, argOffset: 0);
+
         // Build the call
         string mangledName = routine != null
             ? MangleFunctionName(routine)
@@ -1772,6 +1835,10 @@ public partial class LLVMCodeGenerator
             }
             argTypes.Add(GetLLVMType(argType));
         }
+
+        // C105: Pack variadic arguments into List[T]
+        if (method is { IsVariadic: true })
+            PackVariadicArgs(sb, method, arguments, ref argValues, ref argTypes, argOffset: 1);
 
         // Method-level generics on regular method calls (e.g., method has [T] on itself, not the owner)
         // Infer type args from concrete argument types and monomorphize
@@ -5230,6 +5297,116 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// C105: Packs variadic arguments into a List[T] at the call site.
+    /// Modifies argValues/argTypes, replacing individual variadic args with a single list pointer.
+    /// </summary>
+    private void PackVariadicArgs(StringBuilder sb, RoutineInfo routine,
+        List<Expression> arguments, ref List<string> argValues, ref List<string> argTypes,
+        int argOffset)
+    {
+        ParameterInfo? varParam = routine.Parameters.FirstOrDefault(p => p.IsVariadicParam);
+        if (varParam == null) return;
+
+        int varIndex = varParam.Index;
+        int packStart = varIndex + argOffset;
+
+        // Determine element type from actual arguments or parameter type
+        TypeInfo? elemType = null;
+        int firstVarArgIdx = varIndex; // index into explicit arguments (not argValues)
+        if (firstVarArgIdx < arguments.Count)
+            elemType = GetExpressionType(arguments[firstVarArgIdx]);
+
+        // Fall back: extract T from List[T] parameter type
+        if (elemType == null && varParam.Type is { TypeArguments: { Count: > 0 } })
+        {
+            elemType = varParam.Type.TypeArguments[0];
+            if (elemType is GenericParameterTypeInfo && _typeSubstitutions != null
+                && _typeSubstitutions.TryGetValue(elemType.Name, out var resolved))
+                elemType = resolved;
+        }
+
+        if (elemType == null) return;
+
+        // Resolve List[elemType]
+        TypeInfo? listGenDef = _registry.LookupType("List");
+        if (listGenDef == null) return;
+        TypeInfo listType = _registry.GetOrCreateResolution(listGenDef, [elemType]);
+
+        // Create empty List[elemType]
+        string listPtr = EmitCollectionCreate(sb, listType, listType.Name);
+
+        // Look up add_last on List generic definition
+        RoutineInfo? addLast = _registry.LookupRoutine($"{listType.Name}.add_last")
+                             ?? _registry.LookupRoutine("List.add_last");
+        if (addLast == null) return;
+
+        // Handle monomorphization
+        string mangledAdd;
+        if (listType.IsGenericResolution)
+        {
+            mangledAdd = Q($"{listType.FullName}.add_last");
+            RecordMonomorphization(mangledAdd, addLast, listType);
+        }
+        else
+        {
+            mangledAdd = MangleFunctionName(addLast);
+        }
+
+        // Declare add_last if needed
+        string elemLlvm = GetLLVMType(elemType);
+        if (!_generatedFunctions.Contains(mangledAdd))
+        {
+            EmitLine(_functionDeclarations, $"declare void @{mangledAdd}(ptr, {elemLlvm})");
+            _generatedFunctions.Add(mangledAdd);
+        }
+
+        // Determine how many trailing (non-variadic) params follow the varargs param.
+        // Named args matching trailing params are NOT varargs.
+        int trailingParamCount = routine.Parameters.Count - varIndex - 1;
+        var trailingParamNames = new HashSet<string>();
+        for (int i = varIndex + 1; i < routine.Parameters.Count; i++)
+            trailingParamNames.Add(routine.Parameters[i].Name);
+
+        // Count explicit named args that match trailing params
+        int namedTrailingCount = arguments.Count(a =>
+            a is NamedArgumentExpression na && trailingParamNames.Contains(na.Name));
+        int packEnd = argValues.Count - namedTrailingCount;
+
+        // Emit add_last for each variadic argument
+        for (int i = packStart; i < packEnd; i++)
+            EmitLine(sb, $"  call void @{mangledAdd}(ptr {listPtr}, {elemLlvm} {argValues[i]})");
+
+        // Build new argValues: [pre-varargs] + [listPtr] + [trailing defaults]
+        var newArgValues = argValues.Take(packStart).ToList();
+        newArgValues.Add(listPtr);
+        var newArgTypes = argTypes.Take(packStart).ToList();
+        newArgTypes.Add("ptr");
+
+        // Append trailing args if they were already supplied
+        for (int i = packEnd; i < argValues.Count; i++)
+        {
+            newArgValues.Add(argValues[i]);
+            newArgTypes.Add(argTypes[i]);
+        }
+
+        // Supply defaults for trailing params not yet covered
+        int suppliedTrailing = argValues.Count - packEnd;
+        for (int i = varIndex + 1 + suppliedTrailing; i < routine.Parameters.Count; i++)
+        {
+            var param = routine.Parameters[i];
+            if (param.HasDefaultValue)
+            {
+                string value = EmitExpression(sb, param.DefaultValue!);
+                newArgValues.Add(value);
+                newArgTypes.Add(GetLLVMType(param.Type));
+            }
+        }
+
+        argValues = newArgValues;
+        argTypes = newArgTypes;
+    }
+
+    /// <summary>
     /// Emits a zero-arg $create() call for a collection type, handling monomorphization.
     /// </summary>
     private string EmitCollectionCreate(StringBuilder sb, TypeInfo? resolvedType, string typeName)
@@ -5581,14 +5758,25 @@ public partial class LLVMCodeGenerator
 
         foreach (var arg in arguments)
         {
-            // Each arg should be a TupleLiteralExpression (priority, element)
-            if (arg is TupleLiteralExpression tuple && tuple.Elements.Count == 2)
-            {
-                string priorityVal = EmitExpression(sb, tuple.Elements[0]);
-                string elementVal = EmitExpression(sb, tuple.Elements[1]);
+            string? priorityVal = null;
+            string? elementVal = null;
 
+            // DictEntryLiteralExpression: PriorityQueue(1: "high", 2: "low")
+            if (arg is DictEntryLiteralExpression dictEntry)
+            {
+                priorityVal = EmitExpression(sb, dictEntry.Key);
+                elementVal = EmitExpression(sb, dictEntry.Value);
+            }
+            // TupleLiteralExpression: PriorityQueue((1, "high"), (2, "low"))
+            else if (arg is TupleLiteralExpression tuple && tuple.Elements.Count == 2)
+            {
+                priorityVal = EmitExpression(sb, tuple.Elements[0]);
+                elementVal = EmitExpression(sb, tuple.Elements[1]);
+            }
+
+            if (priorityVal != null && elementVal != null)
+            {
                 // add(element: TElement, priority: TPriority)
-                // Note: PQ.add signature is add(element, priority) — element first, priority second
                 if (!_generatedFunctions.Contains(mangledAdd))
                 {
                     EmitLine(_functionDeclarations, $"declare void @{mangledAdd}(ptr, {elementLlvm}, {priorityLlvm})");
