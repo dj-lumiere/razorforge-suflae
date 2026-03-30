@@ -226,13 +226,16 @@ public partial class LLVMCodeGenerator
     private int CalculateTupleSize(TupleTypeInfo tuple)
     {
         int size = 0;
+        int maxAlignment = 1;
         foreach (var elemType in tuple.ElementTypes)
         {
             int elemSize = GetTypeSize(elemType);
-            size = AlignTo(size, Math.Min(elemSize, 8));
+            int alignment = Math.Max(Math.Min(elemSize, 16), 1);
+            maxAlignment = Math.Max(maxAlignment, alignment);
+            size = AlignTo(size, alignment);
             size += elemSize;
         }
-        return AlignTo(size, 8);
+        return AlignTo(size, maxAlignment);
     }
 
     /// <summary>
@@ -363,7 +366,7 @@ public partial class LLVMCodeGenerator
         foreach (var memberVariable in record.MemberVariables)
         {
             int memberVariableSize = GetTypeSize(memberVariable.Type);
-            int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);
+            int alignment = Math.Max(Math.Min(memberVariableSize, 16), 1);
             maxAlignment = Math.Max(maxAlignment, alignment);
             size = AlignTo(size, alignment);
             size += memberVariableSize;
@@ -378,14 +381,16 @@ public partial class LLVMCodeGenerator
     private int CalculateEntitySize(EntityTypeInfo entity)
     {
         int size = 0;
+        int maxAlignment = 1;
         foreach (var memberVariable in entity.MemberVariables)
         {
             int memberVariableSize = GetTypeSize(memberVariable.Type);
-            int alignment = Math.Max(Math.Min(memberVariableSize, 8), 1);
+            int alignment = Math.Max(Math.Min(memberVariableSize, 16), 1);
+            maxAlignment = Math.Max(maxAlignment, alignment);
             size = AlignTo(size, alignment);
             size += memberVariableSize;
         }
-        return AlignTo(size, 8);
+        return AlignTo(size, maxAlignment);
     }
 
     /// <summary>
@@ -394,16 +399,22 @@ public partial class LLVMCodeGenerator
     private int CalculateVariantSize(VariantTypeInfo variant)
     {
         int maxPayloadSize = 0;
+        int maxPayloadAlignment = 1;
         foreach (var member in variant.Members)
         {
             if (!member.IsNone && member.Type != null)
             {
                 int payloadSize = GetTypeSize(member.Type);
+                int payloadAlignment = Math.Max(Math.Min(payloadSize, 16), 1);
                 maxPayloadSize = Math.Max(maxPayloadSize, payloadSize);
+                maxPayloadAlignment = Math.Max(maxPayloadAlignment, payloadAlignment);
             }
         }
-        // Tag (i64 = 8 bytes) + payload
-        return 8 + AlignTo(maxPayloadSize, 8);
+        // Tag (i64 = 8 bytes) + padding + payload, aligned to max of tag and payload alignment
+        int tagSize = 8;
+        int structAlignment = Math.Max(tagSize, maxPayloadAlignment);
+        int size = AlignTo(tagSize, maxPayloadAlignment) + maxPayloadSize;
+        return AlignTo(size, structAlignment);
     }
 
     /// <summary>
