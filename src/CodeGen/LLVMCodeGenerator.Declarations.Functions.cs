@@ -658,4 +658,191 @@ public partial class LLVMCodeGenerator
             }
         } while (_generatedFunctionDefs.Count > prevDefCount);
     }
+
+    /// <summary>
+    /// Finds the AST declaration for a generic routine across user and stdlib programs.
+    /// </summary>
+    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName,
+        int expectedParamCount = -1, string? firstParamTypeHint = null)
+    {
+        bool requireGeneric = genericAstName.EndsWith(value: "[generic]");
+        string baseName = requireGeneric
+            ? genericAstName[..genericAstName.IndexOf(value: "[generic]")]
+            : genericAstName;
+
+        RoutineDeclaration? firstMatch = null;
+
+        bool MatchesRoutine(RoutineDeclaration routine)
+        {
+            if (routine.Name != baseName)
+            {
+                return false;
+            }
+
+            if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
+            {
+                return false;
+            }
+
+            if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        bool MatchesParamType(RoutineDeclaration routine)
+        {
+            if (firstParamTypeHint == null || routine.Parameters.Count == 0)
+            {
+                return true;
+            }
+
+            string astParamType = routine.Parameters[index: 0].Type.Name;
+            return astParamType.StartsWith(value: firstParamTypeHint);
+        }
+
+        foreach ((Program userProgram, string _, string _) in _userPrograms)
+        {
+            foreach (IAstNode decl in userProgram.Declarations)
+            {
+                if (decl is RoutineDeclaration routine && MatchesRoutine(routine: routine))
+                {
+                    firstMatch ??= routine;
+                    if (MatchesParamType(routine: routine))
+                    {
+                        return routine;
+                    }
+                }
+            }
+        }
+
+        foreach ((Program program, string _, string _) in _stdlibPrograms)
+        {
+            foreach (IAstNode decl in program.Declarations)
+            {
+                if (decl is RoutineDeclaration routine && MatchesRoutine(routine: routine))
+                {
+                    firstMatch ??= routine;
+                    if (MatchesParamType(routine: routine))
+                    {
+                        return routine;
+                    }
+                }
+            }
+        }
+
+        if (firstMatch != null)
+        {
+            return firstMatch;
+        }
+
+        if (expectedParamCount >= 0)
+        {
+            return FindGenericAstRoutine(genericAstName: genericAstName,
+                expectedParamCount: -1,
+                firstParamTypeHint: firstParamTypeHint);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a type by applying generic substitutions for monomorphization.
+    /// </summary>
+    private TypeInfo ResolveSubstitutedType(TypeInfo type, Dictionary<string, TypeInfo> subs)
+    {
+        if (subs.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+        {
+            return sub;
+        }
+
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anySubstituted = false;
+            var substitutedArgs = new List<TypeInfo>();
+            foreach (TypeInfo arg in type.TypeArguments)
+            {
+                TypeInfo resolved = ResolveSubstitutedType(type: arg, subs: subs);
+                substitutedArgs.Add(item: resolved);
+                if (!ReferenceEquals(objA: resolved, objB: arg))
+                {
+                    anySubstituted = true;
+                }
+            }
+
+            if (anySubstituted)
+            {
+                TypeInfo? genericBase = GetGenericBase(type: type);
+                if (genericBase != null)
+                {
+                    return _registry.GetOrCreateResolution(genericDef: genericBase,
+                        typeArguments: substitutedArgs);
+                }
+            }
+        }
+
+        if (type is { IsGenericDefinition: true, GenericParameters: not null } &&
+            type.TypeArguments == null)
+        {
+            var typeArgs = type.GenericParameters
+                               .Select(selector: gp =>
+                                    subs.TryGetValue(key: gp, value: out TypeInfo? s)
+                                        ? s
+                                        : _registry.LookupType(name: gp))
+                               .Where(predicate: t => t != null)
+                               .ToList();
+            if (typeArgs.Count == type.GenericParameters.Count)
+            {
+                return _registry.GetOrCreateResolution(genericDef: type, typeArguments: typeArgs!);
+            }
+        }
+
+        return type;
+    }
+
+    /// <summary>
+    /// Builds the concrete RoutineInfo used for a monomorphized generic routine.
+    /// </summary>
+    private RoutineInfo BuildResolvedRoutineInfo(MonomorphizationEntry entry)
+    {
+        RoutineInfo generic = entry.GenericMethod;
+        Dictionary<string, TypeInfo> subs = entry.TypeSubstitutions;
+
+        var resolvedParams = generic.Parameters
+                                    .Select(selector: p =>
+                                     {
+                                         TypeInfo resolvedType =
+                                             ResolveSubstitutedType(type: p.Type, subs: subs);
+                                         return p.WithSubstitutedType(newType: resolvedType);
+                                     })
+                                    .ToList();
+
+        TypeInfo? resolvedReturnType = generic.ReturnType;
+        if (resolvedReturnType != null)
+        {
+            resolvedReturnType = ResolveSubstitutedType(type: resolvedReturnType, subs: subs);
+        }
+
+        return new RoutineInfo(name: generic.Name)
+        {
+            Kind = generic.Kind,
+            OwnerType = entry.ResolvedOwnerType,
+            Parameters = resolvedParams,
+            ReturnType = resolvedReturnType,
+            IsFailable = generic.IsFailable,
+            DeclaredModification = generic.DeclaredModification,
+            ModificationCategory = generic.ModificationCategory,
+            Visibility = generic.Visibility,
+            Location = generic.Location,
+            Module = generic.Module,
+            Annotations = generic.Annotations,
+            CallingConvention = generic.CallingConvention,
+            IsVariadic = generic.IsVariadic,
+            IsDangerous = generic.IsDangerous,
+            Storage = generic.Storage,
+            AsyncStatus = generic.AsyncStatus
+        };
+    }
 }

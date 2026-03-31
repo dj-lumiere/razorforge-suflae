@@ -64,7 +64,9 @@ public partial class LLVMCodeGenerator
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
             BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
-            BinaryOperator.NoneCoalesce => EmitNoneCoalesce(sb: sb, binary: binary),
+            BinaryOperator.NoneCoalesce => GetExpressionType(expr: binary.Left) is ErrorHandlingTypeInfo
+                ? EmitNoneCoalesce(sb: sb, binary: binary)
+                : EmitUserUnwrapOr(sb: sb, binary: binary),
             // Arithmetic, comparison, bitwise operators — normally desugared to method
             // calls by the semantic analyzer, but stdlib bodies are raw AST, so we
             // handle them directly for primitive types.
@@ -651,7 +653,9 @@ public partial class LLVMCodeGenerator
             UnaryOperator.Minus => EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$neg"),
             UnaryOperator.BitwiseNot => EmitBitwiseNot(sb: sb, unary: unary),
             UnaryOperator.Steal => EmitExpression(sb: sb, expr: unary.Operand),
-            UnaryOperator.ForceUnwrap => EmitForceUnwrap(sb: sb, unary: unary),
+            UnaryOperator.ForceUnwrap => GetExpressionType(expr: unary.Operand) is ErrorHandlingTypeInfo
+                ? EmitForceUnwrap(sb: sb, unary: unary)
+                : EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$unwrap"),
             _ => throw new NotImplementedException(
                 message: $"Unary operator '{unary.Operator}' codegen not implemented")
         };
@@ -687,6 +691,52 @@ public partial class LLVMCodeGenerator
         }
 
         return EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$bitnot");
+    }
+
+    /// <summary>
+    /// Emits user-type none coalescing: left.$unwrap_or(right) — eager evaluation.
+    /// </summary>
+    private string EmitUserUnwrapOr(StringBuilder sb, BinaryExpression binary)
+    {
+        string left = EmitExpression(sb: sb, expr: binary.Left);
+        string right = EmitExpression(sb: sb, expr: binary.Right);
+        TypeInfo? leftType = GetExpressionType(expr: binary.Left);
+
+        if (leftType == null)
+        {
+            throw new InvalidOperationException(
+                message: "Cannot determine left operand type for '??' operator");
+        }
+
+        RoutineInfo? method = _registry.LookupMethod(type: leftType, methodName: "$unwrap_or");
+
+        var argValues = new List<string> { left, right };
+        var argTypes = new List<string> { GetParameterLLVMType(type: leftType) };
+
+        TypeInfo? rightType = GetExpressionType(expr: binary.Right);
+        argTypes.Add(item: rightType != null
+            ? GetLLVMType(type: rightType)
+            : "i64");
+
+        string mangledName = method != null
+            ? MangleFunctionName(routine: method)
+            : Q(name: $"{leftType.FullName}.{SanitizeLLVMName(name: "$unwrap_or")}");
+
+        string returnType = method?.ReturnType != null
+            ? GetLLVMType(type: method.ReturnType)
+            : rightType != null
+                ? GetLLVMType(type: rightType)
+                : "i64";
+
+        if (method != null)
+        {
+            GenerateFunctionDeclaration(routine: method);
+        }
+
+        string result = NextTemp();
+        string args = BuildCallArgs(types: argTypes, values: argValues);
+        EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
+        return result;
     }
 
     /// <summary>

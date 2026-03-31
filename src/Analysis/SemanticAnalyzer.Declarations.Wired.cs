@@ -38,6 +38,9 @@ public sealed partial class SemanticAnalyzer
         // Unary operators
         "$neg", "$bitnot",
 
+        // Unwrap operators
+        "$unwrap", "$unwrap_or",
+
         // Membership operators
         "$contains", "$notcontains",
 

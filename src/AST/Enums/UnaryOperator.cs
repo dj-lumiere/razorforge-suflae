@@ -93,6 +93,7 @@ internal static class UnaryOperatorExtensions
             {
                 UnaryOperator.Minus => "$neg",
                 UnaryOperator.BitwiseNot => "$bitnot",
+                UnaryOperator.ForceUnwrap => "$unwrap",
                 _ => null
             };
         }

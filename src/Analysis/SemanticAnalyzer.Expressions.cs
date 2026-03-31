@@ -352,11 +352,28 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Handle none coalescing operator (??)
-        // Not desugared because it needs short-circuit evaluation
+        // Not desugared because it needs short-circuit evaluation for built-in types
         if (binary.Operator == BinaryOperator.NoneCoalesce)
         {
-            // Returns the non-optional type (right operand provides the default)
-            return rightType;
+            if (leftType is ErrorHandlingTypeInfo coalesceError)
+            {
+                return coalesceError.ValueType;
+            }
+
+            // User type — look up $unwrap_or method
+            RoutineInfo? unwrapOrMethod =
+                _registry.LookupMethod(type: leftType, methodName: "$unwrap_or");
+            if (unwrapOrMethod != null)
+            {
+                return unwrapOrMethod.ReturnType ?? rightType;
+            }
+
+            ReportError(code: SemanticDiagnosticCode.TypeDoesNotSupportOperator,
+                message:
+                $"Type '{leftType.Name}' does not support the '??' operator. " +
+                "Implement '$unwrap_or(default: T) -> T' to enable none coalescing.",
+                location: binary.Location);
+            return ErrorTypeInfo.Instance;
         }
 
         // Validate RHS type against the operator method's parameter type
@@ -765,6 +782,29 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 return operandType;
+
+            case UnaryOperator.ForceUnwrap:
+                if (operandType is ErrorHandlingTypeInfo forceUnwrapError)
+                {
+                    return forceUnwrapError.ValueType;
+                }
+
+                // User type — look up $unwrap method
+                {
+                    RoutineInfo? unwrapMethod =
+                        _registry.LookupMethod(type: operandType, methodName: "$unwrap");
+                    if (unwrapMethod != null)
+                    {
+                        return unwrapMethod.ReturnType ?? ErrorTypeInfo.Instance;
+                    }
+
+                    ReportError(code: SemanticDiagnosticCode.TypeDoesNotSupportOperator,
+                        message:
+                        $"Type '{operandType.Name}' does not support the '!!' operator. " +
+                        "Implement '$unwrap() -> T' to enable force unwrap.",
+                        location: unary.Location);
+                    return ErrorTypeInfo.Instance;
+                }
 
             default:
                 return operandType;

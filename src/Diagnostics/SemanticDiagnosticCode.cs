@@ -289,6 +289,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Preset initializer must be a build-time constant expression.</summary>
     PresetNotConstant = 258,
 
+    /// <summary>Type does not support the given operator (missing wired routine).</summary>
+    TypeDoesNotSupportOperator = 259,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════

@@ -301,6 +301,9 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.In => "$contains",
                 BinaryOperator.NotIn => "$notcontains",
 
+                // Unwrap operators
+                BinaryOperator.NoneCoalesce => "$unwrap_or",
+
                 // Non-overloadable operators return null
                 _ => null
             };
