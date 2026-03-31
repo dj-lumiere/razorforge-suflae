@@ -1,6 +1,5 @@
 using SemanticAnalysis.Diagnostics;
 using SemanticAnalysis.Results;
-using SemanticAnalysis.Types;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;

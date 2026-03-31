@@ -420,10 +420,9 @@ public partial class LLVMCodeGenerator
                     value: DetectTargetArch());
                 break;
             case "builder_version":
-                // TODO: What the fuck?
                 EmitSynthesizedBuilderServiceText(routine: routine,
                     funcName: funcName,
-                    value: "0.1.0");
+                    value: typeof(LLVMCodeGenerator).Assembly.GetName().Version?.ToString(fieldCount: 3) ?? "0.0.0");
                 break;
             case "build_mode":
                 // TODO: There is only four modes: DEBUG, RELEASE, RELEASE-TIME, RELEASE-SPACE

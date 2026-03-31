@@ -53,7 +53,6 @@ public sealed partial class SemanticAnalyzer
     /// <param name="node">The declaration node to collect.</param>
     private void CollectDeclaration(IAstNode node)
     {
-        // TODO: Are these all?
         switch (node)
         {
             case RecordDeclaration record:

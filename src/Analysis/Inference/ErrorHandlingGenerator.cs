@@ -134,7 +134,6 @@ public sealed class ErrorHandlingGenerator
     /// <param name="analysis">The analysis result to update.</param>
     private void AnalyzeStatementRecursive(Statement statement, ErrorHandlingAnalysis analysis)
     {
-        // TODO: Is this all the branch?
         switch (statement)
         {
             case ThrowStatement:

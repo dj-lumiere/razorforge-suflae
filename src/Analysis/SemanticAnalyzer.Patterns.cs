@@ -40,7 +40,6 @@ public sealed partial class SemanticAnalyzer
         {
             case LiteralPattern:
                 // Literal patterns don't bind variables
-                // TODO: REALLY?
                 break;
 
             case IdentifierPattern id:
