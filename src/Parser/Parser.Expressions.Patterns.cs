@@ -2,7 +2,6 @@ namespace Compiler.Parser;
 
 using Lexer;
 using SyntaxTree;
-using Diagnostics;
 
 public partial class Parser
 {

@@ -81,11 +81,11 @@ suspended routine UserCache.fetch_user!(id: Integer) -> User
       return cached
 
 routine start()
-  # Create an actor (spawns a green thread)
+  # Create an actor (spawns a suspended task)
   var cache = UserCache().act()  # Type: Actor[UserCache]
 
-  # Multiple tasks can safely call cache methods concurrently
-  # Method calls become messages - no locks needed!
+  # Multiple tasks can safely call cache member routines concurrently
+  # Member routine calls become messages - no locks needed!
   var user = waitfor cache.fetch_user(12345)
   show(f"Got user: {user.name}")
 ```
@@ -197,7 +197,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **Automatic Memory Management**: RC + GC hybrid (deterministic cleanup for most objects)
 - **Arbitrary Precision by Default**: `Integer` and `Decimal` types (no overflow)
 - **Actor Model Concurrency**: `.act()` transforms entities into actors with message passing
-- **Green Threads**: Lightweight coroutines (millions of actors, no problem)
+- **Suspended Routines**: Lightweight coroutine-based concurrency
 - **Four Data Types**: `record`, `entity`, `choice`, `variant`
 - **Native Performance**: AOT compilation to machine code
 - **RazorForge Interop**: Import RazorForge libraries when you need systems control
@@ -208,7 +208,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **Rich Collections**: `List`, `Dict`, `Set`, `Deque`, `SortedDict`, `PriorityQueue`, and more
 - **Error Handling**: `Maybe[T]`, `Result[T]`, `Lookup[T]` (no exceptions by default)
 - **Generics**: Full generic programming with type parameters and protocols
-- **Extension Methods**: Add methods to any type from anywhere
+- **Extension Routines**: Add member routines to any type from anywhere
 - **Modern Syntax**: Clear keywords (`routine`, `entity`, `when`)
 - **Unified Standard Library**: Same collections and APIs across both languages
 
@@ -239,7 +239,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 ### Suflae Documentation
 
 - [Data Types](https://suflae.lumi-dev.xyz/Data-Types) — Records, entities, choices, variants
-- [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model, `.act()`, green threads, async/await
+- [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model, `.act()`, suspended routines, `waitfor`
 - [Error Handling](https://suflae.lumi-dev.xyz/Error-Handling) — `Maybe`, `Result`, error propagation
 - [Text](https://suflae.lumi-dev.xyz/Text) — String handling and text processing
 - [Code Style](https://suflae.lumi-dev.xyz/Code-Style) — Coding conventions
@@ -277,7 +277,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 2. [Data Types](https://suflae.lumi-dev.xyz/Data-Types) — Understanding types
 3. [Pattern Matching](https://suflae.lumi-dev.xyz/Pattern-Matching) — Control flow
 4. [Collections](https://suflae.lumi-dev.xyz/Collections) — Data structures
-5. [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model and green threads
+5. [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model and suspended routines
 
 ### Path 2: Systems Programmer (RazorForge First)
 
@@ -438,7 +438,7 @@ suspended routine start()
 - No two threads access `value` simultaneously
 - Result is always correct, no locks needed!
 
-### Suflae: Async/Await with Tasks
+### Suflae: Suspended Routines with Tasks
 
 ```suflae
 suspended routine fetch(url: Text) -> Text
@@ -464,7 +464,7 @@ suspended routine start()
 | **Philosophy**   | "Just use actors"      | "Choose your primitive"             |
 | **Primitives**   | Actors only            | Atomics, Mutex, MultiRead, Channels |
 | **Syntax**       | `counter.increment()`  | `counter.seize!().increment()`      |
-| **Field Access** | Forbidden on actors    | Allowed in lock scope               |
+| **Member Variable Access** | Forbidden on actors    | Allowed in lock scope               |
 | **Channels**     | Not exposed (internal) | Exposed for direct use              |
 | **Atomics**      | Not exposed            | Exposed for lock-free ops           |
 | **Control**      | Automatic/implicit     | Explicit/manual                     |
@@ -545,7 +545,7 @@ See [Build System](https://razorforge.lumi-dev.xyz/Build-System) for detailed bu
 - Full generics implementation
 - Complete C FFI support (C Subsystem)
 - Freestanding mode for bare metal
-- Full async/await for Suflae (`suspended`/`waitfor`)
+- Full suspended-routine support for Suflae (`suspended`/`waitfor`)
 - Package manager (`forge` CLI tool)
 - Language server protocol (LSP)
 - VSCode extensions

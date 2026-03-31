@@ -1,13 +1,4 @@
-using System.Diagnostics;
-using Compiler.Diagnostics;
-using Compiler.Lexer;
-using Compiler.Parser;
 using SyntaxTree;
-using SemanticAnalysis;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Results;
-using Compiler.CodeGen;
-using Builder.Modules;
 
 namespace Builder;
 

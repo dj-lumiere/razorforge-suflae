@@ -832,9 +832,10 @@ internal partial class Program
 
             Console.WriteLine(
                 value:
-                $"Initialization order: {string.Join(separator: " ??", values: buildResult.InitializationOrder)}");
+                $"Initialization order: {string.Join(separator: " -> ", values: buildResult
+                .InitializationOrder)}");
 
-            // Filter out stdlib files ??they are already loaded by TypeRegistry/StdlibLoader
+            // Filter out stdlib files they are already loaded by TypeRegistry/StdlibLoader
             string normalizedStdlib = Path.GetFullPath(path: stdlibRoot);
             var userUnits = buildResult.Units
                                        .Where(predicate: u => !Path.GetFullPath(path: u.FilePath)

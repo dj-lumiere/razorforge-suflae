@@ -1,9 +1,7 @@
 namespace Compiler.Parser;
 
 using Lexer;
-using SyntaxTree;
 using Diagnostics;
-using SemanticAnalysis.Enums;
 
 public partial class Parser
 {

@@ -1,6 +1,5 @@
 using SyntaxTree;
 using Compiler.Lexer;
-using SemanticAnalysis.Enums;
 using Compiler.Diagnostics;
 
 namespace Compiler.Parser;

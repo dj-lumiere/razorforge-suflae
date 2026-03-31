@@ -1,9 +1,7 @@
 namespace SemanticAnalysis;
 
-using Enums;
 using Symbols;
 using Types;
-using Compiler.Lexer;
 using SyntaxTree;
 using Diagnostics;
 using TypeSymbol = Types.TypeInfo;

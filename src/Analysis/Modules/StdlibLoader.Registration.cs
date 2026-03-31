@@ -6,9 +6,6 @@ namespace Builder.Modules;
 
 using SemanticAnalysis.Enums;
 using SyntaxTree;
-using Compiler.Lexer;
-using Compiler.Parser;
-using System.Globalization;
 
 public sealed partial class StdlibLoader
 {

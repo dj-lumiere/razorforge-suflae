@@ -1,7 +1,5 @@
 namespace Compiler.Lexer;
 
-using Lexer;
-
 /// <summary>
 /// Partial class containing character navigation and token management methods for the unified tokenizer.
 /// </summary>

@@ -3,7 +3,6 @@ using SemanticAnalysis.Symbols;
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 

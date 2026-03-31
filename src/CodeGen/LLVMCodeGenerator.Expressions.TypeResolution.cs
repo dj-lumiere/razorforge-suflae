@@ -1,7 +1,5 @@
 namespace Compiler.CodeGen;
 
-using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;

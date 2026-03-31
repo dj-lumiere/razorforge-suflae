@@ -3,7 +3,6 @@ namespace SemanticAnalysis;
 using Enums;
 using Results;
 using Native;
-using Symbols;
 using Types;
 using Compiler.Lexer;
 using SyntaxTree;

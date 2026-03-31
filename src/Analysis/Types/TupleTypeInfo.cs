@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace SemanticAnalysis.Types;
 
 using Enums;

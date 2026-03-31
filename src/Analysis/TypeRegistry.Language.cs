@@ -1,12 +1,6 @@
-using Builder.Modules;
-
 namespace SemanticAnalysis;
 
 using Enums;
-using Scopes;
-using Symbols;
-using Types;
-using SyntaxTree;
 using TypeInfo = Types.TypeInfo;
 
 public sealed partial class TypeRegistry

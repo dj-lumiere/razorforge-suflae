@@ -1,11 +1,5 @@
 namespace Compiler.CodeGen;
 
-using System.Text;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
-using SyntaxTree;
-
 /// <summary>
 /// Type and function declaration generation.
 /// </summary>

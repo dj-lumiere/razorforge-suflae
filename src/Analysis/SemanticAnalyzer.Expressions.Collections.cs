@@ -1,11 +1,8 @@
 namespace SemanticAnalysis;
 
 using Enums;
-using Results;
-using Native;
 using Symbols;
 using Types;
-using Compiler.Lexer;
 using SyntaxTree;
 using Diagnostics;
 using TypeSymbol = Types.TypeInfo;
@@ -233,7 +230,7 @@ public sealed partial class SemanticAnalyzer
         var elementTypes = new List<TypeSymbol>();
         for (int i = 0; i < tuple.Elements.Count; i++)
         {
-            TypeSymbol? elemExpected = expectedElementTypes?[index: i];
+            TypeSymbol? elemExpected = expectedElementTypes?[i];
             TypeSymbol elementType = AnalyzeExpression(expression: tuple.Elements[index: i],
                 expectedType: elemExpected);
             elementTypes.Add(item: elementType);

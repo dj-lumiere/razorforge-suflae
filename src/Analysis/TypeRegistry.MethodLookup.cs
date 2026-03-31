@@ -1,6 +1,5 @@
 namespace SemanticAnalysis;
 
-using Enums;
 using Symbols;
 using SyntaxTree;
 using Types;
