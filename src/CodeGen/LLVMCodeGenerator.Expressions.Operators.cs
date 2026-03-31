@@ -64,7 +64,7 @@ public partial class LLVMCodeGenerator
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
             BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
-            BinaryOperator.NoneCoalesce => GetExpressionType(expr: binary.Left) is ErrorHandlingTypeInfo
+            BinaryOperator.NoneCoalesce => IsErrorHandlingType(type: GetExpressionType(expr: binary.Left))
                 ? EmitNoneCoalesce(sb: sb, binary: binary)
                 : EmitUserUnwrapOr(sb: sb, binary: binary),
             // Arithmetic, comparison, bitwise operators — normally desugared to method
@@ -653,7 +653,7 @@ public partial class LLVMCodeGenerator
             UnaryOperator.Minus => EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$neg"),
             UnaryOperator.BitwiseNot => EmitBitwiseNot(sb: sb, unary: unary),
             UnaryOperator.Steal => EmitExpression(sb: sb, expr: unary.Operand),
-            UnaryOperator.ForceUnwrap => GetExpressionType(expr: unary.Operand) is ErrorHandlingTypeInfo
+            UnaryOperator.ForceUnwrap => IsErrorHandlingType(type: GetExpressionType(expr: unary.Operand))
                 ? EmitForceUnwrap(sb: sb, unary: unary)
                 : EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$unwrap"),
             _ => throw new NotImplementedException(
@@ -772,5 +772,25 @@ public partial class LLVMCodeGenerator
         string args = BuildCallArgs(types: argTypes, values: argValues);
         EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
         return result;
+    }
+
+    /// <summary>
+    /// Checks if a type is a built-in error handling type (Maybe/Result/Lookup).
+    /// Handles both direct ErrorHandlingTypeInfo and generic instances resolved as RecordTypeInfo.
+    /// </summary>
+    private bool IsErrorHandlingType(TypeInfo? type)
+    {
+        if (type is ErrorHandlingTypeInfo)
+        {
+            return true;
+        }
+
+        if (type != null)
+        {
+            string? baseName = GetGenericBaseName(type: type);
+            return baseName is "Maybe" or "Result" or "Lookup";
+        }
+
+        return false;
     }
 }
