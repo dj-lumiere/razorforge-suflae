@@ -228,6 +228,27 @@ f128_t bf_to_f128(const bf_t *a)
     return result;
 }
 
+// Convert f128 to decimal string (caller must free)
+char* rf_f128_to_string(f128_t x)
+{
+    ensure_bf_ctx();
+    bf_t bx;
+    f128_to_bf(&bx, x);
+
+    char *buf;
+    size_t len;
+    // Use bf_ftoa with 36 significant digits (enough for f128's ~34 digits)
+    buf = bf_ftoa(&len, &bx, 10, 36, BF_FTOA_FORMAT_FREE_MIN | BF_RNDN);
+
+    bf_delete(&bx);
+
+    if (!buf) {
+        buf = (char*)malloc(4);
+        strcpy(buf, "NaN");
+    }
+    return buf;
+}
+
 // ============================================================================
 // Conversion from other float types
 // ============================================================================

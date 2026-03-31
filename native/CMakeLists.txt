@@ -7,9 +7,6 @@ set(CMAKE_CXX_STANDARD 17)
 # Export all symbols on Windows (generates .lib import library)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-# Options
-option(ENABLE_INTELDECIMAL "Enable IEEE 754 decimal floating point support via Intel DFP" ON)
-
 # Platform-specific library suffix
 if(WIN32)
     set(LIB_SUFFIX ".dll")
@@ -26,25 +23,56 @@ endif()
 include_directories(include)
 
 # ============================================================================
-# Third-party libraries (sources are gitignored, download separately)
-# Build configurations are in cmake/*.cmake (tracked in git)
+# Third-party libraries — Core (always needed)
 # ============================================================================
 
 # LibBF - Arbitrary precision floating point with transcendentals
 # https://bellard.org/libbf/ (MIT)
 include(cmake/libbf.cmake)
 
-# Intel Decimal Floating-Point Math Library (libbid)
-# https://www.intel.com/content/www/us/en/developer/articles/tool/intel-decimal-floating-point-math-library.html (BSD-3-Clause)
-include(cmake/inteldecimal.cmake)
+# decNumber - IEEE 754 decimal floating-point (D32/D64/D128) + arbitrary-precision Decimal
+# https://github.com/SDL-Hercules-390/decNumber (ICU License)
+include(cmake/decNumber.cmake)
 
 # LibTomMath - Arbitrary precision integer arithmetic
 # https://github.com/libtom/libtommath (Public Domain)
 include(cmake/libtommath.cmake)
 
-# MAPM - Arbitrary precision decimal arithmetic
-# https://github.com/LuaDist/mapm (Freeware)
-include(cmake/mapm.cmake)
+# ============================================================================
+# Third-party libraries — Modules (loaded on demand)
+# ============================================================================
+
+# zlib - Compression (deflate/gzip)
+# https://github.com/madler/zlib (zlib License)
+include(cmake/zlib.cmake)
+
+# zstd - Fast real-time compression
+# https://github.com/facebook/zstd (BSD + GPLv2)
+include(cmake/zstd.cmake)
+
+# SQLite3 - Embedded SQL database
+# https://www.sqlite.org/ (Public Domain)
+include(cmake/sqlite3.cmake)
+
+# libsodium - Modern cryptography
+# https://github.com/jedisct1/libsodium (ISC)
+include(cmake/libsodium.cmake)
+
+# mbedTLS - Lightweight TLS/crypto (replaces OpenSSL)
+# https://github.com/Mbed-TLS/mbedtls (Apache-2.0)
+include(cmake/openssl.cmake)
+
+# PCRE2 - Regular expressions with Unicode
+# https://github.com/PCRE2Project/pcre2 (BSD-3-Clause)
+include(cmake/pcre2.cmake)
+
+# utf8proc - Unicode properties, normalization, case mapping
+# https://github.com/JuliaStrings/utf8proc (MIT)
+include(cmake/utf8proc.cmake)
+
+# Boehm GC - Conservative garbage collector (Suflae runtime)
+# https://github.com/ivmai/bdwgc (MIT-style)
+include(cmake/bdwgc.cmake)
 
 # ============================================================================
 # Compiler-RT shim for 128-bit integer operations (Windows)
@@ -95,15 +123,10 @@ if(HAVE_LIBBF)
     endif()
 endif()
 
-# Link Intel Decimal if available
-if(HAVE_INTELDECIMAL)
-    target_compile_definitions(razorforge_runtime PRIVATE
-        HAVE_INTELDECIMAL
-        DECIMAL_CALL_BY_REFERENCE=0
-        DECIMAL_GLOBAL_ROUNDING=1
-        DECIMAL_GLOBAL_EXCEPTION_FLAGS=1
-    )
-    target_link_libraries(razorforge_runtime inteldecimal)
+# Link decNumber (D32/D64/D128 + Decimal)
+if(HAVE_DECNUMBER)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_DECNUMBER)
+    target_link_libraries(razorforge_runtime decnumber)
 endif()
 
 # Link LibTomMath if available
@@ -112,10 +135,52 @@ if(HAVE_LIBTOMMATH)
     target_link_libraries(razorforge_runtime tommath)
 endif()
 
-# Link MAPM if available
-if(HAVE_MAPM)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_MAPM)
-    target_link_libraries(razorforge_runtime mapm)
+# Link zlib if available
+if(HAVE_ZLIB)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_ZLIB)
+    target_link_libraries(razorforge_runtime rf_zlib)
+endif()
+
+# Link zstd if available
+if(HAVE_ZSTD)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_ZSTD)
+    target_link_libraries(razorforge_runtime rf_zstd)
+endif()
+
+# Link sqlite3 if available
+if(HAVE_SQLITE3)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_SQLITE3)
+    target_link_libraries(razorforge_runtime rf_sqlite3)
+endif()
+
+# Link libsodium if available
+if(HAVE_LIBSODIUM)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBSODIUM)
+    target_link_libraries(razorforge_runtime sodium)
+endif()
+
+# Link mbedTLS if available
+if(HAVE_MBEDTLS)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_MBEDTLS)
+    target_link_libraries(razorforge_runtime mbedtls mbedcrypto mbedx509)
+endif()
+
+# Link PCRE2 if available
+if(HAVE_PCRE2)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_PCRE2 PCRE2_STATIC PCRE2_CODE_UNIT_WIDTH=32)
+    target_link_libraries(razorforge_runtime pcre2-32-static)
+endif()
+
+# Link utf8proc if available
+if(HAVE_UTF8PROC)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_UTF8PROC UTF8PROC_STATIC)
+    target_link_libraries(razorforge_runtime rf_utf8proc)
+endif()
+
+# Link Boehm GC if available
+if(HAVE_BDWGC)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_BDWGC)
+    target_link_libraries(razorforge_runtime gc)
 endif()
 
 # Set output directory
@@ -151,24 +216,14 @@ if(HAVE_LIBBF)
     endif()
 endif()
 
-if(HAVE_INTELDECIMAL)
-    target_compile_definitions(razorforge_math PRIVATE
-        HAVE_INTELDECIMAL
-        DECIMAL_CALL_BY_REFERENCE=0
-        DECIMAL_GLOBAL_ROUNDING=1
-        DECIMAL_GLOBAL_EXCEPTION_FLAGS=1
-    )
-    target_link_libraries(razorforge_math inteldecimal)
+if(HAVE_DECNUMBER)
+    target_compile_definitions(razorforge_math PRIVATE HAVE_DECNUMBER)
+    target_link_libraries(razorforge_math decnumber)
 endif()
 
 if(HAVE_LIBTOMMATH)
     target_compile_definitions(razorforge_math PRIVATE HAVE_LIBTOMMATH)
     target_link_libraries(razorforge_math tommath)
-endif()
-
-if(HAVE_MAPM)
-    target_compile_definitions(razorforge_math PRIVATE HAVE_MAPM)
-    target_link_libraries(razorforge_math mapm)
 endif()
 
 set_target_properties(razorforge_math PROPERTIES
@@ -191,9 +246,20 @@ install(FILES include/razorforge_math.h
 # Print configuration summary
 message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
+message(STATUS "  ── Core ──")
 message(STATUS "  LibBF (f128 + transcendentals): ${HAVE_LIBBF}")
-message(STATUS "  Intel Decimal (d32/d64/d128):   ${HAVE_INTELDECIMAL}")
-message(STATUS "  LibTomMath (bigint):            ${HAVE_LIBTOMMATH}")
-message(STATUS "  MAPM (bigdecimal):              ${HAVE_MAPM}")
+message(STATUS "  decNumber (d32/d64/d128/Decimal): ${HAVE_DECNUMBER}")
+message(STATUS "  LibTomMath (bigint):              ${HAVE_LIBTOMMATH}")
+message(STATUS "  ── Modules ──")
+message(STATUS "  zlib (compression):               ${HAVE_ZLIB}")
+message(STATUS "  zstd (compression):               ${HAVE_ZSTD}")
+message(STATUS "  sqlite3 (database):               ${HAVE_SQLITE3}")
+message(STATUS "  libsodium (crypto):               ${HAVE_LIBSODIUM}")
+message(STATUS "  mbedTLS (TLS/crypto):             ${HAVE_MBEDTLS}")
+message(STATUS "  PCRE2 (regex):                    ${HAVE_PCRE2}")
+message(STATUS "  utf8proc (unicode):               ${HAVE_UTF8PROC}")
+message(STATUS "  Boehm GC (Suflae GC):             ${HAVE_BDWGC}")
+message(STATUS "  ── Platform ──")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "  Compiler: ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}")
 message(STATUS "")
