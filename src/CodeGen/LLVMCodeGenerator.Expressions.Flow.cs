@@ -284,20 +284,15 @@ public partial class LLVMCodeGenerator
     /// is handled at compile time by the semantic analyzer, which marks the
     /// source as a deadref after the steal.
     ///
-    /// Stealable types:
-    /// - Raw entities (ownership transferred)
-    /// - Shared[T] (reference count transferred)
-    /// - Tracked[T] (weak reference transferred)
-    ///
     /// Non-stealable types (caught by semantic analyzer):
-    /// - Scope-bound tokens (Viewed, Hijacked, Inspected, Seized)
+    /// - All wrappers and tokens (Viewed, Hijacked, Retained, Tracked, Shared, Marked, Inspected, Seized)
     /// - Snatched[T] (internal ownership type)
     /// </remarks>
     private string EmitSteal(StringBuilder sb, StealExpression steal)
     {
         // Steal just evaluates the operand and passes the value through.
         // The semantic analyzer has already validated that:
-        // 1. The operand is a stealable type
+        // 1. The operand is a raw entity type
         // 2. The source will be marked as deadref after this point
         return EmitExpression(sb: sb, expr: steal.Operand);
     }

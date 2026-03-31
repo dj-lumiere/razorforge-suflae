@@ -615,9 +615,9 @@ public sealed partial class SemanticAnalyzer
                         location: call.Location);
                 }
 
-                // #98: .snatch() on Shared/Tracked requires danger! block
+                // #98: .snatch() on Shared/Marked requires danger! block
                 if (member.PropertyName == "snatch" && !InDangerBlock &&
-                    (IsSharedType(type: objectType) || IsTrackedType(type: objectType)))
+                    (IsSharedType(type: objectType) || IsMarkedType(type: objectType)))
                 {
                     ReportError(code: SemanticDiagnosticCode.SnatchRequiresDanger,
                         message:

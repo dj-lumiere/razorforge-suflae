@@ -3,7 +3,7 @@ namespace SemanticAnalysis.Types;
 using Enums;
 
 /// <summary>
-/// Builder-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).
+/// Builder-synthesized wrapper types (Viewed, Hijacked, Retained, Tracked, Shared, Marked, Inspected, Seized, Snatched).
 /// These types transparently forward member access to their inner type while providing
 /// ownership and access control semantics.
 /// </summary>
@@ -84,6 +84,22 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
+        /// Reference-counted single-threaded handle. Shared ownership with automatic cleanup.
+        /// </summary>
+        public static readonly WrapperTypeInfo RetainedDefinition = new(
+            wrapperName: "Retained",
+            innerType: ErrorTypeInfo.Instance,
+            isReadOnly: false) { GenericParameters = ["T"] };
+
+        /// <summary>
+        /// Weak single-threaded handle. Non-owning reference that can become invalid.
+        /// </summary>
+        public static readonly WrapperTypeInfo TrackedWeakDefinition = new(
+            wrapperName: "Tracked",
+            innerType: ErrorTypeInfo.Instance,
+            isReadOnly: false) { GenericParameters = ["T"] };
+
+        /// <summary>
         /// Reference-counted wrapper. Shared ownership with automatic cleanup.
         /// </summary>
         public static readonly WrapperTypeInfo SharedDefinition = new(
@@ -95,7 +111,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Weak-reference wrapper. Non-owning reference that can become invalid.
         /// </summary>
         public static readonly WrapperTypeInfo TrackedDefinition = new(
-            wrapperName: "Tracked",
+            wrapperName: "Marked",
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"] };
 
@@ -112,6 +128,8 @@ public sealed class WrapperTypeInfo : TypeInfo
         [
             ViewedDefinition,
             HijackedDefinition,
+            RetainedDefinition,
+            TrackedWeakDefinition,
             InspectedDefinition,
             SeizedDefinition,
             SharedDefinition,

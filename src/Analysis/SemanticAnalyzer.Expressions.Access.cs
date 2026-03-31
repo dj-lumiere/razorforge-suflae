@@ -387,7 +387,7 @@ public sealed partial class SemanticAnalyzer
             ReportError(code: SemanticDiagnosticCode.LambdaCaptureToken,
                 message: $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
                          $"scope-bound tokens cannot escape their scope. " +
-                         $"Use a handle type (Shared[T] or Tracked[T]) instead.",
+                         $"Use a handle type (Shared[T] or Marked[T]) instead.",
                 location: location);
             return;
         }
@@ -399,7 +399,7 @@ public sealed partial class SemanticAnalyzer
                 message:
                 $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
                 $"raw entities cannot be captured. " +
-                $"Wrap in a handle type (Shared[T] or Tracked[T]) before capturing.",
+                $"Wrap in a handle type (Shared[T] or Marked[T]) before capturing.",
                 location: location);
         }
     }
@@ -411,7 +411,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Raw entities are entity types that are not wrapped
         return type.Category == TypeCategory.Entity && !IsMemoryToken(type: type) &&
-               !IsStealableHandle(type: type) && !IsSnatched(type: type);
+               !IsWrapperType(type: type) && !IsSnatched(type: type);
     }
 
     /// <summary>

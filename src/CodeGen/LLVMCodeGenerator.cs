@@ -1,4 +1,4 @@
-﻿using SemanticAnalysis.Enums;
+using SemanticAnalysis.Enums;
 
 namespace Compiler.CodeGen;
 
@@ -22,8 +22,8 @@ public partial class LLVMCodeGenerator
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     private static readonly HashSet<string> _wrapperTypeNames =
     [
-        "Viewed", "Hijacked", "Retained", "Watched", "Inspected", "Seized", "Shared",
-        "Tracked", "Snatched"
+        "Viewed", "Hijacked", "Retained", "Tracked", "Inspected", "Seized", "Shared",
+        "Marked", "Snatched"
     ];
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>

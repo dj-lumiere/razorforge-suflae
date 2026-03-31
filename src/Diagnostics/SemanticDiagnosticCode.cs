@@ -633,7 +633,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Snatched[T] method calls require danger! block.</summary>
     SnatchedRequiresDanger = 627,
 
-    /// <summary>.snatch() on Shared/Tracked requires danger! block.</summary>
+    /// <summary>.snatch() on Shared/Marked requires danger! block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>inspect!() only valid with MultiRead lock policy.</summary>

@@ -31,10 +31,8 @@ public sealed partial class TypeRegistry
     private static bool IsMemoryWrapperType(string typeName)
     {
         return typeName is "Viewed" or "Hijacked" or "Inspected" or "Seized" or "Snatched"
-            or "Shared" or "Tracked";
+            or "Shared" or "Marked" or "Retained" or "Tracked";
     }
 
     #endregion
-
-    // Protocol type substitution is in TypeRegistry.MethodLookup.cs
 }

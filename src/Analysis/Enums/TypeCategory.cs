@@ -1,4 +1,4 @@
-﻿namespace SemanticAnalysis.Enums;
+namespace SemanticAnalysis.Enums;
 
 /// <summary>
 /// Categories of types in RazorForge/Suflae.
@@ -61,7 +61,7 @@ public enum TypeCategory
     /// <summary>Builder-generated tuple types (always inline LLVM structs).</summary>
     Tuple,
 
-    /// <summary>Builder-synthesized wrapper types (Hijacked, Inspected, Seized, Viewed, Shared, Tracked, Snatched).</summary>
+    /// <summary>Builder-synthesized wrapper types (Viewed, Hijacked, Retained, Tracked, Shared, Marked, Inspected, Seized, Snatched).</summary>
     Wrapper,
 
     /// <summary>Compile-time constant value used as a generic argument (e.g., 4 in ValueList[S64, 4]).</summary>

@@ -1,0 +1,78 @@
+# RazorForge Marked[T, P] - Weak reference to Shared[T, P]
+# Multi-threaded weak references
+module Core
+
+record Marked[T, P]
+needs P obeys LockPolicy
+  secret controller: Snatched[ShareController]
+  secret data: Snatched[T]
+  secret lock: Snatched[P]
+
+# Create weak reference from Shared[T, P]
+routine Shared[T, P].mark() -> Marked[T, P]
+  danger!
+    me.controller.increase_weak_count!()
+    return me
+
+# Check if the marked data is still alive
+routine Marked[T, P].is_alive() -> Bool
+  danger!
+    return me.controller.strong_count() > 0
+
+# Clone the weak reference
+routine Marked[T, P].mark() -> Marked[T, P]
+  danger!
+    me.controller.increase_weak_count!()
+    return me
+
+# Recover strong Shared[T, P] from weak Marked[T, P]
+# Absent if the referenced data has been deallocated
+routine Marked[T, P].recover!() -> Shared[T, P]
+  danger!
+    if me.controller.strong_count() == 0
+      absent
+    me.controller.increase_strong_count!()
+    return Shared[T, P](
+      controller: me.controller,
+      data: me.data,
+      lock: me.lock
+    )
+
+# Release the weak reference
+routine Marked[T, P].release!()
+  danger!
+    me.controller.decrease_weak_count!()
+
+    # If both strong and weak counts are 0, deallocate controller
+    when me.controller.strong_count() == 0 and me.controller.weak_count() == 0
+      == true => me.controller.invalidate!()
+      == false => pass
+  return
+
+# Get reference counts for debugging
+routine Marked[T, P].strong_count() -> S32
+  danger!
+    return me.controller.strong_count()
+
+routine Marked[T, P].weak_count() -> S32
+  danger!
+    return me.controller.weak_count()
+
+# ============================================================================
+# Display (opaque - no inner value access without lock)
+# ============================================================================
+
+@readonly
+routine Marked[T, P].$represent() -> Text
+  return me.type_name()
+
+@readonly
+routine Marked[T, P].$diagnose() -> Text
+  danger!
+    var arc = me.controller.strong_count()
+    var weak = me.controller.weak_count()
+    var alive = arc > 0
+    var data_addr = me.data.get_address()
+    var lock_addr = me.lock.get_address()
+    var lock_state = me.lock.read().state()
+    return me.type_name() + "(arc: " + arc.$represent() + ", weak: " + weak.$represent() + ", alive: " + alive.$represent() + ", state: " + lock_state.$represent() + ", data_addr: " + data_addr.$represent() + ", lock_addr: " + lock_addr.$represent() + ")"

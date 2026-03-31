@@ -133,7 +133,7 @@ public sealed partial class SemanticAnalyzer
                     : ErrorTypeInfo.Instance;
 
                 // Records can only contain value types + Snatched<T>
-                // Entities, wrappers (Shared, Tracked, Viewed, etc.), and reference tuples are not allowed
+                // Entities, wrappers (Shared, Marked, Viewed, etc.), and reference tuples are not allowed
                 if (memberVariableType is TypeInfo fieldTypeInfo &&
                     fieldTypeInfo is not ErrorTypeInfo &&
                     fieldTypeInfo is not GenericParameterTypeInfo &&

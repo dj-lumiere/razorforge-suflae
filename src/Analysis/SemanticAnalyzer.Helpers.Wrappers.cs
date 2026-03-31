@@ -59,11 +59,11 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is a Tracked&lt;T&gt; handle type.
+    /// Checks if a type is a Marked&lt;T&gt; handle type.
     /// </summary>
-    private static bool IsTrackedType(TypeSymbol type)
+    private static bool IsMarkedType(TypeSymbol type)
     {
-        return type.Name == "Tracked";
+        return type.Name == "Marked";
     }
 
     /// <summary>
@@ -71,13 +71,15 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static readonly HashSet<string> WrapperTypes =
     [
-        "Viewed", // Read-only single-threaded token
-        "Hijacked", // Exclusive write single-threaded token
+        "Viewed",    // Read-only single-threaded token
+        "Hijacked",  // Exclusive write single-threaded token
         "Inspected", // Read-only multi-threaded token
-        "Seized", // Exclusive write multi-threaded token
-        "Shared", // Reference-counted handle
-        "Tracked", // Weak reference handle
-        "Snatched" // Unsafe raw pointer handle
+        "Seized",    // Exclusive write multi-threaded token
+        "Shared",    // Reference-counted multi-threaded handle
+        "Marked",    // Weak reference multi-threaded handle
+        "Retained",  // Reference-counted handle
+        "Tracked",   // Weak reference handle
+        "Snatched"   // Unmanaged raw pointer handle
     ];
 
     /// <summary>

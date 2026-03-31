@@ -193,15 +193,17 @@ public sealed partial class SemanticAnalyzer
     /// <remarks>
     /// Stealable types:
     /// - Raw entities (direct entity references)
-    /// - Shared[T] (shared-ownership wrapper)
-    /// - Tracked[T] (reference-counted wrapper)
     ///
     /// Non-stealable types (build error):
-    /// - Viewed[T] (read-only wrapper, scope-bound)
-    /// - Hijacked[T] (exclusive wrapper, scope-bound)
+    /// - Viewed[T]    (read-only wrapper, scope-bound)
+    /// - Hijacked[T]  (exclusive wrapper, scope-bound)
     /// - Inspected[T] (thread-safe read wrapper, scope-bound)
-    /// - Seized[T] (thread-safe exclusive wrapper, scope-bound)
-    /// - Snatched[T] (internal ownership, not for user code)
+    /// - Seized[T]    (thread-safe exclusive wrapper, scope-bound)
+    /// - Retained[T]  (shared-ownership wrapper)
+    /// - Tracked[T]   (reference-counted wrapper)
+    /// - Shared[T, P] (shared-ownership wrapper)
+    /// - Marked[T, P] (reference-counted wrapper)
+    /// - Snatched[T]  (internal ownership wrapper)
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
     {
@@ -214,7 +216,7 @@ public sealed partial class SemanticAnalyzer
             string tokenKind = GetMemoryTokenKind(type: operandType);
             ReportError(code: SemanticDiagnosticCode.StealScopeBoundToken,
                 message: $"Cannot steal '{tokenKind}' - scope-bound wrappers cannot be stolen. " +
-                         $"Only raw entities, Shared[T], and Tracked[T] can be stolen.",
+                         $"Only raw entities can be stolen.",
                 location: steal.Location);
             return operandType;
         }
@@ -228,14 +230,12 @@ public sealed partial class SemanticAnalyzer
             return operandType;
         }
 
-        // For Shared[T] or Tracked[T], return the inner type
-        if (IsStealableHandle(type: operandType))
+        if (!IsRawEntityType(type: operandType))
         {
-            // Unwrap the wrapper to get the inner type
-            if (operandType.TypeArguments is { Count: > 0 })
-            {
-                return operandType.TypeArguments[index: 0];
-            }
+            ReportError(code: SemanticDiagnosticCode.StealScopeBoundToken,
+                message: $"Cannot steal '{operandType.Name}' - only raw entities can be stolen.",
+                location: steal.Location);
+            return operandType;
         }
 
         // #11: Deadref tracking — mark the stolen variable as invalidated
@@ -295,15 +295,6 @@ public sealed partial class SemanticAnalyzer
     private static bool IsSnatched(TypeSymbol type)
     {
         return type.Name == "Snatched" || type.Name.StartsWith(value: "Snatched[");
-    }
-
-    /// <summary>
-    /// Checks if a type is a stealable wrapper (Shared[T] or Tracked[T]).
-    /// </summary>
-    private static bool IsStealableHandle(TypeSymbol type)
-    {
-        return type.Name is "Shared" or "Tracked" || type.Name.StartsWith(value: "Shared[") ||
-               type.Name.StartsWith(value: "Tracked[");
     }
 
     /// <summary>

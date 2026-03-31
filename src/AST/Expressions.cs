@@ -864,8 +864,8 @@ public record GenericMemberExpression(
 /// <remarks>
 /// Steal expression rules:
 /// <list type="bullet">
-/// <item>Can steal: raw entities, Shared&lt;T&gt;, Tracked&lt;T&gt;</item>
-/// <item>Cannot steal: Viewed&lt;T&gt;, Hijacked&lt;T&gt;, Inspected&lt;T&gt;, Seized&lt;T&gt;, Snatched&lt;T&gt;</item>
+/// <item>Can steal: raw entities</item>
+/// <item>Cannot steal: Viewed&lt;T&gt;, Hijacked&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Shared&lt;T, P&gt;, Marked&lt;T, P&gt;, Inspected&lt;T&gt;, Seized&lt;T&gt;, Snatched&lt;T&gt;</item>
 /// <item>After stealing, source becomes deadref (using it is a build error)</item>
 /// <item>Used for: ownership transfer (steal node), container push (list.push(steal node)),
 /// and consuming iteration (for item in steal list)</item>
