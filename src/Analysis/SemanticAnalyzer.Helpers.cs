@@ -298,6 +298,20 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
+        // Reverse: generic definition assignable to its parameterized form within generic context.
+        // e.g., 'me' has type 'Total' (generic def) but return expects 'Total[T]'.
+        // Only allowed when all type args are unresolved generic parameters (not concrete types).
+        if (source.IsGenericDefinition && target.IsGenericResolution &&
+            target.TypeArguments != null &&
+            target.TypeArguments.All(predicate: t => t is GenericParameterTypeInfo))
+        {
+            string baseName = GetBaseTypeName(typeName: target.Name);
+            if (baseName == source.Name)
+            {
+                return true;
+            }
+        }
+
         // Protocol conformance - if target is a protocol, check if source implements it
         if (target.Category == TypeCategory.Protocol)
         {

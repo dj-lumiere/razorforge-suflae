@@ -366,9 +366,13 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol actualType = typeMethod.Parameters[index: startIndex + i].Type;
 
             // Handle protocol self type (Me) - should match the owner type
+            // For generic types, the actual type may be parameterized (e.g., "Total[T]")
+            // while OwnerType.Name is the base name (e.g., "Total").
             if (expectedType is ProtocolSelfTypeInfo)
             {
-                if (typeMethod.OwnerType != null && actualType.Name != typeMethod.OwnerType.Name)
+                if (typeMethod.OwnerType != null &&
+                    !MeTypeMatches(actualName: actualType.Name,
+                        ownerName: typeMethod.OwnerType.Name))
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
@@ -392,9 +396,13 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol actualReturn = typeMethod.ReturnType;
 
             // Handle protocol self type (Me)
+            // For generic types, the actual return may be parameterized (e.g., "Buffer[T]")
+            // while OwnerType.Name is the base name (e.g., "Buffer").
             if (expectedReturn is ProtocolSelfTypeInfo)
             {
-                if (typeMethod.OwnerType != null && actualReturn.Name != typeMethod.OwnerType.Name)
+                if (typeMethod.OwnerType != null &&
+                    !MeTypeMatches(actualName: actualReturn.Name,
+                        ownerName: typeMethod.OwnerType.Name))
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
@@ -410,6 +418,23 @@ public sealed partial class SemanticAnalyzer
                     location: location);
             }
         }
+    }
+
+    /// <summary>
+    /// Checks if an actual type name matches the owner type name for protocol Me type validation.
+    /// For generic types, "Total[T]" matches owner "Total" (parameterized form of the same type).
+    /// </summary>
+    private static bool MeTypeMatches(string actualName, string ownerName)
+    {
+        if (actualName == ownerName)
+        {
+            return true;
+        }
+
+        // Accept parameterized form: "Total[T]" matches "Total"
+        return actualName.StartsWith(value: ownerName, comparisonType: StringComparison.Ordinal) &&
+               actualName.Length > ownerName.Length &&
+               actualName[ownerName.Length] == '[';
     }
 
     /// <summary>

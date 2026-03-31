@@ -257,6 +257,7 @@ public sealed partial class TypeRegistry
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
+            AstParameterCount = routine.AstParameterCount,
             DeclaredModification = routine.DeclaredModification,
             ModificationCategory = routine.ModificationCategory,
             GenericParameters = genericParameters,

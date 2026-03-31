@@ -53,6 +53,12 @@ public sealed class RoutineInfo
     /// <summary>Parameters of this routine.</summary>
     public IReadOnlyList<ParameterInfo> Parameters { get; init; } = [];
 
+    /// <summary>
+    /// The number of parameters from the AST declaration (set in Phase 1, before type resolution).
+    /// Used to distinguish overloads from true duplicates before parameter types are available.
+    /// </summary>
+    public int AstParameterCount { get; init; }
+
     /// <summary>Return type, or null for void.</summary>
     public TypeSymbol? ReturnType { get; init; }
 

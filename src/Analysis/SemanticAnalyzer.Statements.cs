@@ -76,15 +76,14 @@ public sealed partial class SemanticAnalyzer
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
             string methodName = routine.Name[(dotIndex + 1)..];
-            TypeSymbol? ownerType = LookupTypeWithImports(name: typeName);
 
-            // If the type name contains generic params (e.g., "Box[T]"), strip them
-            // and look up the generic definition (e.g., "Box") — mirrors CollectFunctionDeclaration
-            if (ownerType == null && typeName.Contains(value: '['))
-            {
-                string baseTypeName = typeName[..typeName.IndexOf(value: '[')];
-                ownerType = LookupTypeWithImports(name: baseTypeName);
-            }
+            // Always strip generic params first (e.g., "Stack[T]" → "Stack") to look up
+            // the generic definition, not a resolution cache entry like "Stack[T]" which
+            // would produce the wrong FullName ("Stack[T].push" instead of "Stack.push").
+            string lookupName = typeName.Contains(value: '[')
+                ? typeName[..typeName.IndexOf(value: '[')]
+                : typeName;
+            TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
 
             fullName = ownerType != null
                 ? $"{ownerType.Name}.{methodName}"

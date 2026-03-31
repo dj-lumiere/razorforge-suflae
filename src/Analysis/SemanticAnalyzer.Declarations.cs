@@ -80,7 +80,7 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             case RoutineDeclaration func:
-                CollectFunctionDeclaration(routine: func);
+                CollectRoutineDeclaration(routine: func);
                 break;
 
             case ExternalDeclaration externalDecl:
@@ -346,7 +346,7 @@ public sealed partial class SemanticAnalyzer
         TryRegisterType(type: typeInfo, location: protocol.Location);
     }
 
-    private void CollectFunctionDeclaration(RoutineDeclaration routine)
+    private void CollectRoutineDeclaration(RoutineDeclaration routine)
     {
         // Determine the kind of routine
         RoutineKind kind;
@@ -369,15 +369,13 @@ public sealed partial class SemanticAnalyzer
             routineName = routine.Name[(dotIndex + 1)..]; // Just the routine name
 
             kind = RoutineKind.MemberRoutine;
-            ownerType = LookupTypeWithImports(name: typeName);
 
-            // If the type name contains generic params (e.g., "Box[T]"), strip them
-            // and look up the generic definition (e.g., "Box")
-            if (ownerType == null && typeName.Contains(value: '['))
-            {
-                string baseTypeName = typeName[..typeName.IndexOf(value: '[')];
-                ownerType = LookupTypeWithImports(name: baseTypeName);
-            }
+            // Always strip generic params first (e.g., "Stack[T]" → "Stack") to look up
+            // the generic definition, not a resolution cache entry.
+            string lookupName = typeName.Contains(value: '[')
+                ? typeName[..typeName.IndexOf(value: '[')]
+                : typeName;
+            ownerType = LookupTypeWithImports(name: lookupName);
         }
         else
         {
@@ -515,6 +513,7 @@ public sealed partial class SemanticAnalyzer
             OwnerType = ownerType,
             IsFailable = routine.IsFailable,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
+            AstParameterCount = routine.Parameters.Count,
             GenericParameters = routine.GenericParameters,
             GenericConstraints = routine.GenericConstraints,
             Visibility = routine.Visibility,
@@ -554,7 +553,12 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Check for duplicate routine definitions (#150)
-        if (_registry.LookupRoutine(fullName: routineInfo.FullName) != null)
+        // Allow overloads: if the new routine has a different AST parameter count,
+        // it's a potential overload. True signature-level duplicates are caught
+        // after parameter types are resolved in Phase 2.5.
+        RoutineInfo? existingRoutine = _registry.LookupRoutine(fullName: routineInfo.FullName);
+        if (existingRoutine != null &&
+            existingRoutine.AstParameterCount == routine.Parameters.Count)
         {
             ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
                 message: $"Routine '{routineInfo.Name}' is already defined.",
