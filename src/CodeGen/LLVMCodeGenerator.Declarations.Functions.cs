@@ -580,6 +580,19 @@ public partial class LLVMCodeGenerator
                     genericAstName: entry.GenericAstName,
                     expectedParamCount: entry.GenericMethod.Parameters.Count,
                     firstParamTypeHint: firstParamGenericType);
+
+                // Fallback: try the concrete resolved name for non-generic specializations
+                // e.g., "List[Byte].$create" for a concrete overload like List[Byte].$create(from: Bytes)
+                if (astRoutine == null && entry.ResolvedOwnerType != null)
+                {
+                    string concreteName =
+                        $"{entry.ResolvedOwnerType.Name}.{entry.GenericMethod.Name}";
+                    astRoutine = FindGenericAstRoutine(
+                        genericAstName: concreteName,
+                        expectedParamCount: entry.GenericMethod.Parameters.Count,
+                        firstParamTypeHint: firstParamGenericType);
+                }
+
                 if (astRoutine == null)
                 {
                     // Synthesized routines (type_name, $ne, etc.) have no AST body —
@@ -733,7 +746,9 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        if (firstMatch != null)
+        // Only fall back to firstMatch if we weren't filtering by param type,
+        // otherwise we'd return the wrong overload (e.g., $create(U64) instead of $create(Bytes))
+        if (firstMatch != null && firstParamTypeHint == null)
         {
             return firstMatch;
         }
