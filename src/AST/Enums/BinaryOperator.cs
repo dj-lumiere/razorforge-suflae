@@ -242,7 +242,9 @@ public static class BinaryOperatorExtensions
 
                 BinaryOperator.Assign => "=",
                 BinaryOperator.NoneCoalesce => "??",
-                _ => throw new ArgumentOutOfRangeException(nameof(op), op, null)
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(op),
+                    actualValue: op,
+                    message: null)
             };
         }
         /// <summary>

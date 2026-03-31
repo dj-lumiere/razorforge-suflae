@@ -30,8 +30,9 @@ public sealed class TupleTypeInfo : TypeInfo
     /// Creates a new tuple type with the specified element types.
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
-    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes)
-        : base(name: $"Tuple[{string.Join(", ", elementTypes.Select(t => t.Name))}]")
+    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes) : base(
+        name:
+        $"Tuple[{string.Join(separator: ", ", values: elementTypes.Select(selector: t => t.Name))}]")
     {
         ElementTypes = elementTypes;
 
@@ -39,11 +40,11 @@ public sealed class TupleTypeInfo : TypeInfo
         var memberVariables = new List<MemberVariableInfo>(capacity: elementTypes.Count);
         for (int i = 0; i < elementTypes.Count; i++)
         {
-            memberVariables.Add(item: new MemberVariableInfo(name: $"item{i}", type: elementTypes[i])
-            {
-                Visibility = VisibilityModifier.Open,
-                Index = i
-            });
+            memberVariables.Add(
+                item: new MemberVariableInfo(name: $"item{i}", type: elementTypes[index: i])
+                {
+                    Visibility = VisibilityModifier.Open, Index = i
+                });
         }
 
         MemberVariables = memberVariables;
@@ -57,7 +58,8 @@ public sealed class TupleTypeInfo : TypeInfo
     public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
-            message: "Tuple types cannot be further resolved. Create a new TupleTypeInfo instead.");
+            message:
+            "Tuple types cannot be further resolved. Create a new TupleTypeInfo instead.");
     }
 
     /// <summary>
@@ -67,7 +69,9 @@ public sealed class TupleTypeInfo : TypeInfo
     /// <returns>The member variable info, or null if index is out of range.</returns>
     public MemberVariableInfo? GetField(int index)
     {
-        return index >= 0 && index < MemberVariables.Count ? MemberVariables[index] : null;
+        return index >= 0 && index < MemberVariables.Count
+            ? MemberVariables[index: index]
+            : null;
     }
 
     /// <summary>
@@ -77,7 +81,8 @@ public sealed class TupleTypeInfo : TypeInfo
     /// <returns>The member variable info, or null if not found.</returns>
     public MemberVariableInfo? GetField(string memberVariableName)
     {
-        if (!memberVariableName.StartsWith(value: "item", comparisonType: StringComparison.Ordinal))
+        if (!memberVariableName.StartsWith(value: "item",
+                comparisonType: StringComparison.Ordinal))
         {
             return null;
         }

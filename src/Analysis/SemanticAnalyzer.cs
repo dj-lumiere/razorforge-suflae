@@ -66,10 +66,11 @@ public sealed partial class SemanticAnalyzer
     private string? _currentModuleName;
 
     /// <summary>Modules imported by the current file. Used for type resolution of non-Core types.</summary>
-    private readonly HashSet<string> _importedModules = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _importedModules =
+        new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Tracks imported symbol names for collision detection (#105).</summary>
-    private readonly HashSet<string> _importedSymbolNames = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _importedSymbolNames = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Nesting depth for conditional expressions (for #145 deep nesting warning).</summary>
     private int _conditionalNestingDepth;
@@ -96,7 +97,8 @@ public sealed partial class SemanticAnalyzer
     private (string SourceVar, string Policy)? _lastSharePolicy;
 
     /// <summary>Tracks (TypeName, ProtocolName) pairs added by implicit marker conformance, excluded from validation.</summary>
-    private readonly HashSet<(string TypeName, string ProtocolName)> _implicitProtocolConformances = [];
+    private readonly HashSet<(string TypeName, string ProtocolName)>
+        _implicitProtocolConformances = [];
 
     #endregion
 
@@ -160,8 +162,7 @@ public sealed partial class SemanticAnalyzer
         // Phase 5: Error handling variant generation
         GenerateErrorHandlingVariants();
 
-        return new AnalysisResult(
-            Registry: _registry,
+        return new AnalysisResult(Registry: _registry,
             Errors: _errors.AsReadOnly(),
             Warnings: _warnings.AsReadOnly(),
             ParsedLiterals: _parsedLiterals);
@@ -176,7 +177,8 @@ public sealed partial class SemanticAnalyzer
     public IReadOnlyList<SemanticError> ValidateStdlibBodies()
     {
         string previousFilePath = _currentFilePath;
-        var previousImports = new HashSet<string>(_importedModules, StringComparer.OrdinalIgnoreCase);
+        var previousImports = new HashSet<string>(collection: _importedModules,
+            comparer: StringComparer.OrdinalIgnoreCase);
         int errorsBefore = _errors.Count;
 
         // Run global phases that stdlib body analysis depends on
@@ -185,43 +187,44 @@ public sealed partial class SemanticAnalyzer
         AutoRegisterWiredRoutines();
         GenerateDerivedOperators();
 
-        foreach (var (program, filePath, module) in _registry.StdlibPrograms)
+        foreach ((Program program, string filePath, string module) in _registry.StdlibPrograms)
         {
             _currentFilePath = filePath;
             _importedModules.Clear();
 
             // Core module types are auto-imported
-            _importedModules.Add("Core");
+            _importedModules.Add(item: "Core");
 
             // Add the file's own module so sibling types resolve
-            if (!string.IsNullOrEmpty(module))
+            if (!string.IsNullOrEmpty(value: module))
             {
-                _importedModules.Add(module);
+                _importedModules.Add(item: module);
             }
 
             // Process import declarations for this stdlib file
-            foreach (var node in program.Declarations)
+            foreach (IAstNode node in program.Declarations)
             {
                 if (node is ImportDeclaration import)
                 {
                     string importModule = import.ModulePath;
-                    int dotIdx = importModule.IndexOf('.');
+                    int dotIdx = importModule.IndexOf(value: '.');
                     if (dotIdx > 0)
                     {
-                        _importedModules.Add(importModule[..dotIdx]);
+                        _importedModules.Add(item: importModule[..dotIdx]);
                     }
-                    _importedModules.Add(importModule);
+
+                    _importedModules.Add(item: importModule);
                 }
             }
 
-            AnalyzeBodies(program);
+            AnalyzeBodies(program: program);
         }
 
         // Collect stdlib-specific errors
         var stdlibErrors = new List<SemanticError>();
         for (int i = errorsBefore; i < _errors.Count; i++)
         {
-            stdlibErrors.Add(_errors[i]);
+            stdlibErrors.Add(item: _errors[index: i]);
         }
 
         // Restore previous state
@@ -229,7 +232,7 @@ public sealed partial class SemanticAnalyzer
         _importedModules.Clear();
         foreach (string ns in previousImports)
         {
-            _importedModules.Add(ns);
+            _importedModules.Add(item: ns);
         }
 
         return stdlibErrors;
@@ -245,12 +248,15 @@ public sealed partial class SemanticAnalyzer
     public AnalysisResult AnalyzeMultiple(IReadOnlyList<(Program Program, string FilePath)> files)
     {
         // Snapshot storage: file path → imported modules after Phase 1
-        var importSnapshots = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        var symbolNameSnapshots = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        var moduleNameSnapshots = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var importSnapshots =
+            new Dictionary<string, HashSet<string>>(comparer: StringComparer.OrdinalIgnoreCase);
+        var symbolNameSnapshots =
+            new Dictionary<string, HashSet<string>>(comparer: StringComparer.OrdinalIgnoreCase);
+        var moduleNameSnapshots =
+            new Dictionary<string, string?>(comparer: StringComparer.OrdinalIgnoreCase);
 
         // Pass 1: Collect declarations from ALL files (populates registry with all types/routines)
-        foreach (var (program, filePath) in files)
+        foreach ((Program program, string filePath) in files)
         {
             _currentFilePath = filePath;
             _currentModuleName = null;
@@ -260,15 +266,21 @@ public sealed partial class SemanticAnalyzer
             CollectDeclarations(program: program);
 
             // Snapshot the imported modules and module name for this file
-            importSnapshots[filePath] = new HashSet<string>(_importedModules, StringComparer.OrdinalIgnoreCase);
-            symbolNameSnapshots[filePath] = new HashSet<string>(_importedSymbolNames, StringComparer.Ordinal);
-            moduleNameSnapshots[filePath] = _currentModuleName;
+            importSnapshots[key: filePath] = new HashSet<string>(collection: _importedModules,
+                comparer: StringComparer.OrdinalIgnoreCase);
+            symbolNameSnapshots[key: filePath] =
+                new HashSet<string>(collection: _importedSymbolNames,
+                    comparer: StringComparer.Ordinal);
+            moduleNameSnapshots[key: filePath] = _currentModuleName;
         }
 
         // Pass 2: Resolve type bodies across ALL files (members can reference types from other files)
-        foreach (var (program, filePath) in files)
+        foreach ((Program program, string filePath) in files)
         {
-            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots, moduleNameSnapshots);
+            RestoreImportState(filePath: filePath,
+                importSnapshots: importSnapshots,
+                symbolNameSnapshots: symbolNameSnapshots,
+                moduleNameSnapshots: moduleNameSnapshots);
 
             ResolveTypeBodies(program: program);
             ResolveRoutineSignatures(program: program);
@@ -281,9 +293,12 @@ public sealed partial class SemanticAnalyzer
         ValidateProtocolImplementations();
 
         // Pass 3: Analyze bodies per file (expressions need correct import scoping)
-        foreach (var (program, filePath) in files)
+        foreach ((Program program, string filePath) in files)
         {
-            RestoreImportState(filePath, importSnapshots, symbolNameSnapshots, moduleNameSnapshots);
+            RestoreImportState(filePath: filePath,
+                importSnapshots: importSnapshots,
+                symbolNameSnapshots: symbolNameSnapshots,
+                moduleNameSnapshots: moduleNameSnapshots);
 
             AnalyzeBodies(program: program);
         }
@@ -292,8 +307,7 @@ public sealed partial class SemanticAnalyzer
         InferModificationCategories();
         GenerateErrorHandlingVariants();
 
-        return new AnalysisResult(
-            Registry: _registry,
+        return new AnalysisResult(Registry: _registry,
             Errors: _errors.AsReadOnly(),
             Warnings: _warnings.AsReadOnly(),
             ParsedLiterals: _parsedLiterals);
@@ -303,8 +317,7 @@ public sealed partial class SemanticAnalyzer
     /// Restores per-file import state (_currentFilePath, _importedModules, _importedSymbolNames, _currentModuleName)
     /// from previously captured snapshots.
     /// </summary>
-    private void RestoreImportState(
-        string filePath,
+    private void RestoreImportState(string filePath,
         Dictionary<string, HashSet<string>> importSnapshots,
         Dictionary<string, HashSet<string>> symbolNameSnapshots,
         Dictionary<string, string?>? moduleNameSnapshots = null)
@@ -314,19 +327,24 @@ public sealed partial class SemanticAnalyzer
         _importedSymbolNames.Clear();
         _currentModuleName = null;
 
-        if (importSnapshots.TryGetValue(filePath, out var imports))
+        if (importSnapshots.TryGetValue(key: filePath, value: out HashSet<string>? imports))
         {
             foreach (string module in imports)
-                _importedModules.Add(module);
+            {
+                _importedModules.Add(item: module);
+            }
         }
 
-        if (symbolNameSnapshots.TryGetValue(filePath, out var symbols))
+        if (symbolNameSnapshots.TryGetValue(key: filePath, value: out HashSet<string>? symbols))
         {
             foreach (string symbol in symbols)
-                _importedSymbolNames.Add(symbol);
+            {
+                _importedSymbolNames.Add(item: symbol);
+            }
         }
 
-        if (moduleNameSnapshots != null && moduleNameSnapshots.TryGetValue(filePath, out var moduleName))
+        if (moduleNameSnapshots != null &&
+            moduleNameSnapshots.TryGetValue(key: filePath, value: out string? moduleName))
         {
             _currentModuleName = moduleName;
         }

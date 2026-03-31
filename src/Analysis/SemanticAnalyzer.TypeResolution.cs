@@ -38,7 +38,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Try current module (user-defined types are registered as "Module.Name")
-        if (_currentModuleName != null && !name.Contains('.'))
+        if (_currentModuleName != null && !name.Contains(value: '.'))
         {
             result = _registry.LookupType(name: $"{_currentModuleName}.{name}");
             if (result != null)
@@ -58,7 +58,7 @@ public sealed partial class SemanticAnalyzer
     private Symbols.RoutineInfo? LookupRoutineWithImports(string name)
     {
         // Try Core module prefix (Core routines are auto-imported)
-        if (!name.Contains('.'))
+        if (!name.Contains(value: '.'))
         {
             Symbols.RoutineInfo? result = _registry.LookupRoutine(fullName: $"Core.{name}");
             if (result != null)
@@ -103,6 +103,7 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol argType = ResolveType(typeExpr: argExpr);
                 elementTypes.Add(item: (TypeInfo)argType);
             }
+
             return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
         }
 
@@ -127,16 +128,19 @@ public sealed partial class SemanticAnalyzer
 
         // Check for const generic literal values (e.g., 4, 8u64, true/false)
         // These come from ParseTypeOrConstGeneric in the parser
-        if (TryParseConstGenericLiteral(typeExpr.Name, out long constValue, out string? explicitType))
+        if (TryParseConstGenericLiteral(name: typeExpr.Name,
+                value: out long constValue,
+                explicitType: out string? explicitType))
         {
-            return new ConstGenericValueTypeInfo(typeExpr.Name, constValue, explicitType);
+            return new ConstGenericValueTypeInfo(literalText: typeExpr.Name,
+                value: constValue,
+                explicitTypeName: explicitType);
         }
 
         // Type not found
-        ReportError(
-            SemanticDiagnosticCode.UnknownType,
-            $"Unknown type '{typeExpr.Name}'.",
-            typeExpr.Location);
+        ReportError(code: SemanticDiagnosticCode.UnknownType,
+            message: $"Unknown type '{typeExpr.Name}'.",
+            location: typeExpr.Location);
         return ErrorTypeInfo.Instance;
     }
 
@@ -173,19 +177,17 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? genericDef = LookupTypeWithImports(name: typeExpr.Name);
         if (genericDef == null)
         {
-            ReportError(
-                SemanticDiagnosticCode.UnknownType,
-                $"Unknown type '{typeExpr.Name}'.",
-                typeExpr.Location);
+            ReportError(code: SemanticDiagnosticCode.UnknownType,
+                message: $"Unknown type '{typeExpr.Name}'.",
+                location: typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
         if (!genericDef.IsGenericDefinition)
         {
-            ReportError(
-                SemanticDiagnosticCode.TypeNotGeneric,
-                $"Type '{typeExpr.Name}' is not a generic type.",
-                typeExpr.Location);
+            ReportError(code: SemanticDiagnosticCode.TypeNotGeneric,
+                message: $"Type '{typeExpr.Name}' is not a generic type.",
+                location: typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -198,10 +200,10 @@ public sealed partial class SemanticAnalyzer
 
         if (genericDef.GenericParameters!.Count != typeArgs.Count)
         {
-            ReportError(
-                SemanticDiagnosticCode.WrongTypeArgumentCount,
+            ReportError(code: SemanticDiagnosticCode.WrongTypeArgumentCount,
+                message:
                 $"Type '{typeExpr.Name}' expects {genericDef.GenericParameters.Count} type arguments, got {typeArgs.Count}.",
-                typeExpr.Location);
+                location: typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -216,51 +218,44 @@ public sealed partial class SemanticAnalyzer
                 continue;
             }
 
-            ReportError(
-                SemanticDiagnosticCode.BlankAsTypeArgument,
-                "'Blank' cannot be used as a type argument. " +
-                "'Blank' is a unit type with no value.",
-                typeExpr.Location);
+            ReportError(code: SemanticDiagnosticCode.BlankAsTypeArgument,
+                message: "'Blank' cannot be used as a type argument. " +
+                         "'Blank' is a unit type with no value.",
+                location: typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
 
         // Reject Maybe<Data> — Data already supports None
-        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe }
-            && typeArgs[0] is { Name: "Data" })
+        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } &&
+            typeArgs[index: 0] is { Name: "Data" })
         {
-            ReportError(
-                SemanticDiagnosticCode.NullableDataProhibited,
-                "'Data?' is not allowed. 'Data' already supports 'None' natively.",
-                typeExpr.Location);
+            ReportError(code: SemanticDiagnosticCode.NullableDataProhibited,
+                message: "'Data?' is not allowed. 'Data' already supports 'None' natively.",
+                location: typeExpr.Location);
         }
 
         // Reject nested Maybe types (#83): Maybe[Maybe[T]] / T??
-        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe }
-            && typeArgs[0] is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe })
+        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } &&
+            typeArgs[index: 0] is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe })
         {
-            ReportError(
-                SemanticDiagnosticCode.NestedMaybeProhibited,
+            ReportError(code: SemanticDiagnosticCode.NestedMaybeProhibited,
+                message:
                 "'Maybe[Maybe[T]]' is not allowed. A single '?' already expresses optionality.",
-                typeExpr.Location);
+                location: typeExpr.Location);
         }
 
         // Validate generic constraints
-        ValidateGenericConstraints(
-            genericDef: genericDef,
+        ValidateGenericConstraints(genericDef: genericDef,
             typeArgs: typeArgs,
             location: typeExpr.Location);
 
-        return _registry.GetOrCreateResolution(
-            genericDef: genericDef,
-            typeArguments: typeArgs);
+        return _registry.GetOrCreateResolution(genericDef: genericDef, typeArguments: typeArgs);
     }
 
     /// <summary>
     /// Validates that type arguments satisfy generic constraints.
     /// </summary>
-    private void ValidateGenericConstraints(
-        TypeSymbol genericDef,
-        List<TypeSymbol> typeArgs,
+    private void ValidateGenericConstraints(TypeSymbol genericDef, List<TypeSymbol> typeArgs,
         SourceLocation location)
     {
         if (genericDef.GenericConstraints == null || genericDef.GenericConstraints.Count == 0)
@@ -272,12 +267,13 @@ public sealed partial class SemanticAnalyzer
         var paramToArg = new Dictionary<string, TypeSymbol>();
         for (int i = 0; i < genericDef.GenericParameters!.Count; i++)
         {
-            paramToArg[key: genericDef.GenericParameters[i]] = typeArgs[i];
+            paramToArg[key: genericDef.GenericParameters[index: i]] = typeArgs[index: i];
         }
 
         foreach (GenericConstraintDeclaration constraint in genericDef.GenericConstraints)
         {
-            if (!paramToArg.TryGetValue(key: constraint.ParameterName, value: out TypeSymbol? typeArg))
+            if (!paramToArg.TryGetValue(key: constraint.ParameterName,
+                    value: out TypeSymbol? typeArg))
             {
                 continue; // Constraint for unknown parameter
             }
@@ -297,35 +293,51 @@ public sealed partial class SemanticAnalyzer
             switch (constraint.ConstraintType)
             {
                 case ConstraintKind.Obeys:
-                    ValidateFollowsConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateFollowsConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.ValueType:
-                    ValidateValueTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateValueTypeConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.ReferenceType:
-                    ValidateReferenceTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateReferenceTypeConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.RoutineType:
-                    ValidateRoutineTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateRoutineTypeConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.ChoiceType:
-                    ValidateChoiceTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateChoiceTypeConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.VariantType:
-                    ValidateVariantTypeConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateVariantTypeConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.ConstGeneric:
-                    ValidateConstGenericConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateConstGenericConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
 
                 case ConstraintKind.TypeEquality:
-                    ValidateTypeEqualityConstraint(typeArg: typeArg, constraint: constraint, location: location);
+                    ValidateTypeEqualityConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
                     break;
             }
         }
@@ -335,10 +347,8 @@ public sealed partial class SemanticAnalyzer
     /// Validates that a type argument satisfies an <c>obeys</c> constraint by implementing
     /// all of the required protocols listed in the constraint.
     /// </summary>
-    private void ValidateFollowsConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateFollowsConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (constraint.ConstraintTypes == null)
         {
@@ -349,10 +359,10 @@ public sealed partial class SemanticAnalyzer
         {
             if (!ImplementsProtocol(type: typeArg, protocolName: protoExpr.Name))
             {
-                ReportError(
-                    SemanticDiagnosticCode.ProtocolConstraintViolation,
+                ReportError(code: SemanticDiagnosticCode.ProtocolConstraintViolation,
+                    message:
                     $"Type '{typeArg.Name}' does not implement protocol '{protoExpr.Name}' required by constraint on '{constraint.ParameterName}'.",
-                    location);
+                    location: location);
             }
         }
     }
@@ -361,17 +371,15 @@ public sealed partial class SemanticAnalyzer
     /// Validates that a type argument satisfies a <c>valuetype</c> constraint,
     /// requiring the argument to be a record (value type).
     /// </summary>
-    private void ValidateValueTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateValueTypeConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (typeArg.Category != TypeCategory.Record)
         {
-            ReportError(
-                SemanticDiagnosticCode.ValueTypeConstraintViolation,
+            ReportError(code: SemanticDiagnosticCode.ValueTypeConstraintViolation,
+                message:
                 $"Type '{typeArg.Name}' is not a value type (record) required by constraint on '{constraint.ParameterName}'.",
-                location);
+                location: location);
         }
     }
 
@@ -379,17 +387,15 @@ public sealed partial class SemanticAnalyzer
     /// Validates that a type argument satisfies a <c>referencetype</c> constraint,
     /// requiring the argument to be an entity (reference type).
     /// </summary>
-    private void ValidateReferenceTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateReferenceTypeConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (typeArg.Category != TypeCategory.Entity)
         {
-            ReportError(
-                SemanticDiagnosticCode.ReferenceTypeConstraintViolation,
+            ReportError(code: SemanticDiagnosticCode.ReferenceTypeConstraintViolation,
+                message:
                 $"Type '{typeArg.Name}' is not a reference type (entity) required by constraint on '{constraint.ParameterName}'.",
-                location);
+                location: location);
         }
     }
 
@@ -416,17 +422,15 @@ public sealed partial class SemanticAnalyzer
     /// Validates that a type argument satisfies a <c>routinetype</c> constraint,
     /// requiring the argument to be a routine (function) type.
     /// </summary>
-    private void ValidateRoutineTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateRoutineTypeConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (typeArg.Category != TypeCategory.Routine)
         {
-            ReportError(
-                SemanticDiagnosticCode.RoutineTypeConstraintViolation,
+            ReportError(code: SemanticDiagnosticCode.RoutineTypeConstraintViolation,
+                message:
                 $"Type '{typeArg.Name}' is not a routine type required by constraint on '{constraint.ParameterName}'.",
-                location);
+                location: location);
         }
     }
 
@@ -434,17 +438,15 @@ public sealed partial class SemanticAnalyzer
     /// Validates that a type argument satisfies a <c>choicetype</c> constraint,
     /// requiring the argument to be a choice (discriminated union of unit cases) type.
     /// </summary>
-    private void ValidateChoiceTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateChoiceTypeConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (typeArg.Category != TypeCategory.Choice)
         {
-            ReportError(
-                SemanticDiagnosticCode.ChoiceTypeConstraintViolation,
+            ReportError(code: SemanticDiagnosticCode.ChoiceTypeConstraintViolation,
+                message:
                 $"Type '{typeArg.Name}' is not a choice type required by constraint on '{constraint.ParameterName}'.",
-                location);
+                location: location);
         }
     }
 
@@ -452,17 +454,15 @@ public sealed partial class SemanticAnalyzer
     /// Validates that a type argument satisfies a <c>varianttype</c> constraint,
     /// requiring the argument to be a variant (tagged union with payloads) type.
     /// </summary>
-    private void ValidateVariantTypeConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateVariantTypeConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (typeArg.Category != TypeCategory.Variant)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantTypeConstraintViolation,
+            ReportError(code: SemanticDiagnosticCode.VariantTypeConstraintViolation,
+                message:
                 $"Type '{typeArg.Name}' is not a variant type required by constraint on '{constraint.ParameterName}'.",
-                location);
+                location: location);
         }
     }
 
@@ -470,43 +470,42 @@ public sealed partial class SemanticAnalyzer
     /// Validates a const generic constraint (e.g., requires N is Address).
     /// Const generics are build-time constant values, not types.
     /// </summary>
-    private void ValidateConstGenericConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateConstGenericConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (constraint.ConstraintTypes == null || constraint.ConstraintTypes.Count == 0)
         {
             return;
         }
 
-        TypeExpression requiredTypeExpr = constraint.ConstraintTypes[0];
+        TypeExpression requiredTypeExpr = constraint.ConstraintTypes[index: 0];
         string requiredTypeName = requiredTypeExpr.Name;
 
         // Resolve the required type and check ConstCompatible conformance
         TypeSymbol? requiredType = LookupTypeWithImports(name: requiredTypeName);
         if (requiredType == null)
         {
-            ReportError(
-                SemanticDiagnosticCode.InvalidConstGenericType,
+            ReportError(code: SemanticDiagnosticCode.InvalidConstGenericType,
+                message:
                 $"Unknown const generic type '{requiredTypeName}' for '{constraint.ParameterName}'.",
-                location);
+                location: location);
             return;
         }
 
         // Check explicit protocol conformance OR choice category.
         // Uses explicit-only check (not structural conformance) because ConstCompatible
         // is a marker protocol — structural conformance would match any type.
-        bool isValid = ExplicitlyImplementsProtocol(type: requiredType, protocolName: "ConstCompatible")
-                       || requiredType.Category == TypeCategory.Choice;
+        bool isValid =
+            ExplicitlyImplementsProtocol(type: requiredType, protocolName: "ConstCompatible") ||
+            requiredType.Category == TypeCategory.Choice;
 
         if (!isValid)
         {
-            ReportError(
-                SemanticDiagnosticCode.InvalidConstGenericType,
+            ReportError(code: SemanticDiagnosticCode.InvalidConstGenericType,
+                message:
                 $"Type '{requiredTypeName}' is not valid for const generic '{constraint.ParameterName}'. " +
                 "Const generic types must implement ConstCompatible or be a choice type.",
-                location);
+                location: location);
             return;
         }
 
@@ -515,41 +514,40 @@ public sealed partial class SemanticAnalyzer
         {
             if (constVal.ExplicitTypeName != null && constVal.ExplicitTypeName != requiredTypeName)
             {
-                ReportError(
-                    SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                ReportError(code: SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                    message:
                     $"Const generic '{constraint.ParameterName}' requires type '{requiredTypeName}', got '{constVal.ExplicitTypeName}'.",
-                    location);
+                    location: location);
             }
+
             return; // Accept — literal value satisfies const generic constraint
         }
 
         // Verify the type argument matches the expected const type
         if (typeArg.Name != requiredTypeName)
         {
-            ReportError(
-                SemanticDiagnosticCode.ConstGenericTypeMismatch,
+            ReportError(code: SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                message:
                 $"Const generic '{constraint.ParameterName}' requires type '{requiredTypeName}', got '{typeArg.Name}'.",
-                location);
+                location: location);
         }
 
         // #65: Choice const generic values must use fully-qualified names (e.g., Mode.DEBUG not bare DEBUG)
-        if (requiredType.Category == TypeCategory.Choice && !typeArg.Name.Contains('.'))
+        if (requiredType.Category == TypeCategory.Choice && !typeArg.Name.Contains(value: '.'))
         {
-            ReportError(
-                SemanticDiagnosticCode.ConstGenericTypeMismatch,
+            ReportError(code: SemanticDiagnosticCode.ConstGenericTypeMismatch,
+                message:
                 $"Choice const generic '{constraint.ParameterName}' requires fully-qualified case name " +
                 $"(e.g., '{requiredTypeName}.{typeArg.Name}'), not bare '{typeArg.Name}'.",
-                location);
+                location: location);
         }
     }
 
     /// <summary>
     /// Validates a type equality constraint (e.g., requires T in [s32, u8]).
     /// </summary>
-    private void ValidateTypeEqualityConstraint(
-        TypeSymbol typeArg,
-        GenericConstraintDeclaration constraint,
-        SourceLocation location)
+    private void ValidateTypeEqualityConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
     {
         if (constraint.ConstraintTypes == null || constraint.ConstraintTypes.Count == 0)
         {
@@ -559,35 +557,49 @@ public sealed partial class SemanticAnalyzer
         // Check if typeArg matches any of the allowed types
         foreach (TypeExpression allowedExpr in constraint.ConstraintTypes)
         {
-            if (typeArg.Name == allowedExpr.Name || GetBaseTypeName(typeName: typeArg.Name) == allowedExpr.Name)
+            if (typeArg.Name == allowedExpr.Name ||
+                GetBaseTypeName(typeName: typeArg.Name) == allowedExpr.Name)
             {
                 return; // Found a match
             }
         }
 
         // No match found
-        string allowedTypesList = string.Join(separator: ", ", values: constraint.ConstraintTypes.Select(selector: t => t.Name));
-        ReportError(
-            SemanticDiagnosticCode.TypeEqualityConstraintViolation,
+        string allowedTypesList = string.Join(separator: ", ",
+            values: constraint.ConstraintTypes.Select(selector: t => t.Name));
+        ReportError(code: SemanticDiagnosticCode.TypeEqualityConstraintViolation,
+            message:
             $"Type '{typeArg.Name}' is not in [{allowedTypesList}] for constraint on '{constraint.ParameterName}'.",
-            location);
+            location: location);
     }
 
     /// <summary>
     /// Tries to parse a type expression name as a const generic literal value.
     /// Handles untyped integers (4), typed integers (4u64, 8s32), and booleans (true, false).
     /// </summary>
-    private static bool TryParseConstGenericLiteral(string name, out long value, out string? explicitType)
+    private static bool TryParseConstGenericLiteral(string name, out long value,
+        out string? explicitType)
     {
         value = 0;
         explicitType = null;
 
         // Boolean literals
-        if (name == "true") { value = 1; explicitType = "Bool"; return true; }
-        if (name == "false") { value = 0; explicitType = "Bool"; return true; }
+        if (name == "true")
+        {
+            value = 1;
+            explicitType = "Bool";
+            return true;
+        }
+
+        if (name == "false")
+        {
+            value = 0;
+            explicitType = "Bool";
+            return true;
+        }
 
         // Untyped integer literal (e.g., "4", "128")
-        if (long.TryParse(name, out value))
+        if (long.TryParse(s: name, result: out value))
         {
             return true; // No explicit type — inferred from constraint
         }
@@ -604,10 +616,10 @@ public sealed partial class SemanticAnalyzer
             ("addr", "Address")
         ];
 
-        foreach (var (suffix, typeName) in suffixes)
+        foreach ((string suffix, string typeName) in suffixes)
         {
-            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
-                && long.TryParse(name[..^suffix.Length], out value))
+            if (name.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                long.TryParse(s: name[..^suffix.Length], result: out value))
             {
                 explicitType = typeName;
                 return true;

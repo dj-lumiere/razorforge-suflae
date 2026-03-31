@@ -88,7 +88,10 @@ public sealed class BuildDriver
                 _errors.Add(item: new SemanticError(
                     Code: SemanticDiagnosticCode.SourceFileNotFound,
                     Message: $"Source file not found: '{sourceFile}'",
-                    Location: new SourceLocation(FileName: sourceFile, Line: 0, Column: 0, Position: 0)));
+                    Location: new SourceLocation(FileName: sourceFile,
+                        Line: 0,
+                        Column: 0,
+                        Position: 0)));
                 continue;
             }
 
@@ -109,15 +112,16 @@ public sealed class BuildDriver
             }
             catch (InvalidOperationException ex)
             {
-                _errors.Add(item: new SemanticError(
-                    Code: SemanticDiagnosticCode.CircularImport,
+                _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.CircularImport,
                     Message: ex.Message,
-                    Location: new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0)));
+                    Location: new SourceLocation(FileName: "",
+                        Line: 0,
+                        Column: 0,
+                        Position: 0)));
             }
         }
 
-        return new BuildResult(
-            Units: _compiledUnits.Values.ToList(),
+        return new BuildResult(Units: _compiledUnits.Values.ToList(),
             Errors: _errors,
             Warnings: _warnings,
             InitializationOrder: initOrder);
@@ -163,8 +167,7 @@ public sealed class BuildDriver
             {
                 string fromModule = GetModuleForFile(filePath: fromFile);
 
-                bool success = _dependencyGraph.AddDependency(
-                    fromModule: fromModule,
+                bool success = _dependencyGraph.AddDependency(fromModule: fromModule,
                     toModule: modulePath,
                     importLocation: importLocation);
 
@@ -182,15 +185,13 @@ public sealed class BuildDriver
             // Process imports recursively
             foreach (ImportDeclaration import in unit.Imports)
             {
-                string? resolvedPath = _resolver.ResolveImport(
-                    importPath: import.ModulePath,
+                string? resolvedPath = _resolver.ResolveImport(importPath: import.ModulePath,
                     currentFile: filePath,
                     location: import.Location);
 
                 if (resolvedPath != null)
                 {
-                    ProcessFile(
-                        filePath: resolvedPath,
+                    ProcessFile(filePath: resolvedPath,
                         fromFile: filePath,
                         importLocation: import.Location);
                 }
@@ -210,30 +211,37 @@ public sealed class BuildDriver
         try
         {
             string code = File.ReadAllText(path: filePath);
-            bool isSuflae = filePath.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase);
+            bool isSuflae = filePath.EndsWith(value: ".sf",
+                comparisonType: StringComparison.OrdinalIgnoreCase);
 
             // Validate language consistency
             if (isSuflae && _language == Language.RazorForge)
             {
-                _errors.Add(item: new SemanticError(
-                    Code: SemanticDiagnosticCode.LanguageMismatch,
+                _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.LanguageMismatch,
                     Message: $"Cannot import Suflae file '{filePath}' from RazorForge project.",
-                    Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
+                    Location: new SourceLocation(FileName: filePath,
+                        Line: 1,
+                        Column: 1,
+                        Position: 0)));
                 return null;
             }
 
             if (!isSuflae && _language == Language.Suflae)
             {
-                _errors.Add(item: new SemanticError(
-                    Code: SemanticDiagnosticCode.LanguageMismatch,
+                _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.LanguageMismatch,
                     Message: $"Cannot import RazorForge file '{filePath}' from Suflae project.",
-                    Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
+                    Location: new SourceLocation(FileName: filePath,
+                        Line: 1,
+                        Column: 1,
+                        Position: 0)));
                 return null;
             }
 
             // Tokenize
-            var language = isSuflae ? Language.Suflae : Language.RazorForge;
-            var tokenizer = new Tokenizer(code, filePath, language);
+            Language language = isSuflae
+                ? Language.Suflae
+                : Language.RazorForge;
+            var tokenizer = new Tokenizer(source: code, fileName: filePath, language: language);
             List<Token> tokens = tokenizer.Tokenize();
 
             // Parse
@@ -257,8 +265,7 @@ public sealed class BuildDriver
                 }
             }
 
-            return new FileBuildUnit(
-                FilePath: filePath,
+            return new FileBuildUnit(FilePath: filePath,
                 Module: modulePath,
                 Ast: ast,
                 Imports: imports,
@@ -266,18 +273,22 @@ public sealed class BuildDriver
         }
         catch (GrammarException ex)
         {
-            _errors.Add(item: new SemanticError(
-                Code: SemanticDiagnosticCode.ParseError,
+            _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.ParseError,
                 Message: $"{ex.Message}",
-                Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
+                Location: new SourceLocation(FileName: filePath,
+                    Line: 1,
+                    Column: 1,
+                    Position: 0)));
             return null;
         }
         catch (Exception ex)
         {
-            _errors.Add(item: new SemanticError(
-                Code: SemanticDiagnosticCode.CompilationError,
+            _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.CompilationError,
                 Message: $"Error processing '{filePath}': {ex.Message}",
-                Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0)));
+                Location: new SourceLocation(FileName: filePath,
+                    Line: 1,
+                    Column: 1,
+                    Position: 0)));
             return null;
         }
     }

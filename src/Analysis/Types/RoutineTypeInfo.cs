@@ -24,8 +24,8 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// </summary>
     /// <param name="parameterTypes">The parameter types.</param>
     /// <param name="returnType">The return type (null for Blank/void).</param>
-    public RoutineTypeInfo(IReadOnlyList<TypeInfo> parameterTypes, TypeInfo? returnType)
-        : base(name: BuildName(parameterTypes, returnType))
+    public RoutineTypeInfo(IReadOnlyList<TypeInfo> parameterTypes, TypeInfo? returnType) : base(
+        name: BuildName(parameterTypes: parameterTypes, returnType: returnType))
     {
         ParameterTypes = parameterTypes;
         ReturnType = returnType;
@@ -37,7 +37,8 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// </summary>
     private static string BuildName(IReadOnlyList<TypeInfo> parameterTypes, TypeInfo? returnType)
     {
-        string paramList = string.Join(", ", parameterTypes.Select(p => p.Name));
+        string paramList = string.Join(separator: ", ",
+            values: parameterTypes.Select(selector: p => p.Name));
         string returnName = returnType?.Name ?? "Blank";
         return $"({paramList}) -> {returnName}";
     }
@@ -59,7 +60,7 @@ public sealed class RoutineTypeInfo : TypeInfo
         // Check parameter types (contravariant - other's params must be assignable to ours)
         for (int i = 0; i < ParameterTypes.Count; i++)
         {
-            if (ParameterTypes[i].Name != other.ParameterTypes[i].Name)
+            if (ParameterTypes[index: i].Name != other.ParameterTypes[index: i].Name)
             {
                 return false;
             }
@@ -84,7 +85,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     {
         // Function types don't have generic parameters in the traditional sense
         // But we might need to substitute type parameters in param/return types
-        throw new NotSupportedException("Function types cannot be directly resolved.");
+        throw new NotSupportedException(message: "Function types cannot be directly resolved.");
     }
 
     /// <summary>
@@ -95,25 +96,25 @@ public sealed class RoutineTypeInfo : TypeInfo
     public RoutineTypeInfo Substitute(Dictionary<string, TypeInfo> substitution)
     {
         var substitutedParams = ParameterTypes
-            .Select(p => SubstituteType(p, substitution))
-            .ToList();
+                               .Select(selector: p =>
+                                    SubstituteType(type: p, substitution: substitution))
+                               .ToList();
 
         TypeInfo? substitutedReturn = ReturnType != null
-            ? SubstituteType(ReturnType, substitution)
+            ? SubstituteType(type: ReturnType, substitution: substitution)
             : null;
 
-        return new RoutineTypeInfo(substitutedParams, substitutedReturn)
-        {
-            IsFailable = IsFailable
-        };
+        return new RoutineTypeInfo(parameterTypes: substitutedParams,
+            returnType: substitutedReturn) { IsFailable = IsFailable };
     }
 
     /// <summary>
     /// Substitutes type parameters in a type.
     /// </summary>
-    private static TypeInfo SubstituteType(TypeInfo type, Dictionary<string, TypeInfo> substitution)
+    private static TypeInfo SubstituteType(TypeInfo type,
+        Dictionary<string, TypeInfo> substitution)
     {
-        if (substitution.TryGetValue(type.Name, out TypeInfo? substituted))
+        if (substitution.TryGetValue(key: type.Name, value: out TypeInfo? substituted))
         {
             return substituted;
         }
@@ -122,7 +123,7 @@ public sealed class RoutineTypeInfo : TypeInfo
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             type.TypeArguments
-                .Select(arg => SubstituteType(arg, substitution))
+                .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
                 .ToList();
 
             // Would need to reconstruct the resolution - for now just return original

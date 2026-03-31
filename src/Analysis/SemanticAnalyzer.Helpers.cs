@@ -1,4 +1,4 @@
-﻿namespace SemanticAnalysis;
+namespace SemanticAnalysis;
 
 using Enums;
 using Symbols;
@@ -55,8 +55,8 @@ public sealed partial class SemanticAnalyzer
     /// Validates argument count and types for a routine call against the routine's parameter list.
     /// Reports errors for too-few arguments, too-many arguments (on non-variadic routines), and type mismatches.
     /// </summary>
-    private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments, SourceLocation location,
-        TypeSymbol? callObjectType = null)
+    private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments,
+        SourceLocation location, TypeSymbol? callObjectType = null)
     {
         IReadOnlyList<ParameterInfo> parameters = routine.Parameters;
         int totalParams = parameters.Count;
@@ -70,7 +70,8 @@ public sealed partial class SemanticAnalyzer
         // S510: Routines with 2+ non-me parameters require all arguments to be named.
         // This prevents argument-swap bugs at call sites. Variadic routines are exempt
         // because their extra positional args don't map to named parameters.
-        int nonMeParamCount = parameters.Count(predicate: p => p.Name != "me" && !p.HasDefaultValue);
+        int nonMeParamCount =
+            parameters.Count(predicate: p => p.Name != "me" && !p.HasDefaultValue);
         bool requiresNamedArgs = nonMeParamCount >= 2 && !routine.IsVariadic;
 
         foreach (Expression arg in arguments)
@@ -83,7 +84,7 @@ public sealed partial class SemanticAnalyzer
                 int paramIndex = -1;
                 for (int j = 0; j < totalParams; j++)
                 {
-                    if (parameters[j].Name == named.Name)
+                    if (parameters[index: j].Name == named.Name)
                     {
                         paramIndex = j;
                         break;
@@ -93,19 +94,17 @@ public sealed partial class SemanticAnalyzer
                 if (paramIndex == -1)
                 {
                     // S505: Unknown named argument
-                    ReportError(
-                        SemanticDiagnosticCode.UnknownNamedArgument,
-                        $"'{routine.Name}' has no parameter named '{named.Name}'.",
-                        named.Location);
+                    ReportError(code: SemanticDiagnosticCode.UnknownNamedArgument,
+                        message: $"'{routine.Name}' has no parameter named '{named.Name}'.",
+                        location: named.Location);
                     AnalyzeExpression(expression: named.Value);
                 }
                 else if (boundParams.ContainsKey(key: paramIndex))
                 {
                     // S506: Duplicate named argument (parameter already bound)
-                    ReportError(
-                        SemanticDiagnosticCode.DuplicateNamedArgument,
-                        $"Parameter '{named.Name}' of '{routine.Name}' is already bound.",
-                        named.Location);
+                    ReportError(code: SemanticDiagnosticCode.DuplicateNamedArgument,
+                        message: $"Parameter '{named.Name}' of '{routine.Name}' is already bound.",
+                        location: named.Location);
                     AnalyzeExpression(expression: named.Value);
                 }
                 else
@@ -118,26 +117,26 @@ public sealed partial class SemanticAnalyzer
                 if (requiresNamedArgs)
                 {
                     // S510: Named argument enforcement — subsumes S507
-                    ReportError(
-                        SemanticDiagnosticCode.NamedArgumentRequired,
+                    ReportError(code: SemanticDiagnosticCode.NamedArgumentRequired,
+                        message:
                         $"Routine '{routine.Name}' has {nonMeParamCount} parameters - all arguments must be named.",
-                        arg.Location);
+                        location: arg.Location);
                 }
                 else if (seenNamed)
                 {
                     // S507: Positional argument after named argument
-                    ReportError(
-                        SemanticDiagnosticCode.PositionalAfterNamed,
+                    ReportError(code: SemanticDiagnosticCode.PositionalAfterNamed,
+                        message:
                         $"Positional argument cannot appear after named arguments in call to '{routine.Name}'.",
-                        arg.Location);
+                        location: arg.Location);
                 }
 
                 // For variadic routines: once we reach the varargs parameter,
                 // all subsequent positional args are varargs (don't advance past it).
                 // Trailing params (sep, end) are only filled via named args or defaults.
-                bool inVariadicSlot = routine.IsVariadic && positionalIndex > 0
-                    && positionalIndex - 1 < totalParams
-                    && parameters[positionalIndex - 1].IsVariadicParam;
+                bool inVariadicSlot = routine.IsVariadic && positionalIndex > 0 &&
+                                      positionalIndex - 1 < totalParams &&
+                                      parameters[index: positionalIndex - 1].IsVariadicParam;
 
                 if (inVariadicSlot)
                 {
@@ -149,10 +148,10 @@ public sealed partial class SemanticAnalyzer
                     if (boundParams.ContainsKey(key: positionalIndex))
                     {
                         // S506: Positional arg collides with earlier named arg that bound this slot
-                        ReportError(
-                            SemanticDiagnosticCode.DuplicateNamedArgument,
-                            $"Parameter '{parameters[positionalIndex].Name}' of '{routine.Name}' is already bound.",
-                            arg.Location);
+                        ReportError(code: SemanticDiagnosticCode.DuplicateNamedArgument,
+                            message:
+                            $"Parameter '{parameters[index: positionalIndex].Name}' of '{routine.Name}' is already bound.",
+                            location: arg.Location);
                     }
                     else
                     {
@@ -171,16 +170,18 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 if (!inVariadicSlot)
+                {
                     positionalIndex++;
+                }
             }
         }
 
         // Phase 2: Check argument count against required parameters.
-        int requiredParams = parameters.Count(p => !p.HasDefaultValue);
+        int requiredParams = parameters.Count(predicate: p => !p.HasDefaultValue);
         int unboundRequired = 0;
         for (int i = 0; i < totalParams; i++)
         {
-            if (!boundParams.ContainsKey(key: i) && !parameters[i].HasDefaultValue)
+            if (!boundParams.ContainsKey(key: i) && !parameters[index: i].HasDefaultValue)
             {
                 unboundRequired++;
             }
@@ -190,25 +191,25 @@ public sealed partial class SemanticAnalyzer
         {
             if (requiredParams == totalParams)
             {
-                ReportError(
-                    SemanticDiagnosticCode.TooFewArguments,
+                ReportError(code: SemanticDiagnosticCode.TooFewArguments,
+                    message:
                     $"'{routine.Name}' expects {totalParams} argument(s), but got {arguments.Count}.",
-                    location);
+                    location: location);
             }
             else
             {
-                ReportError(
-                    SemanticDiagnosticCode.TooFewArguments,
+                ReportError(code: SemanticDiagnosticCode.TooFewArguments,
+                    message:
                     $"'{routine.Name}' expects at least {requiredParams} argument(s), but got {arguments.Count}.",
-                    location);
+                    location: location);
             }
         }
         else if (positionalIndex > totalParams && !routine.IsVariadic)
         {
-            ReportError(
-                SemanticDiagnosticCode.TooManyArguments,
+            ReportError(code: SemanticDiagnosticCode.TooManyArguments,
+                message:
                 $"'{routine.Name}' expects at most {totalParams} argument(s), but got {arguments.Count}.",
-                location);
+                location: location);
         }
 
         // Phase 3: Type-check each bound argument against its parameter.
@@ -221,20 +222,22 @@ public sealed partial class SemanticAnalyzer
                 continue;
             }
 
-            ParameterInfo param = parameters[binding.Key];
+            ParameterInfo param = parameters[index: binding.Key];
             TypeSymbol paramType = param.Type;
 
             // For variadic parameters, type-check against the element type T, not List[T]
-            if (param.IsVariadicParam && paramType is { IsGenericResolution: true, TypeArguments: [var elemType, ..] })
+            if (param.IsVariadicParam && paramType is
+                    { IsGenericResolution: true, TypeArguments: [var elemType, ..] })
             {
                 paramType = elemType;
             }
 
-            if (callObjectType != null && routine.OwnerType is GenericParameterTypeInfo genParamOwner)
+            if (callObjectType != null &&
+                routine.OwnerType is GenericParameterTypeInfo genParamOwner)
             {
                 var substitutions = new Dictionary<string, TypeSymbol>
                 {
-                    [genParamOwner.Name] = callObjectType
+                    [key: genParamOwner.Name] = callObjectType
                 };
                 paramType = SubstituteWithMapping(type: paramType, substitutions: substitutions);
             }
@@ -249,10 +252,10 @@ public sealed partial class SemanticAnalyzer
 
             if (!IsAssignableTo(source: argType, target: paramType))
             {
-                ReportError(
-                    SemanticDiagnosticCode.ArgumentTypeMismatch,
+                ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
+                    message:
                     $"Argument '{param.Name}' of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
-                    argExpr.Location);
+                    location: argExpr.Location);
             }
         }
     }
@@ -263,9 +266,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private bool IsAssignableTarget(Expression target)
     {
-        return target is IdentifierExpression
-            or MemberExpression
-            or IndexExpression;
+        return target is IdentifierExpression or MemberExpression or IndexExpression;
     }
 
     /// <summary>
@@ -313,7 +314,9 @@ public sealed partial class SemanticAnalyzer
     private static string GetBaseTypeName(string typeName)
     {
         int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0 ? typeName[..genericIndex] : typeName;
+        return genericIndex >= 0
+            ? typeName[..genericIndex]
+            : typeName;
     }
 
     /// <summary>Returns true if the type is the built-in <c>Bool</c> type.</summary>
@@ -386,12 +389,10 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static bool IsComparisonOperator(BinaryOperator op)
     {
-        return op is BinaryOperator.Equal or BinaryOperator.NotEqual
-            or BinaryOperator.Less or BinaryOperator.LessEqual
-            or BinaryOperator.Greater or BinaryOperator.GreaterEqual
-            or BinaryOperator.In or BinaryOperator.NotIn
-            or BinaryOperator.Identical or BinaryOperator.NotIdentical
-            or BinaryOperator.Is or BinaryOperator.IsNot
+        return op is BinaryOperator.Equal or BinaryOperator.NotEqual or BinaryOperator.Less
+            or BinaryOperator.LessEqual or BinaryOperator.Greater or BinaryOperator.GreaterEqual
+            or BinaryOperator.In or BinaryOperator.NotIn or BinaryOperator.Identical
+            or BinaryOperator.NotIdentical or BinaryOperator.Is or BinaryOperator.IsNot
             or BinaryOperator.Obeys or BinaryOperator.Disobeys;
     }
 
@@ -441,7 +442,8 @@ public sealed partial class SemanticAnalyzer
     /// Called from both AnalyzeBinaryExpression (for non-desugared operators like ===, is, obeys)
     /// and AnalyzeChainedComparisonExpression (for chained comparisons like a &lt; b &lt; c).
     /// </summary>
-    private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op, SourceLocation location)
+    private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op,
+        SourceLocation location)
     {
         // Identity operators (===, !==) only work on entity types
         if (op is BinaryOperator.Identical or BinaryOperator.NotIdentical)
@@ -449,10 +451,10 @@ public sealed partial class SemanticAnalyzer
             if (left.Category is not TypeCategory.Entity ||
                 right.Category is not TypeCategory.Entity)
             {
-                ReportError(
-                    SemanticDiagnosticCode.IdentityOperatorRequiresReference,
+                ReportError(code: SemanticDiagnosticCode.IdentityOperatorRequiresReference,
+                    message:
                     $"Identity operator '{op.ToStringRepresentation()}' can only be used with entity types, not '{left.Name}' and '{right.Name}'.",
-                    location);
+                    location: location);
             }
 
             return;
@@ -463,10 +465,10 @@ public sealed partial class SemanticAnalyzer
         {
             if (op is not (BinaryOperator.Is or BinaryOperator.IsNot))
             {
-                ReportError(
-                    SemanticDiagnosticCode.ComparisonOnVariantType,
+                ReportError(code: SemanticDiagnosticCode.ComparisonOnVariantType,
+                    message:
                     $"Comparison operator '{op.ToStringRepresentation()}' cannot be used with variant types. Use 'is' or 'isnot' for pattern matching.",
-                    location);
+                    location: location);
             }
 
             return;
@@ -475,24 +477,27 @@ public sealed partial class SemanticAnalyzer
         // Membership operators (in, notin): check that right has $contains accepting left
         if (op is BinaryOperator.In or BinaryOperator.NotIn)
         {
-            RoutineInfo? containsMethod = _registry.LookupMethod(type: right, methodName: "$contains");
+            RoutineInfo? containsMethod =
+                _registry.LookupMethod(type: right, methodName: "$contains");
             if (containsMethod == null)
             {
-                ReportError(
-                    SemanticDiagnosticCode.IncompatibleComparisonTypes,
+                ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
+                    message:
                     $"Type '{right.Name}' does not support 'in'/'notin' (no $contains method).",
-                    location);
+                    location: location);
             }
+
             return;
         }
 
         // Check that types are compatible (same type or error type)
-        if (!IsAssignableTo(source: left, target: right) && !IsAssignableTo(source: right, target: left))
+        if (!IsAssignableTo(source: left, target: right) &&
+            !IsAssignableTo(source: right, target: left))
         {
-            ReportError(
-                SemanticDiagnosticCode.IncompatibleComparisonTypes,
+            ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
+                message:
                 $"Cannot compare values of incompatible types '{left.Name}' and '{right.Name}'.",
-                location);
+                location: location);
         }
 
         // For ordering/equality operators in chained comparisons, verify the type supports them
@@ -506,10 +511,10 @@ public sealed partial class SemanticAnalyzer
 
         if (!SupportsOperator(type: left, op: op))
         {
-            ReportError(
-                SemanticDiagnosticCode.OrderingNotSupported,
+            ReportError(code: SemanticDiagnosticCode.OrderingNotSupported,
+                message:
                 $"Type '{left.Name}' does not support comparison operator '{op.ToStringRepresentation()}'.",
-                location);
+                location: location);
         }
     }
 
@@ -521,7 +526,8 @@ public sealed partial class SemanticAnalyzer
     /// - Equality only: a == b == c
     /// Invalid: mixing ascending and descending (a &lt; b &gt; c)
     /// </summary>
-    private void ValidateComparisonChain(ChainedComparisonExpression chain, SourceLocation location)
+    private void ValidateComparisonChain(ChainedComparisonExpression chain,
+        SourceLocation location)
     {
         if (chain.Operators.Count < 2)
         {
@@ -541,10 +547,9 @@ public sealed partial class SemanticAnalyzer
             // NotEqual cannot be used in chains
             if (op == BinaryOperator.NotEqual)
             {
-                ReportError(
-                    SemanticDiagnosticCode.NotEqualInComparisonChain,
-                    "The '!=' operator cannot be used in comparison chains.",
-                    location);
+                ReportError(code: SemanticDiagnosticCode.NotEqualInComparisonChain,
+                    message: "The '!=' operator cannot be used in comparison chains.",
+                    location: location);
                 return;
             }
 
@@ -555,10 +560,10 @@ public sealed partial class SemanticAnalyzer
             {
                 if (isAscending == false)
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.MixedComparisonChainDirection,
+                    ReportError(code: SemanticDiagnosticCode.MixedComparisonChainDirection,
+                        message:
                         "Cannot mix ascending (<, <=) and descending (>, >=) operators in a comparison chain.",
-                        location);
+                        location: location);
                     return;
                 }
 
@@ -568,10 +573,10 @@ public sealed partial class SemanticAnalyzer
             {
                 if (isAscending == true)
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.MixedComparisonChainDirection,
+                    ReportError(code: SemanticDiagnosticCode.MixedComparisonChainDirection,
+                        message:
                         "Cannot mix ascending (<, <=) and descending (>, >=) operators in a comparison chain.",
-                        location);
+                        location: location);
                     return;
                 }
 
@@ -594,18 +599,20 @@ public sealed partial class SemanticAnalyzer
         // For generic resolution types, also check if the generic definition has $iter
         if (!obeysIterable && iterableType.IsGenericResolution)
         {
-            RoutineInfo? seqMethod = _registry.LookupMethod(type: iterableType, methodName: "$iter");
+            RoutineInfo? seqMethod =
+                _registry.LookupMethod(type: iterableType, methodName: "$iter");
             if (seqMethod != null)
+            {
                 obeysIterable = true;
+            }
         }
 
         if (!obeysIterable)
         {
-            ReportError(
-                SemanticDiagnosticCode.TypeNotIterable,
-                $"Type '{iterableType.Name}' is not iterable. Types must follow the " +
-                $"'Iterable' protocol to be used in for-in loops.",
-                location);
+            ReportError(code: SemanticDiagnosticCode.TypeNotIterable,
+                message: $"Type '{iterableType.Name}' is not iterable. Types must follow the " +
+                         $"'Iterable' protocol to be used in for-in loops.",
+                location: location);
             return ErrorTypeInfo.Instance;
         }
 
@@ -622,9 +629,10 @@ public sealed partial class SemanticAnalyzer
         {
             foreach (TypeSymbol proto in protocols)
             {
-                if (GetBaseTypeName(typeName: proto.Name) == "Iterable" && proto.TypeArguments is { Count: > 0 })
+                if (GetBaseTypeName(typeName: proto.Name) == "Iterable" &&
+                    proto.TypeArguments is { Count: > 0 })
                 {
-                    TypeInfo elementType = proto.TypeArguments[0];
+                    TypeInfo elementType = proto.TypeArguments[index: 0];
 
                     // Resolve generic parameters if the iterable is a generic resolution
                     if (iterableType is { IsGenericResolution: true, TypeArguments: not null })
@@ -638,11 +646,17 @@ public sealed partial class SemanticAnalyzer
                         if (genericDef?.GenericParameters != null)
                         {
                             var substitution = new Dictionary<string, TypeInfo>();
-                            for (int i = 0; i < genericDef.GenericParameters.Count && i < iterableType.TypeArguments.Count; i++)
+                            for (int i = 0;
+                                 i < genericDef.GenericParameters.Count &&
+                                 i < iterableType.TypeArguments.Count;
+                                 i++)
                             {
-                                substitution[key: genericDef.GenericParameters[i]] = iterableType.TypeArguments[i];
+                                substitution[key: genericDef.GenericParameters[index: i]] =
+                                    iterableType.TypeArguments[index: i];
                             }
-                            elementType = SubstituteTypeParams(type: elementType, substitution: substitution);
+
+                            elementType = SubstituteTypeParams(type: elementType,
+                                substitution: substitution);
                         }
                     }
 
@@ -663,8 +677,9 @@ public sealed partial class SemanticAnalyzer
         if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
         {
             // Resolve generic type args: if return type arg is T and iterableType is Range[S64], resolve T → S64
-            TypeInfo returnTypeArg = seqMethod2.ReturnType.TypeArguments[0];
-            if (returnTypeArg is GenericParameterTypeInfo && iterableType is { IsGenericResolution: true, TypeArguments: not null })
+            TypeInfo returnTypeArg = seqMethod2.ReturnType.TypeArguments[index: 0];
+            if (returnTypeArg is GenericParameterTypeInfo && iterableType is
+                    { IsGenericResolution: true, TypeArguments: not null })
             {
                 TypeInfo? genericDef = iterableType switch
                 {
@@ -674,1079 +689,31 @@ public sealed partial class SemanticAnalyzer
                 };
                 if (genericDef?.GenericParameters != null)
                 {
-                    int paramIndex = genericDef.GenericParameters.ToList().IndexOf(returnTypeArg.Name);
+                    int paramIndex = genericDef.GenericParameters
+                                               .ToList()
+                                               .IndexOf(item: returnTypeArg.Name);
                     if (paramIndex >= 0 && paramIndex < iterableType.TypeArguments.Count)
-                        return iterableType.TypeArguments[paramIndex];
+                    {
+                        return iterableType.TypeArguments[index: paramIndex];
+                    }
                 }
             }
+
             return returnTypeArg;
         }
 
         // Fallback to type arguments if $iter method not found but protocol is implemented
         if (iterableType.TypeArguments is { Count: > 0 })
         {
-            return iterableType.TypeArguments[0];
+            return iterableType.TypeArguments[index: 0];
         }
 
-        ReportError(
-            SemanticDiagnosticCode.TypeNotIterable,
+        ReportError(code: SemanticDiagnosticCode.TypeNotIterable,
+            message:
             $"Cannot determine element type for '{iterableType.Name}'. The $iter method must return Iterator[T].",
-            location);
+            location: location);
         return ErrorTypeInfo.Instance;
-    }
-
-    /// <summary>
-    /// Recursively substitutes generic type parameters in a type using the given substitution map.
-    /// Used to resolve protocol type arguments when the owning type is a generic resolution.
-    /// </summary>
-    private static TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> substitution)
-    {
-        // Direct substitution for generic parameters
-        if (type is GenericParameterTypeInfo && substitution.TryGetValue(key: type.Name, value: out TypeInfo? sub))
-            return sub;
-
-        // Recursive substitution in type arguments
-        if (type.TypeArguments is not { Count: > 0 })
-            return type;
-
-        var newArgs = type.TypeArguments
-            .Select(selector: arg => SubstituteTypeParams(type: arg, substitution: substitution))
-            .ToList();
-
-        // Check if anything actually changed
-        bool changed = false;
-        for (int i = 0; i < newArgs.Count; i++)
-        {
-            if (!ReferenceEquals(objA: newArgs[i], objB: type.TypeArguments[i]))
-            {
-                changed = true;
-                break;
-            }
-        }
-        if (!changed) return type;
-
-        // Get the generic definition and create a new instance with substituted args
-        TypeInfo? genericDef = type switch
-        {
-            RecordTypeInfo r => r.GenericDefinition,
-            EntityTypeInfo e => e.GenericDefinition,
-            ProtocolTypeInfo p => p.GenericDefinition,
-            _ => null
-        };
-
-        if (genericDef != null)
-            return genericDef.CreateInstance(typeArguments: newArgs);
-
-        // TupleTypeInfo doesn't have a GenericDefinition — create a new tuple directly
-        if (type is TupleTypeInfo tuple)
-            return new TupleTypeInfo(elementTypes: newArgs);
-
-        return type;
-    }
-
-    /// <summary>
-    /// Returns true if <paramref name="type"/> implements the named protocol.
-    /// Checks explicit protocol declarations, parent protocol chains, and structural conformance
-    /// (i.e., whether the type has all required methods of the protocol).
-    /// </summary>
-    private bool ImplementsProtocol(TypeSymbol type, string protocolName)
-    {
-        // Get the protocol type
-        TypeSymbol? protocol = LookupTypeWithImports(name: protocolName);
-        if (protocol is not { Category: TypeCategory.Protocol })
-        {
-            return false;
-        }
-
-        // Get the list of implemented protocols for this type
-        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
-        {
-            RecordTypeInfo record => record.ImplementedProtocols,
-            EntityTypeInfo entity => entity.ImplementedProtocols,
-            _ => null
-        };
-
-        if (implementedProtocols == null)
-        {
-            return false;
-        }
-
-        // Check if the protocol is directly declared
-        foreach (TypeSymbol implemented in implementedProtocols)
-        {
-            if (implemented.Name == protocolName || GetBaseTypeName(typeName: implemented.Name) == protocolName)
-            {
-                return true;
-            }
-
-            // Check parent protocols recursively
-            if (implemented is ProtocolTypeInfo proto && CheckParentProtocols(proto: proto, targetName: protocolName))
-            {
-                return true;
-            }
-        }
-
-        // Check if the type has all required methods of the protocol (structural conformance)
-        if (protocol is ProtocolTypeInfo protoType)
-        {
-            return CheckStructuralConformance(type: type, protocol: protoType);
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Returns true if <paramref name="type"/> explicitly declares conformance to the named protocol
-    /// via <c>obeys</c>. Unlike <see cref="ImplementsProtocol"/>, this does NOT fall back to
-    /// structural conformance, making it suitable for marker protocols like ConstCompatible.
-    /// </summary>
-    private bool ExplicitlyImplementsProtocol(TypeSymbol type, string protocolName)
-    {
-        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
-        {
-            RecordTypeInfo record => record.ImplementedProtocols,
-            EntityTypeInfo entity => entity.ImplementedProtocols,
-            _ => null
-        };
-
-        if (implementedProtocols == null)
-        {
-            return false;
-        }
-
-        foreach (TypeSymbol implemented in implementedProtocols)
-        {
-            if (implemented.Name == protocolName || GetBaseTypeName(typeName: implemented.Name) == protocolName)
-            {
-                return true;
-            }
-
-            if (implemented is ProtocolTypeInfo proto && CheckParentProtocols(proto: proto, targetName: protocolName))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if any parent protocol matches the target.
-    /// </summary>
-    private bool CheckParentProtocols(ProtocolTypeInfo proto, string targetName)
-    {
-        foreach (ProtocolTypeInfo parent in proto.ParentProtocols)
-        {
-            if (parent.Name == targetName || GetBaseTypeName(typeName: parent.Name) == targetName)
-            {
-                return true;
-            }
-
-            // Re-lookup parent from registry to get the latest version with populated ParentProtocols,
-            // since immutable type updates may leave stale references in the hierarchy.
-            ProtocolTypeInfo latestParent = parent;
-            if (parent.ParentProtocols.Count == 0)
-            {
-                TypeSymbol? looked = _registry.LookupType(name: parent.Name);
-                if (looked is ProtocolTypeInfo latest)
-                {
-                    latestParent = latest;
-                }
-            }
-
-            if (CheckParentProtocols(proto: latestParent, targetName: targetName))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if a type structurally conforms to a protocol by having all required methods.
-    /// </summary>
-    private bool CheckStructuralConformance(TypeSymbol type, ProtocolTypeInfo protocol)
-    {
-        foreach (ProtocolMethodInfo requiredMethod in protocol.Methods)
-        {
-            // Skip methods with default implementations
-            if (requiredMethod.HasDefaultImplementation)
-            {
-                continue;
-            }
-
-            // Look for the method on the type
-            RoutineInfo? typeMethod = _registry.LookupMethod(type: type, methodName: requiredMethod.Name);
-            if (typeMethod == null)
-            {
-                // Also check with failable suffix
-                if (requiredMethod.IsFailable)
-                {
-                    typeMethod = _registry.LookupMethod(type: type, methodName: requiredMethod.Name + "!");
-                }
-
-                if (typeMethod == null)
-                {
-                    return false;
-                }
-            }
-
-            // Verify method signature matches (basic check)
-            if (!MethodSignatureMatches(typeMethod: typeMethod, protoMethod: requiredMethod))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if a type's method signature matches a protocol method signature.
-    /// </summary>
-    private bool MethodSignatureMatches(RoutineInfo typeMethod, ProtocolMethodInfo protoMethod)
-    {
-        // Check failable matches
-        if (typeMethod.IsFailable != protoMethod.IsFailable)
-        {
-            return false;
-        }
-
-        // Check parameter count (excluding 'me' parameter if present)
-        // In-body methods have explicit 'me' as first parameter
-        // Extension methods don't include 'me' in the parameter list
-        int expectedParamCount = protoMethod.ParameterTypes.Count;
-        bool hasMeParam = typeMethod.Parameters.Count > 0 && typeMethod.Parameters[0].Name == "me";
-        int actualParamCount = typeMethod.Parameters.Count - (hasMeParam ? 1 : 0);
-
-        if (actualParamCount != expectedParamCount)
-        {
-            return false;
-        }
-
-        // Check parameter types - skip 'me' if present
-        int startIndex = hasMeParam ? 1 : 0;
-        for (int i = 0; i < expectedParamCount; i++)
-        {
-            TypeSymbol expectedType = protoMethod.ParameterTypes[i];
-            TypeSymbol actualType = typeMethod.Parameters[startIndex + i].Type;
-
-            // Handle protocol self type (Me) - should match the implementing type
-            if (expectedType is ProtocolSelfTypeInfo)
-            {
-                // 'Me' in protocol should match the owner type of the method
-                if (typeMethod.OwnerType != null && !TypesMatch(actualType, typeMethod.OwnerType))
-                {
-                    return false;
-                }
-            }
-            else if (!TypesMatch(actualType, expectedType))
-            {
-                return false;
-            }
-        }
-
-        // Check return type (if specified)
-        if (protoMethod.ReturnType != null && typeMethod.ReturnType != null)
-        {
-            if (!IsAssignableTo(source: typeMethod.ReturnType, target: protoMethod.ReturnType))
-            {
-                return false;
-            }
-        }
-        else if ((protoMethod.ReturnType == null) != (typeMethod.ReturnType == null))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if two types match for protocol signature comparison.
-    /// </summary>
-    private bool TypesMatch(TypeSymbol actual, TypeSymbol expected)
-    {
-        // Exact name match
-        if (actual.Name == expected.Name)
-        {
-            return true;
-        }
-
-        // Handle ProtocolSelfTypeInfo in expected position
-        if (expected is ProtocolSelfTypeInfo)
-        {
-            // 'Me' matches the owner type - handled by caller
-            return true;
-        }
-
-        // Handle generic resolutions
-        if (expected.IsGenericDefinition && actual.IsGenericResolution)
-        {
-            string baseName = GetBaseTypeName(typeName: actual.Name);
-            if (baseName == expected.Name)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if a hijacking source expression would result in nested hijacking.
-    /// Nested hijacking occurs when trying to hijack a member of an already-hijacked object.
-    /// </summary>
-    /// <param name="source">The source expression for the hijacking statement.</param>
-    /// <returns>True if this would be a nested hijacking, false otherwise.</returns>
-    private bool IsNestedHijacking(Expression source)
-    {
-        // Check if source is a member access expression (e.g., p.child)
-        if (source is not MemberExpression member)
-        {
-            return false;
-        }
-
-        // Check if the object being accessed is an identifier
-        if (member.Object is not IdentifierExpression id)
-        {
-            // Could be a chained member access, check recursively
-            return IsNestedHijacking(source: member.Object);
-        }
-
-        // Look up the variable and check if its type is Hijacked<T>
-        VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
-        if (varInfo == null)
-        {
-            return false;
-        }
-
-        // Check if the variable's type is Hijacked<T>
-        return IsHijackedType(type: varInfo.Type);
-    }
-
-    /// <summary>
-    /// Checks if a type is a Hijacked&lt;T&gt; token type.
-    /// </summary>
-    private static bool IsHijackedType(TypeSymbol type)
-    {
-        return type.Name == "Hijacked" || type.Name.StartsWith("Hijacked[");
-    }
-
-    /// <summary>
-    /// Checks if a type is a Seized&lt;T&gt; token type.
-    /// </summary>
-    private static bool IsSeizedType(TypeSymbol type)
-    {
-        return type.Name == "Seized" || type.Name.StartsWith("Seized[");
-    }
-
-    /// <summary>
-    /// Checks if a type is a Shared&lt;T&gt; handle type.
-    /// </summary>
-    private static bool IsSharedType(TypeSymbol type)
-    {
-        return type.Name == "Shared";
-    }
-
-    /// <summary>
-    /// Checks if a type is a Tracked&lt;T&gt; handle type.
-    /// </summary>
-    private static bool IsTrackedType(TypeSymbol type)
-    {
-        return type.Name == "Tracked";
-    }
-
-    #endregion
-
-    #region Wrapper Type Forwarding
-
-    /// <summary>
-    /// All wrapper types that transparently forward to their inner type.
-    /// </summary>
-    private static readonly HashSet<string> WrapperTypes =
-    [
-        "Viewed",     // Read-only single-threaded token
-        "Hijacked",   // Exclusive write single-threaded token
-        "Inspected",  // Read-only multi-threaded token
-        "Seized",     // Exclusive write multi-threaded token
-        "Shared",     // Reference-counted handle
-        "Tracked",    // Weak reference handle
-        "Snatched"    // Unsafe raw pointer handle
-    ];
-
-    /// <summary>
-    /// Read-only wrapper types that can only access @readonly methods.
-    /// </summary>
-    private static readonly HashSet<string> ReadOnlyWrapperTypes =
-    [
-        "Viewed",     // Read-only single-threaded token
-        "Inspected"   // Read-only multi-threaded token
-    ];
-
-    /// <summary>
-    /// Checks if a type is a wrapper type (Viewed, Hijacked, Shared, etc.).
-    /// </summary>
-    /// <param name="type">The type to check.</param>
-    /// <returns>True if the type is a wrapper type.</returns>
-    private bool IsWrapperType(TypeSymbol type)
-    {
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        return WrapperTypes.Contains(value: baseName);
-    }
-
-    /// <summary>
-    /// Checks if a wrapper type is read-only (Viewed, Inspected).
-    /// </summary>
-    /// <param name="type">The wrapper type to check.</param>
-    /// <returns>True if the wrapper is read-only.</returns>
-    private bool IsReadOnlyWrapper(TypeSymbol type)
-    {
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        return ReadOnlyWrapperTypes.Contains(value: baseName);
-    }
-
-    /// <summary>
-    /// Gets the inner type from a wrapper type (e.g., T from Viewed&lt;T&gt;).
-    /// </summary>
-    /// <param name="wrapperType">The wrapper type.</param>
-    /// <returns>The inner type, or null if not a wrapper or no type arguments.</returns>
-    private TypeSymbol? GetWrapperInnerType(TypeSymbol wrapperType)
-    {
-        if (!IsWrapperType(type: wrapperType))
-        {
-            return null;
-        }
-
-        // Wrapper types have their inner type as the first type argument
-        if (wrapperType.TypeArguments is { Count: > 0 })
-        {
-            return wrapperType.TypeArguments[0];
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Tries to look up a member variable on the inner type of a wrapper type.
-    /// </summary>
-    /// <param name="wrapperType">The wrapper type.</param>
-    /// <param name="memberVariableName">The name of the member variable to look up.</param>
-    /// <returns>The member variable info if found, null otherwise.</returns>
-    private MemberVariableInfo? LookupMemberVariableOnWrapperInnerType(TypeSymbol wrapperType, string memberVariableName)
-    {
-        TypeSymbol? innerType = GetWrapperInnerType(wrapperType: wrapperType);
-        if (innerType == null)
-        {
-            return null;
-        }
-
-        return innerType switch
-        {
-            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName),
-            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName),
-            _ => null
-        };
-    }
-
-    /// <summary>
-    /// Tries to look up a method on the inner type of a wrapper type.
-    /// </summary>
-    /// <param name="wrapperType">The wrapper type.</param>
-    /// <param name="methodName">The name of the method to look up.</param>
-    /// <returns>The routine info if found, null otherwise.</returns>
-    private RoutineInfo? LookupMethodOnWrapperInnerType(TypeSymbol wrapperType, string methodName)
-    {
-        TypeSymbol? innerType = GetWrapperInnerType(wrapperType: wrapperType);
-        if (innerType == null)
-        {
-            return null;
-        }
-
-        // Look up the method on the inner type
-        return _registry.LookupRoutine(fullName: $"{innerType.Name}.{methodName}");
-    }
-
-    /// <summary>
-    /// Validates that a method can be called through a read-only wrapper.
-    /// Read-only wrappers (Viewed, Inspected) can only call @readonly methods.
-    /// </summary>
-    /// <param name="wrapperType">The wrapper type being used.</param>
-    /// <param name="method">The method being called.</param>
-    /// <param name="location">Source location for error reporting.</param>
-    private void ValidateReadOnlyWrapperMethodAccess(
-        TypeSymbol wrapperType,
-        RoutineInfo method,
-        SourceLocation location)
-    {
-        if (!IsReadOnlyWrapper(type: wrapperType))
-        {
-            return; // Modifiable wrappers can access all methods
-        }
-
-        // Read-only wrappers can only access @readonly methods
-        if (!method.IsReadOnly)
-        {
-            string wrapperName = GetBaseTypeName(typeName: wrapperType.Name);
-            ReportError(
-                SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
-                $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}[T]'. " +
-                $"Only @readonly methods are accessible.",
-                location);
-        }
-    }
-
-    #endregion
-
-    #region Memory Token Validation
-
-    /// <summary>
-    /// Token types that cannot be returned from routines or stored in member variables.
-    /// These are inline-only access tokens that must stay within their scope.
-    /// </summary>
-    private static readonly HashSet<string> InlineOnlyTokenTypes =
-    [
-        "Viewed",    // Read-only single-threaded token
-        "Hijacked",  // Exclusive write single-threaded token
-        "Inspected", // Read-only multi-threaded token
-        "Seized"     // Exclusive write multi-threaded token
-    ];
-
-    /// <summary>
-    /// Token types that require uniqueness validation (cannot be passed twice in same call).
-    /// </summary>
-    private static readonly HashSet<string> ExclusiveTokenTypes =
-    [
-        "Hijacked", // Cannot pass same Hijacked token twice
-        "Seized"    // Cannot pass same Seized token twice
-    ];
-
-    /// <summary>
-    /// Checks if a type is an inline-only token type (Viewed, Hijacked, Inspected, Seized).
-    /// These tokens cannot be returned from routines or stored in member variables.
-    /// </summary>
-    private bool IsInlineOnlyTokenType(TypeSymbol type)
-    {
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        return InlineOnlyTokenTypes.Contains(value: baseName);
-    }
-
-    /// <summary>
-    /// Gets the token kind for display in error messages.
-    /// </summary>
-    private static string GetTokenKindDescription(TypeSymbol type)
-    {
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        return baseName switch
-        {
-            "Viewed" => "read-only token (Viewed)",
-            "Hijacked" => "exclusive write token (Hijacked)",
-            "Inspected" => "shared read token (Inspected)",
-            "Seized" => "exclusive shared write token (Seized)",
-            _ => "token"
-        };
-    }
-
-    /// <summary>
-    /// Validates that a type is not an inline-only token when used as a return type.
-    /// </summary>
-    private void ValidateNotTokenReturnType(TypeSymbol type, SourceLocation location)
-    {
-        if (_registry.Language != Language.RazorForge)
-        {
-            return; // Token validation only applies to RazorForge
-        }
-
-        if (IsInlineOnlyTokenType(type: type))
-        {
-            ReportError(
-                SemanticDiagnosticCode.TokenReturnNotAllowed,
-                $"Cannot return {GetTokenKindDescription(type: type)} from a routine. Tokens are inline-only and cannot escape their scope.",
-                location);
-        }
-    }
-
-    /// <summary>
-    /// Validates that a type is not an inline-only token when used as a member variable type.
-    /// </summary>
-    private void ValidateNotTokenMemberVariableType(TypeSymbol type, string memberVariableName, SourceLocation location)
-    {
-        if (_registry.Language != Language.RazorForge)
-        {
-            return; // Token validation only applies to RazorForge
-        }
-
-        if (IsInlineOnlyTokenType(type: type))
-        {
-            ReportError(
-                SemanticDiagnosticCode.TokenMemberVariableNotAllowed,
-                $"Cannot store {GetTokenKindDescription(type: type)} in member variable '{memberVariableName}'. Tokens are inline-only and cannot be stored.",
-                location);
-        }
-    }
-
-    /// <summary>
-    /// Validates that exclusive tokens (Hijacked, Seized) are not passed multiple times in a single call.
-    /// </summary>
-    private void ValidateExclusiveTokenUniqueness(List<Expression> arguments, SourceLocation location)
-    {
-        if (_registry.Language != Language.RazorForge)
-        {
-            return; // Token validation only applies to RazorForge
-        }
-
-        // Track which exclusive token expressions we've seen
-        var seenExclusiveTokens = new HashSet<string>();
-
-        foreach (Expression arg in arguments)
-        {
-            // Get the expression's type
-            if (arg.ResolvedType == null)
-            {
-                continue;
-            }
-
-            // Convert AST TypeInfo back to get the type name
-            string typeName = arg.ResolvedType.Name;
-            string baseName = GetBaseTypeName(typeName: typeName);
-
-            if (!ExclusiveTokenTypes.Contains(value: baseName))
-            {
-                continue;
-            }
-
-            // Get a string representation of the expression for uniqueness checking
-            string exprKey = GetExpressionKey(expression: arg);
-            if (string.IsNullOrEmpty(value: exprKey))
-            {
-                continue;
-            }
-
-            if (seenExclusiveTokens.Contains(value: exprKey))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.ExclusiveTokenDuplicate,
-                    $"Cannot pass the same {baseName} token '{exprKey}' multiple times in a single call. Exclusive tokens require unique access.",
-                    location);
-            }
-            else
-            {
-                seenExclusiveTokens.Add(item: exprKey);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets a string key representing an expression for uniqueness checking.
-    /// Returns null for complex expressions that can't be easily tracked.
-    /// </summary>
-    private static string? GetExpressionKey(Expression expression)
-    {
-        return expression switch
-        {
-            IdentifierExpression id => id.Name,
-            MemberExpression member => $"{GetExpressionKey(expression: member.Object)}.{member.PropertyName}",
-            _ => null
-        };
-    }
-
-    /// <summary>
-    /// Validates that a type is not an inline-only token when used as a variant case payload.
-    /// </summary>
-    private void ValidateNotTokenVariantPayload(TypeSymbol type, string caseName, SourceLocation location)
-    {
-        if (_registry.Language != Language.RazorForge)
-        {
-            return; // Token validation only applies to RazorForge
-        }
-
-        if (IsInlineOnlyTokenType(type: type))
-        {
-            ReportError(
-                SemanticDiagnosticCode.TokenVariantPayloadNotAllowed,
-                $"Cannot use {GetTokenKindDescription(type: type)} as payload for variant case '{caseName}'. Tokens are inline-only and cannot be stored in variants.",
-                location);
-        }
-    }
-
-    #endregion
-
-    #region Access Modifier Enforcement
-
-    /// <summary>
-    /// Gets the effective visibility for member variable write access.
-    /// For posted member variables, write access is secret (only owner can write).
-    /// </summary>
-    /// <param name="memberVariable">The member variable to check.</param>
-    /// <returns>The effective visibility for write access.</returns>
-    private static VisibilityModifier GetEffectiveWriteVisibility(MemberVariableInfo memberVariable)
-    {
-        // Posted member variables have open read but secret write
-        return memberVariable.Visibility == VisibilityModifier.Posted
-            ? VisibilityModifier.Secret
-            : memberVariable.Visibility;
-    }
-
-    /// <summary>
-    /// Checks if access to a member variable is allowed from the current context.
-    /// </summary>
-    /// <param name="memberVariable">The member variable being accessed.</param>
-    /// <param name="isWrite">Whether this is a write access (assignment).</param>
-    /// <param name="accessLocation">Source location of the access site.</param>
-    private void ValidateMemberVariableAccess(MemberVariableInfo memberVariable, bool isWrite, SourceLocation accessLocation)
-    {
-        // Posted member variables: open read, module-only write
-        if (isWrite && memberVariable.Visibility == VisibilityModifier.Posted
-                    && !IsAccessingFromSameModule(memberModule: memberVariable.Owner?.Module))
-        {
-            string typeName = memberVariable.Owner?.Name ?? "type";
-            ReportError(
-                SemanticDiagnosticCode.PostedMemberAccess,
-                $"Cannot write to posted member variable '{memberVariable.Name}' of '{typeName}' from outside its module.",
-                accessLocation);
-            return;
-        }
-
-        // For posted member variables, write access is restricted to secret (module only)
-        VisibilityModifier visibility = isWrite
-            ? GetEffectiveWriteVisibility(memberVariable: memberVariable)
-            : memberVariable.Visibility;
-
-        ValidateMemberAccess(
-            visibility: visibility,
-            memberKind: "member variable",
-            memberName: memberVariable.Name,
-            ownerType: memberVariable.Owner,
-            accessLocation: accessLocation);
-    }
-
-    /// <summary>
-    /// Checks if access to a routine is allowed from the current context.
-    /// </summary>
-    /// <param name="routine">The routine being accessed.</param>
-    /// <param name="accessLocation">Source location of the access site.</param>
-    private void ValidateRoutineAccess(RoutineInfo routine, SourceLocation accessLocation)
-    {
-        ValidateMemberAccess(
-            visibility: routine.Visibility,
-            memberKind: routine.Kind switch
-            {
-                RoutineKind.Creator => "creator",
-                RoutineKind.MemberRoutine => "member routine",
-                _ => "routine"
-            },
-            memberName: routine.Name,
-            ownerType: routine.OwnerType,
-            accessLocation: accessLocation);
-
-        // Dangerous routines can only be called inside danger! blocks
-        if (routine.IsDangerous && !InDangerBlock)
-        {
-            ReportError(
-                SemanticDiagnosticCode.DangerousCallOutsideDangerBlock,
-                $"Dangerous routine '{routine.Name}' can only be called inside a 'danger!' block.",
-                accessLocation);
-        }
-    }
-
-    /// <summary>
-    /// Validates access to a member based on visibility rules.
-    /// </summary>
-    /// <param name="visibility">The visibility modifier of the member.</param>
-    /// <param name="memberKind">The kind of member (member variable, method, etc.) for error messages.</param>
-    /// <param name="memberName">The name of the member.</param>
-    /// <param name="ownerType">The type that owns this member, if any.</param>
-    /// <param name="accessLocation">Source location of the access site.</param>
-    private void ValidateMemberAccess(
-        VisibilityModifier visibility,
-        string memberKind,
-        string memberName,
-        TypeSymbol? ownerType,
-        SourceLocation accessLocation)
-    {
-        switch (visibility)
-        {
-            case VisibilityModifier.Secret:
-                // Secret members are accessible within the same module
-                if (!IsAccessingFromSameModule(memberModule: ownerType?.Module))
-                {
-                    string typeName = ownerType?.Name ?? "type";
-                    ReportError(
-                        SemanticDiagnosticCode.SecretMemberAccess,
-                        $"Cannot access secret {memberKind} '{memberName}' of '{typeName}' from outside its module.",
-                        accessLocation);
-                }
-                break;
-
-            case VisibilityModifier.Posted:
-            case VisibilityModifier.Open:
-            case VisibilityModifier.External:
-                // Open/Posted/External members are accessible from anywhere for reading
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Checks if the current access context is within the same module as the member.
-    /// Module comparison is exact (sub-modules are different modules).
-    /// </summary>
-    private bool IsAccessingFromSameModule(string? memberModule)
-    {
-        string? currentModuleName = GetCurrentModuleName();
-
-        // If both are in no module, they're in the same module
-        if (string.IsNullOrEmpty(value: memberModule) && string.IsNullOrEmpty(value: currentModuleName))
-        {
-            return true;
-        }
-
-        // If either is null/empty but not both, they're not in the same module
-        if (string.IsNullOrEmpty(value: memberModule) || string.IsNullOrEmpty(value: currentModuleName))
-        {
-            return false;
-        }
-
-        // Module comparison is exact - sub-modules are different modules
-        return currentModuleName == memberModule;
-    }
-
-    /// <summary>
-    /// Validates write access to a member variable, checking setter visibility.
-    /// </summary>
-    /// <param name="objectType">The type of the object being accessed.</param>
-    /// <param name="memberVariableName">The name of the member variable being written.</param>
-    /// <param name="location">The source location of the write.</param>
-    private void ValidateMemberVariableWriteAccess(TypeSymbol objectType, string memberVariableName, SourceLocation location)
-    {
-        MemberVariableInfo? memberVariable = objectType switch
-        {
-            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName),
-            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName),
-            _ => null
-        };
-
-        if (memberVariable != null)
-        {
-            ValidateMemberVariableAccess(memberVariable: memberVariable, isWrite: true, accessLocation: location);
-        }
-    }
-
-    #endregion
-
-    #region Stdlib File Detection
-
-    /// <summary>
-    /// Checks whether a file path is inside the stdlib directory.
-    /// Used to allow stdlib files to use reserved features (e.g., module Core).
-    /// </summary>
-    private bool IsStdlibFile(string filePath)
-    {
-        string? stdlibPath = _registry.StdlibPath;
-        if (string.IsNullOrEmpty(stdlibPath) || string.IsNullOrEmpty(filePath))
-            return false;
-
-        string normalizedFile = Path.GetFullPath(filePath);
-        string normalizedStdlib = Path.GetFullPath(stdlibPath);
-        return normalizedFile.StartsWith(normalizedStdlib, StringComparison.OrdinalIgnoreCase);
-    }
-
-    #endregion
-
-    #region Type Narrowing
-
-    /// <summary>
-    /// Information about type narrowing extracted from a condition expression.
-    /// </summary>
-    private record NarrowingInfo(string VariableName, TypeSymbol? ThenBranchType, TypeSymbol? ElseBranchType);
-
-    /// <summary>
-    /// Attempts to extract type narrowing information from a condition expression.
-    /// Handles patterns like "x is None", "x isnot None", "Not(x is None)".
-    /// </summary>
-    private NarrowingInfo? TryExtractNarrowingFromCondition(Expression condition)
-    {
-        // Handle: x is None / x is Crashable / x isnot None / x isnot Crashable
-        if (condition is IsPatternExpression isPat)
-        {
-            return ExtractFromIsPattern(isPat: isPat);
-        }
-
-        // Handle desugared unless: Not(x is None) → if Not(condition) { ... }
-        if (condition is UnaryExpression { Operator: UnaryOperator.Not, Operand: IsPatternExpression innerIsPat })
-        {
-            // Negating the condition swaps then/else narrowing
-            NarrowingInfo? inner = ExtractFromIsPattern(isPat: innerIsPat);
-            if (inner == null) return null;
-            return new NarrowingInfo(inner.VariableName, inner.ElseBranchType, inner.ThenBranchType);
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Extracts narrowing info from an IsPatternExpression.
-    /// </summary>
-    private NarrowingInfo? ExtractFromIsPattern(IsPatternExpression isPat)
-    {
-        // The expression must be a simple identifier
-        if (isPat.Expression is not IdentifierExpression id) return null;
-
-        // Look up the variable to get its current type
-        VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
-        if (varInfo == null) return null;
-
-        // Check for existing narrowing
-        TypeSymbol varType = _registry.GetNarrowedType(name: id.Name) ?? varInfo.Type;
-
-        bool eliminateNone = IsNonePattern(pattern: isPat.Pattern);
-        bool eliminateCrashable = IsCrashablePattern(pattern: isPat.Pattern);
-
-        if (!eliminateNone && !eliminateCrashable) return null;
-
-        TypeSymbol? narrowedType = ComputeNarrowedType(
-            type: varType,
-            eliminateNone: eliminateNone,
-            eliminateCrashable: eliminateCrashable);
-
-        if (narrowedType == null) return null;
-
-        if (isPat.IsNegated)
-        {
-            // "x isnot None" → then branch gets the narrowed type
-            return new NarrowingInfo(id.Name, ThenBranchType: narrowedType, ElseBranchType: null);
-        }
-
-        // "x is None" → else branch gets the narrowed type
-        return new NarrowingInfo(id.Name, ThenBranchType: null, ElseBranchType: narrowedType);
-    }
-
-    /// <summary>
-    /// Checks if a pattern represents a None check.
-    /// The parser creates TypePattern(type: "None") rather than NonePattern.
-    /// </summary>
-    private static bool IsNonePattern(Pattern pattern)
-    {
-        return pattern is NonePattern
-            or TypePattern { Type.Name: "None" };
-    }
-
-    /// <summary>
-    /// Checks if a pattern represents a Crashable check.
-    /// The parser creates TypePattern(type: "Crashable") rather than CrashablePattern.
-    /// </summary>
-    private static bool IsCrashablePattern(Pattern pattern)
-    {
-        return pattern is CrashablePattern
-            or TypePattern { Type.Name: "Crashable" };
-    }
-
-    /// <summary>
-    /// Checks if a pattern is a generic Crashable catch-all (not a specific error type).
-    /// 'is Crashable e' is a catch-all; 'is FileNotFoundError e' is not.
-    /// </summary>
-    private static bool IsCrashableCatchAll(Pattern pattern)
-    {
-        return pattern is CrashablePattern { ErrorType: null }
-            or TypePattern { Type.Name: "Crashable" };
-    }
-
-    /// <summary>
-    /// Computes the narrowed type after eliminating None and/or Crashable possibilities.
-    /// </summary>
-    /// <returns>The narrowed type, or null if narrowing is not possible.</returns>
-    private static TypeSymbol? ComputeNarrowedType(TypeSymbol type, bool eliminateNone, bool eliminateCrashable)
-    {
-        if (type is not ErrorHandlingTypeInfo ehType) return null;
-
-        return ehType.Kind switch
-        {
-            // Maybe<T>: eliminate None → T
-            ErrorHandlingKind.Maybe when eliminateNone => ehType.ValueType,
-
-            // Result<T>: eliminate Crashable → T
-            ErrorHandlingKind.Result when eliminateCrashable => ehType.ValueType,
-
-            // Lookup<T>: must eliminate both None and Crashable → T
-            ErrorHandlingKind.Lookup when eliminateNone && eliminateCrashable => ehType.ValueType,
-
-            // Partial elimination on Lookup is not sufficient
-            _ => null
-        };
-    }
-
-    /// <summary>
-    /// Checks if a statement always produces a return value (return, throw, absent, becomes).
-    /// Used for missing-return validation (#144).
-    /// Unlike <see cref="HasDefiniteExit"/>, this does not count break/continue as terminating,
-    /// since they exit loops but don't return a value from the routine.
-    /// </summary>
-    private static bool StatementAlwaysTerminates(Statement statement)
-    {
-        return statement switch
-        {
-            ReturnStatement => true,
-            ThrowStatement => true,
-            AbsentStatement => true,
-            BecomesStatement => true,
-            BlockStatement block => block.Statements.Count > 0
-                                    && StatementAlwaysTerminates(statement: block.Statements[^1]),
-            IfStatement { ElseStatement: not null } ifStmt =>
-                StatementAlwaysTerminates(statement: ifStmt.ThenStatement)
-                && StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
-            WhenStatement whenStmt =>
-                whenStmt.Clauses.Count > 0
-                && whenStmt.Clauses.Any(c => c.Pattern is ElsePattern or WildcardPattern)
-                && whenStmt.Clauses.All(c => StatementAlwaysTerminates(statement: c.Body)),
-            _ => false
-        };
-    }
-
-    /// <summary>
-    /// Checks if a statement always exits the current scope (return, throw, absent, break, continue).
-    /// Used for guard clause narrowing.
-    /// </summary>
-    private static bool HasDefiniteExit(Statement statement)
-    {
-        return statement switch
-        {
-            ReturnStatement => true,
-            ThrowStatement => true,
-            AbsentStatement => true,
-            BreakStatement => true,
-            ContinueStatement => true,
-            BlockStatement block => block.Statements.Count > 0
-                                    && HasDefiniteExit(statement: block.Statements[^1]),
-            IfStatement { ElseStatement: not null } ifStmt =>
-                HasDefiniteExit(statement: ifStmt.ThenStatement)
-                && HasDefiniteExit(statement: ifStmt.ElseStatement),
-            _ => false
-        };
-    }
-
-    /// <summary>
-    /// Fixed-width numeric type names (excludes system-dependent SAddr/UAddr).
-    /// </summary>
-    private static readonly HashSet<string> FixedWidthNumericTypeNames =
-    [
-        "S8", "S16", "S32", "S64", "S128",
-        "U8", "U16", "U32", "U64", "U128",
-        "F16", "F32", "F64", "F128",
-        "D32", "D64", "D128"
-    ];
-
-    /// <summary>
-    /// Returns true if the type is a fixed-width numeric type (excludes SAddr/UAddr).
-    /// </summary>
-    private static bool IsFixedWidthNumericType(TypeInfo type)
-    {
-        return FixedWidthNumericTypeNames.Contains(item: type.Name);
     }
 
     #endregion
 }
-
-
-
-
-

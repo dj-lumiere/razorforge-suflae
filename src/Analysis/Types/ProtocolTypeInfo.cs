@@ -11,12 +11,10 @@ public sealed class ProtocolTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Protocol;
 
     /// <summary>Method signatures defined by this protocol.</summary>
-    public IReadOnlyList<ProtocolMethodInfo> Methods { get; set; } =
-        [];
+    public IReadOnlyList<ProtocolMethodInfo> Methods { get; set; } = [];
 
     /// <summary>Parent protocols that this protocol extends.</summary>
-    public IReadOnlyList<ProtocolTypeInfo> ParentProtocols { get; init; } =
-        [];
+    public IReadOnlyList<ProtocolTypeInfo> ParentProtocols { get; init; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -53,7 +51,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
         var substitution = new Dictionary<string, TypeInfo>();
         for (int i = 0; i < GenericParameters.Count; i++)
         {
-            substitution[key: GenericParameters[i]] = typeArguments[i];
+            substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
         }
 
         // Build resolved type name

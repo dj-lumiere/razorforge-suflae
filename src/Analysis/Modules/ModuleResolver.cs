@@ -75,16 +75,15 @@ public sealed class ModuleResolver
         if (importPath.StartsWith(value: "../") || importPath.StartsWith(value: "./"))
         {
             string normalizedPath = NormalizePath(importPath: importPath);
-            resolved = ResolveRelativeImport(
-                importPath: normalizedPath,
-                currentFile: currentFile);
+            resolved = ResolveRelativeImport(importPath: normalizedPath, currentFile: currentFile);
         }
         else
         {
             // Module-based resolution: look up in the index
             EnsureNamespaceIndexBuilt();
 
-            if (_namespaceIndex != null && _namespaceIndex.TryGetValue(importPath, out string? filePath))
+            if (_namespaceIndex != null &&
+                _namespaceIndex.TryGetValue(key: importPath, value: out string? filePath))
             {
                 resolved = filePath;
             }
@@ -92,8 +91,8 @@ public sealed class ModuleResolver
             {
                 // Fallback: try file-path-based resolution for backwards compatibility
                 string normalizedPath = NormalizePath(importPath: importPath);
-                resolved = ResolveStdlibImport(importPath: normalizedPath)
-                        ?? ResolveProjectImport(importPath: normalizedPath);
+                resolved = ResolveStdlibImport(importPath: normalizedPath) ??
+                           ResolveProjectImport(importPath: normalizedPath);
             }
         }
 
@@ -102,8 +101,7 @@ public sealed class ModuleResolver
 
         if (resolved == null)
         {
-            _errors.Add(item: new SemanticError(
-                Code: SemanticDiagnosticCode.ModuleNotFound,
+            _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.ModuleNotFound,
                 Message: $"Cannot resolve import '{importPath}'. Module not found.",
                 Location: location));
         }
@@ -123,30 +121,35 @@ public sealed class ModuleResolver
             return;
         }
 
-        _namespaceIndex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _namespaceIndex =
+            new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        if (!Directory.Exists(StdlibRoot))
+        if (!Directory.Exists(path: StdlibRoot))
         {
             return;
         }
 
         // Scan all .rf files in Standard/RazorForge recursively
-        string razorforgePath = Path.Combine(StdlibRoot, "RazorForge");
-        if (Directory.Exists(razorforgePath))
+        string razorforgePath = Path.Combine(path1: StdlibRoot, path2: "RazorForge");
+        if (Directory.Exists(path: razorforgePath))
         {
-            foreach (string filePath in Directory.GetFiles(razorforgePath, "*.rf", SearchOption.AllDirectories))
+            foreach (string filePath in Directory.GetFiles(path: razorforgePath,
+                         searchPattern: "*.rf",
+                         searchOption: SearchOption.AllDirectories))
             {
-                IndexFile(filePath, "RazorForge");
+                IndexFile(filePath: filePath, languagePrefix: "RazorForge");
             }
         }
 
         // Scan all .sf files in Standard/Suflae recursively
-        string suflaePath = Path.Combine(StdlibRoot, "Suflae");
-        if (Directory.Exists(suflaePath))
+        string suflaePath = Path.Combine(path1: StdlibRoot, path2: "Suflae");
+        if (Directory.Exists(path: suflaePath))
         {
-            foreach (string filePath in Directory.GetFiles(suflaePath, "*.sf", SearchOption.AllDirectories))
+            foreach (string filePath in Directory.GetFiles(path: suflaePath,
+                         searchPattern: "*.sf",
+                         searchOption: SearchOption.AllDirectories))
             {
-                IndexFile(filePath, "Suflae");
+                IndexFile(filePath: filePath, languagePrefix: "Suflae");
             }
         }
     }
@@ -160,21 +163,22 @@ public sealed class ModuleResolver
     {
         try
         {
-            string content = File.ReadAllText(filePath);
-            string? fileNamespace = ExtractModule(content);
-            List<string> typeNames = ExtractTypeNames(content);
+            string content = File.ReadAllText(path: filePath);
+            string? fileNamespace = ExtractModule(content: content);
+            List<string> typeNames = ExtractTypeNames(content: content);
 
             // Use file name as type name if no type declarations found
             if (typeNames.Count == 0)
             {
-                string fileName = Path.GetFileNameWithoutExtension(filePath);
-                typeNames.Add(fileName);
+                string fileName = Path.GetFileNameWithoutExtension(path: filePath);
+                typeNames.Add(item: fileName);
             }
 
             // Default module based on directory structure
             if (fileNamespace == null)
             {
-                fileNamespace = DeriveModuleNameFromPath(filePath, languagePrefix);
+                fileNamespace =
+                    DeriveModuleNameFromPath(filePath: filePath, languagePrefix: languagePrefix);
             }
 
             // Register each type under its module
@@ -184,12 +188,12 @@ public sealed class ModuleResolver
             {
                 string key = $"{fileNamespace}.{typeName}";
                 // First registration wins (don't overwrite)
-                _namespaceIndex!.TryAdd(key, filePath);
+                _namespaceIndex!.TryAdd(key: key, value: filePath);
 
                 // Also register with language prefix for cross-language imports
                 // e.g., "RazorForge/Numeric.Integer"
                 string crossLangKey = $"{languagePrefix}/{fileNamespace}.{typeName}";
-                _namespaceIndex!.TryAdd(crossLangKey, filePath);
+                _namespaceIndex!.TryAdd(key: crossLangKey, value: filePath);
             }
         }
         catch
@@ -205,26 +209,32 @@ public sealed class ModuleResolver
     private static string? ExtractModule(string content)
     {
         // Simple regex-free parsing for "module X" or "module X.Y.Z"
-        foreach (string line in content.Split('\n'))
+        foreach (string line in content.Split(separator: '\n'))
         {
             string trimmed = line.Trim();
-            if (trimmed.StartsWith("module "))
+            if (trimmed.StartsWith(value: "module "))
             {
-                string ns = trimmed["module ".Length..].Trim();
+                string ns = trimmed["module ".Length..]
+                   .Trim();
                 // Remove any trailing comments or whitespace
-                int commentIdx = ns.IndexOf('#');
+                int commentIdx = ns.IndexOf(value: '#');
                 if (commentIdx >= 0)
                 {
-                    ns = ns[..commentIdx].Trim();
+                    ns = ns[..commentIdx]
+                       .Trim();
                 }
+
                 return ns;
             }
+
             // Skip comments and empty lines, but stop at first non-comment declaration
-            if (!string.IsNullOrWhiteSpace(trimmed) && !trimmed.StartsWith("#") && !trimmed.StartsWith("import "))
+            if (!string.IsNullOrWhiteSpace(value: trimmed) && !trimmed.StartsWith(value: "#") &&
+                !trimmed.StartsWith(value: "import "))
             {
                 break;
             }
         }
+
         return null;
     }
 
@@ -235,35 +245,42 @@ public sealed class ModuleResolver
     private static List<string> ExtractTypeNames(string content)
     {
         var types = new List<string>();
-        string[] keywords = ["record ", "entity ", "choice ", "variant ", "mutant ", "protocol "
+        string[] keywords =
+        [
+            "record ", "entity ", "choice ", "variant ", "mutant ", "protocol "
         ];
 
-        foreach (string line in content.Split('\n'))
+        foreach (string line in content.Split(separator: '\n'))
         {
             string trimmed = line.Trim();
 
             // Skip visibility modifiers
-            if (trimmed.StartsWith("public ") || trimmed.StartsWith("private ") ||
-                trimmed.StartsWith("internal ") || trimmed.StartsWith("protected "))
+            if (trimmed.StartsWith(value: "public ") || trimmed.StartsWith(value: "private ") ||
+                trimmed.StartsWith(value: "internal ") || trimmed.StartsWith(value: "protected "))
             {
-                trimmed = trimmed[(trimmed.IndexOf(' ') + 1)..].Trim();
+                trimmed = trimmed[(trimmed.IndexOf(value: ' ') + 1)..]
+                   .Trim();
             }
 
             foreach (string keyword in keywords)
             {
-                if (!trimmed.StartsWith(keyword))
+                if (!trimmed.StartsWith(value: keyword))
                 {
                     continue;
                 }
 
-                string rest = trimmed[keyword.Length..].Trim();
+                string rest = trimmed[keyword.Length..]
+                   .Trim();
                 // Extract type name (before < or { or space)
-                int endIdx = rest.IndexOfAny(['[', '{', ' ', '(']);
-                string typeName = endIdx >= 0 ? rest[..endIdx] : rest;
-                if (!string.IsNullOrEmpty(typeName))
+                int endIdx = rest.IndexOfAny(anyOf: ['[', '{', ' ', '(']);
+                string typeName = endIdx >= 0
+                    ? rest[..endIdx]
+                    : rest;
+                if (!string.IsNullOrEmpty(value: typeName))
                 {
-                    types.Add(typeName);
+                    types.Add(item: typeName);
                 }
+
                 break;
             }
         }
@@ -280,27 +297,32 @@ public sealed class ModuleResolver
     {
         try
         {
-            string? fileDir = Path.GetDirectoryName(filePath);
-            if (fileDir == null) return "Core";
+            string? fileDir = Path.GetDirectoryName(path: filePath);
+            if (fileDir == null)
+            {
+                return "Core";
+            }
 
-            string normalizedFileDir = Path.GetFullPath(fileDir);
-            string languageStdlibPath = Path.GetFullPath(Path.Combine(StdlibRoot, languagePrefix));
+            string normalizedFileDir = Path.GetFullPath(path: fileDir);
+            string languageStdlibPath =
+                Path.GetFullPath(path: Path.Combine(path1: StdlibRoot, path2: languagePrefix));
 
-            if (!normalizedFileDir.StartsWith(languageStdlibPath, StringComparison.OrdinalIgnoreCase))
+            if (!normalizedFileDir.StartsWith(value: languageStdlibPath,
+                    comparisonType: StringComparison.OrdinalIgnoreCase))
             {
                 return "Core";
             }
 
             string relativePath = normalizedFileDir[languageStdlibPath.Length..]
-                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+               .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-            if (string.IsNullOrEmpty(relativePath))
+            if (string.IsNullOrEmpty(value: relativePath))
             {
                 return "Core";
             }
 
-            return relativePath.Replace(Path.DirectorySeparatorChar, '.')
-                              .Replace(Path.AltDirectorySeparatorChar, '.');
+            return relativePath.Replace(oldChar: Path.DirectorySeparatorChar, newChar: '.')
+                               .Replace(oldChar: Path.AltDirectorySeparatorChar, newChar: '.');
         }
         catch
         {
@@ -327,7 +349,8 @@ public sealed class ModuleResolver
         {
             // This was a file extension that got converted, restore it
             // e.g., "Module.rf" -> "Module/rf" -> should be "Module"
-            normalized = normalized[..^(Path.DirectorySeparatorChar.ToString().Length + 2)];
+            normalized = normalized[..^(Path.DirectorySeparatorChar.ToString()
+                                            .Length + 2)];
         }
 
         return normalized;
@@ -342,17 +365,19 @@ public sealed class ModuleResolver
         // Lazily discover stdlib directories
         if (_stdlibDirectories == null)
         {
-            _stdlibDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (Directory.Exists(StdlibRoot))
+            _stdlibDirectories = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+            if (Directory.Exists(path: StdlibRoot))
             {
-                foreach (string dir in Directory.GetDirectories(StdlibRoot))
+                foreach (string dir in Directory.GetDirectories(path: StdlibRoot))
                 {
-                    _stdlibDirectories.Add(Path.GetFileName(dir));
+                    _stdlibDirectories.Add(item: Path.GetFileName(path: dir));
                 }
+
                 // Also add stdlib root-level .rf files as potential module sources
-                foreach (string file in Directory.GetFiles(StdlibRoot, "*.rf"))
+                foreach (string file in
+                         Directory.GetFiles(path: StdlibRoot, searchPattern: "*.rf"))
                 {
-                    _stdlibDirectories.Add(Path.GetFileNameWithoutExtension(file));
+                    _stdlibDirectories.Add(item: Path.GetFileNameWithoutExtension(path: file));
                 }
             }
         }
@@ -372,7 +397,8 @@ public sealed class ModuleResolver
             return null;
         }
 
-        string fullPath = Path.GetFullPath(path: Path.Combine(path1: currentDir, path2: importPath));
+        string fullPath =
+            Path.GetFullPath(path: Path.Combine(path1: currentDir, path2: importPath));
 
         return TryFindSourceFile(basePath: fullPath);
     }
@@ -386,15 +412,22 @@ public sealed class ModuleResolver
         // First try direct path (may be a cross-language import like "razorforge/Numeric/Integer")
         string fullPath = Path.Combine(path1: StdlibRoot, path2: importPath);
         string? result = TryFindSourceFile(basePath: fullPath);
-        if (result != null) return result;
+        if (result != null)
+        {
+            return result;
+        }
 
         // Try in RazorForge subdirectory
-        string razorforgePath = Path.Combine(StdlibRoot, "RazorForge", importPath);
+        string razorforgePath =
+            Path.Combine(path1: StdlibRoot, path2: "RazorForge", path3: importPath);
         result = TryFindSourceFile(basePath: razorforgePath);
-        if (result != null) return result;
+        if (result != null)
+        {
+            return result;
+        }
 
         // Try in Suflae subdirectory
-        string suflaePath = Path.Combine(StdlibRoot, "Suflae", importPath);
+        string suflaePath = Path.Combine(path1: StdlibRoot, path2: "Suflae", path3: importPath);
         return TryFindSourceFile(basePath: suflaePath);
     }
 
@@ -472,9 +505,8 @@ public sealed class ModuleResolver
     /// <returns>The module path (e.g., "Collections.List").</returns>
     public static string GetNamespaceFromImport(string importPath)
     {
-        return importPath
-            .Replace(oldChar: '/', newChar: '.')
-            .Replace(oldChar: Path.DirectorySeparatorChar, newChar: '.');
+        return importPath.Replace(oldChar: '/', newChar: '.')
+                         .Replace(oldChar: Path.DirectorySeparatorChar, newChar: '.');
     }
 
     /// <summary>

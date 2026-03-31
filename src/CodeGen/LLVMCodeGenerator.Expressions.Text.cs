@@ -11,43 +11,46 @@ using SyntaxTree;
 /// </summary>
 public partial class LLVMCodeGenerator
 {
-
     private string EmitInsertedText(StringBuilder sb, InsertedTextExpression inserted)
     {
         if (inserted.Parts.Count == 0)
         {
-            return EmitStringLiteral(sb, "");
+            return EmitStringLiteral(sb: sb, value: "");
         }
 
         // Convert each part to a ptr (Text value)
         var partValues = new List<string>();
-        foreach (var part in inserted.Parts)
+        foreach (InsertedTextPart part in inserted.Parts)
         {
             switch (part)
             {
                 case TextPart textPart:
-                    partValues.Add(EmitStringLiteral(sb, textPart.Text));
+                    partValues.Add(item: EmitStringLiteral(sb: sb, value: textPart.Text));
                     break;
                 case ExpressionPart exprPart:
-                    partValues.Add(EmitInsertedTextPart(sb, exprPart));
+                    partValues.Add(item: EmitInsertedTextPart(sb: sb, exprPart: exprPart));
                     break;
             }
         }
 
         if (partValues.Count == 1)
         {
-            return partValues[0];
+            return partValues[index: 0];
         }
 
         // Chain concat calls via native rf_text_concat
-        if (_declaredNativeFunctions.Add("rf_text_concat"))
-            EmitLine(_functionDeclarations, "declare ptr @rf_text_concat(ptr, ptr)");
+        if (_declaredNativeFunctions.Add(item: "rf_text_concat"))
+        {
+            EmitLine(sb: _functionDeclarations, line: "declare ptr @rf_text_concat(ptr, ptr)");
+        }
 
-        string accumulator = partValues[0];
+        string accumulator = partValues[index: 0];
         for (int i = 1; i < partValues.Count; i++)
         {
             string concatResult = NextTemp();
-            EmitLine(sb, $"  {concatResult} = call ptr @rf_text_concat(ptr {accumulator}, ptr {partValues[i]})");
+            EmitLine(sb: sb,
+                line:
+                $"  {concatResult} = call ptr @rf_text_concat(ptr {accumulator}, ptr {partValues[index: i]})");
             accumulator = concatResult;
         }
 
@@ -56,33 +59,39 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a single expression part of an f-string, handling format specifiers.
-    /// Valid specifiers: null (default → $represent), "=" (name prefix + $represent),
+    /// Valid specifiers: null (default �� $represent), "=" (name prefix + $represent),
     /// "?" ($diagnose), "=?" (name prefix + $diagnose).
     /// </summary>
     private string EmitInsertedTextPart(StringBuilder sb, ExpressionPart exprPart)
     {
-        string exprValue = EmitExpression(sb, exprPart.Expression);
-        TypeInfo? exprType = GetExpressionType(exprPart.Expression);
+        string exprValue = EmitExpression(sb: sb, expr: exprPart.Expression);
+        TypeInfo? exprType = GetExpressionType(expr: exprPart.Expression);
         string? formatSpec = exprPart.FormatSpec;
 
-        bool hasName = formatSpec != null && formatSpec.Contains('=');
-        bool hasDiagnose = formatSpec != null && formatSpec.Contains('?');
+        bool hasName = formatSpec != null && formatSpec.Contains(value: '=');
+        bool hasDiagnose = formatSpec != null && formatSpec.Contains(value: '?');
 
         // Resolve the text value via $diagnose or $represent
         string valueText = hasDiagnose
-            ? EmitDiagnoseCall(sb, exprValue, exprType)
-            : EmitRepresentCall(sb, exprValue, exprType);
+            ? EmitDiagnoseCall(sb: sb, value: exprValue, type: exprType)
+            : EmitRepresentCall(sb: sb, value: exprValue, type: exprType);
 
         // Prepend "name=" prefix if = specifier is present
         if (hasName)
         {
-            string varName = exprPart.Expression is IdentifierExpression id ? id.Name : "expr";
-            string prefix = EmitStringLiteral(sb, $"{varName}=");
+            string varName = exprPart.Expression is IdentifierExpression id
+                ? id.Name
+                : "expr";
+            string prefix = EmitStringLiteral(sb: sb, value: $"{varName}=");
 
-            if (_declaredNativeFunctions.Add("rf_text_concat"))
-                EmitLine(_functionDeclarations, "declare ptr @rf_text_concat(ptr, ptr)");
+            if (_declaredNativeFunctions.Add(item: "rf_text_concat"))
+            {
+                EmitLine(sb: _functionDeclarations, line: "declare ptr @rf_text_concat(ptr, ptr)");
+            }
+
             string result = NextTemp();
-            EmitLine(sb, $"  {result} = call ptr @rf_text_concat(ptr {prefix}, ptr {valueText})");
+            EmitLine(sb: sb,
+                line: $"  {result} = call ptr @rf_text_concat(ptr {prefix}, ptr {valueText})");
             return result;
         }
 
@@ -96,38 +105,53 @@ public partial class LLVMCodeGenerator
     {
         // If already Text, return directly
         if (type?.Name == "Text")
+        {
             return value;
+        }
 
         string typeName = type?.Name ?? "Data";
         string representName = $"{typeName}.$represent";
-        RoutineInfo? representMethod = _registry.LookupRoutine(representName);
+        RoutineInfo? representMethod = _registry.LookupRoutine(fullName: representName);
         // For generic resolutions (e.g., ValueBitList[8]), try the generic base name
-        if (representMethod == null && type != null && GetGenericBaseName(type) is { } repBaseName)
+        if (representMethod == null && type != null &&
+            GetGenericBaseName(type: type) is { } repBaseName)
         {
-            representMethod = _registry.LookupRoutine($"{repBaseName}.$represent");
+            representMethod = _registry.LookupRoutine(fullName: $"{repBaseName}.$represent");
         }
+
         if (representMethod != null)
-            GenerateFunctionDeclaration(representMethod);
+        {
+            GenerateFunctionDeclaration(routine: representMethod);
+        }
 
         string mangledName = representMethod != null
-            ? MangleFunctionName(representMethod)
-            : Q($"{typeName}.$represent");
+            ? MangleFunctionName(routine: representMethod)
+            : Q(name: $"{typeName}.$represent");
 
         // For monomorphized methods, use the resolved type name in the mangled function name
-        if (representMethod != null && representMethod.IsGenericDefinition && typeName != representMethod.OwnerType?.Name)
+        if (representMethod != null && representMethod.IsGenericDefinition &&
+            typeName != representMethod.OwnerType?.Name)
         {
             string module = representMethod.OwnerType?.Module ?? representMethod.Module ?? "";
-            string prefix = module != "" ? $"{module}." : "";
-            mangledName = Q($"{prefix}{typeName}.$represent");
+            string prefix = module != ""
+                ? $"{module}."
+                : "";
+            mangledName = Q(name: $"{prefix}{typeName}.$represent");
         }
 
         // Ensure the monomorphized body is compiled for generic types
         if (type != null && representMethod != null && type.IsGenericResolution)
-            RecordMonomorphization(mangledName, representMethod, type);
+        {
+            RecordMonomorphization(mangledName: mangledName,
+                genericMethod: representMethod,
+                resolvedOwnerType: type);
+        }
 
-        string argType = type != null ? GetParameterLLVMType(type) : "i64";
+        string argType = type != null
+            ? GetParameterLLVMType(type: type)
+            : "i64";
         string result = NextTemp();
-        EmitLine(sb, $"  {result} = call ptr @{mangledName}({argType} {value})");
+        EmitLine(sb: sb, line: $"  {result} = call ptr @{mangledName}({argType} {value})");
         return result;
     }
 
@@ -138,36 +162,47 @@ public partial class LLVMCodeGenerator
     {
         string typeName = type?.Name ?? "Data";
         string diagnoseName = $"{typeName}.$diagnose";
-        RoutineInfo? diagnoseMethod = _registry.LookupRoutine(diagnoseName);
+        RoutineInfo? diagnoseMethod = _registry.LookupRoutine(fullName: diagnoseName);
         // For generic resolutions (e.g., ValueBitList[8]), try the generic base name
-        if (diagnoseMethod == null && type != null && GetGenericBaseName(type) is { } diagBaseName)
+        if (diagnoseMethod == null && type != null &&
+            GetGenericBaseName(type: type) is { } diagBaseName)
         {
-            diagnoseMethod = _registry.LookupRoutine($"{diagBaseName}.$diagnose");
+            diagnoseMethod = _registry.LookupRoutine(fullName: $"{diagBaseName}.$diagnose");
         }
+
         if (diagnoseMethod != null)
-            GenerateFunctionDeclaration(diagnoseMethod);
+        {
+            GenerateFunctionDeclaration(routine: diagnoseMethod);
+        }
 
         string mangledName = diagnoseMethod != null
-            ? MangleFunctionName(diagnoseMethod)
-            : Q($"{typeName}.$diagnose");
+            ? MangleFunctionName(routine: diagnoseMethod)
+            : Q(name: $"{typeName}.$diagnose");
 
         // For monomorphized methods, use the resolved type name in the mangled function name
-        if (diagnoseMethod != null && diagnoseMethod.IsGenericDefinition && typeName != diagnoseMethod.OwnerType?.Name)
+        if (diagnoseMethod != null && diagnoseMethod.IsGenericDefinition &&
+            typeName != diagnoseMethod.OwnerType?.Name)
         {
             string module = diagnoseMethod.OwnerType?.Module ?? diagnoseMethod.Module ?? "";
-            string prefix = module != "" ? $"{module}." : "";
-            mangledName = Q($"{prefix}{typeName}.$diagnose");
+            string prefix = module != ""
+                ? $"{module}."
+                : "";
+            mangledName = Q(name: $"{prefix}{typeName}.$diagnose");
         }
 
         // Ensure the monomorphized body is compiled for generic types
         if (type != null && diagnoseMethod != null && type.IsGenericResolution)
-            RecordMonomorphization(mangledName, diagnoseMethod, type);
+        {
+            RecordMonomorphization(mangledName: mangledName,
+                genericMethod: diagnoseMethod,
+                resolvedOwnerType: type);
+        }
 
-        string argType = type != null ? GetParameterLLVMType(type) : "i64";
+        string argType = type != null
+            ? GetParameterLLVMType(type: type)
+            : "i64";
         string result = NextTemp();
-        EmitLine(sb, $"  {result} = call ptr @{mangledName}({argType} {value})");
+        EmitLine(sb: sb, line: $"  {result} = call ptr @{mangledName}({argType} {value})");
         return result;
     }
-
 }
-

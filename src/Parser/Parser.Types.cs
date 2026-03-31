@@ -22,8 +22,7 @@ public partial class Parser
         // Handle nullable suffix: T? -> Maybe[T]
         if (Match(type: TokenType.Question))
         {
-            return new TypeExpression(
-                Name: "Maybe",
+            return new TypeExpression(Name: "Maybe",
                 GenericArguments: [baseType],
                 Location: baseType.Location);
         }
@@ -65,16 +64,22 @@ public partial class Parser
             Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
 
             // Allow any identifier as intrinsic type name (i1, i8, i16, i32, i64, i128, f16, f32, f64, f128, iptr, uptr, etc.)
-            if (!Match(TokenType.Identifier))
+            if (!Match(type: TokenType.Identifier))
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.ExpectedIdentifier,
+                throw new GrammarException(code: GrammarDiagnosticCode.ExpectedIdentifier,
+                    message:
                     $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                    fileName: fileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
 
-            string intrinsicName = PeekToken(offset: -1).Text;
-            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}", GenericArguments: null, Location: location);
+            string intrinsicName = PeekToken(offset: -1)
+               .Text;
+            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}",
+                GenericArguments: null,
+                Location: location);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -89,14 +94,15 @@ public partial class Parser
             {
                 // Single parenthesized type without comma: just (T)
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after type");
-                return elementTypes[0];
+                return elementTypes[index: 0];
             }
 
             // Single-element tuple: (T,)
             if (Check(type: TokenType.RightParen))
             {
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
-                return new TypeExpression(Name: "Tuple", GenericArguments: elementTypes,
+                return new TypeExpression(Name: "Tuple",
+                    GenericArguments: elementTypes,
                     Location: location);
             }
 
@@ -107,8 +113,9 @@ public partial class Parser
             } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightParen));
 
             Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
-            return new TypeExpression(Name: "Tuple", GenericArguments: elementTypes, Location:
-                location);
+            return new TypeExpression(Name: "Tuple",
+                GenericArguments: elementTypes,
+                Location: location);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -119,10 +126,10 @@ public partial class Parser
         //   List[T]               -> generic type
         //   Dict[Text, S32]       -> multi-param generic
         //   FixedBytes[4]         -> const generic (number as type arg)
-        if (!Match(TokenType.Identifier))
+        if (!Match(type: TokenType.Identifier))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedType,
-                $"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedType,
+                message: $"Expected type, got {CurrentToken.Type} ('{CurrentToken.Text}')");
         }
 
         string name = PeekToken(offset: -1)
@@ -132,7 +139,8 @@ public partial class Parser
         // This allows referencing types from other modules in type annotations
         while (Match(type: TokenType.Slash))
         {
-            string part = ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
+            string part =
+                ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
             name += "/" + part;
 
             // Handle dot separator for type within module: razorforge/Core.Bool
@@ -245,7 +253,8 @@ public partial class Parser
     ///   - Next parameter with constraint: [T obeys A, U obeys B]
     /// We look ahead to check if the next identifier has obeys/is/in after it.
     /// </remarks>
-    private (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints) ParseGenericParametersWithConstraints()
+    private (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints)
+        ParseGenericParametersWithConstraints()
     {
         var genericParams = new List<string>();
         var inlineConstraints = new List<GenericConstraintDeclaration>();
@@ -272,12 +281,14 @@ public partial class Parser
                     constraintTypes.Add(item: ParseType());
                     // Continue if comma but next token is NOT an identifier followed by obeys/is/in or greater
                     // This handles both "T obeys A, B" (multiple protocols) and "T obeys A, U obeys B" (next param)
-                } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightBracket) && !(Check(type: TokenType.Identifier) && (PeekToken(offset: 1)
+                } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightBracket) &&
+                         !(Check(type: TokenType.Identifier) && (PeekToken(offset: 1)
                             .Type == TokenType.Obeys || PeekToken(offset: 1)
                             .Type == TokenType.Is || PeekToken(offset: 1)
                             .Type == TokenType.In)));
 
-                inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                    ParameterName: paramName,
                     ConstraintType: ConstraintKind.Obeys,
                     ConstraintTypes: constraintTypes,
                     Location: location));
@@ -291,42 +302,48 @@ public partial class Parser
             {
                 if (Match(type: TokenType.Record))
                 {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.ValueType,
                         ConstraintTypes: null,
                         Location: location));
                 }
                 else if (Match(type: TokenType.Entity))
                 {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.ReferenceType,
                         ConstraintTypes: null,
                         Location: location));
                 }
                 else if (Match(type: TokenType.Routine))
                 {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.RoutineType,
                         ConstraintTypes: null,
                         Location: location));
                 }
                 else if (Match(type: TokenType.Choice))
                 {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.ChoiceType,
                         ConstraintTypes: null,
                         Location: location));
                 }
                 else if (Match(type: TokenType.Flags))
                 {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.FlagsType,
                         ConstraintTypes: null,
                         Location: location));
                 }
                 else if (Match(type: TokenType.Variant))
                 {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.VariantType,
                         ConstraintTypes: null,
                         Location: location));
@@ -336,14 +353,16 @@ public partial class Parser
                     // Const generic constraint: N is Address
                     // Type validation happens in semantic analysis, not parsing
                     TypeExpression constType = ParseType();
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.ConstGeneric,
                         ConstraintTypes: [constType],
                         Location: location));
                 }
                 else
                 {
-                    throw ThrowParseError(GrammarDiagnosticCode.InvalidConstraintKind,
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidConstraintKind,
+                        message:
                         "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
                 }
             }
@@ -353,7 +372,8 @@ public partial class Parser
             // Form: T in [S32, S64, F64]
             else if (Match(type: TokenType.In))
             {
-                Consume(type: TokenType.LeftBracket, errorMessage: "Expected '[' after 'in' for type equality constraint");
+                Consume(type: TokenType.LeftBracket,
+                    errorMessage: "Expected '[' after 'in' for type equality constraint");
 
                 var equalityTypes = new List<TypeExpression>();
                 do
@@ -361,9 +381,11 @@ public partial class Parser
                     equalityTypes.Add(item: ParseType());
                 } while (Match(type: TokenType.Comma));
 
-                Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after type list");
+                Consume(type: TokenType.RightBracket,
+                    errorMessage: "Expected ']' after type list");
 
-                inlineConstraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                    ParameterName: paramName,
                     ConstraintType: ConstraintKind.TypeEquality,
                     ConstraintTypes: equalityTypes,
                     Location: location));
@@ -397,18 +419,27 @@ public partial class Parser
     ///   needs T obeys A needs U obeys B    (chained)
     ///   needs T obeys A, U obeys B            (comma-separated)
     /// </remarks>
-    private List<GenericConstraintDeclaration>? ParseGenericConstraints(List<string>? genericParams, List<GenericConstraintDeclaration>? existingConstraints = null)
+    private List<GenericConstraintDeclaration>? ParseGenericConstraints(
+        List<string>? genericParams,
+        List<GenericConstraintDeclaration>? existingConstraints = null)
     {
         // Allow needs clauses even without explicit generic params (implicit generics from parameter types)
         // But only if there's actually a 'needs' keyword ahead — peek through newlines
         if (genericParams == null || genericParams.Count == 0)
         {
             int offset = 0;
-            while (PeekToken(offset: offset).Type == TokenType.Newline) offset++;
-            if (PeekToken(offset: offset).Type != TokenType.Requires)
+            while (PeekToken(offset: offset)
+                      .Type == TokenType.Newline)
+            {
+                offset++;
+            }
+
+            if (PeekToken(offset: offset)
+                   .Type != TokenType.Requires)
             {
                 return existingConstraints;
             }
+
             // Initialize genericParams so constraint parsing works
             genericParams ??= [];
         }
@@ -422,7 +453,8 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
         // Each parameter can have its own needs clause or they can be comma-separated
         // Skip newlines between needs clauses only when 'needs' obeys
-        while (SkipNewlinesIfFollowedBy(type: TokenType.Requires) && Match(type: TokenType.Requires))
+        while (SkipNewlinesIfFollowedBy(type: TokenType.Requires) &&
+               Match(type: TokenType.Requires))
         {
             do
             {
@@ -446,7 +478,8 @@ public partial class Parser
                         // (i.e., identifier NOT followed by obeys/is/in)
                     } while (Match(type: TokenType.Comma) && !IsNewConstraintDeclaration());
 
-                    constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    constraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.Obeys,
                         ConstraintTypes: constraintTypes,
                         Location: location));
@@ -456,42 +489,48 @@ public partial class Parser
                     // T is record/entity/routine/choice/variant or N is Address (const generic)
                     if (Match(type: TokenType.Record))
                     {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.ValueType,
                             ConstraintTypes: null,
                             Location: location));
                     }
                     else if (Match(type: TokenType.Entity))
                     {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.ReferenceType,
                             ConstraintTypes: null,
                             Location: location));
                     }
                     else if (Match(type: TokenType.Routine))
                     {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.RoutineType,
                             ConstraintTypes: null,
                             Location: location));
                     }
                     else if (Match(type: TokenType.Choice))
                     {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.ChoiceType,
                             ConstraintTypes: null,
                             Location: location));
                     }
                     else if (Match(type: TokenType.Flags))
                     {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.FlagsType,
                             ConstraintTypes: null,
                             Location: location));
                     }
                     else if (Match(type: TokenType.Variant))
                     {
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.VariantType,
                             ConstraintTypes: null,
                             Location: location));
@@ -501,21 +540,24 @@ public partial class Parser
                         // Const generic constraint: N is Address
                         // Type validation happens in semantic analysis, not parsing
                         TypeExpression constType = ParseType();
-                        constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
                             ConstraintType: ConstraintKind.ConstGeneric,
                             ConstraintTypes: [constType],
                             Location: location));
                     }
                     else
                     {
-                        throw ThrowParseError(GrammarDiagnosticCode.InvalidConstraintKind,
+                        throw ThrowParseError(code: GrammarDiagnosticCode.InvalidConstraintKind,
+                            message:
                             "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))
                 {
                     // T in [s32, s64, u32] - type equality constraint with list syntax
-                    Consume(type: TokenType.LeftBracket, errorMessage: "Expected '[' after 'in' for type equality constraint");
+                    Consume(type: TokenType.LeftBracket,
+                        errorMessage: "Expected '[' after 'in' for type equality constraint");
 
                     var equalityTypes = new List<TypeExpression>();
                     do
@@ -523,17 +565,19 @@ public partial class Parser
                         equalityTypes.Add(item: ParseType());
                     } while (Match(type: TokenType.Comma));
 
-                    Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after type list");
+                    Consume(type: TokenType.RightBracket,
+                        errorMessage: "Expected ']' after type list");
 
-                    constraints.Add(item: new GenericConstraintDeclaration(ParameterName: paramName,
+                    constraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
                         ConstraintType: ConstraintKind.TypeEquality,
                         ConstraintTypes: equalityTypes,
                         Location: location));
                 }
                 else
                 {
-                    throw ThrowParseError(GrammarDiagnosticCode.ExpectedConstraintType,
-                        "Expected 'obeys', 'is', or 'in' in generic constraint");
+                    throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedConstraintType,
+                        message: "Expected 'obeys', 'is', or 'in' in generic constraint");
                 }
 
                 // Continue parsing if there's a comma
@@ -553,7 +597,7 @@ public partial class Parser
     private bool IsNewConstraintDeclaration()
     {
         // Must start with an identifier (type parameter name)
-        if (!Check(TokenType.Identifier))
+        if (!Check(type: TokenType.Identifier))
         {
             return false;
         }

@@ -11,46 +11,62 @@ public abstract record ParsedLiteral(SourceLocation Location);
 /// <summary>
 /// Parsed f128 (IEEE binary128) value.
 /// </summary>
-public sealed record ParsedF128(SourceLocation Location, ulong Lo, ulong Hi) : ParsedLiteral(Location)
+public sealed record ParsedF128(SourceLocation Location, ulong Lo, ulong Hi)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"f128(0x{Hi:X16}{Lo:X16})";
+    public override string ToString()
+    {
+        return $"f128(0x{Hi:X16}{Lo:X16})";
+    }
 }
 
 /// <summary>
 /// Parsed d32 (IEEE decimal32) value.
 /// </summary>
-public sealed record ParsedD32(SourceLocation Location, uint Value) : ParsedLiteral(Location)
+public sealed record ParsedD32(SourceLocation Location, uint Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"d32(0x{Value:X8})";
+    public override string ToString()
+    {
+        return $"d32(0x{Value:X8})";
+    }
 }
 
 /// <summary>
 /// Parsed d64 (IEEE decimal64) value.
 /// </summary>
-public sealed record ParsedD64(SourceLocation Location, ulong Value) : ParsedLiteral(Location)
+public sealed record ParsedD64(SourceLocation Location, ulong Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"d64(0x{Value:X16})";
+    public override string ToString()
+    {
+        return $"d64(0x{Value:X16})";
+    }
 }
 
 /// <summary>
 /// Parsed d128 (IEEE decimal128) value.
 /// </summary>
-public sealed record ParsedD128(SourceLocation Location, ulong Lo, ulong Hi) : ParsedLiteral(Location)
+public sealed record ParsedD128(SourceLocation Location, ulong Lo, ulong Hi)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"d128(0x{Hi:X16}{Lo:X16})";
+    public override string ToString()
+    {
+        return $"d128(0x{Hi:X16}{Lo:X16})";
+    }
 }
 
 /// <summary>
 /// Parsed arbitrary-precision Integer value.
 /// </summary>
-public sealed record ParsedInteger(
-    SourceLocation Location,
-    byte[] Limbs,
-    int Sign,
-    long Exponent) : ParsedLiteral(Location)
+public sealed record ParsedInteger(SourceLocation Location, byte[] Limbs, int Sign, long Exponent)
+    : ParsedLiteral(Location: Location)
 {
     public bool IsNegative => Sign != 0;
-    public override string ToString() => $"Integer({(IsNegative ? "-" : "")}{Limbs.Length} limbs)";
+    public override string ToString()
+    {
+        return $"Integer({(IsNegative ? "-" : "")}{Limbs.Length} limbs)";
+    }
 }
 
 /// <summary>
@@ -63,101 +79,114 @@ public sealed record ParsedDecimal(
     int Sign,
     int Exponent,
     int SignificantDigits,
-    bool IsInteger) : ParsedLiteral(Location)
+    bool IsInteger) : ParsedLiteral(Location: Location)
 {
     public bool IsNegative => Sign < 0;
     public bool IsZero => Sign == 0;
-    public override string ToString() => $"Decimal({StringValue}, exp={Exponent})";
+    public override string ToString()
+    {
+        return $"Decimal({StringValue}, exp={Exponent})";
+    }
 }
 
 /// <summary>
 /// Parsed fixed-width signed integer value (S8, S16, S32, S64, S128).
 /// </summary>
-public sealed record ParsedSignedInt(
-    SourceLocation Location,
-    string TypeName,
-    Int128 Value) : ParsedLiteral(Location)
+public sealed record ParsedSignedInt(SourceLocation Location, string TypeName, Int128 Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"{TypeName}({Value})";
+    public override string ToString()
+    {
+        return $"{TypeName}({Value})";
+    }
 }
 
 /// <summary>
 /// Parsed fixed-width unsigned integer value (U8, U16, U32, U64, U128).
 /// </summary>
-public sealed record ParsedUnsignedInt(
-    SourceLocation Location,
-    string TypeName,
-    UInt128 Value) : ParsedLiteral(Location)
+public sealed record ParsedUnsignedInt(SourceLocation Location, string TypeName, UInt128 Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"{TypeName}({Value})";
+    public override string ToString()
+    {
+        return $"{TypeName}({Value})";
+    }
 }
 
 /// <summary>
 /// Parsed fixed-width float value (F16, F32, F64).
 /// F128 uses ParsedF128 with native library parsing.
 /// </summary>
-public sealed record ParsedFloat(
-    SourceLocation Location,
-    string TypeName,
-    double Value) : ParsedLiteral(Location)
+public sealed record ParsedFloat(SourceLocation Location, string TypeName, double Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"{TypeName}({Value})";
+    public override string ToString()
+    {
+        return $"{TypeName}({Value})";
+    }
 }
 
 /// <summary>
 /// Parsed Duration literal value stored as nanoseconds.
 /// Supports: ns, us, ms, s, m, h, d, w suffixes.
 /// </summary>
-public sealed record ParsedDuration(
-    SourceLocation Location,
-    long Nanoseconds,
-    string OriginalUnit) : ParsedLiteral(Location)
+public sealed record ParsedDuration(SourceLocation Location, long Nanoseconds, string OriginalUnit)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"Duration({Nanoseconds}ns, original={OriginalUnit})";
+    public override string ToString()
+    {
+        return $"Duration({Nanoseconds}ns, original={OriginalUnit})";
+    }
 }
 
 /// <summary>
 /// Parsed ByteSize literal value.
 /// Supports: b, kb, kib, mb, mib, gb, gib suffixes.
 /// </summary>
-public sealed record ParsedByteSize(
-    SourceLocation Location,
-    ulong Bytes,
-    string OriginalUnit) : ParsedLiteral(Location)
+public sealed record ParsedByteSize(SourceLocation Location, ulong Bytes, string OriginalUnit)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"ByteSize({Bytes}b, original={OriginalUnit})";
+    public override string ToString()
+    {
+        return $"ByteSize({Bytes}b, original={OriginalUnit})";
+    }
 }
 
 /// <summary>
 /// Parsed imaginary component for J32 (F32-based complex).
 /// </summary>
-public sealed record ParsedJ32(
-    SourceLocation Location,
-    float Value) : ParsedLiteral(Location)
+public sealed record ParsedJ32(SourceLocation Location, float Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"J32({Value}i)";
+    public override string ToString()
+    {
+        return $"J32({Value}i)";
+    }
 }
 
 /// <summary>
 /// Parsed imaginary component for J64 (F64-based complex).
 /// </summary>
-public sealed record ParsedJ64(
-    SourceLocation Location,
-    double Value) : ParsedLiteral(Location)
+public sealed record ParsedJ64(SourceLocation Location, double Value)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"J64({Value}i)";
+    public override string ToString()
+    {
+        return $"J64({Value}i)";
+    }
 }
 
 /// <summary>
 /// Parsed imaginary component for J128 (F128-based complex).
 /// Uses the same representation as ParsedF128.
 /// </summary>
-public sealed record ParsedJ128(
-    SourceLocation Location,
-    ulong Lo,
-    ulong Hi) : ParsedLiteral(Location)
+public sealed record ParsedJ128(SourceLocation Location, ulong Lo, ulong Hi)
+    : ParsedLiteral(Location: Location)
 {
-    public override string ToString() => $"J128(0x{Hi:X16}{Lo:X16}i)";
+    public override string ToString()
+    {
+        return $"J128(0x{Hi:X16}{Lo:X16}i)";
+    }
 }
 
 /// <summary>
@@ -169,9 +198,12 @@ public sealed record ParsedJn(
     string StringValue,
     int Sign,
     int Exponent,
-    int SignificantDigits) : ParsedLiteral(Location)
+    int SignificantDigits) : ParsedLiteral(Location: Location)
 {
     public bool IsNegative => Sign < 0;
     public bool IsZero => Sign == 0;
-    public override string ToString() => $"Jn({StringValue}i, exp={Exponent})";
+    public override string ToString()
+    {
+        return $"Jn({StringValue}i, exp={Exponent})";
+    }
 }

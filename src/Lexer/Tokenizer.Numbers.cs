@@ -81,10 +81,12 @@ public partial class Tokenizer
             // Handle arbitrary precision suffix (n) - maps to Integer or Decimal based on decimal point
             if (suffix == ArbitraryPrecisionSuffix)
             {
-                AddToken(type: isFloat ? TokenType.Decimal : TokenType.Integer);
+                AddToken(type: isFloat
+                    ? TokenType.Decimal
+                    : TokenType.Integer);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
-                    value: out TokenType numericType))
+                         value: out TokenType numericType))
             {
                 AddToken(type: numericType);
             }
@@ -101,9 +103,12 @@ public partial class Tokenizer
             else
             {
                 throw new GrammarException(
-                    ClassifySuffixError(suffix: suffix, isFloat: isFloat),
-                    $"Unknown suffix '{suffix}'",
-                    _fileName, _line, _column, _language);
+                    code: ClassifySuffixError(suffix: suffix, isFloat: isFloat),
+                    message: $"Unknown suffix '{suffix}'",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
         }
         else
@@ -149,19 +154,23 @@ public partial class Tokenizer
                 {
                     int lookAhead = 1;
                     while (char.IsLetterOrDigit(c: Peek(offset: lookAhead)))
+                    {
                         lookAhead++;
+                    }
+
                     if (lookAhead > 1)
                     {
-                        string candidate = _source.Substring(
-                            startIndex: _position + 1, length: lookAhead - 1);
+                        string candidate = _source.Substring(startIndex: _position + 1,
+                            length: lookAhead - 1);
                         if (_numericSuffixToTokenType.ContainsKey(key: candidate) ||
                             candidate == ArbitraryPrecisionSuffix)
                         {
                             Advance(); // consume the underscore
-                            break;     // suffix follows
+                            break; // suffix follows
                         }
                     }
                 }
+
                 Advance();
             }
 
@@ -185,6 +194,7 @@ public partial class Tokenizer
                 {
                     Advance();
                 }
+
                 while (char.IsDigit(c: Peek()))
                 {
                     Advance();
@@ -220,9 +230,12 @@ public partial class Tokenizer
             // Handle arbitrary precision suffix (n)
             if (suffix == ArbitraryPrecisionSuffix)
             {
-                AddToken(type: isHexFloat ? TokenType.Decimal : TokenType.Integer);
+                AddToken(type: isHexFloat
+                    ? TokenType.Decimal
+                    : TokenType.Integer);
             }
-            else if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
+                         value: out TokenType tokenType))
             {
                 AddToken(type: tokenType);
             }
@@ -231,10 +244,12 @@ public partial class Tokenizer
                 string baseType = isHex
                     ? "hex"
                     : "binary";
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidNumericLiteral,
-                    $"Unknown {baseType} suffix '{suffix}'",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidNumericLiteral,
+                    message: $"Unknown {baseType} suffix '{suffix}'",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
         }
         else
@@ -243,11 +258,15 @@ public partial class Tokenizer
             // RF: S64Literal (integer) / F64Literal (hex float), SF: Integer / Decimal
             if (_language == Language.RazorForge)
             {
-                AddToken(type: isHexFloat ? TokenType.F64Literal : TokenType.S64Literal);
+                AddToken(type: isHexFloat
+                    ? TokenType.F64Literal
+                    : TokenType.S64Literal);
             }
             else
             {
-                AddToken(type: isHexFloat ? TokenType.Decimal : TokenType.Integer);
+                AddToken(type: isHexFloat
+                    ? TokenType.Decimal
+                    : TokenType.Integer);
             }
         }
     }
@@ -258,7 +277,7 @@ public partial class Tokenizer
     private void ScanOctalNumber()
     {
         // Consume valid octal digits and underscores
-        while ((Peek() >= '0' && Peek() <= '7') || Peek() == '_')
+        while (Peek() >= '0' && Peek() <= '7' || Peek() == '_')
         {
             Advance();
         }
@@ -280,16 +299,19 @@ public partial class Tokenizer
             {
                 AddToken(type: TokenType.Integer);
             }
-            else if (_numericSuffixToTokenType.TryGetValue(key: suffix, value: out TokenType tokenType))
+            else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
+                         value: out TokenType tokenType))
             {
                 AddToken(type: tokenType);
             }
             else
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidNumericLiteral,
-                    $"Unknown octal suffix '{suffix}'",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidNumericLiteral,
+                    message: $"Unknown octal suffix '{suffix}'",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
         }
         else
@@ -316,23 +338,32 @@ public partial class Tokenizer
     /// </summary>
     private static GrammarDiagnosticCode ClassifySuffixError(string suffix, bool isFloat)
     {
-        char first = char.ToLowerInvariant(c: suffix[0]);
+        char first = char.ToLowerInvariant(c: suffix[index: 0]);
 
         // Memory-unit-like suffixes (b, k, m, g)
         if (first is 'b' or 'k' or 'm' or 'g')
+        {
             return GrammarDiagnosticCode.InvalidMemoryLiteral;
+        }
 
         // Duration-like suffixes (w, d, h, s, or contains ms/us/ns)
         if (first is 'w' or 'd' or 'h' or 's')
+        {
             return GrammarDiagnosticCode.InvalidDurationLiteral;
+        }
 
         string lower = suffix.ToLowerInvariant();
-        if (lower.Contains(value: "ms") || lower.Contains(value: "us") || lower.Contains(value: "ns"))
+        if (lower.Contains(value: "ms") || lower.Contains(value: "us") ||
+            lower.Contains(value: "ns"))
+        {
             return GrammarDiagnosticCode.InvalidDurationLiteral;
+        }
 
         // Float with decimal point
         if (isFloat)
+        {
             return GrammarDiagnosticCode.InvalidFloatLiteral;
+        }
 
         return GrammarDiagnosticCode.InvalidNumericLiteral;
     }

@@ -34,11 +34,14 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <returns>The matching member info, or null if not found.</returns>
     public VariantMemberInfo? FindMember(TypeInfo type)
     {
-        foreach (var member in Members)
+        foreach (VariantMemberInfo member in Members)
         {
             if (member.Type.Name == type.Name)
+            {
                 return member;
+            }
         }
+
         return null;
     }
 
@@ -64,13 +67,14 @@ public sealed class VariantTypeInfo : TypeInfo
         var substitution = new Dictionary<string, TypeInfo>();
         for (int i = 0; i < GenericParameters.Count; i++)
         {
-            substitution[key: GenericParameters[i]] = typeArguments[i];
+            substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
         }
 
         // Substitute types in members
-        var substitutedMembers = Members
-            .Select(selector: m => SubstituteMemberType(memberInfo: m, substitution: substitution))
-            .ToList();
+        var substitutedMembers = Members.Select(selector: m =>
+                                             SubstituteMemberType(memberInfo: m,
+                                                 substitution: substitution))
+                                        .ToList();
 
         // Build resolved type name
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
@@ -94,12 +98,17 @@ public sealed class VariantTypeInfo : TypeInfo
         Dictionary<string, TypeInfo> substitution)
     {
         if (memberInfo.IsNone)
+        {
             return memberInfo; // None state has no type to substitute
+        }
 
         TypeInfo substitutedType =
             SubstituteType(type: memberInfo.Type!, substitution: substitution);
         if (substitutedType == memberInfo.Type)
+        {
             return memberInfo;
+        }
+
         return memberInfo.WithSubstitutedType(newType: substitutedType);
     }
 
@@ -117,8 +126,9 @@ public sealed class VariantTypeInfo : TypeInfo
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
-                .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
-                .ToList();
+                              .Select(selector: arg =>
+                                   SubstituteType(type: arg, substitution: substitution))
+                              .ToList();
 
             if (type is VariantTypeInfo { GenericDefinition: not null } variantType)
             {

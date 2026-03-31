@@ -38,6 +38,7 @@ public sealed class RoutineInfo
                 // Method: Module.OwnerType.Method (e.g., "Core.S8.$add")
                 return $"{OwnerType.FullName}.{Name}";
             }
+
             // Standalone: same as FullName (already Module.Function)
             return FullName;
         }
@@ -68,13 +69,15 @@ public sealed class RoutineInfo
     public bool HasFailableCalls { get; set; }
 
     /// <summary>The declared modification category for this routine (from source annotation).</summary>
-    public ModificationCategory DeclaredModification { get; init; } = ModificationCategory.Migratable;
+    public ModificationCategory DeclaredModification { get; init; } =
+        ModificationCategory.Migratable;
 
     /// <summary>
     /// The inferred/final modification category for this routine.
     /// Initially set to declared value, then updated by modification inference.
     /// </summary>
-    public ModificationCategory ModificationCategory { get; set; } = ModificationCategory.Migratable;
+    public ModificationCategory ModificationCategory { get; set; } =
+        ModificationCategory.Migratable;
 
     /// <summary>Generic type parameters, if any.</summary>
     public IReadOnlyList<string>? GenericParameters { get; init; }
@@ -111,20 +114,31 @@ public sealed class RoutineInfo
     {
         get
         {
-            foreach (var annotation in Annotations)
+            foreach (string annotation in Annotations)
             {
-                if (!annotation.StartsWith("llvm_ir(")) continue;
+                if (!annotation.StartsWith(value: "llvm_ir("))
+                {
+                    continue;
+                }
+
                 // Extract template: llvm_ir("template") or llvm_ir(template)
-                int start = annotation.IndexOf('"') + 1;
-                int end = annotation.LastIndexOf('"');
+                int start = annotation.IndexOf(value: '"') + 1;
+                int end = annotation.LastIndexOf(value: '"');
                 if (start > 0 && end > start)
+                {
                     return annotation[start..end];
+                }
+
                 // Unquoted: strip llvm_ir( prefix and ) suffix
-                var content = annotation.AsSpan()["llvm_ir(".Length..];
+                ReadOnlySpan<char> content = annotation.AsSpan()["llvm_ir(".Length..];
                 if (content.Length > 0 && content[^1] == ')')
+                {
                     content = content[..^1];
+                }
+
                 return content.ToString();
             }
+
             return null;
         }
     }
@@ -199,13 +213,14 @@ public sealed class RoutineInfo
         var substitution = new Dictionary<string, TypeSymbol>();
         for (int i = 0; i < GenericParameters.Count; i++)
         {
-            substitution[key: GenericParameters[i]] = typeArguments[i];
+            substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
         }
 
         // Substitute types in parameters
         var substitutedParams = Parameters
-            .Select(selector: p => SubstituteParameterType(param: p, substitution: substitution))
-            .ToList();
+                               .Select(selector: p =>
+                                    SubstituteParameterType(param: p, substitution: substitution))
+                               .ToList();
 
         // Substitute return type
         TypeSymbol? substitutedReturnType = ReturnType != null
@@ -266,18 +281,30 @@ public sealed class RoutineInfo
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
-                .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
-                .ToList();
+                              .Select(selector: arg =>
+                                   SubstituteType(type: arg, substitution: substitution))
+                              .ToList();
 
             // Use GenericDefinition to create the new resolution (not the resolution itself)
             if (type is Types.EntityTypeInfo { GenericDefinition: not null } entityType)
+            {
                 return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
+
             if (type is Types.RecordTypeInfo { GenericDefinition: not null } recordType)
+            {
                 return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
+
             if (type is Types.ProtocolTypeInfo { GenericDefinition: not null } protocolType)
+            {
                 return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
+
             if (type is Types.ErrorHandlingTypeInfo { GenericDefinition: not null } errorType)
+            {
                 return errorType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
 
             return type.CreateInstance(typeArguments: newArgs);
         }

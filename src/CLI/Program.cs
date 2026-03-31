@@ -15,7 +15,7 @@ namespace Builder;
 /// Minimal CLI for testing the lexer and parser during the overhaul.
 /// Analysis and CodeGen will be added back once the new type system is implemented.
 /// </summary>
-internal class Program
+internal partial class Program
 {
     /// <summary>
     /// Entry point for the RazorForge builder CLI.
@@ -30,10 +30,14 @@ internal class Program
             return 0;
         }
 
-        string command = args[0].ToLowerInvariant().TrimStart('-');
+        string command = args[0]
+                        .ToLowerInvariant()
+                        .TrimStart(trimChar: '-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" || command == "emit" || command == "build" || command == "buildandrun" || command == "check" || command == "validate-stdlib" || command == "help";
+        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" ||
+                         command == "emit" || command == "build" || command == "buildandrun" ||
+                         command == "check" || command == "validate-stdlib" || command == "help";
 
         if (!isCommand)
         {
@@ -46,54 +50,82 @@ internal class Program
             case "parse":
                 if (args.Length < 2)
                 {
-                    Console.WriteLine("Error: parse command requires a file path");
+                    Console.WriteLine(value: "Error: parse command requires a file path");
                     return 1;
                 }
+
                 return ParseFile(sourceFile: args[1]);
 
             case "tokenize":
                 if (args.Length < 2)
                 {
-                    Console.WriteLine("Error: tokenize command requires a file path");
+                    Console.WriteLine(value: "Error: tokenize command requires a file path");
                     return 1;
                 }
+
                 return TokenizeFile(sourceFile: args[1]);
 
             case "codegen":
             case "emit":
                 if (args.Length < 2)
                 {
-                    Console.WriteLine("Error: codegen command requires a file path");
+                    Console.WriteLine(value: "Error: codegen command requires a file path");
                     return 1;
                 }
-                return GenerateCode(sourceFile: args[1], outputFile: args.Length > 2 ? args[2] : null);
+
+                return GenerateCode(sourceFile: args[1],
+                    outputFile: args.Length > 2
+                        ? args[2]
+                        : null);
 
             case "build":
             {
-                var (entryFile, projectRoot, outputFile2) = ResolveEntryFile(args, needsOutputArg: true);
-                if (entryFile == null) return 1;
-                return BuildMultiFile(entryFile: entryFile, outputFile: outputFile2, projectRoot: projectRoot);
+                (string? entryFile, string? projectRoot, string? outputFile2) =
+                    ResolveEntryFile(args: args, needsOutputArg: true);
+                if (entryFile == null)
+                {
+                    return 1;
+                }
+
+                return BuildMultiFile(entryFile: entryFile,
+                    outputFile: outputFile2,
+                    projectRoot: projectRoot);
             }
 
             case "buildandrun":
             {
-                var (entryFile, projectRoot, _) = ResolveEntryFile(args, needsOutputArg: false);
-                if (entryFile == null) return 1;
+                (string? entryFile, string? projectRoot, _) =
+                    ResolveEntryFile(args: args, needsOutputArg: false);
+                if (entryFile == null)
+                {
+                    return 1;
+                }
+
                 return BuildAndRun(entryFile: entryFile, projectRoot: projectRoot);
             }
 
             case "check":
             {
-                var (entryFile, projectRoot, _) = ResolveEntryFile(args, needsOutputArg: false);
-                if (entryFile == null) return 1;
+                (string? entryFile, string? projectRoot, _) =
+                    ResolveEntryFile(args: args, needsOutputArg: false);
+                if (entryFile == null)
+                {
+                    return 1;
+                }
+
                 return CheckMultiFile(entryFile: entryFile, projectRoot: projectRoot);
             }
 
             case "validate-stdlib":
             {
-                string lang = args.Length >= 2 ? args[1].ToLowerInvariant() : "rf";
-                Language stdlibLang = lang == "sf" || lang == "suflae" ? Language.Suflae : Language.RazorForge;
-                return ValidateStdlib(stdlibLang);
+                string lang = args.Length >= 2
+                    ? args[1]
+                       .ToLowerInvariant()
+                    : "rf";
+                Language stdlibLang = lang == "sf" || lang == "suflae"
+                    ? Language.Suflae
+                    : Language.RazorForge;
+                return ValidateStdlib(language: stdlibLang);
             }
 
             case "help":
@@ -110,9 +142,10 @@ internal class Program
     /// Resolves the entry file, project root, and optional output file for build/buildandrun/check commands.
     /// When no explicit entry file is given, searches for a razorforge.toml manifest.
     /// Supports --target to select a specific target from the manifest.
-    /// Returns (entryFile, projectRoot, outputFile) — entryFile is null on error.
+    /// Returns (entryFile, projectRoot, outputFile) ??entryFile is null on error.
     /// </summary>
-    private static (string? EntryFile, string? ProjectRoot, string? OutputFile) ResolveEntryFile(string[] args, bool needsOutputArg)
+    private static (string? EntryFile, string? ProjectRoot, string? OutputFile) ResolveEntryFile(
+        string[] args, bool needsOutputArg)
     {
         // args[0] is the command name (build/buildandrun/check)
         string? targetName = null;
@@ -128,12 +161,18 @@ internal class Program
                 targetName = args[i + 1];
                 i += 2;
             }
-            else if (!args[i].StartsWith("-"))
+            else if (!args[i]
+                        .StartsWith(value: "-"))
             {
                 if (explicitEntry == null)
+                {
                     explicitEntry = args[i];
+                }
                 else if (needsOutputArg && outputFile == null)
+                {
                     outputFile = args[i];
+                }
+
                 i++;
             }
             else
@@ -142,56 +181,68 @@ internal class Program
             }
         }
 
-        // Explicit entry file given — use it directly
+        // Explicit entry file given ??use it directly
         if (explicitEntry != null)
         {
-            if (!File.Exists(explicitEntry))
+            if (!File.Exists(path: explicitEntry))
             {
-                Console.WriteLine($"Error: File '{explicitEntry}' not found.");
+                Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
                 return (null, null, null);
             }
-            string projectRoot = Path.GetDirectoryName(Path.GetFullPath(explicitEntry)) ?? ".";
+
+            string projectRoot =
+                Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
             return (explicitEntry, projectRoot, outputFile);
         }
 
-        // No explicit entry — search for manifest
-        string? manifestPath = ManifestLoader.FindManifest(Environment.CurrentDirectory);
+        // No explicit entry ??search for manifest
+        string? manifestPath = ManifestLoader.FindManifest(startDir: Environment.CurrentDirectory);
         if (manifestPath == null)
         {
-            Console.WriteLine("Error: No entry file specified and no razorforge.toml found.");
-            Console.WriteLine("Either provide an entry file or create a razorforge.toml manifest.");
+            Console.WriteLine(
+                value: "Error: No entry file specified and no razorforge.toml found.");
+            Console.WriteLine(
+                value: "Either provide an entry file or create a razorforge.toml manifest.");
             return (null, null, null);
         }
 
         try
         {
-            var manifest = ManifestLoader.Load(manifestPath);
+            ProjectManifest manifest = ManifestLoader.Load(tomlPath: manifestPath);
 
             TargetInfo? target;
             if (targetName != null)
             {
-                target = manifest.Targets.Find(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase));
+                target = manifest.Targets.Find(match: t => string.Equals(a: t.Name,
+                    b: targetName,
+                    comparisonType: StringComparison.OrdinalIgnoreCase));
                 if (target == null)
                 {
-                    Console.WriteLine($"Error: Target '{targetName}' not found in {ManifestLoader.ManifestFileName}.");
-                    Console.WriteLine($"Available targets: {string.Join(", ", manifest.Targets.Select(t => t.Name))}");
+                    Console.WriteLine(
+                        value:
+                        $"Error: Target '{targetName}' not found in {ManifestLoader.ManifestFileName}.");
+                    Console.WriteLine(
+                        value:
+                        $"Available targets: {string.Join(separator: ", ", values: manifest.Targets.Select(selector: t => t.Name))}");
                     return (null, null, null);
                 }
             }
             else
             {
                 // Use first executable target, or first target if none is executable
-                target = manifest.Targets.Find(t => t.Type == "executable") ?? manifest.Targets[0];
+                target = manifest.Targets.Find(match: t => t.Type == "executable") ??
+                         manifest.Targets[index: 0];
             }
 
-            Console.WriteLine($"Using manifest: {manifestPath}");
-            Console.WriteLine($"Target: {target.Name} ({target.Type})");
+            Console.WriteLine(value: $"Using manifest: {manifestPath}");
+            Console.WriteLine(value: $"Target: {target.Name} ({target.Type})");
 
             return (target.Entry, manifest.ManifestDirectory, outputFile);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
+            Console.WriteLine(
+                value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
             return (null, null, null);
         }
     }
@@ -201,29 +252,55 @@ internal class Program
     /// </summary>
     private static void PrintUsage()
     {
-        Console.WriteLine("RazorForge Builder");
+        Console.WriteLine(value: "RazorForge Builder");
         Console.WriteLine();
-        Console.WriteLine("Usage:");
-        Console.WriteLine("  RazorForge <source-file>                        - Parse file and show AST summary");
-        Console.WriteLine("  RazorForge parse <source-file>                  - Parse file and show AST summary");
-        Console.WriteLine("  RazorForge tokenize <source-file>               - Tokenize file and show tokens");
-        Console.WriteLine("  RazorForge codegen <source-file> [out.ll]       - Generate LLVM IR (single file)");
-        Console.WriteLine("  RazorForge build [entry-file] [out.ll]          - Build multi-file project");
-        Console.WriteLine("  RazorForge build --target <name> [out.ll]       - Build a specific manifest target");
-        Console.WriteLine("  RazorForge buildandrun [entry-file]             - Build and execute");
-        Console.WriteLine("  RazorForge buildandrun --target <name>          - Build and execute manifest target");
-        Console.WriteLine("  RazorForge check [entry-file]                   - Type-check only (no codegen)");
-        Console.WriteLine("  RazorForge check --target <name>                - Type-check manifest target");
-        Console.WriteLine("  RazorForge validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
-        Console.WriteLine("  RazorForge help                                 - Show this help");
+        Console.WriteLine(value: "Usage:");
+        Console.WriteLine(
+            value:
+            "  RazorForge <source-file>                        - Parse file and show AST summary");
+        Console.WriteLine(
+            value:
+            "  RazorForge parse <source-file>                  - Parse file and show AST summary");
+        Console.WriteLine(
+            value:
+            "  RazorForge tokenize <source-file>               - Tokenize file and show tokens");
+        Console.WriteLine(
+            value:
+            "  RazorForge codegen <source-file> [out.ll]       - Generate LLVM IR (single file)");
+        Console.WriteLine(
+            value: "  RazorForge build [entry-file] [out.ll]          - Build multi-file project");
+        Console.WriteLine(
+            value:
+            "  RazorForge build --target <name> [out.ll]       - Build a specific manifest target");
+        Console.WriteLine(
+            value: "  RazorForge buildandrun [entry-file]             - Build and execute");
+        Console.WriteLine(
+            value:
+            "  RazorForge buildandrun --target <name>          - Build and execute manifest target");
+        Console.WriteLine(
+            value:
+            "  RazorForge check [entry-file]                   - Type-check only (no codegen)");
+        Console.WriteLine(
+            value:
+            "  RazorForge check --target <name>                - Type-check manifest target");
+        Console.WriteLine(
+            value:
+            "  RazorForge validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
+        Console.WriteLine(
+            value: "  RazorForge help                                 - Show this help");
         Console.WriteLine();
-        Console.WriteLine("  <source-file>: .rf file for RazorForge or .sf file for Suflae");
-        Console.WriteLine("  If no entry file is given, searches for razorforge.toml in the current");
-        Console.WriteLine("  directory and parent directories.");
+        Console.WriteLine(
+            value: "  <source-file>: .rf file for RazorForge or .sf file for Suflae");
+        Console.WriteLine(
+            value: "  If no entry file is given, searches for razorforge.toml in the current");
+        Console.WriteLine(value: "  directory and parent directories.");
     }
 
     /// <summary>Returns true if the given file path has a <c>.sf</c> extension (Suflae source file).</summary>
-    private static bool IsSuflaeFile(string path) => path.EndsWith(".sf", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSuflaeFile(string path)
+    {
+        return path.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Tokenizes the given source file and prints each token with its position and text to standard output.
@@ -231,39 +308,44 @@ internal class Program
     /// </summary>
     private static int TokenizeFile(string sourceFile)
     {
-        if (!File.Exists(sourceFile))
+        if (!File.Exists(path: sourceFile))
         {
-            Console.WriteLine($"Error: File '{sourceFile}' not found.");
+            Console.WriteLine(value: $"Error: File '{sourceFile}' not found.");
             return 1;
         }
 
-        string code = File.ReadAllText(sourceFile);
-        bool isSuflae = IsSuflaeFile(sourceFile);
+        string code = File.ReadAllText(path: sourceFile);
+        bool isSuflae = IsSuflaeFile(path: sourceFile);
 
-        Console.WriteLine($"Tokenizing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+        Console.WriteLine(
+            value: $"Tokenizing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
         Console.WriteLine();
 
         try
         {
-            var language = isSuflae ? Language.Suflae : Language.RazorForge;
-            var tokenizer = new Tokenizer(code, sourceFile, language);
+            Language language = isSuflae
+                ? Language.Suflae
+                : Language.RazorForge;
+            var tokenizer = new Tokenizer(source: code, fileName: sourceFile, language: language);
             List<Token> tokens = tokenizer.Tokenize();
 
-            Console.WriteLine($"Generated {tokens.Count} tokens:");
+            Console.WriteLine(value: $"Generated {tokens.Count} tokens:");
             Console.WriteLine();
 
             foreach (Token tok in tokens)
             {
-                Console.WriteLine($"  {tok.Line,4}:{tok.Column,-3} {tok.Type,-25} '{EscapeString(tok.Text)}'");
+                Console.WriteLine(
+                    value:
+                    $"  {tok.Line,4}:{tok.Column,-3} {tok.Type,-25} '{EscapeString(s: tok.Text)}'");
             }
 
             Console.WriteLine();
-            Console.WriteLine("Tokenization successful!");
+            Console.WriteLine(value: "Tokenization successful!");
             return 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Tokenization failed: {ex.Message}");
+            Console.WriteLine(value: $"Tokenization failed: {ex.Message}");
             return 1;
         }
     }
@@ -274,69 +356,74 @@ internal class Program
     /// </summary>
     private static int ParseFile(string sourceFile)
     {
-        if (!File.Exists(sourceFile))
+        if (!File.Exists(path: sourceFile))
         {
-            Console.WriteLine($"Error: File '{sourceFile}' not found.");
+            Console.WriteLine(value: $"Error: File '{sourceFile}' not found.");
             return 1;
         }
 
-        string code = File.ReadAllText(sourceFile);
-        bool isSuflae = IsSuflaeFile(sourceFile);
+        string code = File.ReadAllText(path: sourceFile);
+        bool isSuflae = IsSuflaeFile(path: sourceFile);
 
-        Console.WriteLine($"Parsing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+        Console.WriteLine(
+            value: $"Parsing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
         Console.WriteLine();
 
         try
         {
-            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+            Language language = isSuflae
+                ? Language.Suflae
+                : Language.RazorForge;
 
             // Tokenize
-            Console.WriteLine("=== TOKENIZATION ===");
-            var tokenizer = new Tokenizer(code, sourceFile, language);
+            Console.WriteLine(value: "=== TOKENIZATION ===");
+            var tokenizer = new Tokenizer(source: code, fileName: sourceFile, language: language);
             List<Token> tokens = tokenizer.Tokenize();
-            Console.WriteLine($"Generated {tokens.Count} tokens");
+            Console.WriteLine(value: $"Generated {tokens.Count} tokens");
 
             // Parse
             Console.WriteLine();
-            Console.WriteLine("=== PARSING ===");
+            Console.WriteLine(value: "=== PARSING ===");
             var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
             SyntaxTree.Program ast = parser.Parse();
             IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
 
-            Console.WriteLine($"Successfully parsed! AST contains {ast.Declarations.Count} declarations");
+            Console.WriteLine(
+                value: $"Successfully parsed! AST contains {ast.Declarations.Count} declarations");
 
             // Show warnings if any
             if (warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== WARNINGS ({warnings.Count}) ===");
-                foreach (var warning in warnings)
+                Console.WriteLine(value: $"=== WARNINGS ({warnings.Count}) ===");
+                foreach (BuildWarning warning in warnings)
                 {
-                    Console.WriteLine($"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                    Console.WriteLine(
+                        value: $"  [{warning.Line}:{warning.Column}] {warning.Message}");
                 }
             }
 
             // Show AST summary
             Console.WriteLine();
-            Console.WriteLine("=== AST SUMMARY ===");
-            foreach (var decl in ast.Declarations)
+            Console.WriteLine(value: "=== AST SUMMARY ===");
+            foreach (IAstNode decl in ast.Declarations)
             {
-                PrintDeclarationSummary(decl, indent: 0);
+                PrintDeclarationSummary(node: decl, indent: 0);
             }
 
             Console.WriteLine();
-            Console.WriteLine("Parsing successful!");
+            Console.WriteLine(value: "Parsing successful!");
             return 0;
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine(ex.Message);
+            Console.WriteLine(value: ex.Message);
             return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
-            Console.WriteLine(ex.StackTrace);
+            Console.WriteLine(value: ex.Message);
+            Console.WriteLine(value: ex.StackTrace);
             return 1;
         }
     }
@@ -349,42 +436,50 @@ internal class Program
     {
         try
         {
-            string langName = language == Language.Suflae ? "Suflae" : "RazorForge";
-            Console.WriteLine($"Validating {langName} stdlib routine bodies...");
+            string langName = language == Language.Suflae
+                ? "Suflae"
+                : "RazorForge";
+            Console.WriteLine(value: $"Validating {langName} stdlib routine bodies...");
             Console.WriteLine();
 
-            var analyzer = new SemanticAnalyzer(language);
-            var stdlibErrors = analyzer.ValidateStdlibBodies();
+            var analyzer = new SemanticAnalyzer(language: language);
+            IReadOnlyList<SemanticError> stdlibErrors = analyzer.ValidateStdlibBodies();
 
             if (stdlibErrors.Count == 0)
             {
-                Console.WriteLine("All stdlib routine bodies validated successfully!");
+                Console.WriteLine(value: "All stdlib routine bodies validated successfully!");
                 return 0;
             }
 
             // Group errors by file
             var errorsByFile = new Dictionary<string, List<SemanticError>>();
-            foreach (var error in stdlibErrors)
+            foreach (SemanticError error in stdlibErrors)
             {
                 string file = error.Location.FileName;
-                if (!errorsByFile.TryGetValue(file, out var list))
+                if (!errorsByFile.TryGetValue(key: file, value: out List<SemanticError>? list))
                 {
                     list = [];
-                    errorsByFile[file] = list;
+                    errorsByFile[key: file] = list;
                 }
-                list.Add(error);
+
+                list.Add(item: error);
             }
 
-            Console.WriteLine($"=== STDLIB VALIDATION ERRORS ({stdlibErrors.Count} errors in {errorsByFile.Count} files) ===");
+            Console.WriteLine(
+                value:
+                $"=== STDLIB VALIDATION ERRORS ({stdlibErrors.Count} errors in {errorsByFile.Count} files) ===");
             Console.WriteLine();
 
-            foreach (var (file, errors) in errorsByFile.OrderBy(kvp => kvp.Key))
+            foreach ((string file, List<SemanticError> errors) in errorsByFile.OrderBy(
+                         keySelector: kvp => kvp.Key))
             {
-                Console.WriteLine($"  {Path.GetFileName(file)} ({errors.Count} errors):");
-                foreach (var error in errors)
+                Console.WriteLine(
+                    value: $"  {Path.GetFileName(path: file)} ({errors.Count} errors):");
+                foreach (SemanticError error in errors)
                 {
-                    Console.WriteLine($"    {error.FormattedMessage}");
+                    Console.WriteLine(value: $"    {error.FormattedMessage}");
                 }
+
                 Console.WriteLine();
             }
 
@@ -392,120 +487,128 @@ internal class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Stdlib validation failed: {ex.Message}");
-            Console.WriteLine(ex.StackTrace);
+            Console.WriteLine(value: $"Stdlib validation failed: {ex.Message}");
+            Console.WriteLine(value: ex.StackTrace);
             return 1;
         }
     }
 
     /// <summary>
-    /// Runs the full compiler pipeline (tokenize → parse → semantic analysis → LLVM IR generation)
+    /// Runs the full compiler pipeline (tokenize ??parse ??semantic analysis ??LLVM IR generation)
     /// on the given source file and writes the resulting IR to <paramref name="outputFile"/>,
     /// or to a default <c>.ll</c> file if no output path is specified.
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
     private static int GenerateCode(string sourceFile, string? outputFile)
     {
-        if (!File.Exists(sourceFile))
+        if (!File.Exists(path: sourceFile))
         {
-            Console.WriteLine($"Error: File '{sourceFile}' not found.");
+            Console.WriteLine(value: $"Error: File '{sourceFile}' not found.");
             return 1;
         }
 
-        string code = File.ReadAllText(sourceFile);
-        bool isSuflae = IsSuflaeFile(sourceFile);
+        string code = File.ReadAllText(path: sourceFile);
+        bool isSuflae = IsSuflaeFile(path: sourceFile);
 
-        Console.WriteLine($"Building {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+        Console.WriteLine(
+            value: $"Building {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
         Console.WriteLine();
 
         try
         {
-            var language = isSuflae ? Language.Suflae : Language.RazorForge;
+            Language language = isSuflae
+                ? Language.Suflae
+                : Language.RazorForge;
 
             // Tokenize
-            Console.WriteLine("=== TOKENIZATION ===");
-            var tokenizer = new Tokenizer(code, sourceFile, language);
+            Console.WriteLine(value: "=== TOKENIZATION ===");
+            var tokenizer = new Tokenizer(source: code, fileName: sourceFile, language: language);
             List<Token> tokens = tokenizer.Tokenize();
-            Console.WriteLine($"Generated {tokens.Count} tokens");
+            Console.WriteLine(value: $"Generated {tokens.Count} tokens");
 
             // Parse
             Console.WriteLine();
-            Console.WriteLine("=== PARSING ===");
+            Console.WriteLine(value: "=== PARSING ===");
             var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
             SyntaxTree.Program ast = parser.Parse();
             IReadOnlyList<BuildWarning> parseWarnings = parser.GetWarnings();
 
-            Console.WriteLine($"Parsed {ast.Declarations.Count} declarations");
+            Console.WriteLine(value: $"Parsed {ast.Declarations.Count} declarations");
 
             // Semantic Analysis
             Console.WriteLine();
-            Console.WriteLine("=== SEMANTIC ANALYSIS ===");
+            Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
-            var analyzer = new SemanticAnalyzer(language);
-            var result = analyzer.Analyze(ast);
+            var analyzer = new SemanticAnalyzer(language: language);
+            AnalysisResult result = analyzer.Analyze(program: ast);
 
-            Console.WriteLine($"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+            Console.WriteLine(
+                value: $"Routines registered: {result.Registry.GetAllRoutines().Count()}");
 
             // Show errors and warnings
             if (result.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
-                foreach (var error in result.Errors)
+                Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
+                foreach (SemanticError error in result.Errors)
                 {
-                    Console.WriteLine($"  {error.FormattedMessage}");
+                    Console.WriteLine(value: $"  {error.FormattedMessage}");
                 }
+
                 Console.WriteLine();
-                Console.WriteLine("Code generation aborted due to errors.");
+                Console.WriteLine(value: "Code generation aborted due to errors.");
                 return 1;
             }
 
             if (result.Warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
-                foreach (var warning in result.Warnings)
+                Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
+                foreach (SemanticWarning warning in result.Warnings)
                 {
-                    Console.WriteLine($"  {warning.FormattedMessage}");
+                    Console.WriteLine(value: $"  {warning.FormattedMessage}");
                 }
             }
 
             // Code Generation
             Console.WriteLine();
-            Console.WriteLine("=== CODE GENERATION ===");
+            Console.WriteLine(value: "=== CODE GENERATION ===");
 
             // Pass stdlib programs to codegen so intrinsic routines get built
-            var stdlibPrograms = result.Registry.StdlibPrograms;
-            var generator = new LLVMCodeGenerator(ast, result.Registry, stdlibPrograms);
+            IReadOnlyList<(SyntaxTree.Program Program, string FilePath, string Module)>
+                stdlibPrograms = result.Registry.StdlibPrograms;
+            var generator = new LLVMCodeGenerator(program: ast,
+                registry: result.Registry,
+                stdlibPrograms: stdlibPrograms);
             string llvmIR = generator.Generate();
 
             // Output
             if (outputFile != null)
             {
-                File.WriteAllText(outputFile, llvmIR);
-                Console.WriteLine($"LLVM IR written to: {outputFile}");
+                File.WriteAllText(path: outputFile, contents: llvmIR);
+                Console.WriteLine(value: $"LLVM IR written to: {outputFile}");
             }
             else
             {
                 // Default output file
-                string defaultOutput = Path.ChangeExtension(sourceFile, ".ll");
-                File.WriteAllText(defaultOutput, llvmIR);
-                Console.WriteLine($"LLVM IR written to: {defaultOutput}");
+                string defaultOutput = Path.ChangeExtension(path: sourceFile, extension: ".ll");
+                File.WriteAllText(path: defaultOutput, contents: llvmIR);
+                Console.WriteLine(value: $"LLVM IR written to: {defaultOutput}");
             }
 
             Console.WriteLine();
-            Console.WriteLine("Code generation successful!");
+            Console.WriteLine(value: "Code generation successful!");
             return 0;
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine($"{ex.Message}");
+            Console.WriteLine(value: $"{ex.Message}");
             return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Build failed: {ex.Message}");
-            Console.WriteLine(ex.StackTrace);
+            Console.WriteLine(value: $"Build failed: {ex.Message}");
+            Console.WriteLine(value: ex.StackTrace);
             return 1;
         }
     }
@@ -517,22 +620,25 @@ internal class Program
     private static int BuildNativeRuntime()
     {
         // Find native/build by walking up from the executable directory
-        string? current = Path.GetDirectoryName(typeof(Program).Assembly.Location);
+        string? current = Path.GetDirectoryName(path: typeof(Program).Assembly.Location);
         string? nativeBuildDir = null;
         for (int i = 0; i < 6 && current != null; i++)
         {
-            string candidate = Path.Combine(current, "native", "build");
-            if (File.Exists(Path.Combine(candidate, "build.ninja")) ||
-                File.Exists(Path.Combine(candidate, "Makefile")))
+            string candidate = Path.Combine(path1: current, path2: "native", path3: "build");
+            if (File.Exists(path: Path.Combine(path1: candidate, path2: "build.ninja")) ||
+                File.Exists(path: Path.Combine(path1: candidate, path2: "Makefile")))
             {
                 nativeBuildDir = candidate;
                 break;
             }
-            current = Path.GetDirectoryName(current);
+
+            current = Path.GetDirectoryName(path: current);
         }
 
         if (nativeBuildDir == null)
-            return 0; // No native build directory found — skip silently
+        {
+            return 0; // No native build directory found ??skip silently
+        }
 
         var psi = new ProcessStartInfo
         {
@@ -540,16 +646,16 @@ internal class Program
             Arguments = $"--build \"{nativeBuildDir}\"",
             UseShellExecute = false,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = true
         };
 
         try
         {
-            using var process = Process.Start(psi);
+            using var process = Process.Start(startInfo: psi);
             if (process == null)
             {
-                Console.WriteLine("Warning: Failed to start cmake.");
-                return 0; // Non-fatal — continue with existing runtime
+                Console.WriteLine(value: "Warning: Failed to start cmake.");
+                return 0; // Non-fatal ??continue with existing runtime
             }
 
             string stderr = process.StandardError.ReadToEnd();
@@ -557,28 +663,42 @@ internal class Program
 
             if (process.ExitCode != 0)
             {
-                Console.Error.Write(stderr);
-                Console.WriteLine($"Native runtime build failed (cmake exited with code {process.ExitCode})");
+                Console.Error.Write(value: stderr);
+                Console.WriteLine(
+                    value:
+                    $"Native runtime build failed (cmake exited with code {process.ExitCode})");
                 return 1;
             }
 
             // Copy fresh artifacts to the exe directory so they're picked up at link/run time
-            string? exeDir = Path.GetDirectoryName(typeof(Program).Assembly.Location);
+            string? exeDir = Path.GetDirectoryName(path: typeof(Program).Assembly.Location);
             if (exeDir != null)
             {
-                string nativeBinDir = Path.Combine(nativeBuildDir, "bin");
-                string nativeLibDir = Path.Combine(nativeBuildDir, "lib");
-                string exeNativeBinDir = Path.Combine(exeDir, "native", "build", "bin");
-                string exeNativeLibDir = Path.Combine(exeDir, "native", "build", "lib");
+                string nativeBinDir = Path.Combine(path1: nativeBuildDir, path2: "bin");
+                string nativeLibDir = Path.Combine(path1: nativeBuildDir, path2: "lib");
+                string exeNativeBinDir = Path.Combine(path1: exeDir,
+                    path2: "native",
+                    path3: "build",
+                    path4: "bin");
+                string exeNativeLibDir = Path.Combine(path1: exeDir,
+                    path2: "native",
+                    path3: "build",
+                    path4: "lib");
 
-                CopyDirectoryFiles(nativeBinDir, exeNativeBinDir);
-                CopyDirectoryFiles(nativeLibDir, exeNativeLibDir);
+                CopyDirectoryFiles(srcDir: nativeBinDir, dstDir: exeNativeBinDir);
+                CopyDirectoryFiles(srcDir: nativeLibDir, dstDir: exeNativeLibDir);
 
                 // Also copy DLLs to the exe root (matches csproj LinkBase="." behavior)
-                if (Directory.Exists(nativeBinDir))
+                if (Directory.Exists(path: nativeBinDir))
                 {
-                    foreach (string dll in Directory.GetFiles(nativeBinDir, "*.dll"))
-                        File.Copy(dll, Path.Combine(exeDir, Path.GetFileName(dll)), overwrite: true);
+                    foreach (string dll in Directory.GetFiles(path: nativeBinDir,
+                                 searchPattern: "*.dll"))
+                    {
+                        File.Copy(sourceFileName: dll,
+                            destFileName: Path.Combine(path1: exeDir,
+                                path2: Path.GetFileName(path: dll)),
+                            overwrite: true);
+                    }
                 }
             }
 
@@ -586,16 +706,24 @@ internal class Program
         }
         catch (Exception)
         {
-            return 0; // cmake not found — skip silently
+            return 0; // cmake not found ??skip silently
         }
     }
 
     private static void CopyDirectoryFiles(string srcDir, string dstDir)
     {
-        if (!Directory.Exists(srcDir)) return;
-        Directory.CreateDirectory(dstDir);
-        foreach (string file in Directory.GetFiles(srcDir))
-            File.Copy(file, Path.Combine(dstDir, Path.GetFileName(file)), overwrite: true);
+        if (!Directory.Exists(path: srcDir))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(path: dstDir);
+        foreach (string file in Directory.GetFiles(path: srcDir))
+        {
+            File.Copy(sourceFileName: file,
+                destFileName: Path.Combine(path1: dstDir, path2: Path.GetFileName(path: file)),
+                overwrite: true);
+        }
     }
 
     /// <summary>
@@ -603,180 +731,230 @@ internal class Program
     /// </summary>
     private static string DetectLinkerFromStderr(string stderr)
     {
-        if (stderr.Contains("lld-link:")) return "lld-link";
-        if (stderr.Contains("ld.lld:")) return "ld.lld";
-        if (stderr.Contains("collect2:")) return "collect2";
-        if (stderr.Contains("LINK :") || stderr.Contains("LINK:")) return "link.exe";
-        if (stderr.Contains("ld:")) return "ld";
+        if (stderr.Contains(value: "lld-link:"))
+        {
+            return "lld-link";
+        }
+
+        if (stderr.Contains(value: "ld.lld:"))
+        {
+            return "ld.lld";
+        }
+
+        if (stderr.Contains(value: "collect2:"))
+        {
+            return "collect2";
+        }
+
+        if (stderr.Contains(value: "LINK :") || stderr.Contains(value: "LINK:"))
+        {
+            return "link.exe";
+        }
+
+        if (stderr.Contains(value: "ld:"))
+        {
+            return "ld";
+        }
+
         return "clang";
     }
 
     /// <summary>
     /// Runs the multi-file build pipeline: BuildDriver (parse + resolve imports + topo sort)
-    /// → SemanticAnalyzer.AnalyzeMultiple → LLVMCodeGenerator with multiple user programs.
+    /// ??SemanticAnalyzer.AnalyzeMultiple ??LLVMCodeGenerator with multiple user programs.
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
-    private static int BuildMultiFile(string entryFile, string? outputFile, string? projectRoot = null)
+    private static int BuildMultiFile(string entryFile, string? outputFile,
+        string? projectRoot = null)
     {
-        if (!File.Exists(entryFile))
+        if (!File.Exists(path: entryFile))
         {
-            Console.WriteLine($"Error: File '{entryFile}' not found.");
+            Console.WriteLine(value: $"Error: File '{entryFile}' not found.");
             return 1;
         }
 
         // Rebuild native runtime if sources changed
         int nativeResult = BuildNativeRuntime();
         if (nativeResult != 0)
+        {
             return nativeResult;
+        }
 
-        bool isSuflae = IsSuflaeFile(entryFile);
-        var language = isSuflae ? Language.Suflae : Language.RazorForge;
+        bool isSuflae = IsSuflaeFile(path: entryFile);
+        Language language = isSuflae
+            ? Language.Suflae
+            : Language.RazorForge;
 
-        Console.WriteLine($"Building {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
+        Console.WriteLine(
+            value:
+            $"Building {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
         Console.WriteLine();
 
         try
         {
             // Use provided project root (from manifest) or fall back to entry file directory
-            projectRoot ??= Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
+            projectRoot ??= Path.GetDirectoryName(path: Path.GetFullPath(path: entryFile)) ?? ".";
             string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
 
             // Phase 1: Parse all files and resolve dependencies
-            Console.WriteLine("=== BUILD DRIVER ===");
-            var driver = new BuildDriver(projectRoot, stdlibRoot, language);
-            BuildResult buildResult = driver.CompileFile(Path.GetFullPath(entryFile));
+            Console.WriteLine(value: "=== BUILD DRIVER ===");
+            var driver = new BuildDriver(projectRoot: projectRoot,
+                stdlibRoot: stdlibRoot,
+                language: language);
+            BuildResult buildResult =
+                driver.CompileFile(entryFile: Path.GetFullPath(path: entryFile));
 
-            Console.WriteLine($"Parsed {buildResult.Units.Count} file(s)");
+            Console.WriteLine(value: $"Parsed {buildResult.Units.Count} file(s)");
 
             if (buildResult.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
-                foreach (var error in buildResult.Errors)
+                Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
+                foreach (SemanticError error in buildResult.Errors)
                 {
-                    Console.WriteLine($"  {error.FormattedMessage}");
+                    Console.WriteLine(value: $"  {error.FormattedMessage}");
                 }
+
                 Console.WriteLine();
-                Console.WriteLine("Build aborted due to errors.");
+                Console.WriteLine(value: "Build aborted due to errors.");
                 return 1;
             }
 
             if (buildResult.Warnings.Count > 0)
             {
-                Console.WriteLine($"Warnings: {buildResult.Warnings.Count}");
-                foreach (var warning in buildResult.Warnings)
+                Console.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
+                foreach (BuildWarning warning in buildResult.Warnings)
                 {
-                    Console.WriteLine($"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                    Console.WriteLine(
+                        value: $"  [{warning.Line}:{warning.Column}] {warning.Message}");
                 }
             }
 
-            Console.WriteLine($"Initialization order: {string.Join(" → ", buildResult.InitializationOrder)}");
+            Console.WriteLine(
+                value:
+                $"Initialization order: {string.Join(separator: " ??", values: buildResult.InitializationOrder)}");
 
-            // Filter out stdlib files — they are already loaded by TypeRegistry/StdlibLoader
-            string normalizedStdlib = Path.GetFullPath(stdlibRoot);
+            // Filter out stdlib files ??they are already loaded by TypeRegistry/StdlibLoader
+            string normalizedStdlib = Path.GetFullPath(path: stdlibRoot);
             var userUnits = buildResult.Units
-                .Where(u => !Path.GetFullPath(u.FilePath).StartsWith(normalizedStdlib, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+                                       .Where(predicate: u => !Path.GetFullPath(path: u.FilePath)
+                                           .StartsWith(value: normalizedStdlib,
+                                                comparisonType: StringComparison
+                                                   .OrdinalIgnoreCase))
+                                       .ToList();
 
             // Build file list in topological order
-            var unitsByFile = new Dictionary<string, FileBuildUnit>(StringComparer.OrdinalIgnoreCase);
-            foreach (var unit in userUnits)
+            var unitsByFile =
+                new Dictionary<string, FileBuildUnit>(comparer: StringComparer.OrdinalIgnoreCase);
+            foreach (FileBuildUnit unit in userUnits)
             {
-                unitsByFile[unit.FilePath] = unit;
+                unitsByFile[key: unit.FilePath] = unit;
             }
 
             // Map module names back to file units for ordering
-            var unitsByModule = new Dictionary<string, FileBuildUnit>(StringComparer.OrdinalIgnoreCase);
-            foreach (var unit in userUnits)
+            var unitsByModule =
+                new Dictionary<string, FileBuildUnit>(comparer: StringComparer.OrdinalIgnoreCase);
+            foreach (FileBuildUnit unit in userUnits)
             {
-                string moduleName = unit.Module ?? Path.GetFileNameWithoutExtension(unit.FilePath);
-                unitsByModule[moduleName] = unit;
+                string moduleName =
+                    unit.Module ?? Path.GetFileNameWithoutExtension(path: unit.FilePath);
+                unitsByModule[key: moduleName] = unit;
             }
 
             var orderedFiles = new List<(SyntaxTree.Program Program, string FilePath)>();
             foreach (string moduleName in buildResult.InitializationOrder)
             {
-                if (unitsByModule.TryGetValue(moduleName, out var unit))
+                if (unitsByModule.TryGetValue(key: moduleName, value: out FileBuildUnit? unit))
                 {
-                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                    orderedFiles.Add(item: (unit.Ast, unit.FilePath));
                 }
             }
 
             // Fallback: if init order doesn't cover all units (e.g., entry file with no module decl)
-            foreach (var unit in userUnits)
+            foreach (FileBuildUnit unit in userUnits)
             {
-                if (!orderedFiles.Any(f => string.Equals(f.FilePath, unit.FilePath, StringComparison.OrdinalIgnoreCase)))
+                if (!orderedFiles.Any(predicate: f => string.Equals(a: f.FilePath,
+                        b: unit.FilePath,
+                        comparisonType: StringComparison.OrdinalIgnoreCase)))
                 {
-                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                    orderedFiles.Add(item: (unit.Ast, unit.FilePath));
                 }
             }
 
             // Phase 2: Semantic analysis (multi-file)
             Console.WriteLine();
-            Console.WriteLine("=== SEMANTIC ANALYSIS ===");
+            Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
-            var analyzer = new SemanticAnalyzer(language);
-            var result = analyzer.AnalyzeMultiple(orderedFiles);
+            var analyzer = new SemanticAnalyzer(language: language);
+            AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
 
-            Console.WriteLine($"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+            Console.WriteLine(
+                value: $"Routines registered: {result.Registry.GetAllRoutines().Count()}");
 
             if (result.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
-                foreach (var error in result.Errors)
+                Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
+                foreach (SemanticError error in result.Errors)
                 {
-                    Console.WriteLine($"  {error.FormattedMessage}");
+                    Console.WriteLine(value: $"  {error.FormattedMessage}");
                 }
+
                 Console.WriteLine();
-                Console.WriteLine("Code generation aborted due to errors.");
+                Console.WriteLine(value: "Code generation aborted due to errors.");
                 return 1;
             }
 
             if (result.Warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
-                foreach (var warning in result.Warnings)
+                Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
+                foreach (SemanticWarning warning in result.Warnings)
                 {
-                    Console.WriteLine($"  {warning.FormattedMessage}");
+                    Console.WriteLine(value: $"  {warning.FormattedMessage}");
                 }
             }
 
             // Phase 3: Code generation (multi-program)
             Console.WriteLine();
-            Console.WriteLine("=== CODE GENERATION ===");
+            Console.WriteLine(value: "=== CODE GENERATION ===");
 
-            var userPrograms = orderedFiles
-                .Select(f =>
-                {
-                    string module = unitsByFile.TryGetValue(f.FilePath, out var u) ? u.Module ?? "" : "";
-                    return (f.Program, f.FilePath, module);
-                })
-                .ToList();
+            var userPrograms = orderedFiles.Select(selector: f =>
+                                            {
+                                                string module =
+                                                    unitsByFile.TryGetValue(key: f.FilePath,
+                                                        value: out FileBuildUnit? u)
+                                                        ? u.Module ?? ""
+                                                        : "";
+                                                return (f.Program, f.FilePath, module);
+                                            })
+                                           .ToList();
 
-            var stdlibPrograms = result.Registry.StdlibPrograms;
-            var generator = new LLVMCodeGenerator(userPrograms, result.Registry, stdlibPrograms);
+            IReadOnlyList<(SyntaxTree.Program Program, string FilePath, string Module)>
+                stdlibPrograms = result.Registry.StdlibPrograms;
+            var generator = new LLVMCodeGenerator(userPrograms: userPrograms,
+                registry: result.Registry,
+                stdlibPrograms: stdlibPrograms);
             string llvmIR = generator.Generate();
 
             // Output
-            string outPath = outputFile ?? Path.ChangeExtension(entryFile, ".ll");
-            File.WriteAllText(outPath, llvmIR);
-            Console.WriteLine($"LLVM IR written to: {outPath}");
+            string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
+            File.WriteAllText(path: outPath, contents: llvmIR);
+            Console.WriteLine(value: $"LLVM IR written to: {outPath}");
 
             Console.WriteLine();
-            Console.WriteLine("Build successful!");
+            Console.WriteLine(value: "Build successful!");
             return 0;
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine($"{ex.Message}");
+            Console.WriteLine(value: $"{ex.Message}");
             return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Build failed: {ex.Message}");
-            Console.WriteLine(ex.StackTrace);
+            Console.WriteLine(value: $"Build failed: {ex.Message}");
+            Console.WriteLine(value: ex.StackTrace);
             return 1;
         }
     }
@@ -787,127 +965,145 @@ internal class Program
     /// </summary>
     private static int CheckMultiFile(string entryFile, string? projectRoot = null)
     {
-        if (!File.Exists(entryFile))
+        if (!File.Exists(path: entryFile))
         {
-            Console.WriteLine($"Error: File '{entryFile}' not found.");
+            Console.WriteLine(value: $"Error: File '{entryFile}' not found.");
             return 1;
         }
 
-        bool isSuflae = IsSuflaeFile(entryFile);
-        var language = isSuflae ? Language.Suflae : Language.RazorForge;
+        bool isSuflae = IsSuflaeFile(path: entryFile);
+        Language language = isSuflae
+            ? Language.Suflae
+            : Language.RazorForge;
 
-        Console.WriteLine($"Checking {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
+        Console.WriteLine(
+            value:
+            $"Checking {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
         Console.WriteLine();
 
         try
         {
-            projectRoot ??= Path.GetDirectoryName(Path.GetFullPath(entryFile)) ?? ".";
+            projectRoot ??= Path.GetDirectoryName(path: Path.GetFullPath(path: entryFile)) ?? ".";
             string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
 
             // Phase 1: Parse all files and resolve dependencies
-            Console.WriteLine("=== BUILD DRIVER ===");
-            var driver = new BuildDriver(projectRoot, stdlibRoot, language);
-            BuildResult buildResult = driver.CompileFile(Path.GetFullPath(entryFile));
+            Console.WriteLine(value: "=== BUILD DRIVER ===");
+            var driver = new BuildDriver(projectRoot: projectRoot,
+                stdlibRoot: stdlibRoot,
+                language: language);
+            BuildResult buildResult =
+                driver.CompileFile(entryFile: Path.GetFullPath(path: entryFile));
 
-            Console.WriteLine($"Parsed {buildResult.Units.Count} file(s)");
+            Console.WriteLine(value: $"Parsed {buildResult.Units.Count} file(s)");
 
             if (buildResult.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
-                foreach (var error in buildResult.Errors)
+                Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
+                foreach (SemanticError error in buildResult.Errors)
                 {
-                    Console.WriteLine($"  {error.FormattedMessage}");
+                    Console.WriteLine(value: $"  {error.FormattedMessage}");
                 }
+
                 Console.WriteLine();
-                Console.WriteLine("Check failed due to errors.");
+                Console.WriteLine(value: "Check failed due to errors.");
                 return 1;
             }
 
             if (buildResult.Warnings.Count > 0)
             {
-                Console.WriteLine($"Warnings: {buildResult.Warnings.Count}");
-                foreach (var warning in buildResult.Warnings)
+                Console.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
+                foreach (BuildWarning warning in buildResult.Warnings)
                 {
-                    Console.WriteLine($"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                    Console.WriteLine(
+                        value: $"  [{warning.Line}:{warning.Column}] {warning.Message}");
                 }
             }
 
             // Filter out stdlib files
-            string normalizedStdlib = Path.GetFullPath(stdlibRoot);
+            string normalizedStdlib = Path.GetFullPath(path: stdlibRoot);
             var userUnits = buildResult.Units
-                .Where(u => !Path.GetFullPath(u.FilePath).StartsWith(normalizedStdlib, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+                                       .Where(predicate: u => !Path.GetFullPath(path: u.FilePath)
+                                           .StartsWith(value: normalizedStdlib,
+                                                comparisonType: StringComparison
+                                                   .OrdinalIgnoreCase))
+                                       .ToList();
 
-            var unitsByModule = new Dictionary<string, FileBuildUnit>(StringComparer.OrdinalIgnoreCase);
-            foreach (var unit in userUnits)
+            var unitsByModule =
+                new Dictionary<string, FileBuildUnit>(comparer: StringComparer.OrdinalIgnoreCase);
+            foreach (FileBuildUnit unit in userUnits)
             {
-                string moduleName = unit.Module ?? Path.GetFileNameWithoutExtension(unit.FilePath);
-                unitsByModule[moduleName] = unit;
+                string moduleName =
+                    unit.Module ?? Path.GetFileNameWithoutExtension(path: unit.FilePath);
+                unitsByModule[key: moduleName] = unit;
             }
 
             var orderedFiles = new List<(SyntaxTree.Program Program, string FilePath)>();
             foreach (string moduleName in buildResult.InitializationOrder)
             {
-                if (unitsByModule.TryGetValue(moduleName, out var unit))
+                if (unitsByModule.TryGetValue(key: moduleName, value: out FileBuildUnit? unit))
                 {
-                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                    orderedFiles.Add(item: (unit.Ast, unit.FilePath));
                 }
             }
 
-            foreach (var unit in userUnits)
+            foreach (FileBuildUnit unit in userUnits)
             {
-                if (!orderedFiles.Any(f => string.Equals(f.FilePath, unit.FilePath, StringComparison.OrdinalIgnoreCase)))
+                if (!orderedFiles.Any(predicate: f => string.Equals(a: f.FilePath,
+                        b: unit.FilePath,
+                        comparisonType: StringComparison.OrdinalIgnoreCase)))
                 {
-                    orderedFiles.Add((unit.Ast, unit.FilePath));
+                    orderedFiles.Add(item: (unit.Ast, unit.FilePath));
                 }
             }
 
-            // Phase 2: Semantic analysis (multi-file) — no codegen
+            // Phase 2: Semantic analysis (multi-file) ??no codegen
             Console.WriteLine();
-            Console.WriteLine("=== SEMANTIC ANALYSIS ===");
+            Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
-            var analyzer = new SemanticAnalyzer(language);
-            var result = analyzer.AnalyzeMultiple(orderedFiles);
+            var analyzer = new SemanticAnalyzer(language: language);
+            AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
 
-            Console.WriteLine($"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+            Console.WriteLine(
+                value: $"Routines registered: {result.Registry.GetAllRoutines().Count()}");
 
             if (result.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== ERRORS ({result.Errors.Count}) ===");
-                foreach (var error in result.Errors)
+                Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
+                foreach (SemanticError error in result.Errors)
                 {
-                    Console.WriteLine($"  {error.FormattedMessage}");
+                    Console.WriteLine(value: $"  {error.FormattedMessage}");
                 }
+
                 Console.WriteLine();
-                Console.WriteLine("Check failed due to errors.");
+                Console.WriteLine(value: "Check failed due to errors.");
                 return 1;
             }
 
             if (result.Warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine($"=== WARNINGS ({result.Warnings.Count}) ===");
-                foreach (var warning in result.Warnings)
+                Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
+                foreach (SemanticWarning warning in result.Warnings)
                 {
-                    Console.WriteLine($"  {warning.FormattedMessage}");
+                    Console.WriteLine(value: $"  {warning.FormattedMessage}");
                 }
             }
 
             Console.WriteLine();
-            Console.WriteLine("Check passed!");
+            Console.WriteLine(value: "Check passed!");
             return 0;
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine($"{ex.Message}");
+            Console.WriteLine(value: $"{ex.Message}");
             return 1;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Check failed: {ex.Message}");
-            Console.WriteLine(ex.StackTrace);
+            Console.WriteLine(value: $"Check failed: {ex.Message}");
+            Console.WriteLine(value: ex.StackTrace);
             return 1;
         }
     }
@@ -919,32 +1115,37 @@ internal class Program
     private static int BuildAndRun(string entryFile, string? projectRoot = null)
     {
         // Build first (to a temp .ll file)
-        string llFile = Path.ChangeExtension(entryFile, ".ll");
-        int buildResult = BuildMultiFile(entryFile: entryFile, outputFile: llFile, projectRoot: projectRoot);
+        string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
+        int buildResult = BuildMultiFile(entryFile: entryFile,
+            outputFile: llFile,
+            projectRoot: projectRoot);
         if (buildResult != 0)
         {
             return buildResult;
         }
 
         // Find the runtime import library (.lib) directory
-        string? exeDir = Path.GetDirectoryName(typeof(Program).Assembly.Location);
-        string runtimeLibDir = Path.Combine(exeDir ?? ".", "native", "build", "lib");
+        string? exeDir = Path.GetDirectoryName(path: typeof(Program).Assembly.Location);
+        string runtimeLibDir = Path.Combine(path1: exeDir ?? ".",
+            path2: "native",
+            path3: "build",
+            path4: "lib");
 
         // Run opt with mem2reg + sroa passes on the .ll file
-        string optFile = Path.ChangeExtension(llFile, ".opt.ll");
-        var optArgs = $"-S -passes=mem2reg,sroa \"{llFile}\" -o \"{optFile}\"";
+        string optFile = Path.ChangeExtension(path: llFile, extension: ".opt.ll");
+        string optArgs = $"-S -passes=mem2reg,sroa \"{llFile}\" -o \"{optFile}\"";
         var optPsi = new ProcessStartInfo
         {
             FileName = "opt",
             Arguments = optArgs,
             UseShellExecute = false,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = true
         };
 
         try
         {
-            using var optProcess = Process.Start(optPsi);
+            using var optProcess = Process.Start(startInfo: optPsi);
             if (optProcess != null)
             {
                 string optStderr = optProcess.StandardError.ReadToEnd();
@@ -952,8 +1153,8 @@ internal class Program
 
                 if (optProcess.ExitCode != 0)
                 {
-                    // opt failed — fall back to unoptimized .ll
-                    Console.Error.WriteLine($"opt warning: {optStderr.Trim()}");
+                    // opt failed ??fall back to unoptimized .ll
+                    Console.Error.WriteLine(value: $"opt warning: {optStderr.Trim()}");
                     optFile = llFile;
                 }
             }
@@ -964,13 +1165,14 @@ internal class Program
         }
         catch
         {
-            // opt not available — fall back to unoptimized .ll
+            // opt not available ??fall back to unoptimized .ll
             optFile = llFile;
         }
 
-        // Compile .ll → .exe using clang
-        string exeFile = Path.ChangeExtension(llFile, ".exe");
-        var clangArgs = $"-o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime";
+        // Compile .ll ??.exe using clang
+        string exeFile = Path.ChangeExtension(path: llFile, extension: ".exe");
+        string clangArgs =
+            $"-o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime";
 
         var clangPsi = new ProcessStartInfo
         {
@@ -978,15 +1180,15 @@ internal class Program
             Arguments = clangArgs,
             UseShellExecute = false,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = true
         };
 
         try
         {
-            using var clangProcess = Process.Start(clangPsi);
+            using var clangProcess = Process.Start(startInfo: clangPsi);
             if (clangProcess == null)
             {
-                Console.WriteLine("Error: Failed to start clang.");
+                Console.WriteLine(value: "Error: Failed to start clang.");
                 return 1;
             }
 
@@ -997,63 +1199,71 @@ internal class Program
             if (clangProcess.ExitCode != 0)
             {
                 // MSVC's link.exe sends detailed errors (LNK2019) to stdout,
-                // while the summary (LNK1120) goes to stderr — print both.
-                if (!string.IsNullOrWhiteSpace(clangStdout))
-                    Console.Error.Write(clangStdout);
-                if (!string.IsNullOrWhiteSpace(clangStderr))
-                    Console.Error.Write(clangStderr);
+                // while the summary (LNK1120) goes to stderr ??print both.
+                if (!string.IsNullOrWhiteSpace(value: clangStdout))
+                {
+                    Console.Error.Write(value: clangStdout);
+                }
+
+                if (!string.IsNullOrWhiteSpace(value: clangStderr))
+                {
+                    Console.Error.Write(value: clangStderr);
+                }
 
                 string allOutput = clangStdout + clangStderr;
-                string linker = DetectLinkerFromStderr(allOutput);
-                Console.WriteLine($"Linking failed ({linker} exited with code {clangProcess.ExitCode})");
+                string linker = DetectLinkerFromStderr(stderr: allOutput);
+                Console.WriteLine(
+                    value: $"Linking failed ({linker} exited with code {clangProcess.ExitCode})");
                 return 1;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to execute clang: {ex.Message}");
-            Console.WriteLine("Make sure LLVM/Clang is installed and 'clang' is on your PATH.");
+            Console.WriteLine(value: $"Failed to execute clang: {ex.Message}");
+            Console.WriteLine(
+                value: "Make sure LLVM/Clang is installed and 'clang' is on your PATH.");
             return 1;
         }
 
         // Copy the runtime DLL next to the output .exe so it can be found at runtime
-        string? outputDir = Path.GetDirectoryName(Path.GetFullPath(exeFile));
+        string? outputDir = Path.GetDirectoryName(path: Path.GetFullPath(path: exeFile));
         if (outputDir != null && exeDir != null)
         {
-            string srcDll = Path.Combine(exeDir, "razorforge_runtime.dll");
-            if (File.Exists(srcDll))
+            string srcDll = Path.Combine(path1: exeDir, path2: "razorforge_runtime.dll");
+            if (File.Exists(path: srcDll))
             {
-                string dstDll = Path.Combine(outputDir, "razorforge_runtime.dll");
-                File.Copy(srcDll, dstDll, overwrite: true);
+                string dstDll = Path.Combine(path1: outputDir, path2: "razorforge_runtime.dll");
+                File.Copy(sourceFileName: srcDll, destFileName: dstDll, overwrite: true);
             }
         }
 
         // Run the produced .exe
         Console.WriteLine();
-        Console.WriteLine("=== EXECUTION ===");
+        Console.WriteLine(value: "=== EXECUTION ===");
 
         bool stdinIsPiped = Console.IsInputRedirected;
         var psi = new ProcessStartInfo
         {
-            FileName = Path.GetFullPath(exeFile),
+            FileName = Path.GetFullPath(path: exeFile),
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            RedirectStandardInput = stdinIsPiped,
+            RedirectStandardInput = stdinIsPiped
         };
 
         try
         {
-            using var process = Process.Start(psi);
+            using var process = Process.Start(startInfo: psi);
             if (process == null)
             {
-                Console.WriteLine("Error: Failed to start the compiled executable.");
+                Console.WriteLine(value: "Error: Failed to start the compiled executable.");
                 return 1;
             }
 
             if (stdinIsPiped)
             {
-                Console.OpenStandardInput().CopyTo(process.StandardInput.BaseStream);
+                Console.OpenStandardInput()
+                       .CopyTo(destination: process.StandardInput.BaseStream);
                 process.StandardInput.Close();
             }
 
@@ -1061,16 +1271,21 @@ internal class Program
             string stderr = process.StandardError.ReadToEnd();
             process.WaitForExit();
 
-            if (!string.IsNullOrEmpty(stdout))
-                Console.Write(stdout);
-            if (!string.IsNullOrEmpty(stderr))
-                Console.Error.Write(stderr);
+            if (!string.IsNullOrEmpty(value: stdout))
+            {
+                Console.Write(value: stdout);
+            }
+
+            if (!string.IsNullOrEmpty(value: stderr))
+            {
+                Console.Error.Write(value: stderr);
+            }
 
             return process.ExitCode;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to execute {exeFile}: {ex.Message}");
+            Console.WriteLine(value: $"Failed to execute {exeFile}: {ex.Message}");
             return 1;
         }
     }
@@ -1079,83 +1294,4 @@ internal class Program
     /// Recursively prints a one-line summary of an AST node to standard output,
     /// indented to the given depth. Used to display a human-readable AST overview after parsing.
     /// </summary>
-    private static void PrintDeclarationSummary(IAstNode node, int indent)
-    {
-        string prefix = new string(' ', indent * 2);
-
-        switch (node)
-        {
-            case RoutineDeclaration func:
-                string funcModifiers = string.Join(" ", GetModifiers(func));
-                Console.WriteLine($"{prefix}func {func.Name}({func.Parameters.Count} params) -> {func.ReturnType?.ToString() ?? "void"} {funcModifiers}".TrimEnd());
-                break;
-
-            case RecordDeclaration rec:
-                string recModifiers = string.Join(" ", GetModifiers(rec));
-                Console.WriteLine($"{prefix}record {rec.Name} ({rec.Members.Count} members) {recModifiers}".TrimEnd());
-                break;
-
-            case EntityDeclaration ent:
-                string entModifiers = string.Join(" ", GetModifiers(ent));
-                Console.WriteLine($"{prefix}entity {ent.Name} ({ent.Members.Count} members) {entModifiers}".TrimEnd());
-                break;
-
-            case ChoiceDeclaration choice:
-                Console.WriteLine($"{prefix}choice {choice.Name} ({choice.Cases.Count} variants)");
-                break;
-
-            case VariantDeclaration variant:
-                Console.WriteLine($"{prefix}variant {variant.Name} ({variant.Members.Count} members)");
-                break;
-
-            case ProtocolDeclaration proto:
-                Console.WriteLine($"{prefix}protocol {proto.Name} ({proto.Methods.Count} methods)");
-                break;
-
-            case ImportDeclaration import:
-                Console.WriteLine($"{prefix}import {import.ModulePath}");
-                break;
-
-            case ModuleDeclaration ns:
-                Console.WriteLine($"{prefix}module {ns.Path}");
-                break;
-
-            default:
-                Console.WriteLine($"{prefix}{node.GetType().Name}");
-                break;
-        }
-    }
-
-    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for a routine declaration.</summary>
-    private static List<string> GetModifiers(RoutineDeclaration func)
-    {
-        var mods = new List<string>();
-        if (func.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", func.GenericParameters)}]");
-        return mods;
-    }
-
-    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for a record declaration.</summary>
-    private static List<string> GetModifiers(RecordDeclaration rec)
-    {
-        var mods = new List<string>();
-        if (rec.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", rec.GenericParameters)}]");
-        return mods;
-    }
-
-    /// <summary>Returns a list of modifier tokens (e.g., generic parameter lists) for an entity declaration.</summary>
-    private static List<string> GetModifiers(EntityDeclaration ent)
-    {
-        var mods = new List<string>();
-        if (ent.GenericParameters?.Count > 0) mods.Add($"[{string.Join(", ", ent.GenericParameters)}]");
-        return mods;
-    }
-
-    /// <summary>
-    /// Escapes newline, carriage return, and tab characters in a string to their
-    /// backslash-escaped equivalents for safe display on a single console line.
-    /// </summary>
-    private static string EscapeString(string s)
-    {
-        return s.Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
-    }
 }

@@ -1,0 +1,270 @@
+namespace Compiler.Parser;
+
+using Lexer;
+using SyntaxTree;
+using Diagnostics;
+
+public partial class Parser
+{
+    private bool TryParseNumericLiteral(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        // Integer literals (S32/S64/S128 and Integer for arbitrary precision)
+        if (Match(TokenType.Integer,
+                TokenType.S8Literal,
+                TokenType.S16Literal,
+                TokenType.S32Literal,
+                TokenType.S64Literal,
+                TokenType.S128Literal,
+                TokenType.U8Literal,
+                TokenType.U16Literal,
+                TokenType.U32Literal,
+                TokenType.U64Literal,
+                TokenType.U128Literal,
+                TokenType.AddressLiteral,
+                TokenType.Decimal,
+                TokenType.F16Literal,
+                TokenType.F32Literal,
+                TokenType.F64Literal,
+                TokenType.F128Literal,
+                TokenType.D32Literal,
+                TokenType.D64Literal,
+                TokenType.D128Literal,
+                TokenType.J32Literal,
+                TokenType.J64Literal,
+                TokenType.J128Literal,
+                TokenType.JnLiteral))
+        {
+            Token token = PeekToken(offset: -1);
+            result = new LiteralExpression(Value: token.Text,
+                LiteralType: token.Type,
+                Location: location);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a text literal (text, formatted text, raw text, bytes).
+    /// </summary>
+    private bool TryParseTextLiteral(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        if (!Match(TokenType.TextLiteral,
+                TokenType.RawText,
+                TokenType.BytesLiteral,
+                TokenType.BytesRawLiteral))
+        {
+            return false;
+        }
+
+        Token token = PeekToken(offset: -1);
+        string value = token.Text;
+
+        // Regular text literals
+        if (value.StartsWith(value: "\"") && value.EndsWith(value: "\""))
+        {
+            value = value.Substring(startIndex: 1, length: value.Length - 2);
+        }
+        else if (value.StartsWith(value: "b\""))
+        {
+            int prefixEnd = value.IndexOf(value: '"');
+            if (prefixEnd > 0)
+            {
+                value = value.Substring(startIndex: prefixEnd + 1,
+                    length: value.Length - prefixEnd - 2);
+            }
+        }
+
+        result = new LiteralExpression(Value: value, LiteralType: token.Type, Location: location);
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to parse an inserted text expression (f-string).
+    /// Consumes InsertionStart, then text segments and expression parts, until InsertionEnd.
+    /// </summary>
+    private bool TryParseInsertedText(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        if (!Match(type: TokenType.InsertionStart))
+        {
+            return false;
+        }
+
+        Token startToken = PeekToken(offset: -1);
+        bool isRaw = startToken.Text.StartsWith(value: "rf");
+        var parts = new List<InsertedTextPart>();
+
+        while (!IsAtEnd && !Check(type: TokenType.InsertionEnd))
+        {
+            if (Match(type: TokenType.TextSegment))
+            {
+                Token textToken = PeekToken(offset: -1);
+                parts.Add(item: new TextPart(Text: textToken.Text,
+                    Location: GetLocation(token: textToken)));
+            }
+            else if (Match(type: TokenType.LeftBrace))
+            {
+                Token braceToken = PeekToken(offset: -1);
+                SourceLocation partLocation = GetLocation(token: braceToken);
+
+                // Parse the expression inside the braces
+                Expression expr = ParseExpression();
+
+                // Check for optional format specifier
+                string? formatSpec = null;
+                if (Match(type: TokenType.FormatSpec))
+                {
+                    formatSpec = PeekToken(offset: -1)
+                       .Text;
+                }
+
+                Consume(type: TokenType.RightBrace,
+                    errorMessage: "Expected '}' after insertion expression");
+
+                parts.Add(item: new ExpressionPart(Expression: expr,
+                    FormatSpec: formatSpec,
+                    Location: partLocation));
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        Consume(type: TokenType.InsertionEnd,
+            errorMessage: "Expected closing '\"' for inserted text");
+
+        result = new InsertedTextExpression(Parts: parts, IsRaw: isRaw, Location: location);
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to parse a letter literal (letter8, letter16, letter, or byte letter).
+    /// </summary>
+    private bool TryParseLetterLiteral(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        if (!Match(TokenType.LetterLiteral, TokenType.ByteLetterLiteral))
+        {
+            return false;
+        }
+
+        Token token = PeekToken(offset: -1);
+        string parsedLetter = ParseLetterContent(value: token.Text);
+        result = new LiteralExpression(Value: parsedLetter,
+            LiteralType: token.Type,
+            Location: location);
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to parse a ByteSize literal (bytes, kilobytes, etc.).
+    /// All ByteSize literals are stored as raw strings for semantic analysis.
+    /// The semantic analyzer will parse the value and validate it fits in the target type.
+    /// </summary>
+    private bool TryParseByteSizeLiteral(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        if (!Match(TokenType.ByteLiteral,
+                TokenType.KilobyteLiteral,
+                TokenType.KibibyteLiteral,
+                TokenType.MegabyteLiteral,
+                TokenType.MebibyteLiteral,
+                TokenType.GigabyteLiteral,
+                TokenType.GibibyteLiteral))
+        {
+            return false;
+        }
+
+        Token token = PeekToken(offset: -1);
+        result = new LiteralExpression(Value: token.Text,
+            LiteralType: token.Type,
+            Location: location);
+        return true;
+    }
+
+    /// <summary>
+    /// Tries to parse a duration/time literal (hours, minutes, seconds, etc.).
+    /// All duration literals are stored as raw strings for semantic analysis.
+    /// The semantic analyzer will parse the value and validate it fits in the target type.
+    /// </summary>
+    private bool TryParseDurationLiteral(SourceLocation location, out Expression? result)
+    {
+        result = null;
+
+        if (!Match(TokenType.WeekLiteral,
+                TokenType.DayLiteral,
+                TokenType.HourLiteral,
+                TokenType.MinuteLiteral,
+                TokenType.SecondLiteral,
+                TokenType.MillisecondLiteral,
+                TokenType.MicrosecondLiteral,
+                TokenType.NanosecondLiteral))
+        {
+            return false;
+        }
+
+        Token token = PeekToken(offset: -1);
+        result = new LiteralExpression(Value: token.Text,
+            LiteralType: token.Type,
+            Location: location);
+        return true;
+    }
+
+    /// <summary>
+    /// Parses the content of a letter literal, handling escape sequences.
+    /// </summary>
+    private static string ParseLetterContent(string value)
+    {
+        // Determine the actual character content — strip quotes if present
+        string charContent;
+        int quoteStart = value.IndexOf(value: '\'');
+        int quoteEnd = value.Length - 1;
+
+        if (quoteStart >= 0 && quoteEnd > quoteStart && value[index: quoteEnd] == '\'')
+        {
+            charContent = value.Substring(startIndex: quoteStart + 1,
+                length: quoteEnd - quoteStart - 1);
+        }
+        else
+        {
+            charContent = value;
+        }
+
+        if (charContent.StartsWith(value: "\\u") && charContent.Length == 8)
+        {
+            int codePoint =
+                Convert.ToInt32(value: charContent.Substring(startIndex: 2), fromBase: 16);
+            return char.ConvertFromUtf32(utf32: codePoint);
+        }
+
+        return charContent switch
+        {
+            "\\'" => "'",
+            @"\\" => "\\",
+            "\\n" => "\n",
+            "\\t" => "\t",
+            "\\r" => "\r",
+            "\\0" => "\0",
+            _ => charContent
+        };
+    }
+
+    /// <summary>
+    /// Parses a when expression for use in expression context.
+    /// Syntax: when expression:
+    ///             pattern => expr
+    ///             pattern => expr
+    /// Similar to Rust's match expression or Kotlin's when expression.
+    /// </summary>
+    /// <param name="location">The source location of the when keyword.</param>
+    /// <returns>A <see cref="WhenExpression"/> AST node.</returns>
+}

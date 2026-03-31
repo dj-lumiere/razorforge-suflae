@@ -164,7 +164,8 @@ public sealed class ModificationInference
     /// </summary>
     /// <param name="node">The call graph node.</param>
     /// <param name="assignment">The assignment statement.</param>
-    private void AnalyzeAssignmentForModification(CallGraphNode node, AssignmentStatement assignment)
+    private void AnalyzeAssignmentForModification(CallGraphNode node,
+        AssignmentStatement assignment)
     {
         // Check if the target is me.memberVar or me.memberVar.subfield...
         if (IsMemberVariableOfMe(expression: assignment.Target))
@@ -188,8 +189,7 @@ public sealed class ModificationInference
                 memberExpr.Object is IdentifierExpression { Name: "me" } ||
                 IsMemberVariableOfMe(expression: memberExpr.Object),
 
-            IndexExpression indexExpr =>
-                IsMemberVariableOfMe(expression: indexExpr.Object),
+            IndexExpression indexExpr => IsMemberVariableOfMe(expression: indexExpr.Object),
 
             IdentifierExpression { Name: "me" } => true,
 

@@ -7,5 +7,4 @@
 /// </summary>
 public class SemanticException
 {
-
 }

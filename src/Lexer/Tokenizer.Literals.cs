@@ -130,22 +130,27 @@ public partial class Tokenizer
                 char c = Advance();
                 if (bitWidth == 8 && c > '\x7F')
                 {
-                    throw new GrammarException(
-                        GrammarDiagnosticCode.InvalidEscapeSequence,
-                        $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
-                        "Byte literals only accept ASCII (0x00-0x7F). Use \"text\".encode_as(UTF8) instead.",
-                        _fileName, _line, _column, _language);
+                    throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                        message: $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
+                                 "Byte literals only accept ASCII (0x00-0x7F). Use \"text\".encode_as(UTF8) instead.",
+                        fileName: _fileName,
+                        line: _line,
+                        column: _column,
+                        language: _language);
                 }
+
                 content.Append(value: c);
             }
         }
 
         if (IsAtEnd())
         {
-            throw new GrammarException(
-                GrammarDiagnosticCode.UnterminatedString,
-                $"Unterminated text starting at line {startLine}, column {startColumn}",
-                _fileName, startLine, startColumn, _language);
+            throw new GrammarException(code: GrammarDiagnosticCode.UnterminatedString,
+                message: $"Unterminated text starting at line {startLine}, column {startColumn}",
+                fileName: _fileName,
+                line: startLine,
+                column: startColumn,
+                language: _language);
         }
 
         Advance(); // consume closing quote
@@ -162,7 +167,9 @@ public partial class Tokenizer
         int startColumn = _column;
 
         // Emit InsertionStart token (text = "f\"" or "rf\"")
-        string prefix = isRaw ? "rf\"" : "f\"";
+        string prefix = isRaw
+            ? "rf\""
+            : "f\"";
         AddToken(type: TokenType.InsertionStart, text: prefix);
 
         var textBuffer = new System.Text.StringBuilder();
@@ -218,10 +225,12 @@ public partial class Tokenizer
                 }
 
                 // Unmatched } outside insertion — treat as error
-                throw new GrammarException(
-                    GrammarDiagnosticCode.UnexpectedToken,
-                    "Unmatched '}' in formatted text. Use '}}' for a literal brace.",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                    message: "Unmatched '}' in formatted text. Use '}}' for a literal brace.",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
 
             if (!isRaw && c == '\\')
@@ -236,8 +245,10 @@ public partial class Tokenizer
                 else
                 {
                     ScanEscapeSequence(bitWidth: 32);
-                    textBuffer.Append(value: ParseEscapeSequence(escapeStart: escapeStart, bitWidth: 32));
+                    textBuffer.Append(
+                        value: ParseEscapeSequence(escapeStart: escapeStart, bitWidth: 32));
                 }
+
                 continue;
             }
 
@@ -253,10 +264,13 @@ public partial class Tokenizer
         }
 
         // Reached EOF without closing quote
-        throw new GrammarException(
-            GrammarDiagnosticCode.UnterminatedString,
+        throw new GrammarException(code: GrammarDiagnosticCode.UnterminatedString,
+            message:
             $"Unterminated formatted text starting at line {startLine}, column {startColumn}",
-            _fileName, startLine, startColumn, _language);
+            fileName: _fileName,
+            line: startLine,
+            column: startColumn,
+            language: _language);
     }
 
     /// <summary>
@@ -270,17 +284,22 @@ public partial class Tokenizer
         while (!IsAtEnd())
         {
             // Skip whitespace inside the insertion expression
-            while (!IsAtEnd() && (Peek() == ' ' || Peek() == '\t' || Peek() == '\r' || Peek() == '\n'))
+            while (!IsAtEnd() &&
+                   (Peek() == ' ' || Peek() == '\t' || Peek() == '\r' || Peek() == '\n'))
             {
                 if (Peek() == '\n')
                 {
                     _line++;
                     _column = 0;
                 }
+
                 Advance();
             }
 
-            if (IsAtEnd()) break;
+            if (IsAtEnd())
+            {
+                break;
+            }
 
             _tokenStart = _position;
             _tokenStartColumn = _column;
@@ -313,7 +332,11 @@ public partial class Tokenizer
                     break;
                 case ')':
                     AddToken(type: TokenType.RightParen);
-                    if (_bracketDepth > 0) _bracketDepth--;
+                    if (_bracketDepth > 0)
+                    {
+                        _bracketDepth--;
+                    }
+
                     break;
                 case '[':
                     AddToken(type: TokenType.LeftBracket);
@@ -321,7 +344,11 @@ public partial class Tokenizer
                     break;
                 case ']':
                     AddToken(type: TokenType.RightBracket);
-                    if (_bracketDepth > 0) _bracketDepth--;
+                    if (_bracketDepth > 0)
+                    {
+                        _bracketDepth--;
+                    }
+
                     break;
                 case '{':
                     AddToken(type: TokenType.LeftBrace);
@@ -329,7 +356,11 @@ public partial class Tokenizer
                     break;
                 case '}':
                     AddToken(type: TokenType.RightBrace);
-                    if (_bracketDepth > 0) _bracketDepth--;
+                    if (_bracketDepth > 0)
+                    {
+                        _bracketDepth--;
+                    }
+
                     break;
                 case ',':
                     AddToken(type: TokenType.Comma);
@@ -342,48 +373,83 @@ public partial class Tokenizer
                     break;
                 case '-':
                     if (Match(expected: '>'))
+                    {
                         AddToken(type: TokenType.Arrow);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Minus);
+                    }
+
                     break;
                 case '*':
                     if (Match(expected: '*'))
+                    {
                         AddToken(type: TokenType.Power);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Star);
+                    }
+
                     break;
                 case '/':
                     if (Match(expected: '/'))
+                    {
                         AddToken(type: TokenType.Divide);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Slash);
+                    }
+
                     break;
                 case '%':
                     AddToken(type: TokenType.Percent);
                     break;
                 case '=':
                     if (Match(expected: '='))
+                    {
                         AddToken(type: TokenType.Equal);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Assign);
+                    }
+
                     break;
                 case '!':
                     if (Match(expected: '='))
+                    {
                         AddToken(type: TokenType.NotEqual);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Bang);
+                    }
+
                     break;
                 case '<':
                     if (Match(expected: '='))
+                    {
                         AddToken(type: TokenType.LessEqual);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Less);
+                    }
+
                     break;
                 case '>':
                     if (Match(expected: '='))
+                    {
                         AddToken(type: TokenType.GreaterEqual);
+                    }
                     else
+                    {
                         AddToken(type: TokenType.Greater);
+                    }
+
                     break;
                 case '"':
                     ScanString();
@@ -400,6 +466,7 @@ public partial class Tokenizer
                     {
                         ScanIdentifier();
                     }
+
                     break;
             }
         }
@@ -426,8 +493,17 @@ public partial class Tokenizer
             {
                 break;
             }
-            if (c == '{') depth++;
-            if (c == '}') depth--;
+
+            if (c == '{')
+            {
+                depth++;
+            }
+
+            if (c == '}')
+            {
+                depth--;
+            }
+
             spec.Append(value: Advance());
         }
 
@@ -492,10 +568,13 @@ public partial class Tokenizer
             // \x is byte-only, \u is letter-only
             if (bitWidth != 8 && Peek() == 'x')
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidEscapeSequence,
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                    message:
                     "Hex escape \\x is not valid in letter literals. Use \\u for Unicode codepoints.",
-                    _fileName, _line, _column, _language);
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
 
             ScanEscapeSequence(bitWidth: bitWidth);
@@ -505,15 +584,19 @@ public partial class Tokenizer
             char c = Peek();
             if (bitWidth == 8 && c > '\x7F')
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidEscapeSequence,
-                    $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
-                    "Byte literals only accept ASCII (0x00-0x7F).",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                    message: $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
+                             "Byte literals only accept ASCII (0x00-0x7F).",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
+
             Advance(); // consume the character
             // Handle UTF-16 surrogate pairs for non-BMP codepoints (Letter is UTF-32)
-            if (bitWidth != 8 && char.IsHighSurrogate(c) && !IsAtEnd() && char.IsLowSurrogate(Peek()))
+            if (bitWidth != 8 && char.IsHighSurrogate(c: c) && !IsAtEnd() &&
+                char.IsLowSurrogate(c: Peek()))
             {
                 Advance(); // consume low surrogate
             }
@@ -521,10 +604,12 @@ public partial class Tokenizer
 
         if (!Match(expected: '\''))
         {
-            throw new GrammarException(
-                GrammarDiagnosticCode.UnterminatedString,
-                "Unterminated character literal",
-                _fileName, _line, _column, _language);
+            throw new GrammarException(code: GrammarDiagnosticCode.UnterminatedString,
+                message: "Unterminated character literal",
+                fileName: _fileName,
+                line: _line,
+                column: _column,
+                language: _language);
         }
 
         AddToken(type: tokenType);
@@ -541,10 +626,12 @@ public partial class Tokenizer
     {
         if (IsAtEnd())
         {
-            throw new GrammarException(
-                GrammarDiagnosticCode.InvalidEscapeSequence,
-                "Unterminated escape sequence",
-                _fileName, _line, _column, _language);
+            throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                message: "Unterminated escape sequence",
+                fileName: _fileName,
+                line: _line,
+                column: _column,
+                language: _language);
         }
 
         char escapeChar = Peek();
@@ -560,11 +647,15 @@ public partial class Tokenizer
             case 'u':
                 if (bitWidth == 8)
                 {
-                    throw new GrammarException(
-                        GrammarDiagnosticCode.InvalidEscapeSequence,
+                    throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                        message:
                         "Unicode escape \\u is not valid in byte literals. Use \\x for hex byte values.",
-                        _fileName, _line, _column, _language);
+                        fileName: _fileName,
+                        line: _line,
+                        column: _column,
+                        language: _language);
                 }
+
                 Advance(); // consume 'u'
                 ScanUnicodeEscape();
                 break;
@@ -575,10 +666,12 @@ public partial class Tokenizer
                 {
                     Advance();
                 }
+
                 while (Peek() == ' ' || Peek() == '\t')
                 {
                     Advance();
                 }
+
                 break;
             case '\n':
                 // Line continuation: \ followed by LF
@@ -587,12 +680,15 @@ public partial class Tokenizer
                 {
                     Advance();
                 }
+
                 break;
             default:
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidEscapeSequence,
-                    $"Invalid escape sequence '\\{escapeChar}'",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                    message: $"Invalid escape sequence '\\{escapeChar}'",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
         }
     }
 
@@ -605,10 +701,12 @@ public partial class Tokenizer
         {
             if (!IsHexDigit(c: Peek()))
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidEscapeSequence,
-                    "Invalid hex byte escape: expected 2 hex digits (\\xFF)",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                    message: "Invalid hex byte escape: expected 2 hex digits (\\xFF)",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
 
             Advance();
@@ -624,10 +722,12 @@ public partial class Tokenizer
         {
             if (!IsHexDigit(c: Peek()))
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidEscapeSequence,
-                    "Invalid Unicode escape: expected 6 hex digits (\\uXXXXXX)",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                    message: "Invalid Unicode escape: expected 6 hex digits (\\uXXXXXX)",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
 
             Advance();
@@ -655,10 +755,12 @@ public partial class Tokenizer
 
             if (codePoint > 0x10FFFF)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidEscapeSequence,
-                    $"Unicode escape value U+{codePoint:X} exceeds valid Unicode range",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
+                    message: $"Unicode escape value U+{codePoint:X} exceeds valid Unicode range",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
 
             return (char)codePoint;

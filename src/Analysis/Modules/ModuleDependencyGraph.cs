@@ -96,8 +96,7 @@ public sealed class ModuleDependencyGraph
         // Check for self-import
         if (fromModule == toModule)
         {
-            _errors.Add(item: new SemanticError(
-                Code: SemanticDiagnosticCode.SelfImport,
+            _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.SelfImport,
                 Message: $"Module '{fromModule}' cannot import itself.",
                 Location: importLocation));
             return false;
@@ -116,8 +115,7 @@ public sealed class ModuleDependencyGraph
             cycle.Add(item: fromModule); // Complete the cycle
             string cyclePath = string.Join(separator: " → ", values: cycle);
 
-            _errors.Add(item: new SemanticError(
-                Code: SemanticDiagnosticCode.CircularImport,
+            _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.CircularImport,
                 Message: $"Circular import detected: {cyclePath}",
                 Location: importLocation));
 
@@ -214,7 +212,8 @@ public sealed class ModuleDependencyGraph
             {
                 // This should not happen if AddDependency properly validates
                 throw new InvalidOperationException(
-                    message: $"Unexpected cycle detected at module '{module}'. This indicates a bug in dependency tracking.");
+                    message:
+                    $"Unexpected cycle detected at module '{module}'. This indicates a bug in dependency tracking.");
             }
 
             visiting.Add(item: module);
@@ -274,7 +273,10 @@ public sealed class ModuleDependencyGraph
     /// <summary>
     /// Gets all registered modules.
     /// </summary>
-    public IEnumerable<ModuleNode> GetAllModules() => _modules.Values;
+    public IEnumerable<ModuleNode> GetAllModules()
+    {
+        return _modules.Values;
+    }
 
     /// <summary>
     /// Gets a specific module if it exists.
@@ -283,7 +285,9 @@ public sealed class ModuleDependencyGraph
     /// <returns>The module node if found, null otherwise.</returns>
     public ModuleNode? GetModule(string modulePath)
     {
-        return _modules.TryGetValue(key: modulePath, value: out ModuleNode? node) ? node : null;
+        return _modules.TryGetValue(key: modulePath, value: out ModuleNode? node)
+            ? node
+            : null;
     }
 
     /// <summary>

@@ -25,7 +25,8 @@ public sealed partial class SemanticAnalyzer
     private void InferModificationCategories()
     {
         // Create the modification inference engine and run propagation
-        _modificationInference = new ModificationInference(callGraph: _callGraph, registry: _registry);
+        _modificationInference =
+            new ModificationInference(callGraph: _callGraph, registry: _registry);
         _modificationInference.InferAll();
 
         // Apply inferred categories back to RoutineInfo
@@ -48,10 +49,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        _callGraph.AddEdge(
-            caller: _currentRoutine,
-            callee: callee,
-            callsOnMe: callOnMe);
+        _callGraph.AddEdge(caller: _currentRoutine, callee: callee, callsOnMe: callOnMe);
     }
 
     /// <summary>
@@ -66,8 +64,7 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
-        _modificationInference?.AnalyzeStatementForModification(
-            node: _currentCallGraphNode,
+        _modificationInference?.AnalyzeStatementForModification(node: _currentCallGraphNode,
             statement: statement);
     }
 
@@ -108,8 +105,7 @@ public sealed partial class SemanticAnalyzer
                 memberExpr.Object is IdentifierExpression { Name: "me" } ||
                 IsMemberVariableOfMe(expression: memberExpr.Object),
 
-            IndexExpression indexExpr =>
-                IsMemberVariableOfMe(expression: indexExpr.Object),
+            IndexExpression indexExpr => IsMemberVariableOfMe(expression: indexExpr.Object),
 
             IdentifierExpression { Name: "me" } => true,
 
@@ -124,7 +120,8 @@ public sealed partial class SemanticAnalyzer
     /// <param name="callee">The routine being called.</param>
     /// <param name="callExpr">The call expression.</param>
     /// <param name="hasModifyingToken">Whether the ! token was used.</param>
-    private void ValidateModifyingCall(RoutineInfo callee, Expression callExpr, bool hasModifyingToken)
+    private void ValidateModifyingCall(RoutineInfo callee, Expression callExpr,
+        bool hasModifyingToken)
     {
         ModificationCategory calleeCategory = callee.ModificationCategory;
 
@@ -133,10 +130,9 @@ public sealed partial class SemanticAnalyzer
         {
             if (hasModifyingToken)
             {
-                ReportWarning(
-                    SemanticWarningCode.UnnecessaryModificationToken,
-                    $"Method '{callee.Name}' is readonly, no ! token needed.",
-                    callExpr.Location);
+                ReportWarning(code: SemanticWarningCode.UnnecessaryModificationToken,
+                    message: $"Method '{callee.Name}' is readonly, no ! token needed.",
+                    location: callExpr.Location);
             }
 
             return;
@@ -145,10 +141,10 @@ public sealed partial class SemanticAnalyzer
         // Writable and Migratable methods require ! token
         if (!hasModifyingToken && calleeCategory >= ModificationCategory.Writable)
         {
-            ReportError(
-                SemanticDiagnosticCode.ModifyingMethodRequiresToken,
+            ReportError(code: SemanticDiagnosticCode.ModifyingMethodRequiresToken,
+                message:
                 $"Method '{callee.Name}' is {calleeCategory.ToString().ToLower()} and requires ! token.",
-                callExpr.Location);
+                location: callExpr.Location);
         }
     }
 
@@ -170,10 +166,10 @@ public sealed partial class SemanticAnalyzer
                 // Read-only tokens can only call readonly methods
                 if (calleeCategory != ModificationCategory.Readonly)
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.ModifyingMethodThroughReadOnlyToken,
+                    ReportError(code: SemanticDiagnosticCode.ModifyingMethodThroughReadOnlyToken,
+                        message:
                         $"Cannot call {calleeCategory.ToString().ToLower()} method '{callee.Name}' through {tokenType} token.",
-                        callExpr.Location);
+                        location: callExpr.Location);
                 }
 
                 break;
@@ -184,15 +180,15 @@ public sealed partial class SemanticAnalyzer
                 // TODO: Migratable is possible unless iterating.
                 if (calleeCategory == ModificationCategory.Migratable)
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.MigratableMethodThroughExclusiveToken,
+                    ReportError(code: SemanticDiagnosticCode.MigratableMethodThroughExclusiveToken,
+                        message:
                         $"Cannot call migratable method '{callee.Name}' through {tokenType} token.",
-                        callExpr.Location);
+                        location: callExpr.Location);
                 }
 
                 break;
 
-                // Owned access (no token wrapper) can call any method
+            // Owned access (no token wrapper) can call any method
         }
     }
 

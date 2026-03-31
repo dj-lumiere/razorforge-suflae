@@ -46,9 +46,7 @@ public sealed class ParameterInfo
     {
         return new ParameterInfo(name: Name, type: newType)
         {
-            DefaultValue = DefaultValue,
-            Index = Index,
-            IsVariadicParam = IsVariadicParam
+            DefaultValue = DefaultValue, Index = Index, IsVariadicParam = IsVariadicParam
         };
     }
 }

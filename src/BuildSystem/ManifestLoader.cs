@@ -13,14 +13,18 @@ public static class ManifestLoader
     /// </summary>
     public static string? FindManifest(string startDir)
     {
-        string? dir = Path.GetFullPath(startDir);
+        string? dir = Path.GetFullPath(path: startDir);
         while (dir != null)
         {
-            string candidate = Path.Combine(dir, ManifestFileName);
-            if (File.Exists(candidate))
+            string candidate = Path.Combine(path1: dir, path2: ManifestFileName);
+            if (File.Exists(path: candidate))
+            {
                 return candidate;
-            dir = Path.GetDirectoryName(dir);
+            }
+
+            dir = Path.GetDirectoryName(path: dir);
         }
+
         return null;
     }
 
@@ -30,45 +34,56 @@ public static class ManifestLoader
     /// </summary>
     public static ProjectManifest Load(string tomlPath)
     {
-        string fullPath = Path.GetFullPath(tomlPath);
-        string manifestDir = Path.GetDirectoryName(fullPath)!;
-        string content = File.ReadAllText(fullPath);
+        string fullPath = Path.GetFullPath(path: tomlPath);
+        string manifestDir = Path.GetDirectoryName(path: fullPath)!;
+        string content = File.ReadAllText(path: fullPath);
 
-        TomlTable root = Toml.ToModel(content);
+        TomlTable root = Toml.ToModel(text: content);
 
         var manifest = new ProjectManifest { ManifestDirectory = manifestDir };
 
         // [package]
-        if (root.TryGetValue("package", out object? packageObj) && packageObj is TomlTable packageTable)
+        if (root.TryGetValue(key: "package", value: out object? packageObj) &&
+            packageObj is TomlTable packageTable)
         {
-            manifest.Package = ParsePackage(packageTable);
+            manifest.Package = ParsePackage(table: packageTable);
         }
         else
         {
-            throw new InvalidOperationException($"{ManifestFileName}: missing [package] section.");
+            throw new InvalidOperationException(
+                message: $"{ManifestFileName}: missing [package] section.");
         }
 
-        if (string.IsNullOrWhiteSpace(manifest.Package.Name))
-            throw new InvalidOperationException($"{ManifestFileName}: package.name is required.");
+        if (string.IsNullOrWhiteSpace(value: manifest.Package.Name))
+        {
+            throw new InvalidOperationException(
+                message: $"{ManifestFileName}: package.name is required.");
+        }
 
         // Build module index for resolving entry modules
-        var moduleIndex = BuildModuleIndex(manifestDir);
+        Dictionary<string, string> moduleIndex = BuildModuleIndex(projectDir: manifestDir);
 
         // [targets.*]
-        if (root.TryGetValue("targets", out object? targetsObj) && targetsObj is TomlTable targetsTable)
+        if (root.TryGetValue(key: "targets", value: out object? targetsObj) &&
+            targetsObj is TomlTable targetsTable)
         {
-            foreach (var (name, value) in targetsTable)
+            foreach ((string name, object value) in targetsTable)
             {
                 if (value is TomlTable targetTable)
                 {
-                    var target = ParseTarget(name, targetTable, moduleIndex);
-                    manifest.Targets.Add(target);
+                    TargetInfo target = ParseTarget(name: name,
+                        table: targetTable,
+                        moduleIndex: moduleIndex);
+                    manifest.Targets.Add(item: target);
                 }
             }
         }
 
         if (manifest.Targets.Count == 0)
-            throw new InvalidOperationException($"{ManifestFileName}: at least one target is required.");
+        {
+            throw new InvalidOperationException(
+                message: $"{ManifestFileName}: at least one target is required.");
+        }
 
         return manifest;
     }
@@ -77,45 +92,81 @@ public static class ManifestLoader
     {
         var pkg = new PackageInfo();
 
-        if (table.TryGetValue("name", out object? name))
+        if (table.TryGetValue(key: "name", value: out object? name))
+        {
             pkg.Name = name?.ToString() ?? "";
-        if (table.TryGetValue("version", out object? version))
+        }
+
+        if (table.TryGetValue(key: "version", value: out object? version))
+        {
             pkg.Version = version?.ToString();
-        if (table.TryGetValue("license", out object? license))
+        }
+
+        if (table.TryGetValue(key: "license", value: out object? license))
+        {
             pkg.License = license?.ToString();
-        if (table.TryGetValue("description", out object? description))
+        }
+
+        if (table.TryGetValue(key: "description", value: out object? description))
+        {
             pkg.Description = description?.ToString();
-        if (table.TryGetValue("authors", out object? authorsObj) && authorsObj is TomlArray authorsArray)
-            pkg.Authors = authorsArray.Select(a => a?.ToString() ?? "").ToList();
-        if (table.TryGetValue("repository", out object? repository))
+        }
+
+        if (table.TryGetValue(key: "authors", value: out object? authorsObj) &&
+            authorsObj is TomlArray authorsArray)
+        {
+            pkg.Authors = authorsArray.Select(selector: a => a?.ToString() ?? "")
+                                      .ToList();
+        }
+
+        if (table.TryGetValue(key: "repository", value: out object? repository))
+        {
             pkg.Repository = repository?.ToString();
-        if (table.TryGetValue("razorforge-version", out object? rfVersion))
+        }
+
+        if (table.TryGetValue(key: "razorforge-version", value: out object? rfVersion))
+        {
             pkg.RazorForgeVersion = rfVersion?.ToString();
+        }
 
         return pkg;
     }
 
-    private static TargetInfo ParseTarget(string name, TomlTable table, Dictionary<string, string> moduleIndex)
+    private static TargetInfo ParseTarget(string name, TomlTable table,
+        Dictionary<string, string> moduleIndex)
     {
         var target = new TargetInfo { Name = name };
 
-        if (table.TryGetValue("type", out object? type))
+        if (table.TryGetValue(key: "type", value: out object? type))
+        {
             target.Type = type?.ToString() ?? "executable";
-        if (table.TryGetValue("entry", out object? entry))
-            target.Entry = entry?.ToString() ?? "";
-        if (table.TryGetValue("lib_type", out object? libType))
-            target.LibType = libType?.ToString();
+        }
 
-        if (string.IsNullOrWhiteSpace(target.Entry))
-            throw new InvalidOperationException($"{ManifestFileName}: target '{name}' must have an 'entry' field.");
+        if (table.TryGetValue(key: "entry", value: out object? entry))
+        {
+            target.Entry = entry?.ToString() ?? "";
+        }
+
+        if (table.TryGetValue(key: "lib_type", value: out object? libType))
+        {
+            target.LibType = libType?.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(value: target.Entry))
+        {
+            throw new InvalidOperationException(
+                message: $"{ManifestFileName}: target '{name}' must have an 'entry' field.");
+        }
 
         // Resolve module name to file path
-        if (!moduleIndex.TryGetValue(target.Entry, out string? resolvedFile))
+        if (!moduleIndex.TryGetValue(key: target.Entry, value: out string? resolvedFile))
         {
             string available = moduleIndex.Count > 0
-                ? string.Join(", ", moduleIndex.Keys.OrderBy(k => k))
+                ? string.Join(separator: ", ",
+                    values: moduleIndex.Keys.OrderBy(keySelector: k => k))
                 : "(none found)";
             throw new InvalidOperationException(
+                message:
                 $"{ManifestFileName}: target '{name}' entry module '{target.Entry}' not found. Available modules: {available}");
         }
 
@@ -129,21 +180,29 @@ public static class ManifestLoader
     /// </summary>
     private static Dictionary<string, string> BuildModuleIndex(string projectDir)
     {
-        var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var index = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        if (!Directory.Exists(projectDir))
+        if (!Directory.Exists(path: projectDir))
+        {
             return index;
+        }
 
-        var extensions = new[] { "*.rf", "*.sf" };
+        string[] extensions = new[]
+        {
+            "*.rf",
+            "*.sf"
+        };
         foreach (string pattern in extensions)
         {
-            foreach (string filePath in Directory.GetFiles(projectDir, pattern, SearchOption.AllDirectories))
+            foreach (string filePath in Directory.GetFiles(path: projectDir,
+                         searchPattern: pattern,
+                         searchOption: SearchOption.AllDirectories))
             {
-                string? moduleName = ExtractModuleName(filePath);
+                string? moduleName = ExtractModuleName(filePath: filePath);
                 if (moduleName != null)
                 {
                     // First file wins for a given module name
-                    index.TryAdd(moduleName, Path.GetFullPath(filePath));
+                    index.TryAdd(key: moduleName, value: Path.GetFullPath(path: filePath));
                 }
             }
         }
@@ -158,26 +217,36 @@ public static class ManifestLoader
     {
         try
         {
-            foreach (string line in File.ReadLines(filePath))
+            foreach (string line in File.ReadLines(path: filePath))
             {
                 string trimmed = line.Trim();
-                if (trimmed.StartsWith("module "))
+                if (trimmed.StartsWith(value: "module "))
                 {
-                    string name = trimmed["module ".Length..].Trim();
-                    int commentIdx = name.IndexOf('#');
+                    string name = trimmed["module ".Length..]
+                       .Trim();
+                    int commentIdx = name.IndexOf(value: '#');
                     if (commentIdx >= 0)
-                        name = name[..commentIdx].Trim();
+                    {
+                        name = name[..commentIdx]
+                           .Trim();
+                    }
+
                     return name;
                 }
+
                 // Skip comments, empty lines, and imports — stop at first real declaration
-                if (!string.IsNullOrWhiteSpace(trimmed) && !trimmed.StartsWith("#") && !trimmed.StartsWith("import "))
+                if (!string.IsNullOrWhiteSpace(value: trimmed) &&
+                    !trimmed.StartsWith(value: "#") && !trimmed.StartsWith(value: "import "))
+                {
                     break;
+                }
             }
         }
         catch
         {
             // Skip unreadable files
         }
+
         return null;
     }
 }

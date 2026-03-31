@@ -40,7 +40,9 @@ public sealed class RecordTypeInfo : TypeInfo
     /// Returns null if not a single-member-variable wrapper.
     /// </summary>
     public IntrinsicTypeInfo? UnderlyingIntrinsic =>
-        IsSingleMemberVariableWrapper ? MemberVariables[0].Type as IntrinsicTypeInfo : null;
+        IsSingleMemberVariableWrapper
+            ? MemberVariables[index: 0].Type as IntrinsicTypeInfo
+            : null;
 
     /// <summary>
     /// The LLVM type representation for this record.
@@ -114,13 +116,15 @@ public sealed class RecordTypeInfo : TypeInfo
         var substitution = new Dictionary<string, TypeInfo>();
         for (int i = 0; i < GenericParameters.Count; i++)
         {
-            substitution[key: GenericParameters[i]] = typeArguments[i];
+            substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
         }
 
         // Substitute types in member variables
-        var substitutedMemberVariables = MemberVariables
-            .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
-            .ToList();
+        var substitutedMemberVariables = MemberVariables.Select(selector: f =>
+                                                             SubstituteMemberVariableType(
+                                                                 memberVariable: f,
+                                                                 substitution: substitution))
+                                                        .ToList();
 
         // Build resolved type name (e.g., "List[s32]")
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
@@ -132,7 +136,10 @@ public sealed class RecordTypeInfo : TypeInfo
             ImplementedProtocols = ImplementedProtocols, // TODO: substitute protocol type args
             TypeArguments = typeArguments,
             GenericDefinition = this,
-            BackendType = ResolveBackendTypeTemplate(BackendType, GenericParameters, typeArguments),
+            BackendType =
+                ResolveBackendTypeTemplate(template: BackendType,
+                    genericParams: GenericParameters,
+                    typeArguments: typeArguments),
             Visibility = Visibility,
             Location = Location,
             Module = Module
@@ -145,55 +152,71 @@ public sealed class RecordTypeInfo : TypeInfo
     /// {(N+7)//8} for arithmetic expressions over const generics.
     /// Returns the template unchanged if it contains no holes.
     /// </summary>
-    private static string? ResolveBackendTypeTemplate(string? template, IReadOnlyList<string>? genericParams,
-        IReadOnlyList<TypeInfo> typeArguments)
+    private static string? ResolveBackendTypeTemplate(string? template,
+        IReadOnlyList<string>? genericParams, IReadOnlyList<TypeInfo> typeArguments)
     {
-        if (template == null || genericParams == null || !template.Contains('{'))
+        if (template == null || genericParams == null || !template.Contains(value: '{'))
+        {
             return template;
+        }
 
         var paramMap = new Dictionary<string, TypeInfo>();
         for (int i = 0; i < genericParams.Count && i < typeArguments.Count; i++)
-            paramMap[genericParams[i]] = typeArguments[i];
+        {
+            paramMap[key: genericParams[index: i]] = typeArguments[index: i];
+        }
 
         var result = new System.Text.StringBuilder();
         int pos = 0;
         while (pos < template.Length)
         {
-            int open = template.IndexOf('{', pos);
+            int open = template.IndexOf(value: '{', startIndex: pos);
             if (open < 0)
             {
-                result.Append(template, pos, template.Length - pos);
+                result.Append(value: template, startIndex: pos, count: template.Length - pos);
                 break;
             }
-            result.Append(template, pos, open - pos);
-            int close = template.IndexOf('}', open + 1);
+
+            result.Append(value: template, startIndex: pos, count: open - pos);
+            int close = template.IndexOf(value: '}', startIndex: open + 1);
             if (close < 0)
             {
-                result.Append(template, open, template.Length - open);
+                result.Append(value: template, startIndex: open, count: template.Length - open);
                 break;
             }
-            string hole = template[(open + 1)..close].Trim();
-            result.Append(ResolveHole(hole, paramMap));
+
+            string hole = template[(open + 1)..close]
+               .Trim();
+            result.Append(value: ResolveHole(hole: hole, paramMap: paramMap));
             pos = close + 1;
         }
+
         return result.ToString();
     }
 
     private static string ResolveHole(string hole, Dictionary<string, TypeInfo> paramMap)
     {
         // Simple parameter name: {N} or {T}
-        if (paramMap.TryGetValue(hole, out TypeInfo? typeArg))
-            return SubstituteTypeArg(typeArg);
+        if (paramMap.TryGetValue(key: hole, value: out TypeInfo? typeArg))
+        {
+            return SubstituteTypeArg(typeArg: typeArg);
+        }
 
         // Arithmetic expression: {(N+7)//8}
         var constValues = new Dictionary<string, long>();
-        foreach (var (name, ti) in paramMap)
+        foreach ((string name, TypeInfo ti) in paramMap)
         {
             if (ti is ConstGenericValueTypeInfo constVal)
-                constValues[name] = constVal.Value;
+            {
+                constValues[key: name] = constVal.Value;
+            }
         }
+
         if (constValues.Count > 0)
-            return EvaluateConstExpr(hole, constValues).ToString();
+        {
+            return EvaluateConstExpr(expr: hole, paramValues: constValues)
+               .ToString();
+        }
 
         return hole; // fallback: return as-is
     }
@@ -201,9 +224,15 @@ public sealed class RecordTypeInfo : TypeInfo
     private static string SubstituteTypeArg(TypeInfo typeArg)
     {
         if (typeArg is ConstGenericValueTypeInfo constVal)
+        {
             return constVal.Value.ToString();
+        }
+
         if (typeArg is RecordTypeInfo record)
+        {
             return record.LlvmType;
+        }
+
         return "ptr"; // entities, protocols, etc. are pointers
     }
 
@@ -214,89 +243,117 @@ public sealed class RecordTypeInfo : TypeInfo
     private static long EvaluateConstExpr(string expr, Dictionary<string, long> paramValues)
     {
         int pos = 0;
-        long result = ParseAddSub(expr, ref pos, paramValues);
+        long result = ParseAddSub(expr: expr, pos: ref pos, paramValues: paramValues);
         return result;
     }
 
     private static long ParseAddSub(string expr, ref int pos, Dictionary<string, long> paramValues)
     {
-        long left = ParseMulDiv(expr, ref pos, paramValues);
+        long left = ParseMulDiv(expr: expr, pos: ref pos, paramValues: paramValues);
         while (pos < expr.Length)
         {
-            SkipWhitespace(expr, ref pos);
-            if (pos < expr.Length && expr[pos] == '+')
+            SkipWhitespace(expr: expr, pos: ref pos);
+            if (pos < expr.Length && expr[index: pos] == '+')
             {
                 pos++;
-                left += ParseMulDiv(expr, ref pos, paramValues);
+                left += ParseMulDiv(expr: expr, pos: ref pos, paramValues: paramValues);
             }
-            else if (pos < expr.Length && expr[pos] == '-')
+            else if (pos < expr.Length && expr[index: pos] == '-')
             {
                 pos++;
-                left -= ParseMulDiv(expr, ref pos, paramValues);
+                left -= ParseMulDiv(expr: expr, pos: ref pos, paramValues: paramValues);
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
+
         return left;
     }
 
     private static long ParseMulDiv(string expr, ref int pos, Dictionary<string, long> paramValues)
     {
-        long left = ParseAtom(expr, ref pos, paramValues);
+        long left = ParseAtom(expr: expr, pos: ref pos, paramValues: paramValues);
         while (pos < expr.Length)
         {
-            SkipWhitespace(expr, ref pos);
-            if (pos + 1 < expr.Length && expr[pos] == '/' && expr[pos + 1] == '/')
+            SkipWhitespace(expr: expr, pos: ref pos);
+            if (pos + 1 < expr.Length && expr[index: pos] == '/' && expr[index: pos + 1] == '/')
             {
                 pos += 2;
-                left /= ParseAtom(expr, ref pos, paramValues);
+                left /= ParseAtom(expr: expr, pos: ref pos, paramValues: paramValues);
             }
-            else if (pos < expr.Length && expr[pos] == '*')
+            else if (pos < expr.Length && expr[index: pos] == '*')
             {
                 pos++;
-                left *= ParseAtom(expr, ref pos, paramValues);
+                left *= ParseAtom(expr: expr, pos: ref pos, paramValues: paramValues);
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
+
         return left;
     }
 
     private static long ParseAtom(string expr, ref int pos, Dictionary<string, long> paramValues)
     {
-        SkipWhitespace(expr, ref pos);
-        if (pos < expr.Length && expr[pos] == '(')
+        SkipWhitespace(expr: expr, pos: ref pos);
+        if (pos < expr.Length && expr[index: pos] == '(')
         {
             pos++;
-            long val = ParseAddSub(expr, ref pos, paramValues);
-            SkipWhitespace(expr, ref pos);
-            if (pos < expr.Length && expr[pos] == ')')
+            long val = ParseAddSub(expr: expr, pos: ref pos, paramValues: paramValues);
+            SkipWhitespace(expr: expr, pos: ref pos);
+            if (pos < expr.Length && expr[index: pos] == ')')
+            {
                 pos++;
+            }
+
             return val;
         }
-        if (pos < expr.Length && char.IsDigit(expr[pos]))
+
+        if (pos < expr.Length && char.IsDigit(c: expr[index: pos]))
         {
             int start = pos;
-            while (pos < expr.Length && char.IsDigit(expr[pos]))
+            while (pos < expr.Length && char.IsDigit(c: expr[index: pos]))
+            {
                 pos++;
-            return long.Parse(expr[start..pos]);
+            }
+
+            return long.Parse(s: expr[start..pos]);
         }
-        if (pos < expr.Length && char.IsLetter(expr[pos]))
+
+        if (pos < expr.Length && char.IsLetter(c: expr[index: pos]))
         {
             int start = pos;
-            while (pos < expr.Length && (char.IsLetterOrDigit(expr[pos]) || expr[pos] == '_'))
+            while (pos < expr.Length &&
+                   (char.IsLetterOrDigit(c: expr[index: pos]) || expr[index: pos] == '_'))
+            {
                 pos++;
+            }
+
             string name = expr[start..pos];
-            if (paramValues.TryGetValue(name, out long val))
+            if (paramValues.TryGetValue(key: name, value: out long val))
+            {
                 return val;
-            throw new InvalidOperationException($"Unknown parameter '{name}' in @llvm template expression");
+            }
+
+            throw new InvalidOperationException(
+                message: $"Unknown parameter '{name}' in @llvm template expression");
         }
+
         throw new InvalidOperationException(
+            message:
             $"Unexpected character in @llvm template expression at position {pos}: '{expr}'");
     }
 
     private static void SkipWhitespace(string expr, ref int pos)
     {
-        while (pos < expr.Length && char.IsWhiteSpace(expr[pos]))
+        while (pos < expr.Length && char.IsWhiteSpace(c: expr[index: pos]))
+        {
             pos++;
+        }
     }
 
     /// <summary>
@@ -305,10 +362,11 @@ public sealed class RecordTypeInfo : TypeInfo
     /// <param name="memberVariable">The member variable to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
     /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>
-    private static MemberVariableInfo SubstituteMemberVariableType(MemberVariableInfo memberVariable,
-        Dictionary<string, TypeInfo> substitution)
+    private static MemberVariableInfo SubstituteMemberVariableType(
+        MemberVariableInfo memberVariable, Dictionary<string, TypeInfo> substitution)
     {
-        TypeInfo substitutedType = SubstituteType(type: memberVariable.Type, substitution: substitution);
+        TypeInfo substitutedType =
+            SubstituteType(type: memberVariable.Type, substitution: substitution);
         return memberVariable.WithSubstitutedType(newType: substitutedType);
     }
 
@@ -334,7 +392,8 @@ public sealed class RecordTypeInfo : TypeInfo
         }
 
         var newArgs = type.TypeArguments
-                          .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
+                          .Select(selector: arg =>
+                               SubstituteType(type: arg, substitution: substitution))
                           .ToList();
 
         // Get the generic definition and create resolved instance with new args

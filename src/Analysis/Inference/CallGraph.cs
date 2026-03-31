@@ -58,6 +58,8 @@ public sealed class CallGraph
     /// <returns>The node if found, null otherwise.</returns>
     public CallGraphNode? LookupNode(string fullName)
     {
-        return _nodes.TryGetValue(key: fullName, value: out CallGraphNode? node) ? node : null;
+        return _nodes.TryGetValue(key: fullName, value: out CallGraphNode? node)
+            ? node
+            : null;
     }
 }

@@ -68,7 +68,7 @@ public partial class Tokenizer
         [key: "mb"] = TokenType.MegabyteLiteral,
         [key: "mib"] = TokenType.MebibyteLiteral,
         [key: "gb"] = TokenType.GigabyteLiteral,
-        [key: "gib"] = TokenType.GibibyteLiteral,
+        [key: "gib"] = TokenType.GibibyteLiteral
     };
 
     /// <summary>
@@ -210,7 +210,7 @@ public partial class Tokenizer
             [key: "suspended"] = TokenType.Suspended,
             [key: "waitfor"] = TokenType.Waitfor,
             [key: "within"] = TokenType.Within,
-            [key: "after"] = TokenType.After,
+            [key: "after"] = TokenType.After
         };
 
         // RF-only keywords
@@ -253,7 +253,9 @@ public partial class Tokenizer
 
             // Imaginary (for complex numbers)
             // RF defaults "j" to J64Literal, SF defaults to JnLiteral
-            [key: "j"] = _language == Language.RazorForge ? TokenType.J64Literal : TokenType.JnLiteral,
+            [key: "j"] = _language == Language.RazorForge
+                ? TokenType.J64Literal
+                : TokenType.JnLiteral,
             [key: "j32"] = TokenType.J32Literal,
             [key: "j64"] = TokenType.J64Literal,
             [key: "j128"] = TokenType.J128Literal,

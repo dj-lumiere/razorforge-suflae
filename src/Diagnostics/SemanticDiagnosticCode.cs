@@ -321,7 +321,6 @@ public enum SemanticDiagnosticCode
     SingleExpressionBranchUsesBecomes = 308,
 
 
-
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -857,8 +856,7 @@ public enum SemanticDiagnosticCode
     BuilderServiceImportRequired = 950,
 
     /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
-    UnresolvedRoutineBody = 951,
-
+    UnresolvedRoutineBody = 951
 }
 
 public static class SemanticDiagnosticCodeExtensions

@@ -42,7 +42,10 @@ public partial class Parser
     /// <summary>
     /// Gets all parse errors encountered during parsing.
     /// </summary>
-    public IReadOnlyList<string> GetErrors() => _errors;
+    public IReadOnlyList<string> GetErrors()
+    {
+        return _errors;
+    }
 
     /// <summary>
     /// The source file name for error reporting.
@@ -271,7 +274,7 @@ public partial class Parser
         }
 
         // Parse visibility and storage class modifiers
-        var (visibility, storage) = ParseModifiers();
+        (VisibilityModifier visibility, StorageClass storage) = ParseModifiers();
 
         // Define declaration with annotations (e.g., @config(target: "windows") define CLong as S32)
         if (Match(type: TokenType.Define))
@@ -292,7 +295,8 @@ public partial class Parser
             isDangerous = Match(type: TokenType.Dangerous);
 
             // Handle: dangerous external("C") routine ... (dangerous before external)
-            if (isDangerous && visibility == VisibilityModifier.Open && Match(type: TokenType.External))
+            if (isDangerous && visibility == VisibilityModifier.Open &&
+                Match(type: TokenType.External))
             {
                 visibility = VisibilityModifier.External;
             }
@@ -319,21 +323,24 @@ public partial class Parser
                     callingConvention = conventionToken.Text.Trim(trimChar: '"');
                 }
 
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after calling convention");
+                Consume(type: TokenType.RightParen,
+                    errorMessage: "Expected ')' after calling convention");
             }
 
             // Block form: external("C")\n  routine ... routine ...
             // Check for block form: next meaningful token is Newline (not 'routine')
             if (Check(type: TokenType.Newline))
             {
-                return ParseExternalBlockDeclaration(callingConvention: callingConvention, isDangerous: isDangerous);
+                return ParseExternalBlockDeclaration(callingConvention: callingConvention,
+                    isDangerous: isDangerous);
             }
 
             // Single form: external("C") routine foo()
             if (Match(type: TokenType.Routine))
             {
-                return ParseExternalDeclaration(
-                    callingConvention: callingConvention, annotations: annotations, isDangerous: isDangerous);
+                return ParseExternalDeclaration(callingConvention: callingConvention,
+                    annotations: annotations,
+                    isDangerous: isDangerous);
             }
         }
 
@@ -346,12 +353,16 @@ public partial class Parser
             // In record bodies, external is not allowed
             if (_parsingStrictRecordBody && visibility is VisibilityModifier.External)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message:
                     $"'{visibility.ToString().ToLower()}' is not valid for record member variables. " +
                     "Record member variables can use 'secret', 'posted', or 'open'",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                    fileName: fileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
+
             return ParseMemberVariableDeclaration(visibility: visibility);
         }
 
@@ -362,12 +373,15 @@ public partial class Parser
             // MemberVariables use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    "Type member variables cannot use 'var' or 'preset'. " +
-                    "Use 'name: Type' syntax instead",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "Type member variables cannot use 'var' or 'preset'. " +
+                             "Use 'name: Type' syntax instead",
+                    fileName: fileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
+
             return ParseVariableDeclaration(visibility: visibility, storage: storage);
         }
 
@@ -414,37 +428,55 @@ public partial class Parser
             // Validate: global storage is not allowed for routines
             if (storage == StorageClass.Global)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    "'global' storage class is not valid for routines. " +
-                    "'global' can only be used for file-scope static variables",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "'global' storage class is not valid for routines. " +
+                             "'global' can only be used for file-scope static variables",
+                    fileName: fileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
-            return ParseRoutineDeclaration(visibility: visibility, annotations: annotations, storage: storage, asyncStatus: asyncStatus, isDangerous: isDangerous);
+
+            return ParseRoutineDeclaration(visibility: visibility,
+                annotations: annotations,
+                storage: storage,
+                asyncStatus: asyncStatus,
+                isDangerous: isDangerous);
         }
 
         // If we consumed 'suspended'/'threaded' but no 'routine' follows, that's an error
         if (asyncStatus != AsyncStatus.None)
         {
-            string modifier = asyncStatus == AsyncStatus.Suspended ? "suspended" : "threaded";
-            throw new GrammarException(
-                GrammarDiagnosticCode.UnexpectedToken,
-                $"'{modifier}' must be followed by 'routine'",
-                fileName, CurrentToken.Line, CurrentToken.Column, _language);
+            string modifier = asyncStatus == AsyncStatus.Suspended
+                ? "suspended"
+                : "threaded";
+            throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"'{modifier}' must be followed by 'routine'",
+                fileName: fileName,
+                line: CurrentToken.Line,
+                column: CurrentToken.Column,
+                language: _language);
         }
 
         // Validate: storage class modifiers are not valid for type declarations
         if (storage != StorageClass.None)
         {
-            bool isTypeKeyword = Check(TokenType.Entity, TokenType.Record,
-                TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol);
+            bool isTypeKeyword = Check(TokenType.Entity,
+                TokenType.Record,
+                TokenType.Choice,
+                TokenType.Flags,
+                TokenType.Variant,
+                TokenType.Protocol);
 
             if (isTypeKeyword)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message:
                     $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                    fileName: fileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
         }
 
@@ -483,16 +515,18 @@ public partial class Parser
         // it is an record or protocol)
         if (visibility != VisibilityModifier.Open)
         {
-            string validDeclarations = "routine, entity, record, choice, variant, protocol, preset, or var";
-            throw ThrowParseError(GrammarDiagnosticCode.VisibilityWithoutDeclaration,
-                $"Visibility modifier '{visibility}' must be followed by a declaration " +
-                $"({validDeclarations})");
+            string validDeclarations =
+                "routine, entity, record, choice, variant, protocol, preset, or var";
+            throw ThrowParseError(code: GrammarDiagnosticCode.VisibilityWithoutDeclaration,
+                message: $"Visibility modifier '{visibility}' must be followed by a declaration " +
+                         $"({validDeclarations})");
         }
 
         // If we have annotations but no declaration, that's an error
         if (annotations.Count > 0)
         {
-            throw ThrowParseError(GrammarDiagnosticCode.AnnotationsWithoutDeclaration,
+            throw ThrowParseError(code: GrammarDiagnosticCode.AnnotationsWithoutDeclaration,
+                message:
                 "Annotations must be followed by a declaration (routine, entity, record, etc.)");
         }
 

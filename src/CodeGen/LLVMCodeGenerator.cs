@@ -21,14 +21,18 @@ public partial class LLVMCodeGenerator
 
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     private static readonly HashSet<string> _wrapperTypeNames =
-        ["Viewed", "Hijacked", "Retained", "Watched", "Inspected", "Seized", "Shared",
-            "Tracked", "Snatched"];
+    [
+        "Viewed", "Hijacked", "Retained", "Watched", "Inspected", "Seized", "Shared",
+        "Tracked", "Snatched"
+    ];
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)> _userPrograms;
+    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)>
+        _userPrograms;
 
     /// <summary>The stdlib programs to include routine bodies from.</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)> _stdlibPrograms;
+    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)>
+        _stdlibPrograms;
 
     /// <summary>Output buffer for type declarations.</summary>
     private readonly StringBuilder _typeDeclarations = new();
@@ -103,9 +107,7 @@ public partial class LLVMCodeGenerator
     private readonly Dictionary<string, ProtocolDispatchInfo> _pendingProtocolDispatches = new();
 
     /// <summary>Entry for a pending protocol dispatch stub.</summary>
-    private record ProtocolDispatchInfo(
-        ProtocolTypeInfo Protocol,
-        string MethodName);
+    private record ProtocolDispatchInfo(ProtocolTypeInfo Protocol, string MethodName);
 
     /// <summary>Entry for a pending generic monomorphization.</summary>
     private record MonomorphizationEntry(
@@ -156,8 +158,13 @@ public partial class LLVMCodeGenerator
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
     /// <param name="pointerBitWidth">Pointer bit width for the target platform (currently only 64 is supported).</param>
-    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
-        : this([(program, program.Location.FileName, "")], registry, stdlibPrograms, pointerBitWidth)
+    public LLVMCodeGenerator(Program program, TypeRegistry registry,
+        IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
+        int pointerBitWidth = 64) : this(userPrograms:
+        [(program, program.Location.FileName, "")],
+        registry: registry,
+        stdlibPrograms: stdlibPrograms,
+        pointerBitWidth: pointerBitWidth)
     {
     }
 
@@ -168,10 +175,18 @@ public partial class LLVMCodeGenerator
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
     /// <param name="pointerBitWidth">Pointer bit width for the target platform (currently only 64 is supported).</param>
-    public LLVMCodeGenerator(IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
+    public LLVMCodeGenerator(
+        IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
+        TypeRegistry registry,
+        IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
+        int pointerBitWidth = 64)
     {
         if (pointerBitWidth != 64)
-            throw new ArgumentException($"Only 64-bit targets are currently supported (got {pointerBitWidth}).", nameof(pointerBitWidth));
+        {
+            throw new ArgumentException(
+                message: $"Only 64-bit targets are currently supported (got {pointerBitWidth}).",
+                paramName: nameof(pointerBitWidth));
+        }
 
         _userPrograms = userPrograms;
         _registry = registry;
@@ -183,7 +198,8 @@ public partial class LLVMCodeGenerator
         _dataLayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
         // Runtime object layout sizes — derived from field types, not from type definitions yet
         _collectionHeaderSizeBytes = _pointerSizeBytes + 8 + 8; // ptr + i64 count + i64 capacity
-        _dataEntitySizeBytes = 8 + _pointerSizeBytes + 8; // i64 type_id + ptr data_ptr + i64 data_size
+        _dataEntitySizeBytes =
+            8 + _pointerSizeBytes + 8; // i64 type_id + ptr data_ptr + i64 data_size
     }
 
     #endregion
@@ -196,35 +212,46 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? LookupTypeInCurrentModule(string name)
     {
-        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module
-                             ?? _currentEmittingRoutine?.Module;
-        if (moduleName != null && !name.Contains('.'))
+        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
+                             _currentEmittingRoutine?.Module;
+        if (moduleName != null && !name.Contains(value: '.'))
         {
-            TypeInfo? qualified = _registry.LookupType($"{moduleName}.{name}");
-            if (qualified != null) return qualified;
+            TypeInfo? qualified = _registry.LookupType(name: $"{moduleName}.{name}");
+            if (qualified != null)
+            {
+                return qualified;
+            }
         }
-        return _registry.LookupType(name);
+
+        return _registry.LookupType(name: name);
     }
 
     /// <summary>
     /// Gets the generic definition for a resolved generic type, regardless of concrete subtype.
     /// Returns null for non-generic or non-resolved types.
     /// </summary>
-    private static TypeInfo? GetGenericBase(TypeInfo type) => type switch
+    private static TypeInfo? GetGenericBase(TypeInfo type)
     {
-        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-        ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
-        ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
-        VariantTypeInfo { GenericDefinition: not null } v => v.GenericDefinition,
-        _ => null
-    };
+        return type switch
+        {
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+            ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
+            ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
+            VariantTypeInfo { GenericDefinition: not null } v => v.GenericDefinition,
+            _ => null
+        };
+    }
 
     /// <summary>
     /// Gets the generic definition's name for a resolved generic type.
     /// Returns null for non-generic or non-resolved types.
     /// </summary>
-    private static string? GetGenericBaseName(TypeInfo type) => GetGenericBase(type)?.Name;
+    private static string? GetGenericBaseName(TypeInfo type)
+    {
+        return GetGenericBase(type: type)
+          ?.Name;
+    }
 
     #endregion
 
@@ -262,35 +289,43 @@ public partial class LLVMCodeGenerator
     private void GenerateTypeDeclarations()
     {
         // Generate entity types (reference types, heap-allocated)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Entity))
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
         {
             if (type is EntityTypeInfo { IsGenericDefinition: false } entity)
             {
                 // Skip resolutions with unresolved generic parameters at any depth
                 // (e.g., List[BTreeSetNode[T]] where T is nested inside a type argument)
-                if (entity.TypeArguments != null && entity.TypeArguments.Any(ContainsGenericParameter))
+                if (entity.TypeArguments != null &&
+                    entity.TypeArguments.Any(predicate: ContainsGenericParameter))
+                {
                     continue;
-                GenerateEntityType(entity);
+                }
+
+                GenerateEntityType(entity: entity);
             }
         }
 
         // Generate record types (value types)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Record))
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
         {
             if (type is RecordTypeInfo { IsGenericDefinition: false } record)
             {
-                if (record.TypeArguments != null && record.TypeArguments.Any(ContainsGenericParameter))
+                if (record.TypeArguments != null &&
+                    record.TypeArguments.Any(predicate: ContainsGenericParameter))
+                {
                     continue;
-                GenerateRecordType(record);
+                }
+
+                GenerateRecordType(record: record);
             }
         }
 
         // Generate choice types (enums → single-member-variable records)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Choice))
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Choice))
         {
             if (type is ChoiceTypeInfo choice)
             {
-                GenerateChoiceType(choice);
+                GenerateChoiceType(choice: choice);
             }
         }
 
@@ -298,11 +333,11 @@ public partial class LLVMCodeGenerator
         // so no named struct definitions are needed.
 
         // Generate variant types (tagged unions → tag + payload record)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Variant))
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Variant))
         {
             if (type is VariantTypeInfo { IsGenericDefinition: false } variant)
             {
-                GenerateVariantType(variant);
+                GenerateVariantType(variant: variant);
             }
         }
     }
@@ -312,9 +347,17 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static bool ContainsGenericParameter(TypeInfo type)
     {
-        if (type is GenericParameterTypeInfo) return true;
-        if (type.TypeArguments == null) return false;
-        return type.TypeArguments.Any(ContainsGenericParameter);
+        if (type is GenericParameterTypeInfo)
+        {
+            return true;
+        }
+
+        if (type.TypeArguments == null)
+        {
+            return false;
+        }
+
+        return type.TypeArguments.Any(predicate: ContainsGenericParameter);
     }
 
     /// <summary>
@@ -328,36 +371,36 @@ public partial class LLVMCodeGenerator
         var routinesWithBodies = new HashSet<string>();
 
         // User program routines
-        foreach (var (userProgram, _, _) in _userPrograms)
+        foreach ((Program userProgram, string _, string _) in _userPrograms)
         {
-            foreach (var decl in userProgram.Declarations)
+            foreach (IAstNode decl in userProgram.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    routinesWithBodies.Add(routine.Name);
+                    routinesWithBodies.Add(item: routine.Name);
                 }
             }
         }
 
         // Stdlib routines with bodies
-        foreach (var (program, _, _) in _stdlibPrograms)
+        foreach ((Program program, string _, string _) in _stdlibPrograms)
         {
-            foreach (var decl in program.Declarations)
+            foreach (IAstNode decl in program.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    routinesWithBodies.Add(routine.Name);
+                    routinesWithBodies.Add(item: routine.Name);
                 }
             }
         }
 
-        foreach (var routine in _registry.GetAllRoutines())
+        foreach (RoutineInfo routine in _registry.GetAllRoutines())
         {
             // Skip generic definitions, routines with unresolved types,
             // and methods on generic owner types (e.g., Dict[K,V].count)
-            if (routine.IsGenericDefinition || HasErrorTypes(routine)
-                || routine.OwnerType is { IsGenericDefinition: true }
-                || routine.OwnerType is GenericParameterTypeInfo)
+            if (routine.IsGenericDefinition || HasErrorTypes(routine: routine) ||
+                routine.OwnerType is { IsGenericDefinition: true } ||
+                routine.OwnerType is GenericParameterTypeInfo)
             {
                 continue;
             }
@@ -369,14 +412,17 @@ public partial class LLVMCodeGenerator
             }
 
             // Skip routines that have bodies (they will be emitted as 'define' in GenerateFunctionDefinitions)
-            string fullName = routine.OwnerType != null ? $"{routine.OwnerType.Name}.{routine.Name}" : routine.Name;
-            if (routinesWithBodies.Contains(routine.Name) || routinesWithBodies.Contains(fullName))
+            string fullName = routine.OwnerType != null
+                ? $"{routine.OwnerType.Name}.{routine.Name}"
+                : routine.Name;
+            if (routinesWithBodies.Contains(item: routine.Name) ||
+                routinesWithBodies.Contains(item: fullName))
             {
                 continue;
             }
 
             // Only emit 'declare' for truly external routines
-            GenerateFunctionDeclaration(routine);
+            GenerateFunctionDeclaration(routine: routine);
         }
     }
 
@@ -392,7 +438,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Check parameter types
-        foreach (var param in routine.Parameters)
+        foreach (ParameterInfo param in routine.Parameters)
         {
             if (param.Type.Category == TypeCategory.Error)
             {
@@ -410,13 +456,13 @@ public partial class LLVMCodeGenerator
     private void GenerateFunctionDefinitions()
     {
         // First, generate user program routines (these take priority)
-        foreach (var (userProgram, _, _) in _userPrograms)
+        foreach ((Program userProgram, string _, string _) in _userPrograms)
         {
-            foreach (var decl in userProgram.Declarations)
+            foreach (IAstNode decl in userProgram.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    GenerateFunctionDefinition(routine);
+                    GenerateFunctionDefinition(routine: routine);
                 }
             }
         }
@@ -433,9 +479,9 @@ public partial class LLVMCodeGenerator
             prevDefCount = _generatedFunctionDefs.Count;
 
             // Phase A: Compile stdlib routine bodies for referenced routines
-            foreach (var (program, _, module) in _stdlibPrograms)
+            foreach ((Program program, string _, string module) in _stdlibPrograms)
             {
-                foreach (var decl in program.Declarations)
+                foreach (IAstNode decl in program.Declarations)
                 {
                     if (decl is RoutineDeclaration routine)
                     {
@@ -444,23 +490,25 @@ public partial class LLVMCodeGenerator
                         // 2. Module-qualified (e.g., "IO.show")
                         // 3. Short name fallback via LookupRoutineByName
                         // 4. Overload-based lookup using AST parameter types
-                        var routineInfo = _registry.LookupRoutine(routine.Name);
-                        if (routineInfo == null && !string.IsNullOrEmpty(module))
+                        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routine.Name);
+                        if (routineInfo == null && !string.IsNullOrEmpty(value: module))
                         {
-                            routineInfo = _registry.LookupRoutine($"{module}.{routine.Name}");
+                            routineInfo =
+                                _registry.LookupRoutine(fullName: $"{module}.{routine.Name}");
                         }
+
                         if (routineInfo == null)
                         {
-                            int dotIdx = routine.Name.IndexOf('.');
+                            int dotIdx = routine.Name.IndexOf(value: '.');
                             if (dotIdx > 0)
                             {
                                 string shortName = routine.Name[(dotIdx + 1)..];
-                                routineInfo = _registry.LookupRoutine(shortName)
-                                              ?? _registry.LookupRoutineByName(shortName);
+                                routineInfo = _registry.LookupRoutine(fullName: shortName) ??
+                                              _registry.LookupRoutineByName(name: shortName);
                             }
                             else
                             {
-                                routineInfo = _registry.LookupRoutineByName(routine.Name);
+                                routineInfo = _registry.LookupRoutineByName(name: routine.Name);
                             }
                         }
 
@@ -471,46 +519,70 @@ public partial class LLVMCodeGenerator
                         if (routineInfo != null)
                         {
                             var astParamTypes = new List<TypeInfo>();
-                            foreach (var param in routine.Parameters)
+                            foreach (Parameter param in routine.Parameters)
                             {
                                 if (param.Type != null)
                                 {
                                     string typeName = param.Type.Name;
                                     if (param.Type.GenericArguments is { Count: > 0 })
-                                        typeName = $"{typeName}[{string.Join(", ", param.Type.GenericArguments.Select(a => a.Name))}]";
-                                    var t = _registry.LookupType(typeName);
-                                    if (t != null) astParamTypes.Add(t);
+                                    {
+                                        typeName =
+                                            $"{typeName}[{string.Join(separator: ", ", values: param.Type.GenericArguments.Select(selector: a => a.Name))}]";
+                                    }
+
+                                    TypeInfo? t = _registry.LookupType(name: typeName);
+                                    if (t != null)
+                                    {
+                                        astParamTypes.Add(item: t);
+                                    }
                                 }
                             }
+
                             if (astParamTypes.Count == routine.Parameters.Count)
                             {
-                                var overload = _registry.LookupRoutineOverload(
-                                    routineInfo.FullName, astParamTypes);
+                                RoutineInfo? overload = _registry.LookupRoutineOverload(
+                                    fullName: routineInfo.FullName,
+                                    argTypes: astParamTypes);
                                 if (overload != null)
+                                {
                                     routineInfo = overload;
+                                }
                             }
                         }
+
                         if (routineInfo == null || routineInfo.IsGenericDefinition)
+                        {
                             continue;
-                        if (HasErrorTypes(routineInfo))
+                        }
+
+                        if (HasErrorTypes(routine: routineInfo))
+                        {
                             continue;
+                        }
 
                         // Only generate definitions for routines that were declared
-                        string funcName = MangleFunctionName(routineInfo);
-                        if (!_generatedFunctions.Contains(funcName))
+                        string funcName = MangleFunctionName(routine: routineInfo);
+                        if (!_generatedFunctions.Contains(item: funcName))
+                        {
                             continue;
+                        }
 
                         // Skip if already defined
-                        if (_generatedFunctionDefs.Contains(funcName))
+                        if (_generatedFunctionDefs.Contains(item: funcName))
+                        {
                             continue;
+                        }
 
                         try
                         {
-                            GenerateFunctionDefinition(routine, routineInfo);
+                            GenerateFunctionDefinition(routine: routine,
+                                preResolvedInfo: routineInfo);
                         }
                         catch (Exception ex)
                         {
-                            Console.Error.WriteLine($"Warning: Stdlib codegen failed for '{routine.Name}': {ex.Message}");
+                            Console.Error.WriteLine(
+                                value:
+                                $"Warning: Stdlib codegen failed for '{routine.Name}': {ex.Message}");
                         }
                     }
                 }
@@ -528,7 +600,9 @@ public partial class LLVMCodeGenerator
             iterations++;
             if (iterations >= maxIterations)
             {
-                Console.Error.WriteLine($"Warning: GenerateFunctionDefinitions reached {maxIterations} iterations, possible infinite loop");
+                Console.Error.WriteLine(
+                    value:
+                    $"Warning: GenerateFunctionDefinitions reached {maxIterations} iterations, possible infinite loop");
                 break;
             }
         } while (_generatedFunctionDefs.Count > prevDefCount);
@@ -553,73 +627,83 @@ public partial class LLVMCodeGenerator
         var output = new StringBuilder();
 
         // Module header
-        output.AppendLine("; ModuleID = 'razorforge_module'");
-        output.AppendLine("source_filename = \"razorforge_module\"");
-        output.AppendLine($"target datalayout = \"{_dataLayout}\"");
-        output.AppendLine($"target triple = \"{_targetTriple}\"");
+        output.AppendLine(value: "; ModuleID = 'razorforge_module'");
+        output.AppendLine(value: "source_filename = \"razorforge_module\"");
+        output.AppendLine(handler: $"target datalayout = \"{_dataLayout}\"");
+        output.AppendLine(handler: $"target triple = \"{_targetTriple}\"");
         output.AppendLine();
 
         // Type declarations
         if (_typeDeclarations.Length > 0)
         {
-            output.AppendLine("; Type declarations");
-            output.Append(_typeDeclarations);
+            output.AppendLine(value: "; Type declarations");
+            output.Append(value: _typeDeclarations);
             output.AppendLine();
         }
 
         // Global declarations
         if (_globalDeclarations.Length > 0)
         {
-            output.AppendLine("; Global declarations");
-            output.Append(_globalDeclarations);
+            output.AppendLine(value: "; Global declarations");
+            output.Append(value: _globalDeclarations);
             output.AppendLine();
         }
 
         // Function declarations — filter out any that now have definitions
         if (_functionDeclarations.Length > 0)
         {
-            output.AppendLine("; Function declarations");
-            foreach (string line in _functionDeclarations.ToString().Split('\n'))
+            output.AppendLine(value: "; Function declarations");
+            foreach (string line in _functionDeclarations.ToString()
+                                                         .Split(separator: '\n'))
             {
                 // Skip declare lines for functions that have definitions
-                if (line.StartsWith("declare ") && _generatedFunctionDefs.Count > 0)
+                if (line.StartsWith(value: "declare ") && _generatedFunctionDefs.Count > 0)
                 {
                     // Extract function name from "declare ... @funcName(...)"
-                    int atIdx = line.IndexOf('@');
-                    int parenIdx = line.IndexOf('(', atIdx > 0 ? atIdx : 0);
+                    int atIdx = line.IndexOf(value: '@');
+                    int parenIdx = line.IndexOf(value: '(',
+                        startIndex: atIdx > 0
+                            ? atIdx
+                            : 0);
                     if (atIdx > 0 && parenIdx > atIdx)
                     {
                         string declaredName = line[(atIdx + 1)..parenIdx];
-                        if (_generatedFunctionDefs.Contains(declaredName))
+                        if (_generatedFunctionDefs.Contains(item: declaredName))
+                        {
                             continue; // Skip — this function has a define
+                        }
                     }
                 }
-                output.AppendLine(line);
+
+                output.AppendLine(value: line);
             }
         }
 
         // Function definitions
         if (_functionDefinitions.Length > 0)
         {
-            output.AppendLine("; Function definitions");
-            output.Append(_functionDefinitions);
+            output.AppendLine(value: "; Function definitions");
+            output.Append(value: _functionDefinitions);
         }
 
         // Emit main() entry point that calls the module's start() routine
-        string? startFunc = _generatedFunctionDefs.FirstOrDefault(f => f == "start" || f.EndsWith(".start") || f.EndsWith(".start\""));
+        string? startFunc = _generatedFunctionDefs.FirstOrDefault(predicate: f =>
+            f == "start" || f.EndsWith(value: ".start") || f.EndsWith(value: ".start\""));
         if (startFunc != null)
         {
-            output.AppendLine("; Entry point");
-            output.AppendLine("define i32 @main(i32 %argc, ptr %argv) {");
-            output.AppendLine("entry:");
-            output.AppendLine("  call void @rf_runtime_init()");
-            output.AppendLine($"  call void @{startFunc}()");
-            output.AppendLine("  ret i32 0");
-            output.AppendLine("}");
+            output.AppendLine(value: "; Entry point");
+            output.AppendLine(value: "define i32 @main(i32 %argc, ptr %argv) {");
+            output.AppendLine(value: "entry:");
+            output.AppendLine(value: "  call void @rf_runtime_init()");
+            output.AppendLine(handler: $"  call void @{startFunc}()");
+            output.AppendLine(value: "  ret i32 0");
+            output.AppendLine(value: "}");
         }
 
         // Normalize to Unix line endings (clang/LLVM requires LF, not CRLF)
-        return output.ToString().Replace("\r\n", "\n").Replace("\r", "\n");
+        return output.ToString()
+                     .Replace(oldValue: "\r\n", newValue: "\n")
+                     .Replace(oldValue: "\r", newValue: "\n");
     }
 
     #endregion
@@ -650,10 +734,12 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitLine(StringBuilder sb, string line)
     {
-        sb.AppendLine(line);
+        sb.AppendLine(value: line);
         // Auto-track current basic block for PHI node predecessors
-        if (line.Length > 0 && line[0] != ' ' && line.EndsWith(':'))
+        if (line.Length > 0 && line[index: 0] != ' ' && line.EndsWith(value: ':'))
+        {
             _currentBlock = line[..^1];
+        }
     }
 
     /// <summary>
@@ -663,16 +749,22 @@ public partial class LLVMCodeGenerator
     private string EmitCStringConstant(string value)
     {
         string name = $"@.cstr.{_cstrCounter++}";
-        byte[] utf8 = Encoding.UTF8.GetBytes(value + "\0");
+        byte[] utf8 = Encoding.UTF8.GetBytes(s: value + "\0");
         var sb = new StringBuilder();
         foreach (byte b in utf8)
         {
             if (b >= 0x20 && b < 0x7F && b != (byte)'\\' && b != (byte)'"')
-                sb.Append((char)b);
+            {
+                sb.Append(value: (char)b);
+            }
             else
-                sb.Append($"\\{b:X2}");
+            {
+                sb.Append(handler: $"\\{b:X2}");
+            }
         }
-        EmitLine(_globalDeclarations, $"{name} = private unnamed_addr constant [{utf8.Length} x i8] c\"{sb}\"");
+
+        EmitLine(sb: _globalDeclarations,
+            line: $"{name} = private unnamed_addr constant [{utf8.Length} x i8] c\"{sb}\"");
         return name;
     }
 
@@ -681,32 +773,48 @@ public partial class LLVMCodeGenerator
     /// Returns a mapping of generic parameter names to concrete types, or null if inference fails.
     /// Only infers parameters that belong to the method itself (excludes owner-level params).
     /// </summary>
-    private static Dictionary<string, TypeInfo>? InferMethodTypeArgs(
-        RoutineInfo genericMethod, IReadOnlyList<TypeInfo> argTypes)
+    private static Dictionary<string, TypeInfo>? InferMethodTypeArgs(RoutineInfo genericMethod,
+        IReadOnlyList<TypeInfo> argTypes)
     {
-        if (genericMethod.GenericParameters == null) return null;
+        if (genericMethod.GenericParameters == null)
+        {
+            return null;
+        }
 
         // Determine which params are method-level (exclude owner-level)
         var ownerParams = new HashSet<string>();
         if (genericMethod.OwnerType?.GenericParameters != null)
-            foreach (var gp in genericMethod.OwnerType.GenericParameters)
-                ownerParams.Add(gp);
+        {
+            foreach (string gp in genericMethod.OwnerType.GenericParameters)
+            {
+                ownerParams.Add(item: gp);
+            }
+        }
 
         var methodParams = genericMethod.GenericParameters
-            .Where(gp => !ownerParams.Contains(gp)).ToHashSet();
-        if (methodParams.Count == 0) return null;
+                                        .Where(predicate: gp => !ownerParams.Contains(item: gp))
+                                        .ToHashSet();
+        if (methodParams.Count == 0)
+        {
+            return null;
+        }
 
         var inferred = new Dictionary<string, TypeInfo>();
 
         for (int i = 0; i < genericMethod.Parameters.Count && i < argTypes.Count; i++)
         {
-            TypeInfo paramType = genericMethod.Parameters[i].Type;
-            TypeInfo argType = argTypes[i];
-            InferFromTypes(paramType, argType, methodParams, inferred);
+            TypeInfo paramType = genericMethod.Parameters[index: i].Type;
+            TypeInfo argType = argTypes[index: i];
+            InferFromTypes(paramType: paramType,
+                argType: argType,
+                methodParams: methodParams,
+                inferred: inferred);
         }
 
         // Only succeed if ALL method-level params are inferred
-        return inferred.Count == methodParams.Count ? inferred : null;
+        return inferred.Count == methodParams.Count
+            ? inferred
+            : null;
     }
 
     /// <summary>
@@ -717,20 +825,25 @@ public partial class LLVMCodeGenerator
         HashSet<string> methodParams, Dictionary<string, TypeInfo> inferred)
     {
         // Case 1: Direct generic parameter (T → S64)
-        if (paramType is GenericParameterTypeInfo && methodParams.Contains(paramType.Name))
+        if (paramType is GenericParameterTypeInfo && methodParams.Contains(item: paramType.Name))
         {
-            inferred.TryAdd(paramType.Name, argType);
+            inferred.TryAdd(key: paramType.Name, value: argType);
             return;
         }
 
         // Case 2: Generic resolution (List[T] → List[S64])
         // Match base types and recurse on type arguments
-        if (paramType is { IsGenericResolution: true, TypeArguments: not null }
-            && argType is { IsGenericResolution: true, TypeArguments: not null }
-            && paramType.TypeArguments.Count == argType.TypeArguments.Count)
+        if (paramType is { IsGenericResolution: true, TypeArguments: not null } &&
+            argType is { IsGenericResolution: true, TypeArguments: not null } &&
+            paramType.TypeArguments.Count == argType.TypeArguments.Count)
         {
             for (int i = 0; i < paramType.TypeArguments.Count; i++)
-                InferFromTypes(paramType.TypeArguments[i], argType.TypeArguments[i], methodParams, inferred);
+            {
+                InferFromTypes(paramType: paramType.TypeArguments[index: i],
+                    argType: argType.TypeArguments[index: i],
+                    methodParams: methodParams,
+                    inferred: inferred);
+            }
         }
     }
 
@@ -742,8 +855,10 @@ public partial class LLVMCodeGenerator
     private void RecordMonomorphization(string mangledName, RoutineInfo genericMethod,
         TypeInfo resolvedOwnerType, Dictionary<string, TypeInfo>? methodTypeArgs = null)
     {
-        if (_pendingMonomorphizations.ContainsKey(mangledName))
+        if (_pendingMonomorphizations.ContainsKey(key: mangledName))
+        {
             return;
+        }
 
         // Generic parameter owner methods (e.g., routine T.view() called on Point)
         // The owner is GenericParameterTypeInfo("T"), resolved to a concrete type
@@ -751,15 +866,24 @@ public partial class LLVMCodeGenerator
         {
             var typeSubs = new Dictionary<string, TypeInfo>
             {
-                [genParam.Name] = resolvedOwnerType
+                [key: genParam.Name] = resolvedOwnerType
             };
             // Merge method-level type args
             if (methodTypeArgs != null)
-                foreach (var (key, value) in methodTypeArgs)
-                    typeSubs[key] = value;
+            {
+                foreach ((string key, TypeInfo value) in methodTypeArgs)
+                {
+                    typeSubs[key: key] = value;
+                }
+            }
+
             string genericAstName = $"{genParam.Name}.{genericMethod.Name}";
-            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-                genericMethod, resolvedOwnerType, typeSubs, genericAstName, methodTypeArgs);
+            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
+                GenericMethod: genericMethod,
+                ResolvedOwnerType: resolvedOwnerType,
+                TypeSubstitutions: typeSubs,
+                GenericAstName: genericAstName,
+                MethodTypeSubstitutions: methodTypeArgs);
             return;
         }
 
@@ -772,18 +896,34 @@ public partial class LLVMCodeGenerator
             // Map protocol's generic params using receiver's type arguments
             if (resolvedOwnerType.TypeArguments != null)
             {
-                for (int i = 0; i < protocolOwner.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
-                    typeSubs[protocolOwner.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+                for (int i = 0;
+                     i < protocolOwner.GenericParameters.Count &&
+                     i < resolvedOwnerType.TypeArguments.Count;
+                     i++)
+                {
+                    typeSubs[key: protocolOwner.GenericParameters[index: i]] =
+                        resolvedOwnerType.TypeArguments[index: i];
+                }
             }
-            if (methodTypeArgs != null)
-                foreach (var (key, value) in methodTypeArgs)
-                    typeSubs[key] = value;
 
-            string protoParamList = string.Join(", ", protocolOwner.GenericParameters);
+            if (methodTypeArgs != null)
+            {
+                foreach ((string key, TypeInfo value) in methodTypeArgs)
+                {
+                    typeSubs[key: key] = value;
+                }
+            }
+
+            string protoParamList =
+                string.Join(separator: ", ", values: protocolOwner.GenericParameters);
             string genericAstName = $"{protocolOwner.Name}[{protoParamList}].{genericMethod.Name}";
 
-            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-                genericMethod, resolvedOwnerType, typeSubs, genericAstName, methodTypeArgs);
+            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
+                GenericMethod: genericMethod,
+                ResolvedOwnerType: resolvedOwnerType,
+                TypeSubstitutions: typeSubs,
+                GenericAstName: genericAstName,
+                MethodTypeSubstitutions: methodTypeArgs);
             return;
         }
 
@@ -801,36 +941,52 @@ public partial class LLVMCodeGenerator
             var typeSubs2 = new Dictionary<string, TypeInfo>();
             if (resolvedOwnerType.TypeArguments != null)
             {
-                for (int i = 0; i < genericDef.GenericParameters.Count && i < resolvedOwnerType.TypeArguments.Count; i++)
+                for (int i = 0;
+                     i < genericDef.GenericParameters.Count &&
+                     i < resolvedOwnerType.TypeArguments.Count;
+                     i++)
                 {
-                    typeSubs2[genericDef.GenericParameters[i]] = resolvedOwnerType.TypeArguments[i];
+                    typeSubs2[key: genericDef.GenericParameters[index: i]] =
+                        resolvedOwnerType.TypeArguments[index: i];
                 }
             }
 
             // Merge method-level type args (e.g., U → S32 for double-generic methods)
             if (methodTypeArgs != null)
             {
-                foreach (var (key, value) in methodTypeArgs)
-                    typeSubs2[key] = value;
+                foreach ((string key, TypeInfo value) in methodTypeArgs)
+                {
+                    typeSubs2[key: key] = value;
+                }
             }
 
             // Build generic AST name: e.g., "List[T].add_last"
-            string genericParamList = string.Join(", ", genericDef.GenericParameters);
+            string genericParamList =
+                string.Join(separator: ", ", values: genericDef.GenericParameters);
             string genericAstName2 = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
 
-            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-                genericMethod, resolvedOwnerType, typeSubs2, genericAstName2, methodTypeArgs);
+            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
+                GenericMethod: genericMethod,
+                ResolvedOwnerType: resolvedOwnerType,
+                TypeSubstitutions: typeSubs2,
+                GenericAstName: genericAstName2,
+                MethodTypeSubstitutions: methodTypeArgs);
             return;
         }
 
         // Method-level generics on a non-generic owner (e.g., Text.$create[T](from: List[T]))
         // Owner type is concrete (Text), but method itself has generic parameters
-        if (methodTypeArgs != null && methodTypeArgs.Count > 0 && genericMethod.IsGenericDefinition)
+        if (methodTypeArgs != null && methodTypeArgs.Count > 0 &&
+            genericMethod.IsGenericDefinition)
         {
-            var typeSubs3 = new Dictionary<string, TypeInfo>(methodTypeArgs);
+            var typeSubs3 = new Dictionary<string, TypeInfo>(dictionary: methodTypeArgs);
             string genericAstName3 = genericMethod.FullName; // e.g., "Text.$create"
-            _pendingMonomorphizations[mangledName] = new MonomorphizationEntry(
-                genericMethod, resolvedOwnerType, typeSubs3, genericAstName3, methodTypeArgs);
+            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
+                GenericMethod: genericMethod,
+                ResolvedOwnerType: resolvedOwnerType,
+                TypeSubstitutions: typeSubs3,
+                GenericAstName: genericAstName3,
+                MethodTypeSubstitutions: methodTypeArgs);
         }
     }
 

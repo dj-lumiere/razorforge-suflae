@@ -3,7 +3,12 @@ namespace Compiler.Parser;
 /// <summary>
 /// Represents a build-time warning for style violations or deprecated patterns
 /// </summary>
-public class BuildWarning(string message, int line, int column, WarningSeverity severity, string warningCode)
+public class BuildWarning(
+    string message,
+    int line,
+    int column,
+    WarningSeverity severity,
+    string warningCode)
 {
     /// <summary>Human-readable description of the warning condition.</summary>
     public string Message { get; } = message;

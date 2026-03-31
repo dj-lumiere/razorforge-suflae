@@ -90,16 +90,14 @@ public sealed class ErrorHandlingGenerator
 
         // try_ variant is always generated
         RoutineInfo tryVariant = GenerateTryVariant(original: routine);
-        variants.Add(item: new GeneratedVariant(
-            Kind: ErrorHandlingVariantKind.Try,
+        variants.Add(item: new GeneratedVariant(Kind: ErrorHandlingVariantKind.Try,
             Routine: tryVariant));
 
         // check_ variant if only throw (no absent)
         if (analysis is { HasThrow: true, HasAbsent: false })
         {
             RoutineInfo checkVariant = GenerateCheckVariant(original: routine);
-            variants.Add(item: new GeneratedVariant(
-                Kind: ErrorHandlingVariantKind.Check,
+            variants.Add(item: new GeneratedVariant(Kind: ErrorHandlingVariantKind.Check,
                 Routine: checkVariant));
         }
 
@@ -107,16 +105,13 @@ public sealed class ErrorHandlingGenerator
         if (analysis is { HasThrow: true, HasAbsent: true })
         {
             RoutineInfo lookupVariant = GenerateLookupVariant(original: routine);
-            variants.Add(item: new GeneratedVariant(
-                Kind: ErrorHandlingVariantKind.Lookup,
+            variants.Add(item: new GeneratedVariant(Kind: ErrorHandlingVariantKind.Lookup,
                 Routine: lookupVariant));
         }
 
         return new ErrorHandlingResult
         {
-            Variants = variants,
-            HasThrow = analysis.HasThrow,
-            HasAbsent = analysis.HasAbsent
+            Variants = variants, HasThrow = analysis.HasThrow, HasAbsent = analysis.HasAbsent
         };
     }
 
@@ -194,31 +189,32 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The try_ variant routine info.</returns>
     private RoutineInfo GenerateTryVariant(RoutineInfo original)
     {
-        TypeInfo returnType = original.ReturnType
-            ?? _registry.LookupType("Blank")
-            ?? throw new InvalidOperationException(
-                message: "Failable function must have a return type and Blank type must be registered");
+        TypeInfo returnType = original.ReturnType ?? _registry.LookupType(name: "Blank") ??
+            throw new InvalidOperationException(
+                message:
+                "Failable function must have a return type and Blank type must be registered");
 
         TypeInfo maybeType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.MaybeDefinition,
             typeArguments: [returnType]);
 
-        return new RoutineInfo(name: GenerateVariantName(prefix: "try", originalName: original.Name))
-        {
-            Kind = original.Kind,
-            OwnerType = original.OwnerType,
-            Parameters = original.Parameters,
-            ReturnType = maybeType,
-            IsFailable = false, // try_ variants don't fail
-            DeclaredModification = original.DeclaredModification,
-            ModificationCategory = original.ModificationCategory,
-            GenericParameters = original.GenericParameters,
-            GenericConstraints = original.GenericConstraints,
-            Visibility = original.Visibility,
-            Location = original.Location,
-            Module = original.Module,
-            Annotations = original.Annotations
-        };
+        return new
+            RoutineInfo(name: GenerateVariantName(prefix: "try", originalName: original.Name))
+            {
+                Kind = original.Kind,
+                OwnerType = original.OwnerType,
+                Parameters = original.Parameters,
+                ReturnType = maybeType,
+                IsFailable = false, // try_ variants don't fail
+                DeclaredModification = original.DeclaredModification,
+                ModificationCategory = original.ModificationCategory,
+                GenericParameters = original.GenericParameters,
+                GenericConstraints = original.GenericConstraints,
+                Visibility = original.Visibility,
+                Location = original.Location,
+                Module = original.Module,
+                Annotations = original.Annotations
+            };
     }
 
     /// <summary>
@@ -229,31 +225,32 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The check_ variant routine info.</returns>
     private RoutineInfo GenerateCheckVariant(RoutineInfo original)
     {
-        TypeInfo returnType = original.ReturnType
-            ?? _registry.LookupType("Blank")
-            ?? throw new InvalidOperationException(
-                message: "Failable function must have a return type and Blank type must be registered");
+        TypeInfo returnType = original.ReturnType ?? _registry.LookupType(name: "Blank") ??
+            throw new InvalidOperationException(
+                message:
+                "Failable function must have a return type and Blank type must be registered");
 
         TypeInfo resultType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.ResultDefinition,
             typeArguments: [returnType]);
 
-        return new RoutineInfo(name: GenerateVariantName(prefix: "check", originalName: original.Name))
-        {
-            Kind = original.Kind,
-            OwnerType = original.OwnerType,
-            Parameters = original.Parameters,
-            ReturnType = resultType,
-            IsFailable = false, // check_ variants don't fail
-            DeclaredModification = original.DeclaredModification,
-            ModificationCategory = original.ModificationCategory,
-            GenericParameters = original.GenericParameters,
-            GenericConstraints = original.GenericConstraints,
-            Visibility = original.Visibility,
-            Location = original.Location,
-            Module = original.Module,
-            Annotations = original.Annotations
-        };
+        return new
+            RoutineInfo(name: GenerateVariantName(prefix: "check", originalName: original.Name))
+            {
+                Kind = original.Kind,
+                OwnerType = original.OwnerType,
+                Parameters = original.Parameters,
+                ReturnType = resultType,
+                IsFailable = false, // check_ variants don't fail
+                DeclaredModification = original.DeclaredModification,
+                ModificationCategory = original.ModificationCategory,
+                GenericParameters = original.GenericParameters,
+                GenericConstraints = original.GenericConstraints,
+                Visibility = original.Visibility,
+                Location = original.Location,
+                Module = original.Module,
+                Annotations = original.Annotations
+            };
     }
 
     /// <summary>
@@ -265,30 +262,31 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The lookup_ variant routine info.</returns>
     private RoutineInfo GenerateLookupVariant(RoutineInfo original)
     {
-        TypeInfo returnType = original.ReturnType
-            ?? _registry.LookupType("Blank")
-            ?? throw new InvalidOperationException(
-                message: "Failable function must have a return type and Blank type must be registered");
+        TypeInfo returnType = original.ReturnType ?? _registry.LookupType(name: "Blank") ??
+            throw new InvalidOperationException(
+                message:
+                "Failable function must have a return type and Blank type must be registered");
 
         TypeInfo lookupType = _registry.GetOrCreateResolution(
             genericDef: ErrorHandlingTypeInfo.WellKnown.LookupDefinition,
             typeArguments: [returnType]);
 
-        return new RoutineInfo(name: GenerateVariantName(prefix: "lookup", originalName: original.Name))
-        {
-            Kind = original.Kind,
-            OwnerType = original.OwnerType,
-            Parameters = original.Parameters,
-            ReturnType = lookupType,
-            IsFailable = false, // lookup_ variants don't fail
-            DeclaredModification = original.DeclaredModification,
-            ModificationCategory = original.ModificationCategory,
-            GenericParameters = original.GenericParameters,
-            GenericConstraints = original.GenericConstraints,
-            Visibility = original.Visibility,
-            Location = original.Location,
-            Module = original.Module,
-            Annotations = original.Annotations
-        };
+        return new
+            RoutineInfo(name: GenerateVariantName(prefix: "lookup", originalName: original.Name))
+            {
+                Kind = original.Kind,
+                OwnerType = original.OwnerType,
+                Parameters = original.Parameters,
+                ReturnType = lookupType,
+                IsFailable = false, // lookup_ variants don't fail
+                DeclaredModification = original.DeclaredModification,
+                ModificationCategory = original.ModificationCategory,
+                GenericParameters = original.GenericParameters,
+                GenericConstraints = original.GenericConstraints,
+                Visibility = original.Visibility,
+                Location = original.Location,
+                Module = original.Module,
+                Annotations = original.Annotations
+            };
     }
 }

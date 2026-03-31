@@ -71,7 +71,7 @@ public sealed class EntityTypeInfo : TypeInfo
         // to break infinite recursion. The shell is used only as a type reference in member
         // variable lists, not to access members directly.
         _creatingInstances ??= new HashSet<string>();
-        if (!_creatingInstances.Add(resolvedName))
+        if (!_creatingInstances.Add(item: resolvedName))
         {
             return new EntityTypeInfo(name: resolvedName)
             {
@@ -91,13 +91,15 @@ public sealed class EntityTypeInfo : TypeInfo
             var substitution = new Dictionary<string, TypeInfo>();
             for (int i = 0; i < GenericParameters.Count; i++)
             {
-                substitution[key: GenericParameters[i]] = typeArguments[i];
+                substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
             }
 
             // Substitute types in member variables
             var substitutedMemberVariables = MemberVariables
-                .Select(selector: f => SubstituteMemberVariableType(memberVariable: f, substitution: substitution))
-                .ToList();
+                                            .Select(selector: f =>
+                                                 SubstituteMemberVariableType(memberVariable: f,
+                                                     substitution: substitution))
+                                            .ToList();
 
             return new EntityTypeInfo(name: resolvedName)
             {
@@ -112,7 +114,7 @@ public sealed class EntityTypeInfo : TypeInfo
         }
         finally
         {
-            _creatingInstances.Remove(resolvedName);
+            _creatingInstances.Remove(item: resolvedName);
         }
     }
 
@@ -122,10 +124,11 @@ public sealed class EntityTypeInfo : TypeInfo
     /// <param name="memberVariable">The member variable to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
     /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>
-    private static MemberVariableInfo SubstituteMemberVariableType(MemberVariableInfo memberVariable,
-        Dictionary<string, TypeInfo> substitution)
+    private static MemberVariableInfo SubstituteMemberVariableType(
+        MemberVariableInfo memberVariable, Dictionary<string, TypeInfo> substitution)
     {
-        TypeInfo substitutedType = SubstituteType(type: memberVariable.Type, substitution: substitution);
+        TypeInfo substitutedType =
+            SubstituteType(type: memberVariable.Type, substitution: substitution);
         return memberVariable.WithSubstitutedType(newType: substitutedType);
     }
 
@@ -149,7 +152,8 @@ public sealed class EntityTypeInfo : TypeInfo
         }
 
         var newArgs = type.TypeArguments
-                          .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
+                          .Select(selector: arg =>
+                               SubstituteType(type: arg, substitution: substitution))
                           .ToList();
 
         if (type is EntityTypeInfo { GenericDefinition: not null } entityType)

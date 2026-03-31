@@ -71,10 +71,12 @@ public partial class Tokenizer
         // Reject mixed tabs and spaces
         if (hasTabs && hasSpaces)
         {
-            throw new GrammarException(
-                GrammarDiagnosticCode.MixedTabsAndSpaces,
-                "Indentation mixes tabs and spaces; use one or the other",
-                _fileName, _line, _column, _language);
+            throw new GrammarException(code: GrammarDiagnosticCode.MixedTabsAndSpaces,
+                message: "Indentation mixes tabs and spaces; use one or the other",
+                fileName: _fileName,
+                line: _line,
+                column: _column,
+                language: _language);
         }
 
         // Skip empty lines (don't change indentation state)
@@ -101,10 +103,12 @@ public partial class Tokenizer
         // Validate indentation alignment
         if (spaces % 2 != 0)
         {
-            throw new GrammarException(
-                GrammarDiagnosticCode.InconsistentIndentation,
-                $"Indentation error: expected multiple of 2 spaces, got {spaces} spaces",
-                _fileName, _line, _column, _language);
+            throw new GrammarException(code: GrammarDiagnosticCode.InconsistentIndentation,
+                message: $"Indentation error: expected multiple of 2 spaces, got {spaces} spaces",
+                fileName: _fileName,
+                line: _line,
+                column: _column,
+                language: _language);
         }
 
         // Handle indentation increase (new block)
@@ -238,7 +242,6 @@ public partial class Tokenizer
             _ => true
         };
     }
-
 
     #endregion
 }

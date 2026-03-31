@@ -29,9 +29,10 @@ public sealed partial class SemanticAnalyzer
             {
                 if (seenNonImport)
                 {
-                    ReportError(SemanticDiagnosticCode.ImportPositionViolation,
+                    ReportError(code: SemanticDiagnosticCode.ImportPositionViolation,
+                        message:
                         $"Import '{import.ModulePath}' must appear before other declarations.",
-                        import.Location);
+                        location: import.Location);
                 }
             }
             else if (declaration is not ModuleDeclaration)
@@ -89,7 +90,10 @@ public sealed partial class SemanticAnalyzer
 
             case ExternalBlockDeclaration block:
                 foreach (Declaration decl in block.Declarations)
+                {
                     CollectDeclaration(node: decl);
+                }
+
                 break;
 
             case VariableDeclaration variable:
@@ -118,12 +122,13 @@ public sealed partial class SemanticAnalyzer
     private void ValidateModuleDeclaration(ModuleDeclaration ns)
     {
         // Module "Core" is reserved for stdlib only
-        if (ns.Path.Equals("Core", StringComparison.OrdinalIgnoreCase) &&
-            !IsStdlibFile(_currentFilePath))
+        if (ns.Path.Equals(value: "Core", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+            !IsStdlibFile(filePath: _currentFilePath))
         {
-            ReportError(SemanticDiagnosticCode.ReservedModuleCore,
+            ReportError(code: SemanticDiagnosticCode.ReservedModuleCore,
+                message:
                 "Module 'Core' is reserved for the standard library and cannot be used in user code.",
-                ns.Location);
+                location: ns.Location);
         }
     }
 
@@ -138,13 +143,13 @@ public sealed partial class SemanticAnalyzer
         bool success = _registry.LoadModule(importPath: import.ModulePath,
             currentFile: _currentFilePath,
             location: import.Location,
-            out string? effectiveModule);
+            effectiveModule: out string? effectiveModule);
 
         if (!success)
         {
-            ReportError(SemanticDiagnosticCode.ModuleNotFound,
-                $"Cannot resolve import '{import.ModulePath}'. Module not found.",
-                import.Location);
+            ReportError(code: SemanticDiagnosticCode.ModuleNotFound,
+                message: $"Cannot resolve import '{import.ModulePath}'. Module not found.",
+                location: import.Location);
             return;
         }
 
@@ -155,9 +160,9 @@ public sealed partial class SemanticAnalyzer
             {
                 if (!_importedSymbolNames.Add(item: symbolName))
                 {
-                    ReportError(SemanticDiagnosticCode.ImportNameCollision,
-                        $"Symbol '{symbolName}' is already imported from another module.",
-                        import.Location);
+                    ReportError(code: SemanticDiagnosticCode.ImportNameCollision,
+                        message: $"Symbol '{symbolName}' is already imported from another module.",
+                        location: import.Location);
                 }
             }
         }
@@ -165,7 +170,7 @@ public sealed partial class SemanticAnalyzer
         // Track the imported module for per-file type resolution
         if (effectiveModule != null)
         {
-            _importedModules.Add(effectiveModule);
+            _importedModules.Add(item: effectiveModule);
         }
     }
 
@@ -183,9 +188,10 @@ public sealed partial class SemanticAnalyzer
         {
             if (!_currentTypeMemberVariableNames.Add(item: memberVariable.Name))
             {
-                ReportError(SemanticDiagnosticCode.DuplicateMemberVariableDefinition,
+                ReportError(code: SemanticDiagnosticCode.DuplicateMemberVariableDefinition,
+                    message:
                     $"Member variable '{memberVariable.Name}' is already defined in this type.",
-                    memberVariable.Location);
+                    location: memberVariable.Location);
             }
         }
 
@@ -204,20 +210,22 @@ public sealed partial class SemanticAnalyzer
         // Validate that variant types cannot be stored in member variables
         if (memberVariableType is VariantTypeInfo)
         {
-            ReportError(SemanticDiagnosticCode.VariantMemberVariableNotAllowed,
+            ReportError(code: SemanticDiagnosticCode.VariantMemberVariableNotAllowed,
+                message:
                 $"Variant type '{memberVariableType.Name}' cannot be stored in member variable '{memberVariable.Name}'. " +
                 "Variants must be dismantled immediately with pattern matching.",
-                memberVariable.Location);
+                location: memberVariable.Location);
         }
 
         // Validate that Result<T> and Lookup<T> are not used as member variable types
         if (memberVariableType is ErrorHandlingTypeInfo errorHandlingType &&
             errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
         {
-            ReportError(SemanticDiagnosticCode.ErrorHandlingTypeAsMemberVariable,
+            ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeAsMemberVariable,
+                message:
                 $"'{errorHandlingType.Kind}[T]' cannot be used as a member variable type. " +
                 "Error handling types are internal for error propagation and should not be stored.",
-                memberVariable.Location);
+                location: memberVariable.Location);
         }
 
         // TODO: Register member variable in the current type's member variable list when type body resolution is implemented
@@ -245,7 +253,7 @@ public sealed partial class SemanticAnalyzer
             Visibility = record.Visibility,
             Location = record.Location,
             Module = GetCurrentModuleName(),
-            BackendType = ExtractLlvmAnnotation(record.Annotations)
+            BackendType = ExtractLlvmAnnotation(annotations: record.Annotations)
         };
 
         TryRegisterType(type: typeInfo, location: record.Location);
@@ -257,12 +265,18 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static string? ExtractLlvmAnnotation(List<string>? annotations)
     {
-        if (annotations == null) return null;
-        foreach (var ann in annotations)
+        if (annotations == null)
         {
-            if (ann.StartsWith("llvm(") && ann.EndsWith(")"))
+            return null;
+        }
+
+        foreach (string ann in annotations)
+        {
+            if (ann.StartsWith(value: "llvm(") && ann.EndsWith(value: ")"))
+            {
                 return ann[5..^1]
-                   .Trim('"');
+                   .Trim(trimChar: '"');
+            }
         }
 
         return null;
@@ -360,9 +374,9 @@ public sealed partial class SemanticAnalyzer
 
             // If the type name contains generic params (e.g., "Box[T]"), strip them
             // and look up the generic definition (e.g., "Box")
-            if (ownerType == null && typeName.Contains('['))
+            if (ownerType == null && typeName.Contains(value: '['))
             {
-                string baseTypeName = typeName[..typeName.IndexOf('[')];
+                string baseTypeName = typeName[..typeName.IndexOf(value: '[')];
                 ownerType = LookupTypeWithImports(name: baseTypeName);
             }
         }
@@ -375,30 +389,32 @@ public sealed partial class SemanticAnalyzer
         // Validate that variants cannot have member routines
         if (ownerType is VariantTypeInfo && kind == RoutineKind.MemberRoutine)
         {
-            ReportError(SemanticDiagnosticCode.VariantMethodNotAllowed,
-                $"Variant type '{ownerType.Name}' cannot have member routines. " +
-                "Variants only support 'is', 'isnot', and pattern matching with 'when'.",
-                routine.Location);
+            ReportError(code: SemanticDiagnosticCode.VariantMethodNotAllowed,
+                message: $"Variant type '{ownerType.Name}' cannot have member routines. " +
+                         "Variants only support 'is', 'isnot', and pattern matching with 'when'.",
+                location: routine.Location);
         }
 
         // Validate that choice types cannot define any operator wired methods
         if (ownerType is ChoiceTypeInfo && kind == RoutineKind.MemberRoutine &&
             IsOperatorWired(name: routineName))
         {
-            ReportError(SemanticDiagnosticCode.ArithmeticOnChoiceType,
+            ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                message:
                 $"Choice type '{ownerType.Name}' cannot define operator '{routineName}'. " +
                 "Choice types do not support operators. Use 'is' for case matching and regular routines for additional behavior.",
-                routine.Location);
+                location: routine.Location);
         }
 
         // #135: Flags types cannot define any operator wired methods
         if (ownerType is FlagsTypeInfo && kind == RoutineKind.MemberRoutine &&
             IsOperatorWired(name: routineName))
         {
-            ReportError(SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
+            ReportError(code: SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
+                message:
                 $"Flags type '{ownerType.Name}' cannot define operator '{routineName}'. " +
                 "Flags only support built-in operators: 'is', 'isnot', 'isonly', and 'but'.",
-                routine.Location);
+                location: routine.Location);
         }
 
         // Validate reserved prefixes (try_, check_, lookup_) for user functions
@@ -408,59 +424,72 @@ public sealed partial class SemanticAnalyzer
 
         if (IsReservedRoutinePrefix(name: baseName))
         {
-            ReportError(SemanticDiagnosticCode.ReservedRoutinePrefix,
-                $"Routine name '{baseName}' uses a reserved prefix. " +
-                "Prefixes 'try_', 'check_', and 'lookup_' are reserved for auto-generated error handling variants.",
-                routine.Location);
+            ReportError(code: SemanticDiagnosticCode.ReservedRoutinePrefix,
+                message: $"Routine name '{baseName}' uses a reserved prefix. " +
+                         "Prefixes 'try_', 'check_', and 'lookup_' are reserved for auto-generated error handling variants.",
+                location: routine.Location);
         }
 
         // Validate $ prefixed names are known built-in methods
         if (IsUnknownWiredMethod(name: baseName))
         {
-            ReportError(SemanticDiagnosticCode.UnknownWiredRoutine,
-                $"Routine name '{baseName}' uses reserved '$' prefix. " +
-                "Names starting with '$' are reserved for built-in methods.",
-                routine.Location);
+            ReportError(code: SemanticDiagnosticCode.UnknownWiredRoutine,
+                message: $"Routine name '{baseName}' uses reserved '$' prefix. " +
+                         "Names starting with '$' are reserved for built-in methods.",
+                location: routine.Location);
         }
 
         // @generated and @innate are only valid on protocol routine declarations
         if (routine.Annotations.Contains(item: "generated") ||
             routine.Annotations.Contains(item: "innate"))
         {
-            ReportError(SemanticDiagnosticCode.InvalidGeneratedInnatePlacement,
+            ReportError(code: SemanticDiagnosticCode.InvalidGeneratedInnatePlacement,
+                message:
                 "'@generated' and '@innate' annotations are only valid on protocol routine declarations.",
-                routine.Location);
+                location: routine.Location);
         }
 
         // @crash_only is only valid on failable (!) routines (#76)
         if (routine.Annotations.Contains(item: "crash_only") && !routine.IsFailable)
         {
-            ReportError(SemanticDiagnosticCode.CrashOnlyOnNonFailable,
-                "'@crash_only' is only valid on failable (!) routines.",
-                routine.Location);
+            ReportError(code: SemanticDiagnosticCode.CrashOnlyOnNonFailable,
+                message: "'@crash_only' is only valid on failable (!) routines.",
+                location: routine.Location);
         }
 
         // #66: Index operators ($getitem/$setitem) are only valid on entities
         if (baseName is "$getitem" or "$setitem" && ownerType is not null &&
             ownerType is not EntityTypeInfo)
         {
-            ReportError(SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
-                $"Index operators are only valid on entities, not on '{ownerType.Name}'.",
-                routine.Location);
+            ReportError(code: SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
+                message: $"Index operators are only valid on entities, not on '{ownerType.Name}'.",
+                location: routine.Location);
         }
 
         // #157: Conflicting mutation category annotations
         {
             int mutationCount = 0;
-            if (routine.Annotations.Contains(item: "readonly")) mutationCount++;
-            if (routine.Annotations.Contains(item: "writable")) mutationCount++;
-            if (routine.Annotations.Contains(item: "migratable")) mutationCount++;
+            if (routine.Annotations.Contains(item: "readonly"))
+            {
+                mutationCount++;
+            }
+
+            if (routine.Annotations.Contains(item: "writable"))
+            {
+                mutationCount++;
+            }
+
+            if (routine.Annotations.Contains(item: "migratable"))
+            {
+                mutationCount++;
+            }
+
             if (mutationCount > 1)
             {
-                ReportError(SemanticDiagnosticCode.MutationCategoryConflict,
-                    "Routine has conflicting mutation annotations. " +
-                    "Only one of @readonly, @writable, or @migratable can be specified.",
-                    routine.Location);
+                ReportError(code: SemanticDiagnosticCode.MutationCategoryConflict,
+                    message: "Routine has conflicting mutation annotations. " +
+                             "Only one of @readonly, @writable, or @migratable can be specified.",
+                    location: routine.Location);
             }
         }
 
@@ -468,9 +497,10 @@ public sealed partial class SemanticAnalyzer
         // Visibility is a single enum, but check for annotations that conflict with visibility
         if (routine.Visibility == VisibilityModifier.Secret && ownerType == null)
         {
-            ReportError(SemanticDiagnosticCode.InvalidVisibilityCombination,
+            ReportError(code: SemanticDiagnosticCode.InvalidVisibilityCombination,
+                message:
                 "Top-level routines cannot be 'secret'. Use 'core' for module-internal visibility.",
-                routine.Location);
+                location: routine.Location);
         }
 
         // The AST already stores names without the '!' suffix
@@ -505,30 +535,31 @@ public sealed partial class SemanticAnalyzer
                                   .ToList();
         if (varargParams.Count > 1)
         {
-            ReportError(SemanticDiagnosticCode.VarargsMultiple,
-                "Only one varargs parameter is allowed per routine.",
-                varargParams[1].Location);
+            ReportError(code: SemanticDiagnosticCode.VarargsMultiple,
+                message: "Only one varargs parameter is allowed per routine.",
+                location: varargParams[index: 1].Location);
         }
 
         if (varargParams.Count >= 1)
         {
-            int varargIndex = routine.Parameters.IndexOf(item: varargParams[0]);
+            int varargIndex = routine.Parameters.IndexOf(item: varargParams[index: 0]);
             bool isFirstNonMe = varargIndex == 0 ||
-                                (varargIndex == 1 && routine.Parameters[0].Name == "me");
+                                varargIndex == 1 && routine.Parameters[index: 0].Name == "me";
             if (!isFirstNonMe)
             {
-                ReportError(SemanticDiagnosticCode.VarargsNotFirst,
+                ReportError(code: SemanticDiagnosticCode.VarargsNotFirst,
+                    message:
                     "Varargs parameter must be the first parameter (or second after 'me').",
-                    varargParams[0].Location);
+                    location: varargParams[index: 0].Location);
             }
         }
 
         // Check for duplicate routine definitions (#150)
         if (_registry.LookupRoutine(fullName: routineInfo.FullName) != null)
         {
-            ReportError(SemanticDiagnosticCode.DuplicateRoutineDefinition,
-                $"Routine '{routineInfo.Name}' is already defined.",
-                routine.Location);
+            ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
+                message: $"Routine '{routineInfo.Name}' is already defined.",
+                location: routine.Location);
             return;
         }
 
@@ -568,7 +599,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Skip stdlib/fallback types (types without source location or in Core module)
         // These are pre-defined types that may not have full method implementations in test environments
-        if (type.Location == null || string.IsNullOrEmpty(type.Location.FileName))
+        if (type.Location == null || string.IsNullOrEmpty(value: type.Location.FileName))
         {
             return;
         }
@@ -618,14 +649,16 @@ public sealed partial class SemanticAnalyzer
                 ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name);
             if (typeMethod == null && requiredMethod.IsFailable)
             {
-                typeMethod = ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name + "!");
+                typeMethod =
+                    ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name + "!");
             }
 
             if (typeMethod == null)
             {
-                ReportError(SemanticDiagnosticCode.MissingProtocolMethod,
+                ReportError(code: SemanticDiagnosticCode.MissingProtocolMethod,
+                    message:
                     $"Type '{type.Name}' declares 'obeys {protocol.Name}' but does not implement required method '{requiredMethod.Name}'.",
-                    type.Location ?? new SourceLocation(FileName: "",
+                    location: type.Location ?? new SourceLocation(FileName: "",
                         Line: 0,
                         Column: 0,
                         Position: 0));
@@ -633,10 +666,11 @@ public sealed partial class SemanticAnalyzer
             else if (requiredMethod.GenerationKind == ProtocolRoutineKind.Innate &&
                      !typeMethod.IsSynthesized)
             {
-                ReportError(SemanticDiagnosticCode.InnateOverrideNotAllowed,
+                ReportError(code: SemanticDiagnosticCode.InnateOverrideNotAllowed,
+                    message:
                     $"Cannot override innate routine '{protocol.Name}.{requiredMethod.Name}'. " +
                     "Innate routines are compiler-provided and cannot be overridden.",
-                    typeMethod.Location);
+                    location: typeMethod.Location);
             }
             else if (typeMethod != null)
             {
@@ -646,18 +680,20 @@ public sealed partial class SemanticAnalyzer
                 if (requiredMethod.Modification == ModificationCategory.Readonly &&
                     typeMethod.ModificationCategory != ModificationCategory.Readonly)
                 {
-                    ReportError(SemanticDiagnosticCode.ProtocolMutationContractViolation,
+                    ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
+                        message:
                         $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be @readonly, " +
                         $"but implementation on '{type.Name}' is @{typeMethod.ModificationCategory.ToString().ToLowerInvariant()}.",
-                        typeMethod.Location);
+                        location: typeMethod.Location);
                 }
                 else if (requiredMethod.Modification == ModificationCategory.Writable &&
                          typeMethod.ModificationCategory == ModificationCategory.Migratable)
                 {
-                    ReportError(SemanticDiagnosticCode.ProtocolMutationContractViolation,
+                    ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
+                        message:
                         $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be at most @writable, " +
                         $"but implementation on '{type.Name}' is @migratable.",
-                        typeMethod.Location);
+                        location: typeMethod.Location);
                 }
             }
         }
@@ -694,16 +730,16 @@ public sealed partial class SemanticAnalyzer
 
         foreach (GenericConstraintDeclaration constraint in constraints)
         {
-            if (!validParams.Contains(constraint.ParameterName))
+            if (!validParams.Contains(item: constraint.ParameterName))
             {
-                ReportError(SemanticDiagnosticCode.UnknownTypeParameterInConstraint,
+                ReportError(code: SemanticDiagnosticCode.UnknownTypeParameterInConstraint,
+                    message:
                     $"Type parameter '{constraint.ParameterName}' in constraint is not declared. " +
-                    $"Declared type parameters: {(typeParameters?.Count > 0 ? string.Join(", ", typeParameters) : "none")}.",
-                    constraint.Location ?? location);
+                    $"Declared type parameters: {(typeParameters?.Count > 0 ? string.Join(separator: ", ", values: typeParameters) : "none")}.",
+                    location: constraint.Location ?? location);
             }
         }
     }
 
     #endregion
 }
-

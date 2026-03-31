@@ -25,15 +25,18 @@ public sealed partial class TypeRegistry
         }
 
         // Also register with parameter-based disambiguation for overload resolution
-        string overloadKey = GetOverloadKey(routine);
-        if (overloadKey != key) // Only store if different from primary key (avoids overwriting resolved entries)
+        string overloadKey = GetOverloadKey(routine: routine);
+        if (overloadKey !=
+            key) // Only store if different from primary key (avoids overwriting resolved entries)
+        {
             _routines[key: overloadKey] = routine;
+        }
 
         // Index by module-qualified name for unambiguous lookup
         string qualifiedName = routine.QualifiedName;
         if (qualifiedName != key)
         {
-            _routinesByQualifiedName.TryAdd(qualifiedName, routine);
+            _routinesByQualifiedName.TryAdd(key: qualifiedName, value: routine);
         }
 
         // Index by owner type for fast method lookup
@@ -55,7 +58,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     private static string GetOverloadKey(RoutineInfo routine)
     {
-        var paramTypes = string.Join(",", routine.Parameters.Select(p => p.Type.Name));
+        string paramTypes = string.Join(separator: ",",
+            values: routine.Parameters.Select(selector: p => p.Type.Name));
         return $"{routine.FullName}#{paramTypes}";
     }
 
@@ -66,7 +70,8 @@ public sealed partial class TypeRegistry
     public RoutineInfo? LookupRoutineOverload(string fullName, IReadOnlyList<TypeInfo> argTypes)
     {
         // Try exact overload match
-        var paramTypeNames = string.Join(",", argTypes.Select(t => t.Name));
+        string paramTypeNames =
+            string.Join(separator: ",", values: argTypes.Select(selector: t => t.Name));
         string overloadKey = $"{fullName}#{paramTypeNames}";
         if (_routines.TryGetValue(key: overloadKey, value: out RoutineInfo? overload))
         {
@@ -78,7 +83,11 @@ public sealed partial class TypeRegistry
         //        → try key "List.$create#SortedSet[T]" which matches the registered generic overload.
         foreach (TypeInfo argType in argTypes)
         {
-            if (!argType.IsGenericResolution) continue;
+            if (!argType.IsGenericResolution)
+            {
+                continue;
+            }
+
             TypeInfo? genericDef = argType switch
             {
                 RecordTypeInfo r => r.GenericDefinition,
@@ -86,12 +95,18 @@ public sealed partial class TypeRegistry
                 ProtocolTypeInfo p => p.GenericDefinition,
                 _ => null
             };
-            if (genericDef?.GenericParameters == null) continue;
+            if (genericDef?.GenericParameters == null)
+            {
+                continue;
+            }
 
-            string genericArgName = $"{genericDef.Name}[{string.Join(", ", genericDef.GenericParameters)}]";
+            string genericArgName =
+                $"{genericDef.Name}[{string.Join(separator: ", ", values: genericDef.GenericParameters)}]";
             string genericOverloadKey = $"{fullName}#{genericArgName}";
-            if (_routines.TryGetValue(key: genericOverloadKey, value: out RoutineInfo? genericOverload)
-                && !genericOverload.IsVariadic) // Skip variadic overloads — handled by variadic fallback
+            if (_routines.TryGetValue(key: genericOverloadKey,
+                    value: out RoutineInfo? genericOverload) &&
+                !genericOverload
+                   .IsVariadic) // Skip variadic overloads — handled by variadic fallback
             {
                 return genericOverload;
             }
@@ -99,15 +114,16 @@ public sealed partial class TypeRegistry
 
         // For generic instances (e.g., List[Byte].$create), try the generic definition
         // (e.g., List[T].$create#U64) since overloads are registered on the generic definition.
-        int bracketIdx = fullName.IndexOf('[');
+        int bracketIdx = fullName.IndexOf(value: '[');
         if (bracketIdx >= 0)
         {
-            int closeBracketIdx = fullName.IndexOf("].", bracketIdx);
+            int closeBracketIdx = fullName.IndexOf(value: "].", startIndex: bracketIdx);
             if (closeBracketIdx >= 0)
             {
                 string genericDefName = fullName[..bracketIdx] + fullName[(closeBracketIdx + 1)..];
                 string genericOverloadKey = $"{genericDefName}#{paramTypeNames}";
-                if (_routines.TryGetValue(key: genericOverloadKey, value: out RoutineInfo? genericDefOverload))
+                if (_routines.TryGetValue(key: genericOverloadKey,
+                        value: out RoutineInfo? genericDefOverload))
                 {
                     return genericDefOverload;
                 }
@@ -136,13 +152,14 @@ public sealed partial class TypeRegistry
         }
 
         // Fall back to module-qualified name lookup
-        if (_routinesByQualifiedName.TryGetValue(fullName, out RoutineInfo? qualified))
+        if (_routinesByQualifiedName.TryGetValue(key: fullName, value: out RoutineInfo? qualified))
         {
             return qualified;
         }
 
         // Try Core module prefix (Core routines are auto-imported)
-        if (!fullName.Contains('.') && _routines.TryGetValue(key: $"Core.{fullName}", value: out routine))
+        if (!fullName.Contains(value: '.') &&
+            _routines.TryGetValue(key: $"Core.{fullName}", value: out routine))
         {
             return routine;
         }
@@ -155,7 +172,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     public RoutineInfo? LookupRoutineByQualifiedName(string qualifiedName)
     {
-        return _routinesByQualifiedName.GetValueOrDefault(qualifiedName);
+        return _routinesByQualifiedName.GetValueOrDefault(key: qualifiedName);
     }
 
     /// <summary>
@@ -164,11 +181,14 @@ public sealed partial class TypeRegistry
     /// </summary>
     public RoutineInfo? LookupRoutineByName(string name)
     {
-        foreach (var routine in _routines.Values)
+        foreach (RoutineInfo routine in _routines.Values)
         {
             if (routine.Name == name && routine.OwnerType == null)
+            {
                 return routine;
+            }
         }
+
         return null;
     }
 
@@ -179,15 +199,19 @@ public sealed partial class TypeRegistry
     {
         // Prefer non-variadic generic overloads (e.g., show[T](value: T) over show[T](values...: T))
         RoutineInfo? fallback = null;
-        foreach (var routine in _routines.Values)
+        foreach (RoutineInfo routine in _routines.Values)
         {
             if (routine.Name == name && routine.OwnerType == null && routine.IsGenericDefinition)
             {
                 if (!routine.IsVariadic)
+                {
                     return routine;
+                }
+
                 fallback ??= routine;
             }
         }
+
         return fallback;
     }
 
@@ -196,12 +220,15 @@ public sealed partial class TypeRegistry
     /// </summary>
     public RoutineInfo? LookupVariadicGenericOverload(string name)
     {
-        foreach (var routine in _routines.Values)
+        foreach (RoutineInfo routine in _routines.Values)
         {
-            if (routine.Name == name && routine.OwnerType == null
-                && routine.IsGenericDefinition && routine.IsVariadic)
+            if (routine.Name == name && routine.OwnerType == null && routine.IsGenericDefinition &&
+                routine.IsVariadic)
+            {
                 return routine;
+            }
         }
+
         return null;
     }
 
@@ -213,11 +240,8 @@ public sealed partial class TypeRegistry
     /// <param name="returnType">The resolved return type.</param>
     /// <param name="genericParameters">Updated generic parameters (may include implicit ones from protocol-as-type).</param>
     /// <param name="genericConstraints">Updated generic constraints (may include implicit ones from protocol-as-type).</param>
-    public void UpdateRoutine(
-        RoutineInfo routine,
-        IReadOnlyList<ParameterInfo> parameters,
-        TypeInfo? returnType,
-        IReadOnlyList<string>? genericParameters,
+    public void UpdateRoutine(RoutineInfo routine, IReadOnlyList<ParameterInfo> parameters,
+        TypeInfo? returnType, IReadOnlyList<string>? genericParameters,
         IReadOnlyList<GenericConstraintDeclaration>? genericConstraints)
     {
         string key = routine.FullName;
@@ -252,15 +276,17 @@ public sealed partial class TypeRegistry
         _routines[key: key] = updatedRoutine;
 
         // Register with the resolved overload key so body-matching can find it
-        string resolvedOverloadKey = GetOverloadKey(updatedRoutine);
+        string resolvedOverloadKey = GetOverloadKey(routine: updatedRoutine);
         if (resolvedOverloadKey != key)
+        {
             _routines[key: resolvedOverloadKey] = updatedRoutine;
+        }
 
         // Update the module-qualified name index
         string qualifiedName = updatedRoutine.QualifiedName;
         if (qualifiedName != key)
         {
-            _routinesByQualifiedName[qualifiedName] = updatedRoutine;
+            _routinesByQualifiedName[key: qualifiedName] = updatedRoutine;
         }
 
         // Update the routines-by-owner index if this is a method
@@ -272,7 +298,7 @@ public sealed partial class TypeRegistry
                 int index = list.FindIndex(match: r => r.FullName == key);
                 if (index >= 0)
                 {
-                    list[index] = updatedRoutine;
+                    list[index: index] = updatedRoutine;
                 }
             }
         }
@@ -300,10 +326,13 @@ public sealed partial class TypeRegistry
         // For protocol types, check the protocol's method signatures
         if (type is ProtocolTypeInfo proto)
         {
-            var protoMethod = proto.Methods.FirstOrDefault(m => m.Name == methodName);
+            ProtocolMethodInfo? protoMethod =
+                proto.Methods.FirstOrDefault(predicate: m => m.Name == methodName);
             if (protoMethod != null)
             {
-                return SynthesizeProtocolMethod(proto, protoMethod, ownerType: type);
+                return SynthesizeProtocolMethod(proto: proto,
+                    protoMethod: protoMethod,
+                    ownerType: type);
             }
         }
 
@@ -318,26 +347,32 @@ public sealed partial class TypeRegistry
                 _ => null
             };
             // Fallback: strip type arguments from name to find generic definition
-            if (genericDef == null && type.Name.Contains('['))
+            if (genericDef == null && type.Name.Contains(value: '['))
             {
-                string baseName = type.Name[..type.Name.IndexOf('[')];
-                genericDef = LookupType(baseName);
+                string baseName = type.Name[..type.Name.IndexOf(value: '[')];
+                genericDef = LookupType(name: baseName);
                 // Try module-qualified name for non-Core types
-                if (genericDef == null && !string.IsNullOrEmpty(type.Module))
-                    genericDef = LookupType($"{type.Module}.{baseName}");
+                if (genericDef == null && !string.IsNullOrEmpty(value: type.Module))
+                {
+                    genericDef = LookupType(name: $"{type.Module}.{baseName}");
+                }
             }
 
             if (genericDef != null)
             {
-                RoutineInfo? genericMethod = LookupMethod(type: genericDef, methodName: methodName);
+                RoutineInfo? genericMethod =
+                    LookupMethod(type: genericDef, methodName: methodName);
                 if (genericMethod != null)
                 {
                     // Universal methods on bare type params (e.g., T.get_address(), T.snatch())
                     // must keep their GenericParameterTypeInfo owner so codegen can record
                     // the correct monomorphization (T → concrete receiver type).
                     if (genericMethod.OwnerType is GenericParameterTypeInfo)
+                    {
                         return genericMethod;
-                    return SubstituteMethodForOwner(genericMethod, resolvedOwner: type);
+                    }
+
+                    return SubstituteMethodForOwner(method: genericMethod, resolvedOwner: type);
                 }
             }
         }
@@ -364,11 +399,13 @@ public sealed partial class TypeRegistry
 
         // Fallback: check methods registered on generic type parameters (e.g., routine T.view())
         // These methods are available on all types
-        foreach (var (_, ownerMethods) in _routinesByOwner)
+        foreach ((string _, List<RoutineInfo> ownerMethods) in _routinesByOwner)
         {
-            if (ownerMethods.Count > 0 && ownerMethods[0].OwnerType is GenericParameterTypeInfo)
+            if (ownerMethods.Count > 0 &&
+                ownerMethods[index: 0].OwnerType is GenericParameterTypeInfo)
             {
-                RoutineInfo? universalMethod = ownerMethods.FirstOrDefault(predicate: m => m.Name == methodName);
+                RoutineInfo? universalMethod =
+                    ownerMethods.FirstOrDefault(predicate: m => m.Name == methodName);
                 if (universalMethod != null)
                 {
                     return universalMethod;
@@ -384,49 +421,62 @@ public sealed partial class TypeRegistry
     /// modification category, storage, and all other metadata. Substitutes generic type
     /// parameters for instantiated generic protocols (e.g., Iterator[S64]: T → S64).
     /// </summary>
-    private RoutineInfo SynthesizeProtocolMethod(ProtocolTypeInfo proto, ProtocolMethodInfo protoMethod, TypeInfo ownerType)
+    private RoutineInfo SynthesizeProtocolMethod(ProtocolTypeInfo proto,
+        ProtocolMethodInfo protoMethod, TypeInfo ownerType)
     {
         // Build substitution map for generic protocols (e.g., Iterator[S64]: T → S64)
         Dictionary<string, TypeInfo>? substitution = null;
         if (proto.TypeArguments is { Count: > 0 })
         {
-            var genericDef = proto.GenericDefinition ?? proto;
+            ProtocolTypeInfo genericDef = proto.GenericDefinition ?? proto;
             if (genericDef.GenericParameters is { Count: > 0 })
             {
                 substitution = new Dictionary<string, TypeInfo>();
-                for (int i = 0; i < genericDef.GenericParameters.Count
-                              && i < proto.TypeArguments.Count; i++)
-                    substitution[genericDef.GenericParameters[i]] = proto.TypeArguments[i];
+                for (int i = 0;
+                     i < genericDef.GenericParameters.Count && i < proto.TypeArguments.Count;
+                     i++)
+                {
+                    substitution[key: genericDef.GenericParameters[index: i]] =
+                        proto.TypeArguments[index: i];
+                }
             }
         }
 
         // Resolve return type with substitution
         TypeInfo? resolvedReturn = protoMethod.ReturnType;
         if (resolvedReturn != null && substitution != null)
-            resolvedReturn = SubstituteTypeInProtocol(resolvedReturn, substitution);
+        {
+            resolvedReturn =
+                SubstituteTypeInProtocol(type: resolvedReturn, substitution: substitution);
+        }
 
         // Convert ProtocolMethodInfo.ParameterTypes → ParameterInfo list
         var parameters = new List<ParameterInfo>();
         for (int i = 0; i < protoMethod.ParameterTypes.Count; i++)
         {
-            TypeInfo paramType = protoMethod.ParameterTypes[i];
+            TypeInfo paramType = protoMethod.ParameterTypes[index: i];
             if (substitution != null)
-                paramType = SubstituteTypeInProtocol(paramType, substitution);
+            {
+                paramType = SubstituteTypeInProtocol(type: paramType, substitution: substitution);
+            }
 
             string paramName = i < protoMethod.ParameterNames.Count
-                ? protoMethod.ParameterNames[i]
+                ? protoMethod.ParameterNames[index: i]
                 : $"arg{i}";
-            parameters.Add(new ParameterInfo(paramName, paramType) { Index = i });
+            parameters.Add(
+                item: new ParameterInfo(name: paramName, type: paramType) { Index = i });
         }
 
-        return new RoutineInfo(protoMethod.Name)
+        return new RoutineInfo(name: protoMethod.Name)
         {
             OwnerType = ownerType,
             Parameters = parameters,
             ReturnType = resolvedReturn,
             IsFailable = protoMethod.IsFailable,
             ModificationCategory = protoMethod.Modification,
-            Storage = protoMethod.IsInstanceMethod ? StorageClass.None : StorageClass.Common,
+            Storage = protoMethod.IsInstanceMethod
+                ? StorageClass.None
+                : StorageClass.Common,
             AsyncStatus = protoMethod.Name == "$next"
                 ? AsyncStatus.Emitting
                 : AsyncStatus.None,
@@ -451,22 +501,30 @@ public sealed partial class TypeRegistry
         };
 
         if (genericDef?.GenericParameters == null || resolvedOwner.TypeArguments == null)
+        {
             return method;
+        }
 
         var substitution = new Dictionary<string, TypeInfo>();
-        for (int i = 0; i < genericDef.GenericParameters.Count
-                      && i < resolvedOwner.TypeArguments.Count; i++)
+        for (int i = 0;
+             i < genericDef.GenericParameters.Count && i < resolvedOwner.TypeArguments.Count;
+             i++)
         {
-            substitution[genericDef.GenericParameters[i]] = resolvedOwner.TypeArguments[i];
+            substitution[key: genericDef.GenericParameters[index: i]] =
+                resolvedOwner.TypeArguments[index: i];
         }
 
         if (substitution.Count == 0)
+        {
             return method;
+        }
 
         // Substitute types in parameters
         var substitutedParams = method.Parameters
-            .Select(p => RoutineInfo.SubstituteParameterType(param: p, substitution: substitution))
-            .ToList();
+                                      .Select(selector: p =>
+                                           RoutineInfo.SubstituteParameterType(param: p,
+                                               substitution: substitution))
+                                      .ToList();
 
         // Substitute return type
         TypeInfo? substitutedReturn = method.ReturnType != null
@@ -552,25 +610,38 @@ public sealed partial class TypeRegistry
     /// Recursively substitutes generic type parameters in a type.
     /// Handles both direct parameters (T → S64) and composite types (Iterator[T] → Iterator[S64]).
     /// </summary>
-    private TypeInfo SubstituteTypeInProtocol(TypeInfo type, Dictionary<string, TypeInfo> substitution)
+    private TypeInfo SubstituteTypeInProtocol(TypeInfo type,
+        Dictionary<string, TypeInfo> substitution)
     {
         // Direct substitution for generic parameters
-        if (type is GenericParameterTypeInfo && substitution.TryGetValue(type.Name, out TypeInfo? sub))
+        if (type is GenericParameterTypeInfo &&
+            substitution.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+        {
             return sub;
+        }
 
         // Recursive substitution in type arguments
         if (type.TypeArguments is not { Count: > 0 })
+        {
             return type;
+        }
 
         bool anyChanged = false;
         var newArgs = new List<TypeInfo>();
-        foreach (var arg in type.TypeArguments)
+        foreach (TypeInfo arg in type.TypeArguments)
         {
-            var resolved = SubstituteTypeInProtocol(arg, substitution);
-            newArgs.Add(resolved);
-            if (!ReferenceEquals(resolved, arg)) anyChanged = true;
+            TypeInfo resolved = SubstituteTypeInProtocol(type: arg, substitution: substitution);
+            newArgs.Add(item: resolved);
+            if (!ReferenceEquals(objA: resolved, objB: arg))
+            {
+                anyChanged = true;
+            }
         }
-        if (!anyChanged) return type;
+
+        if (!anyChanged)
+        {
+            return type;
+        }
 
         // Get the generic definition and create a new instance with substituted args
         TypeInfo? genDef = type switch
@@ -582,7 +653,9 @@ public sealed partial class TypeRegistry
         };
 
         if (genDef != null)
-            return GetOrCreateResolution(genDef, newArgs);
+        {
+            return GetOrCreateResolution(genericDef: genDef, typeArguments: newArgs);
+        }
 
         return type;
     }

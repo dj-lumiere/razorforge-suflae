@@ -42,7 +42,8 @@ public sealed partial class SemanticAnalyzer
         _errorHandlingGenerator = new ErrorHandlingGenerator(registry: _registry);
 
         // Create a snapshot of routines before iterating, since we'll be adding variants
-        List<RoutineInfo> routines = _registry.GetAllRoutines().ToList();
+        var routines = _registry.GetAllRoutines()
+                                .ToList();
 
         // Find all failable routines and generate variants
         foreach (RoutineInfo routine in routines)
@@ -71,27 +72,24 @@ public sealed partial class SemanticAnalyzer
     private void GenerateVariantsForRoutine(RoutineInfo routine, Statement body)
     {
         // @crash_only: still analyze throw/absent but don't generate safe variants (#76)
-        if (routine.Annotations.Any(a => a == "crash_only"))
+        if (routine.Annotations.Any(predicate: a => a == "crash_only"))
         {
-            ErrorHandlingResult crashOnlyResult = _errorHandlingGenerator!.GenerateVariants(
-                routine: routine, body: body);
+            ErrorHandlingResult crashOnlyResult =
+                _errorHandlingGenerator!.GenerateVariants(routine: routine, body: body);
             routine.HasThrow = crashOnlyResult.HasThrow;
             routine.HasAbsent = crashOnlyResult.HasAbsent;
             return;
         }
 
-        ErrorHandlingResult result = _errorHandlingGenerator!.GenerateVariants(
-            routine: routine,
-            body: body);
+        ErrorHandlingResult result =
+            _errorHandlingGenerator!.GenerateVariants(routine: routine, body: body);
 
         // Report any errors from variant generation
         if (result.Error != null)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantGenerationError,
-                result.Error,
-                routine.Location ?? new SourceLocation(
-                    FileName: "<unknown>",
+            ReportError(code: SemanticDiagnosticCode.VariantGenerationError,
+                message: result.Error,
+                location: routine.Location ?? new SourceLocation(FileName: "<unknown>",
                     Line: 0,
                     Column: 0,
                     Position: 0));

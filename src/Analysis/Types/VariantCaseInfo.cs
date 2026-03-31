@@ -52,10 +52,6 @@ public sealed class VariantMemberInfo
     /// </summary>
     public VariantMemberInfo WithSubstitutedType(TypeInfo newType)
     {
-        return new VariantMemberInfo(type: newType)
-        {
-            TagValue = TagValue,
-            Location = Location
-        };
+        return new VariantMemberInfo(type: newType) { TagValue = TagValue, Location = Location };
     }
 }

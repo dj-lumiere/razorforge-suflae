@@ -80,19 +80,23 @@ public sealed partial class SemanticAnalyzer
 
             // If the type name contains generic params (e.g., "Box[T]"), strip them
             // and look up the generic definition (e.g., "Box") — mirrors CollectFunctionDeclaration
-            if (ownerType == null && typeName.Contains('['))
+            if (ownerType == null && typeName.Contains(value: '['))
             {
-                string baseTypeName = typeName[..typeName.IndexOf('[')];
+                string baseTypeName = typeName[..typeName.IndexOf(value: '[')];
                 ownerType = LookupTypeWithImports(name: baseTypeName);
             }
 
-            fullName = ownerType != null ? $"{ownerType.Name}.{methodName}" : routine.Name;
+            fullName = ownerType != null
+                ? $"{ownerType.Name}.{methodName}"
+                : routine.Name;
         }
         else
         {
             // Top-level function: Module.Name (if module set), else just Name
             string? module = GetCurrentModuleName();
-            fullName = string.IsNullOrEmpty(value: module) ? routine.Name : $"{module}.{routine.Name}";
+            fullName = string.IsNullOrEmpty(value: module)
+                ? routine.Name
+                : $"{module}.{routine.Name}";
         }
 
         // Look up the routine, trying overload disambiguation by resolved parameter types.
@@ -102,24 +106,34 @@ public sealed partial class SemanticAnalyzer
         RoutineInfo? routineInfo = null;
         if (routine.Parameters.Count > 0)
         {
-            var paramTypeNames = routine.Parameters
-                .Select(p =>
-                {
-                    if (p.Type == null) return "";
-                    TypeSymbol? resolved = LookupTypeWithImports(name: p.Type.Name);
-                    return resolved?.Name ?? p.Type.Name ?? "";
-                })
-                .Where(n => !string.IsNullOrEmpty(n));
-            string overloadKey = $"{fullName}#{string.Join(",", paramTypeNames)}";
+            IEnumerable<string> paramTypeNames = routine.Parameters
+                                                        .Select(selector: p =>
+                                                         {
+                                                             if (p.Type == null)
+                                                             {
+                                                                 return "";
+                                                             }
+
+                                                             TypeSymbol? resolved =
+                                                                 LookupTypeWithImports(
+                                                                     name: p.Type.Name);
+                                                             return resolved?.Name ??
+                                                                 p.Type.Name ?? "";
+                                                         })
+                                                        .Where(predicate: n =>
+                                                             !string.IsNullOrEmpty(value: n));
+            string overloadKey =
+                $"{fullName}#{string.Join(separator: ",", values: paramTypeNames)}";
             routineInfo = _registry.LookupRoutine(fullName: overloadKey);
         }
+
         routineInfo ??= _registry.LookupRoutine(fullName: fullName);
         if (routineInfo == null)
         {
-            ReportError(
-                SemanticDiagnosticCode.UnresolvedRoutineBody,
+            ReportError(code: SemanticDiagnosticCode.UnresolvedRoutineBody,
+                message:
                 $"Routine '{fullName}' body could not be matched to a registered declaration.",
-                routine.Location);
+                location: routine.Location);
             return;
         }
 
@@ -151,24 +165,24 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Validate that non-void routines return on all paths (#144)
-        if (routineInfo.ReturnType != null &&
-            routineInfo.ReturnType.Name != "Blank" &&
+        if (routineInfo.ReturnType != null && routineInfo.ReturnType.Name != "Blank" &&
             !StatementAlwaysTerminates(statement: routine.Body))
         {
-            ReportError(
-                SemanticDiagnosticCode.MissingReturn,
+            ReportError(code: SemanticDiagnosticCode.MissingReturn,
+                message:
                 $"Routine '{routine.Name}' has return type '{routineInfo.ReturnType.Name}' but not all code paths return a value.",
-                routine.Location);
+                location: routine.Location);
         }
 
         // Failable routines must contain throw, absent, or call other failable routines (#77)
-        if (routineInfo is { IsFailable: true, HasThrow: false, HasAbsent: false, HasFailableCalls: false })
+        if (routineInfo is
+            { IsFailable: true, HasThrow: false, HasAbsent: false, HasFailableCalls: false })
         {
-            ReportError(
-                SemanticDiagnosticCode.FailableWithoutThrowOrAbsent,
+            ReportError(code: SemanticDiagnosticCode.FailableWithoutThrowOrAbsent,
+                message:
                 $"Failable routine '{routine.Name}!' contains neither 'throw' nor 'absent'. " +
                 "Remove the '!' suffix or add error-handling statements.",
-                routine.Location);
+                location: routine.Location);
         }
 
         // Store routine body for error handling variant generation (Phase 5)
@@ -178,14 +192,15 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #161: Report undismantled Lookup variables at routine scope exit
-        foreach (var pending in _pendingLookupVars)
+        foreach ((string Name, SourceLocation Location) pending in _pendingLookupVars)
         {
-            ReportError(
-                SemanticDiagnosticCode.LookupNotDismantled,
+            ReportError(code: SemanticDiagnosticCode.LookupNotDismantled,
+                message:
                 $"Lookup variable '{pending.Name}' must be dismantled before end of scope. " +
                 "Use 'when', '??', or 'if is' to handle the lookup result.",
-                pending.Location);
+                location: pending.Location);
         }
+
         _pendingLookupVars.Clear();
 
         _registry.ExitScope();
@@ -278,10 +293,9 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             default:
-                ReportWarning(
-                    SemanticWarningCode.UnknownStatementType,
-                    $"Unknown statement type: {statement.GetType().Name}",
-                    statement.Location);
+                ReportWarning(code: SemanticWarningCode.UnknownStatementType,
+                    message: $"Unknown statement type: {statement.GetType().Name}",
+                    location: statement.Location);
                 break;
         }
     }
@@ -294,10 +308,9 @@ public sealed partial class SemanticAnalyzer
     {
         if (block.Statements.Count == 0)
         {
-            ReportError(
-                SemanticDiagnosticCode.EmptyBlockWithoutPass,
-                "Empty block requires 'pass' keyword.",
-                block.Location);
+            ReportError(code: SemanticDiagnosticCode.EmptyBlockWithoutPass,
+                message: "Empty block requires 'pass' keyword.",
+                location: block.Location);
             return;
         }
 
@@ -308,17 +321,17 @@ public sealed partial class SemanticAnalyzer
             // #58: Check if previous statement declared a variant that hasn't been dismantled
             if (_lastDeclaredVariantVar is { } pendingVariant)
             {
-                bool isDismantling = stmt is WhenStatement when
-                    && when.Expression is IdentifierExpression id
-                    && id.Name == pendingVariant.Name;
+                bool isDismantling = stmt is WhenStatement when &&
+                                     when.Expression is IdentifierExpression id &&
+                                     id.Name == pendingVariant.Name;
 
                 if (!isDismantling)
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.VariantNotDismantled,
+                    ReportError(code: SemanticDiagnosticCode.VariantNotDismantled,
+                        message:
                         $"Variant variable '{pendingVariant.Name}' must be dismantled immediately with 'when'. " +
                         "Variants cannot be used after other statements.",
-                        pendingVariant.Location);
+                        location: pendingVariant.Location);
                 }
 
                 _lastDeclaredVariantVar = null;
@@ -330,11 +343,11 @@ public sealed partial class SemanticAnalyzer
         // #58: Check if the last statement declared a variant without a subsequent when
         if (_lastDeclaredVariantVar is { } trailingVariant)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantNotDismantled,
+            ReportError(code: SemanticDiagnosticCode.VariantNotDismantled,
+                message:
                 $"Variant variable '{trailingVariant.Name}' must be dismantled immediately with 'when'. " +
                 "Variants cannot be used after other statements.",
-                trailingVariant.Location);
+                location: trailingVariant.Location);
             _lastDeclaredVariantVar = null;
         }
 
@@ -355,10 +368,10 @@ public sealed partial class SemanticAnalyzer
                 break;
 
             default:
-                ReportWarning(
-                    SemanticWarningCode.UnexpectedDeclaration,
+                ReportWarning(code: SemanticWarningCode.UnexpectedDeclaration,
+                    message:
                     $"Unexpected declaration in statement context: {decl.Declaration.GetType().Name}",
-                    decl.Location);
+                    location: decl.Location);
                 break;
         }
     }
@@ -386,10 +399,10 @@ public sealed partial class SemanticAnalyzer
             }
             else
             {
-                ReportError(
-                    SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                    message:
                     $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
-                    varDecl.Location);
+                    location: varDecl.Location);
                 varType = ErrorTypeInfo.Instance;
             }
         }
@@ -397,28 +410,28 @@ public sealed partial class SemanticAnalyzer
         // If we have both type annotation and initializer, verify compatibility
         if (varDecl is { Type: not null, Initializer: not null })
         {
-            TypeSymbol initType = AnalyzeExpression(expression: varDecl.Initializer, expectedType: varType);
+            TypeSymbol initType =
+                AnalyzeExpression(expression: varDecl.Initializer, expectedType: varType);
             if (!IsAssignableTo(source: initType, target: varType))
             {
-                ReportError(
-                    SemanticDiagnosticCode.VariableInitializerTypeMismatch,
+                ReportError(code: SemanticDiagnosticCode.VariableInitializerTypeMismatch,
+                    message:
                     $"Cannot assign value of type '{initType.Name}' to variable of type '{varType.Name}'.",
-                    varDecl.Location);
+                    location: varDecl.Location);
             }
         }
 
         // RazorForge: Entity bare assignment prohibition
         // `var b = a` where `a` is an entity is a build error (must use .share() or steal)
         // Only applies to bare identifier references, not creator calls or function returns
-        if (_registry.Language == Language.RazorForge
-            && varDecl.Initializer is IdentifierExpression
-            && varType is EntityTypeInfo)
+        if (_registry.Language == Language.RazorForge &&
+            varDecl.Initializer is IdentifierExpression && varType is EntityTypeInfo)
         {
-            ReportError(
-                SemanticDiagnosticCode.BareEntityAssignment,
+            ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                message:
                 $"Cannot directly assign entity of type '{varType.Name}' to variable '{varDecl.Name}'. " +
                 "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
-                varDecl.Location);
+                location: varDecl.Location);
         }
 
         // Variant copy prohibition: `var box2 = box1` is not allowed
@@ -426,63 +439,63 @@ public sealed partial class SemanticAnalyzer
         // Binding from routine calls (`var result = make_shape()`) is allowed
         if (varDecl.Initializer is IdentifierExpression && varType is VariantTypeInfo)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantCopyNotAllowed,
+            ReportError(code: SemanticDiagnosticCode.VariantCopyNotAllowed,
+                message:
                 $"Variant type '{varType.Name}' cannot be copied to variable '{varDecl.Name}'. " +
                 "Variants must be dismantled immediately with pattern matching.",
-                varDecl.Location);
+                location: varDecl.Location);
         }
 
         // #96: Seized[T] cannot be copied or aliased — exclusive lock token
-        if (varDecl.Initializer is IdentifierExpression
-            && IsSeizedType(type: varType))
+        if (varDecl.Initializer is IdentifierExpression && IsSeizedType(type: varType))
         {
-            ReportError(
-                SemanticDiagnosticCode.SeizedCopyNotAllowed,
-                $"Cannot copy or alias 'Seized[T]' variable to '{varDecl.Name}'. " +
-                "Seized tokens are exclusive and cannot be duplicated — use the original variable directly.",
-                varDecl.Location);
+            ReportError(code: SemanticDiagnosticCode.SeizedCopyNotAllowed,
+                message: $"Cannot copy or alias 'Seized[T]' variable to '{varDecl.Name}'. " +
+                         "Seized tokens are exclusive and cannot be duplicated — use the original variable directly.",
+                location: varDecl.Location);
         }
 
         // #81: Result/Lookup cannot be copied from variable to variable
         // `var r = check_parse!(data)` then `when r` is allowed (call result)
         // `var r2 = r1` where r1: Result[T] is not allowed (variable copy)
-        if (varDecl.Initializer is IdentifierExpression
-            && varType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup })
+        if (varDecl.Initializer is IdentifierExpression && varType is ErrorHandlingTypeInfo
+            {
+                Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
+            })
         {
-            ReportError(
-                SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
-                $"'{varType.Name}' cannot be copied to another variable. " +
-                "Dismantle it immediately with 'when', '??', or 'if is'.",
-                varDecl.Location);
+            ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
+                message: $"'{varType.Name}' cannot be copied to another variable. " +
+                         "Dismantle it immediately with 'when', '??', or 'if is'.",
+                location: varDecl.Location);
         }
 
         // #57: The 'global' keyword is only valid for entity type variables
-        if (varDecl.Storage == StorageClass.Global && varType is not EntityTypeInfo && varType is not ErrorTypeInfo)
+        if (varDecl.Storage == StorageClass.Global && varType is not EntityTypeInfo &&
+            varType is not ErrorTypeInfo)
         {
-            ReportError(
-                SemanticDiagnosticCode.GlobalOnlyForEntities,
+            ReportError(code: SemanticDiagnosticCode.GlobalOnlyForEntities,
+                message:
                 $"The 'global' keyword is only valid for entity type variables, not for type '{varType.Name}'.",
-                varDecl.Location);
+                location: varDecl.Location);
         }
 
         // Register variable in current scope
-        bool declared = _registry.DeclareVariable(
-            name: varDecl.Name,
-            type: varType);
+        bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType);
 
         if (!declared)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariableRedeclaration,
-                $"Variable '{varDecl.Name}' is already declared in this scope.",
-                varDecl.Location);
+            ReportError(code: SemanticDiagnosticCode.VariableRedeclaration,
+                message: $"Variable '{varDecl.Name}' is already declared in this scope.",
+                location: varDecl.Location);
         }
 
         // #19: Propagate lock policy from share[Policy]() to the declared variable
-        if (_lastSharePolicy != null && varDecl.Initializer is GenericMethodCallExpression { MethodName: "share" })
+        if (_lastSharePolicy != null && varDecl.Initializer is GenericMethodCallExpression
+            {
+                MethodName: "share"
+            })
         {
-            _variableLockPolicies[varDecl.Name] = _lastSharePolicy.Value.Policy;
+            _variableLockPolicies[key: varDecl.Name] = _lastSharePolicy.Value.Policy;
             _lastSharePolicy = null;
         }
 
@@ -493,10 +506,10 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #161: Track Lookup variables that must be dismantled before scope exit
-        if (varType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup }
-            && varDecl.Initializer is not IdentifierExpression)
+        if (varType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup } &&
+            varDecl.Initializer is not IdentifierExpression)
         {
-            _pendingLookupVars.Add((varDecl.Name, varDecl.Location));
+            _pendingLookupVars.Add(item: (varDecl.Name, varDecl.Location));
         }
     }
 
@@ -524,19 +537,17 @@ public sealed partial class SemanticAnalyzer
             string baseReturnName = GetBaseTypeName(typeName: exprType.Name);
             if (baseReturnName == "Task")
             {
-                ReportWarning(
-                    SemanticWarningCode.UnusedTaskResult,
-                    $"Task result from '{routineName}()' is not awaited. " +
-                    "Use 'waitfor' to await the result, or 'discard' to explicitly ignore it.",
-                    call.Location);
+                ReportWarning(code: SemanticWarningCode.UnusedTaskResult,
+                    message: $"Task result from '{routineName}()' is not awaited. " +
+                             "Use 'waitfor' to await the result, or 'discard' to explicitly ignore it.",
+                    location: call.Location);
             }
             else
             {
-                ReportWarning(
-                    SemanticWarningCode.UnusedRoutineReturnValue,
-                    $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
-                    "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
-                    call.Location);
+                ReportWarning(code: SemanticWarningCode.UnusedRoutineReturnValue,
+                    message: $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
+                             "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
+                    location: call.Location);
             }
         }
     }
@@ -554,10 +565,10 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeExpression(expression: element);
                 if (!IsAssignableTarget(target: element))
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.InvalidAssignmentTarget,
+                    ReportError(code: SemanticDiagnosticCode.InvalidAssignmentTarget,
+                        message:
                         "All elements of tuple destructuring must be assignable targets (variables, member accesses, or indices).",
-                        element.Location);
+                        location: element.Location);
                 }
 
                 // Check modifiability for identifier elements
@@ -566,10 +577,9 @@ public sealed partial class SemanticAnalyzer
                     VariableInfo? varInfo = _registry.LookupVariable(name: elemId.Name);
                     if (varInfo is { IsModifiable: false })
                     {
-                        ReportError(
-                            SemanticDiagnosticCode.AssignmentToImmutable,
-                            $"Cannot assign to preset variable '{elemId.Name}'.",
-                            assign.Location);
+                        ReportError(code: SemanticDiagnosticCode.AssignmentToImmutable,
+                            message: $"Cannot assign to preset variable '{elemId.Name}'.",
+                            location: assign.Location);
                     }
                 }
             }
@@ -579,10 +589,10 @@ public sealed partial class SemanticAnalyzer
             {
                 if (tupleLhs.Elements.Count != tupleType.ElementTypes.Count)
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.DestructuringArityMismatch,
+                    ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
+                        message:
                         $"Tuple destructuring has {tupleLhs.Elements.Count} targets but the value has {tupleType.ElementTypes.Count} elements.",
-                        assign.Location);
+                        location: assign.Location);
                 }
             }
 
@@ -595,10 +605,9 @@ public sealed partial class SemanticAnalyzer
         // Check if target is assignable (variable, member variable, or index)
         if (!IsAssignableTarget(target: assign.Target))
         {
-            ReportError(
-                SemanticDiagnosticCode.InvalidAssignmentTarget,
-                "Invalid assignment target.",
-                assign.Target.Location);
+            ReportError(code: SemanticDiagnosticCode.InvalidAssignmentTarget,
+                message: "Invalid assignment target.",
+                location: assign.Target.Location);
             return;
         }
 
@@ -608,10 +617,9 @@ public sealed partial class SemanticAnalyzer
             VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
             if (varInfo is { IsModifiable: false })
             {
-                ReportError(
-                    SemanticDiagnosticCode.AssignmentToImmutable,
-                    $"Cannot assign to preset variable '{id.Name}'.",
-                    assign.Location);
+                ReportError(code: SemanticDiagnosticCode.AssignmentToImmutable,
+                    message: $"Cannot assign to preset variable '{id.Name}'.",
+                    location: assign.Location);
             }
         }
 
@@ -623,25 +631,28 @@ public sealed partial class SemanticAnalyzer
             // Read-only wrapper types (Viewed, Inspected) cannot be written through
             if (IsReadOnlyWrapper(type: objectType))
             {
-                ReportError(
-                    SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    message:
                     $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
                     "Use Hijacked[T] for exclusive write access or Seized[T] for locked write access.",
-                    assign.Location);
+                    location: assign.Location);
             }
 
-            ValidateMemberVariableWriteAccess(objectType: objectType, memberVariableName: member.PropertyName, location: assign.Location);
+            ValidateMemberVariableWriteAccess(objectType: objectType,
+                memberVariableName: member.PropertyName,
+                location: assign.Location);
 
             // Preset enforcement: cannot assign to member variables of preset variables
             if (member.Object is IdentifierExpression memberVariableTarget)
             {
-                VariableInfo? targetVar = _registry.LookupVariable(name: memberVariableTarget.Name);
+                VariableInfo? targetVar =
+                    _registry.LookupVariable(name: memberVariableTarget.Name);
                 if (targetVar is { IsModifiable: false })
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable,
+                    ReportError(code: SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable,
+                        message:
                         $"Cannot assign to member variable '{member.PropertyName}' of preset variable '{memberVariableTarget.Name}'.",
-                        assign.Location);
+                        location: assign.Location);
                 }
             }
 
@@ -649,598 +660,34 @@ public sealed partial class SemanticAnalyzer
             if (_currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
-                ReportError(
-                    SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                ReportError(code: SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    message:
                     $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
                     "Use @writable or @migratable to allow modifications.",
-                    assign.Location);
+                    location: assign.Location);
             }
         }
 
         // #81: Result/Lookup cannot be copied from variable to variable via assignment
-        if (assign.Value is IdentifierExpression
-            && valueType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup })
+        if (assign.Value is IdentifierExpression && valueType is ErrorHandlingTypeInfo
+            {
+                Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
+            })
         {
-            ReportError(
-                SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
-                $"'{valueType.Name}' cannot be copied to another variable. " +
-                "Dismantle it immediately with 'when', '??', or 'if is'.",
-                assign.Location);
+            ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
+                message: $"'{valueType.Name}' cannot be copied to another variable. " +
+                         "Dismantle it immediately with 'when', '??', or 'if is'.",
+                location: assign.Location);
         }
 
         // Check type compatibility
         if (!IsAssignableTo(source: valueType, target: targetType))
         {
-            ReportError(
-                SemanticDiagnosticCode.AssignmentTypeMismatch,
+            ReportError(code: SemanticDiagnosticCode.AssignmentTypeMismatch,
+                message:
                 $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
-                assign.Location);
+                location: assign.Location);
         }
-    }
-
-    private void AnalyzeIfStatement(IfStatement ifStmt)
-    {
-        TypeSymbol conditionType = AnalyzeExpression(expression: ifStmt.Condition);
-
-        // Condition must be boolean
-        if (!IsBoolType(type: conditionType))
-        {
-            ReportError(
-                SemanticDiagnosticCode.IfConditionNotBool,
-                $"If condition must be boolean, got '{conditionType.Name}'.",
-                ifStmt.Condition.Location);
-        }
-
-        // Extract narrowing info from condition
-        NarrowingInfo? narrowing = TryExtractNarrowingFromCondition(condition: ifStmt.Condition);
-
-        // Analyze then branch (with narrowing if applicable)
-        if (narrowing?.ThenBranchType != null)
-        {
-            _registry.EnterScope(kind: ScopeKind.Block, name: "if_then");
-            _registry.NarrowVariable(name: narrowing.VariableName, narrowedType: narrowing.ThenBranchType);
-            AnalyzeStatement(statement: ifStmt.ThenStatement);
-            _registry.ExitScope();
-        }
-        else
-        {
-            AnalyzeStatement(statement: ifStmt.ThenStatement);
-        }
-
-        // Analyze else branch if present (with inverse narrowing if applicable)
-        if (ifStmt.ElseStatement != null)
-        {
-            if (narrowing?.ElseBranchType != null)
-            {
-                _registry.EnterScope(kind: ScopeKind.Block, name: "if_else");
-                _registry.NarrowVariable(name: narrowing.VariableName, narrowedType: narrowing.ElseBranchType);
-                AnalyzeStatement(statement: ifStmt.ElseStatement);
-                _registry.ExitScope();
-            }
-            else
-            {
-                AnalyzeStatement(statement: ifStmt.ElseStatement);
-            }
-        }
-
-        // Guard clause narrowing: if the then branch definitely exits,
-        // apply else narrowing to the remainder of the current scope
-        if (ifStmt.ElseStatement == null
-            && narrowing?.ElseBranchType != null
-            && HasDefiniteExit(statement: ifStmt.ThenStatement))
-        {
-            _registry.NarrowVariable(name: narrowing.VariableName, narrowedType: narrowing.ElseBranchType);
-        }
-    }
-
-    private void AnalyzeWhileStatement(WhileStatement whileStmt)
-    {
-        TypeSymbol conditionType = AnalyzeExpression(expression: whileStmt.Condition);
-
-        // Condition must be boolean
-        if (!IsBoolType(type: conditionType))
-        {
-            ReportError(
-                SemanticDiagnosticCode.WhileConditionNotBool,
-                $"While condition must be boolean, got '{conditionType.Name}'.",
-                whileStmt.Condition.Location);
-        }
-
-        // Analyze loop body
-        _registry.EnterScope(kind: ScopeKind.Loop, name: "while");
-        AnalyzeStatement(statement: whileStmt.Body);
-        _registry.ExitScope();
-    }
-
-    private void AnalyzeForStatement(ForStatement forStmt)
-    {
-        _registry.EnterScope(kind: ScopeKind.Loop, name: "for");
-
-        // Analyze iterable expression
-        TypeSymbol iterableType = AnalyzeExpression(expression: forStmt.Iterable);
-
-        // Get element type from iterable
-        TypeSymbol elementType = GetIterableElementType(iterableType: iterableType, location: forStmt.Location);
-
-        // Handle either simple variable or destructuring pattern
-        if (forStmt.Variable != null)
-        {
-            // Simple variable binding: for item in items
-            _registry.DeclareVariable(
-                name: forStmt.Variable,
-                type: elementType);
-        }
-        else if (forStmt.VariablePattern != null)
-        {
-            // Destructuring pattern: for (index, item) in items.enumerate()
-            if (elementType is TupleTypeInfo tupleType)
-            {
-                // Check arity match
-                int bindingCount = forStmt.VariablePattern.Bindings.Count;
-                if (bindingCount != tupleType.Arity)
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.DestructuringArityMismatch,
-                        $"Destructuring pattern has {bindingCount} bindings but tuple has {tupleType.Arity} elements.",
-                        forStmt.VariablePattern.Location);
-                }
-
-                // Declare each binding with its corresponding tuple element type
-                for (int i = 0; i < forStmt.VariablePattern.Bindings.Count; i++)
-                {
-                    DestructuringBinding binding = forStmt.VariablePattern.Bindings[i];
-                    if (binding.BindingName != null)
-                    {
-                        TypeSymbol bindingType = i < tupleType.Arity
-                            ? (TypeSymbol)tupleType.ElementTypes[i]
-                            : ErrorTypeInfo.Instance;
-                        _registry.DeclareVariable(name: binding.BindingName, type: bindingType);
-                    }
-                }
-            }
-            else
-            {
-                // Non-tuple type with destructuring pattern
-                ReportError(
-                    SemanticDiagnosticCode.DestructuringArityMismatch,
-                    $"Cannot destructure non-tuple type '{elementType.Name}' in for loop.",
-                    forStmt.VariablePattern.Location);
-                // Still declare variables with error type so analysis can continue
-                foreach (DestructuringBinding binding in forStmt.VariablePattern.Bindings)
-                {
-                    if (binding.BindingName != null)
-                    {
-                        _registry.DeclareVariable(name: binding.BindingName, type: ErrorTypeInfo.Instance);
-                    }
-                }
-            }
-        }
-
-        // #22: Track active iteration source for migratable-during-iteration check
-        string? iterationSourceName = forStmt.Iterable is IdentifierExpression iterSource
-            ? iterSource.Name
-            : null;
-
-        if (iterationSourceName != null)
-        {
-            _activeIterationSources.Add(iterationSourceName);
-        }
-
-        // Analyze loop body
-        AnalyzeStatement(statement: forStmt.Body);
-
-        if (iterationSourceName != null)
-        {
-            _activeIterationSources.Remove(iterationSourceName);
-        }
-
-        _registry.ExitScope();
-    }
-
-    private void AnalyzeWhenStatement(WhenStatement whenStmt)
-    {
-        TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
-
-        // #161: Mark Lookup variable as dismantled when targeted by 'when'
-        if (whenStmt.Expression is IdentifierExpression whenTarget)
-        {
-            _pendingLookupVars.RemoveAll(v => v.Name == whenTarget.Name);
-        }
-
-        // #88: Pattern order enforcement — else/wildcard must be last, detect unreachable patterns
-        {
-            bool seenElse = false;
-            foreach (WhenClause clause in whenStmt.Clauses)
-            {
-                if (seenElse)
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.PatternOrderViolation,
-                        "Unreachable pattern after 'else' or wildcard.",
-                        clause.Pattern.Location);
-                }
-
-                if (clause.Pattern is ElsePattern or WildcardPattern)
-                {
-                    seenElse = true;
-                }
-            }
-        }
-
-        // #130/#148: Duplicate pattern detection
-        {
-            var seenPatterns = new HashSet<string>();
-            foreach (WhenClause clause in whenStmt.Clauses)
-            {
-                string? patternKey = GetPatternKey(pattern: clause.Pattern);
-                if (patternKey != null && !seenPatterns.Add(item: patternKey))
-                {
-                    ReportError(
-                        SemanticDiagnosticCode.DuplicatePattern,
-                        $"Duplicate pattern: {patternKey}.",
-                        clause.Pattern.Location);
-                }
-            }
-        }
-
-        // Track handled patterns for narrowing the else clause
-        bool handledNone = false;
-        bool handledCrashable = false;
-
-        foreach (WhenClause clause in whenStmt.Clauses)
-        {
-            _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
-
-            // Track which patterns are handled (before the else clause)
-            if (IsNonePattern(pattern: clause.Pattern))
-            {
-                handledNone = true;
-            }
-            else if (IsCrashablePattern(pattern: clause.Pattern))
-            {
-                handledCrashable = true;
-            }
-
-            switch (clause.Pattern)
-            {
-                case ElsePattern elsePat when matchedType is ErrorHandlingTypeInfo ehType:
-                {
-                    // Compute narrowed type for else clause binding
-                    TypeSymbol? narrowedType = ComputeNarrowedType(
-                        type: ehType,
-                        eliminateNone: handledNone,
-                        eliminateCrashable: handledCrashable);
-
-                    if (narrowedType != null && elsePat.VariableName != null)
-                    {
-                        // Declare with narrowed type instead of original matchedType
-                        DeclarePatternVariable(
-                            name: elsePat.VariableName,
-                            type: narrowedType,
-                            location: elsePat.Location);
-                        AnalyzeStatement(statement: clause.Body);
-                        _registry.ExitScope();
-                        continue;
-                    }
-
-                    break;
-                }
-            }
-
-            // Analyze pattern and bind variables
-            AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
-
-            // Analyze clause body
-            AnalyzeStatement(statement: clause.Body);
-
-            _registry.ExitScope();
-        }
-
-        // Check exhaustiveness for enumerable types (choice, variant, error-handling)
-        if (matchedType is ChoiceTypeInfo or VariantTypeInfo or ErrorHandlingTypeInfo)
-        {
-            bool hasCatchAll = whenStmt.Clauses.Any(predicate: c =>
-                c.Pattern is WildcardPattern or ElsePattern or IdentifierPattern);
-
-            if (!hasCatchAll)
-            {
-                ExhaustivenessResult exhaustiveness = CheckExhaustiveness(
-                    clauses: whenStmt.Clauses,
-                    matchedType: matchedType);
-
-                if (!exhaustiveness.IsExhaustive)
-                {
-                    string missing = exhaustiveness.MissingCases.Count > 0
-                        ? $" Missing cases: {string.Join(separator: ", ", values: exhaustiveness.MissingCases)}."
-                        : "";
-
-                    // #89: Result/Lookup missing Crashable catch-all is an error, not a warning
-                    if (matchedType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup }
-                        && exhaustiveness.MissingCases.Contains(item: "Crashable"))
-                    {
-                        ReportError(
-                            SemanticDiagnosticCode.NonExhaustiveMatch,
-                            $"Pattern match on '{matchedType.Name}' requires a 'Crashable' catch-all arm.{missing}",
-                            whenStmt.Location);
-                    }
-                    else
-                    {
-                        ReportWarning(
-                            SemanticWarningCode.NonExhaustiveWhen,
-                            $"When statement may not cover all cases of '{matchedType.Name}'.{missing}",
-                            whenStmt.Location);
-                    }
-                }
-            }
-        }
-    }
-
-    private void AnalyzeReturnStatement(ReturnStatement ret)
-    {
-        if (_currentRoutine == null)
-        {
-            ReportError(
-                SemanticDiagnosticCode.ReturnOutsideFunction,
-                "Return statement outside of function.",
-                ret.Location);
-            return;
-        }
-
-        if (ret.Value != null)
-        {
-            // Pass expected return type for contextual literal inference
-            TypeSymbol returnType = AnalyzeExpression(expression: ret.Value, expectedType: _currentRoutine.ReturnType);
-
-            // Validate that tokens cannot be returned (RazorForge only)
-            ValidateNotTokenReturnType(type: returnType, location: ret.Location);
-
-            if (_currentRoutine.ReturnType != null &&
-                !IsAssignableTo(source: returnType, target: _currentRoutine.ReturnType))
-            {
-                ReportError(
-                    SemanticDiagnosticCode.ReturnTypeMismatch,
-                    $"Cannot return value of type '{returnType.Name}' from function expecting '{_currentRoutine.ReturnType.Name}'.",
-                    ret.Location);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Analyzes a becomes statement (block result value).
-    /// Becomes is used in multi-statement when/if branches to explicitly indicate the branch's result.
-    /// </summary>
-    private void AnalyzeBecomesStatement(BecomesStatement becomesStmt)
-    {
-        // Analyze the becomes expression
-        // For now, we just validate the expression type - context validation
-        // (checking that becomes appears in an appropriate block context) can be
-        // added in a future phase when we track block expression contexts
-        TypeSymbol becomesType = AnalyzeExpression(expression: becomesStmt.Value);
-
-        // Validate that tokens cannot be block results (RazorForge only)
-        ValidateNotTokenReturnType(type: becomesType, location: becomesStmt.Location);
-    }
-
-    private void AnalyzeThrowStatement(ThrowStatement throwStmt)
-    {
-        if (_currentRoutine == null || !_currentRoutine.IsFailable)
-        {
-            ReportError(
-                SemanticDiagnosticCode.ThrowOutsideFailableFunction,
-                "Throw statement is only allowed in failable functions (marked with !).",
-                throwStmt.Location);
-            return;
-        }
-
-        TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
-
-        // Error must implement Crashable protocol
-        if (!ImplementsProtocol(type: errorType, protocolName: "Crashable"))
-        {
-            ReportError(
-                SemanticDiagnosticCode.ThrowNotCrashable,
-                $"Thrown value must implement Crashable protocol, got '{errorType.Name}'.",
-                throwStmt.Error.Location);
-        }
-
-        // Error types must be records (#84)
-        if (errorType.Category != TypeCategory.Record &&
-            errorType is not ErrorTypeInfo &&
-            errorType.Name != "Error")
-        {
-            ReportError(
-                SemanticDiagnosticCode.ThrowRequiresRecordType,
-                $"Only record types can be thrown, got '{errorType.Name}' ({errorType.Category}). " +
-                "Error types must be records for safe stack-based error propagation.",
-                throwStmt.Error.Location);
-        }
-
-        // Mark routine as having throw statements (for variant generation)
-        _currentRoutine.HasThrow = true;
-    }
-
-    private void AnalyzeAbsentStatement(AbsentStatement absent)
-    {
-        if (_currentRoutine == null || !_currentRoutine.IsFailable)
-        {
-            ReportError(
-                SemanticDiagnosticCode.AbsentOutsideFailableFunction,
-                "Absent statement is only allowed in failable functions (marked with !).",
-                absent.Location);
-            return;
-        }
-
-        // Mark routine as having absent statements (for variant generation)
-        _currentRoutine.HasAbsent = true;
-    }
-
-    private void AnalyzeBreakStatement(BreakStatement breakStmt)
-    {
-        if (!_registry.CurrentScope.IsInLoop)
-        {
-            ReportError(
-                SemanticDiagnosticCode.BreakOutsideLoop,
-                "Break statement is only allowed inside a loop.",
-                breakStmt.Location);
-        }
-    }
-
-    private void AnalyzeContinueStatement(ContinueStatement continueStmt)
-    {
-        if (!_registry.CurrentScope.IsInLoop)
-        {
-            ReportError(
-                SemanticDiagnosticCode.ContinueOutsideLoop,
-                "Continue statement is only allowed inside a loop.",
-                continueStmt.Location);
-        }
-    }
-
-    private void AnalyzeDestructuringStatement(DestructuringStatement destruct)
-    {
-        TypeSymbol initType = AnalyzeExpression(expression: destruct.Initializer);
-
-        // Analyze the destructuring pattern and bind variables
-        AnalyzeDestructuringPattern(pattern: destruct.Pattern, sourceType: initType);
-    }
-
-    /// <summary>
-    /// Analyzes a discard statement (explicitly ignores a return value).
-    /// Used to explicitly indicate that a routine's return value is intentionally ignored.
-    /// </summary>
-    private void AnalyzeDiscardStatement(DiscardStatement discard)
-    {
-        // discard must target a routine call, not an arbitrary expression like a literal or variable
-        if (discard.Expression is not CallExpression)
-        {
-            ReportError(
-                SemanticDiagnosticCode.InvalidDiscardTarget,
-                "'discard' can only be used with routine calls. " +
-                "Use 'discard some_routine()' to explicitly ignore a return value.",
-                discard.Location);
-        }
-
-        // Analyze the expression - this validates the expression and checks for errors
-        // The result is intentionally discarded
-        AnalyzeExpression(expression: discard.Expression);
-    }
-
-    /// <summary>
-    /// #71: Validates emit statement — only allowed inside generator routines.
-    /// </summary>
-    private void AnalyzeEmitStatement(EmitStatement emitStmt)
-    {
-        // Analyze the emitted expression
-        TypeSymbol emittedType = AnalyzeExpression(expression: emitStmt.Expression);
-
-        // emit is only valid inside generator routines
-        if (_currentRoutine == null)
-        {
-            ReportError(
-                SemanticDiagnosticCode.EmitOutsideGenerator,
-                "'emit' statement is only allowed inside generator routines.",
-                emitStmt.Location);
-            return;
-        }
-
-        // Mark current routine as generator
-        _currentRoutineIsGenerator = true;
-
-        // Validate return type is Sequence[T]
-        if (_currentRoutine.ReturnType != null)
-        {
-            string returnName = GetBaseTypeName(typeName: _currentRoutine.ReturnType.Name);
-            if (returnName != "Sequence")
-            {
-                ReportError(
-                    SemanticDiagnosticCode.GeneratorReturnType,
-                    $"Generator routine must return Sequence[T], not '{_currentRoutine.ReturnType.Name}'.",
-                    emitStmt.Location);
-            }
-        }
-    }
-
-    private void AnalyzeDangerStatement(DangerStatement danger)
-    {
-        if (_registry.Language == Language.Suflae)
-        {
-            ReportError(
-                SemanticDiagnosticCode.FeatureNotInSuflae,
-                "Danger blocks are not available in Suflae.",
-                danger.Location);
-            return;
-        }
-
-        // Danger blocks cannot be nested
-        if (InDangerBlock)
-        {
-            ReportError(
-                SemanticDiagnosticCode.NestedDangerBlock,
-                "Danger blocks cannot be nested.",
-                danger.Location);
-            return;
-        }
-
-        // Enter danger scope
-        _registry.EnterScope(kind: ScopeKind.Block, name: "danger");
-        _dangerBlockDepth = 1;
-
-        try
-        {
-            AnalyzeBlockStatement(block: danger.Body);
-        }
-        finally
-        {
-            _dangerBlockDepth = 0;
-            _registry.ExitScope();
-        }
-    }
-
-    private void AnalyzeUsingStatement(UsingStatement usingStmt)
-    {
-        // Analyze the resource expression to get its type
-        TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
-
-        // The bound variable type defaults to the resource type, but may be overridden
-        // by $enter's return type when it returns non-void.
-        TypeSymbol boundType = resourceType;
-
-        // All using targets (tokens and resources alike) require $enter/$exit
-        if (_registry.Language == Language.RazorForge)
-        {
-            // LookupMethod handles generic type fallback (e.g., Viewed[Point].$enter → Viewed.$enter)
-            RoutineInfo? enterMethod = _registry.LookupMethod(type: resourceType, methodName: "$enter");
-            RoutineInfo? exitMethod = _registry.LookupMethod(type: resourceType, methodName: "$exit");
-
-            if (enterMethod == null || exitMethod == null)
-            {
-                ReportError(
-                    SemanticDiagnosticCode.UsingTargetMissingEnterExit,
-                    $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management.",
-                    usingStmt.Location);
-            }
-            else if (enterMethod.ReturnType != null && !enterMethod.ReturnType.IsBlank)
-            {
-                boundType = enterMethod.ReturnType;
-            }
-        }
-
-        // Create a new scope for the using block
-        _registry.EnterScope(kind: ScopeKind.Block, name: "using");
-
-        // Declare the binding variable in the using scope
-        _registry.DeclareVariable(
-            name: usingStmt.Name,
-            type: boundType);
-
-        // Analyze the body
-        AnalyzeStatement(statement: usingStmt.Body);
-
-        // #171/#172: Token/resource scope escape — validate that the using-bound variable
-        // is not returned or stored in outer scope (handled by ValidateNotTokenReturnType
-        // for tokens, and conceptually enforced by scope exit for resources)
-
-        _registry.ExitScope();
     }
 
     #endregion

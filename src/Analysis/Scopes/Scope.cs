@@ -117,7 +117,7 @@ public sealed class Scope
         Scope? current = this;
         while (current != null)
         {
-            foreach (var kvp in current._variables)
+            foreach (KeyValuePair<string, VariableInfo> kvp in current._variables)
             {
                 // Don't override - inner scope shadows outer
                 variables.TryAdd(key: kvp.Key, value: kvp.Value);
@@ -137,10 +137,7 @@ public sealed class Scope
     /// <returns>The newly created child scope.</returns>
     public Scope CreateChildScope(ScopeKind kind, string? name = null)
     {
-        return new Scope(kind: kind, parent: this)
-        {
-            Name = name
-        };
+        return new Scope(kind: kind, parent: this) { Name = name };
     }
 
     /// <summary>

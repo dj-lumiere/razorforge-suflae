@@ -598,8 +598,11 @@ public record IdentifierPattern(string Name, SourceLocation Location)
 /// <item>when obj { is CIRCLE ((x, y), radius) => ... } matches with nested destructuring</item>
 /// </list>
 /// </remarks>
-public record TypePattern(TypeExpression Type, string? VariableName, List<DestructuringBinding>? Bindings, SourceLocation Location)
-    : Pattern(Location: Location);
+public record TypePattern(
+    TypeExpression Type,
+    string? VariableName,
+    List<DestructuringBinding>? Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>
 /// Pattern that matches when a value is NOT a specific type.
@@ -625,8 +628,7 @@ public record FlagsPattern(
     FlagsTestConnective Connective,
     List<string>? ExcludedFlags,
     bool IsExact,
-    SourceLocation Location)
-    : Pattern(Location: Location);
+    SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>
 /// Pattern that matches any value without binding it to a variable.
@@ -670,10 +672,8 @@ public record ExpressionPattern(Expression Expression, SourceLocation Location)
 /// <item>== true => ... (boolean matching)</item>
 /// </list>
 /// </remarks>
-public record ComparisonPattern(
-    TokenType Operator,
-    Expression Value,
-    SourceLocation Location) : Pattern(Location: Location);
+public record ComparisonPattern(TokenType Operator, Expression Value, SourceLocation Location)
+    : Pattern(Location: Location);
 
 /// <summary>
 /// Pattern for matching variant cases with optional destructuring.
@@ -799,9 +799,8 @@ public record ElsePattern(string? VariableName, SourceLocation Location)
 /// <item>var ((x, y), radius) = circle (nested)</item>
 /// </list>
 /// </remarks>
-public record DestructuringPattern(
-    List<DestructuringBinding> Bindings,
-    SourceLocation Location) : Pattern(Location: Location);
+public record DestructuringPattern(List<DestructuringBinding> Bindings, SourceLocation Location)
+    : Pattern(Location: Location);
 
 /// <summary>
 /// Pattern for type checking with simultaneous destructuring.
@@ -885,4 +884,3 @@ public record UsingStatement(
         return visitor.VisitUsingStatement(node: this);
     }
 }
-

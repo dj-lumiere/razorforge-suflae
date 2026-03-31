@@ -26,41 +26,41 @@ public partial class LLVMCodeGenerator
         switch (stmt)
         {
             case BlockStatement block:
-                return EmitBlock(sb, block);
+                return EmitBlock(sb: sb, block: block);
 
             case ExpressionStatement expr:
-                EmitExpression(sb, expr.Expression);
+                EmitExpression(sb: sb, expr: expr.Expression);
                 return false;
 
             case DeclarationStatement decl:
-                EmitDeclarationStatement(sb, decl);
+                EmitDeclarationStatement(sb: sb, decl: decl);
                 return false;
 
             case AssignmentStatement assign:
-                EmitAssignment(sb, assign);
+                EmitAssignment(sb: sb, assign: assign);
                 return false;
 
             case ReturnStatement ret:
-                EmitReturn(sb, ret);
+                EmitReturn(sb: sb, ret: ret);
                 return true; // Return terminates the block
 
             case IfStatement ifStmt:
-                return EmitIf(sb, ifStmt);
+                return EmitIf(sb: sb, ifStmt: ifStmt);
 
             case WhileStatement whileStmt:
-                EmitWhile(sb, whileStmt);
+                EmitWhile(sb: sb, whileStmt: whileStmt);
                 return false;
 
             case ForStatement forStmt:
-                EmitFor(sb, forStmt);
+                EmitFor(sb: sb, forStmt: forStmt);
                 return false;
 
             case BreakStatement:
-                EmitBreak(sb);
+                EmitBreak(sb: sb);
                 return true; // Break terminates the block
 
             case ContinueStatement:
-                EmitContinue(sb);
+                EmitContinue(sb: sb);
                 return true; // Continue terminates the block
 
             case PassStatement:
@@ -69,40 +69,41 @@ public partial class LLVMCodeGenerator
 
             case DangerStatement danger:
                 // danger! block - just emit the body
-                return EmitBlock(sb, danger.Body);
+                return EmitBlock(sb: sb, block: danger.Body);
 
             case WhenStatement whenStmt:
-                EmitWhen(sb, whenStmt);
+                EmitWhen(sb: sb, whenStmt: whenStmt);
                 return false;
 
             case DiscardStatement discard:
                 // Discard: evaluate the call expression and ignore the result
                 // TODO: Maybe NOT evaluating if it is creator?
-                EmitExpression(sb, discard.Expression);
+                EmitExpression(sb: sb, expr: discard.Expression);
                 return false;
 
             case UsingStatement usingStmt:
-                EmitUsing(sb, usingStmt);
+                EmitUsing(sb: sb, usingStmt: usingStmt);
                 return false;
 
             case ThrowStatement throwStmt:
-                EmitThrow(sb, throwStmt);
+                EmitThrow(sb: sb, throwStmt: throwStmt);
                 return true; // Throw terminates the block
 
             case AbsentStatement:
-                EmitAbsent(sb);
+                EmitAbsent(sb: sb);
                 return true; // Absent terminates the block
 
             case EmitStatement emitStmt:
-                EmitEmit(sb, emitStmt);
+                EmitEmit(sb: sb, emitStmt: emitStmt);
                 return false;
 
             case BecomesStatement becomesStmt:
-                EmitBecomes(sb, becomesStmt);
+                EmitBecomes(sb: sb, becomesStmt: becomesStmt);
                 return false;
 
             default:
-                throw new NotImplementedException($"Statement type not implemented: {stmt.GetType().Name}");
+                throw new NotImplementedException(
+                    message: $"Statement type not implemented: {stmt.GetType().Name}");
         }
     }
 
@@ -112,13 +113,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private bool EmitBlock(StringBuilder sb, BlockStatement block)
     {
-        foreach (var stmt in block.Statements)
+        foreach (Statement stmt in block.Statements)
         {
-            if (EmitStatement(sb, stmt))
+            if (EmitStatement(sb: sb, stmt: stmt))
             {
                 return true; // Block terminated early
             }
         }
+
         return false;
     }
 
@@ -134,7 +136,7 @@ public partial class LLVMCodeGenerator
     {
         if (decl.Declaration is VariableDeclaration varDecl)
         {
-            EmitVariableDeclaration(sb, varDecl);
+            EmitVariableDeclaration(sb: sb, varDecl: varDecl);
         }
         // Other declaration types (function, type) are handled at module level
     }
@@ -149,53 +151,54 @@ public partial class LLVMCodeGenerator
         TypeInfo? varType = null;
         if (varDecl.Type != null)
         {
-            varType = ResolveTypeExpression(varDecl.Type);
+            varType = ResolveTypeExpression(typeExpr: varDecl.Type);
         }
         else if (varDecl.Initializer != null)
         {
-            varType = GetExpressionType(varDecl.Initializer);
+            varType = GetExpressionType(expr: varDecl.Initializer);
         }
 
         if (varType == null)
         {
-            throw new InvalidOperationException($"Cannot determine type for variable '{varDecl.Name}'");
+            throw new InvalidOperationException(
+                message: $"Cannot determine type for variable '{varDecl.Name}'");
         }
 
-        string llvmType = GetLLVMType(varType);
+        string llvmType = GetLLVMType(type: varType);
 
         // Generate unique LLVM name for this variable (handles shadowing/redeclaration)
         string uniqueName;
-        if (_varNameCounts.TryGetValue(varDecl.Name, out int count))
+        if (_varNameCounts.TryGetValue(key: varDecl.Name, value: out int count))
         {
-            _varNameCounts[varDecl.Name] = count + 1;
+            _varNameCounts[key: varDecl.Name] = count + 1;
             uniqueName = $"{varDecl.Name}.{count + 1}";
         }
         else
         {
-            _varNameCounts[varDecl.Name] = 1;
+            _varNameCounts[key: varDecl.Name] = 1;
             uniqueName = varDecl.Name;
         }
 
         // Allocate stack space
         string varPtr = $"%{uniqueName}.addr";
-        EmitLine(sb, $"  {varPtr} = alloca {llvmType}");
+        EmitLine(sb: sb, line: $"  {varPtr} = alloca {llvmType}");
 
         // Register local variable for identifier lookup
-        _localVariables[varDecl.Name] = varType;
-        _localVarLLVMNames[varDecl.Name] = uniqueName;
+        _localVariables[key: varDecl.Name] = varType;
+        _localVarLLVMNames[key: varDecl.Name] = uniqueName;
 
         // Track entity variables for automatic cleanup at return points
         // Only track when initialized via constructor (actual heap allocation)
-        if (varType is EntityTypeInfo && IsEntityConstructorCall(varDecl.Initializer))
+        if (varType is EntityTypeInfo && IsEntityConstructorCall(expr: varDecl.Initializer))
         {
-            _localEntityVars.Add((varDecl.Name, $"%{uniqueName}.addr"));
+            _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
         }
 
         // Store initial value if present
         if (varDecl.Initializer != null)
         {
-            string value = EmitExpression(sb, varDecl.Initializer);
-            EmitLine(sb, $"  store {llvmType} {value}, ptr {varPtr}");
+            string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
+            EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
         }
     }
 
@@ -204,7 +207,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? ResolveTypeExpression(TypeExpression typeExpr)
     {
-        return _registry.LookupType(typeExpr.Name);
+        return _registry.LookupType(name: typeExpr.Name);
     }
 
     #endregion
@@ -218,25 +221,29 @@ public partial class LLVMCodeGenerator
     private void EmitAssignment(StringBuilder sb, AssignmentStatement assign)
     {
         // Evaluate the value first
-        string value = EmitExpression(sb, assign.Value);
+        string value = EmitExpression(sb: sb, expr: assign.Value);
 
         // Determine target type and emit store
         switch (assign.Target)
         {
             case IdentifierExpression id:
-                EmitVariableAssignment(sb, id.Name, value);
+                EmitVariableAssignment(sb: sb, varName: id.Name, value: value);
                 break;
 
             case MemberExpression member:
-                EmitMemberVariableAssignment(sb, member, value, GetExpressionType(assign.Value));
+                EmitMemberVariableAssignment(sb: sb,
+                    member: member,
+                    value: value,
+                    valueType: GetExpressionType(expr: assign.Value));
                 break;
 
             case IndexExpression index:
-                EmitIndexAssignment(sb, index, value);
+                EmitIndexAssignment(sb: sb, index: index, value: value);
                 break;
 
             default:
-                throw new NotImplementedException($"Assignment target not implemented: {assign.Target.GetType().Name}");
+                throw new NotImplementedException(
+                    message: $"Assignment target not implemented: {assign.Target.GetType().Name}");
         }
     }
 
@@ -245,35 +252,43 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitVariableAssignment(StringBuilder sb, string varName, string value)
     {
-        if (!_localVariables.TryGetValue(varName, out var varType))
+        if (!_localVariables.TryGetValue(key: varName, value: out TypeInfo? varType))
         {
-            throw new InvalidOperationException($"Variable '{varName}' not found");
+            throw new InvalidOperationException(message: $"Variable '{varName}' not found");
         }
 
-        string llvmName = _localVarLLVMNames.TryGetValue(varName, out var unique) ? unique : varName;
-        string llvmType = GetLLVMType(varType);
-        EmitLine(sb, $"  store {llvmType} {value}, ptr %{llvmName}.addr");
+        string llvmName = _localVarLLVMNames.TryGetValue(key: varName, value: out string? unique)
+            ? unique
+            : varName;
+        string llvmType = GetLLVMType(type: varType);
+        EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr %{llvmName}.addr");
     }
 
     /// <summary>
     /// Emits a store to a member variable.
     /// </summary>
-    private void EmitMemberVariableAssignment(StringBuilder sb, MemberExpression member, string value, TypeInfo? valueType = null)
+    private void EmitMemberVariableAssignment(StringBuilder sb, MemberExpression member,
+        string value, TypeInfo? valueType = null)
     {
         // Evaluate the object
-        string target = EmitExpression(sb, member.Object);
-        TypeInfo? targetType = GetExpressionType(member.Object);
+        string target = EmitExpression(sb: sb, expr: member.Object);
+        TypeInfo? targetType = GetExpressionType(expr: member.Object);
 
         if (targetType is EntityTypeInfo entity)
         {
-            EmitEntityMemberVariableWrite(sb, target, entity, member.PropertyName, value, valueType);
+            EmitEntityMemberVariableWrite(sb: sb,
+                entityPtr: target,
+                entity: entity,
+                memberVariableName: member.PropertyName,
+                value: value,
+                valueType: valueType);
         }
         // Wrapper type forwarding: Hijacked[T], Seized[T], etc. — write through to inner entity
-        else if (targetType is RecordTypeInfo wrapperRecord
-                 && GetGenericBaseName(wrapperRecord) is { } wrapBaseName
-                 && _wrapperTypeNames.Contains(wrapBaseName)
-                 && wrapperRecord.TypeArguments is { Count: > 0 }
-                 && wrapperRecord.TypeArguments[0] is EntityTypeInfo innerEntity)
+        else if (targetType is RecordTypeInfo wrapperRecord &&
+                 GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
+                 _wrapperTypeNames.Contains(item: wrapBaseName) &&
+                 wrapperRecord.TypeArguments is { Count: > 0 } &&
+                 wrapperRecord.TypeArguments[index: 0] is EntityTypeInfo innerEntity)
         {
             // For @llvm("ptr") wrappers, the value IS the pointer directly
             // For struct wrappers, extract the inner Snatched[T] (ptr) from field 0
@@ -284,15 +299,23 @@ public partial class LLVMCodeGenerator
             }
             else
             {
-                string recordTypeName = GetRecordTypeName(wrapperRecord);
+                string recordTypeName = GetRecordTypeName(record: wrapperRecord);
                 innerPtr = NextTemp();
-                EmitLine(sb, $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
+                EmitLine(sb: sb,
+                    line: $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
             }
-            EmitEntityMemberVariableWrite(sb, innerPtr, innerEntity, member.PropertyName, value, valueType);
+
+            EmitEntityMemberVariableWrite(sb: sb,
+                entityPtr: innerPtr,
+                entity: innerEntity,
+                memberVariableName: member.PropertyName,
+                value: value,
+                valueType: valueType);
         }
         else
         {
-            throw new InvalidOperationException($"Cannot assign to member variable on type: {targetType?.Name}");
+            throw new InvalidOperationException(
+                message: $"Cannot assign to member variable on type: {targetType?.Name}");
         }
     }
 
@@ -301,31 +324,35 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, string value)
     {
-        TypeInfo? targetType = GetExpressionType(index.Object);
+        TypeInfo? targetType = GetExpressionType(expr: index.Object);
 
         // Dispatch to $setitem if the type has one
-        RoutineInfo? setItem = LookupSetItemMethod(index);
+        RoutineInfo? setItem = LookupSetItemMethod(index: index);
         if (setItem != null && targetType != null &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
             // For record $setitem!: pass alloca pointer so mutations propagate
             string receiver;
             string receiverLlvm;
-            bool isRecordSetItem = targetType is RecordTypeInfo && setItem.Name.Contains("$setitem");
+            bool isRecordSetItem = targetType is RecordTypeInfo &&
+                                   setItem.Name.Contains(value: "$setitem");
             if (isRecordSetItem && index.Object is IdentifierExpression recId)
             {
-                string llvmName = _localVarLLVMNames.TryGetValue(recId.Name, out var unique) ? unique : recId.Name;
+                string llvmName =
+                    _localVarLLVMNames.TryGetValue(key: recId.Name, value: out string? unique)
+                        ? unique
+                        : recId.Name;
                 receiver = $"%{llvmName}.addr";
                 receiverLlvm = "ptr";
             }
             else
             {
-                receiver = EmitExpression(sb, index.Object);
-                receiverLlvm = GetParameterLLVMType(targetType);
+                receiver = EmitExpression(sb: sb, expr: index.Object);
+                receiverLlvm = GetParameterLLVMType(type: targetType);
             }
 
-            string indexValue = EmitExpression(sb, index.Index);
-            TypeInfo? indexType = GetExpressionType(index.Index);
+            string indexValue = EmitExpression(sb: sb, expr: index.Index);
+            TypeInfo? indexType = GetExpressionType(expr: index.Index);
 
             // Build mangled name with proper monomorphization
             string mangledName;
@@ -333,72 +360,109 @@ public partial class LLVMCodeGenerator
             {
                 // Infer method-level type args from the explicit arguments (index, value)
                 var concreteArgTypes = new List<TypeInfo>();
-                if (indexType != null) concreteArgTypes.Add(indexType);
-                var methodTypeArgs = InferMethodTypeArgs(setItem, concreteArgTypes);
+                if (indexType != null)
+                {
+                    concreteArgTypes.Add(item: indexType);
+                }
+
+                Dictionary<string, TypeInfo>? methodTypeArgs =
+                    InferMethodTypeArgs(genericMethod: setItem, argTypes: concreteArgTypes);
 
                 if (methodTypeArgs != null)
                 {
                     var resolvedParamNames = new List<string> { targetType.Name };
-                    if (indexType != null) resolvedParamNames.Add(indexType.Name);
+                    if (indexType != null)
+                    {
+                        resolvedParamNames.Add(item: indexType.Name);
+                    }
+
                     // Resolve value param type
                     if (setItem.Parameters.Count >= 2)
                     {
-                        var valParamType = ResolveSubstitutedType(setItem.Parameters[^1].Type, methodTypeArgs);
-                        resolvedParamNames.Add(valParamType.Name);
+                        TypeInfo valParamType =
+                            ResolveSubstitutedType(type: setItem.Parameters[^1].Type,
+                                subs: methodTypeArgs);
+                        resolvedParamNames.Add(item: valParamType.Name);
                     }
+
                     string ownerName = setItem.OwnerType?.FullName ?? targetType.FullName;
-                    mangledName = Q($"{ownerName}.{SanitizeLLVMName(setItem.Name)}#{string.Join(",", resolvedParamNames)}");
-                    RecordMonomorphization(mangledName, setItem, targetType, methodTypeArgs);
+                    mangledName =
+                        Q(name:
+                            $"{ownerName}.{SanitizeLLVMName(name: setItem.Name)}#{string.Join(separator: ",", values: resolvedParamNames)}");
+                    RecordMonomorphization(mangledName: mangledName,
+                        genericMethod: setItem,
+                        resolvedOwnerType: targetType,
+                        methodTypeArgs: methodTypeArgs);
                 }
                 else
                 {
-                    mangledName = Q($"{targetType.FullName}.{SanitizeLLVMName(setItem.Name)}");
-                    RecordMonomorphization(mangledName, setItem, targetType);
+                    mangledName =
+                        Q(name: $"{targetType.FullName}.{SanitizeLLVMName(name: setItem.Name)}");
+                    RecordMonomorphization(mangledName: mangledName,
+                        genericMethod: setItem,
+                        resolvedOwnerType: targetType);
                 }
             }
-            else if (targetType.IsGenericResolution && setItem.OwnerType is { IsGenericDefinition: true })
+            else if (targetType.IsGenericResolution &&
+                     setItem.OwnerType is { IsGenericDefinition: true })
             {
-                mangledName = Q($"{targetType.FullName}.{SanitizeLLVMName(setItem.Name)}");
-                RecordMonomorphization(mangledName, setItem, targetType);
+                mangledName =
+                    Q(name: $"{targetType.FullName}.{SanitizeLLVMName(name: setItem.Name)}");
+                RecordMonomorphization(mangledName: mangledName,
+                    genericMethod: setItem,
+                    resolvedOwnerType: targetType);
             }
             else
             {
-                mangledName = MangleFunctionName(setItem);
+                mangledName = MangleFunctionName(routine: setItem);
             }
 
-            GenerateFunctionDeclaration(setItem);
+            GenerateFunctionDeclaration(routine: setItem);
 
             // Build argument types
-            string indexLlvm = indexType != null ? GetLLVMType(indexType) : "i64";
-            string valueLlvm = indexType != null ? GetLLVMType(indexType) : "i64"; // placeholder
+            string indexLlvm = indexType != null
+                ? GetLLVMType(type: indexType)
+                : "i64";
+            string valueLlvm = indexType != null
+                ? GetLLVMType(type: indexType)
+                : "i64"; // placeholder
 
             // Use type arguments to resolve the value parameter type
             // For List[T]: value is TypeArguments[0]; for Dict[K, V]: value is TypeArguments[^1]
             if (targetType.TypeArguments is { Count: > 0 })
-                valueLlvm = GetLLVMType(targetType.TypeArguments[^1]);
+            {
+                valueLlvm = GetLLVMType(type: targetType.TypeArguments[^1]);
+            }
             else if (setItem.Parameters.Count >= 2)
-                valueLlvm = GetLLVMType(setItem.Parameters[^1].Type);
+            {
+                valueLlvm = GetLLVMType(type: setItem.Parameters[^1].Type);
+            }
 
-            string args = $"{receiverLlvm} {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value}";
-            EmitLine(sb, $"  call void @{mangledName}({args})");
+            string args =
+                $"{receiverLlvm} {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value}";
+            EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
             return;
         }
 
         // Fallback: raw GEP + store for pointer/contiguous-memory types
-        string target = EmitExpression(sb, index.Object);
-        string idxVal = EmitExpression(sb, index.Index);
+        string target = EmitExpression(sb: sb, expr: index.Object);
+        string idxVal = EmitExpression(sb: sb, expr: index.Index);
 
         string elemType = targetType switch
         {
-            RecordTypeInfo r when r.TypeArguments?.Count > 0 => GetLLVMType(r.TypeArguments[0]),
-            EntityTypeInfo e when e.TypeArguments?.Count > 0 => GetLLVMType(e.TypeArguments[0]),
+            RecordTypeInfo r when r.TypeArguments?.Count > 0 => GetLLVMType(
+                type: r.TypeArguments[index: 0]),
+            EntityTypeInfo e when e.TypeArguments?.Count > 0 => GetLLVMType(
+                type: e.TypeArguments[index: 0]),
             _ => throw new InvalidOperationException(
+                message:
                 $"Cannot determine element type for index assignment on type: {targetType?.Name}")
         };
 
         string elemPtr = NextTemp();
-        EmitLine(sb, $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {idxVal}");
-        EmitLine(sb, $"  store {elemType} {value}, ptr {elemPtr}");
+        EmitLine(sb: sb,
+            line: $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {idxVal}");
+        EmitLine(sb: sb, line: $"  store {elemType} {value}, ptr {elemPtr}");
     }
 
     /// <summary>
@@ -406,11 +470,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private RoutineInfo? LookupSetItemMethod(IndexExpression index)
     {
-        TypeInfo? targetType = GetExpressionType(index.Object);
-        if (targetType == null) return null;
+        TypeInfo? targetType = GetExpressionType(expr: index.Object);
+        if (targetType == null)
+        {
+            return null;
+        }
 
-        RoutineInfo? setItem = _registry.LookupRoutine($"{targetType.Name}.$setitem")
-            ?? _registry.LookupRoutine($"{targetType.Name}.$setitem!");
+        RoutineInfo? setItem = _registry.LookupRoutine(fullName: $"{targetType.Name}.$setitem") ??
+                               _registry.LookupRoutine(fullName: $"{targetType.Name}.$setitem!");
 
         // For generic resolutions (e.g., List[S64]), also try the generic definition name
         if (setItem == null && targetType.IsGenericResolution)
@@ -423,8 +490,8 @@ public partial class LLVMCodeGenerator
             };
             if (genDefName != null)
             {
-                setItem = _registry.LookupRoutine($"{genDefName}.$setitem")
-                    ?? _registry.LookupRoutine($"{genDefName}.$setitem!");
+                setItem = _registry.LookupRoutine(fullName: $"{genDefName}.$setitem") ??
+                          _registry.LookupRoutine(fullName: $"{genDefName}.$setitem!");
             }
         }
 
@@ -449,126 +516,138 @@ public partial class LLVMCodeGenerator
             {
                 // Load the stored emit value
                 string loaded = NextTemp();
-                EmitLine(sb, $"  {loaded} = load {_emitSlotType}, ptr {_emitSlotAddr}");
+                EmitLine(sb: sb, line: $"  {loaded} = load {_emitSlotType}, ptr {_emitSlotAddr}");
 
                 // Allocate a Snatched handle and store the value
                 int size = _currentFunctionReturnType != null
-                    ? GetTypeSize(_currentFunctionReturnType)
-                    : GetTypeSizeFromLlvmType(_emitSlotType);
+                    ? GetTypeSize(type: _currentFunctionReturnType)
+                    : GetTypeSizeFromLlvmType(llvmType: _emitSlotType);
                 string handle = NextTemp();
-                EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                EmitLine(sb, $"  store {_emitSlotType} {loaded}, ptr {handle}");
+                EmitLine(sb: sb, line: $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
+                EmitLine(sb: sb, line: $"  store {_emitSlotType} {loaded}, ptr {handle}");
 
                 // Build { i64 1, ptr handle } — DataState.VALID
                 string v0 = NextTemp();
-                EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
+                EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
                 string v1 = NextTemp();
-                EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                EmitLine(sb: sb,
+                    line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
 
-                EmitUsingCleanup(sb);
-                EmitEntityCleanup(sb, null);
-                EmitLine(sb, "  call void @rf_trace_pop()");
-                EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                EmitUsingCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: null);
+                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
             }
             else if (_currentRoutineIsFailable)
             {
                 // Failable void routine: return { i64 1, ptr null } (VALID, no payload)
-                EmitUsingCleanup(sb);
-                EmitEntityCleanup(sb, null);
-                EmitLine(sb, "  call void @rf_trace_pop()");
-                EmitLine(sb, "  ret { i64, ptr } { i64 1, ptr null }");
+                EmitUsingCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: null);
+                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 1, ptr null }");
             }
             else
             {
-                EmitUsingCleanup(sb);
-                EmitEntityCleanup(sb, null);
-                EmitLine(sb, "  call void @rf_trace_pop()");
-                EmitLine(sb, "  ret void");
+                EmitUsingCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: null);
+                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                EmitLine(sb: sb, line: "  ret void");
             }
         }
         else
         {
-            string value = EmitExpression(sb, ret.Value);
+            string value = EmitExpression(sb: sb, expr: ret.Value);
             // Prefer current function's return type (matches the 'define' header)
             // to avoid type mismatches between header and ret instruction
-            TypeInfo? retType = _currentFunctionReturnType ?? GetExpressionType(ret.Value);
+            TypeInfo? retType = _currentFunctionReturnType ?? GetExpressionType(expr: ret.Value);
             if (retType == null)
             {
-                throw new InvalidOperationException("Cannot determine return type for return statement");
+                throw new InvalidOperationException(
+                    message: "Cannot determine return type for return statement");
             }
-            string llvmType = GetLLVMType(retType);
+
+            string llvmType = GetLLVMType(type: retType);
 
             // Skip cleanup for the returned entity variable (ownership transfers to caller)
-            string? returnedVarName = ret.Value is IdentifierExpression id
-                && _localEntityVars.Any(e => e.Name == id.Name) ? id.Name : null;
-            EmitUsingCleanup(sb);
-            EmitEntityCleanup(sb, returnedVarName);
+            string? returnedVarName = ret.Value is IdentifierExpression id &&
+                                      _localEntityVars.Any(predicate: e => e.Name == id.Name)
+                ? id.Name
+                : null;
+            EmitUsingCleanup(sb: sb);
+            EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
 
-            EmitLine(sb, "  call void @rf_trace_pop()");
+            EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
 
             // Failable routines wrap the return value in { i64, ptr } with tag=1 (VALID)
             if (_currentRoutineIsFailable)
             {
                 string v0 = NextTemp();
-                EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
+                EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
 
                 if (retType is EntityTypeInfo)
                 {
                     // Entity types are already pointers — store directly, no heap allocation
                     string v1 = NextTemp();
-                    EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
-                    EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                    EmitLine(sb: sb,
+                        line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
+                    EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
                 }
                 else
                 {
-                    int size = GetTypeSize(retType);
+                    int size = GetTypeSize(type: retType);
                     string handle = NextTemp();
-                    EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                    EmitLine(sb, $"  store {llvmType} {value}, ptr {handle}");
+                    EmitLine(sb: sb,
+                        line: $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
+                    EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {handle}");
                     string v1 = NextTemp();
-                    EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
-                    EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                    EmitLine(sb: sb,
+                        line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                    EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
                 }
             }
             // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T
-            else if (IsMaybeType(retType) && value != "zeroinitializer")
+            else if (IsMaybeType(type: retType) && value != "zeroinitializer")
             {
-                TypeInfo? exprType = GetExpressionType(ret.Value);
-                if (exprType == null || !IsMaybeType(exprType))
+                TypeInfo? exprType = GetExpressionType(expr: ret.Value);
+                if (exprType == null || !IsMaybeType(type: exprType))
                 {
                     // Wrap: build { i64 1, ptr handle }
-                    TypeInfo innerType = retType is ErrorHandlingTypeInfo eh ? eh.ValueType
-                        : (retType.TypeArguments is { Count: > 0 } ? retType.TypeArguments[0] : retType);
+                    TypeInfo innerType = retType is ErrorHandlingTypeInfo eh ? eh.ValueType :
+                        retType.TypeArguments is { Count: > 0 } ? retType.TypeArguments[index: 0] :
+                        retType;
                     string v0 = NextTemp();
-                    EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
+                    EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
 
                     if (innerType is EntityTypeInfo)
                     {
                         // Entity types are already pointers — store directly, no heap allocation
                         string v1 = NextTemp();
-                        EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
-                        EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                        EmitLine(sb: sb,
+                            line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
+                        EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
                     }
                     else
                     {
-                        string innerLlvm = GetLLVMType(innerType);
-                        int size = GetTypeSize(innerType);
+                        string innerLlvm = GetLLVMType(type: innerType);
+                        int size = GetTypeSize(type: innerType);
                         string handle = NextTemp();
-                        EmitLine(sb, $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                        EmitLine(sb, $"  store {innerLlvm} {value}, ptr {handle}");
+                        EmitLine(sb: sb,
+                            line: $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
+                        EmitLine(sb: sb, line: $"  store {innerLlvm} {value}, ptr {handle}");
                         string v1 = NextTemp();
-                        EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
-                        EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+                        EmitLine(sb: sb,
+                            line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                        EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
                     }
                 }
                 else
                 {
-                    EmitLine(sb, $"  ret {llvmType} {value}");
+                    EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
                 }
             }
             else
             {
-                EmitLine(sb, $"  ret {llvmType} {value}");
+                EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
             }
         }
     }
@@ -579,14 +658,31 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private bool IsEntityConstructorCall(Expression? expr)
     {
-        if (expr is CreatorExpression) return true;
-        if (expr is ListLiteralExpression) return true;
-        if (expr is SetLiteralExpression) return true;
-        if (expr is DictLiteralExpression) return true;
+        if (expr is CreatorExpression)
+        {
+            return true;
+        }
+
+        if (expr is ListLiteralExpression)
+        {
+            return true;
+        }
+
+        if (expr is SetLiteralExpression)
+        {
+            return true;
+        }
+
+        if (expr is DictLiteralExpression)
+        {
+            return true;
+        }
+
         if (expr is CallExpression { Callee: IdentifierExpression id })
         {
-            return _registry.LookupType(id.Name) is EntityTypeInfo;
+            return _registry.LookupType(name: id.Name) is EntityTypeInfo;
         }
+
         return false;
     }
 
@@ -596,14 +692,18 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
     {
-        foreach (var (name, llvmAddr) in _localEntityVars)
+        foreach ((string name, string llvmAddr) in _localEntityVars)
         {
-            if (name == returnedVarName) continue;
+            if (name == returnedVarName)
+            {
+                continue;
+            }
+
             string loaded = NextTemp();
-            EmitLine(sb, $"  {loaded} = load ptr, ptr {llvmAddr}");
+            EmitLine(sb: sb, line: $"  {loaded} = load ptr, ptr {llvmAddr}");
             string asInt = NextTemp();
-            EmitLine(sb, $"  {asInt} = ptrtoint ptr {loaded} to i64");
-            EmitLine(sb, $"  call void @rf_invalidate(i64 {asInt})");
+            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {loaded} to i64");
+            EmitLine(sb: sb, line: $"  call void @rf_invalidate(i64 {asInt})");
         }
     }
 
@@ -613,11 +713,12 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitUsingCleanup(StringBuilder sb)
     {
-        foreach (var (resourceValue, resourceType, exitMethod) in _usingCleanupStack)
+        foreach ((string resourceValue, TypeInfo resourceType, RoutineInfo exitMethod) in
+                 _usingCleanupStack)
         {
-            string exitMangled = MangleFunctionName(exitMethod);
-            string receiverType = GetParameterLLVMType(resourceType);
-            EmitLine(sb, $"  call void @{exitMangled}({receiverType} {resourceValue})");
+            string exitMangled = MangleFunctionName(routine: exitMethod);
+            string receiverType = GetParameterLLVMType(type: resourceType);
+            EmitLine(sb: sb, line: $"  call void @{exitMangled}({receiverType} {resourceValue})");
         }
     }
 
@@ -632,24 +733,29 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitEmit(StringBuilder sb, EmitStatement emitStmt)
     {
-        string value = EmitExpression(sb, emitStmt.Expression);
+        string value = EmitExpression(sb: sb, expr: emitStmt.Expression);
 
-        TypeInfo? valueType = GetExpressionType(emitStmt.Expression) ?? _currentFunctionReturnType;
+        TypeInfo? valueType =
+            GetExpressionType(expr: emitStmt.Expression) ?? _currentFunctionReturnType;
         if (valueType == null)
         {
-            throw new InvalidOperationException("Cannot determine type for emit expression");
+            throw new InvalidOperationException(
+                message: "Cannot determine type for emit expression");
         }
-        string llvmType = GetLLVMType(valueType);
+
+        string llvmType = GetLLVMType(type: valueType);
 
         // Tuple literals produce inline aggregates, not pointers — match EmitTupleLiteral's actual type
         if (llvmType == "ptr" && emitStmt.Expression is TupleLiteralExpression tupleEmitExpr)
         {
-            var elemTypes = tupleEmitExpr.Elements.Select(e =>
+            IEnumerable<string> elemTypes = tupleEmitExpr.Elements.Select(selector: e =>
             {
-                TypeInfo? et = GetExpressionType(e);
-                return et != null ? GetLLVMType(et) : "i64";
+                TypeInfo? et = GetExpressionType(expr: e);
+                return et != null
+                    ? GetLLVMType(type: et)
+                    : "i64";
             });
-            llvmType = $"{{ {string.Join(", ", elemTypes)} }}";
+            llvmType = $"{{ {string.Join(separator: ", ", values: elemTypes)} }}";
         }
 
         // Lazily create the emit slot alloca on first emit
@@ -657,11 +763,11 @@ public partial class LLVMCodeGenerator
         {
             _emitSlotAddr = "%emit.slot.addr";
             _emitSlotType = llvmType;
-            EmitLine(sb, $"  {_emitSlotAddr} = alloca {llvmType}");
+            EmitLine(sb: sb, line: $"  {_emitSlotAddr} = alloca {llvmType}");
         }
 
         // Store the emitted value
-        EmitLine(sb, $"  store {llvmType} {value}, ptr {_emitSlotAddr}");
+        EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {_emitSlotAddr}");
     }
 
     #endregion
@@ -678,7 +784,7 @@ public partial class LLVMCodeGenerator
         // rf_crash is declared via NativeDeclarations.rf registry
 
         // Get the error type info
-        TypeInfo? errorType = GetExpressionType(throwStmt.Error);
+        TypeInfo? errorType = GetExpressionType(expr: throwStmt.Error);
         string typeName = errorType?.Name ?? "UnknownError";
 
         // Check if error type is an empty record (no member variables) — skip construction
@@ -691,47 +797,52 @@ public partial class LLVMCodeGenerator
         }
         else
         {
-            errorVal = EmitExpression(sb, throwStmt.Error);
+            errorVal = EmitExpression(sb: sb, expr: throwStmt.Error);
         }
 
         // Try to call crash_message() on the error to get the message Text
         string dataPtr = "null";
         string msgLen = "0";
         string crashMethodName = $"{typeName}.crash_message";
-        var crashMethod = _registry.LookupRoutine(crashMethodName);
+        RoutineInfo? crashMethod = _registry.LookupRoutine(fullName: crashMethodName);
         if (crashMethod != null)
         {
             // Ensure crash_message is declared/defined
-            GenerateFunctionDeclaration(crashMethod);
-            string mangledCrash = MangleFunctionName(crashMethod);
+            GenerateFunctionDeclaration(routine: crashMethod);
+            string mangledCrash = MangleFunctionName(routine: crashMethod);
 
-            string llvmReceiverType = GetLLVMType(errorType!);
+            string llvmReceiverType = GetLLVMType(type: errorType!);
 
             // Call crash_message(me) → returns ptr to Text entity
             string textPtr = NextTemp();
-            EmitLine(sb, $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
+            EmitLine(sb: sb,
+                line: $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
 
             // Text entity = { ptr letters_list }
             // List[Letter] entity = { ptr data, i64 count, i64 capacity }
             string lettersPtr = NextTemp();
-            EmitLine(sb, $"  {lettersPtr} = load ptr, ptr {textPtr}");
+            EmitLine(sb: sb, line: $"  {lettersPtr} = load ptr, ptr {textPtr}");
             string dataField = NextTemp();
-            EmitLine(sb, $"  {dataField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 0");
+            EmitLine(sb: sb,
+                line:
+                $"  {dataField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 0");
             dataPtr = NextTemp();
-            EmitLine(sb, $"  {dataPtr} = load ptr, ptr {dataField}");
+            EmitLine(sb: sb, line: $"  {dataPtr} = load ptr, ptr {dataField}");
             string countField = NextTemp();
-            EmitLine(sb, $"  {countField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 1");
+            EmitLine(sb: sb,
+                line:
+                $"  {countField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 1");
             msgLen = NextTemp();
-            EmitLine(sb, $"  {msgLen} = load i64, ptr {countField}");
+            EmitLine(sb: sb, line: $"  {msgLen} = load i64, ptr {countField}");
         }
 
         // Emit C string constants for type name and file, cast ptr → i64 (Address)
-        string typeCStr = EmitCStringConstant(typeName);
-        string fileCStr = EmitCStringConstant(throwStmt.Location.FileName);
+        string typeCStr = EmitCStringConstant(value: typeName);
+        string fileCStr = EmitCStringConstant(value: throwStmt.Location.FileName);
         string typeNameAsInt = NextTemp();
-        EmitLine(sb, $"  {typeNameAsInt} = ptrtoint ptr {typeCStr} to i64");
+        EmitLine(sb: sb, line: $"  {typeNameAsInt} = ptrtoint ptr {typeCStr} to i64");
         string fileAsInt = NextTemp();
-        EmitLine(sb, $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
+        EmitLine(sb: sb, line: $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
 
         // Cast message data ptr → i64 (Address)
         string msgDataAsInt;
@@ -742,15 +853,17 @@ public partial class LLVMCodeGenerator
         else
         {
             msgDataAsInt = NextTemp();
-            EmitLine(sb, $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
+            EmitLine(sb: sb, line: $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
         }
 
         // Clean up active using scopes before crashing
-        EmitUsingCleanup(sb);
+        EmitUsingCleanup(sb: sb);
 
         // Call rf_crash — never returns
-        EmitLine(sb, $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
-        EmitLine(sb, "  unreachable");
+        EmitLine(sb: sb,
+            line:
+            $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
+        EmitLine(sb: sb, line: "  unreachable");
     }
 
     /// <summary>
@@ -762,12 +875,12 @@ public partial class LLVMCodeGenerator
     {
         // Build { i64 0, ptr null } — DataState.ABSENT
         string v0 = NextTemp();
-        EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 0, 0");
+        EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 0, 0");
         string v1 = NextTemp();
-        EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr null, 1");
+        EmitLine(sb: sb, line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr null, 1");
         // Clean up active using scopes before returning absent
-        EmitUsingCleanup(sb);
-        EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
+        EmitUsingCleanup(sb: sb);
+        EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
     }
 
     /// <summary>
@@ -779,1594 +892,7 @@ public partial class LLVMCodeGenerator
         // Evaluate the becomes expression. In the current when statement codegen,
         // this is equivalent to an expression statement — the value flows through
         // the block's last expression. Future: store to a when-result alloca and branch to merge.
-        EmitExpression(sb, becomesStmt.Value);
-    }
-
-    #endregion
-
-    #region Control Flow - If/Else
-
-    /// <summary>
-    /// Emits code for an if statement with optional else branch.
-    /// Returns true if both branches terminate (meaning the if as a whole terminates).
-    /// </summary>
-    private bool EmitIf(StringBuilder sb, IfStatement ifStmt)
-    {
-        string condition = EmitExpression(sb, ifStmt.Condition);
-
-        string thenLabel = NextLabel("if_then");
-        string endLabel = NextLabel("if_end");
-
-        if (ifStmt.ElseBranch != null)
-        {
-            string elseLabel = NextLabel("if_else");
-            EmitLine(sb, $"  br i1 {condition}, label %{thenLabel}, label %{elseLabel}");
-
-            // Then branch
-            EmitLine(sb, $"{thenLabel}:");
-            bool thenTerminated = EmitStatement(sb, ifStmt.ThenBranch);
-            if (!thenTerminated)
-            {
-                EmitLine(sb, $"  br label %{endLabel}");
-            }
-
-            // Else branch
-            EmitLine(sb, $"{elseLabel}:");
-            bool elseTerminated = EmitStatement(sb, ifStmt.ElseBranch);
-            if (!elseTerminated)
-            {
-                EmitLine(sb, $"  br label %{endLabel}");
-            }
-
-            // If both branches terminated, the end block is unreachable
-            // but we still need to emit it for LLVM (it will be dead code eliminated)
-            if (thenTerminated && elseTerminated)
-            {
-                // Both branches return - the if statement as a whole terminates
-                // Still emit end label but mark that we terminated
-                EmitLine(sb, $"{endLabel}:");
-                return true;
-            }
-
-            // End block is reachable from at least one branch
-            EmitLine(sb, $"{endLabel}:");
-            return false;
-        }
-        else
-        {
-            EmitLine(sb, $"  br i1 {condition}, label %{thenLabel}, label %{endLabel}");
-
-            // Then branch
-            EmitLine(sb, $"{thenLabel}:");
-            bool thenTerminated = EmitStatement(sb, ifStmt.ThenBranch);
-            if (!thenTerminated)
-            {
-                EmitLine(sb, $"  br label %{endLabel}");
-            }
-
-            // End block (always reachable via the else path, even if then returns)
-            EmitLine(sb, $"{endLabel}:");
-            return false; // If without else never fully terminates
-        }
-    }
-
-    #endregion
-
-    #region Control Flow - While Loop
-
-    /// <summary>
-    /// Stack of loop labels for break/continue.
-    /// </summary>
-    private readonly Stack<(string ContinueLabel, string BreakLabel)> _loopStack = new();
-
-    /// <summary>
-    /// Stack of active using-scope cleanups. Each entry holds the info needed to call $exit()
-    /// on early exit (return, throw, break, continue, absent).
-    /// </summary>
-    private readonly Stack<(string ResourceValue, TypeInfo ResourceType, RoutineInfo ExitMethod)> _usingCleanupStack = new();
-
-    /// <summary>
-    /// Emits code for a while loop.
-    /// </summary>
-    private void EmitWhile(StringBuilder sb, WhileStatement whileStmt)
-    {
-        string condLabel = NextLabel("while_cond");
-        string bodyLabel = NextLabel("while_body");
-        string endLabel = NextLabel("while_end");
-
-        // Push loop labels for break/continue
-        _loopStack.Push((condLabel, endLabel));
-
-        // Jump to condition
-        EmitLine(sb, $"  br label %{condLabel}");
-
-        // Condition block
-        EmitLine(sb, $"{condLabel}:");
-        string condition = EmitExpression(sb, whileStmt.Condition);
-        EmitLine(sb, $"  br i1 {condition}, label %{bodyLabel}, label %{endLabel}");
-
-        // Body block
-        EmitLine(sb, $"{bodyLabel}:");
-        bool bodyTerminated = EmitStatement(sb, whileStmt.Body);
-        if (!bodyTerminated)
-        {
-            EmitLine(sb, $"  br label %{condLabel}");
-        }
-
-        // End block
-        EmitLine(sb, $"{endLabel}:");
-
-        // Pop loop labels
-        _loopStack.Pop();
-    }
-
-    #endregion
-
-    #region Control Flow - For Loop
-
-    /// <summary>
-    /// Emits code for a for loop.
-    /// for x in iterable { body } becomes:
-    ///   iterator = iterable.$iter()
-    ///   while iterator.$has_next() { x = iterator.$next(); body }
-    /// </summary>
-    private void EmitFor(StringBuilder sb, ForStatement forStmt)
-    {
-        // Fast path: range-based for loop (for x in (start to end) or (start to end by step))
-        if (forStmt.Iterable is RangeExpression range)
-        {
-            EmitForRange(sb, forStmt, range);
-            return;
-        }
-
-        // General iterator protocol: seq.$iter() → emitter, emitter.$next() → Maybe[T]
-        // Maybe layout: { i64 (DataState), ptr (Snatched handle) }
-        // DataState: VALID=1 → has value, ABSENT=0 → done
-
-        string condLabel = NextLabel("for_cond");
-        string bodyLabel = NextLabel("for_body");
-        string endLabel = NextLabel("for_end");
-
-        _loopStack.Push((condLabel, endLabel));
-
-        // Evaluate the iterable expression and get its type
-        string iterValue = EmitExpression(sb, forStmt.Iterable);
-        TypeInfo? iterType = GetExpressionType(forStmt.Iterable);
-
-        // Call $iter() to get the emitter
-        string emitterValue;
-        TypeInfo? emitterType = null;
-
-        if (iterType != null)
-        {
-            // Look up $iter method — LookupMethod handles generic type fallback
-            RoutineInfo? iterMethod = _registry.LookupMethod(iterType, "$iter");
-
-            if (iterMethod != null)
-            {
-                // Handle monomorphization for generic types
-                string iterMangled;
-                if (iterMethod.OwnerType != null &&
-                    (iterMethod.OwnerType.IsGenericDefinition || iterMethod.OwnerType.IsGenericResolution
-                     || iterMethod.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo) &&
-                    iterType.IsGenericResolution)
-                {
-                    iterMangled = Q($"{iterType.FullName}.$iter");
-                    RecordMonomorphization(iterMangled, iterMethod, iterType);
-                }
-                else
-                {
-                    iterMangled = MangleFunctionName(iterMethod);
-                }
-
-                // Skip for protocol-owned methods — monomorphized version will declare itself
-                if (iterMethod.OwnerType is not ProtocolTypeInfo)
-                    GenerateFunctionDeclaration(iterMethod);
-
-                // Resolve return type: substitute generic params (e.g., RangeEmitter[T] → RangeEmitter[S64])
-                TypeInfo? resolvedReturnType = iterMethod.ReturnType;
-                if (resolvedReturnType is GenericParameterTypeInfo && iterType is { IsGenericResolution: true, TypeArguments: not null })
-                {
-                    TypeInfo? ownerGenericDef = iterType switch
-                    {
-                        RecordTypeInfo r => r.GenericDefinition,
-                        EntityTypeInfo e => e.GenericDefinition,
-                        _ => null
-                    };
-                    if (ownerGenericDef?.GenericParameters != null)
-                    {
-                        int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(resolvedReturnType.Name);
-                        if (paramIndex >= 0 && paramIndex < iterType.TypeArguments.Count)
-                            resolvedReturnType = iterType.TypeArguments[paramIndex];
-                    }
-                }
-                else if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null } &&
-                         iterType is { IsGenericResolution: true, TypeArguments: not null })
-                {
-                    // Nested resolution: RangeEmitter[T] → RangeEmitter[S64]
-                    TypeInfo? ownerGenericDef = iterType switch
-                    {
-                        RecordTypeInfo r => r.GenericDefinition,
-                        EntityTypeInfo e => e.GenericDefinition,
-                        _ => null
-                    };
-                    if (ownerGenericDef?.GenericParameters != null)
-                    {
-                        bool anyChanged = false;
-                        var substitutedArgs = new List<TypeInfo>();
-                        foreach (var arg in resolvedReturnType.TypeArguments)
-                        {
-                            if (arg is GenericParameterTypeInfo gp)
-                            {
-                                int paramIndex = ownerGenericDef.GenericParameters.ToList().IndexOf(gp.Name);
-                                if (paramIndex >= 0 && paramIndex < iterType.TypeArguments.Count)
-                                {
-                                    substitutedArgs.Add(iterType.TypeArguments[paramIndex]);
-                                    anyChanged = true;
-                                    continue;
-                                }
-                            }
-                            substitutedArgs.Add(arg);
-                        }
-                        if (anyChanged)
-                        {
-                            TypeInfo? genericBase = GetGenericBase(resolvedReturnType)
-                                ?? LookupTypeInCurrentModule(resolvedReturnType.Name);
-                            if (genericBase != null)
-                                resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
-                        }
-                    }
-                }
-
-                emitterType = resolvedReturnType;
-
-                // Ensure entity type struct definition is emitted for resolved generic emitter types
-                if (emitterType is EntityTypeInfo emitterEntityType)
-                    GenerateEntityType(emitterEntityType);
-
-                string receiverLlvm = GetParameterLLVMType(iterType);
-                string emitterReturnType = emitterType != null ? GetLLVMType(emitterType) : "ptr";
-
-                // Emit declaration for the monomorphized name
-                if (!_generatedFunctions.Contains(iterMangled))
-                {
-                    EmitLine(_functionDeclarations, $"declare {emitterReturnType} @{iterMangled}({receiverLlvm})");
-                    _generatedFunctions.Add(iterMangled);
-                }
-
-                string emitterTemp = NextTemp();
-                EmitLine(sb, $"  {emitterTemp} = call {emitterReturnType} @{iterMangled}({receiverLlvm} {iterValue})");
-                emitterValue = emitterTemp;
-            }
-            else
-            {
-                // No $iter found, use seqValue directly as the emitter
-                emitterValue = iterValue;
-                emitterType = iterType;
-            }
-        }
-        else
-        {
-            emitterValue = iterValue;
-        }
-
-        // Store emitter in an alloca so we can reload it each iteration
-        string emitterLlvmType = emitterType != null ? GetLLVMType(emitterType) : "ptr";
-        string emitterAddr = NextTemp().Replace("%", "%emitter.");
-        EmitLine(sb, $"  {emitterAddr} = alloca {emitterLlvmType}");
-        EmitLine(sb, $"  store {emitterLlvmType} {emitterValue}, ptr {emitterAddr}");
-
-        // Determine element type from $next() return type (preferred) or emitter type arguments (fallback).
-        // $next() is preferred because the yielded type may differ from the emitter's type argument
-        // (e.g., EnumerateEmitter[S64].$next() yields Tuple[U64, S64], not S64).
-        TypeInfo? elemType = null;
-        if (emitterType != null)
-        {
-            RoutineInfo? nextLookup = _registry.LookupMethod(emitterType, "$next");
-            // Skip protocol-typed return values — they need further resolution
-            if (nextLookup?.ReturnType is ErrorHandlingTypeInfo { ValueType: not null } errType
-                && errType.ValueType is not ProtocolTypeInfo)
-                elemType = errType.ValueType;
-            else if (nextLookup?.ReturnType != null && nextLookup.ReturnType is not ProtocolTypeInfo)
-                elemType = nextLookup.ReturnType;
-        }
-
-        // Fallback: use emitter's first type argument (works for simple Iterator[T])
-        if (elemType == null && emitterType?.TypeArguments is { Count: > 0 })
-        {
-            elemType = emitterType.TypeArguments[0];
-        }
-
-        // Resolve generic parameters in element type using emitter's type arguments
-        if (emitterType is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            elemType = ResolveGenericElementType(elemType, emitterType);
-        }
-
-        string elemLlvmType = elemType != null ? GetLLVMType(elemType) : "i64";
-
-        // Allocate loop variable(s)
-        string? varAddr = null;
-        if (forStmt.VariablePattern != null && elemType is TupleTypeInfo tupleElemType)
-        {
-            // Tuple destructuring: pre-allocate variables for each binding
-            var bindings = forStmt.VariablePattern.Bindings;
-            for (int i = 0; i < bindings.Count && i < tupleElemType.MemberVariables.Count; i++)
-            {
-                var binding = bindings[i];
-                string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_destruct{i}";
-                if (bindName == "_") continue;
-
-                var memberVar = tupleElemType.MemberVariables[i];
-                string memberLlvmType = GetLLVMType(memberVar.Type);
-                EmitLine(sb, $"  %{bindName}.addr = alloca {memberLlvmType}");
-                _localVariables[bindName] = memberVar.Type;
-            }
-        }
-        else
-        {
-            string varName = forStmt.Variable ?? "_iter";
-            varAddr = $"%{varName}.addr";
-            EmitLine(sb, $"  {varAddr} = alloca {elemLlvmType}");
-
-            if (elemType != null)
-            {
-                _localVariables[varName] = elemType;
-            }
-        }
-
-        EmitLine(sb, $"  br label %{condLabel}");
-
-        // Condition block: call $next() → Maybe[T] = { i64, ptr }
-        EmitLine(sb, $"{condLabel}:");
-        string emitterLoad = NextTemp();
-        EmitLine(sb, $"  {emitterLoad} = load {emitterLlvmType}, ptr {emitterAddr}");
-
-        // Call $next() on the emitter (emitting routine, always returns { i64, ptr })
-        // LookupMethod handles generic type fallback (e.g., RangeEmitter[S64] → RangeEmitter[T])
-        RoutineInfo? nextMethod = emitterType != null
-            ? _registry.LookupMethod(emitterType, "$next")
-            : null;
-
-        string maybeResult;
-
-        if (nextMethod != null)
-        {
-            // Handle monomorphization for generic emitter types
-            string nextMangled;
-            if (nextMethod.OwnerType != null &&
-                (nextMethod.OwnerType.IsGenericDefinition || nextMethod.OwnerType.IsGenericResolution
-                 || nextMethod.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo) &&
-                emitterType != null && emitterType.IsGenericResolution)
-            {
-                nextMangled = Q($"{emitterType.FullName}.$next");
-                RecordMonomorphization(nextMangled, nextMethod, emitterType);
-            }
-            else
-            {
-                nextMangled = MangleFunctionName(nextMethod);
-            }
-
-            GenerateFunctionDeclaration(nextMethod);
-
-            // Emitting routines always return { i64, ptr } at IR level
-            string maybeRetType = "{ i64, ptr }";
-
-            // Emit declaration for the monomorphized name
-            if (!_generatedFunctions.Contains(nextMangled))
-            {
-                EmitLine(_functionDeclarations, $"declare {maybeRetType} @{nextMangled}({emitterLlvmType} {emitterLoad})");
-                _generatedFunctions.Add(nextMangled);
-            }
-
-            maybeResult = NextTemp();
-            EmitLine(sb, $"  {maybeResult} = call {maybeRetType} @{nextMangled}({emitterLlvmType} {emitterLoad})");
-        }
-        else
-        {
-            // Fallback: construct the call name from the type
-            string fallbackName = emitterType != null
-                ? Q($"{emitterType.FullName}.$next")
-                : "$next";
-            maybeResult = NextTemp();
-            EmitLine(sb, $"  {maybeResult} = call {{ i64, ptr }} @{fallbackName}({emitterLlvmType} {emitterLoad})");
-        }
-
-        // Extract tag from Maybe result (field 0 = DataState i64)
-        string maybeTagPtr = NextTemp();
-        EmitLine(sb, $"  {maybeTagPtr} = alloca {{ i64, ptr }}");
-        EmitLine(sb, $"  store {{ i64, ptr }} {maybeResult}, ptr {maybeTagPtr}");
-        string tagFieldPtr = NextTemp();
-        string tagVal = NextTemp();
-        EmitLine(sb, $"  {tagFieldPtr} = getelementptr {{ i64, ptr }}, ptr {maybeTagPtr}, i32 0, i32 0");
-        EmitLine(sb, $"  {tagVal} = load i64, ptr {tagFieldPtr}");
-
-        // tag == 1 (VALID) → has value → body, else → end
-        string hasValue = NextTemp();
-        EmitLine(sb, $"  {hasValue} = icmp eq i64 {tagVal}, 1");
-        EmitLine(sb, $"  br i1 {hasValue}, label %{bodyLabel}, label %{endLabel}");
-
-        // Body block: extract payload (field 1 = ptr handle), store in loop var
-        EmitLine(sb, $"{bodyLabel}:");
-        string handlePtr = NextTemp();
-        string handleVal = NextTemp();
-        EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {maybeTagPtr}, i32 0, i32 1");
-        EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
-
-        // Load element value from the Snatched handle pointer
-        if (forStmt.VariablePattern != null && elemType is TupleTypeInfo bodyTupleType)
-        {
-            // Tuple destructuring: extract each field from the handle pointer
-            var bindings = forStmt.VariablePattern.Bindings;
-            string anonStructType = $"{{ {string.Join(", ", bodyTupleType.ElementTypes.Select(e => GetLLVMType(e)))} }}";
-            for (int i = 0; i < bindings.Count && i < bodyTupleType.MemberVariables.Count; i++)
-            {
-                var binding = bindings[i];
-                string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_destruct{i}";
-                if (bindName == "_") continue;
-
-                var memberVar = bodyTupleType.MemberVariables[i];
-                string memberLlvmType = GetLLVMType(memberVar.Type);
-                string memberPtr = NextTemp();
-                EmitLine(sb, $"  {memberPtr} = getelementptr {anonStructType}, ptr {handleVal}, i32 0, i32 {i}");
-                string memberVal = NextTemp();
-                EmitLine(sb, $"  {memberVal} = load {memberLlvmType}, ptr {memberPtr}");
-                EmitLine(sb, $"  store {memberLlvmType} {memberVal}, ptr %{bindName}.addr");
-            }
-        }
-        else if (varAddr != null)
-        {
-            string elemVal = NextTemp();
-            EmitLine(sb, $"  {elemVal} = load {elemLlvmType}, ptr {handleVal}");
-            EmitLine(sb, $"  store {elemLlvmType} {elemVal}, ptr {varAddr}");
-        }
-
-        bool bodyTerminated = EmitStatement(sb, forStmt.Body);
-        if (!bodyTerminated)
-        {
-            EmitLine(sb, $"  br label %{condLabel}");
-        }
-
-        // End block
-        EmitLine(sb, $"{endLabel}:");
-        _loopStack.Pop();
-    }
-
-    /// <summary>
-    /// Resolves generic parameters within an element type using the emitter's concrete type arguments.
-    /// Handles direct params (T → S64), tuple types (Tuple[U64, T] → Tuple[U64, S64]),
-    /// and parameterized types (List[T] → List[S64]).
-    /// </summary>
-    private TypeInfo? ResolveGenericElementType(TypeInfo? elemType, TypeInfo emitterType)
-    {
-        if (elemType == null) return null;
-
-        TypeInfo? emitterGenericDef = emitterType switch
-        {
-            EntityTypeInfo e => e.GenericDefinition,
-            RecordTypeInfo r => r.GenericDefinition,
-            _ => null
-        };
-        if (emitterGenericDef?.GenericParameters == null) return elemType;
-
-        // Build param→concrete mapping from emitter (e.g., T → S64)
-        var paramMap = new Dictionary<string, TypeInfo>();
-        for (int i = 0; i < emitterGenericDef.GenericParameters.Count && i < emitterType.TypeArguments!.Count; i++)
-            paramMap[emitterGenericDef.GenericParameters[i]] = emitterType.TypeArguments[i];
-
-        return SubstituteTypeParams(elemType, paramMap);
-    }
-
-    /// <summary>
-    /// Recursively substitutes generic type parameters in a type using the given mapping.
-    /// </summary>
-    private TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> paramMap)
-    {
-        // Direct generic parameter (T → S64)
-        if (type is GenericParameterTypeInfo && paramMap.TryGetValue(type.Name, out var sub))
-            return sub;
-
-        // Tuple with generic elements (Tuple[U64, T] → Tuple[U64, S64])
-        if (type is TupleTypeInfo tuple)
-        {
-            bool anyChanged = false;
-            var resolvedElems = new List<TypeInfo>();
-            foreach (var elem in tuple.ElementTypes)
-            {
-                var resolved = SubstituteTypeParams(elem, paramMap);
-                if (resolved != elem) anyChanged = true;
-                resolvedElems.Add(resolved);
-            }
-            if (anyChanged)
-            {
-                return new TupleTypeInfo(resolvedElems);
-            }
-        }
-
-        // Parameterized type with generic args (List[T] → List[S64])
-        if (type is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            bool anyChanged = false;
-            var resolvedArgs = new List<TypeInfo>();
-            foreach (var ta in type.TypeArguments)
-            {
-                var resolved = SubstituteTypeParams(ta, paramMap);
-                if (resolved != ta) anyChanged = true;
-                resolvedArgs.Add(resolved);
-            }
-            if (anyChanged)
-            {
-                var genericBase = GetGenericBase(type) ?? _registry.LookupType(type.Name);
-                if (genericBase != null)
-                    return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
-            }
-        }
-
-        return type;
-    }
-
-    /// <summary>
-    /// Emits a range-based for loop as a simple counter loop with start/end/step.
-    /// </summary>
-    private void EmitForRange(StringBuilder sb, ForStatement forStmt, RangeExpression range)
-    {
-        string condLabel = NextLabel("for_cond");
-        string bodyLabel = NextLabel("for_body");
-        string incrLabel = NextLabel("for_incr");
-        string endLabel = NextLabel("for_end");
-
-        _loopStack.Push((incrLabel, endLabel));
-
-        // Infer element type from range bounds
-        TypeInfo? elemType = GetExpressionType(range.Start) ?? GetExpressionType(range.End);
-        string elemLlvmType = elemType != null ? GetLLVMType(elemType) : "i64";
-
-        // Evaluate range bounds
-        string start = EmitExpression(sb, range.Start);
-        string end = EmitExpression(sb, range.End);
-        string userStep = range.Step != null ? EmitExpression(sb, range.Step) : null;
-
-        // Allocate loop variable (uniquify name to avoid conflicts with repeated loops)
-        string varName = forStmt.Variable ?? "_iter";
-        string uniqueVarName;
-        if (_varNameCounts.TryGetValue(varName, out int count))
-        {
-            _varNameCounts[varName] = count + 1;
-            uniqueVarName = $"{varName}.{count + 1}";
-        }
-        else
-        {
-            _varNameCounts[varName] = 1;
-            uniqueVarName = varName;
-        }
-        _localVarLLVMNames[varName] = uniqueVarName;
-        string varAddr = $"%{uniqueVarName}.addr";
-        EmitLine(sb, $"  {varAddr} = alloca {elemLlvmType}");
-        EmitLine(sb, $"  store {elemLlvmType} {start}, ptr {varAddr}");
-
-        // Register loop variable type
-        TypeInfo? loopVarType = elemType ?? _registry.LookupType("S64") ?? _registry.LookupType("@intrinsic.i64");
-        if (loopVarType != null)
-        {
-            _localVariables[varName] = loopVarType;
-        }
-
-        bool isFloat = elemLlvmType is "half" or "float" or "double" or "fp128";
-
-        // Compute direction at runtime: is_desc = start > end
-        // For float ranges or explicitly descending (downto), keep compile-time behavior
-        string? isDescReg = null;
-        string step;
-        if (isFloat || range.IsDescending)
-        {
-            step = userStep ?? "1";
-        }
-        else
-        {
-            // Runtime direction inference for integer to/til ranges
-            isDescReg = NextTemp();
-            EmitLine(sb, $"  {isDescReg} = icmp sgt {elemLlvmType} {start}, {end}");
-            if (userStep != null)
-            {
-                // Negate step if descending: step = select is_desc, -userStep, userStep
-                string negStep = NextTemp();
-                EmitLine(sb, $"  {negStep} = sub {elemLlvmType} 0, {userStep}");
-                step = NextTemp();
-                EmitLine(sb, $"  {step} = select i1 {isDescReg}, {elemLlvmType} {negStep}, {elemLlvmType} {userStep}");
-            }
-            else
-            {
-                step = NextTemp();
-                EmitLine(sb, $"  {step} = select i1 {isDescReg}, {elemLlvmType} -1, {elemLlvmType} 1");
-            }
-        }
-
-        EmitLine(sb, $"  br label %{condLabel}");
-
-        // Condition
-        EmitLine(sb, $"{condLabel}:");
-        string current = NextTemp();
-        EmitLine(sb, $"  {current} = load {elemLlvmType}, ptr {varAddr}");
-        string cmp;
-        if (isFloat)
-        {
-            cmp = NextTemp();
-            string fcmpOp = range.IsDescending ? "oge" : range.IsExclusive ? "olt" : "ole";
-            EmitLine(sb, $"  {cmp} = fcmp {fcmpOp} {elemLlvmType} {current}, {end}");
-        }
-        else if (range.IsDescending)
-        {
-            // Explicit descending (downto): always use sge
-            cmp = NextTemp();
-            string icmpOp = range.IsExclusive ? "sgt" : "sge";
-            EmitLine(sb, $"  {cmp} = icmp {icmpOp} {elemLlvmType} {current}, {end}");
-        }
-        else
-        {
-            // Runtime direction: emit both comparisons, select based on is_desc
-            string ascCmp = NextTemp();
-            string descCmp = NextTemp();
-            string ascOp = range.IsExclusive ? "slt" : "sle";
-            string descOp = range.IsExclusive ? "sgt" : "sge";
-            EmitLine(sb, $"  {ascCmp} = icmp {ascOp} {elemLlvmType} {current}, {end}");
-            EmitLine(sb, $"  {descCmp} = icmp {descOp} {elemLlvmType} {current}, {end}");
-            cmp = NextTemp();
-            EmitLine(sb, $"  {cmp} = select i1 {isDescReg}, i1 {descCmp}, i1 {ascCmp}");
-        }
-        EmitLine(sb, $"  br i1 {cmp}, label %{bodyLabel}, label %{endLabel}");
-
-        // Body
-        EmitLine(sb, $"{bodyLabel}:");
-        bool bodyTerminated = EmitStatement(sb, forStmt.Body);
-        if (!bodyTerminated)
-        {
-            EmitLine(sb, $"  br label %{incrLabel}");
-        }
-
-        // Increment: i += step (step is negative for descending)
-        EmitLine(sb, $"{incrLabel}:");
-        string curVal = NextTemp();
-        EmitLine(sb, $"  {curVal} = load {elemLlvmType}, ptr {varAddr}");
-        string nextVal = NextTemp();
-        if (isFloat)
-        {
-            string fop = range.IsDescending ? "fsub" : "fadd";
-            EmitLine(sb, $"  {nextVal} = {fop} {elemLlvmType} {curVal}, {userStep ?? "1"}");
-        }
-        else
-        {
-            // step already has correct sign from runtime select (or is positive for explicit descending sub)
-            if (range.IsDescending)
-                EmitLine(sb, $"  {nextVal} = sub {elemLlvmType} {curVal}, {userStep ?? "1"}");
-            else
-                EmitLine(sb, $"  {nextVal} = add {elemLlvmType} {curVal}, {step}");
-        }
-        EmitLine(sb, $"  store {elemLlvmType} {nextVal}, ptr {varAddr}");
-        EmitLine(sb, $"  br label %{condLabel}");
-
-        // End
-        EmitLine(sb, $"{endLabel}:");
-        _loopStack.Pop();
-    }
-
-    #endregion
-
-    #region Control Flow - Break/Continue
-
-    /// <summary>
-    /// Emits code for a break statement.
-    /// </summary>
-    private void EmitBreak(StringBuilder sb)
-    {
-        if (_loopStack.Count == 0)
-        {
-            throw new InvalidOperationException("Break statement outside of loop");
-        }
-
-        var (_, breakLabel) = _loopStack.Peek();
-        // Clean up active using scopes before breaking out of loop
-        EmitUsingCleanup(sb);
-        EmitLine(sb, $"  br label %{breakLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for a continue statement.
-    /// </summary>
-    private void EmitContinue(StringBuilder sb)
-    {
-        if (_loopStack.Count == 0)
-        {
-            throw new InvalidOperationException("Continue statement outside of loop");
-        }
-
-        var (continueLabel, _) = _loopStack.Peek();
-        // Clean up active using scopes before continuing loop
-        EmitUsingCleanup(sb);
-        EmitLine(sb, $"  br label %{continueLabel}");
-    }
-
-    #endregion
-
-    #region Control Flow - When (Pattern Matching)
-
-    /// <summary>
-    /// Emits code for a when statement (pattern matching).
-    /// </summary>
-    private void EmitWhen(StringBuilder sb, WhenStatement whenStmt)
-    {
-        // Evaluate the subject expression once
-        string subject = EmitExpression(sb, whenStmt.Expression);
-        TypeInfo? subjectType = GetExpressionType(whenStmt.Expression);
-        string endLabel = NextLabel("when_end");
-
-        // Generate labels for each clause
-        var clauseLabels = new List<string>();
-        for (int i = 0; i < whenStmt.Clauses.Count; i++)
-        {
-            clauseLabels.Add(NextLabel($"when_case{i}"));
-        }
-
-        // Jump to first clause
-        if (clauseLabels.Count > 0)
-        {
-            EmitLine(sb, $"  br label %{clauseLabels[0]}");
-        }
-        else
-        {
-            EmitLine(sb, $"  br label %{endLabel}");
-        }
-
-        // Emit each clause
-        for (int i = 0; i < whenStmt.Clauses.Count; i++)
-        {
-            var clause = whenStmt.Clauses[i];
-            string currentLabel = clauseLabels[i];
-            string nextLabel = i + 1 < clauseLabels.Count ? clauseLabels[i + 1] : endLabel;
-
-            EmitLine(sb, $"{currentLabel}:");
-
-            // Emit pattern matching code
-            string bodyLabel = NextLabel($"when_body{i}");
-            EmitPatternMatch(sb, subject, clause.Pattern, bodyLabel, nextLabel, subjectType);
-
-            // Emit body
-            EmitLine(sb, $"{bodyLabel}:");
-            bool bodyTerminated = EmitStatement(sb, clause.Body);
-            if (!bodyTerminated)
-            {
-                EmitLine(sb, $"  br label %{endLabel}");
-            }
-        }
-
-        // End block
-        EmitLine(sb, $"{endLabel}:");
-    }
-
-    /// <summary>
-    /// Emits code for pattern matching.
-    /// Branches to matchLabel if pattern matches, failLabel otherwise.
-    /// </summary>
-    private void EmitPatternMatch(StringBuilder sb, string subject, Pattern pattern, string matchLabel, string failLabel, TypeInfo? subjectType = null)
-    {
-        switch (pattern)
-        {
-            case LiteralPattern lit:
-                EmitLiteralPatternMatch(sb, subject, lit, matchLabel, failLabel, subjectType);
-                break;
-
-            case WildcardPattern:
-                // Always matches - unconditional branch
-                EmitLine(sb, $"  br label %{matchLabel}");
-                break;
-
-            case ElsePattern elseP:
-                // Always matches; optionally bind value to variable
-                if (elseP.VariableName != null && subjectType != null)
-                {
-                    string elseType = GetLLVMType(subjectType);
-                    string elseAddr = $"%{elseP.VariableName}.addr";
-                    EmitLine(sb, $"  {elseAddr} = alloca {elseType}");
-                    EmitLine(sb, $"  store {elseType} {subject}, ptr {elseAddr}");
-                    _localVariables[elseP.VariableName] = subjectType;
-                }
-                EmitLine(sb, $"  br label %{matchLabel}");
-                break;
-
-            case IdentifierPattern id:
-                EmitIdentifierPatternMatch(sb, subject, id, matchLabel, subjectType);
-                break;
-
-            case TypePattern typePattern:
-                EmitTypePatternMatch(sb, subject, typePattern, matchLabel, failLabel, subjectType);
-                break;
-
-            case VariantPattern variant:
-                EmitVariantPatternMatch(sb, subject, variant, matchLabel, failLabel, subjectType);
-                break;
-
-            case GuardPattern guardPattern:
-                EmitGuardPatternMatch(sb, subject, guardPattern, matchLabel, failLabel, subjectType);
-                break;
-
-            case NonePattern:
-                EmitNonePatternMatch(sb, subject, matchLabel, failLabel, subjectType);
-                break;
-
-            case CrashablePattern crashable:
-                EmitCrashablePatternMatch(sb, subject, crashable, matchLabel, failLabel, subjectType);
-                break;
-
-            case ExpressionPattern exprPattern:
-                // Expression pattern: evaluate condition directly
-                string condition = EmitExpression(sb, exprPattern.Expression);
-                EmitLine(sb, $"  br i1 {condition}, label %{matchLabel}, label %{failLabel}");
-                break;
-
-            case NegatedTypePattern negType:
-                EmitNegatedTypePatternMatch(sb, subject, negType, matchLabel, failLabel, subjectType);
-                break;
-
-            case FlagsPattern flagsPattern:
-                EmitFlagsPatternMatch(sb, subject, flagsPattern, matchLabel, failLabel, subjectType);
-                break;
-
-            case ComparisonPattern cmpPattern:
-                EmitComparisonPatternMatch(sb, subject, cmpPattern, matchLabel, failLabel, subjectType);
-                break;
-
-            case DestructuringPattern destructPattern:
-                EmitDestructuringPatternMatch(sb, subject, destructPattern, matchLabel, subjectType);
-                break;
-
-            case TypeDestructuringPattern typeDestructPattern:
-                EmitTypeDestructuringPatternMatch(sb, subject, typeDestructPattern, matchLabel, failLabel, subjectType);
-                break;
-
-            default:
-                throw new NotImplementedException(
-                    $"Pattern type not implemented in codegen: {pattern.GetType().Name}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for literal pattern matching with correct type comparison.
-    /// </summary>
-    private void EmitLiteralPatternMatch(StringBuilder sb, string subject, LiteralPattern lit, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        string litValue = lit.Value?.ToString() ?? "0";
-        string result = NextTemp();
-
-        // Determine LLVM type and comparison from the literal's token type
-        string llvmType = lit.LiteralType switch
-        {
-            Lexer.TokenType.S8Literal => "i8",
-            Lexer.TokenType.S16Literal => "i16",
-            Lexer.TokenType.S32Literal => "i32",
-            Lexer.TokenType.S64Literal => "i64",
-            Lexer.TokenType.S128Literal => "i128",
-            Lexer.TokenType.U8Literal => "i8",
-            Lexer.TokenType.U16Literal => "i16",
-            Lexer.TokenType.U32Literal => "i32",
-            Lexer.TokenType.U64Literal => "i64",
-            Lexer.TokenType.U128Literal => "i128",
-            Lexer.TokenType.F16Literal => "half",
-            Lexer.TokenType.F32Literal => "float",
-            Lexer.TokenType.F64Literal => "double",
-            Lexer.TokenType.F128Literal => "fp128",
-            Lexer.TokenType.True or Lexer.TokenType.False => "i1",
-            _ => subjectType != null ? GetLLVMType(subjectType) : "i64"
-        };
-
-        bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
-        bool isText = lit.LiteralType == Lexer.TokenType.TextLiteral;
-
-        if (isText)
-        {
-            // Text comparison via Text.$eq(me, other) -> Bool (i1)
-            RoutineInfo? textEq = _registry.LookupRoutine("Text.$eq");
-            string eqFuncName = textEq != null ? MangleFunctionName(textEq) : "Text$_eq";
-            EmitLine(sb, $"  {result} = call i1 @{eqFuncName}(ptr {subject}, ptr {litValue})");
-        }
-        else if (isFloat)
-        {
-            litValue = lit.Value switch
-            {
-                float f => f.ToString("G9"),
-                double d => d.ToString("G17"),
-                _ => litValue
-            };
-            EmitLine(sb, $"  {result} = fcmp oeq {llvmType} {subject}, {litValue}");
-        }
-        else
-        {
-            if (lit.Value is bool b)
-                litValue = b ? "true" : "false";
-            EmitLine(sb, $"  {result} = icmp eq {llvmType} {subject}, {litValue}");
-        }
-
-        EmitLine(sb, $"  br i1 {result}, label %{matchLabel}, label %{failLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for identifier pattern: bind value to variable and always match.
-    /// </summary>
-    private void EmitIdentifierPatternMatch(StringBuilder sb, string subject, IdentifierPattern id, string matchLabel, TypeInfo? subjectType)
-    {
-        string llvmType = subjectType != null ? GetLLVMType(subjectType) : "i64";
-        string varAddr = $"%{id.Name}.addr";
-
-        EmitLine(sb, $"  {varAddr} = alloca {llvmType}");
-        EmitLine(sb, $"  store {llvmType} {subject}, ptr {varAddr}");
-
-        if (subjectType != null)
-        {
-            _localVariables[id.Name] = subjectType;
-        }
-
-        EmitLine(sb, $"  br label %{matchLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for type pattern matching.
-    /// </summary>
-    private void EmitTypePatternMatch(StringBuilder sb, string subject, TypePattern typePattern, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        // Resolve the target type
-        TypeInfo? targetType = _registry.LookupType(typePattern.Type.Name);
-
-        // Determine the actual target label — if we need to bind, use an extraction block
-        bool needsBind = typePattern.VariableName != null && targetType != null;
-        string branchTarget = needsBind ? NextLabel("type_bind") : matchLabel;
-
-        if (subjectType is VariantTypeInfo variant && targetType != null)
-        {
-            // For variants, check if any member matches the target type
-            VariantMemberInfo? matchedMember = null;
-
-            // Check for None state
-            if (targetType.Name == "None")
-            {
-                matchedMember = variant.Members.FirstOrDefault(m => m.IsNone);
-            }
-            else
-            {
-                matchedMember = variant.FindMember(targetType);
-            }
-
-            if (matchedMember != null)
-            {
-                string tagPtr = NextTemp();
-                string tag = NextTemp();
-                string variantTypeName = GetVariantTypeName(variant);
-                EmitLine(sb, $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
-                string cmp = NextTemp();
-                EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
-                EmitLine(sb, $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
-            }
-            else
-            {
-                EmitLine(sb, $"  br label %{failLabel}");
-            }
-        }
-        else
-        {
-            // For entities, compare vtable pointer or type tag
-            if (subjectType != null && targetType != null && subjectType.Name == targetType.Name)
-            {
-                EmitLine(sb, $"  br label %{branchTarget}");
-            }
-            else if (subjectType is EntityTypeInfo && targetType is EntityTypeInfo
-                     && subjectType.Name != targetType.Name)
-            {
-                // Known incompatible entity types — cannot match
-                EmitLine(sb, $"  br label %{failLabel}");
-            }
-            else
-            {
-                // Cannot determine at compile time — fall through to match (optimistic)
-                EmitLine(sb, $"  br label %{branchTarget}");
-            }
-        }
-
-        // Bind to variable if specified — emit alloca+store in a dedicated block
-        if (needsBind)
-        {
-            EmitLine(sb, $"{branchTarget}:");
-            string bindType = GetLLVMType(targetType!);
-            string varAddr = $"%{typePattern.VariableName}.addr";
-            EmitLine(sb, $"  {varAddr} = alloca {bindType}");
-            EmitLine(sb, $"  store {bindType} {subject}, ptr {varAddr}");
-            _localVariables[typePattern.VariableName!] = targetType!;
-            EmitLine(sb, $"  br label %{matchLabel}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for crashable pattern matching (error case of Result/Lookup/Maybe).
-    /// </summary>
-    private void EmitCrashablePatternMatch(StringBuilder sb, string subject, CrashablePattern crashable, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        if (subjectType is ErrorHandlingTypeInfo errorInfo)
-        {
-            // Maybe has no error case — CrashablePattern cannot match
-            if (errorInfo.Kind == ErrorHandlingKind.Maybe)
-            {
-                EmitLine(sb, $"  br label %{failLabel}");
-                return;
-            }
-
-            // Error handling layout: { i64 (DataState), ptr (Snatched handle) }
-            // DataState: VALID=1, ABSENT=0, ERROR=-1
-            // CrashablePattern matches the ERROR case (tag == -1)
-            string tagPtr = NextTemp();
-            string tag = NextTemp();
-            EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {subject}, i32 0, i32 0");
-            EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
-            string cmp = NextTemp();
-            EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, -1");
-
-            // Bind error value to variable if specified
-            if (crashable.VariableName != null)
-            {
-                string extractLabel = NextLabel("crash_extract");
-                EmitLine(sb, $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
-
-                EmitLine(sb, $"{extractLabel}:");
-                // Extract ptr from field 1 (Snatched handle)
-                string handlePtr = NextTemp();
-                string handleVal = NextTemp();
-                EmitLine(sb, $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {subject}, i32 0, i32 1");
-                EmitLine(sb, $"  {handleVal} = load ptr, ptr {handlePtr}");
-
-                string varAddr = $"%{crashable.VariableName}.addr";
-                EmitLine(sb, $"  {varAddr} = alloca ptr");
-                EmitLine(sb, $"  store ptr {handleVal}, ptr {varAddr}");
-
-                TypeInfo errorType = errorInfo.ErrorType ?? errorInfo;
-                _localVariables[crashable.VariableName] = errorType;
-                EmitLine(sb, $"  br label %{matchLabel}");
-            }
-            else
-            {
-                EmitLine(sb, $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-            }
-        }
-        else
-        {
-            // Not an error handling type — cannot match crashable pattern
-            EmitLine(sb, $"  br label %{failLabel}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for None pattern matching.
-    /// For error handling types, checks DataState tag == 0 (ABSENT).
-    /// For other types, falls back to pointer null check.
-    /// </summary>
-    private void EmitNonePatternMatch(StringBuilder sb, string subject, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        if (subjectType is ErrorHandlingTypeInfo errorInfo)
-        {
-            // Result has no None case
-            if (errorInfo.Kind == ErrorHandlingKind.Result)
-            {
-                EmitLine(sb, $"  br label %{failLabel}");
-                return;
-            }
-
-            // Maybe and Lookup: check DataState tag == 0 (ABSENT)
-            // Error handling layout: { i64 (DataState), ptr (Snatched handle) }
-            string tagPtr = NextTemp();
-            string tag = NextTemp();
-            EmitLine(sb, $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {subject}, i32 0, i32 0");
-            EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
-            string cmp = NextTemp();
-            EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, 0");
-            EmitLine(sb, $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-        }
-        else
-        {
-            // Non-error-handling type: check for null pointer
-            string cmp = NextTemp();
-            EmitLine(sb, $"  {cmp} = icmp eq ptr {subject}, null");
-            EmitLine(sb, $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for variant pattern matching (is MemberType payload).
-    /// </summary>
-    private void EmitVariantPatternMatch(StringBuilder sb, string subject, VariantPattern variant, string matchLabel, string failLabel, TypeInfo? subjectType = null)
-    {
-        // Determine variant type and struct name for GEP
-        VariantTypeInfo? variantType = subjectType as VariantTypeInfo;
-        if (variantType == null && variant.VariantType != null)
-        {
-            variantType = _registry.LookupType(variant.VariantType) as VariantTypeInfo;
-        }
-
-        string variantStructType = variantType != null ? GetVariantTypeName(variantType) : "{ i64 }";
-
-        // Extract tag from variant (first field)
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
-        EmitLine(sb, $"  {tagPtr} = getelementptr {variantStructType}, ptr {subject}, i32 0, i32 0");
-        EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
-
-        // Look up member by case name (which is the type name)
-        int expectedTag = 0;
-        VariantMemberInfo? matchedMember = null;
-        if (variantType != null)
-        {
-            matchedMember = variantType.Members.FirstOrDefault(m => m.Name == variant.CaseName);
-            if (matchedMember != null)
-                expectedTag = matchedMember.TagValue;
-        }
-
-        string cmp = NextTemp();
-        EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, {expectedTag}");
-
-        // If bindings are present, extract payload in the match block
-        if (variant.Bindings is { Count: > 0 } && matchedMember is { IsNone: false })
-        {
-            string extractLabel = NextLabel("variant_extract");
-            EmitLine(sb, $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
-
-            EmitLine(sb, $"{extractLabel}:");
-            // Extract payload (second field of variant struct)
-            string payloadPtr = NextTemp();
-            EmitLine(sb, $"  {payloadPtr} = getelementptr {variantStructType}, ptr {subject}, i32 0, i32 1");
-
-            // Bind the first binding to the payload
-            var binding = variant.Bindings[0];
-            string bindName = binding.BindingName ?? binding.MemberVariableName ?? "_payload";
-
-            TypeInfo? payloadType = matchedMember.Type;
-
-            if (payloadType != null)
-            {
-                string payloadLlvm = GetLLVMType(payloadType);
-                string payloadVal = NextTemp();
-                EmitLine(sb, $"  {payloadVal} = load {payloadLlvm}, ptr {payloadPtr}");
-
-                string bindAddr = $"%{bindName}.addr";
-                EmitLine(sb, $"  {bindAddr} = alloca {payloadLlvm}");
-                EmitLine(sb, $"  store {payloadLlvm} {payloadVal}, ptr {bindAddr}");
-                _localVariables[bindName] = payloadType;
-            }
-
-            EmitLine(sb, $"  br label %{matchLabel}");
-        }
-        else
-        {
-            EmitLine(sb, $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for guard pattern matching (pattern if condition).
-    /// </summary>
-    private void EmitGuardPatternMatch(StringBuilder sb, string subject, GuardPattern guardPattern, string matchLabel, string failLabel, TypeInfo? subjectType = null)
-    {
-        // First check inner pattern
-        string guardCheck = NextLabel("guard_check");
-        EmitPatternMatch(sb, subject, guardPattern.InnerPattern, guardCheck, failLabel, subjectType);
-
-        // Then check guard condition
-        EmitLine(sb, $"{guardCheck}:");
-        string guardResult = EmitExpression(sb, guardPattern.Guard);
-        EmitLine(sb, $"  br i1 {guardResult}, label %{matchLabel}, label %{failLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for negated type pattern matching (isnot Type).
-    /// Inverts the logic of TypePattern — branches to matchLabel when type does NOT match.
-    /// </summary>
-    private void EmitNegatedTypePatternMatch(StringBuilder sb, string subject, NegatedTypePattern negType, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        // Invert: match→fail, fail→match compared to regular TypePattern
-        TypeInfo? targetType = _registry.LookupType(negType.Type.Name);
-
-        if (subjectType is VariantTypeInfo variant && targetType != null)
-        {
-            VariantMemberInfo? matchedMember = targetType.Name == "None"
-                ? variant.Members.FirstOrDefault(m => m.IsNone)
-                : variant.FindMember(targetType);
-
-            if (matchedMember != null)
-            {
-                string tagPtr = NextTemp();
-                string tag = NextTemp();
-                string variantTypeName = GetVariantTypeName(variant);
-                EmitLine(sb, $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
-                string cmp = NextTemp();
-                EmitLine(sb, $"  {cmp} = icmp ne i64 {tag}, {matchedMember.TagValue}");
-                EmitLine(sb, $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-            }
-            else
-            {
-                // No matching case — always matches the negation
-                EmitLine(sb, $"  br label %{matchLabel}");
-            }
-        }
-        else if (subjectType != null && targetType != null && subjectType.Name == targetType.Name)
-        {
-            // Known same type — negation always fails
-            EmitLine(sb, $"  br label %{failLabel}");
-        }
-        else if (subjectType is EntityTypeInfo && targetType is EntityTypeInfo
-                 && subjectType.Name != targetType.Name)
-        {
-            // Known different entity types — negation always matches
-            EmitLine(sb, $"  br label %{matchLabel}");
-        }
-        else
-        {
-            // Cannot determine — fall through to match (optimistic for negation)
-            EmitLine(sb, $"  br label %{matchLabel}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for flags pattern matching in when clauses.
-    /// Reuses the same bitwise logic as EmitFlagsTest.
-    /// </summary>
-    private void EmitFlagsPatternMatch(StringBuilder sb, string subject, FlagsPattern flagsPattern, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        FlagsTypeInfo? flagsType = subjectType as FlagsTypeInfo;
-
-        // Build the combined test mask
-        ulong testMask = 0;
-        foreach (string flagName in flagsPattern.FlagNames)
-        {
-            testMask |= ResolveFlagBit(flagName, flagsType);
-        }
-
-        // Build excluded mask
-        ulong excludedMask = 0;
-        if (flagsPattern.ExcludedFlags != null)
-        {
-            foreach (string flagName in flagsPattern.ExcludedFlags)
-            {
-                excludedMask |= ResolveFlagBit(flagName, flagsType);
-            }
-        }
-
-        string maskStr = testMask.ToString();
-        string result;
-
-        if (flagsPattern.IsExact)
-        {
-            // isonly: x == mask
-            result = NextTemp();
-            EmitLine(sb, $"  {result} = icmp eq i64 {subject}, {maskStr}");
-        }
-        else
-        {
-            // is: check flags based on connective
-            string andResult = NextTemp();
-            EmitLine(sb, $"  {andResult} = and i64 {subject}, {maskStr}");
-
-            if (flagsPattern.Connective == FlagsTestConnective.Or)
-            {
-                result = NextTemp();
-                EmitLine(sb, $"  {result} = icmp ne i64 {andResult}, 0");
-            }
-            else
-            {
-                result = NextTemp();
-                EmitLine(sb, $"  {result} = icmp eq i64 {andResult}, {maskStr}");
-            }
-
-            // Handle 'but' exclusion
-            if (excludedMask > 0)
-            {
-                string exclAnd = NextTemp();
-                EmitLine(sb, $"  {exclAnd} = and i64 {subject}, {excludedMask}");
-                string exclCmp = NextTemp();
-                EmitLine(sb, $"  {exclCmp} = icmp eq i64 {exclAnd}, 0");
-                string combined = NextTemp();
-                EmitLine(sb, $"  {combined} = and i1 {result}, {exclCmp}");
-                result = combined;
-            }
-        }
-
-        EmitLine(sb, $"  br i1 {result}, label %{matchLabel}, label %{failLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for comparison pattern matching (== value, != value, &lt; value, etc.).
-    /// </summary>
-    private void EmitComparisonPatternMatch(StringBuilder sb, string subject, ComparisonPattern cmpPattern, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        string rhs = EmitExpression(sb, cmpPattern.Value);
-        string llvmType = subjectType != null ? GetLLVMType(subjectType) : "i64";
-        bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
-        bool isPtr = llvmType == "ptr";
-
-        string result = NextTemp();
-
-        if (cmpPattern.Operator == Lexer.TokenType.ReferenceEqual)
-        {
-            EmitLine(sb, $"  {result} = icmp eq ptr {subject}, {rhs}");
-        }
-        else if (cmpPattern.Operator == Lexer.TokenType.ReferenceNotEqual)
-        {
-            EmitLine(sb, $"  {result} = icmp ne ptr {subject}, {rhs}");
-        }
-        else if (isFloat)
-        {
-            string fcmpOp = cmpPattern.Operator switch
-            {
-                Lexer.TokenType.Equal => "oeq",
-                Lexer.TokenType.NotEqual => "one",
-                Lexer.TokenType.Less => "olt",
-                Lexer.TokenType.LessEqual => "ole",
-                Lexer.TokenType.Greater => "ogt",
-                Lexer.TokenType.GreaterEqual => "oge",
-                _ => "oeq"
-            };
-            EmitLine(sb, $"  {result} = fcmp {fcmpOp} {llvmType} {subject}, {rhs}");
-        }
-        else if (isPtr)
-        {
-            string icmpOp = cmpPattern.Operator switch
-            {
-                Lexer.TokenType.Equal => "eq",
-                Lexer.TokenType.NotEqual => "ne",
-                _ => "eq"
-            };
-            EmitLine(sb, $"  {result} = icmp {icmpOp} ptr {subject}, {rhs}");
-        }
-        else
-        {
-            string icmpOp = cmpPattern.Operator switch
-            {
-                Lexer.TokenType.Equal => "eq",
-                Lexer.TokenType.NotEqual => "ne",
-                Lexer.TokenType.Less => "slt",
-                Lexer.TokenType.LessEqual => "sle",
-                Lexer.TokenType.Greater => "sgt",
-                Lexer.TokenType.GreaterEqual => "sge",
-                _ => "eq"
-            };
-            EmitLine(sb, $"  {result} = icmp {icmpOp} {llvmType} {subject}, {rhs}");
-        }
-
-        EmitLine(sb, $"  br i1 {result}, label %{matchLabel}, label %{failLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for destructuring pattern: extract fields and bind to variables.
-    /// Always matches (destructuring is structural, not conditional).
-    /// </summary>
-    private void EmitDestructuringPatternMatch(StringBuilder sb, string subject, DestructuringPattern destructPattern, string matchLabel, TypeInfo? subjectType)
-    {
-        EmitDestructuringBindings(sb, subject, destructPattern.Bindings, subjectType);
-        EmitLine(sb, $"  br label %{matchLabel}");
-    }
-
-    /// <summary>
-    /// Emits code for type + destructuring pattern: type check then extract fields.
-    /// </summary>
-    private void EmitTypeDestructuringPatternMatch(StringBuilder sb, string subject, TypeDestructuringPattern pattern, string matchLabel, string failLabel, TypeInfo? subjectType)
-    {
-        TypeInfo? targetType = _registry.LookupType(pattern.Type.Name);
-
-        // Type check first (same logic as TypePattern)
-        string extractLabel = NextLabel("type_destruct");
-
-        if (subjectType is VariantTypeInfo variant && targetType != null)
-        {
-            VariantMemberInfo? matchedMember = targetType.Name == "None"
-                ? variant.Members.FirstOrDefault(m => m.IsNone)
-                : variant.FindMember(targetType);
-
-            if (matchedMember != null)
-            {
-                string tagPtr = NextTemp();
-                string tag = NextTemp();
-                string variantTypeName = GetVariantTypeName(variant);
-                EmitLine(sb, $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb, $"  {tag} = load i64, ptr {tagPtr}");
-                string cmp = NextTemp();
-                EmitLine(sb, $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
-                EmitLine(sb, $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
-            }
-            else
-            {
-                EmitLine(sb, $"  br label %{failLabel}");
-                EmitLine(sb, $"{extractLabel}:");
-                EmitLine(sb, $"  br label %{matchLabel}");
-                return;
-            }
-        }
-        else if (subjectType != null && targetType != null && subjectType.Name == targetType.Name)
-        {
-            EmitLine(sb, $"  br label %{extractLabel}");
-        }
-        else if (subjectType is EntityTypeInfo && targetType is EntityTypeInfo
-                 && subjectType.Name != targetType.Name)
-        {
-            EmitLine(sb, $"  br label %{failLabel}");
-            EmitLine(sb, $"{extractLabel}:");
-            EmitLine(sb, $"  br label %{matchLabel}");
-            return;
-        }
-        else
-        {
-            EmitLine(sb, $"  br label %{extractLabel}");
-        }
-
-        // Extract and bind fields
-        EmitLine(sb, $"{extractLabel}:");
-        TypeInfo? bindType = targetType ?? subjectType;
-        EmitDestructuringBindings(sb, subject, pattern.Bindings, bindType);
-        EmitLine(sb, $"  br label %{matchLabel}");
-    }
-
-    /// <summary>
-    /// Emits field extraction for destructuring bindings.
-    /// Supports both positional and named bindings on records, entities, and tuples.
-    /// </summary>
-    private void EmitDestructuringBindings(StringBuilder sb, string subject, List<DestructuringBinding> bindings, TypeInfo? subjectType)
-    {
-        // Get the member variables from the subject type
-        IReadOnlyList<MemberVariableInfo>? memberVariables = subjectType switch
-        {
-            RecordTypeInfo record => record.MemberVariables,
-            EntityTypeInfo entity => entity.MemberVariables,
-            TupleTypeInfo tuple => tuple.MemberVariables,
-            _ => null
-        };
-
-        string structTypeName = subjectType switch
-        {
-            RecordTypeInfo record => record.HasDirectBackendType ? record.LlvmType
-                : record.IsSingleMemberVariableWrapper ? GetLLVMType(record.UnderlyingIntrinsic!)
-                : GetRecordTypeName(record),
-            EntityTypeInfo entity => GetEntityTypeName(entity),
-            TupleTypeInfo tuple => $"{{ {string.Join(", ", tuple.ElementTypes.Select(e => GetLLVMType(e)))} }}",
-            _ => "{ }"
-        };
-
-        for (int i = 0; i < bindings.Count; i++)
-        {
-            var binding = bindings[i];
-            string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_destruct{i}";
-
-            if (bindName == "_") continue; // Wildcard, skip
-
-            // Find the member variable by name or position
-            int memberIdx = -1;
-            MemberVariableInfo? memberVar = null;
-
-            if (memberVariables != null)
-            {
-                if (binding.MemberVariableName != null)
-                {
-                    for (int j = 0; j < memberVariables.Count; j++)
-                    {
-                        if (memberVariables[j].Name == binding.MemberVariableName)
-                        {
-                            memberIdx = j;
-                            memberVar = memberVariables[j];
-                            break;
-                        }
-                    }
-                }
-
-                if (memberIdx < 0 && i < memberVariables.Count)
-                {
-                    memberIdx = i;
-                    memberVar = memberVariables[i];
-                }
-            }
-
-            if (memberIdx < 0 || memberVar == null) continue;
-
-            string memberLlvmType = GetLLVMType(memberVar.Type);
-            string memberPtr = NextTemp();
-            EmitLine(sb, $"  {memberPtr} = getelementptr {structTypeName}, ptr {subject}, i32 0, i32 {memberIdx}");
-            string memberVal = NextTemp();
-            EmitLine(sb, $"  {memberVal} = load {memberLlvmType}, ptr {memberPtr}");
-
-            string varAddr = $"%{bindName}.addr";
-            EmitLine(sb, $"  {varAddr} = alloca {memberLlvmType}");
-            EmitLine(sb, $"  store {memberLlvmType} {memberVal}, ptr {varAddr}");
-            _localVariables[bindName] = memberVar.Type;
-        }
-    }
-
-    #endregion
-
-    #region Using Statement
-
-    /// <summary>
-    /// Emits code for a using statement.
-    /// using name = resource { body }
-    /// Calls $enter/$exit around the body for all using targets (tokens and resources alike).
-    /// </summary>
-    private void EmitUsing(StringBuilder sb, UsingStatement usingStmt)
-    {
-        // Evaluate the resource expression
-        string resourceValue = EmitExpression(sb, usingStmt.Resource);
-        TypeInfo? resourceType = GetExpressionType(usingStmt.Resource);
-        string llvmType = resourceType != null ? GetLLVMType(resourceType) : "ptr";
-
-        // Check if $enter exists for this type — LookupMethod handles generic type fallback
-        RoutineInfo? enterMethod = resourceType != null
-            ? _registry.LookupMethod(resourceType, "$enter")
-            : null;
-
-        string boundValue;
-        TypeInfo? boundType;
-
-        if (enterMethod != null)
-        {
-            // Resource path: call $enter(), bind result (or resource if void)
-            GenerateFunctionDeclaration(enterMethod);
-            string enterMangled = MangleFunctionName(enterMethod);
-            string receiverType = GetParameterLLVMType(resourceType!);
-
-            if (enterMethod.ReturnType != null && GetLLVMType(enterMethod.ReturnType) != "void")
-            {
-                string enterResult = NextTemp();
-                string returnType = GetLLVMType(enterMethod.ReturnType);
-                EmitLine(sb, $"  {enterResult} = call {returnType} @{enterMangled}({receiverType} {resourceValue})");
-                boundValue = enterResult;
-                boundType = enterMethod.ReturnType;
-            }
-            else
-            {
-                EmitLine(sb, $"  call void @{enterMangled}({receiverType} {resourceValue})");
-                boundValue = resourceValue;
-                boundType = resourceType;
-            }
-        }
-        else
-        {
-            // Fallback: no $enter found (should not happen for well-typed programs)
-            boundValue = resourceValue;
-            boundType = resourceType;
-        }
-
-        // Allocate and store the bound variable
-        string bindLlvmType = boundType != null ? GetLLVMType(boundType) : llvmType;
-        string varAddr = $"%{usingStmt.Name}.addr";
-        EmitLine(sb, $"  {varAddr} = alloca {bindLlvmType}");
-        EmitLine(sb, $"  store {bindLlvmType} {boundValue}, ptr {varAddr}");
-
-        if (boundType != null)
-        {
-            _localVariables[usingStmt.Name] = boundType;
-        }
-
-        // Look up $exit before the body so early exits can call it
-        RoutineInfo? exitMethod = enterMethod != null
-            ? _registry.LookupMethod(resourceType!, "$exit")
-            : null;
-
-        // Push cleanup so early exits (return/throw/break/continue/absent) call $exit
-        if (exitMethod != null)
-        {
-            GenerateFunctionDeclaration(exitMethod);
-            _usingCleanupStack.Push((resourceValue, resourceType!, exitMethod));
-        }
-
-        // Emit the body
-        EmitStatement(sb, usingStmt.Body);
-
-        // Normal exit: call $exit and pop cleanup
-        if (exitMethod != null)
-        {
-            _usingCleanupStack.Pop();
-            string exitMangled = MangleFunctionName(exitMethod);
-            string receiverType = GetParameterLLVMType(resourceType);
-            EmitLine(sb, $"  call void @{exitMangled}({receiverType} {resourceValue})");
-        }
+        EmitExpression(sb: sb, expr: becomesStmt.Value);
     }
 
     #endregion

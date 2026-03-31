@@ -1,4 +1,6 @@
-﻿namespace Compiler.CodeGen;
+﻿using SemanticAnalysis.Symbols;
+
+namespace Compiler.CodeGen;
 
 using SemanticAnalysis.Types;
 
@@ -16,28 +18,40 @@ public partial class LLVMCodeGenerator
     /// <returns>The LLVM type string.</returns>
     private TypeInfo ResolveTypeSubstitution(TypeInfo type)
     {
-        if (_typeSubstitutions == null) return type;
+        if (_typeSubstitutions == null)
+        {
+            return type;
+        }
 
         // Direct generic parameter substitution (e.g., K → S64)
-        if (_typeSubstitutions.TryGetValue(type.Name, out var sub))
+        if (_typeSubstitutions.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+        {
             return sub;
+        }
 
         // Parameterized types with unresolved args (e.g., DictEntry[K, V] → DictEntry[S64, Text])
         if (type.TypeArguments is { Count: > 0 })
         {
             bool anyResolved = false;
             var resolvedArgs = new List<TypeInfo>();
-            foreach (var ta in type.TypeArguments)
+            foreach (TypeInfo ta in type.TypeArguments)
             {
-                var resolved = ResolveTypeSubstitution(ta);
-                resolvedArgs.Add(resolved);
-                if (resolved != ta) anyResolved = true;
+                TypeInfo resolved = ResolveTypeSubstitution(type: ta);
+                resolvedArgs.Add(item: resolved);
+                if (resolved != ta)
+                {
+                    anyResolved = true;
+                }
             }
+
             if (anyResolved)
             {
-                TypeInfo? genericBase = GetGenericBase(type);
+                TypeInfo? genericBase = GetGenericBase(type: type);
                 if (genericBase != null)
-                    return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
+                {
+                    return _registry.GetOrCreateResolution(genericDef: genericBase,
+                        typeArguments: resolvedArgs);
+                }
             }
         }
 
@@ -46,38 +60,46 @@ public partial class LLVMCodeGenerator
 
     private string GetLLVMType(TypeInfo type)
     {
-        type = ResolveTypeSubstitution(type);
+        type = ResolveTypeSubstitution(type: type);
         return type switch
         {
             // Intrinsic types map directly to LLVM
-            IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic),
+            IntrinsicTypeInfo intrinsic => GetIntrinsicLLVMType(intrinsic: intrinsic),
 
             // Records with @llvm annotation → use backend type directly (skip generic definitions with template holes)
-            RecordTypeInfo { HasDirectBackendType: true, IsGenericDefinition: false } record => record.LlvmType,
+            RecordTypeInfo
+            {
+                HasDirectBackendType: true, IsGenericDefinition: false
+            } record => record.LlvmType,
 
             // Legacy single-member-variable wrappers → unwrap to underlying intrinsic
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
-                GetLLVMType(record.UnderlyingIntrinsic!),
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record => GetLLVMType(
+                type: record.UnderlyingIntrinsic!),
 
             // Generic definition records (unresolved) → pointer fallback
             RecordTypeInfo { IsGenericDefinition: true } => "ptr",
 
             // Records with no fields — look up the registered definition (may have @llvm annotation)
             RecordTypeInfo { MemberVariables.Count: 0 } record when
-                _registry.LookupType(record.Name) is RecordTypeInfo { HasDirectBackendType: true } llvmRecord
-                => llvmRecord.LlvmType,
+                _registry.LookupType(name: record.Name) is RecordTypeInfo
+                {
+                    HasDirectBackendType: true
+                } llvmRecord => llvmRecord.LlvmType,
 
             // Records with no fields and generic base type has @llvm annotation
-            RecordTypeInfo { MemberVariables.Count: 0, GenericDefinition: { HasDirectBackendType: true } baseRecord }
-                => baseRecord.LlvmType,
+            RecordTypeInfo
+            {
+                MemberVariables.Count: 0,
+                GenericDefinition: { HasDirectBackendType: true } baseRecord
+            } => baseRecord.LlvmType,
 
             // Error handling records (Maybe[T], Result[T], Lookup[T]) → always anonymous { i64, ptr }
             // This ensures consistency between RecordTypeInfo and ErrorHandlingTypeInfo representations.
-            RecordTypeInfo record when GetGenericBaseName(record) is "Maybe" or "Result" or "Lookup"
-                => "{ i64, ptr }",
+            RecordTypeInfo record when GetGenericBaseName(type: record) is "Maybe" or "Result"
+                or "Lookup" => "{ i64, ptr }",
 
             // Multi-member-variable records → LLVM struct type
-            RecordTypeInfo record => GetRecordTypeName(record),
+            RecordTypeInfo record => GetRecordTypeName(record: record),
 
             // Entities → pointer to LLVM struct
             EntityTypeInfo => "ptr",
@@ -92,13 +114,14 @@ public partial class LLVMCodeGenerator
             FlagsTypeInfo => "i64",
 
             // Tuples → always inline struct
-            TupleTypeInfo tuple => GetTupleTypeName(tuple),
+            TupleTypeInfo tuple => GetTupleTypeName(tuple: tuple),
 
             // Variants → struct { tag, payload }
-            VariantTypeInfo variant => GetVariantTypeName(variant),
+            VariantTypeInfo variant => GetVariantTypeName(variant: variant),
 
             // Error handling types → struct { tag, payload }
-            ErrorHandlingTypeInfo errorHandling => GetErrorHandlingTypeName(errorHandling),
+            ErrorHandlingTypeInfo errorHandling => GetErrorHandlingTypeName(
+                errorType: errorHandling),
 
             // Protocols → type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
             ProtocolTypeInfo => "ptr",
@@ -111,11 +134,12 @@ public partial class LLVMCodeGenerator
 
             // Error placeholder
             ErrorTypeInfo => throw new InvalidOperationException(
+                message:
                 "Error type found in codegen - semantic analysis should have caught this"),
 
             // Unknown
             _ => throw new InvalidOperationException(
-                $"Unknown type category: {type.Category}")
+                message: $"Unknown type category: {type.Category}")
         };
     }
 
@@ -148,7 +172,8 @@ public partial class LLVMCodeGenerator
             // Void (for function returns)
             "@intrinsic.void" => "void",
 
-            _ => throw new InvalidOperationException($"Unknown intrinsic type: {intrinsic.Name}")
+            _ => throw new InvalidOperationException(
+                message: $"Unknown intrinsic type: {intrinsic.Name}")
         };
     }
 
@@ -157,7 +182,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetRecordTypeName(RecordTypeInfo record)
     {
-        return $"%{Q($"Record.{record.Name}")}";
+        return $"%{Q(name: $"Record.{record.Name}")}";
     }
 
     /// <summary>
@@ -165,7 +190,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetEntityTypeName(EntityTypeInfo entity)
     {
-        return $"%{Q($"Entity.{entity.Name}")}";
+        return $"%{Q(name: $"Entity.{entity.Name}")}";
     }
 
     /// <summary>
@@ -173,7 +198,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetVariantTypeName(VariantTypeInfo variant)
     {
-        return $"%{Q($"Variant.{variant.Name}")}";
+        return $"%{Q(name: $"Variant.{variant.Name}")}";
     }
 
     /// <summary>
@@ -191,7 +216,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static string GetChoiceTypeName(ChoiceTypeInfo choice)
     {
-        return $"%{Q($"Choice.{choice.Name}")}";
+        return $"%{Q(name: $"Choice.{choice.Name}")}";
     }
 
     /// <summary>
@@ -202,12 +227,13 @@ public partial class LLVMCodeGenerator
         // Tuples are inline LLVM structs: { i64, i64 } etc.
         // Resolve type substitutions for generic params (e.g., T → S64)
         var parts = new List<string>();
-        foreach (var elemType in tuple.ElementTypes)
+        foreach (TypeInfo elemType in tuple.ElementTypes)
         {
-            TypeInfo resolved = ResolveTypeSubstitution(elemType);
-            parts.Add(GetLLVMType(resolved));
+            TypeInfo resolved = ResolveTypeSubstitution(type: elemType);
+            parts.Add(item: GetLLVMType(type: resolved));
         }
-        return $"{{ {string.Join(", ", parts)} }}";
+
+        return $"{{ {string.Join(separator: ", ", values: parts)} }}";
     }
 
     /// <summary>
@@ -217,15 +243,16 @@ public partial class LLVMCodeGenerator
     {
         int size = 0;
         int maxAlignment = 1;
-        foreach (var elemType in tuple.ElementTypes)
+        foreach (TypeInfo elemType in tuple.ElementTypes)
         {
-            int elemSize = GetTypeSize(elemType);
-            int alignment = Math.Max(Math.Min(elemSize, 16), 1);
-            maxAlignment = Math.Max(maxAlignment, alignment);
-            size = AlignTo(size, alignment);
+            int elemSize = GetTypeSize(type: elemType);
+            int alignment = Math.Max(val1: Math.Min(val1: elemSize, val2: 16), val2: 1);
+            maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
+            size = AlignTo(size: size, alignment: alignment);
             size += elemSize;
         }
-        return AlignTo(size, maxAlignment);
+
+        return AlignTo(size: size, alignment: maxAlignment);
     }
 
     /// <summary>
@@ -245,9 +272,12 @@ public partial class LLVMCodeGenerator
     {
         foreach (char c in name)
         {
-            if (!char.IsLetterOrDigit(c) && c != '$' && c != '.' && c != '_' && c != '-')
+            if (!char.IsLetterOrDigit(c: c) && c != '$' && c != '.' && c != '_' && c != '-')
+            {
                 return $"\"{name}\"";
+            }
         }
+
         return name;
     }
 
@@ -258,14 +288,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string GetParameterLLVMType(TypeInfo type)
     {
-        type = ResolveTypeSubstitution(type);
+        type = ResolveTypeSubstitution(type: type);
         return type switch
         {
             // Entities are always passed as pointers
             EntityTypeInfo => "ptr",
 
             // Other types use normal mapping
-            _ => GetLLVMType(type)
+            _ => GetLLVMType(type: type)
         };
     }
 
@@ -276,17 +306,17 @@ public partial class LLVMCodeGenerator
     {
         return type switch
         {
-            IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic),
+            IntrinsicTypeInfo intrinsic => GetIntrinsicSize(intrinsic: intrinsic),
             RecordTypeInfo { HasDirectBackendType: true, IsGenericDefinition: false } record =>
-                GetTypeSizeFromLlvmType(record.BackendType!),
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
-                GetTypeSize(record.UnderlyingIntrinsic!),
-            RecordTypeInfo record => CalculateRecordSize(record),
+                GetTypeSizeFromLlvmType(llvmType: record.BackendType!),
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record => GetTypeSize(
+                type: record.UnderlyingIntrinsic!),
+            RecordTypeInfo record => CalculateRecordSize(record: record),
             EntityTypeInfo => _pointerSizeBytes, // Entities are heap-allocated, stored as pointers
-            TupleTypeInfo tuple => CalculateTupleSize(tuple),
+            TupleTypeInfo tuple => CalculateTupleSize(tuple: tuple),
             WrapperTypeInfo => _pointerSizeBytes, // Pointer size
             ChoiceTypeInfo => 4, // i32 tag
-            VariantTypeInfo variant => CalculateVariantSize(variant),
+            VariantTypeInfo variant => CalculateVariantSize(variant: variant),
             _ => _pointerSizeBytes // Default to pointer size
         };
     }
@@ -321,11 +351,14 @@ public partial class LLVMCodeGenerator
     private int GetTypeSizeFromLlvmType(string llvmType)
     {
         // Array types: [N x elemType]
-        if (llvmType.StartsWith("[") && llvmType.Contains(" x "))
+        if (llvmType.StartsWith(value: "[") && llvmType.Contains(value: " x "))
         {
-            var parts = llvmType[1..^1].Split(" x ", 2);
-            int count = int.Parse(parts[0].Trim());
-            int elemSize = GetTypeSizeFromLlvmType(parts[1].Trim());
+            string[] parts = llvmType[1..^1]
+               .Split(separator: " x ", count: 2);
+            int count = int.Parse(s: parts[0]
+               .Trim());
+            int elemSize = GetTypeSizeFromLlvmType(llvmType: parts[1]
+               .Trim());
             return count * elemSize;
         }
 
@@ -342,7 +375,8 @@ public partial class LLVMCodeGenerator
             "double" => 8,
             "fp128" => 16,
             "ptr" => _pointerSizeBytes,
-            _ => throw new InvalidOperationException($"Unknown LLVM type for size calculation: {llvmType}")
+            _ => throw new InvalidOperationException(
+                message: $"Unknown LLVM type for size calculation: {llvmType}")
         };
     }
 
@@ -353,16 +387,17 @@ public partial class LLVMCodeGenerator
     {
         int size = 0;
         int maxAlignment = 1;
-        foreach (var memberVariable in record.MemberVariables)
+        foreach (MemberVariableInfo memberVariable in record.MemberVariables)
         {
-            int memberVariableSize = GetTypeSize(memberVariable.Type);
-            int alignment = Math.Max(Math.Min(memberVariableSize, 16), 1);
-            maxAlignment = Math.Max(maxAlignment, alignment);
-            size = AlignTo(size, alignment);
+            int memberVariableSize = GetTypeSize(type: memberVariable.Type);
+            int alignment = Math.Max(val1: Math.Min(val1: memberVariableSize, val2: 16), val2: 1);
+            maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
+            size = AlignTo(size: size, alignment: alignment);
             size += memberVariableSize;
         }
+
         // Align struct to its natural alignment (max member alignment), matching LLVM layout
-        return AlignTo(size, maxAlignment);
+        return AlignTo(size: size, alignment: maxAlignment);
     }
 
     /// <summary>
@@ -372,15 +407,16 @@ public partial class LLVMCodeGenerator
     {
         int size = 0;
         int maxAlignment = 1;
-        foreach (var memberVariable in entity.MemberVariables)
+        foreach (MemberVariableInfo memberVariable in entity.MemberVariables)
         {
-            int memberVariableSize = GetTypeSize(memberVariable.Type);
-            int alignment = Math.Max(Math.Min(memberVariableSize, 16), 1);
-            maxAlignment = Math.Max(maxAlignment, alignment);
-            size = AlignTo(size, alignment);
+            int memberVariableSize = GetTypeSize(type: memberVariable.Type);
+            int alignment = Math.Max(val1: Math.Min(val1: memberVariableSize, val2: 16), val2: 1);
+            maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
+            size = AlignTo(size: size, alignment: alignment);
             size += memberVariableSize;
         }
-        return AlignTo(size, maxAlignment);
+
+        return AlignTo(size: size, alignment: maxAlignment);
     }
 
     /// <summary>
@@ -390,21 +426,23 @@ public partial class LLVMCodeGenerator
     {
         int maxPayloadSize = 0;
         int maxPayloadAlignment = 1;
-        foreach (var member in variant.Members)
+        foreach (VariantMemberInfo member in variant.Members)
         {
             if (!member.IsNone && member.Type != null)
             {
-                int payloadSize = GetTypeSize(member.Type);
-                int payloadAlignment = Math.Max(Math.Min(payloadSize, 16), 1);
-                maxPayloadSize = Math.Max(maxPayloadSize, payloadSize);
-                maxPayloadAlignment = Math.Max(maxPayloadAlignment, payloadAlignment);
+                int payloadSize = GetTypeSize(type: member.Type);
+                int payloadAlignment =
+                    Math.Max(val1: Math.Min(val1: payloadSize, val2: 16), val2: 1);
+                maxPayloadSize = Math.Max(val1: maxPayloadSize, val2: payloadSize);
+                maxPayloadAlignment = Math.Max(val1: maxPayloadAlignment, val2: payloadAlignment);
             }
         }
+
         // Tag (i64 = 8 bytes) + padding + payload, aligned to max of tag and payload alignment
         int tagSize = 8;
-        int structAlignment = Math.Max(tagSize, maxPayloadAlignment);
-        int size = AlignTo(tagSize, maxPayloadAlignment) + maxPayloadSize;
-        return AlignTo(size, structAlignment);
+        int structAlignment = Math.Max(val1: tagSize, val2: maxPayloadAlignment);
+        int size = AlignTo(size: tagSize, alignment: maxPayloadAlignment) + maxPayloadSize;
+        return AlignTo(size: size, alignment: structAlignment);
     }
 
     /// <summary>

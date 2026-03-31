@@ -22,8 +22,8 @@ public sealed class ConstGenericValueTypeInfo : TypeInfo
     /// </summary>
     public string? ExplicitTypeName { get; }
 
-    public ConstGenericValueTypeInfo(string literalText, long value, string? explicitTypeName)
-        : base(name: literalText)
+    public ConstGenericValueTypeInfo(string literalText, long value, string? explicitTypeName) :
+        base(name: literalText)
     {
         Value = value;
         ExplicitTypeName = explicitTypeName;

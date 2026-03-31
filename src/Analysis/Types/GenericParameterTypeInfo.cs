@@ -23,7 +23,6 @@ public sealed class GenericParameterTypeInfo : TypeInfo
     /// <exception cref="InvalidOperationException">Always thrown as generic parameters cannot be resolved.</exception>
     public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
-        throw new InvalidOperationException(
-            message: "Cannot resolve a generic type parameter.");
+        throw new InvalidOperationException(message: "Cannot resolve a generic type parameter.");
     }
 }

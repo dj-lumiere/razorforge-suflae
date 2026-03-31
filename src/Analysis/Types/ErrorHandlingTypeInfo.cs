@@ -39,8 +39,8 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
     /// <param name="name">The name of the error handling type.</param>
     /// <param name="kind">The kind of error handling type.</param>
     /// <param name="valueType">The success value type.</param>
-    public ErrorHandlingTypeInfo(string name, ErrorHandlingKind kind, TypeInfo valueType)
-        : base(name: name)
+    public ErrorHandlingTypeInfo(string name, ErrorHandlingKind kind, TypeInfo valueType) :
+        base(name: name)
     {
         Kind = kind;
         ValueType = valueType;
@@ -56,7 +56,7 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
                 message: $"Error handling type '{Name}' expects exactly 1 type argument.");
         }
 
-        TypeInfo valueType = typeArguments[0];
+        TypeInfo valueType = typeArguments[index: 0];
         string resolvedName = $"{Kind}[{valueType.Name}]";
 
         return new ErrorHandlingTypeInfo(name: resolvedName, kind: Kind, valueType: valueType)
@@ -79,33 +79,24 @@ public sealed class ErrorHandlingTypeInfo : TypeInfo
         /// Generic Maybe&lt;T&gt; definition.
         /// Pattern matches with: is None, else value
         /// </summary>
-        public static ErrorHandlingTypeInfo MaybeDefinition { get; } =
-            new(name: "Maybe", kind: ErrorHandlingKind.Maybe,
-                valueType: new TypeParameterPlaceholder(name: "T"))
-            {
-                GenericParameters = ["T"]
-            };
+        public static ErrorHandlingTypeInfo MaybeDefinition { get; } = new(name: "Maybe",
+            kind: ErrorHandlingKind.Maybe,
+            valueType: new TypeParameterPlaceholder(name: "T")) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Generic Result&lt;T&gt; definition.
         /// Pattern matches with: is Crashable e, else value
         /// </summary>
-        public static ErrorHandlingTypeInfo ResultDefinition { get; } =
-            new(name: "Result", kind: ErrorHandlingKind.Result,
-                valueType: new TypeParameterPlaceholder(name: "T"))
-            {
-                GenericParameters = ["T"]
-            };
+        public static ErrorHandlingTypeInfo ResultDefinition { get; } = new(name: "Result",
+            kind: ErrorHandlingKind.Result,
+            valueType: new TypeParameterPlaceholder(name: "T")) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Generic Lookup&lt;T&gt; definition.
         /// Pattern matches with: is Crashable e, is None, else value
         /// </summary>
-        public static ErrorHandlingTypeInfo LookupDefinition { get; } =
-            new(name: "Lookup", kind: ErrorHandlingKind.Lookup,
-                valueType: new TypeParameterPlaceholder(name: "T"))
-            {
-                GenericParameters = ["T"]
-            };
+        public static ErrorHandlingTypeInfo LookupDefinition { get; } = new(name: "Lookup",
+            kind: ErrorHandlingKind.Lookup,
+            valueType: new TypeParameterPlaceholder(name: "T")) { GenericParameters = ["T"] };
     }
 }

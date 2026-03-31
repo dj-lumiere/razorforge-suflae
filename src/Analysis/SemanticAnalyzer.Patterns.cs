@@ -24,16 +24,14 @@ public sealed partial class SemanticAnalyzer
         Scope? parent = _registry.CurrentScope.Parent;
         if (parent?.LookupVariable(name: name) != null)
         {
-            ReportError(
-                SemanticDiagnosticCode.IdentifierShadowing,
+            ReportError(code: SemanticDiagnosticCode.IdentifierShadowing,
+                message:
                 $"Pattern variable '{name}' shadows an existing variable in an outer scope.",
-                location);
+                location: location);
         }
 
         // Still declare the variable even if shadowing, to avoid cascading errors
-        _registry.DeclareVariable(
-            name: name,
-            type: type);
+        _registry.DeclareVariable(name: name, type: type);
     }
 
     private void AnalyzePattern(Pattern pattern, TypeSymbol matchedType)
@@ -47,23 +45,20 @@ public sealed partial class SemanticAnalyzer
 
             case IdentifierPattern id:
                 // Bind the matched value to the identifier
-                DeclarePatternVariable(
-                    name: id.Name,
-                    type: matchedType,
-                    location: id.Location);
+                DeclarePatternVariable(name: id.Name, type: matchedType, location: id.Location);
                 break;
 
             case TypePattern typePat:
                 // None is a keyword, not a registered type — handle it directly
                 if (typePat.Type.Name == "None")
                 {
-                    if (matchedType is not ErrorTypeInfo
-                        && matchedType.Category != TypeCategory.ErrorHandling)
+                    if (matchedType is not ErrorTypeInfo &&
+                        matchedType.Category != TypeCategory.ErrorHandling)
                     {
-                        ReportError(
-                            SemanticDiagnosticCode.PatternTypeMismatch,
+                        ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                            message:
                             $"Type pattern 'is None' can never match a value of type '{matchedType.Name}'.",
-                            typePat.Location);
+                            location: typePat.Location);
                     }
 
                     break;
@@ -75,34 +70,33 @@ public sealed partial class SemanticAnalyzer
                 if (matchedType is ChoiceTypeInfo choiceForIs)
                 {
                     string? choiceCaseName = ExtractChoiceCaseFromTypePattern(
-                        typePat: typePat, choice: choiceForIs);
+                        typePat: typePat,
+                        choice: choiceForIs);
                     if (choiceCaseName != null)
                     {
                         // Valid choice case match via 'is' — no type resolution needed
                         if (typePat.VariableName != null)
                         {
-                            ReportError(
-                                SemanticDiagnosticCode.PatternTypeMismatch,
-                                "Choice case patterns cannot bind variables.",
-                                typePat.Location);
+                            ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                                message: "Choice case patterns cannot bind variables.",
+                                location: typePat.Location);
                         }
 
                         if (typePat.Bindings is { Count: > 0 })
                         {
-                            ReportError(
-                                SemanticDiagnosticCode.PatternTypeMismatch,
-                                "Choice case patterns cannot destructure.",
-                                typePat.Location);
+                            ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                                message: "Choice case patterns cannot destructure.",
+                                location: typePat.Location);
                         }
 
                         break;
                     }
 
                     // Not a valid case name — report specific error
-                    ReportError(
-                        SemanticDiagnosticCode.ChoiceCaseNotFound,
+                    ReportError(code: SemanticDiagnosticCode.ChoiceCaseNotFound,
+                        message:
                         $"Choice type '{choiceForIs.Name}' does not have a case named '{typePat.Type.Name}'.",
-                        typePat.Location);
+                        location: typePat.Location);
                     break;
                 }
 
@@ -111,51 +105,47 @@ public sealed partial class SemanticAnalyzer
                 if (matchedType is FlagsTypeInfo flagsForIs)
                 {
                     string flagName = typePat.Type.Name;
-                    if (flagsForIs.Members.Any(m => m.Name == flagName))
+                    if (flagsForIs.Members.Any(predicate: m => m.Name == flagName))
                     {
                         if (typePat.VariableName != null)
                         {
-                            ReportError(
-                                SemanticDiagnosticCode.PatternTypeMismatch,
-                                "Flags member patterns cannot bind variables.",
-                                typePat.Location);
+                            ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                                message: "Flags member patterns cannot bind variables.",
+                                location: typePat.Location);
                         }
 
                         if (typePat.Bindings is { Count: > 0 })
                         {
-                            ReportError(
-                                SemanticDiagnosticCode.PatternTypeMismatch,
-                                "Flags member patterns cannot destructure.",
-                                typePat.Location);
+                            ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                                message: "Flags member patterns cannot destructure.",
+                                location: typePat.Location);
                         }
 
                         break;
                     }
 
-                    ReportError(
-                        SemanticDiagnosticCode.FlagsMemberNotFound,
+                    ReportError(code: SemanticDiagnosticCode.FlagsMemberNotFound,
+                        message:
                         $"Flags type '{flagsForIs.Name}' does not have a member named '{flagName}'.",
-                        typePat.Location);
+                        location: typePat.Location);
                     break;
                 }
 
                 TypeSymbol patternType = ResolveType(typeExpr: typePat.Type);
 
                 // Check type compatibility between matched type and pattern type
-                if (patternType is not ErrorTypeInfo
-                    && matchedType is not ErrorTypeInfo
-                    && !IsTypePatternCompatible(matchedType: matchedType, patternType: patternType))
+                if (patternType is not ErrorTypeInfo && matchedType is not ErrorTypeInfo &&
+                    !IsTypePatternCompatible(matchedType: matchedType, patternType: patternType))
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.PatternTypeMismatch,
+                    ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                        message:
                         $"Type pattern 'is {patternType.Name}' can never match a value of type '{matchedType.Name}'.",
-                        typePat.Location);
+                        location: typePat.Location);
                 }
 
                 if (typePat.VariableName != null)
                 {
-                    DeclarePatternVariable(
-                        name: typePat.VariableName,
+                    DeclarePatternVariable(name: typePat.VariableName,
                         type: patternType,
                         location: typePat.Location);
                 }
@@ -165,16 +155,17 @@ public sealed partial class SemanticAnalyzer
                 {
                     foreach (DestructuringBinding binding in typePat.Bindings)
                     {
-                        TypeSymbol memberVariableType = LookupMemberVariableType(type: patternType, memberVariableName: binding.MemberVariableName);
+                        TypeSymbol memberVariableType = LookupMemberVariableType(type: patternType,
+                            memberVariableName: binding.MemberVariableName);
 
                         if (binding.NestedPattern != null)
                         {
-                            AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
+                            AnalyzePattern(pattern: binding.NestedPattern,
+                                matchedType: memberVariableType);
                         }
                         else if (binding.BindingName != null)
                         {
-                            DeclarePatternVariable(
-                                name: binding.BindingName,
+                            DeclarePatternVariable(name: binding.BindingName,
                                 type: memberVariableType,
                                 location: binding.Location);
                         }
@@ -199,10 +190,9 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol guardType = AnalyzeExpression(expression: guard.Guard);
                 if (!IsBoolType(type: guardType))
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.PatternGuardNotBool,
-                        "Guard expression must be boolean.",
-                        guard.Guard.Location);
+                    ReportError(code: SemanticDiagnosticCode.PatternGuardNotBool,
+                        message: "Guard expression must be boolean.",
+                        location: guard.Guard.Location);
                 }
 
                 break;
@@ -210,8 +200,7 @@ public sealed partial class SemanticAnalyzer
             case ElsePattern elsePat:
                 if (elsePat.VariableName != null)
                 {
-                    DeclarePatternVariable(
-                        name: elsePat.VariableName,
+                    DeclarePatternVariable(name: elsePat.VariableName,
                         type: matchedType,
                         location: elsePat.Location);
                 }
@@ -235,10 +224,9 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol exprType = AnalyzeExpression(expression: exprPat.Expression);
                 if (!IsBoolType(type: exprType))
                 {
-                    ReportError(
-                        SemanticDiagnosticCode.ExpressionPatternNotBool,
-                        "Expression pattern must be boolean.",
-                        exprPat.Location);
+                    ReportError(code: SemanticDiagnosticCode.ExpressionPatternNotBool,
+                        message: "Expression pattern must be boolean.",
+                        location: exprPat.Location);
                 }
 
                 break;
@@ -248,23 +236,24 @@ public sealed partial class SemanticAnalyzer
                 {
                     if (matchedType.Category != TypeCategory.Error)
                     {
-                        ReportError(
-                            SemanticDiagnosticCode.FlagsTypeMismatch,
+                        ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
+                            message:
                             $"Flags pattern requires a flags type, but got '{matchedType.Name}'.",
-                            flagsPat.Location);
+                            location: flagsPat.Location);
                     }
+
                     break;
                 }
 
                 // Validate each flag name exists
                 foreach (string flagName in flagsPat.FlagNames)
                 {
-                    if (flagsTypeForPat.Members.All(m => m.Name != flagName))
+                    if (flagsTypeForPat.Members.All(predicate: m => m.Name != flagName))
                     {
-                        ReportError(
-                            SemanticDiagnosticCode.FlagsMemberNotFound,
+                        ReportError(code: SemanticDiagnosticCode.FlagsMemberNotFound,
+                            message:
                             $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
-                            flagsPat.Location);
+                            location: flagsPat.Location);
                     }
                 }
 
@@ -273,12 +262,12 @@ public sealed partial class SemanticAnalyzer
                 {
                     foreach (string flagName in flagsPat.ExcludedFlags)
                     {
-                        if (flagsTypeForPat.Members.All(m => m.Name != flagName))
+                        if (flagsTypeForPat.Members.All(predicate: m => m.Name != flagName))
                         {
-                            ReportError(
-                                SemanticDiagnosticCode.FlagsMemberNotFound,
+                            ReportError(code: SemanticDiagnosticCode.FlagsMemberNotFound,
+                                message:
                                 $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
-                                flagsPat.Location);
+                                location: flagsPat.Location);
                         }
                     }
                 }
@@ -288,18 +277,18 @@ public sealed partial class SemanticAnalyzer
                 {
                     if (flagsPat.Connective == FlagsTestConnective.Or)
                     {
-                        ReportError(
-                            SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                        ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                            message:
                             "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
-                            flagsPat.Location);
+                            location: flagsPat.Location);
                     }
 
                     if (flagsPat.ExcludedFlags is { Count: > 0 })
                     {
-                        ReportError(
-                            SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                        ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
+                            message:
                             "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
-                            flagsPat.Location);
+                            location: flagsPat.Location);
                     }
                 }
 
@@ -307,10 +296,9 @@ public sealed partial class SemanticAnalyzer
 
             case ComparisonPattern cmp when matchedType is ChoiceTypeInfo:
                 // Choice types must use 'is CASE_NAME', not '== CASE_NAME'
-                ReportError(
-                    SemanticDiagnosticCode.PatternTypeMismatch,
-                    "Use 'is' instead of comparison operators for choice case matching.",
-                    cmp.Location);
+                ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
+                    message: "Use 'is' instead of comparison operators for choice case matching.",
+                    location: cmp.Location);
                 break;
         }
     }
@@ -324,11 +312,17 @@ public sealed partial class SemanticAnalyzer
             // Get member variable type from source type
             if (binding.MemberVariableName != null && sourceType is RecordTypeInfo record)
             {
-                memberVariableType = record.LookupMemberVariable(memberVariableName: binding.MemberVariableName)?.Type ?? ErrorTypeInfo.Instance;
+                memberVariableType = record
+                                    .LookupMemberVariable(
+                                         memberVariableName: binding.MemberVariableName)
+                                   ?.Type ?? ErrorTypeInfo.Instance;
             }
             else if (binding.MemberVariableName != null && sourceType is EntityTypeInfo entity)
             {
-                memberVariableType = entity.LookupMemberVariable(memberVariableName: binding.MemberVariableName)?.Type ?? ErrorTypeInfo.Instance;
+                memberVariableType = entity
+                                    .LookupMemberVariable(
+                                         memberVariableName: binding.MemberVariableName)
+                                   ?.Type ?? ErrorTypeInfo.Instance;
             }
 
             if (binding.NestedPattern != null)
@@ -338,8 +332,7 @@ public sealed partial class SemanticAnalyzer
             }
             else if (binding.BindingName != null)
             {
-                DeclarePatternVariable(
-                    name: binding.BindingName,
+                DeclarePatternVariable(name: binding.BindingName,
                     type: memberVariableType,
                     location: binding.Location);
             }
@@ -362,23 +355,24 @@ public sealed partial class SemanticAnalyzer
 
         if (members == null)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantPatternOnNonVariant,
+            ReportError(code: SemanticDiagnosticCode.VariantPatternOnNonVariant,
+                message:
                 $"Cannot match variant pattern against non-variant type '{matchedType.Name}'.",
-                pattern.Location);
+                location: pattern.Location);
             // Still declare bindings with error type to avoid cascading errors
             DeclareBindingsWithErrorType(bindings: pattern.Bindings);
             return;
         }
 
         // Find the matching member by case name (type name or "None")
-        VariantMemberInfo? matchedMember = members.FirstOrDefault(m => m.Name == pattern.CaseName);
+        VariantMemberInfo? matchedMember =
+            members.FirstOrDefault(predicate: m => m.Name == pattern.CaseName);
         if (matchedMember == null)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantCaseNotFound,
+            ReportError(code: SemanticDiagnosticCode.VariantCaseNotFound,
+                message:
                 $"Variant type '{matchedType.Name}' does not have a member type '{pattern.CaseName}'.",
-                pattern.Location);
+                location: pattern.Location);
             DeclareBindingsWithErrorType(bindings: pattern.Bindings);
             return;
         }
@@ -391,10 +385,9 @@ public sealed partial class SemanticAnalyzer
 
         if (matchedMember.IsNone)
         {
-            ReportError(
-                SemanticDiagnosticCode.VariantCaseNoPayload,
-                $"Variant member 'None' has no payload to destructure.",
-                pattern.Location);
+            ReportError(code: SemanticDiagnosticCode.VariantCaseNoPayload,
+                message: $"Variant member 'None' has no payload to destructure.",
+                location: pattern.Location);
             return;
         }
 
@@ -402,17 +395,16 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol payloadType = matchedMember.Type!;
 
         // For a single binding without member variable name, bind directly to the payload
-        if (pattern.Bindings.Count == 1 && pattern.Bindings[0].MemberVariableName == null)
+        if (pattern.Bindings.Count == 1 && pattern.Bindings[index: 0].MemberVariableName == null)
         {
-            DestructuringBinding binding = pattern.Bindings[0];
+            DestructuringBinding binding = pattern.Bindings[index: 0];
             if (binding.NestedPattern != null)
             {
                 AnalyzePattern(pattern: binding.NestedPattern, matchedType: payloadType);
             }
             else if (binding.BindingName != null)
             {
-                DeclarePatternVariable(
-                    name: binding.BindingName,
+                DeclarePatternVariable(name: binding.BindingName,
                     type: payloadType,
                     location: binding.Location);
             }
@@ -422,16 +414,17 @@ public sealed partial class SemanticAnalyzer
             // Multiple bindings - payload must be a record/entity type
             foreach (DestructuringBinding binding in pattern.Bindings)
             {
-                TypeSymbol memberVariableType = LookupMemberVariableType(type: payloadType, memberVariableName: binding.MemberVariableName);
+                TypeSymbol memberVariableType = LookupMemberVariableType(type: payloadType,
+                    memberVariableName: binding.MemberVariableName);
 
                 if (binding.NestedPattern != null)
                 {
-                    AnalyzePattern(pattern: binding.NestedPattern, matchedType: memberVariableType);
+                    AnalyzePattern(pattern: binding.NestedPattern,
+                        matchedType: memberVariableType);
                 }
                 else if (binding.BindingName != null)
                 {
-                    DeclarePatternVariable(
-                        name: binding.BindingName,
+                    DeclarePatternVariable(name: binding.BindingName,
                         type: memberVariableType,
                         location: binding.Location);
                 }
@@ -449,7 +442,8 @@ public sealed partial class SemanticAnalyzer
 
         foreach (DestructuringBinding binding in pattern.Bindings)
         {
-            TypeSymbol memberVariableType = LookupMemberVariableType(type: targetType, memberVariableName: binding.MemberVariableName);
+            TypeSymbol memberVariableType = LookupMemberVariableType(type: targetType,
+                memberVariableName: binding.MemberVariableName);
 
             if (binding.NestedPattern != null)
             {
@@ -457,8 +451,7 @@ public sealed partial class SemanticAnalyzer
             }
             else if (binding.BindingName != null)
             {
-                DeclarePatternVariable(
-                    name: binding.BindingName,
+                DeclarePatternVariable(name: binding.BindingName,
                     type: memberVariableType,
                     location: binding.Location);
             }
@@ -477,8 +470,12 @@ public sealed partial class SemanticAnalyzer
 
         return type switch
         {
-            RecordTypeInfo record => record.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
-            EntityTypeInfo entity => entity.LookupMemberVariable(memberVariableName: memberVariableName)?.Type ?? ErrorTypeInfo.Instance,
+            RecordTypeInfo record => record
+                                    .LookupMemberVariable(memberVariableName: memberVariableName)
+                                   ?.Type ?? ErrorTypeInfo.Instance,
+            EntityTypeInfo entity => entity
+                                    .LookupMemberVariable(memberVariableName: memberVariableName)
+                                   ?.Type ?? ErrorTypeInfo.Instance,
             _ => ErrorTypeInfo.Instance
         };
     }
@@ -497,9 +494,7 @@ public sealed partial class SemanticAnalyzer
         {
             if (binding.BindingName != null)
             {
-                _registry.DeclareVariable(
-                    name: binding.BindingName,
-                    type: ErrorTypeInfo.Instance);
+                _registry.DeclareVariable(name: binding.BindingName, type: ErrorTypeInfo.Instance);
             }
         }
     }
@@ -517,8 +512,8 @@ public sealed partial class SemanticAnalyzer
         }
 
         // If either is a type parameter, we can't know at analysis time
-        if (matchedType.Category == TypeCategory.TypeParameter
-            || patternType.Category == TypeCategory.TypeParameter)
+        if (matchedType.Category == TypeCategory.TypeParameter ||
+            patternType.Category == TypeCategory.TypeParameter)
         {
             return true;
         }
@@ -542,8 +537,8 @@ public sealed partial class SemanticAnalyzer
         }
 
         // IsAssignableTo in either direction covers subtyping
-        if (IsAssignableTo(source: matchedType, target: patternType)
-            || IsAssignableTo(source: patternType, target: matchedType))
+        if (IsAssignableTo(source: matchedType, target: patternType) ||
+            IsAssignableTo(source: patternType, target: matchedType))
         {
             return true;
         }
@@ -559,13 +554,14 @@ public sealed partial class SemanticAnalyzer
     /// <summary>
     /// Result of exhaustiveness analysis.
     /// </summary>
-    private readonly record struct ExhaustivenessResult(bool IsExhaustive, List<string> MissingCases);
+    private readonly record struct ExhaustivenessResult(
+        bool IsExhaustive,
+        List<string> MissingCases);
 
     /// <summary>
     /// Checks whether the given when clauses exhaustively cover all cases of the matched type.
     /// </summary>
-    private ExhaustivenessResult CheckExhaustiveness(
-        IReadOnlyList<WhenClause> clauses,
+    private ExhaustivenessResult CheckExhaustiveness(IReadOnlyList<WhenClause> clauses,
         TypeSymbol matchedType)
     {
         // If any clause is a catch-all pattern, it's always exhaustive
@@ -580,9 +576,11 @@ public sealed partial class SemanticAnalyzer
         return matchedType switch
         {
             ChoiceTypeInfo choice => CheckChoiceExhaustiveness(clauses: clauses, choice: choice),
-            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses, members: variant.Members,
+            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses,
+                members: variant.Members,
                 typeName: variant.Name),
-            ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses, ehType: eh),
+            ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses,
+                ehType: eh),
             // #129: Flags when always requires else — too many combinations to exhaustively check
             FlagsTypeInfo => new ExhaustivenessResult(IsExhaustive: false, MissingCases: ["else"]),
             _ when matchedType.Name == "Bool" => CheckBoolExhaustiveness(clauses: clauses),
@@ -594,8 +592,7 @@ public sealed partial class SemanticAnalyzer
     /// Checks whether all cases of a choice type are covered by 'is' TypePatterns.
     /// </summary>
     private static ExhaustivenessResult CheckChoiceExhaustiveness(
-        IReadOnlyList<WhenClause> clauses,
-        ChoiceTypeInfo choice)
+        IReadOnlyList<WhenClause> clauses, ChoiceTypeInfo choice)
     {
         var coveredCases = new HashSet<string>();
 
@@ -609,12 +606,11 @@ public sealed partial class SemanticAnalyzer
         }
 
         var missingCases = choice.Cases
-            .Where(predicate: c => !coveredCases.Contains(c.Name))
-            .Select(selector: c => c.Name)
-            .ToList();
+                                 .Where(predicate: c => !coveredCases.Contains(item: c.Name))
+                                 .Select(selector: c => c.Name)
+                                 .ToList();
 
-        return new ExhaustivenessResult(
-            IsExhaustive: missingCases.Count == 0,
+        return new ExhaustivenessResult(IsExhaustive: missingCases.Count == 0,
             MissingCases: missingCases);
     }
 
@@ -648,7 +644,8 @@ public sealed partial class SemanticAnalyzer
     /// Handles both shorthand (NORTH) and qualified (Direction.NORTH) forms.
     /// Returns null if the pattern doesn't match any case.
     /// </summary>
-    private static string? ExtractChoiceCaseFromTypePattern(TypePattern typePat, ChoiceTypeInfo choice)
+    private static string? ExtractChoiceCaseFromTypePattern(TypePattern typePat,
+        ChoiceTypeInfo choice)
     {
         string name = typePat.Type.Name;
 
@@ -683,28 +680,26 @@ public sealed partial class SemanticAnalyzer
     /// not VariantPattern.
     /// </summary>
     private static ExhaustivenessResult CheckVariantExhaustiveness(
-        IReadOnlyList<WhenClause> clauses,
-        IReadOnlyList<VariantMemberInfo> members,
+        IReadOnlyList<WhenClause> clauses, IReadOnlyList<VariantMemberInfo> members,
         string typeName)
     {
         var coveredMembers = new HashSet<string>();
 
         foreach (WhenClause clause in clauses)
         {
-            string? memberName = ExtractVariantMemberName(pattern: clause.Pattern, typeName: typeName);
+            string? memberName =
+                ExtractVariantMemberName(pattern: clause.Pattern, typeName: typeName);
             if (memberName != null)
             {
                 coveredMembers.Add(item: memberName);
             }
         }
 
-        var missingMembers = members
-            .Where(predicate: m => !coveredMembers.Contains(m.Name))
-            .Select(selector: m => m.Name)
-            .ToList();
+        var missingMembers = members.Where(predicate: m => !coveredMembers.Contains(item: m.Name))
+                                    .Select(selector: m => m.Name)
+                                    .ToList();
 
-        return new ExhaustivenessResult(
-            IsExhaustive: missingMembers.Count == 0,
+        return new ExhaustivenessResult(IsExhaustive: missingMembers.Count == 0,
             MissingCases: missingMembers);
     }
 
@@ -722,7 +717,8 @@ public sealed partial class SemanticAnalyzer
                 string name = typePat.Type.Name;
 
                 // Dotted form: "Value.S64" → extract "S64"
-                if (name.StartsWith(value: typeName + ".", comparisonType: StringComparison.Ordinal))
+                if (name.StartsWith(value: typeName + ".",
+                        comparisonType: StringComparison.Ordinal))
                 {
                     return name[(typeName.Length + 1)..];
                 }
@@ -746,8 +742,7 @@ public sealed partial class SemanticAnalyzer
     /// Checks whether Maybe/Result/Lookup error handling types are exhaustively matched.
     /// </summary>
     private ExhaustivenessResult CheckErrorHandlingExhaustiveness(
-        IReadOnlyList<WhenClause> clauses,
-        ErrorHandlingTypeInfo ehType)
+        IReadOnlyList<WhenClause> clauses, ErrorHandlingTypeInfo ehType)
     {
         bool hasNone = false;
         bool hasCrashableCatchAll = false;
@@ -776,23 +771,49 @@ public sealed partial class SemanticAnalyzer
         switch (ehType.Kind)
         {
             case ErrorHandlingKind.Maybe:
-                if (!hasNone) missing.Add(item: "None");
-                if (!hasValue) missing.Add(item: "value");
+                if (!hasNone)
+                {
+                    missing.Add(item: "None");
+                }
+
+                if (!hasValue)
+                {
+                    missing.Add(item: "value");
+                }
+
                 break;
             case ErrorHandlingKind.Result:
-                if (!hasCrashableCatchAll) missing.Add(item: "Crashable");
-                if (!hasValue) missing.Add(item: "value");
+                if (!hasCrashableCatchAll)
+                {
+                    missing.Add(item: "Crashable");
+                }
+
+                if (!hasValue)
+                {
+                    missing.Add(item: "value");
+                }
+
                 break;
             case ErrorHandlingKind.Lookup:
-                if (!hasNone) missing.Add(item: "None");
-                if (!hasCrashableCatchAll) missing.Add(item: "Crashable");
-                if (!hasValue) missing.Add(item: "value");
+                if (!hasNone)
+                {
+                    missing.Add(item: "None");
+                }
+
+                if (!hasCrashableCatchAll)
+                {
+                    missing.Add(item: "Crashable");
+                }
+
+                if (!hasValue)
+                {
+                    missing.Add(item: "value");
+                }
+
                 break;
         }
 
-        return new ExhaustivenessResult(
-            IsExhaustive: missing.Count == 0,
-            MissingCases: missing);
+        return new ExhaustivenessResult(IsExhaustive: missing.Count == 0, MissingCases: missing);
     }
 
     /// <summary>
@@ -816,12 +837,17 @@ public sealed partial class SemanticAnalyzer
         }
 
         var missing = new List<string>();
-        if (!hasTrue) missing.Add(item: "true");
-        if (!hasFalse) missing.Add(item: "false");
+        if (!hasTrue)
+        {
+            missing.Add(item: "true");
+        }
 
-        return new ExhaustivenessResult(
-            IsExhaustive: missing.Count == 0,
-            MissingCases: missing);
+        if (!hasFalse)
+        {
+            missing.Add(item: "false");
+        }
+
+        return new ExhaustivenessResult(IsExhaustive: missing.Count == 0, MissingCases: missing);
     }
 
     /// <summary>
@@ -837,7 +863,8 @@ public sealed partial class SemanticAnalyzer
             VariantPattern vp => $"variant:{vp.CaseName}",
             NonePattern => "none",
             CrashablePattern => "crashable",
-            FlagsPattern fp => $"flags:{string.Join(separator: "|", values: fp.FlagNames.OrderBy(keySelector: n => n))}",
+            FlagsPattern fp =>
+                $"flags:{string.Join(separator: "|", values: fp.FlagNames.OrderBy(keySelector: n => n))}",
             // Identifier, wildcard, else, guard, expression patterns are not deduplicated
             _ => null
         };

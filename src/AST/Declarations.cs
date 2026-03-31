@@ -55,7 +55,6 @@ public record GenericConstraintDeclaration(
     List<TypeExpression>? ConstraintTypes = null,
     SourceLocation Location = default);
 
-
 #endregion
 
 #region Variable and Function Declarations
@@ -136,8 +135,7 @@ public record RoutineDeclaration(
     bool IsFailable = false,
     StorageClass Storage = StorageClass.None,
     AsyncStatus Async = AsyncStatus.None,
-    bool IsDangerous = false)
-    : Declaration(Location: Location)
+    bool IsDangerous = false) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
@@ -177,8 +175,7 @@ public record EntityDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location,
     List<GenericConstraintDeclaration>? GenericConstraints = null,
-    bool HasPassBody = false)
-    : Declaration(Location: Location)
+    bool HasPassBody = false) : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
@@ -343,8 +340,8 @@ public record ProtocolDeclaration(
     List<RoutineSignature> Methods,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    List<GenericConstraintDeclaration>? GenericConstraints = null
-    ) : Declaration(Location: Location)
+    List<GenericConstraintDeclaration>? GenericConstraints = null)
+    : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
@@ -466,9 +463,7 @@ public record ChoiceCase(
 /// </summary>
 /// <param name="Type">The type expression for this member</param>
 /// <param name="Location">Source location information</param>
-public record VariantMember(
-    TypeExpression Type,
-    SourceLocation Location);
+public record VariantMember(TypeExpression Type, SourceLocation Location);
 
 /// <summary>
 /// Routine (function) signature used within Protocol (trait) declarations.
@@ -594,9 +589,8 @@ public record ExternalDeclaration(
 /// Block form of external declarations grouping multiple routines under one calling convention.
 /// <code>external("C") { routine foo() routine bar() }</code>
 /// </summary>
-public record ExternalBlockDeclaration(
-    List<Declaration> Declarations,
-    SourceLocation Location) : Declaration(Location: Location)
+public record ExternalBlockDeclaration(List<Declaration> Declarations, SourceLocation Location)
+    : Declaration(Location: Location)
 {
     public override T Accept<T>(IAstVisitor<T> visitor)
     {

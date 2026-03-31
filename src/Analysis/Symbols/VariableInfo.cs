@@ -27,7 +27,9 @@ public sealed class VariableInfo
     public string? Module { get; init; }
 
     /// <summary>The module-qualified name (e.g., "Core.S8_MIN").</summary>
-    public string QualifiedName => string.IsNullOrEmpty(Module) ? Name : $"{Module}.{Name}";
+    public string QualifiedName => string.IsNullOrEmpty(value: Module)
+        ? Name
+        : $"{Module}.{Name}";
 
     /// <summary>Source location where this variable is defined.</summary>
     public SourceLocation? Location { get; init; }

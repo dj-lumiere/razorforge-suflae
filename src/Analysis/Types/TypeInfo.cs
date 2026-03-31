@@ -54,7 +54,7 @@ public abstract class TypeInfo
 
             // Generic resolutions already have type args in Name (e.g., "Snatched[U8]"),
             // so only append TypeArguments for generic definitions where Name is bare
-            if (TypeArguments is not { Count: > 0 } || Name.Contains('['))
+            if (TypeArguments is not { Count: > 0 } || Name.Contains(value: '['))
             {
                 return baseName;
             }

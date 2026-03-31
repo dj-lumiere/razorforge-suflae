@@ -1,4 +1,4 @@
-﻿using Builder.Modules;
+using Builder.Modules;
 
 namespace SemanticAnalysis;
 
@@ -42,10 +42,12 @@ public sealed partial class TypeRegistry
     public string? StdlibPath => _stdlibPath;
 
     /// <summary>Set of loaded module paths (e.g., "Collections.List", "ErrorHandling.Maybe").</summary>
-    private readonly HashSet<string> _loadedModules = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _loadedModules =
+        new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Maps module IDs to their effective module names (for import tracking).</summary>
-    private readonly Dictionary<string, string> _moduleNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _moduleNames =
+        new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The module resolver for finding module files.</summary>
     private ModuleResolver? _moduleResolver;
@@ -127,13 +129,13 @@ public sealed partial class TypeRegistry
         // These allow using @intrinsic.double instead of @intrinsic.f64
         var llvmAliases = new Dictionary<string, IntrinsicTypeInfo>
         {
-            ["@intrinsic.half"] = IntrinsicTypeInfo.WellKnown.F16,
-            ["@intrinsic.float"] = IntrinsicTypeInfo.WellKnown.F32,
-            ["@intrinsic.double"] = IntrinsicTypeInfo.WellKnown.F64,
-            ["@intrinsic.fp128"] = IntrinsicTypeInfo.WellKnown.F128
+            [key: "@intrinsic.half"] = IntrinsicTypeInfo.WellKnown.F16,
+            [key: "@intrinsic.float"] = IntrinsicTypeInfo.WellKnown.F32,
+            [key: "@intrinsic.double"] = IntrinsicTypeInfo.WellKnown.F64,
+            [key: "@intrinsic.fp128"] = IntrinsicTypeInfo.WellKnown.F128
         };
 
-        foreach (var (alias, intrinsic) in llvmAliases)
+        foreach ((string alias, IntrinsicTypeInfo intrinsic) in llvmAliases)
         {
             _intrinsics[key: alias] = intrinsic;
             _types[key: alias] = intrinsic;
@@ -153,17 +155,17 @@ public sealed partial class TypeRegistry
 
         _coreModuleLoaded = true;
 
-        if (_stdlibPath != null && Directory.Exists(_stdlibPath))
+        if (_stdlibPath != null && Directory.Exists(path: _stdlibPath))
         {
-            _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
-            _stdlibLoader.LoadCoreModule(this);
+            _stdlibLoader ??= new StdlibLoader(stdlibRoot: _stdlibPath, language: Language);
+            _stdlibLoader.LoadCoreModule(registry: this);
         }
         else
         {
             string searchPath = _stdlibPath ?? "not specified";
             throw new InvalidOperationException(
-                $"Standard library not found at '{searchPath}'. " +
-                "Ensure standard/ directory exists and contains the Core module.");
+                message: $"Standard library not found at '{searchPath}'. " +
+                         "Ensure standard/ directory exists and contains the Core module.");
         }
     }
 
@@ -176,8 +178,8 @@ public sealed partial class TypeRegistry
     /// Gets the parsed stdlib programs (for code generation).
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> StdlibPrograms
-        => _stdlibLoader?.AllLoadedPrograms ?? [];
+    public IReadOnlyList<(Program Program, string FilePath, string Module)> StdlibPrograms =>
+        _stdlibLoader?.AllLoadedPrograms ?? [];
 
     /// <summary>
     /// Loads a module on-demand by its import path.
@@ -192,28 +194,30 @@ public sealed partial class TypeRegistry
         out string? effectiveModule)
     {
         // Normalize the import path to a module identifier (e.g., "Collections/List" -> "Collections.List")
-        string moduleId = importPath.Replace('/', '.').Replace('\\', '.');
+        string moduleId = importPath.Replace(oldChar: '/', newChar: '.')
+                                    .Replace(oldChar: '\\', newChar: '.');
 
         // Check if already loaded
-        if (_loadedModules.Contains(moduleId))
+        if (_loadedModules.Contains(item: moduleId))
         {
-            _moduleNames.TryGetValue(moduleId, out effectiveModule);
+            _moduleNames.TryGetValue(key: moduleId, value: out effectiveModule);
             return true;
         }
 
         // Core module is special - always loaded at startup
-        if (moduleId.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
-            moduleId.StartsWith("Core.", StringComparison.OrdinalIgnoreCase))
+        if (moduleId.Equals(value: "Core", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+            moduleId.StartsWith(value: "Core.",
+                comparisonType: StringComparison.OrdinalIgnoreCase))
         {
             LoadCoreModule();
-            _loadedModules.Add(moduleId);
+            _loadedModules.Add(item: moduleId);
             effectiveModule = "Core";
-            _moduleNames[moduleId] = "Core";
+            _moduleNames[key: moduleId] = "Core";
             return true;
         }
 
         // Ensure stdlib path is available
-        if (_stdlibPath == null || !Directory.Exists(_stdlibPath))
+        if (_stdlibPath == null || !Directory.Exists(path: _stdlibPath))
         {
             effectiveModule = null;
             return false;
@@ -221,11 +225,14 @@ public sealed partial class TypeRegistry
 
         // Initialize the module resolver if needed
         _moduleResolver ??= new ModuleResolver(
-            projectRoot: Path.GetDirectoryName(currentFile) ?? Directory.GetCurrentDirectory(),
+            projectRoot: Path.GetDirectoryName(path: currentFile) ??
+                         Directory.GetCurrentDirectory(),
             stdlibRoot: _stdlibPath);
 
         // Resolve the import path to a file
-        string? resolvedPath = _moduleResolver.ResolveImport(importPath, currentFile, location);
+        string? resolvedPath = _moduleResolver.ResolveImport(importPath: importPath,
+            currentFile: currentFile,
+            location: location);
         if (resolvedPath == null)
         {
             effectiveModule = null;
@@ -233,15 +240,16 @@ public sealed partial class TypeRegistry
         }
 
         // Mark as loaded before parsing to prevent infinite recursion
-        _loadedModules.Add(moduleId);
+        _loadedModules.Add(item: moduleId);
 
         // Load the module using StdlibLoader
-        _stdlibLoader ??= new StdlibLoader(_stdlibPath, Language);
-        effectiveModule = _stdlibLoader.LoadModule(this, resolvedPath, moduleId);
+        _stdlibLoader ??= new StdlibLoader(stdlibRoot: _stdlibPath, language: Language);
+        effectiveModule =
+            _stdlibLoader.LoadModule(registry: this, filePath: resolvedPath, moduleId: moduleId);
 
         if (effectiveModule != null)
         {
-            _moduleNames[moduleId] = effectiveModule;
+            _moduleNames[key: moduleId] = effectiveModule;
         }
 
         return effectiveModule != null;
@@ -254,7 +262,7 @@ public sealed partial class TypeRegistry
     /// <returns>True if the module is loaded, false otherwise.</returns>
     public bool IsModuleLoaded(string moduleId)
     {
-        return _loadedModules.Contains(moduleId);
+        return _loadedModules.Contains(item: moduleId);
     }
 
     /// <summary>
@@ -352,7 +360,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="recordName">The name of the record to update.</param>
     /// <param name="memberVariables">The resolved member variables.</param>
-    public void UpdateRecordMemberVariables(string recordName, IReadOnlyList<MemberVariableInfo> memberVariables)
+    public void UpdateRecordMemberVariables(string recordName,
+        IReadOnlyList<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: recordName, value: out TypeInfo? type))
         {
@@ -387,7 +396,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="entityName">The name of the entity to update.</param>
     /// <param name="memberVariables">The resolved member variables.</param>
-    public void UpdateEntityMemberVariables(string entityName, IReadOnlyList<MemberVariableInfo> memberVariables)
+    public void UpdateEntityMemberVariables(string entityName,
+        IReadOnlyList<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: entityName, value: out TypeInfo? type))
         {
@@ -512,7 +522,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="protocolName">The name of the protocol to update.</param>
     /// <param name="parentProtocols">The resolved parent protocol types.</param>
-    public void UpdateProtocolParents(string protocolName, IReadOnlyList<ProtocolTypeInfo> parentProtocols)
+    public void UpdateProtocolParents(string protocolName,
+        IReadOnlyList<ProtocolTypeInfo> parentProtocols)
     {
         if (!_types.TryGetValue(key: protocolName, value: out TypeInfo? type))
         {
@@ -606,7 +617,8 @@ public sealed partial class TypeRegistry
         {
             if (type is ChoiceTypeInfo choiceType)
             {
-                ChoiceCaseInfo? caseInfo = choiceType.Cases.FirstOrDefault(predicate: c => c.Name == caseName);
+                ChoiceCaseInfo? caseInfo =
+                    choiceType.Cases.FirstOrDefault(predicate: c => c.Name == caseName);
                 if (caseInfo != null)
                 {
                     return (choiceType, caseInfo);
@@ -643,19 +655,21 @@ public sealed partial class TypeRegistry
         }
 
         // Try Core module prefix (Core types are auto-imported)
-        if (!name.Contains('.') && _types.TryGetValue(key: $"Core.{name}", value: out type))
+        if (!name.Contains(value: '.') && _types.TryGetValue(key: $"Core.{name}", value: out type))
         {
             return type;
         }
 
         // Try any module prefix (e.g., Collections.SortedSet for bare "SortedSet")
-        if (!name.Contains('.'))
+        if (!name.Contains(value: '.'))
         {
             string suffix = $".{name}";
-            foreach (var (key, value) in _types)
+            foreach ((string key, TypeInfo value) in _types)
             {
-                if (key.EndsWith(suffix))
+                if (key.EndsWith(value: suffix))
+                {
                     return value;
+                }
             }
         }
 
@@ -696,26 +710,32 @@ public sealed partial class TypeRegistry
     /// <param name="returnType">The return type (null for Blank/void).</param>
     /// <param name="isFailable">Whether the function can throw/absent.</param>
     /// <returns>The cached or newly created function type.</returns>
-    public RoutineTypeInfo GetOrCreateRoutineType(
-        IReadOnlyList<TypeInfo> parameterTypes,
-        TypeInfo? returnType,
-        bool isFailable = false)
+    public RoutineTypeInfo GetOrCreateRoutineType(IReadOnlyList<TypeInfo> parameterTypes,
+        TypeInfo? returnType, bool isFailable = false)
     {
         // Build the signature key
-        string paramList = string.Join(", ", parameterTypes.Select(p => p.Name));
+        string paramList = string.Join(separator: ", ",
+            values: parameterTypes.Select(selector: p => p.Name));
         string returnName = returnType?.Name ?? "Blank";
-        string failableSuffix = isFailable ? "!" : "";
+        string failableSuffix = isFailable
+            ? "!"
+            : "";
         string key = $"({paramList}) -> {returnName}{failableSuffix}";
 
         // Check cache
-        if (_resolutions.TryGetValue(key, out TypeInfo? existing) && existing is RoutineTypeInfo routineType)
+        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) &&
+            existing is RoutineTypeInfo routineType)
         {
             return routineType;
         }
 
         // Create and cache
-        var newType = new RoutineTypeInfo(parameterTypes, returnType) { IsFailable = isFailable };
-        _resolutions[key] = newType;
+        var newType =
+            new RoutineTypeInfo(parameterTypes: parameterTypes, returnType: returnType)
+            {
+                IsFailable = isFailable
+            };
+        _resolutions[key: key] = newType;
 
         return newType;
     }
@@ -729,11 +749,13 @@ public sealed partial class TypeRegistry
     public TupleTypeInfo GetOrCreateTupleType(IReadOnlyList<TypeInfo> elementTypes)
     {
         // Build the cache key
-        string typeList = string.Join(separator: ", ", values: elementTypes.Select(selector: t => t.FullName));
+        string typeList = string.Join(separator: ", ",
+            values: elementTypes.Select(selector: t => t.FullName));
         string key = $"Tuple[{typeList}]";
 
         // Check cache
-        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) && existing is TupleTypeInfo tupleType)
+        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) &&
+            existing is TupleTypeInfo tupleType)
         {
             return tupleType;
         }
@@ -743,10 +765,10 @@ public sealed partial class TypeRegistry
         _resolutions[key: key] = newType;
 
         // Auto-register TupleType.$represent()
-        TypeInfo? textType = LookupType("Text");
+        TypeInfo? textType = LookupType(name: "Text");
         if (textType != null)
         {
-            RegisterRoutine(new RoutineInfo(name: "$represent")
+            RegisterRoutine(routine: new RoutineInfo(name: "$represent")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -759,7 +781,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(new RoutineInfo(name: "$diagnose")
+            RegisterRoutine(routine: new RoutineInfo(name: "$diagnose")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -774,12 +796,12 @@ public sealed partial class TypeRegistry
         }
 
         // Auto-register $eq and $ne (always — element-wise equality)
-        TypeInfo? boolType = LookupType("Bool");
+        TypeInfo? boolType = LookupType(name: "Bool");
         if (boolType != null)
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(new RoutineInfo(name: "$eq")
+            RegisterRoutine(routine: new RoutineInfo(name: "$eq")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -792,7 +814,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(new RoutineInfo(name: "$ne")
+            RegisterRoutine(routine: new RoutineInfo(name: "$ne")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -807,10 +829,11 @@ public sealed partial class TypeRegistry
         }
 
         // Auto-register $hash if ALL element types support $hash
-        TypeInfo? u64Type = LookupType("U64");
-        if (u64Type != null && elementTypes.All(et => LookupMethod(et, "$hash") != null))
+        TypeInfo? u64Type = LookupType(name: "U64");
+        if (u64Type != null &&
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$hash") != null))
         {
-            RegisterRoutine(new RoutineInfo(name: "$hash")
+            RegisterRoutine(routine: new RoutineInfo(name: "$hash")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -825,13 +848,13 @@ public sealed partial class TypeRegistry
         }
 
         // Auto-register $cmp + derived operators if ALL element types support $cmp
-        TypeInfo? comparisonSignType = LookupType("ComparisonSign");
+        TypeInfo? comparisonSignType = LookupType(name: "ComparisonSign");
         if (boolType != null && comparisonSignType != null &&
-            elementTypes.All(et => LookupMethod(et, "$cmp") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$cmp") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(new RoutineInfo(name: "$cmp")
+            RegisterRoutine(routine: new RoutineInfo(name: "$cmp")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -845,9 +868,15 @@ public sealed partial class TypeRegistry
             });
 
             // Derived: $lt, $le, $gt, $ge
-            foreach (string opName in new[] { "$lt", "$le", "$gt", "$ge" })
+            foreach (string opName in new[]
+                     {
+                         "$lt",
+                         "$le",
+                         "$gt",
+                         "$ge"
+                     })
             {
-                RegisterRoutine(new RoutineInfo(name: opName)
+                RegisterRoutine(routine: new RoutineInfo(name: opName)
                 {
                     Kind = RoutineKind.MemberRoutine,
                     OwnerType = newType,
@@ -873,22 +902,23 @@ public sealed partial class TypeRegistry
     /// <param name="innerType">The type being wrapped.</param>
     /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewed, Inspected).</param>
     /// <returns>The cached or newly created wrapper type.</returns>
-    public WrapperTypeInfo GetOrCreateWrapperType(
-        string wrapperName,
-        TypeInfo innerType,
+    public WrapperTypeInfo GetOrCreateWrapperType(string wrapperName, TypeInfo innerType,
         bool isReadOnly)
     {
         // Build the cache key
         string key = $"{wrapperName}[{innerType.FullName}]";
 
         // Check cache
-        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) && existing is WrapperTypeInfo wrapperType)
+        if (_resolutions.TryGetValue(key: key, value: out TypeInfo? existing) &&
+            existing is WrapperTypeInfo wrapperType)
         {
             return wrapperType;
         }
 
         // Create and cache
-        var newType = new WrapperTypeInfo(wrapperName: wrapperName, innerType: innerType, isReadOnly: isReadOnly);
+        var newType = new WrapperTypeInfo(wrapperName: wrapperName,
+            innerType: innerType,
+            isReadOnly: isReadOnly);
         _resolutions[key: key] = newType;
 
         return newType;
@@ -907,7 +937,7 @@ public sealed partial class TypeRegistry
             TypeCategory.Record => true,
             TypeCategory.Choice => true,
             TypeCategory.Variant => true, // Variants are value types (stack-allocated)
-            TypeCategory.Tuple => true,   // Tuples are always inline structs
+            TypeCategory.Tuple => true, // Tuples are always inline structs
             _ => false
         };
     }
@@ -929,7 +959,9 @@ public sealed partial class TypeRegistry
     /// <returns>The underlying intrinsic type, or null if not a single-member-variable wrapper.</returns>
     public IntrinsicTypeInfo? GetUnderlyingIntrinsic(TypeInfo type)
     {
-        return type is RecordTypeInfo record ? record.UnderlyingIntrinsic : null;
+        return type is RecordTypeInfo record
+            ? record.UnderlyingIntrinsic
+            : null;
     }
 
     /// <summary>
@@ -940,8 +972,8 @@ public sealed partial class TypeRegistry
     public IEnumerable<TypeInfo> GetTypesByCategory(TypeCategory category)
     {
         return _types.Values
-            .Concat(_resolutions.Values)
-            .Where(predicate: t => t.Category == category);
+                     .Concat(second: _resolutions.Values)
+                     .Where(predicate: t => t.Category == category);
     }
 
     /// <summary>
@@ -951,14 +983,14 @@ public sealed partial class TypeRegistry
     public IEnumerable<TypeInfo> GetTypesWithMethods()
     {
         IEnumerable<TypeInfo> namedTypes = _types.Values.Where(predicate: t =>
-            t.Category is TypeCategory.Record or TypeCategory.Entity or
-                TypeCategory.Choice or TypeCategory.Flags);
+            t.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Choice
+                or TypeCategory.Flags);
 
         // Include tuple types from resolutions cache
-        IEnumerable<TypeInfo> tupleTypes = _resolutions.Values
-            .Where(predicate: t => t is TupleTypeInfo);
+        IEnumerable<TypeInfo> tupleTypes =
+            _resolutions.Values.Where(predicate: t => t is TupleTypeInfo);
 
-        return namedTypes.Concat(tupleTypes);
+        return namedTypes.Concat(second: tupleTypes);
     }
 
     /// <summary>
@@ -999,7 +1031,9 @@ public sealed partial class TypeRegistry
     /// <exception cref="InvalidOperationException">Thrown if attempting to exit the global scope.</exception>
     public void ExitScope()
     {
-        _currentScope = _currentScope.Parent ?? throw new InvalidOperationException(message: "Cannot exit the global scope.");
+        _currentScope = _currentScope.Parent ??
+                        throw new InvalidOperationException(
+                            message: "Cannot exit the global scope.");
     }
 
     /// <summary>
@@ -1013,8 +1047,7 @@ public sealed partial class TypeRegistry
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsModifiable = !isPreset,
-            IsPreset = isPreset
+            IsModifiable = !isPreset, IsPreset = isPreset
         };
 
         return _currentScope.DeclareVariable(variable: variable);
@@ -1031,18 +1064,16 @@ public sealed partial class TypeRegistry
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsModifiable = false,
-            IsPreset = true,
-            Module = module
+            IsModifiable = false, IsPreset = true, Module = module
         };
 
-        _presets[name] = variable;
+        _presets[key: name] = variable;
 
         // Index by module-qualified name for unambiguous lookup
         string qualifiedName = variable.QualifiedName;
         if (qualifiedName != name)
         {
-            _presetsByQualifiedName.TryAdd(qualifiedName, variable);
+            _presetsByQualifiedName.TryAdd(key: qualifiedName, value: variable);
         }
     }
 
@@ -1054,9 +1085,8 @@ public sealed partial class TypeRegistry
     /// <returns>The variable info if found, null otherwise.</returns>
     public VariableInfo? LookupVariable(string name)
     {
-        return _currentScope.LookupVariable(name: name)
-            ?? _presets.GetValueOrDefault(name)
-            ?? _presetsByQualifiedName.GetValueOrDefault(name);
+        return _currentScope.LookupVariable(name: name) ?? _presets.GetValueOrDefault(key: name) ??
+            _presetsByQualifiedName.GetValueOrDefault(key: name);
     }
 
     /// <summary>
@@ -1064,7 +1094,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     public VariableInfo? LookupPresetByQualifiedName(string qualifiedName)
     {
-        return _presetsByQualifiedName.GetValueOrDefault(qualifiedName);
+        return _presetsByQualifiedName.GetValueOrDefault(key: qualifiedName);
     }
 
     /// <summary>
@@ -1134,36 +1164,4 @@ public sealed partial class TypeRegistry
     }
 
     #endregion
-
-    #region Language-Specific Validation
-
-    /// <summary>
-    /// Validates that a type is allowed for the current language.
-    /// </summary>
-    /// <param name="type">The type to validate.</param>
-    /// <returns>True if the type is allowed for the current language, false otherwise.</returns>
-    public bool IsTypeAllowedForLanguage(TypeInfo type)
-    {
-        // Memory wrapper types are RazorForge only
-        if (IsMemoryWrapperType(typeName: type.Name) && Language == Language.Suflae)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if a type name is a RazorForge-specific memory wrapper type.
-    /// </summary>
-    /// <param name="typeName">The name of the type to check.</param>
-    /// <returns>True if the type is a memory wrapper, false otherwise.</returns>
-    private static bool IsMemoryWrapperType(string typeName)
-    {
-        return typeName is "Viewed" or "Hijacked" or "Inspected" or "Seized" or "Snatched" or "Shared" or "Tracked";
-    }
-
-    #endregion
-
-    // Protocol type substitution is in TypeRegistry.MethodLookup.cs
 }

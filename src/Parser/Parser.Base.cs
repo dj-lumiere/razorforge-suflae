@@ -65,10 +65,12 @@ public partial class Parser
         }
 
         Token current = CurrentToken;
-        throw new GrammarException(
-            GetExpectedTokenCode(type: type),
-            $"{errorMessage}. Expected {type}, got {current.Type}",
-            fileName, current.Line, current.Column, _language);
+        throw new GrammarException(code: GetExpectedTokenCode(type: type),
+            message: $"{errorMessage}. Expected {type}, got {current.Type}",
+            fileName: fileName,
+            line: current.Line,
+            column: current.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -136,18 +138,21 @@ public partial class Parser
     private bool SkipNewlinesIfFollowedBy(TokenType type)
     {
         int offset = 0;
-        while (PeekToken(offset: offset).Type == TokenType.Newline)
+        while (PeekToken(offset: offset)
+                  .Type == TokenType.Newline)
         {
             offset++;
         }
 
-        if (PeekToken(offset: offset).Type != type)
+        if (PeekToken(offset: offset)
+               .Type != type)
         {
             return true; // Don't skip, but let caller check Match
         }
 
         // Actually consume the newlines
         while (Match(type: TokenType.Newline)) { }
+
         return true;
     }
 
@@ -236,8 +241,10 @@ public partial class Parser
             // Comparison operators
             TokenType.In or TokenType.Is or TokenType.Obeys => Precedence.Comparison,
             TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => Precedence.Comparison,
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual => Precedence.Comparison,
-            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence.Comparison,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual =>
+                Precedence.Comparison,
+            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence
+               .Comparison,
 
             // Bitwise operators
             TokenType.Pipe => Precedence.BitwiseOr,
@@ -245,7 +252,8 @@ public partial class Parser
             TokenType.Ampersand => Precedence.BitwiseAnd,
 
             // Shift operators
-            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
+            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift
+                or TokenType.LogicalRightShift => Precedence.Shift,
 
             // Additive operators
             TokenType.Plus or TokenType.Minus => Precedence.Additive,
@@ -253,7 +261,8 @@ public partial class Parser
             TokenType.MinusWrap or TokenType.MinusClamp => Precedence.Additive,
 
             // Multiplicative operators
-            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent => Precedence.Multiplicative,
+            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent =>
+                Precedence.Multiplicative,
             TokenType.MultiplyWrap or TokenType.MultiplyClamp => Precedence.Multiplicative,
             TokenType.SlashClamp => Precedence.Multiplicative,
 
@@ -276,7 +285,8 @@ public partial class Parser
     {
         return type switch
         {
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual or TokenType.Equal => true,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual
+                or TokenType.Equal => true,
             _ => false
         };
     }
@@ -308,8 +318,10 @@ public partial class Parser
             return true;
         }
 
-        var directions = operators.Select(selector: op => GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
-                                  .ToList();
+        var directions = operators
+                        .Select(selector: op =>
+                             GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
+                        .ToList();
 
         // All equality is valid
         if (directions.All(predicate: d => d == 0))
@@ -339,7 +351,8 @@ public partial class Parser
             BinaryOperator.Greater => TokenType.Greater,
             BinaryOperator.GreaterEqual => TokenType.GreaterEqual,
             BinaryOperator.Equal => TokenType.Equal,
-            _ => TokenType.Equal // Non-chainable operators default to equality (won't affect chain validation)
+            _ => TokenType
+               .Equal // Non-chainable operators default to equality (won't affect chain validation)
         };
     }
 
@@ -437,11 +450,13 @@ public partial class Parser
     /// <returns>The exception to throw.</returns>
     protected GrammarException ThrowParseError(string message)
     {
-        var token = CurrentToken;
-        return new GrammarException(
-            GrammarDiagnosticCode.UnexpectedToken,
-            message,
-            fileName, token.Line, token.Column, _language);
+        Token token = CurrentToken;
+        return new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+            message: message,
+            fileName: fileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -453,10 +468,12 @@ public partial class Parser
     /// <returns>The exception to throw.</returns>
     protected GrammarException ThrowParseError(string message, Token token)
     {
-        return new GrammarException(
-            GrammarDiagnosticCode.UnexpectedToken,
-            message,
-            fileName, token.Line, token.Column, _language);
+        return new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+            message: message,
+            fileName: fileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -468,9 +485,13 @@ public partial class Parser
     /// <returns>The exception to throw.</returns>
     protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message)
     {
-        var token = CurrentToken;
-        return new GrammarException(code, message,
-            fileName, token.Line, token.Column, _language);
+        Token token = CurrentToken;
+        return new GrammarException(code: code,
+            message: message,
+            fileName: fileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -481,10 +502,15 @@ public partial class Parser
     /// <param name="message">The error message.</param>
     /// <param name="token">The token where the error occurred.</param>
     /// <returns>The exception to throw.</returns>
-    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message, Token token)
+    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message,
+        Token token)
     {
-        return new GrammarException(code, message,
-            fileName, token.Line, token.Column, _language);
+        return new GrammarException(code: code,
+            message: message,
+            fileName: fileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     #endregion
@@ -545,10 +571,12 @@ public partial class Parser
             TokenType.Disobeys => BinaryOperator.Disobeys,
             TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
 
-            _ => throw new GrammarException(
-                GrammarDiagnosticCode.UnexpectedToken,
-                $"Unknown binary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column, _language)
+            _ => throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"Unknown binary operator: {tokenType}",
+                fileName: fileName,
+                line: CurrentToken.Line,
+                column: CurrentToken.Column,
+                language: _language)
         };
     }
 
@@ -563,10 +591,12 @@ public partial class Parser
             TokenType.Not => UnaryOperator.Not,
             TokenType.Tilde => UnaryOperator.BitwiseNot,
 
-            _ => throw new GrammarException(
-                GrammarDiagnosticCode.UnexpectedToken,
-                $"Unknown unary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column, _language)
+            _ => throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"Unknown unary operator: {tokenType}",
+                fileName: fileName,
+                line: CurrentToken.Line,
+                column: CurrentToken.Column,
+                language: _language)
         };
     }
 
@@ -693,7 +723,9 @@ public partial class Parser
     {
         if (CurrentToken.Type == TokenType.RightBrace)
         {
-            AddWarning(message: "Unnecessary closing brace detected. This language uses indentation-based scoping, not braces.",
+            AddWarning(
+                message:
+                "Unnecessary closing brace detected. This language uses indentation-based scoping, not braces.",
                 token: CurrentToken,
                 warningCode: WarningCodes.UnnecessaryBraces,
                 severity: WarningSeverity.StyleViolation);

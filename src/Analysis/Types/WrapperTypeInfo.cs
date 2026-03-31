@@ -24,8 +24,8 @@ public sealed class WrapperTypeInfo : TypeInfo
     /// <param name="wrapperName">The name of the wrapper type (e.g., "Hijacked", "Viewed").</param>
     /// <param name="innerType">The type being wrapped.</param>
     /// <param name="isReadOnly">Whether this is a read-only wrapper.</param>
-    public WrapperTypeInfo(string wrapperName, TypeInfo innerType, bool isReadOnly = false)
-        : base(name: wrapperName)
+    public WrapperTypeInfo(string wrapperName, TypeInfo innerType, bool isReadOnly = false) : base(
+        name: wrapperName)
     {
         InnerType = innerType;
         IsReadOnly = isReadOnly;
@@ -41,9 +41,8 @@ public sealed class WrapperTypeInfo : TypeInfo
                 message: $"Wrapper type '{Name}' requires exactly one type argument.");
         }
 
-        return new WrapperTypeInfo(
-            wrapperName: Name,
-            innerType: typeArguments[0],
+        return new WrapperTypeInfo(wrapperName: Name,
+            innerType: typeArguments[index: 0],
             isReadOnly: IsReadOnly);
     }
 
@@ -56,13 +55,9 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// <summary>
         /// Read-only single-threaded token. Provides unmodifiable view of the inner value.
         /// </summary>
-        public static readonly WrapperTypeInfo ViewedDefinition = new(
-            wrapperName: "Viewed",
+        public static readonly WrapperTypeInfo ViewedDefinition = new(wrapperName: "Viewed",
             innerType: ErrorTypeInfo.Instance, // Placeholder, will be resolved with actual type
-            isReadOnly: true)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: true) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Exclusive write single-threaded token. Provides modifiable access with exclusive ownership.
@@ -70,10 +65,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         public static readonly WrapperTypeInfo HijackedDefinition = new(
             wrapperName: "Hijacked",
             innerType: ErrorTypeInfo.Instance,
-            isReadOnly: false)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Read-only multi-threaded token. Thread-safe unmodifiable view.
@@ -81,10 +73,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         public static readonly WrapperTypeInfo InspectedDefinition = new(
             wrapperName: "Inspected",
             innerType: ErrorTypeInfo.Instance,
-            isReadOnly: true)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: true) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Exclusive write multi-threaded token. Thread-safe modifiable access with exclusive ownership.
@@ -92,10 +81,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         public static readonly WrapperTypeInfo SeizedDefinition = new(
             wrapperName: "Seized",
             innerType: ErrorTypeInfo.Instance,
-            isReadOnly: false)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Reference-counted handle. Shared ownership with automatic cleanup.
@@ -103,10 +89,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         public static readonly WrapperTypeInfo SharedDefinition = new(
             wrapperName: "Shared",
             innerType: ErrorTypeInfo.Instance,
-            isReadOnly: false)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Weak reference handle. Non-owning reference that can become invalid.
@@ -114,10 +97,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         public static readonly WrapperTypeInfo TrackedDefinition = new(
             wrapperName: "Tracked",
             innerType: ErrorTypeInfo.Instance,
-            isReadOnly: false)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
         /// Unsafe raw pointer handle. Danger zone only.
@@ -125,10 +105,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         public static readonly WrapperTypeInfo SnatchedDefinition = new(
             wrapperName: "Snatched",
             innerType: ErrorTypeInfo.Instance,
-            isReadOnly: false)
-        {
-            GenericParameters = ["T"]
-        };
+            isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>All well-known wrapper type definitions.</summary>
         public static IEnumerable<WrapperTypeInfo> All =>

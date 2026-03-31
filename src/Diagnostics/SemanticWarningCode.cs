@@ -177,7 +177,7 @@ public enum SemanticWarningCode
     UnknownExpressionType = 401,
 
     /// <summary>Unexpected declaration in statement context.</summary>
-    UnexpectedDeclaration = 402,
+    UnexpectedDeclaration = 402
 }
 
 public static class SemanticWarningCodeExtensions

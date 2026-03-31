@@ -124,6 +124,7 @@ public partial class Parser
                 ElseStatement: newBranch,
                 Location: root.Location);
         }
+
         if (root.ElseStatement is IfStatement nestedIf)
         {
             return new IfStatement(Condition: root.Condition,
@@ -131,6 +132,7 @@ public partial class Parser
                 ElseStatement: AttachElseBranch(root: nestedIf, newBranch: newBranch),
                 Location: root.Location);
         }
+
         // Already has a non-if else branch, shouldn't happen
         return root;
     }
@@ -154,7 +156,9 @@ public partial class Parser
         }
 
         // Unless is "if not condition"
-        var negatedCondition = new UnaryExpression(Operator: UnaryOperator.Not, Operand: condition, Location: condition.Location);
+        var negatedCondition = new UnaryExpression(Operator: UnaryOperator.Not,
+            Operand: condition,
+            Location: condition.Location);
 
         return new IfStatement(Condition: negatedCondition,
             ThenStatement: thenBranch,
@@ -182,7 +186,10 @@ public partial class Parser
             elseBranch = ParseBody();
         }
 
-        return new WhileStatement(Condition: condition, Body: body, ElseBranch: elseBranch, Location: location);
+        return new WhileStatement(Condition: condition,
+            Body: body,
+            ElseBranch: elseBranch,
+            Location: location);
     }
 
     /// <summary>
@@ -196,10 +203,14 @@ public partial class Parser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
         // loop body is equivalent to while true body
-        Expression trueCondition = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
+        Expression trueCondition =
+            new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
         Statement body = ParseBody();
 
-        return new WhileStatement(Condition: trueCondition, Body: body, ElseBranch: null, Location: location);
+        return new WhileStatement(Condition: trueCondition,
+            Body: body,
+            ElseBranch: null,
+            Location: location);
     }
 
     /// <summary>
@@ -294,7 +305,9 @@ public partial class Parser
         {
             // Bare `when` followed by newline — condition-based with no subject
             isConditionBased = true;
-            expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
+            expression = new LiteralExpression(Value: true,
+                LiteralType: TokenType.True,
+                Location: location);
         }
         else if (Check(type: TokenType.True))
         {
@@ -305,7 +318,9 @@ public partial class Parser
             {
                 isConditionBased = true;
                 Advance(); // consume 'true'
-                expression = new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
+                expression = new LiteralExpression(Value: true,
+                    LiteralType: TokenType.True,
+                    Location: location);
             }
             else
             {
@@ -322,9 +337,10 @@ public partial class Parser
 
         if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock,
-                "Expected indented block after when");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
+                message: "Expected indented block after when");
         }
+
         ProcessIndentToken();
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -333,7 +349,10 @@ public partial class Parser
 
         var clauses = new List<WhenClause>();
 
-        bool AtClauseEnd() => Check(type: TokenType.Dedent) || IsAtEnd;
+        bool AtClauseEnd()
+        {
+            return Check(type: TokenType.Dedent) || IsAtEnd;
+        }
 
         while (!AtClauseEnd())
         {
@@ -357,10 +376,12 @@ public partial class Parser
                 // Check for variable binding: else varName => ... or else varName\n INDENT
                 if (Check(type: TokenType.Identifier))
                 {
-                    TokenType nextAfterIdent = PeekToken(offset: 1).Type;
+                    TokenType nextAfterIdent = PeekToken(offset: 1)
+                       .Type;
                     if (nextAfterIdent is TokenType.FatArrow or TokenType.Newline)
                     {
-                        string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
+                        string varName =
+                            ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
                         pattern = new ElsePattern(VariableName: varName, Location: clauseLocation);
                     }
                     else
@@ -385,39 +406,40 @@ public partial class Parser
             {
                 _inWhenPatternContext = true;
                 // Check if this is a flags pattern: identifier followed by and/or/but
-                if (Check(type: TokenType.Identifier) &&
-                    PeekToken(offset: 1).Type is TokenType.And or TokenType.Or or TokenType.But)
+                if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+                       .Type is TokenType.And or TokenType.Or or TokenType.But)
                 {
                     pattern = ParseFlagsIsWhenPattern();
                 }
                 // 'is' must be followed by a type/variant name
-                else if (Check(type: TokenType.None) ||
-                    Check(type: TokenType.Identifier))
+                else if (Check(type: TokenType.None) || Check(type: TokenType.Identifier))
                 {
                     pattern = ParseTypePattern();
                 }
                 else
                 {
-                    throw ThrowParseError(GrammarDiagnosticCode.InvalidPattern,
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                        message:
                         $"'is' must be followed by a type name. For value comparisons, use '== {CurrentToken.Text}' instead of 'is {CurrentToken.Text}'.");
                 }
+
                 _inWhenPatternContext = false;
             }
             // Case 4: 'isnot' keyword - negated type pattern (no variable binding)
             else if (Match(type: TokenType.IsNot))
             {
                 _inWhenPatternContext = true;
-                if (Check(type: TokenType.None) ||
-                    Check(type: TokenType.Identifier))
+                if (Check(type: TokenType.None) || Check(type: TokenType.Identifier))
                 {
                     TypeExpression type = ParseType();
                     pattern = new NegatedTypePattern(Type: type, Location: clauseLocation);
                 }
                 else
                 {
-                    throw ThrowParseError(GrammarDiagnosticCode.InvalidPattern,
-                        "'isnot' must be followed by a type name.");
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                        message: "'isnot' must be followed by a type name.");
                 }
+
                 _inWhenPatternContext = false;
             }
             // Case 5: 'isonly' keyword - exact flags pattern
@@ -425,17 +447,23 @@ public partial class Parser
             {
                 _inWhenPatternContext = true;
                 var flagNames = new List<string>();
-                flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
+                flagNames.Add(
+                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
                 while (Match(type: TokenType.And))
                 {
-                    flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                    flagNames.Add(
+                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
                 }
-                pattern = new FlagsPattern(FlagNames: flagNames, Connective: FlagsTestConnective.And,
-                    ExcludedFlags: null, IsExact: true, Location: clauseLocation);
+
+                pattern = new FlagsPattern(FlagNames: flagNames,
+                    Connective: FlagsTestConnective.And,
+                    ExcludedFlags: null,
+                    IsExact: true,
+                    Location: clauseLocation);
                 _inWhenPatternContext = false;
             }
             // Case 6: Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
-            else if (IsComparisonOperator(CurrentToken.Type))
+            else if (IsComparisonOperator(tokenType: CurrentToken.Type))
             {
                 pattern = ParseComparisonPattern();
             }
@@ -458,7 +486,8 @@ public partial class Parser
             if (Match(type: TokenType.FatArrow))
             {
                 // After =>, check for block form: => \n INDENT block DEDENT
-                if (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Indent)
+                if (Check(type: TokenType.Newline) && PeekToken(offset: 1)
+                       .Type == TokenType.Indent)
                 {
                     Advance(); // consume newline
                     body = ParseIndentedBlock();
@@ -476,12 +505,15 @@ public partial class Parser
             }
             else
             {
-                Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after when pattern");
+                Consume(type: TokenType.FatArrow,
+                    errorMessage: "Expected '=>' after when pattern");
                 body = ParseStatement();
             }
+
             _inWhenClauseBody = false;
 
-            clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
+            clauses.Add(
+                item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
 
             // Optional comma or newline between clauses
             Match(TokenType.Comma, TokenType.Newline);
@@ -494,8 +526,8 @@ public partial class Parser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedent,
-                "Expected dedent after when clauses");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedDedent,
+                message: "Expected dedent after when clauses");
         }
 
         return new WhenStatement(Expression: expression, Clauses: clauses, Location: location);
@@ -518,34 +550,50 @@ public partial class Parser
         if (Check(type: TokenType.And))
         {
             while (Match(type: TokenType.And))
+            {
                 flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            }
+
             if (Match(type: TokenType.But))
             {
                 excluded = new List<string>();
-                excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+                excluded.Add(
+                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
                 while (Match(type: TokenType.And))
-                    excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                {
+                    excluded.Add(
+                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                }
             }
         }
         else if (Check(type: TokenType.Or))
         {
             connective = FlagsTestConnective.Or;
             while (Match(type: TokenType.Or))
+            {
                 flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'or'"));
+            }
         }
         else if (Check(type: TokenType.But))
         {
             if (Match(type: TokenType.But))
             {
                 excluded = new List<string>();
-                excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+                excluded.Add(
+                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
                 while (Match(type: TokenType.And))
-                    excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                {
+                    excluded.Add(
+                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                }
             }
         }
 
-        return new FlagsPattern(FlagNames: flags, Connective: connective,
-            ExcludedFlags: excluded, IsExact: false, Location: loc);
+        return new FlagsPattern(FlagNames: flags,
+            Connective: connective,
+            ExcludedFlags: excluded,
+            IsExact: false,
+            Location: loc);
     }
 
     /// <summary>
@@ -575,14 +623,16 @@ public partial class Parser
             // Check for qualified name: Type.CASE or Type.CASE.SubCase
             while (Match(type: TokenType.Dot))
             {
-                if (Match(TokenType.Identifier))
+                if (Match(type: TokenType.Identifier))
                 {
-                    name += "." + PeekToken(offset: -1).Text;
+                    name += "." + PeekToken(offset: -1)
+                       .Text;
                 }
                 else
                 {
-                    throw ThrowParseError(GrammarDiagnosticCode.ExpectedDotInQualifiedPattern,
-                        "Expected identifier after '.' in pattern");
+                    throw ThrowParseError(
+                        code: GrammarDiagnosticCode.ExpectedDotInQualifiedPattern,
+                        message: "Expected identifier after '.' in pattern");
                 }
             }
 
@@ -591,18 +641,23 @@ public partial class Parser
             if (Match(type: TokenType.LeftParen))
             {
                 bindings = ParseDestructuringBindingList();
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
+                Consume(type: TokenType.RightParen,
+                    errorMessage: "Expected ')' after destructuring bindings");
             }
 
             // Check for variable binding (only if no destructuring)
             string? variableName = null;
             if (bindings == null && Check(type: TokenType.Identifier))
             {
-                variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
+                variableName =
+                    ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
             }
 
             TypeExpression type = new(Name: name, GenericArguments: null, Location: location);
-            Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
+            Pattern typePattern = new TypePattern(Type: type,
+                VariableName: variableName,
+                Bindings: bindings,
+                Location: location);
             return TryParseGuard(innerPattern: typePattern, location: location);
         }
 
@@ -610,7 +665,9 @@ public partial class Parser
         Expression expr = ParsePrimary();
         if (expr is LiteralExpression literal)
         {
-            Pattern litPattern = new LiteralPattern(Value: literal.Value, LiteralType: literal.LiteralType, Location: location);
+            Pattern litPattern = new LiteralPattern(Value: literal.Value,
+                LiteralType: literal.LiteralType,
+                Location: location);
             return TryParseGuard(innerPattern: litPattern, location: location);
         }
 
@@ -655,15 +712,19 @@ public partial class Parser
         // Handle 'is None' as a special case - None is a keyword
         if (Match(type: TokenType.None))
         {
-            TypeExpression noneType = new TypeExpression(Name: "None", GenericArguments: null, Location: location);
-            Pattern nonePattern = new TypePattern(Type: noneType, VariableName: null, Bindings: null, Location: location);
+            var noneType =
+                new TypeExpression(Name: "None", GenericArguments: null, Location: location);
+            Pattern nonePattern = new TypePattern(Type: noneType,
+                VariableName: null,
+                Bindings: null,
+                Location: location);
             return TryParseGuard(innerPattern: nonePattern, location: location);
         }
 
         if (!Check(type: TokenType.Identifier))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedPattern,
-                $"Expected type name after 'is', got {CurrentToken.Type}");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedPattern,
+                message: $"Expected type name after 'is', got {CurrentToken.Type}");
         }
 
         string name = CurrentToken.Text;
@@ -672,14 +733,15 @@ public partial class Parser
         // Check for qualified name: Type.CASE or Type.CASE.SubCase
         while (Match(type: TokenType.Dot))
         {
-            if (Match(TokenType.Identifier))
+            if (Match(type: TokenType.Identifier))
             {
-                name += "." + PeekToken(offset: -1).Text;
+                name += "." + PeekToken(offset: -1)
+                   .Text;
             }
             else
             {
-                throw ThrowParseError(GrammarDiagnosticCode.ExpectedDotInQualifiedPattern,
-                    "Expected identifier after '.' in pattern");
+                throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedDotInQualifiedPattern,
+                    message: "Expected identifier after '.' in pattern");
             }
         }
 
@@ -688,18 +750,23 @@ public partial class Parser
         if (Match(type: TokenType.LeftParen))
         {
             bindings = ParseDestructuringBindingList();
-            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after destructuring bindings");
+            Consume(type: TokenType.RightParen,
+                errorMessage: "Expected ')' after destructuring bindings");
         }
 
         // Check for variable binding (only if no destructuring)
         string? variableName = null;
         if (bindings == null && Check(type: TokenType.Identifier))
         {
-            variableName = ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
+            variableName =
+                ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
         }
 
-        TypeExpression type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
-        Pattern typePattern = new TypePattern(Type: type, VariableName: variableName, Bindings: bindings, Location: location);
+        var type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+        Pattern typePattern = new TypePattern(Type: type,
+            VariableName: variableName,
+            Bindings: bindings,
+            Location: location);
         return TryParseGuard(innerPattern: typePattern, location: location);
     }
 
@@ -711,9 +778,8 @@ public partial class Parser
     /// <returns>True if the token is a comparison operator for patterns.</returns>
     private static bool IsComparisonOperator(TokenType tokenType)
     {
-        return tokenType is TokenType.Equal or TokenType.NotEqual
-            or TokenType.Less or TokenType.Greater
-            or TokenType.LessEqual or TokenType.GreaterEqual
+        return tokenType is TokenType.Equal or TokenType.NotEqual or TokenType.Less
+            or TokenType.Greater or TokenType.LessEqual or TokenType.GreaterEqual
             or TokenType.ReferenceEqual or TokenType.ReferenceNotEqual;
     }
 
@@ -739,14 +805,19 @@ public partial class Parser
         {
             if (Match(type: TokenType.Dot))
             {
-                string memberName = ConsumeIdentifier(errorMessage: "Expected member name after '.'");
-                value = new MemberExpression(Object: value, PropertyName: memberName, Location: GetLocation());
+                string memberName =
+                    ConsumeIdentifier(errorMessage: "Expected member name after '.'");
+                value = new MemberExpression(Object: value,
+                    PropertyName: memberName,
+                    Location: GetLocation());
             }
             else if (Match(type: TokenType.LeftParen))
             {
                 List<Expression> args = ParseArgumentList();
                 Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
-                value = new CallExpression(Callee: value, Arguments: args, Location: GetLocation());
+                value = new CallExpression(Callee: value,
+                    Arguments: args,
+                    Location: GetLocation());
             }
         }
 
@@ -771,10 +842,8 @@ public partial class Parser
 
         Expression? value = null;
         // Check for both Newline and Dedent/RightBrace - either can follow a valueless return
-        if (!Check(type: TokenType.Newline) &&
-            !Check(type: TokenType.Dedent) &&
-            !Check(type: TokenType.RightBrace) &&
-            !IsAtEnd)
+        if (!Check(type: TokenType.Newline) && !Check(type: TokenType.Dedent) &&
+            !Check(type: TokenType.RightBrace) && !IsAtEnd)
         {
             value = ParseExpression();
         }
@@ -887,11 +956,13 @@ public partial class Parser
         // Discard must be followed by a call expression
         if (expression is not CallExpression)
         {
-            throw new GrammarException(
-                GrammarDiagnosticCode.DiscardRequiresCall,
-                "The 'discard' keyword must be followed by a routine call. " +
-                "Use 'discard routine_call()' to explicitly ignore a return value.",
-                fileName, location.Line, location.Column, _language);
+            throw new GrammarException(code: GrammarDiagnosticCode.DiscardRequiresCall,
+                message: "The 'discard' keyword must be followed by a routine call. " +
+                         "Use 'discard routine_call()' to explicitly ignore a return value.",
+                fileName: fileName,
+                line: location.Line,
+                column: location.Column,
+                language: _language);
         }
 
         ConsumeStatementTerminator();
@@ -940,7 +1011,8 @@ public partial class Parser
         do
         {
             Expression resource = ParseExpression();
-            Consume(type: TokenType.As, errorMessage: "Expected 'as' after resource expression in using block");
+            Consume(type: TokenType.As,
+                errorMessage: "Expected 'as' after resource expression in using block");
             string name = ConsumeIdentifier(errorMessage: "Expected binding name after 'as'");
             resources.Add(item: (resource, name));
         } while (Match(type: TokenType.Comma));
@@ -952,8 +1024,7 @@ public partial class Parser
         Statement result = body;
         for (int i = resources.Count - 1; i >= 0; i--)
         {
-            result = new UsingStatement(
-                Resource: resources[index: i].Resource,
+            result = new UsingStatement(Resource: resources[index: i].Resource,
                 Name: resources[index: i].Name,
                 Body: result,
                 Location: location);
@@ -1013,15 +1084,15 @@ public partial class Parser
         }
         else if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock,
-                "Expected newline before indented block");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
+                message: "Expected newline before indented block");
         }
 
         // Must have an indent token for a proper indented block
         if (!Check(type: TokenType.Indent))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock,
-                "Expected indented block");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
+                message: "Expected indented block");
         }
 
         // Process the indent token
@@ -1048,8 +1119,8 @@ public partial class Parser
         }
         else if (!IsAtEnd)
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedDedent,
-                "Expected dedent to close indented block");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedDedent,
+                message: "Expected dedent to close indented block");
         }
 
         return new BlockStatement(Statements: statements, Location: location);
@@ -1080,7 +1151,9 @@ public partial class Parser
     /// <returns>A <see cref="DestructuringStatement"/> AST node.</returns>
     private DestructuringStatement ParseDestructuringDeclaration()
     {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -2)); // -2 because we already consumed 'var'
+        SourceLocation
+            location =
+                GetLocation(token: PeekToken(offset: -2)); // -2 because we already consumed 'var'
 
         // Parse the destructuring pattern (reuse ParseDestructuringBindings from Expressions)
         List<DestructuringBinding> bindings = ParseDestructuringBindings();

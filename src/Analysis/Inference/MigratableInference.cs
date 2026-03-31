@@ -88,7 +88,11 @@ public sealed class MigratableInference
                     continue;
                 }
 
-                if (!node.Callees.Any(edge => edge is { CallsOnMe: true, Target.InferredModification: ModificationCategory.Migratable }))
+                if (!node.Callees.Any(predicate: edge => edge is
+                    {
+                        CallsOnMe: true,
+                        Target.InferredModification: ModificationCategory.Migratable
+                    }))
                 {
                     continue;
                 }
@@ -149,8 +153,7 @@ public sealed class MigratableInference
                 memberExpr.Object is IdentifierExpression { Name: "me" } ||
                 IsMemberVariableOfMe(expression: memberExpr.Object),
 
-            IndexExpression indexExpr =>
-                IsMemberVariableOfMe(expression: indexExpr.Object),
+            IndexExpression indexExpr => IsMemberVariableOfMe(expression: indexExpr.Object),
 
             IdentifierExpression { Name: "me" } => true,
 

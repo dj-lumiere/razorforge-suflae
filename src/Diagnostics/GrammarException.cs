@@ -12,12 +12,12 @@ public class GrammarException(
     string fileName,
     int line,
     int column,
-    Language language) : Exception(FormatMessage(code,
-    message,
-    fileName,
-    line,
-    column,
-    language))
+    Language language) : Exception(message: FormatMessage(code: code,
+    message: message,
+    fileName: fileName,
+    line: line,
+    column: column,
+    language: language))
 {
     /// <summary>
     /// The diagnostic code for this error.
@@ -48,15 +48,11 @@ public class GrammarException(
     /// Formats the error message in the standard format:
     /// error[RF-G001]: filename.rf:10:5: message
     /// </summary>
-    private static string FormatMessage(
-        GrammarDiagnosticCode code,
-        string message,
-        string fileName,
-        int line,
-        int column,
+    private static string FormatMessage(GrammarDiagnosticCode code, string message,
+        string fileName, int line, int column,
         Language language)
     {
-        var location = fileName;
+        string location = fileName;
         if (line > 0)
         {
             location += $":{line}";
@@ -66,6 +62,6 @@ public class GrammarException(
             }
         }
 
-        return $"error[{code.ToCodeString(language)}]: {location}: {message}";
+        return $"error[{code.ToCodeString(language: language)}]: {location}: {message}";
     }
 }

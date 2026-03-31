@@ -83,7 +83,11 @@ public partial class Tokenizer
                 break;
             case ')':
                 AddToken(type: TokenType.RightParen);
-                if (_bracketDepth > 0) _bracketDepth--;
+                if (_bracketDepth > 0)
+                {
+                    _bracketDepth--;
+                }
+
                 break;
             case '[':
                 AddToken(type: TokenType.LeftBracket);
@@ -91,7 +95,11 @@ public partial class Tokenizer
                 break;
             case ']':
                 AddToken(type: TokenType.RightBracket);
-                if (_bracketDepth > 0) _bracketDepth--;
+                if (_bracketDepth > 0)
+                {
+                    _bracketDepth--;
+                }
+
                 break;
             // Braces kept for set/dict literals and f-text inserting (not block delimiters)
             case '{':
@@ -100,16 +108,22 @@ public partial class Tokenizer
                 break;
             case '}':
                 AddToken(type: TokenType.RightBrace);
-                if (_bracketDepth > 0) _bracketDepth--;
+                if (_bracketDepth > 0)
+                {
+                    _bracketDepth--;
+                }
+
                 break;
             case ',':
                 AddToken(type: TokenType.Comma);
                 break;
             case ';':
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidCharacter,
-                    "Semicolons are not used. Statements are terminated by newlines.",
-                    _fileName, _line, _column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidCharacter,
+                    message: "Semicolons are not used. Statements are terminated by newlines.",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
 
             // Multi-character punctuation
             case '.':
@@ -121,10 +135,13 @@ public partial class Tokenizer
                     }
                     else
                     {
-                        throw new GrammarException(
-                            GrammarDiagnosticCode.InvalidCharacter,
+                        throw new GrammarException(code: GrammarDiagnosticCode.InvalidCharacter,
+                            message:
                             "Range operator '..' is no longer supported. Use 'to' keyword instead (e.g., '1 to 10').",
-                            _fileName, _line, _column, _language);
+                            fileName: _fileName,
+                            line: _line,
+                            column: _column,
+                            language: _language);
                     }
                 }
                 else
@@ -136,10 +153,13 @@ public partial class Tokenizer
             case ':':
                 if (Match(expected: ':'))
                 {
-                    throw new GrammarException(
-                        GrammarDiagnosticCode.InvalidCharacter,
+                    throw new GrammarException(code: GrammarDiagnosticCode.InvalidCharacter,
+                        message:
                         "Static access operator '::' is no longer supported. Use '.' instead.",
-                        _fileName, _line, _column, _language);
+                        fileName: _fileName,
+                        line: _line,
+                        column: _column,
+                        language: _language);
                 }
 
                 AddToken(type: TokenType.Colon);
@@ -181,7 +201,9 @@ public partial class Tokenizer
                 if (Match(expected: '='))
                 {
                     // != or !==
-                    AddToken(type: Match(expected: '=') ? TokenType.ReferenceNotEqual : TokenType.NotEqual);
+                    AddToken(type: Match(expected: '=')
+                        ? TokenType.ReferenceNotEqual
+                        : TokenType.NotEqual);
                 }
                 else if (Match(expected: '!'))
                 {
@@ -193,6 +215,7 @@ public partial class Tokenizer
                     // ! (failable marker or negation)
                     AddToken(type: TokenType.Bang);
                 }
+
                 break;
             case '<':
                 ScanLessThanOperator();
@@ -258,7 +281,7 @@ public partial class Tokenizer
                     ScanPrefixedNumber(isHex: false);
                 }
                 else if ((Peek() == 'o' || Peek() == 'O') &&
-                         ((Peek(offset: 1) >= '0' && Peek(offset: 1) <= '7') ||
+                         (Peek(offset: 1) >= '0' && Peek(offset: 1) <= '7' ||
                           Peek(offset: 1) == '_'))
                 {
                     Advance(); // consume 'o' or 'O'

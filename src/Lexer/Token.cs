@@ -14,5 +14,10 @@ namespace Compiler.Lexer;
 /// for accurate error reporting and IDE integration features like hover
 /// tooltips and go-to-definition.
 /// </remarks>
-public record Token(TokenType Type, string FileName, string Text, int Line, int Column, int
-    Position = -1);
+public record Token(
+    TokenType Type,
+    string FileName,
+    string Text,
+    int Line,
+    int Column,
+    int Position = -1);
