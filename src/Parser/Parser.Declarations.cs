@@ -385,13 +385,7 @@ public partial class Parser
             IsDangerous: isDangerous);
     }
 
-    /// <summary>
-    /// Parses an entity (class/reference type) declaration.
-    /// Syntax: <c>entity Name[T] obeys Protocol</c> followed by indented body.
-    /// Entities are heap-allocated reference types.
-    /// </summary>
-    /// <param name="visibility">Access modifier for the entity.</param>
-    /// <returns>An <see cref="EntityDeclaration"/> AST node.</returns>
+    // Entity declaration parsing lives in Parser.Declarations.Types.cs.
     private (VisibilityModifier Visibility, StorageClass Storage) ParseModifiers()
     {
         VisibilityModifier visibility = VisibilityModifier.Open; // Default

@@ -4,6 +4,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation helpers for result type resolution and conditional lowering.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private TypeInfo? ResolveIdentifierType(IdentifierExpression id)
@@ -631,7 +634,4 @@ public partial class LLVMCodeGenerator
     }
 
 
-    /// <summary>
-    /// Generates code for a conditional (ternary) expression.
-    /// </summary>
 }

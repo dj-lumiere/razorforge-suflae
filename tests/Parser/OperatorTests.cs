@@ -11,6 +11,9 @@ using static TestHelpers;
 public class OperatorTests
 {
     #region Standard Arithmetic Operators
+    /// <summary>
+    /// Tests Parse_Addition.
+    /// </summary>
 
     [Fact]
     public void Parse_Addition()
@@ -22,6 +25,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Subtraction.
+    /// </summary>
 
     [Fact]
     public void Parse_Subtraction()
@@ -33,6 +39,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Multiplication.
+    /// </summary>
 
     [Fact]
     public void Parse_Multiplication()
@@ -44,6 +53,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Division.
+    /// </summary>
 
     [Fact]
     public void Parse_Division()
@@ -55,6 +67,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_FloorDivision.
+    /// </summary>
 
     [Fact]
     public void Parse_FloorDivision()
@@ -66,6 +81,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Remainder.
+    /// </summary>
 
     [Fact]
     public void Parse_Remainder()
@@ -77,6 +95,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Power.
+    /// </summary>
 
     [Fact]
     public void Parse_Power()
@@ -88,6 +109,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Negation.
+    /// </summary>
 
     [Fact]
     public void Parse_Negation()
@@ -99,6 +123,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedArithmetic.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedArithmetic()
@@ -110,6 +137,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ParenthesizedArithmetic.
+    /// </summary>
 
     [Fact]
     public void Parse_ParenthesizedArithmetic()
@@ -125,6 +155,9 @@ public class OperatorTests
     #endregion
 
     #region Wrapping Arithmetic Operators
+    /// <summary>
+    /// Tests Parse_WrappingAdd.
+    /// </summary>
 
     [Fact]
     public void Parse_WrappingAdd()
@@ -138,6 +171,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WrappingSubtract.
+    /// </summary>
 
     [Fact]
     public void Parse_WrappingSubtract()
@@ -151,6 +187,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WrappingMultiply.
+    /// </summary>
 
     [Fact]
     public void Parse_WrappingMultiply()
@@ -164,6 +203,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WrappingPower.
+    /// </summary>
 
     [Fact]
     public void Parse_WrappingPower()
@@ -181,6 +223,9 @@ public class OperatorTests
     #endregion
 
     #region Clamping Arithmetic Operators
+    /// <summary>
+    /// Tests Parse_ClampingAdd.
+    /// </summary>
 
     [Fact]
     public void Parse_ClampingAdd()
@@ -194,6 +239,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ClampingSubtract.
+    /// </summary>
 
     [Fact]
     public void Parse_ClampingSubtract()
@@ -207,6 +255,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ClampingMultiply.
+    /// </summary>
 
     [Fact]
     public void Parse_ClampingMultiply()
@@ -220,6 +271,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ClampingPower.
+    /// </summary>
 
     [Fact]
     public void Parse_ClampingPower()
@@ -237,6 +291,9 @@ public class OperatorTests
     #endregion
 
     #region Comparison Operators
+    /// <summary>
+    /// Tests Parse_Equal.
+    /// </summary>
 
     [Fact]
     public void Parse_Equal()
@@ -248,6 +305,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NotEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_NotEqual()
@@ -259,6 +319,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LessThan.
+    /// </summary>
 
     [Fact]
     public void Parse_LessThan()
@@ -270,6 +333,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LessOrEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_LessOrEqual()
@@ -281,6 +347,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_GreaterThan.
+    /// </summary>
 
     [Fact]
     public void Parse_GreaterThan()
@@ -292,6 +361,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_GreaterOrEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_GreaterOrEqual()
@@ -303,6 +375,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedComparison.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedComparison()
@@ -314,6 +389,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedRangeComparison.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedRangeComparison()
@@ -329,6 +407,9 @@ public class OperatorTests
     #endregion
 
     #region Identity Operators
+    /// <summary>
+    /// Tests Parse_IdentityEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_IdentityEqual()
@@ -340,6 +421,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_IdentityNotEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_IdentityNotEqual()
@@ -355,6 +439,9 @@ public class OperatorTests
     #endregion
 
     #region Logical Operators
+    /// <summary>
+    /// Tests Parse_LogicalAnd.
+    /// </summary>
 
     [Fact]
     public void Parse_LogicalAnd()
@@ -366,6 +453,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LogicalOr.
+    /// </summary>
 
     [Fact]
     public void Parse_LogicalOr()
@@ -377,6 +467,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LogicalNot.
+    /// </summary>
 
     [Fact]
     public void Parse_LogicalNot()
@@ -388,6 +481,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedLogical.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedLogical()
@@ -399,6 +495,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LogicalWithComparison.
+    /// </summary>
 
     [Fact]
     public void Parse_LogicalWithComparison()
@@ -414,6 +513,9 @@ public class OperatorTests
     #endregion
 
     #region Bitwise Operators
+    /// <summary>
+    /// Tests Parse_BitwiseAnd.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseAnd()
@@ -425,6 +527,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseOr.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseOr()
@@ -436,6 +541,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseXor.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseXor()
@@ -447,6 +555,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseNot.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseNot()
@@ -458,6 +569,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LeftShift.
+    /// </summary>
 
     [Fact]
     public void Parse_LeftShift()
@@ -469,6 +583,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_RightShift.
+    /// </summary>
 
     [Fact]
     public void Parse_RightShift()
@@ -480,6 +597,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LogicalLeftShift.
+    /// </summary>
 
     [Fact]
     public void Parse_LogicalLeftShift()
@@ -491,6 +611,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LogicalRightShift.
+    /// </summary>
 
     [Fact]
     public void Parse_LogicalRightShift()
@@ -506,6 +629,9 @@ public class OperatorTests
     #endregion
 
     #region None Coalescing Operator
+    /// <summary>
+    /// Tests Parse_NoneCoalescing.
+    /// </summary>
 
     [Fact]
     public void Parse_NoneCoalescing()
@@ -518,6 +644,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedNoneCoalescing.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedNoneCoalescing()
@@ -532,6 +661,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NoneCoalescingWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_NoneCoalescingWithMethodCall()
@@ -547,6 +679,9 @@ public class OperatorTests
     #endregion
 
     #region Assignment Operators
+    /// <summary>
+    /// Tests Parse_SimpleAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleAssignment()
@@ -560,6 +695,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_AddAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_AddAssignment()
@@ -573,6 +711,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SubtractAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_SubtractAssignment()
@@ -586,6 +727,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MultiplyAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiplyAssignment()
@@ -599,6 +743,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_DivideAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_DivideAssignment()
@@ -612,6 +759,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_FloorDivideAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_FloorDivideAssignment()
@@ -625,6 +775,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_RemainderAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_RemainderAssignment()
@@ -638,6 +791,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseAndAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseAndAssignment()
@@ -651,6 +807,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseOrAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseOrAssignment()
@@ -664,6 +823,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseXorAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseXorAssignment()
@@ -677,6 +839,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LeftShiftAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_LeftShiftAssignment()
@@ -690,6 +855,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_RightShiftAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_RightShiftAssignment()
@@ -707,6 +875,9 @@ public class OperatorTests
     #endregion
 
     #region Text Operators
+    /// <summary>
+    /// Tests Parse_TextConcatenation.
+    /// </summary>
 
     [Fact]
     public void Parse_TextConcatenation()
@@ -718,6 +889,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_TextRepetition.
+    /// </summary>
 
     [Fact]
     public void Parse_TextRepetition()
@@ -733,6 +907,9 @@ public class OperatorTests
     #endregion
 
     #region Range Operators
+    /// <summary>
+    /// Tests Parse_InclusiveRange.
+    /// </summary>
 
     [Fact]
     public void Parse_InclusiveRange()
@@ -746,6 +923,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_RangeWithStep.
+    /// </summary>
 
     [Fact]
     public void Parse_RangeWithStep()
@@ -763,6 +943,9 @@ public class OperatorTests
     #endregion
 
     #region Complex Operator Expressions
+    /// <summary>
+    /// Tests Parse_ComplexExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_ComplexExpression()
@@ -774,6 +957,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MixedOperatorPrecedence.
+    /// </summary>
 
     [Fact]
     public void Parse_MixedOperatorPrecedence()
@@ -785,6 +971,9 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BitwiseWithComparison.
+    /// </summary>
 
     [Fact]
     public void Parse_BitwiseWithComparison()

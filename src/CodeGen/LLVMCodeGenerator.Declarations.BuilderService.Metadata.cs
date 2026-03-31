@@ -995,9 +995,4 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
     }
-
-
-    /// <summary>
-    /// Emits a BuilderService standalone routine that returns a U64 constant.
-    /// </summary>
 }

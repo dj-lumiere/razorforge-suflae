@@ -15,6 +15,9 @@ using static TestHelpers;
 public class TypeResolutionTests
 {
     #region Basic Type Registration
+    /// <summary>
+    /// Tests Analyze_Record_RegistersInTypeRegistry.
+    /// </summary>
 
     [Fact]
     public void Analyze_Record_RegistersInTypeRegistry()
@@ -31,6 +34,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Record, actual: type.Category);
     }
+    /// <summary>
+    /// Tests Analyze_Entity_RegistersInTypeRegistry.
+    /// </summary>
 
     [Fact]
     public void Analyze_Entity_RegistersInTypeRegistry()
@@ -46,6 +52,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Entity, actual: type.Category);
     }
+    /// <summary>
+    /// Tests Analyze_Choice_RegistersInTypeRegistry.
+    /// </summary>
 
     [Fact]
     public void Analyze_Choice_RegistersInTypeRegistry()
@@ -64,6 +73,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Choice, actual: type.Category);
     }
+    /// <summary>
+    /// Tests Analyze_Variant_RegistersInTypeRegistry.
+    /// </summary>
 
     [Fact]
     public void Analyze_Variant_RegistersInTypeRegistry()
@@ -81,6 +93,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Variant, actual: type.Category);
     }
+    /// <summary>
+    /// Tests Analyze_Protocol_RegistersInTypeRegistry.
+    /// </summary>
 
     [Fact]
     public void Analyze_Protocol_RegistersInTypeRegistry()
@@ -101,6 +116,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Generic Type Registration
+    /// <summary>
+    /// Tests Analyze_GenericRecord_RegistersWithTypeParameters.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecord_RegistersWithTypeParameters()
@@ -116,6 +134,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: type);
         Assert.True(condition: type.IsGenericDefinition);
     }
+    /// <summary>
+    /// Tests Analyze_GenericEntity_MultipleTypeParameters.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericEntity_MultipleTypeParameters()
@@ -136,6 +157,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Routine Registration
+    /// <summary>
+    /// Tests Analyze_GlobalRoutine_RegistersInRegistry.
+    /// </summary>
 
     [Fact]
     public void Analyze_GlobalRoutine_RegistersInRegistry()
@@ -151,6 +175,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: routine);
         Assert.Equal(expected: RoutineKind.Function, actual: routine.Kind);
     }
+    /// <summary>
+    /// Tests Analyze_Method_RegistersWithOwnerType.
+    /// </summary>
 
     [Fact]
     public void Analyze_Method_RegistersWithOwnerType()
@@ -171,6 +198,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: routine);
         Assert.Equal(expected: RoutineKind.MemberRoutine, actual: routine.Kind);
     }
+    /// <summary>
+    /// Tests Analyze_FailableRoutine_RegistersAsFailable.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableRoutine_RegistersAsFailable()
@@ -190,6 +220,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Field Resolution
+    /// <summary>
+    /// Tests Analyze_RecordMemberVariables_ResolveTypes.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordMemberVariables_ResolveTypes()
@@ -207,6 +240,9 @@ public class TypeResolutionTests
         Assert.NotNull(@object: type);
         // Check fields are resolved
     }
+    /// <summary>
+    /// Tests Analyze_EntityMemberVariables_ResolveTypes.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityMemberVariables_ResolveTypes()
@@ -226,6 +262,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Type Errors
+    /// <summary>
+    /// Tests Analyze_UndefinedType_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UndefinedType_ReportsError()
@@ -241,6 +280,9 @@ public class TypeResolutionTests
             filter: e => e.Message.Contains(value: "UnknownType",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_DuplicateTypeName_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateTypeName_ReportsError()
@@ -256,6 +298,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_DuplicateMemberVariableName_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateMemberVariableName_ReportsError()
@@ -269,6 +314,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_ReservedFunctionPrefix_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReservedFunctionPrefix_ReportsError()
@@ -285,6 +333,9 @@ public class TypeResolutionTests
             filter: e => e.Message.Contains(value: "reserved",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_ReservedFunctionPrefix_Check_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReservedFunctionPrefix_Check_ReportsError()
@@ -298,6 +349,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_ReservedFunctionPrefix_Lookup_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReservedFunctionPrefix_Lookup_ReportsError()
@@ -315,6 +369,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Constraint Validation
+    /// <summary>
+    /// Tests Analyze_ValidConstraint_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ValidConstraint_NoError()
@@ -332,6 +389,9 @@ public class TypeResolutionTests
         Analyze(source: source);
         // Should have no constraint-related errors
     }
+    /// <summary>
+    /// Tests Analyze_UnknownTypeParameter_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UnknownTypeParameter_ReportsError()
@@ -353,6 +413,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Protocol Implementation
+    /// <summary>
+    /// Tests Analyze_RecordFollowsProtocol_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordFollowsProtocol_NoError()
@@ -378,6 +441,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Integer Literal Type Inference
+    /// <summary>
+    /// Tests Analyze_ReturnIntegerLiteral_InfersFromReturnType.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InfersFromReturnType()
@@ -390,6 +456,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_ReturnIntegerLiteral_InfersU32.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InfersU32()
@@ -402,6 +471,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_ReturnIntegerLiteral_InfersS64.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InfersS64()
@@ -414,6 +486,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_ReturnIntegerLiteral_InMethodWithReturnType.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InMethodWithReturnType()
@@ -430,6 +505,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_VarWithTypeAnnotation_InfersLiteralAsAnnotatedType.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarWithTypeAnnotation_InfersLiteralAsAnnotatedType()
@@ -444,6 +522,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_VarWithTypeAnnotation_InfersUnsignedLiteral.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarWithTypeAnnotation_InfersUnsignedLiteral()
@@ -457,6 +538,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLiteral.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLiteral()
@@ -471,6 +555,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
     }
+    /// <summary>
+    /// Tests Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLargeValue.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLargeValue()
@@ -489,6 +576,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Variant Restrictions
+    /// <summary>
+    /// Tests Analyze_VariantInMemberVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantInMemberVariable_ReportsError()
@@ -505,6 +595,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantAsParameter_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantAsParameter_ReportsError()
@@ -522,6 +615,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantMethodDefinition_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantMethodDefinition_ReportsError()
@@ -539,6 +635,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantReturnType_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantReturnType_NoError()
@@ -557,6 +656,9 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_VariantInMemberVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_VariantInMemberVariable_ReportsError()
@@ -573,6 +675,9 @@ public class TypeResolutionTests
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantOperatorDefinition_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantOperatorDefinition_ReportsError()
@@ -590,6 +695,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantCopy_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantCopy_ReportsError()
@@ -612,6 +720,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantReassignment_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantReassignment_ReportsError()
@@ -634,6 +745,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_VariantBindFromCall_NoCopyError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantBindFromCall_NoCopyError()
@@ -660,6 +774,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Choice Restrictions
+    /// <summary>
+    /// Tests Analyze_ChoiceOperatorDefinition_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceOperatorDefinition_ReportsError()
@@ -677,6 +794,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceRegularMethod_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceRegularMethod_NoError()
@@ -695,6 +815,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceMixedValues_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceMixedValues_ReportsError()
@@ -709,6 +832,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceAllExplicitValues_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceAllExplicitValues_NoError()
@@ -723,6 +849,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceAllImplicitValues_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceAllImplicitValues_NoError()
@@ -741,6 +870,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Error Handling Return Type Restrictions
+    /// <summary>
+    /// Tests Analyze_RoutineReturnsMaybe_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineReturnsMaybe_ReportsError()
@@ -754,6 +886,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Tests Analyze_RoutineReturnsResult_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineReturnsResult_ReportsError()
@@ -766,6 +901,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Tests Analyze_RoutineReturnsLookup_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineReturnsLookup_ReportsError()
@@ -778,6 +916,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Tests Analyze_FailableRoutine_NoErrorHandlingReturnTypeError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableRoutine_NoErrorHandlingReturnTypeError()
@@ -790,6 +931,9 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Tests Analyze_MethodReturnsMaybe_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodReturnsMaybe_ReportsError()
@@ -812,6 +956,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Const Generic Validation
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_IntegerType_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_IntegerType_NoError()
@@ -831,6 +978,9 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_BoolType_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_BoolType_NoError()
@@ -849,6 +999,9 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_ChoiceType_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_ChoiceType_NoError()
@@ -873,6 +1026,9 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_RecordType_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_RecordType_ReportsError()
@@ -894,6 +1050,9 @@ public class TypeResolutionTests
         Assert.Contains(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_TypeMismatch_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_TypeMismatch_ReportsError()
@@ -916,6 +1075,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Generic Method Resolution (S191, S192, S193)
+    /// <summary>
+    /// Tests Analyze_GenericRecord_EqualityOperator_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecord_EqualityOperator_NoError()
@@ -941,6 +1103,9 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
+    /// <summary>
+    /// Tests Analyze_GenericType_VoidMethodCall_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericType_VoidMethodCall_NoError()
@@ -963,6 +1128,9 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
+    /// <summary>
+    /// Tests Analyze_GenericType_MethodCall_ResolvesViaDefinition.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericType_MethodCall_ResolvesViaDefinition()

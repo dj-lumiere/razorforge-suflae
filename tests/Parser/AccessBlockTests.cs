@@ -12,6 +12,9 @@ using static TestHelpers;
 public class AccessBlockTests
 {
     #region Viewing Block Tests (Single-threaded Read)
+    /// <summary>
+    /// Tests Parse_SimpleViewing.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleViewing()
@@ -26,6 +29,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ViewingWithMultipleStatements.
+    /// </summary>
 
     [Fact]
     public void Parse_ViewingWithMultipleStatements()
@@ -42,6 +48,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedViewing.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedViewing()
@@ -58,6 +67,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ViewingWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_ViewingWithMethodCall()
@@ -78,6 +90,9 @@ public class AccessBlockTests
     #endregion
 
     #region Hijacking Block Tests (Single-threaded Exclusive)
+    /// <summary>
+    /// Tests Parse_SimpleHijacking.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleHijacking()
@@ -92,6 +107,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_HijackingWithMultipleMutations.
+    /// </summary>
 
     [Fact]
     public void Parse_HijackingWithMultipleMutations()
@@ -108,6 +126,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_HijackingWithControlFlow.
+    /// </summary>
 
     [Fact]
     public void Parse_HijackingWithControlFlow()
@@ -132,6 +153,9 @@ public class AccessBlockTests
     #endregion
 
     #region Inspecting Block Tests (Multi-threaded Read)
+    /// <summary>
+    /// Tests Parse_SimpleInspecting.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleInspecting()
@@ -146,6 +170,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InspectingMultipleReaders.
+    /// </summary>
 
     [Fact]
     public void Parse_InspectingMultipleReaders()
@@ -165,6 +192,9 @@ public class AccessBlockTests
     #endregion
 
     #region Seizing Block Tests (Multi-threaded Exclusive)
+    /// <summary>
+    /// Tests Parse_SimpleSeizing.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleSeizing()
@@ -179,6 +209,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SeizingWithMultipleMutations.
+    /// </summary>
 
     [Fact]
     public void Parse_SeizingWithMultipleMutations()
@@ -195,6 +228,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SeizingDowngradeToViewing.
+    /// </summary>
 
     [Fact]
     public void Parse_SeizingDowngradeToViewing()
@@ -215,6 +251,9 @@ public class AccessBlockTests
     #endregion
 
     #region Using Block Tests (Resource Management)
+    /// <summary>
+    /// Tests Parse_SimpleUsing.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleUsing()
@@ -229,6 +268,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_UsingMultipleResources.
+    /// </summary>
 
     [Fact]
     public void Parse_UsingMultipleResources()
@@ -243,6 +285,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedUsing.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedUsing()
@@ -257,6 +302,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_UsingWithControlFlow.
+    /// </summary>
 
     [Fact]
     public void Parse_UsingWithControlFlow()
@@ -273,6 +321,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_UsingWithErrorHandling.
+    /// </summary>
 
     [Fact]
     public void Parse_UsingWithErrorHandling()
@@ -293,6 +344,9 @@ public class AccessBlockTests
     #endregion
 
     #region Combined Access Patterns
+    /// <summary>
+    /// Tests Parse_ViewingThenHijacking.
+    /// </summary>
 
     [Fact]
     public void Parse_ViewingThenHijacking()
@@ -310,6 +364,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_UsingWithViewing.
+    /// </summary>
 
     [Fact]
     public void Parse_UsingWithViewing()
@@ -326,6 +383,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ComplexAccessPattern.
+    /// </summary>
 
     [Fact]
     public void Parse_ComplexAccessPattern()
@@ -351,6 +411,9 @@ public class AccessBlockTests
     #endregion
 
     #region Inline Access Tests
+    /// <summary>
+    /// Tests Parse_InlineView.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineView()
@@ -364,6 +427,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InlineHijack.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineHijack()
@@ -377,6 +443,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InlineViewAsArgument.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineViewAsArgument()
@@ -390,6 +459,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InlineMultipleViews.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineMultipleViews()
@@ -407,6 +479,9 @@ public class AccessBlockTests
     #endregion
 
     #region Consume Operation Tests
+    /// <summary>
+    /// Tests Parse_ConsumeTransfer.
+    /// </summary>
 
     [Fact]
     public void Parse_ConsumeTransfer()
@@ -420,6 +495,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ConsumeAsArgument.
+    /// </summary>
 
     [Fact]
     public void Parse_ConsumeAsArgument()
@@ -437,6 +515,9 @@ public class AccessBlockTests
     #endregion
 
     #region Share Operation Tests
+    /// <summary>
+    /// Tests Parse_ShareWithPolicy.
+    /// </summary>
 
     [Fact]
     public void Parse_ShareWithPolicy()
@@ -450,6 +531,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ShareMutex.
+    /// </summary>
 
     [Fact]
     public void Parse_ShareMutex()
@@ -463,6 +547,9 @@ public class AccessBlockTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_TrackShared.
+    /// </summary>
 
     [Fact]
     public void Parse_TrackShared()

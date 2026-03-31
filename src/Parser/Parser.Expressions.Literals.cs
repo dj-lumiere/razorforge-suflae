@@ -3,6 +3,9 @@ namespace Compiler.Parser;
 using Lexer;
 using SyntaxTree;
 
+/// <summary>
+/// Partial class containing literal and inline flow-expression parsing.
+/// </summary>
 public partial class Parser
 {
     private bool TryParseNumericLiteral(SourceLocation location, out Expression? result)
@@ -257,13 +260,4 @@ public partial class Parser
         };
     }
 
-    /// <summary>
-    /// Parses a when expression for use in expression context.
-    /// Syntax: when expression:
-    ///             pattern => expr
-    ///             pattern => expr
-    /// Similar to Rust's match expression or Kotlin's when expression.
-    /// </summary>
-    /// <param name="location">The source location of the when keyword.</param>
-    /// <returns>A <see cref="WhenExpression"/> AST node.</returns>
 }

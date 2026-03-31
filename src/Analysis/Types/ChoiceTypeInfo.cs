@@ -10,6 +10,7 @@ using Enums;
 /// </summary>
 public sealed class ChoiceTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Choice;
 
     /// <summary>The cases (variants) of this choice.</summary>

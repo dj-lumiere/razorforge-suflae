@@ -5,6 +5,9 @@ using SyntaxTree;
 using Diagnostics;
 using SemanticAnalysis.Enums;
 
+/// <summary>
+/// Partial class containing external block and external routine declaration parsing.
+/// </summary>
 public partial class Parser
 {
     private ExternalDeclaration ParseExternalDeclaration(string? callingConvention = null,
@@ -168,11 +171,4 @@ public partial class Parser
         return new ExternalBlockDeclaration(Declarations: declarations, Location: blockLocation);
     }
 
-    /// <summary>
-    /// Parses visibility and storage class modifiers.
-    /// Visibility: posted, secret, external
-    /// Storage: common, global
-    /// These are orthogonal and can be combined: posted common, secret common, etc.
-    /// </summary>
-    /// <returns>A tuple of (visibility, storage) modifiers.</returns>
 }

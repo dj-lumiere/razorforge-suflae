@@ -15,6 +15,9 @@ using static TestHelpers;
 public class DiscardTests
 {
     #region RazorForge - Discard With Call
+    /// <summary>
+    /// Tests Analyze_DiscardCall_NoWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_DiscardCall_NoWarning()
@@ -32,6 +35,9 @@ public class DiscardTests
         Assert.Empty(collection: result.Errors);
         Assert.Empty(collection: result.Warnings);
     }
+    /// <summary>
+    /// Tests Analyze_CallWithoutDiscard_NonBlankReturn_Warning.
+    /// </summary>
 
     [Fact]
     public void Analyze_CallWithoutDiscard_NonBlankReturn_Warning()
@@ -55,6 +61,9 @@ public class DiscardTests
                 w.Message.Contains(value: "discard",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_CallWithoutDiscard_BlankReturn_NoWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_CallWithoutDiscard_BlankReturn_NoWarning()
@@ -73,6 +82,9 @@ public class DiscardTests
         Assert.Empty(collection: result.Errors);
         Assert.Empty(collection: result.Warnings);
     }
+    /// <summary>
+    /// Tests Analyze_AssignedCall_NoWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_AssignedCall_NoWarning()
@@ -93,6 +105,9 @@ public class DiscardTests
             filter: w => w.Message.Contains(value: "unused",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_DiscardMemberCall_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DiscardMemberCall_NoError()
@@ -116,6 +131,9 @@ public class DiscardTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Parse_DiscardMemberCall_Succeeds.
+    /// </summary>
 
     [Fact]
     public void Parse_DiscardMemberCall_Succeeds()
@@ -135,6 +153,9 @@ public class DiscardTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_DiscardFailableMemberCall_Succeeds.
+    /// </summary>
 
     [Fact]
     public void Parse_DiscardFailableMemberCall_Succeeds()
@@ -158,6 +179,9 @@ public class DiscardTests
     #endregion
 
     #region RazorForge - Discard Parser Errors
+    /// <summary>
+    /// Tests Parse_DiscardVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Parse_DiscardVariable_ReportsError()
@@ -172,6 +196,9 @@ public class DiscardTests
         // discard must be followed by a call expression - parser uses error recovery
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_DiscardLiteral_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Parse_DiscardLiteral_ReportsError()
@@ -185,6 +212,9 @@ public class DiscardTests
         // discard must be followed by a call expression
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_DiscardStringLiteral_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Parse_DiscardStringLiteral_ReportsError()
@@ -202,6 +232,9 @@ public class DiscardTests
     #endregion
 
     #region Suflae - Discard With Call
+    /// <summary>
+    /// Tests AnalyzeSuflae_DiscardCall_NoWarning.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_DiscardCall_NoWarning()
@@ -218,6 +251,9 @@ public class DiscardTests
         Assert.Empty(collection: result.Errors);
         Assert.Empty(collection: result.Warnings);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_CallWithoutDiscard_NonBlankReturn_Warning.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_CallWithoutDiscard_NonBlankReturn_Warning()
@@ -240,6 +276,9 @@ public class DiscardTests
                 w.Message.Contains(value: "discard",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_CallWithoutDiscard_BlankReturn_NoWarning.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_CallWithoutDiscard_BlankReturn_NoWarning()
@@ -256,6 +295,9 @@ public class DiscardTests
         Assert.Empty(collection: result.Errors);
         Assert.Empty(collection: result.Warnings);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_AssignedCall_NoWarning.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_AssignedCall_NoWarning()
@@ -279,6 +321,9 @@ public class DiscardTests
     #endregion
 
     #region Suflae - Discard Parser Errors
+    /// <summary>
+    /// Tests ParseSuflae_DiscardVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_DiscardVariable_ReportsError()
@@ -293,6 +338,9 @@ public class DiscardTests
         (_, var parser) = ParseSuflaeWithErrors(source: source);
         Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors");
     }
+    /// <summary>
+    /// Tests ParseSuflae_DiscardLiteral_ReportsError.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_DiscardLiteral_ReportsError()
@@ -306,6 +354,9 @@ public class DiscardTests
         (_, var parser) = ParseSuflaeWithErrors(source: source);
         Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors");
     }
+    /// <summary>
+    /// Tests ParseSuflae_DiscardStringLiteral_ReportsError.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_DiscardStringLiteral_ReportsError()

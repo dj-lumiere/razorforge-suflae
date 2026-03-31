@@ -12,6 +12,9 @@ using static TestHelpers;
 public class TupleTests
 {
     #region Type Inference
+    /// <summary>
+    /// Tests Analyze_InfersTuple.
+    /// </summary>
 
     [Fact]
     public void Analyze_InfersTuple()
@@ -26,6 +29,9 @@ public class TupleTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_ContainsEntity_InfersTuple.
+    /// </summary>
 
     [Fact]
     public void Analyze_ContainsEntity_InfersTuple()
@@ -45,6 +51,9 @@ public class TupleTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_NestedTuples_InfersCorrectly.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedTuples_InfersCorrectly()
@@ -58,6 +67,9 @@ public class TupleTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_SingleElementTuple_WithTrailingComma.
+    /// </summary>
 
     [Fact]
     public void Analyze_SingleElementTuple_WithTrailingComma()
@@ -75,6 +87,9 @@ public class TupleTests
     #endregion
 
     #region Tuple Type Category
+    /// <summary>
+    /// Tests Analyze_TupleType_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleType_NoErrors()
@@ -94,6 +109,9 @@ public class TupleTests
     #endregion
 
     #region Mixed Types
+    /// <summary>
+    /// Tests Analyze_MixedNumericTypes_Works.
+    /// </summary>
 
     [Fact]
     public void Analyze_MixedNumericTypes_Works()
@@ -107,6 +125,9 @@ public class TupleTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_TupleWithEntity_InfersTuple.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleWithEntity_InfersTuple()
@@ -128,6 +149,9 @@ public class TupleTests
     #endregion
 
     #region For-Loop Destructuring
+    /// <summary>
+    /// Tests Analyze_ForLoopDestructuring_NonTuple_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ForLoopDestructuring_NonTuple_ReportsError()
@@ -148,6 +172,9 @@ public class TupleTests
     #endregion
 
     #region Suflae Syntax
+    /// <summary>
+    /// Tests AnalyzeSuflae_TupleLiteral_Works.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_TupleLiteral_Works()
@@ -160,6 +187,9 @@ public class TupleTests
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_NestedTuple_Works.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_NestedTuple_Works()
@@ -176,6 +206,9 @@ public class TupleTests
     #endregion
 
     #region #173: Tuple assignment destructuring
+    /// <summary>
+    /// Tests Analyze_TupleAssignmentDestructuring_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleAssignmentDestructuring_NoError()
@@ -191,6 +224,9 @@ public class TupleTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_TupleAssignmentNonAssignableTarget_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleAssignmentNonAssignableTarget_ReportsError()

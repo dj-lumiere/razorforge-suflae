@@ -36,6 +36,7 @@ public partial class Parser
     /// Consumes an identifier token and returns its text.
     /// </summary>
     /// <param name="errorMessage">Error message to show if token is not an identifier.</param>
+    /// <param name="allowKeywords">Whether contextual keywords may be consumed as identifiers.</param>
     /// <returns>The identifier text.</returns>
     /// <exception cref="GrammarException">Thrown if current token is not a valid identifier.</exception>
     private string ConsumeIdentifier(string errorMessage, bool allowKeywords = false)

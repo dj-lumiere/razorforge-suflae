@@ -10,6 +10,7 @@ using Symbols;
 /// </summary>
 public sealed class RecordTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Record;
 
     /// <summary>MemberVariables declared in this record.</summary>

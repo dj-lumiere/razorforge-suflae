@@ -858,6 +858,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
     UnresolvedRoutineBody = 951
 }
+/// <summary>
+/// Provides formatting helpers for <see cref="SemanticDiagnosticCode"/>.
+/// </summary>
 
 public static class SemanticDiagnosticCodeExtensions
 {

@@ -14,6 +14,9 @@ using static TestHelpers;
 public class EmptyBodyValidationTests
 {
     #region Statement Blocks
+    /// <summary>
+    /// Tests Analyze_RoutineBodyWithPass_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineBodyWithPass_NoError()
@@ -32,6 +35,9 @@ public class EmptyBodyValidationTests
     #endregion
 
     #region Type Bodies
+    /// <summary>
+    /// Tests Analyze_EmptyRecordBody_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyRecordBody_ReportsError()
@@ -43,6 +49,9 @@ public class EmptyBodyValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
+    /// <summary>
+    /// Tests Analyze_RecordWithPass_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithPass_NoError()
@@ -56,6 +65,9 @@ public class EmptyBodyValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
+    /// <summary>
+    /// Tests Analyze_EmptyEntityBody_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyEntityBody_ReportsError()
@@ -67,6 +79,9 @@ public class EmptyBodyValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
+    /// <summary>
+    /// Tests Analyze_EntityWithPass_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityWithPass_NoError()
@@ -84,6 +99,9 @@ public class EmptyBodyValidationTests
     #endregion
 
     #region Enumerations (always error when empty)
+    /// <summary>
+    /// Tests Analyze_EmptyChoice_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyChoice_ReportsError()
@@ -95,6 +113,9 @@ public class EmptyBodyValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
+    /// <summary>
+    /// Tests Analyze_EmptyVariant_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyVariant_ReportsError()
@@ -106,6 +127,9 @@ public class EmptyBodyValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
+    /// <summary>
+    /// Tests Analyze_EmptyFlags_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyFlags_ReportsError()

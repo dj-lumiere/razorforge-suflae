@@ -11,6 +11,9 @@ using static TestHelpers;
 public class ErrorHandlingTests
 {
     #region Failable Routine Declaration
+    /// <summary>
+    /// Tests Parse_FailableRoutine_WithBang.
+    /// </summary>
 
     [Fact]
     public void Parse_FailableRoutine_WithBang()
@@ -26,6 +29,9 @@ public class ErrorHandlingTests
         Assert.Equal(expected: "get_value", actual: routine.Name);
         Assert.True(condition: routine.IsFailable);
     }
+    /// <summary>
+    /// Tests Parse_FailableRoutine_WithParameter.
+    /// </summary>
 
     [Fact]
     public void Parse_FailableRoutine_WithParameter()
@@ -41,6 +47,9 @@ public class ErrorHandlingTests
         Assert.True(condition: routine.IsFailable);
         Assert.Single(collection: routine.Parameters);
     }
+    /// <summary>
+    /// Tests Parse_FailableMethod_WithBang.
+    /// </summary>
 
     [Fact]
     public void Parse_FailableMethod_WithBang()
@@ -56,6 +65,9 @@ public class ErrorHandlingTests
         Assert.Equal(expected: "User.validate", actual: routine.Name);
         Assert.True(condition: routine.IsFailable);
     }
+    /// <summary>
+    /// Tests Parse_NonFailableRoutine.
+    /// </summary>
 
     [Fact]
     public void Parse_NonFailableRoutine()
@@ -74,6 +86,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region Throw Statement
+    /// <summary>
+    /// Tests Parse_ThrowStatement_Simple.
+    /// </summary>
 
     [Fact]
     public void Parse_ThrowStatement_Simple()
@@ -101,6 +116,9 @@ public class ErrorHandlingTests
                                              .FirstOrDefault();
         Assert.NotNull(@object: throwStmt);
     }
+    /// <summary>
+    /// Tests Parse_ThrowStatement_WithExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_ThrowStatement_WithExpression()
@@ -125,6 +143,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region Absent Statement
+    /// <summary>
+    /// Tests Parse_AbsentStatement.
+    /// </summary>
 
     [Fact]
     public void Parse_AbsentStatement()
@@ -151,6 +172,9 @@ public class ErrorHandlingTests
                                                .FirstOrDefault();
         Assert.NotNull(@object: absentStmt);
     }
+    /// <summary>
+    /// Tests Parse_AbsentStatement_InUnless.
+    /// </summary>
 
     [Fact]
     public void Parse_AbsentStatement_InUnless()
@@ -183,6 +207,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region Combined Throw and Absent
+    /// <summary>
+    /// Tests Parse_RoutineWithBothThrowAndAbsent.
+    /// </summary>
 
     [Fact]
     public void Parse_RoutineWithBothThrowAndAbsent()
@@ -223,6 +250,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region Maybe Type (?)
+    /// <summary>
+    /// Tests Parse_MaybeReturnType.
+    /// </summary>
 
     [Fact]
     public void Parse_MaybeReturnType()
@@ -240,6 +270,9 @@ public class ErrorHandlingTests
         // Return type should be Maybe[User] or User?
         Assert.NotNull(@object: routine.ReturnType);
     }
+    /// <summary>
+    /// Tests Parse_MaybeParameter.
+    /// </summary>
 
     [Fact]
     public void Parse_MaybeParameter()
@@ -255,6 +288,9 @@ public class ErrorHandlingTests
 
         Assert.Single(collection: routine.Parameters);
     }
+    /// <summary>
+    /// Tests Parse_MaybeVariable.
+    /// </summary>
 
     [Fact]
     public void Parse_MaybeVariable()
@@ -271,6 +307,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region None Coalescing (??)
+    /// <summary>
+    /// Tests Parse_NoneCoalescingOperator.
+    /// </summary>
 
     [Fact]
     public void Parse_NoneCoalescingOperator()
@@ -283,6 +322,9 @@ public class ErrorHandlingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedNoneCoalescing.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedNoneCoalescing()
@@ -301,6 +343,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region Pattern Matching with Error Types
+    /// <summary>
+    /// Tests Parse_WhenExpression_WithMaybe.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenExpression_WithMaybe()
@@ -330,6 +375,9 @@ public class ErrorHandlingTests
     #endregion
 
     #region Error Cases
+    /// <summary>
+    /// Tests Parse_ThrowInNonFailableRoutine_ShouldParse.
+    /// </summary>
 
     [Fact]
     public void Parse_ThrowInNonFailableRoutine_ShouldParse()
@@ -345,6 +393,9 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: program);
         // Semantic analysis will catch this error
     }
+    /// <summary>
+    /// Tests Parse_AbsentInNonFailableRoutine_ShouldParse.
+    /// </summary>
 
     [Fact]
     public void Parse_AbsentInNonFailableRoutine_ShouldParse()
@@ -359,6 +410,9 @@ public class ErrorHandlingTests
         Program program = Parse(source: source);
         Assert.NotNull(@object: program);
     }
+    /// <summary>
+    /// Tests Parse_ThrowWithoutExpression_Throws.
+    /// </summary>
 
     [Fact]
     public void Parse_ThrowWithoutExpression_Throws()

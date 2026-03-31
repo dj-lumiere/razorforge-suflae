@@ -8,6 +8,7 @@ using Enums;
 /// </summary>
 public sealed class ProtocolTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Protocol;
 
     /// <summary>Method signatures defined by this protocol.</summary>

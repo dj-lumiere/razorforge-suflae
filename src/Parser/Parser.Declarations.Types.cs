@@ -4,6 +4,9 @@ using Lexer;
 using SyntaxTree;
 using Diagnostics;
 
+/// <summary>
+/// Partial class containing type, entity, and routine declaration parsing.
+/// </summary>
 public partial class Parser
 {
     private EntityDeclaration ParseEntityDeclaration(
@@ -128,6 +131,7 @@ public partial class Parser
     /// Records are stack-allocated value types.
     /// </summary>
     /// <param name="visibility">Access modifier for the record.</param>
+    /// <param name="annotations">Optional annotations attached to the record declaration.</param>
     /// <returns>A <see cref="RecordDeclaration"/> AST node.</returns>
     private RecordDeclaration ParseRecordDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open, List<string>? annotations = null)
@@ -812,13 +816,4 @@ public partial class Parser
             Location: location);
     }
 
-    /// <summary>
-    /// Parses an external (FFI) function declaration.
-    /// RF-only construct. Syntax: <c>external("C") routine name(param: Type, ...) -&gt; ReturnType</c>
-    /// Supports variadic functions and calling convention specification.
-    /// </summary>
-    /// <param name="callingConvention">The calling convention (e.g., "C"). Defaults to "C" if null.</param>
-    /// <param name="annotations">Optional annotations applied to the external declaration.</param>
-    /// <param name="isDangerous">Whether the external routine is marked as dangerous.</param>
-    /// <returns>An <see cref="ExternalDeclaration"/> AST node.</returns>
 }

@@ -13,6 +13,9 @@ using static TestHelpers;
 public class VariantValidationTests
 {
     #region #59: Variant member containment
+    /// <summary>
+    /// Tests Analyze_VariantWithRecordMember_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantWithRecordMember_NoError()
@@ -30,6 +33,9 @@ public class VariantValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
+    /// <summary>
+    /// Tests Analyze_VariantWithNestedVariant_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantWithNestedVariant_ReportsError()
@@ -48,6 +54,9 @@ public class VariantValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType
                          && e.Message.Contains("nested variant"));
     }
+    /// <summary>
+    /// Tests Analyze_VariantWithPrimitiveMember_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantWithPrimitiveMember_NoError()
@@ -67,6 +76,9 @@ public class VariantValidationTests
     #endregion
 
     #region #58: Variant must dismantle immediately
+    /// <summary>
+    /// Tests Analyze_VariantDismantledImmediately_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantDismantledImmediately_NoError()
@@ -91,6 +103,9 @@ public class VariantValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }
+    /// <summary>
+    /// Tests Analyze_VariantNotDismantled_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantNotDismantled_ReportsError()
@@ -119,6 +134,9 @@ public class VariantValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }
+    /// <summary>
+    /// Tests Analyze_VariantNeverDismantled_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantNeverDismantled_ReportsError()

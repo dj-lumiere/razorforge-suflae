@@ -13,6 +13,9 @@ using static TestHelpers;
 public class ProtocolImplementationTests
 {
     #region Basic Protocol Implementation
+    /// <summary>
+    /// Tests Analyze_ImplementsAllMethods_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ImplementsAllMethods_NoError()
@@ -34,6 +37,9 @@ public class ProtocolImplementationTests
         Analyze(source: source);
         // Should validate protocol implementation
     }
+    /// <summary>
+    /// Tests Analyze_MissingProtocolMethod_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MissingProtocolMethod_ReportsError()
@@ -51,6 +57,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_WrongMethodSignature_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WrongMethodSignature_ReportsError()
@@ -76,6 +85,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Protocol Method Annotations
+    /// <summary>
+    /// Tests Analyze_MethodMissingReadonly_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodMissingReadonly_ReportsError()
@@ -96,6 +108,9 @@ public class ProtocolImplementationTests
         Analyze(source: source);
         // Should warn about missing @readonly annotation
     }
+    /// <summary>
+    /// Tests Analyze_MethodWithWritableWhenProtocolReadonly_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodWithWritableWhenProtocolReadonly_ReportsError()
@@ -121,6 +136,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Multiple Protocols
+    /// <summary>
+    /// Tests Analyze_MultipleProtocols_AllImplemented_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleProtocols_AllImplemented_NoError()
@@ -148,6 +166,9 @@ public class ProtocolImplementationTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_MultipleProtocols_OneMissing_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleProtocols_OneMissing_ReportsError()
@@ -176,6 +197,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Generic Protocol Implementation
+    /// <summary>
+    /// Tests Analyze_GenericProtocol_Implementation_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericProtocol_Implementation_NoError()
@@ -199,6 +223,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Protocol Method Parameters
+    /// <summary>
+    /// Tests Analyze_ProtocolMethodWithParameters_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolMethodWithParameters_NoError()
@@ -219,6 +246,9 @@ public class ProtocolImplementationTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_ProtocolMethodWrongParameterType_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolMethodWrongParameterType_ReportsError()
@@ -244,6 +274,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Entity Protocol Implementation
+    /// <summary>
+    /// Tests Analyze_EntityImplementsProtocol_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityImplementsProtocol_NoError()
@@ -267,6 +300,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Suflae Protocol Tests
+    /// <summary>
+    /// Tests AnalyzeSuflae_ImplementsProtocol_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_ImplementsProtocol_NoError()
@@ -288,6 +324,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_MissingProtocolMethod_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_MissingProtocolMethod_ReportsError()
@@ -310,6 +349,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Protocol Inheritance
+    /// <summary>
+    /// Tests Analyze_ProtocolExtends_Implementation_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolExtends_Implementation_NoError()
@@ -338,6 +380,9 @@ public class ProtocolImplementationTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_ProtocolExtends_MissingParentMethod_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolExtends_MissingParentMethod_ReportsError()
@@ -367,6 +412,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Annotation Placement Validation (#177)
+    /// <summary>
+    /// Tests Analyze_GeneratedOnNonProtocolRoutine_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GeneratedOnNonProtocolRoutine_ReportsError()
@@ -385,6 +433,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
+    /// <summary>
+    /// Tests Analyze_InnateOnNonProtocolRoutine_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_InnateOnNonProtocolRoutine_ReportsError()
@@ -403,6 +454,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
+    /// <summary>
+    /// Tests Analyze_GeneratedOnProtocolRoutine_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GeneratedOnProtocolRoutine_NoError()
@@ -428,6 +482,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
+    /// <summary>
+    /// Tests Analyze_InnateOnProtocolRoutine_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_InnateOnProtocolRoutine_NoError()
@@ -449,6 +506,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Innate Override Prohibition (#178)
+    /// <summary>
+    /// Tests Analyze_OverrideInnateRoutine_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_OverrideInnateRoutine_ReportsError()
@@ -470,6 +530,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
     }
+    /// <summary>
+    /// Tests Analyze_InnateRoutineNotOverridden_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_InnateRoutineNotOverridden_NoError()
@@ -491,6 +554,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Generated Override Prioritization (#179)
+    /// <summary>
+    /// Tests Analyze_OverrideGeneratedNe_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_OverrideGeneratedNe_NoError()
@@ -520,6 +586,9 @@ public class ProtocolImplementationTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.GeneratedOperatorOverride);
     }
+    /// <summary>
+    /// Tests Analyze_GeneratedNeNotOverridden_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GeneratedNeNotOverridden_NoError()
@@ -549,6 +618,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Protocol with Default Values
+    /// <summary>
+    /// Tests Analyze_ProtocolMethodWithDefaultParameter_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolMethodWithDefaultParameter_NoError()
@@ -573,6 +645,9 @@ public class ProtocolImplementationTests
     #endregion
 
     #region Multiple Protocol Generic Constraints (#62)
+    /// <summary>
+    /// Tests Parse_InlineMultipleObeys_Parses.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineMultipleObeys_Parses()
@@ -593,6 +668,9 @@ public class ProtocolImplementationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NeedsMultipleObeys_Parses.
+    /// </summary>
 
     [Fact]
     public void Parse_NeedsMultipleObeys_Parses()

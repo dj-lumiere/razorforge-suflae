@@ -14,6 +14,9 @@ using static TestHelpers;
 public class ImportValidationTests
 {
     #region #106: Import position enforcement
+    /// <summary>
+    /// Tests Analyze_ImportAfterDeclaration_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ImportAfterDeclaration_ReportsError()
@@ -29,6 +32,9 @@ public class ImportValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
+    /// <summary>
+    /// Tests Analyze_ImportBeforeDeclaration_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ImportBeforeDeclaration_NoError()
@@ -44,6 +50,9 @@ public class ImportValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
+    /// <summary>
+    /// Tests Analyze_MultipleImportsBeforeDeclarations_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleImportsBeforeDeclarations_NoError()
@@ -65,6 +74,9 @@ public class ImportValidationTests
     #endregion
 
     #region #105: Import name collision
+    /// <summary>
+    /// Tests Analyze_DuplicateImportedSymbol_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateImportedSymbol_ReportsError()
@@ -80,6 +92,9 @@ public class ImportValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportNameCollision);
     }
+    /// <summary>
+    /// Tests Analyze_DisjointSpecificImports_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DisjointSpecificImports_NoError()

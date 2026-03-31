@@ -582,6 +582,9 @@ public sealed partial class TypeRegistry
 
         _types[key: choiceName] = updatedChoice;
     }
+    /// <summary>
+    /// Updates the declared member set for an already-registered flags type.
+    /// </summary>
 
     public void UpdateFlagsMembers(string flagsName, IReadOnlyList<FlagsMemberInfo> members)
     {

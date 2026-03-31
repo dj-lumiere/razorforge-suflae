@@ -13,6 +13,9 @@ using static TestHelpers;
 public class SuflaeAttributeTests
 {
     #region Simple Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_ReadonlyAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ReadonlyAttribute()
@@ -28,6 +31,9 @@ public class SuflaeAttributeTests
         Assert.NotNull(@object: routine.Annotations);
         Assert.Contains(expected: "readonly", collection: routine.Annotations);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WritableAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WritableAttribute()
@@ -40,6 +46,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_CrashOnlyAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_CrashOnlyAttribute()
@@ -54,6 +63,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_PreludeAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_PreludeAttribute()
@@ -66,6 +78,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_StaticAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_StaticAttribute()
@@ -78,6 +93,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_InlineAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_InlineAttribute()
@@ -94,6 +112,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Parameterized Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_ConfigAttributeTargetOs.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ConfigAttributeTargetOs()
@@ -106,6 +127,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ConfigAttributeFeature.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ConfigAttributeFeature()
@@ -118,6 +142,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_DeprecatedAttributeWithMessage.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_DeprecatedAttributeWithMessage()
@@ -134,6 +161,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Compound Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_CompoundAttributes.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_CompoundAttributes()
@@ -148,6 +178,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_CompoundAttributesMultiple.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_CompoundAttributesMultiple()
@@ -160,6 +193,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_CompoundProtocolAnnotations.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_CompoundProtocolAnnotations()
@@ -179,6 +215,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Type Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_AttributeOnRecord.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AttributeOnRecord()
@@ -192,6 +231,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_AttributeOnEntity.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AttributeOnEntity()
@@ -205,6 +247,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_AttributeOnProtocol.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AttributeOnProtocol()
@@ -222,6 +267,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Field Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_AttributeOnField.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AttributeOnField()
@@ -237,6 +285,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_AttributeOnEntityMemberVariable.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AttributeOnEntityMemberVariable()
@@ -256,6 +307,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Multiple Annotation Lines Tests
+    /// <summary>
+    /// Tests ParseSuflae_MultipleAttributeLines.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MultipleAttributeLines()
@@ -270,6 +324,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_AttributesOnTypeAndMethods.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AttributesOnTypeAndMethods()
@@ -294,6 +351,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Visibility with Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_VisibilityAndAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VisibilityAndAttribute()
@@ -307,6 +367,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_PrivateWithAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_PrivateWithAttribute()
@@ -319,6 +382,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_InternalWithAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_InternalWithAttribute()
@@ -335,6 +401,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Protocol Method Annotations
+    /// <summary>
+    /// Tests ParseSuflae_ProtocolMethodAttributes.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ProtocolMethodAttributes()
@@ -357,6 +426,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Async Annotations
+    /// <summary>
+    /// Tests ParseSuflae_SuspendedWithAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SuspendedWithAttribute()
@@ -374,6 +446,9 @@ public class SuflaeAttributeTests
     #endregion
 
     #region Test Annotation Tests
+    /// <summary>
+    /// Tests ParseSuflae_TestAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_TestAttribute()
@@ -386,6 +461,9 @@ public class SuflaeAttributeTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BenchAttribute.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BenchAttribute()

@@ -14,6 +14,9 @@ using static TestHelpers;
 public class PatternOrderTests
 {
     #region #88: Pattern order enforcement
+    /// <summary>
+    /// Tests Analyze_WhenElseBeforeOtherPatterns_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenElseBeforeOtherPatterns_ReportsError()
@@ -33,6 +36,9 @@ public class PatternOrderTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
     }
+    /// <summary>
+    /// Tests Analyze_WhenElseLast_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenElseLast_NoError()
@@ -57,6 +63,9 @@ public class PatternOrderTests
     #endregion
 
     #region #130/#148: Duplicate pattern detection
+    /// <summary>
+    /// Tests Analyze_DuplicateLiteralPattern_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateLiteralPattern_ReportsError()
@@ -73,6 +82,9 @@ public class PatternOrderTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }
+    /// <summary>
+    /// Tests Analyze_DuplicateChoiceCasePattern_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateChoiceCasePattern_ReportsError()
@@ -93,6 +105,9 @@ public class PatternOrderTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }
+    /// <summary>
+    /// Tests Analyze_DistinctPatterns_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DistinctPatterns_NoError()

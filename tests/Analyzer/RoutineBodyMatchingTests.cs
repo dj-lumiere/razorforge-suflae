@@ -14,6 +14,9 @@ using static TestHelpers;
 public class RoutineBodyMatchingTests
 {
     #region Overloaded $create Routines
+    /// <summary>
+    /// Tests Analyze_OverloadedCreate_BothBodiesMatch.
+    /// </summary>
 
     [Fact]
     public void Analyze_OverloadedCreate_BothBodiesMatch()
@@ -44,6 +47,9 @@ public class RoutineBodyMatchingTests
     #endregion
 
     #region Generic Member Routines (External Syntax)
+    /// <summary>
+    /// Tests Analyze_GenericOwnerExternalRoutine_BodyMatches.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericOwnerExternalRoutine_BodyMatches()
@@ -67,6 +73,9 @@ public class RoutineBodyMatchingTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
+    /// <summary>
+    /// Tests Analyze_GenericMethodLevelParam_BodyMatches.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericMethodLevelParam_BodyMatches()
@@ -93,6 +102,9 @@ public class RoutineBodyMatchingTests
     #endregion
 
     #region Module-Qualified Routines
+    /// <summary>
+    /// Tests Analyze_ModuleQualifiedRoutine_BodyMatches.
+    /// </summary>
 
     [Fact]
     public void Analyze_ModuleQualifiedRoutine_BodyMatches()

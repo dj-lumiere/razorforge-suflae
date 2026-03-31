@@ -14,6 +14,9 @@ using static TestHelpers;
 public class RecordContainmentTests
 {
     #region Valid Record MemberVariables (no errors expected)
+    /// <summary>
+    /// Tests Analyze_RecordWithPrimitiveMemberVariables_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithPrimitiveMemberVariables_NoErrors()
@@ -28,6 +31,9 @@ public class RecordContainmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Tests Analyze_RecordWithRecordMemberVariable_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithRecordMemberVariable_NoErrors()
@@ -43,6 +49,9 @@ public class RecordContainmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Tests Analyze_RecordWithChoiceMemberVariable_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithChoiceMemberVariable_NoErrors()
@@ -62,6 +71,9 @@ public class RecordContainmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Tests Analyze_GenericRecordWithTypeParameter_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecordWithTypeParameter_NoErrors()
@@ -76,6 +88,9 @@ public class RecordContainmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Tests Analyze_GenericRecordMultipleTypeParams_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecordMultipleTypeParams_NoErrors()
@@ -94,6 +109,9 @@ public class RecordContainmentTests
     #endregion
 
     #region Invalid Record MemberVariables (errors expected)
+    /// <summary>
+    /// Tests Analyze_RecordWithEntityMemberVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithEntityMemberVariable_ReportsError()
@@ -110,6 +128,9 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
                          && e.Message.Contains("user"));
     }
+    /// <summary>
+    /// Tests Analyze_RecordWithEntityMemberVariable_MessageMentionsValueTypes.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithEntityMemberVariable_MessageMentionsValueTypes()
@@ -130,6 +151,9 @@ public class RecordContainmentTests
     #endregion
 
     #region With Expression on Non-Records
+    /// <summary>
+    /// Tests Analyze_WithOnEntity_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOnEntity_ReportsError()
@@ -146,6 +170,9 @@ public class RecordContainmentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
+    /// <summary>
+    /// Tests Analyze_WithOnRecord_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOnRecord_NoError()
@@ -163,6 +190,9 @@ public class RecordContainmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
+    /// <summary>
+    /// Tests Analyze_WithOnRecordMultiMemberVariable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOnRecordMultiMemberVariable_NoError()

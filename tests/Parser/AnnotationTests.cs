@@ -12,6 +12,9 @@ using static TestHelpers;
 public class AttributeTests
 {
     #region Simple Annotation Tests
+    /// <summary>
+    /// Tests Parse_ReadonlyAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_ReadonlyAttribute()
@@ -27,6 +30,9 @@ public class AttributeTests
         Assert.NotNull(@object: routine.Annotations);
         Assert.Contains(expected: "readonly", collection: routine.Annotations);
     }
+    /// <summary>
+    /// Tests Parse_WritableAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_WritableAttribute()
@@ -43,6 +49,9 @@ public class AttributeTests
         Assert.NotNull(@object: routine.Annotations);
         Assert.Contains(expected: "writable", collection: routine.Annotations);
     }
+    /// <summary>
+    /// Tests Parse_CrashOnlyAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_CrashOnlyAttribute()
@@ -60,6 +69,9 @@ public class AttributeTests
         Assert.NotNull(@object: routine.Annotations);
         Assert.Contains(expected: "crash_only", collection: routine.Annotations);
     }
+    /// <summary>
+    /// Tests Parse_PreludeAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_PreludeAttribute()
@@ -76,6 +88,9 @@ public class AttributeTests
         Assert.NotNull(@object: routine.Annotations);
         Assert.Contains(expected: "prelude", collection: routine.Annotations);
     }
+    /// <summary>
+    /// Tests Parse_StaticAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_StaticAttribute()
@@ -88,6 +103,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InlineAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineAttribute()
@@ -104,6 +122,9 @@ public class AttributeTests
     #endregion
 
     #region Parameterized Annotation Tests
+    /// <summary>
+    /// Tests Parse_ConfigAttributeTargetOs.
+    /// </summary>
 
     [Fact]
     public void Parse_ConfigAttributeTargetOs()
@@ -118,6 +139,9 @@ public class AttributeTests
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         Assert.NotNull(@object: routine.Annotations);
     }
+    /// <summary>
+    /// Tests Parse_ConfigAttributeFeature.
+    /// </summary>
 
     [Fact]
     public void Parse_ConfigAttributeFeature()
@@ -131,6 +155,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ConfigAttributeArchitecture.
+    /// </summary>
 
     [Fact]
     public void Parse_ConfigAttributeArchitecture()
@@ -144,6 +171,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_DeprecatedAttributeWithMessage.
+    /// </summary>
 
     [Fact]
     public void Parse_DeprecatedAttributeWithMessage()
@@ -161,6 +191,9 @@ public class AttributeTests
     #endregion
 
     #region Compound Annotation Tests
+    /// <summary>
+    /// Tests Parse_CompoundAttributes.
+    /// </summary>
 
     [Fact]
     public void Parse_CompoundAttributes()
@@ -175,6 +208,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_CompoundAttributesMultiple.
+    /// </summary>
 
     [Fact]
     public void Parse_CompoundAttributesMultiple()
@@ -187,6 +223,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_CompoundProtocolAnnotations.
+    /// </summary>
 
     [Fact]
     public void Parse_CompoundProtocolAnnotations()
@@ -206,6 +245,9 @@ public class AttributeTests
     #endregion
 
     #region Type Annotation Tests
+    /// <summary>
+    /// Tests Parse_AttributeOnProtocol.
+    /// </summary>
 
     [Fact]
     public void Parse_AttributeOnProtocol()
@@ -224,6 +266,9 @@ public class AttributeTests
     #endregion
 
     #region Member Variable Annotation Tests
+    /// <summary>
+    /// Tests Parse_AttributeOnField.
+    /// </summary>
 
     [Fact]
     public void Parse_AttributeOnField()
@@ -239,6 +284,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_AttributeOnEntityMemberVariable.
+    /// </summary>
 
     [Fact]
     public void Parse_AttributeOnEntityMemberVariable()
@@ -258,6 +306,9 @@ public class AttributeTests
     #endregion
 
     #region Multiple Annotation Lines Tests
+    /// <summary>
+    /// Tests Parse_MultipleAttributeLines.
+    /// </summary>
 
     [Fact]
     public void Parse_MultipleAttributeLines()
@@ -272,6 +323,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_AttributesOnTypeAndMethods.
+    /// </summary>
 
     [Fact]
     public void Parse_AttributesOnTypeAndMethods()
@@ -297,6 +351,9 @@ public class AttributeTests
     #endregion
 
     #region Visibility with Annotation Tests
+    /// <summary>
+    /// Tests Parse_VisibilityAndAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_VisibilityAndAttribute()
@@ -310,6 +367,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_PrivateWithAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_PrivateWithAttribute()
@@ -322,6 +382,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InternalWithAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_InternalWithAttribute()
@@ -338,6 +401,9 @@ public class AttributeTests
     #endregion
 
     #region Protocol Member Routine Annotations
+    /// <summary>
+    /// Tests Parse_ProtocolMethodAttributes.
+    /// </summary>
 
     [Fact]
     public void Parse_ProtocolMethodAttributes()
@@ -360,6 +426,9 @@ public class AttributeTests
     #endregion
 
     #region Test Annotation Tests
+    /// <summary>
+    /// Tests Parse_TestAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_TestAttribute()
@@ -373,6 +442,9 @@ public class AttributeTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BenchAttribute.
+    /// </summary>
 
     [Fact]
     public void Parse_BenchAttribute()

@@ -13,6 +13,9 @@ using static TestHelpers;
 public class RoutineDeclarationTests
 {
     #region Duplicate Routine Definition
+    /// <summary>
+    /// Tests Analyze_DuplicateRoutine_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateRoutine_ReportsError()
@@ -28,6 +31,9 @@ public class RoutineDeclarationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicateRoutineDefinition);
     }
+    /// <summary>
+    /// Tests Analyze_UniqueRoutines_NoDuplicateError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UniqueRoutines_NoDuplicateError()

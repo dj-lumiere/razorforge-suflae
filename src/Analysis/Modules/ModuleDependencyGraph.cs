@@ -142,10 +142,8 @@ public sealed class ModuleDependencyGraph
         var visited = new HashSet<string>();
         var path = new List<string>();
 
-        /// <summary>
-        /// Recursively searches for a path from <paramref name="current"/> to <paramref name="targetModule"/>
-        /// using depth-first search. Appends visited nodes to <c>path</c> and returns true if the target is reachable.
-        /// </summary>
+        // Depth-first search from current to targetModule. Appends visited nodes to path
+        // and returns true once the target becomes reachable.
         bool DFS(string current)
         {
             if (current == targetModule)
@@ -196,11 +194,8 @@ public sealed class ModuleDependencyGraph
         var visited = new HashSet<string>();
         var visiting = new HashSet<string>(); // For cycle detection
 
-        /// <summary>
-        /// Recursively visits a module and all its dependencies using depth-first post-order traversal,
-        /// adding each module to <c>result</c> after all dependencies have been visited.
-        /// Throws <see cref="InvalidOperationException"/> if an unexpected cycle is encountered.
-        /// </summary>
+        // Depth-first post-order traversal that emits each module after all dependencies.
+        // Throws if an unexpected cycle slips past AddDependency validation.
         void Visit(string module)
         {
             if (visited.Contains(item: module))

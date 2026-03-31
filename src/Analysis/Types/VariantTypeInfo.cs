@@ -9,6 +9,7 @@ using Enums;
 /// </summary>
 public sealed class VariantTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Variant;
 
     /// <summary>The member types of this variant.</summary>

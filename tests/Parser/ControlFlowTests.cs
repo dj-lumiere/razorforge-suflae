@@ -12,6 +12,9 @@ using static TestHelpers;
 public class ControlFlowTests
 {
     #region If Statement Tests
+    /// <summary>
+    /// Tests Parse_SimpleIf.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleIf()
@@ -33,6 +36,9 @@ public class ControlFlowTests
         Assert.NotNull(@object: ifStmt);
         Assert.Null(@object: ifStmt.ElseStatement);
     }
+    /// <summary>
+    /// Tests Parse_IfElse.
+    /// </summary>
 
     [Fact]
     public void Parse_IfElse()
@@ -56,6 +62,9 @@ public class ControlFlowTests
         Assert.NotNull(@object: ifStmt);
         Assert.NotNull(@object: ifStmt.ElseStatement);
     }
+    /// <summary>
+    /// Tests Parse_IfElseIfElse.
+    /// </summary>
 
     [Fact]
     public void Parse_IfElseIfElse()
@@ -82,6 +91,9 @@ public class ControlFlowTests
         // elseif is parsed as nested if in else
         Assert.NotNull(@object: ifStmt.ElseStatement);
     }
+    /// <summary>
+    /// Tests Parse_MultipleElseIf.
+    /// </summary>
 
     [Fact]
     public void Parse_MultipleElseIf()
@@ -100,6 +112,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedIf.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedIf()
@@ -118,6 +133,9 @@ public class ControlFlowTests
     #endregion
 
     #region Unless Statement Tests
+    /// <summary>
+    /// Tests Parse_SimpleUnless.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleUnless()
@@ -138,6 +156,9 @@ public class ControlFlowTests
                                  .First();
         Assert.NotNull(@object: ifStmt);
     }
+    /// <summary>
+    /// Tests Parse_UnlessWithElse.
+    /// </summary>
 
     [Fact]
     public void Parse_UnlessWithElse()
@@ -153,6 +174,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_UnlessGuardClause.
+    /// </summary>
 
     [Fact]
     public void Parse_UnlessGuardClause()
@@ -171,6 +195,9 @@ public class ControlFlowTests
     #endregion
 
     #region Inline If-Then-Else Tests
+    /// <summary>
+    /// Tests Parse_InlineIfThenElse.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineIfThenElse()
@@ -184,6 +211,9 @@ public class ControlFlowTests
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         Assert.NotNull(@object: routine.ReturnType);
     }
+    /// <summary>
+    /// Tests Parse_InlineIfThenElse_InAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineIfThenElse_InAssignment()
@@ -203,6 +233,9 @@ public class ControlFlowTests
     #endregion
 
     #region Loop Statement Tests
+    /// <summary>
+    /// Tests Parse_InfiniteLoop.
+    /// </summary>
 
     [Fact]
     public void Parse_InfiniteLoop()
@@ -226,6 +259,9 @@ public class ControlFlowTests
                                        .FirstOrDefault();
         Assert.NotNull(@object: loopStmt);
     }
+    /// <summary>
+    /// Tests Parse_LoopWithBreak.
+    /// </summary>
 
     [Fact]
     public void Parse_LoopWithBreak()
@@ -239,6 +275,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LoopWithContinue.
+    /// </summary>
 
     [Fact]
     public void Parse_LoopWithContinue()
@@ -258,6 +297,9 @@ public class ControlFlowTests
     #endregion
 
     #region While Loop Tests
+    /// <summary>
+    /// Tests Parse_SimpleWhile.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleWhile()
@@ -278,6 +320,9 @@ public class ControlFlowTests
                                         .FirstOrDefault();
         Assert.NotNull(@object: whileStmt);
     }
+    /// <summary>
+    /// Tests Parse_WhileWithCounter.
+    /// </summary>
 
     [Fact]
     public void Parse_WhileWithCounter()
@@ -293,6 +338,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhileWithBreak.
+    /// </summary>
 
     [Fact]
     public void Parse_WhileWithBreak()
@@ -308,6 +356,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhileWithContinue.
+    /// </summary>
 
     [Fact]
     public void Parse_WhileWithContinue()
@@ -328,6 +379,9 @@ public class ControlFlowTests
     #endregion
 
     #region For Loop Tests
+    /// <summary>
+    /// Tests Parse_ForRangeInclusive.
+    /// </summary>
 
     [Fact]
     public void Parse_ForRangeInclusive()
@@ -348,6 +402,9 @@ public class ControlFlowTests
                                     .FirstOrDefault();
         Assert.NotNull(@object: forStmt);
     }
+    /// <summary>
+    /// Tests Parse_ForRangeWithStep.
+    /// </summary>
 
     [Fact]
     public void Parse_ForRangeWithStep()
@@ -361,6 +418,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ForInCollection.
+    /// </summary>
 
     [Fact]
     public void Parse_ForInCollection()
@@ -375,6 +435,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ForWithEnumerate.
+    /// </summary>
 
     [Fact]
     public void Parse_ForWithEnumerate()
@@ -389,6 +452,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ForWithBreak.
+    /// </summary>
 
     [Fact]
     public void Parse_ForWithBreak()
@@ -404,6 +470,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ForWithContinue.
+    /// </summary>
 
     [Fact]
     public void Parse_ForWithContinue()
@@ -419,6 +488,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedFor.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedFor()
@@ -437,6 +509,9 @@ public class ControlFlowTests
     #endregion
 
     #region Return Statement Tests
+    /// <summary>
+    /// Tests Parse_ReturnWithValue.
+    /// </summary>
 
     [Fact]
     public void Parse_ReturnWithValue()
@@ -456,6 +531,9 @@ public class ControlFlowTests
         Assert.NotNull(@object: returnStmt);
         Assert.NotNull(@object: returnStmt.Value);
     }
+    /// <summary>
+    /// Tests Parse_ReturnWithoutValue.
+    /// </summary>
 
     [Fact]
     public void Parse_ReturnWithoutValue()
@@ -468,6 +546,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_EarlyReturn.
+    /// </summary>
 
     [Fact]
     public void Parse_EarlyReturn()
@@ -485,6 +566,9 @@ public class ControlFlowTests
     #endregion
 
     #region Pass Statement Tests
+    /// <summary>
+    /// Tests Parse_PassStatement.
+    /// </summary>
 
     [Fact]
     public void Parse_PassStatement()
@@ -497,6 +581,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_PassInIfBranch.
+    /// </summary>
 
     [Fact]
     public void Parse_PassInIfBranch()
@@ -516,6 +603,9 @@ public class ControlFlowTests
     #endregion
 
     #region Stop and Verify Tests
+    /// <summary>
+    /// Tests Parse_StopWithMessage.
+    /// </summary>
 
     [Fact]
     public void Parse_StopWithMessage()
@@ -529,6 +619,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VerifyWithCondition.
+    /// </summary>
 
     [Fact]
     public void Parse_VerifyWithCondition()
@@ -542,6 +635,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VerifyWithoutMessage.
+    /// </summary>
 
     [Fact]
     public void Parse_VerifyWithoutMessage()
@@ -555,6 +651,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_Breach.
+    /// </summary>
 
     [Fact]
     public void Parse_Breach()
@@ -567,6 +666,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BreachWithoutMessage.
+    /// </summary>
 
     [Fact]
     public void Parse_BreachWithoutMessage()
@@ -583,6 +685,9 @@ public class ControlFlowTests
     #endregion
 
     #region Complex Control Flow Tests
+    /// <summary>
+    /// Tests Parse_ComplexNestedControlFlow.
+    /// </summary>
 
     [Fact]
     public void Parse_ComplexNestedControlFlow()
@@ -602,6 +707,9 @@ public class ControlFlowTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ControlFlowWithErrorHandling.
+    /// </summary>
 
     [Fact]
     public void Parse_ControlFlowWithErrorHandling()

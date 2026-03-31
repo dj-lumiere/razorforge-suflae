@@ -14,6 +14,9 @@ using static TestHelpers;
 public class OperatorProtocolTests
 {
     #region Correct Protocol Conformance
+    /// <summary>
+    /// Tests Analyze_AddableWithFollows_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AddableWithFollows_NoError()
@@ -35,6 +38,9 @@ public class OperatorProtocolTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_EquatableWithFollows_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EquatableWithFollows_NoError()
@@ -56,6 +62,9 @@ public class OperatorProtocolTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_ComparableWithFollows_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ComparableWithFollows_NoError()
@@ -85,6 +94,9 @@ public class OperatorProtocolTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_MultipleOperatorProtocols_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleOperatorProtocols_NoError()
@@ -118,6 +130,9 @@ public class OperatorProtocolTests
     #endregion
 
     #region Missing Protocol Conformance
+    /// <summary>
+    /// Tests Analyze_AddWithoutAddable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AddWithoutAddable_ReportsError()
@@ -145,6 +160,9 @@ public class OperatorProtocolTests
                 e.Message.Contains(value: "Addable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_EqWithoutEquatable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EqWithoutEquatable_ReportsError()
@@ -172,6 +190,9 @@ public class OperatorProtocolTests
                 e.Message.Contains(value: "Equatable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_CmpWithoutComparable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_CmpWithoutComparable_ReportsError()
@@ -207,6 +228,9 @@ public class OperatorProtocolTests
     #endregion
 
     #region Non-Operator Methods (No Protocol Required)
+    /// <summary>
+    /// Tests Analyze_CreateWithoutProtocol_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_CreateWithoutProtocol_NoError()
@@ -223,6 +247,9 @@ public class OperatorProtocolTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_DestroyWithoutProtocol_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DestroyWithoutProtocol_NoError()
@@ -239,6 +266,9 @@ public class OperatorProtocolTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_RegularMethodWithoutProtocol_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RegularMethodWithoutProtocol_NoError()
@@ -260,6 +290,9 @@ public class OperatorProtocolTests
     #endregion
 
     #region Suflae Tests
+    /// <summary>
+    /// Tests AnalyzeSuflae_AddableWithFollows_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_AddableWithFollows_NoError()
@@ -281,6 +314,9 @@ public class OperatorProtocolTests
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_AddWithoutAddable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_AddWithoutAddable_ReportsError()

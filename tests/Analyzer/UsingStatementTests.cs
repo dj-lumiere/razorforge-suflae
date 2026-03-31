@@ -13,6 +13,9 @@ using static TestHelpers;
 public class UsingStatementTests
 {
     #region Token Using
+    /// <summary>
+    /// Tests Analyze_TokenUsing_BindsTokenType.
+    /// </summary>
 
     [Fact]
     public void Analyze_TokenUsing_BindsTokenType()
@@ -37,6 +40,9 @@ public class UsingStatementTests
     #endregion
 
     #region Resource With Void $enter
+    /// <summary>
+    /// Tests Analyze_ResourceWithVoidEnterExit_BindsResourceType.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResourceWithVoidEnterExit_BindsResourceType()
@@ -67,6 +73,9 @@ public class UsingStatementTests
     #endregion
 
     #region Resource With Non-Void $enter
+    /// <summary>
+    /// Tests Analyze_ResourceWithNonVoidEnter_BindsEnterReturnType.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResourceWithNonVoidEnter_BindsEnterReturnType()
@@ -101,6 +110,9 @@ public class UsingStatementTests
     #endregion
 
     #region Missing $enter/$exit
+    /// <summary>
+    /// Tests Analyze_ResourceMissingEnterExit_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResourceMissingEnterExit_ReportsError()
@@ -121,6 +133,9 @@ public class UsingStatementTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }
+    /// <summary>
+    /// Tests Analyze_ResourceWithOnlyEnter_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResourceWithOnlyEnter_ReportsError()

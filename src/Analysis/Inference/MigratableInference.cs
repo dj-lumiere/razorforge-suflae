@@ -45,10 +45,9 @@ public sealed class MigratableInference
     /// Phase 1: Detects methods that directly modify <c>Snatched&lt;U8&gt;</c>.
     /// </summary>
     /// <remarks>
-    /// TODO: Implement base case detection for migratable methods.
     /// A method is migratable if it reassigns the internal <c>Snatched&lt;U8&gt;</c> member variable of an entity.
     /// All entity types use <c>Snatched&lt;U8&gt;</c> internally for their dynamic storage.
-    /// Detection should analyze method bodies for assignments to <c>Snatched&lt;U8&gt;</c>-typed member variables.
+    /// Detection is not implemented yet; this pass currently documents the intended analysis boundary.
     /// </remarks>
     private void DetectDirectMigrations()
     {
@@ -113,10 +112,9 @@ public sealed class MigratableInference
     /// <param name="receiver">The receiver expression (object the method is called on).</param>
     /// <param name="receiverType">The type of the receiver.</param>
     /// <remarks>
-    /// TODO: Implement call-site migratable detection.
     /// This should check if the called method (methodName on receiverType) is migratable,
     /// and if the receiver is a member variable of 'me', mark the calling method as migratable too.
-    /// Currently no detection is implemented - this is a placeholder.
+    /// Current implementation only detects whether the receiver targets <c>me</c> or one of its member variables.
     /// </remarks>
     public void AnalyzeCallForMigration(CallGraphNode node, CallExpression callExpr,
         string methodName, Expression receiver, TypeInfo receiverType)

@@ -203,15 +203,4 @@ public partial class Parser
             message: $"Unexpected token: {CurrentToken.Type}");
     }
 
-    /// <summary>
-    /// Tries to parse a numeric literal (integer, float, decimal, imaginary).
-    /// All numeric literals are stored as raw strings for semantic analysis.
-    /// The semantic analyzer will parse the value based on the expected type context.
-    /// </summary>
-    /// <remarks>
-    /// Storing literals as strings enables:
-    /// - Contextual type inference: `var a: S16 = 100` treats 100 as S16
-    /// - Arbitrary precision: `var b: Integer = 123...123` handles any size
-    /// - Overflow detection: semantic analyzer can validate value fits in target type
-    /// </remarks>
 }

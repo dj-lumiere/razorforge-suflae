@@ -12,6 +12,9 @@ using static TestHelpers;
 /// </summary>
 public class DispatchInferenceTests
 {
+    /// <summary>
+    /// Tests Analyze_ConcreteVarargs_NoDispatchError.
+    /// </summary>
     [Fact]
     public void Analyze_ConcreteVarargs_NoDispatchError()
     {
@@ -26,6 +29,9 @@ public class DispatchInferenceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
+    /// <summary>
+    /// Tests Analyze_GenericConstrainedVarargs_NoDispatchError.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericConstrainedVarargs_NoDispatchError()
@@ -49,6 +55,9 @@ public class DispatchInferenceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
+    /// <summary>
+    /// Tests Analyze_ProtocolVarargsSameType_NoDispatchError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolVarargsSameType_NoDispatchError()
@@ -72,6 +81,9 @@ public class DispatchInferenceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
+    /// <summary>
+    /// Tests Analyze_ProtocolVarargsMixedTypes_ReportsRuntimeDispatchError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolVarargsMixedTypes_ReportsRuntimeDispatchError()

@@ -12,6 +12,9 @@ using static TestHelpers;
 public class ExpressionTests
 {
     #region Routine Call Tests
+    /// <summary>
+    /// Tests Parse_SimpleMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleMethodCall()
@@ -24,6 +27,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MethodCallWithMultipleArgs.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallWithMultipleArgs()
@@ -36,6 +42,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MethodCallWithNamedArgs.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallWithNamedArgs()
@@ -48,6 +57,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MethodCallChain.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallChain()
@@ -60,6 +72,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MethodCallOnLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallOnLiteral()
@@ -72,6 +87,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MethodCallWithConversion.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallWithConversion()
@@ -84,6 +102,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_StaticMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_StaticMethodCall()
@@ -100,6 +121,9 @@ public class ExpressionTests
     #endregion
 
     #region Member Variable Access Tests
+    /// <summary>
+    /// Tests Parse_SimpleMemberVariableAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleMemberVariableAccess()
@@ -112,6 +136,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ChainedMemberVariableAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedMemberVariableAccess()
@@ -124,6 +151,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MixedMemberVariableAndMethodAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_MixedMemberVariableAndMethodAccess()
@@ -136,6 +166,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MeMemberVariableAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_MeMemberVariableAccess()
@@ -152,6 +185,9 @@ public class ExpressionTests
     #endregion
 
     #region Indexing Tests
+    /// <summary>
+    /// Tests Parse_ArrayIndexing.
+    /// </summary>
 
     [Fact]
     public void Parse_ArrayIndexing()
@@ -164,6 +200,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MultiDimensionalIndexing.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiDimensionalIndexing()
@@ -176,6 +215,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_DictIndexing.
+    /// </summary>
 
     [Fact]
     public void Parse_DictIndexing()
@@ -188,6 +230,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_IndexAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_IndexAssignment()
@@ -205,6 +250,9 @@ public class ExpressionTests
     #endregion
 
     #region Constructor Tests
+    /// <summary>
+    /// Tests Parse_RecordConstructor.
+    /// </summary>
 
     [Fact]
     public void Parse_RecordConstructor()
@@ -217,6 +265,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_EntityConstructor.
+    /// </summary>
 
     [Fact]
     public void Parse_EntityConstructor()
@@ -229,6 +280,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedConstructor.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedConstructor()
@@ -241,6 +295,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_GenericConstructor.
+    /// </summary>
 
     [Fact]
     public void Parse_GenericConstructor()
@@ -257,6 +314,9 @@ public class ExpressionTests
     #endregion
 
     #region Lambda and Closure Tests
+    /// <summary>
+    /// Tests Parse_SimpleLambda.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleLambda()
@@ -269,6 +329,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SingleParamLambda.
+    /// </summary>
 
     [Fact]
     public void Parse_SingleParamLambda()
@@ -281,6 +344,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaAsArgument.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaAsArgument()
@@ -294,6 +360,9 @@ public class ExpressionTests
         AssertParses(source: source);
     }
 
+    /// <summary>
+    /// Tests Parse_LambdaWithCapture.
+    /// </summary>
     [Fact]
     // TODO: This should NOT parse.
     public void Parse_LambdaWithCapture()
@@ -308,6 +377,9 @@ public class ExpressionTests
         AssertParses(source: source);
     }
 
+    /// <summary>
+    /// Tests Parse_LambdaWithGivenClause_SingleCapture.
+    /// </summary>
     [Fact]
     public void Parse_LambdaWithGivenClause_SingleCapture()
     {
@@ -321,6 +393,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaWithGivenClause_MultipleCaptures.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaWithGivenClause_MultipleCaptures()
@@ -335,6 +410,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaWithGivenClause_ZeroParams.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaWithGivenClause_ZeroParams()
@@ -348,6 +426,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaWithGivenClause_ParenthesizedParams.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaWithGivenClause_ParenthesizedParams()
@@ -361,6 +442,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaInvalid_CommaBeforeGiven.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_CommaBeforeGiven()
@@ -374,6 +458,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaInvalid_TrailingCommaInGiven.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_TrailingCommaInGiven()
@@ -387,6 +474,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaInvalid_MultipleUnparenthesizedCaptures.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_MultipleUnparenthesizedCaptures()
@@ -400,6 +490,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LambdaInvalid_MultipleUnparenthesizedParams.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_MultipleUnparenthesizedParams()
@@ -417,6 +510,9 @@ public class ExpressionTests
     #endregion
 
     #region String Interpolation Tests
+    /// <summary>
+    /// Tests Parse_SimpleInterpolation.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleInterpolation()
@@ -429,6 +525,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InterpolationWithExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_InterpolationWithExpression()
@@ -441,6 +540,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MultipleInterpolations.
+    /// </summary>
 
     [Fact]
     public void Parse_MultipleInterpolations()
@@ -453,6 +555,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InterpolationWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_InterpolationWithMethodCall()
@@ -465,6 +570,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_InterpolationWithFormatting.
+    /// </summary>
 
     [Fact]
     public void Parse_InterpolationWithFormatting()
@@ -494,6 +602,9 @@ public class ExpressionTests
         var varDecl = (VariableDeclaration)declStmt.Declaration;
         return (InsertedTextExpression)varDecl.Initializer!;
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_SimpleInterpolation_HasThreeParts.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_SimpleInterpolation_HasThreeParts()
@@ -514,6 +625,9 @@ public class ExpressionTests
         Assert.Equal(expected: "!", actual: ((TextPart)expr.Parts[2]).Text);
         Assert.False(condition: expr.IsRaw);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_MultipleInsertions_HasFiveParts.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_MultipleInsertions_HasFiveParts()
@@ -536,6 +650,9 @@ public class ExpressionTests
         // The third expression should be a + b (binary expression)
         Assert.IsType<BinaryExpression>(((ExpressionPart)expr.Parts[4]).Expression);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_EscapedBraces_SingleTextPart.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_EscapedBraces_SingleTextPart()
@@ -551,6 +668,9 @@ public class ExpressionTests
         Assert.IsType<TextPart>(expr.Parts[0]);
         Assert.Equal(expected: "Set: {1, 2}", actual: ((TextPart)expr.Parts[0]).Text);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_FormatSpec.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_FormatSpec()
@@ -566,6 +686,9 @@ public class ExpressionTests
         var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.Equal(expected: "D2", actual: exprPart.FormatSpec);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_NestedBrackets_IndexAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_NestedBrackets_IndexAccess()
@@ -581,6 +704,9 @@ public class ExpressionTests
         var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.IsType<IndexExpression>(exprPart.Expression);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_NestedBrackets_FunctionCall.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_NestedBrackets_FunctionCall()
@@ -596,6 +722,9 @@ public class ExpressionTests
         var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.IsType<CallExpression>(exprPart.Expression);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_NoInsertions_SingleTextPart.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_NoInsertions_SingleTextPart()
@@ -611,6 +740,9 @@ public class ExpressionTests
         Assert.IsType<TextPart>(expr.Parts[0]);
         Assert.Equal(expected: "plain text", actual: ((TextPart)expr.Parts[0]).Text);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_AdjacentInsertions.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_AdjacentInsertions()
@@ -626,6 +758,9 @@ public class ExpressionTests
         Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.IsType<ExpressionPart>(expr.Parts[1]);
     }
+    /// <summary>
+    /// Tests Parse_InsertedText_RawFormatted.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_RawFormatted()
@@ -650,6 +785,9 @@ public class ExpressionTests
     #endregion
 
     #region Type Conversion Tests
+    /// <summary>
+    /// Tests Parse_TypeConversionMethod.
+    /// </summary>
 
     [Fact]
     public void Parse_TypeConversionMethod()
@@ -662,6 +800,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_TypeConversionFromLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_TypeConversionFromLiteral()
@@ -678,6 +819,9 @@ public class ExpressionTests
     #endregion
 
     #region Parenthesized Expression Tests
+    /// <summary>
+    /// Tests Parse_ParenthesizedExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_ParenthesizedExpression()
@@ -690,6 +834,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedParentheses.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedParentheses()
@@ -706,6 +853,9 @@ public class ExpressionTests
     #endregion
 
     #region Range Expression Tests
+    /// <summary>
+    /// Tests Parse_RangeExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_RangeExpression()
@@ -718,6 +868,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_RangeExpressionWithStep.
+    /// </summary>
 
     [Fact]
     public void Parse_RangeExpressionWithStep()
@@ -734,6 +887,9 @@ public class ExpressionTests
     #endregion
 
     #region Complex Expression Tests
+    /// <summary>
+    /// Tests Parse_ComplexChainedExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_ComplexChainedExpression()
@@ -750,6 +906,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ConditionalExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_ConditionalExpression()
@@ -762,6 +921,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenAsExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenAsExpression()
@@ -777,6 +939,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NoneCoalescingChain.
+    /// </summary>
 
     [Fact]
     public void Parse_NoneCoalescingChain()
@@ -793,6 +958,9 @@ public class ExpressionTests
     #endregion
 
     #region Variant Construction Tests
+    /// <summary>
+    /// Tests Parse_VariantConstruction.
+    /// </summary>
 
     [Fact]
     public void Parse_VariantConstruction()
@@ -805,6 +973,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VariantWithoutPayload.
+    /// </summary>
 
     [Fact]
     public void Parse_VariantWithoutPayload()
@@ -821,6 +992,9 @@ public class ExpressionTests
     #endregion
 
     #region Choice Value Tests
+    /// <summary>
+    /// Tests Parse_ChoiceValue.
+    /// </summary>
 
     [Fact]
     public void Parse_ChoiceValue()
@@ -997,6 +1171,9 @@ public class ExpressionTests
     #endregion
 
     #region Byte Literal Tests
+    /// <summary>
+    /// Tests Parse_ByteStringLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteStringLiteral()
@@ -1009,6 +1186,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ByteCharLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteCharLiteral()
@@ -1021,6 +1201,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ByteStringHexEscape.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteStringHexEscape()
@@ -1033,6 +1216,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ByteRawStringLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteRawStringLiteral()
@@ -1045,6 +1231,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Tokenize_ByteStringLiteral_CorrectTokenType.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteStringLiteral_CorrectTokenType()
@@ -1055,6 +1244,9 @@ public class ExpressionTests
         Assert.Equal(expected: Compiler.Lexer.TokenType.BytesLiteral,
             actual: tokens[index: 0].Type);
     }
+    /// <summary>
+    /// Tests Tokenize_ByteCharLiteral_CorrectTokenType.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteCharLiteral_CorrectTokenType()
@@ -1065,6 +1257,9 @@ public class ExpressionTests
         Assert.Equal(expected: Compiler.Lexer.TokenType.ByteLetterLiteral,
             actual: tokens[index: 0].Type);
     }
+    /// <summary>
+    /// Tests Tokenize_ByteStringNonAscii_ThrowsError.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteStringNonAscii_ThrowsError()
@@ -1073,6 +1268,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Tests Tokenize_ByteStringUnicodeEscape_ThrowsError.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteStringUnicodeEscape_ThrowsError()
@@ -1081,6 +1279,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Tests Tokenize_ByteCharNonAscii_ThrowsError.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteCharNonAscii_ThrowsError()
@@ -1089,6 +1290,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Tests Tokenize_UnicodeEscape_Exactly6Digits.
+    /// </summary>
 
     [Fact]
     public void Tokenize_UnicodeEscape_Exactly6Digits()
@@ -1100,6 +1304,9 @@ public class ExpressionTests
         Assert.Equal(expected: Compiler.Lexer.TokenType.TextLiteral,
             actual: tokens[index: 0].Type);
     }
+    /// <summary>
+    /// Tests Tokenize_UnicodeEscape_TooFewDigits_ThrowsError.
+    /// </summary>
 
     [Fact]
     public void Tokenize_UnicodeEscape_TooFewDigits_ThrowsError()
@@ -1109,6 +1316,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Tests Tokenize_UnicodeEscape_TwoDigits_ThrowsError.
+    /// </summary>
 
     [Fact]
     public void Tokenize_UnicodeEscape_TwoDigits_ThrowsError()
@@ -1122,6 +1332,9 @@ public class ExpressionTests
     #endregion
 
     #region With Expression Tests
+    /// <summary>
+    /// Tests Parse_WithMemberVariableUpdate.
+    /// </summary>
 
     [Fact]
     public void Parse_WithMemberVariableUpdate()
@@ -1134,6 +1347,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WithMultipleFields.
+    /// </summary>
 
     [Fact]
     public void Parse_WithMultipleFields()
@@ -1146,6 +1362,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WithIndexUpdate.
+    /// </summary>
 
     [Fact]
     public void Parse_WithIndexUpdate()
@@ -1158,6 +1377,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WithNestedMemberVariable.
+    /// </summary>
 
     [Fact]
     public void Parse_WithNestedMemberVariable()
@@ -1170,6 +1392,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WithMixedUpdates.
+    /// </summary>
 
     [Fact]
     public void Parse_WithMixedUpdates()
@@ -1182,6 +1407,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WithExpression_ASTStructure.
+    /// </summary>
 
     [Fact]
     public void Parse_WithExpression_ASTStructure()
@@ -1206,6 +1434,9 @@ public class ExpressionTests
         Assert.Null(withExpr.Updates[0].Index);
         Assert.Null(withExpr.Updates[1].Index);
     }
+    /// <summary>
+    /// Tests Parse_WithExpression_NestedMemberVariablePath_ASTStructure.
+    /// </summary>
 
     [Fact]
     public void Parse_WithExpression_NestedMemberVariablePath_ASTStructure()
@@ -1229,6 +1460,9 @@ public class ExpressionTests
         Assert.Equal(expected: "address", actual: withExpr.Updates[0].MemberVariablePath![0]);
         Assert.Equal(expected: "city", actual: withExpr.Updates[0].MemberVariablePath![1]);
     }
+    /// <summary>
+    /// Tests Parse_WithExpression_IndexUpdate_ASTStructure.
+    /// </summary>
 
     [Fact]
     public void Parse_WithExpression_IndexUpdate_ASTStructure()
@@ -1255,6 +1489,9 @@ public class ExpressionTests
     #endregion
 
     #region Multi-Line Bracketed Expression Tests (L21)
+    /// <summary>
+    /// Tests Parse_MultiLineConstructorCall_WithNamedArgs.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineConstructorCall_WithNamedArgs()
@@ -1271,6 +1508,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MultiLineFunctionCall_WithPositionalArgs.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineFunctionCall_WithPositionalArgs()
@@ -1287,6 +1527,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedBrackets_MultiLine.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedBrackets_MultiLine()
@@ -1303,6 +1546,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MultiLineListLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineListLiteral()
@@ -1319,6 +1565,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MultiLineReturn_WithConstructor.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineReturn_WithConstructor()
@@ -1334,6 +1583,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Tokenize_MultiLineParens_NoIndentDedent.
+    /// </summary>
 
     [Fact]
     public void Tokenize_MultiLineParens_NoIndentDedent()
@@ -1366,6 +1618,9 @@ public class ExpressionTests
     #endregion
 
     #region Slice Expression Tests
+    /// <summary>
+    /// Tests Parse_SliceExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_SliceExpression()
@@ -1378,6 +1633,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SliceExpressionWithBackIndex.
+    /// </summary>
 
     [Fact]
     public void Parse_SliceExpressionWithBackIndex()
@@ -1390,6 +1648,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SliceExpression_ASTStructure.
+    /// </summary>
 
     [Fact]
     public void Parse_SliceExpression_ASTStructure()
@@ -1412,6 +1673,9 @@ public class ExpressionTests
         Assert.IsType<LiteralExpression>(slice.Start);
         Assert.IsType<LiteralExpression>(slice.End);
     }
+    /// <summary>
+    /// Tests Parse_SliceExpression_TilRange.
+    /// </summary>
 
     [Fact]
     public void Parse_SliceExpression_TilRange()
@@ -1425,6 +1689,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_SliceExpression_RejectsStep.
+    /// </summary>
 
     [Fact]
     public void Parse_SliceExpression_RejectsStep()
@@ -1437,6 +1704,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_RegularIndexExpression_StillWorks.
+    /// </summary>
 
     [Fact]
     public void Parse_RegularIndexExpression_StillWorks()

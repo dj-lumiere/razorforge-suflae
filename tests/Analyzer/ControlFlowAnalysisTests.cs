@@ -12,6 +12,9 @@ using static TestHelpers;
 public class ControlFlowAnalysisTests
 {
     #region Return Path Analysis
+    /// <summary>
+    /// Tests Analyze_AllPathsReturn_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AllPathsReturn_NoError()
@@ -27,6 +30,9 @@ public class ControlFlowAnalysisTests
         Analyze(source: source);
         // Should have no missing return errors
     }
+    /// <summary>
+    /// Tests Analyze_WhenExpressionReturn_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpressionReturn_NoError()
@@ -47,6 +53,9 @@ public class ControlFlowAnalysisTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_EarlyReturnInLoop_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EarlyReturnInLoop_NoError()
@@ -62,6 +71,9 @@ public class ControlFlowAnalysisTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_UnlessElseReturn_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UnlessElseReturn_NoError()
@@ -79,6 +91,9 @@ public class ControlFlowAnalysisTests
     #endregion
 
     #region Unreachable Code
+    /// <summary>
+    /// Tests Analyze_CodeAfterReturn_ReportsWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_CodeAfterReturn_ReportsWarning()
@@ -93,6 +108,9 @@ public class ControlFlowAnalysisTests
         Analyze(source: source);
         // Should have warning about unreachable code
     }
+    /// <summary>
+    /// Tests Analyze_CodeAfterAbsent_ReportsWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_CodeAfterAbsent_ReportsWarning()
@@ -106,6 +124,9 @@ public class ControlFlowAnalysisTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_CodeAfterThrow_ReportsWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_CodeAfterThrow_ReportsWarning()
@@ -123,6 +144,9 @@ public class ControlFlowAnalysisTests
     #endregion
 
     #region Break and Continue Analysis
+    /// <summary>
+    /// Tests Analyze_BreakInsideLoop_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_BreakInsideLoop_NoError()
@@ -137,6 +161,9 @@ public class ControlFlowAnalysisTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_ContinueInsideLoop_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ContinueInsideLoop_NoError()
@@ -152,6 +179,9 @@ public class ControlFlowAnalysisTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_BreakOutsideLoop_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_BreakOutsideLoop_ReportsError()
@@ -165,6 +195,9 @@ public class ControlFlowAnalysisTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_ContinueOutsideLoop_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ContinueOutsideLoop_ReportsError()
@@ -182,6 +215,9 @@ public class ControlFlowAnalysisTests
     #endregion
 
     #region Failable Routine Analysis
+    /// <summary>
+    /// Tests Analyze_AbsentInNonFailable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AbsentInNonFailable_ReportsError()
@@ -195,6 +231,9 @@ public class ControlFlowAnalysisTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_ThrowInNonFailable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ThrowInNonFailable_ReportsError()
@@ -208,6 +247,9 @@ public class ControlFlowAnalysisTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_AbsentInFailable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AbsentInFailable_NoError()
@@ -221,6 +263,9 @@ public class ControlFlowAnalysisTests
         Analyze(source: source);
         // Should be valid
     }
+    /// <summary>
+    /// Tests Analyze_ThrowInFailable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ThrowInFailable_NoError()
@@ -237,6 +282,9 @@ public class ControlFlowAnalysisTests
     #endregion
 
     #region Conditional Return Analysis
+    /// <summary>
+    /// Tests Analyze_IfWithoutElse_NoReturn_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_IfWithoutElse_NoReturn_ReportsError()
@@ -250,6 +298,9 @@ public class ControlFlowAnalysisTests
         Analyze(source: source);
         // Should report missing return path
     }
+    /// <summary>
+    /// Tests Analyze_NestedIfElse_AllPathsReturn_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedIfElse_AllPathsReturn_NoError()
@@ -271,6 +322,9 @@ public class ControlFlowAnalysisTests
     #endregion
 
     #region Suflae Control Flow
+    /// <summary>
+    /// Tests AnalyzeSuflae_AllPathsReturn_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_AllPathsReturn_NoError()
@@ -285,6 +339,9 @@ public class ControlFlowAnalysisTests
 
         AnalyzeSuflae(source: source);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_BreakInsideLoop_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_BreakInsideLoop_NoError()
@@ -298,6 +355,9 @@ public class ControlFlowAnalysisTests
 
         AnalyzeSuflae(source: source);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_BreakOutsideLoop_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_BreakOutsideLoop_ReportsError()
@@ -314,6 +374,9 @@ public class ControlFlowAnalysisTests
     #endregion
 
     #region Becomes Statement Validation
+    /// <summary>
+    /// Tests Analyze_WhenExpressionBlockWithBecomes_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpressionBlockWithBecomes_NoError()
@@ -333,6 +396,9 @@ public class ControlFlowAnalysisTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_WhenExpressionBlockMissingBecomes_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpressionBlockMissingBecomes_ReportsError()
@@ -352,6 +418,9 @@ public class ControlFlowAnalysisTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "requires 'becomes'", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_WhenExpressionSingleBecomesBlock_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpressionSingleBecomesBlock_ReportsError()
@@ -370,6 +439,9 @@ public class ControlFlowAnalysisTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "'=>' syntax", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_WhenExpressionArrowSyntax_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpressionArrowSyntax_NoError()
@@ -387,6 +459,9 @@ public class ControlFlowAnalysisTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_WhenStatementBlockWithoutBecomes_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenStatementBlockWithoutBecomes_NoError()
@@ -407,6 +482,9 @@ public class ControlFlowAnalysisTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_WhenExpressionBlockWithBecomes_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_WhenExpressionBlockWithBecomes_NoError()
@@ -426,6 +504,9 @@ public class ControlFlowAnalysisTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_WhenExpressionBlockMissingBecomes_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_WhenExpressionBlockMissingBecomes_ReportsError()

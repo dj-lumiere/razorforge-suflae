@@ -19,6 +19,9 @@ using static TestHelpers;
 public class ExhaustivenessTests
 {
     #region Choice — When Expression
+    /// <summary>
+    /// Tests WhenExpression_Choice_AllCasesCovered_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_AllCasesCovered_NoError()
@@ -42,6 +45,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_MissingCase_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_MissingCase_ReportsError()
@@ -64,6 +70,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_WithElse_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_WithElse_NoError()
@@ -85,6 +94,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_Shorthand_AllCasesCovered_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_Shorthand_AllCasesCovered_NoError()
@@ -106,6 +118,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_EqualsOperator_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_EqualsOperator_ReportsError()
@@ -131,6 +146,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Choice — When Statement
+    /// <summary>
+    /// Tests WhenStatement_Choice_MissingCase_ReportsWarning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_MissingCase_ReportsWarning()
@@ -152,6 +170,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
+    /// <summary>
+    /// Tests WhenStatement_Choice_AllCasesCovered_NoWarning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_AllCasesCovered_NoWarning()
@@ -173,6 +194,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
+    /// <summary>
+    /// Tests WhenStatement_Choice_WithElse_NoWarning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_WithElse_NoWarning()
@@ -198,6 +222,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Bool — When Expression
+    /// <summary>
+    /// Tests WhenExpression_Bool_BothCases_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_BothCases_NoError()
@@ -214,6 +241,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Bool_MissingFalse_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_MissingFalse_ReportsError()
@@ -229,6 +259,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Bool_MissingTrue_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_MissingTrue_ReportsError()
@@ -248,6 +281,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Error Handling Types — When Expression
+    /// <summary>
+    /// Tests WhenExpression_Maybe_NoneAndElse_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Maybe_NoneAndElse_NoError()
@@ -268,6 +304,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Wildcard and Else
+    /// <summary>
+    /// Tests WhenExpression_Wildcard_AlwaysExhaustive.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Wildcard_AlwaysExhaustive()
@@ -284,6 +323,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_ElseBinding_AlwaysExhaustive.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_ElseBinding_AlwaysExhaustive()
@@ -300,6 +342,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_NoElse_NonEnumerableType_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_NoElse_NonEnumerableType_ReportsError()
@@ -321,6 +366,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Error Message Content
+    /// <summary>
+    /// Tests WhenExpression_Choice_MissingCase_ErrorIncludesMissingCaseName.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_MissingCase_ErrorIncludesMissingCaseName()
@@ -342,6 +390,9 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch
                          && e.Message.Contains("PENDING"));
     }
+    /// <summary>
+    /// Tests WhenExpression_Bool_MissingCase_ErrorIncludesMissingValue.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_MissingCase_ErrorIncludesMissingValue()
@@ -358,6 +409,9 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch
                          && e.Message.Contains("false"));
     }
+    /// <summary>
+    /// Tests WhenStatement_Choice_MissingCases_WarningIncludesMissingNames.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_MissingCases_WarningIncludesMissingNames()
@@ -386,6 +440,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Choice — Unified 'is' Pattern (Phase 12)
+    /// <summary>
+    /// Tests WhenExpression_Choice_IsPattern_AllCases_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_AllCases_NoError()
@@ -409,6 +466,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_IsPattern_QualifiedName_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_QualifiedName_NoError()
@@ -432,6 +492,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_IsPattern_MissingCase_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_MissingCase_ReportsError()
@@ -454,6 +517,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_IsPattern_WithElse_NoError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_WithElse_NoError()
@@ -475,6 +541,9 @@ public class ExhaustivenessTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests WhenStatement_Choice_IsPattern_MissingCase_ReportsWarning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_IsPattern_MissingCase_ReportsWarning()
@@ -496,6 +565,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_MixedIsAndEquals_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_MixedIsAndEquals_ReportsError()
@@ -519,6 +591,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_IsPattern_InvalidCase_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_InvalidCase_ReportsError()
@@ -542,6 +617,9 @@ public class ExhaustivenessTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseNotFound);
     }
+    /// <summary>
+    /// Tests WhenExpression_Choice_IsPattern_VariableBinding_ReportsError.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_VariableBinding_ReportsError()

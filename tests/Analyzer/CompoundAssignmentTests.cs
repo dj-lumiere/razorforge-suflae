@@ -15,6 +15,9 @@ using static TestHelpers;
 public class CompoundAssignmentTests
 {
     #region In-Place Dispatch (type defines $iadd)
+    /// <summary>
+    /// Tests Analyze_RecordWithInPlaceWired_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithInPlaceWired_NoError()
@@ -38,6 +41,9 @@ public class CompoundAssignmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
+    /// <summary>
+    /// Tests Analyze_EntityWithInPlaceWired_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityWithInPlaceWired_NoError()
@@ -65,6 +71,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Fallback Dispatch (record with only $add)
+    /// <summary>
+    /// Tests Analyze_RecordWithRegularWired_FallsBack.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithRegularWired_FallsBack()
@@ -96,6 +105,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Entity Without In-Place Wired (no fallback)
+    /// <summary>
+    /// Tests Analyze_EntityWithoutInPlaceWired_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityWithoutInPlaceWired_ReportsError()
@@ -126,6 +138,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Neither Wired Exists
+    /// <summary>
+    /// Tests Analyze_NoWiredsDefined_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_NoWiredsDefined_ReportsError()
@@ -149,6 +164,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Mutability Checks
+    /// <summary>
+    /// Tests Analyze_VarCompoundAssignment_NoImmutableError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarCompoundAssignment_NoImmutableError()
@@ -177,6 +195,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Choice Type Prohibition
+    /// <summary>
+    /// Tests Analyze_ChoiceCompoundAssignment_ReportsArithmeticError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceCompoundAssignment_ReportsArithmeticError()
@@ -201,6 +222,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Multiple Compound Operators
+    /// <summary>
+    /// Tests Analyze_SubtractCompoundAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_SubtractCompoundAssignment_NoError()
@@ -224,6 +248,9 @@ public class CompoundAssignmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
+    /// <summary>
+    /// Tests Analyze_BitwiseAndCompoundAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_BitwiseAndCompoundAssignment_NoError()
@@ -251,6 +278,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Primitive Types (existing behavior preserved)
+    /// <summary>
+    /// Tests Analyze_PrimitiveVarCompoundAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_PrimitiveVarCompoundAssignment_NoError()
@@ -266,6 +296,9 @@ public class CompoundAssignmentTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_PrimitiveVarCompoundAssignment_NoImmutableError.
+    /// </summary>
 
     [Fact]
     public void Analyze_PrimitiveVarCompoundAssignment_NoImmutableError()

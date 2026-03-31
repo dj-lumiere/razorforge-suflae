@@ -5,6 +5,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation for collection and aggregate literals.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private string EmitListLiteral(StringBuilder sb, ListLiteralExpression list)
@@ -813,10 +816,4 @@ public partial class LLVMCodeGenerator
 
         return pqPtr;
     }
-
-
-    /// <summary>
-    /// Emits a flags test expression: x is FLAG, x isnot FLAG, x isonly FLAG.
-    /// FlagsTestExpression has Subject, Kind, TestFlags, Connective, and ExcludedFlags.
-    /// </summary>
 }

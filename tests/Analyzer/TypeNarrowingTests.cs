@@ -13,6 +13,9 @@ using static TestHelpers;
 public class TypeNarrowingTests
 {
     #region Guard Clause Narrowing (unless / if-return)
+    /// <summary>
+    /// Tests Analyze_UnlessIsNone_NarrowsMaybeToValue.
+    /// </summary>
 
     [Fact]
     public void Analyze_UnlessIsNone_NarrowsMaybeToValue()
@@ -30,6 +33,9 @@ public class TypeNarrowingTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_IfIsNoneReturn_NarrowsMaybeToValue.
+    /// </summary>
 
     [Fact]
     public void Analyze_IfIsNoneReturn_NarrowsMaybeToValue()
@@ -46,6 +52,9 @@ public class TypeNarrowingTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_IfIsNotNone_NarrowsInThenBranch.
+    /// </summary>
 
     [Fact]
     public void Analyze_IfIsNotNone_NarrowsInThenBranch()
@@ -62,6 +71,9 @@ public class TypeNarrowingTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_IfIsNoneWithElse_NarrowsInElseBranch.
+    /// </summary>
 
     [Fact]
     public void Analyze_IfIsNoneWithElse_NarrowsInElseBranch()
@@ -83,6 +95,9 @@ public class TypeNarrowingTests
     #endregion
 
     #region When Statement Narrowing
+    /// <summary>
+    /// Tests Analyze_WhenMaybe_ElseBindsNarrowedType.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenMaybe_ElseBindsNarrowedType()
@@ -104,6 +119,9 @@ public class TypeNarrowingTests
     #endregion
 
     #region No Narrowing for Non-Error Types
+    /// <summary>
+    /// Tests Analyze_NonErrorHandlingType_NoNarrowingCrash.
+    /// </summary>
 
     [Fact]
     public void Analyze_NonErrorHandlingType_NoNarrowingCrash()

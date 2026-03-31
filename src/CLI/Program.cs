@@ -1290,9 +1290,4 @@ internal partial class Program
             return 1;
         }
     }
-
-    /// <summary>
-    /// Recursively prints a one-line summary of an AST node to standard output,
-    /// indented to the given depth. Used to display a human-readable AST overview after parsing.
-    /// </summary>
 }

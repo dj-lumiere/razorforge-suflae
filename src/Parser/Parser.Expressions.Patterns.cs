@@ -3,6 +3,9 @@ namespace Compiler.Parser;
 using Lexer;
 using SyntaxTree;
 
+/// <summary>
+/// Partial class containing pattern and flags-test expression parsing helpers.
+/// </summary>
 public partial class Parser
 {
     private FlagsTestExpression ParseFlagsTestChain(Expression subject, string firstFlag,
@@ -513,22 +516,4 @@ public partial class Parser
             Operand: expr,
             Location: opLocation);
     }
-
-    /// <summary>
-    /// Parses postfix expressions: function calls, indexing, member access, and more.
-    /// Syntax: <c>f(args)</c>, <c>x[index]</c>, <c>obj.member</c>, <c>obj.method!()</c>, <c>value with (memberVar: newVal)</c>
-    /// Handles generic method calls: <c>func[T]()</c>, <c>obj.method[T]()</c>
-    /// </summary>
-    /// <remarks>
-    /// Postfix operators in order of check:
-    /// 1. Generic function call: func[T]() or func![T]()
-    /// 2. Failable function call: func!(args)
-    /// 3. Regular function call: func(args)
-    /// 4. Index access: expr[index]
-    /// 5. Member access: expr.member (with sub-cases for generic/failable methods)
-    /// 6. Functional update: expr with (memberVar: value)
-    ///
-    /// Generic type arguments use '[' and ']' which don't conflict with any operators.
-    /// </remarks>
-    /// <returns>The parsed expression.</returns>
 }

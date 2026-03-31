@@ -144,6 +144,8 @@ public partial class LLVMCodeGenerator
     /// Generates the LLVM function definition (with body).
     /// </summary>
     /// <param name="routine">The routine declaration from AST.</param>
+    /// <param name="preResolvedInfo">Optional pre-resolved routine metadata.</param>
+    /// <param name="nameOverride">Optional mangled name override.</param>
     private void GenerateFunctionDefinition(RoutineDeclaration routine,
         RoutineInfo? preResolvedInfo = null, string? nameOverride = null)
     {
@@ -653,10 +655,4 @@ public partial class LLVMCodeGenerator
             }
         } while (_generatedFunctionDefs.Count > prevDefCount);
     }
-
-    /// <summary>
-    /// Finds a generic routine's AST declaration from stdlib programs.
-    /// </summary>
-    /// <param name="genericAstName">The generic AST name (e.g., "List[T].add_last").</param>
-    /// <returns>The routine declaration if found, null otherwise.</returns>
 }

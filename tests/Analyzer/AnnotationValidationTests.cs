@@ -13,6 +13,9 @@ using static TestHelpers;
 public class AnnotationValidationTests
 {
     #region #145: Nested conditional expression warning
+    /// <summary>
+    /// Tests Analyze_SimpleConditional_NoWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_SimpleConditional_NoWarning()
@@ -26,6 +29,9 @@ public class AnnotationValidationTests
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NestedConditionalExpression);
     }
+    /// <summary>
+    /// Tests Analyze_ConditionalInRoutine_NoWarning.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConditionalInRoutine_NoWarning()

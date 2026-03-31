@@ -13,6 +13,9 @@ using static TestHelpers;
 public class SuflaeControlFlowTests
 {
     #region If Statement Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleIf.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleIf()
@@ -33,6 +36,9 @@ public class SuflaeControlFlowTests
         Assert.NotNull(@object: ifStmt);
         Assert.Null(@object: ifStmt.ElseStatement);
     }
+    /// <summary>
+    /// Tests ParseSuflae_IfElse.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_IfElse()
@@ -55,6 +61,9 @@ public class SuflaeControlFlowTests
         Assert.NotNull(@object: ifStmt);
         Assert.NotNull(@object: ifStmt.ElseStatement);
     }
+    /// <summary>
+    /// Tests ParseSuflae_IfElseIfElse.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_IfElseIfElse()
@@ -71,6 +80,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_MultipleElseIf.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MultipleElseIf()
@@ -89,6 +101,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NestedIf.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NestedIf()
@@ -106,6 +121,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Unless Statement Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleUnless.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleUnless()
@@ -118,6 +136,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UnlessWithElse.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UnlessWithElse()
@@ -132,6 +153,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UnlessGuardClause.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UnlessGuardClause()
@@ -149,6 +173,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Inline If-Then-Else Tests
+    /// <summary>
+    /// Tests ParseSuflae_InlineIfThenElse.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_InlineIfThenElse()
@@ -160,6 +187,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_InlineIfThenElse_InAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_InlineIfThenElse_InAssignment()
@@ -175,6 +205,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Loop Statement Tests
+    /// <summary>
+    /// Tests ParseSuflae_InfiniteLoop.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_InfiniteLoop()
@@ -189,6 +222,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LoopWithBreak.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LoopWithBreak()
@@ -201,6 +237,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LoopWithContinue.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LoopWithContinue()
@@ -219,6 +258,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region While Loop Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleWhile.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleWhile()
@@ -231,6 +273,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhileWithCounter.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhileWithCounter()
@@ -245,6 +290,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhileWithElse.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhileWithElse()
@@ -265,6 +313,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region For Loop Tests
+    /// <summary>
+    /// Tests ParseSuflae_ForRangeInclusive.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForRangeInclusive()
@@ -277,6 +328,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ForRangeWithStep.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForRangeWithStep()
@@ -289,6 +343,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ForDownto.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForDownto()
@@ -301,6 +358,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ForInCollection.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForInCollection()
@@ -314,6 +374,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ForWithEnumerate.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForWithEnumerate()
@@ -327,6 +390,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ForWithElse.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForWithElse()
@@ -343,6 +409,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NestedFor.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NestedFor()
@@ -360,6 +429,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Throw Tests
+    /// <summary>
+    /// Tests ParseSuflae_Throw.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Throw()
@@ -377,6 +449,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Using Statement Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleUsing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleUsing()
@@ -390,6 +465,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingMultipleResources.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingMultipleResources()
@@ -403,6 +481,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NestedUsing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NestedUsing()
@@ -420,6 +501,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Return and Pass Tests
+    /// <summary>
+    /// Tests ParseSuflae_ReturnWithValue.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ReturnWithValue()
@@ -431,6 +515,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ReturnWithoutValue.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ReturnWithoutValue()
@@ -443,6 +530,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_PassStatement.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_PassStatement()
@@ -458,6 +548,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Async Tests
+    /// <summary>
+    /// Tests ParseSuflae_SuspendedRoutine.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SuspendedRoutine()
@@ -470,6 +563,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Waitfor.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Waitfor()
@@ -486,6 +582,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Stop and Verify Tests
+    /// <summary>
+    /// Tests ParseSuflae_StopWithMessage.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_StopWithMessage()
@@ -499,6 +598,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VerifyWithCondition.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VerifyWithCondition()
@@ -511,6 +613,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Breach.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Breach()
@@ -526,6 +631,9 @@ public class SuflaeControlFlowTests
     #endregion
 
     #region Complex Control Flow Tests
+    /// <summary>
+    /// Tests ParseSuflae_ComplexNestedControlFlow.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ComplexNestedControlFlow()
@@ -544,6 +652,9 @@ public class SuflaeControlFlowTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ControlFlowWithErrorHandling.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ControlFlowWithErrorHandling()

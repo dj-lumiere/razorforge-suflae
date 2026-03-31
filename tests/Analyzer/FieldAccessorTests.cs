@@ -12,6 +12,9 @@ using static TestHelpers;
 /// </summary>
 public class FieldAccessorTests
 {
+    /// <summary>
+    /// Tests Analyze_RecordWithOpenAndSecretFields_AllFieldsResolves.
+    /// </summary>
     [Fact]
     public void Analyze_RecordWithOpenAndSecretFields_AllFieldsResolves()
     {
@@ -27,6 +30,9 @@ public class FieldAccessorTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
     }
+    /// <summary>
+    /// Tests Analyze_RecordWithOpenAndSecretFields_OpenFieldsResolves.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithOpenAndSecretFields_OpenFieldsResolves()

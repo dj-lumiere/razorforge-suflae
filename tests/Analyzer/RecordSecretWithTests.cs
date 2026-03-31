@@ -13,6 +13,9 @@ using static TestHelpers;
 public class RecordSecretWithTests
 {
     #region #45: With secret member prohibition
+    /// <summary>
+    /// Tests Analyze_WithOpenMemberVariable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOpenMemberVariable_NoError()
@@ -30,6 +33,9 @@ public class RecordSecretWithTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithSecretMemberProhibited);
     }
+    /// <summary>
+    /// Tests Analyze_WithSecretMemberVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithSecretMemberVariable_ReportsError()
@@ -47,6 +53,9 @@ public class RecordSecretWithTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithSecretMemberProhibited);
     }
+    /// <summary>
+    /// Tests Analyze_WithPostedMemberVariable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithPostedMemberVariable_NoError()

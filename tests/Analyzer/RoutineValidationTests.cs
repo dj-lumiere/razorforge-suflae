@@ -14,6 +14,9 @@ using static TestHelpers;
 public class RoutineValidationTests
 {
     #region #157: Mutation category conflict
+    /// <summary>
+    /// Tests Analyze_SingleMutationAnnotation_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_SingleMutationAnnotation_NoError()
@@ -31,6 +34,9 @@ public class RoutineValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
     }
+    /// <summary>
+    /// Tests Analyze_ConflictingMutationAnnotations_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConflictingMutationAnnotations_ReportsError()
@@ -54,6 +60,9 @@ public class RoutineValidationTests
     #endregion
 
     #region #151: Static/instance mismatch
+    /// <summary>
+    /// Tests Analyze_CommonRoutineCalledOnInstance_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_CommonRoutineCalledOnInstance_ReportsError()
@@ -74,6 +83,9 @@ public class RoutineValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CommonRoutineMismatch);
     }
+    /// <summary>
+    /// Tests Analyze_CommonRoutineCalledOnType_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_CommonRoutineCalledOnType_NoError()

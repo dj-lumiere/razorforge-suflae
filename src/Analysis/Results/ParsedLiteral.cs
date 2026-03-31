@@ -14,6 +14,7 @@ public abstract record ParsedLiteral(SourceLocation Location);
 public sealed record ParsedF128(SourceLocation Location, ulong Lo, ulong Hi)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"f128(0x{Hi:X16}{Lo:X16})";
@@ -26,6 +27,7 @@ public sealed record ParsedF128(SourceLocation Location, ulong Lo, ulong Hi)
 public sealed record ParsedD32(SourceLocation Location, uint Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"d32(0x{Value:X8})";
@@ -38,6 +40,7 @@ public sealed record ParsedD32(SourceLocation Location, uint Value)
 public sealed record ParsedD64(SourceLocation Location, ulong Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"d64(0x{Value:X16})";
@@ -50,6 +53,7 @@ public sealed record ParsedD64(SourceLocation Location, ulong Value)
 public sealed record ParsedD128(SourceLocation Location, ulong Lo, ulong Hi)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"d128(0x{Hi:X16}{Lo:X16})";
@@ -62,7 +66,11 @@ public sealed record ParsedD128(SourceLocation Location, ulong Lo, ulong Hi)
 public sealed record ParsedInteger(SourceLocation Location, byte[] Limbs, int Sign, long Exponent)
     : ParsedLiteral(Location: Location)
 {
+    /// <summary>
+    /// Gets whether the parsed integer has a negative sign.
+    /// </summary>
     public bool IsNegative => Sign != 0;
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"Integer({(IsNegative ? "-" : "")}{Limbs.Length} limbs)";
@@ -81,8 +89,15 @@ public sealed record ParsedDecimal(
     int SignificantDigits,
     bool IsInteger) : ParsedLiteral(Location: Location)
 {
+    /// <summary>
+    /// Gets whether the parsed decimal has a negative sign.
+    /// </summary>
     public bool IsNegative => Sign < 0;
+    /// <summary>
+    /// Gets whether the parsed decimal represents zero.
+    /// </summary>
     public bool IsZero => Sign == 0;
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"Decimal({StringValue}, exp={Exponent})";
@@ -95,6 +110,7 @@ public sealed record ParsedDecimal(
 public sealed record ParsedSignedInt(SourceLocation Location, string TypeName, Int128 Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"{TypeName}({Value})";
@@ -107,6 +123,7 @@ public sealed record ParsedSignedInt(SourceLocation Location, string TypeName, I
 public sealed record ParsedUnsignedInt(SourceLocation Location, string TypeName, UInt128 Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"{TypeName}({Value})";
@@ -120,6 +137,7 @@ public sealed record ParsedUnsignedInt(SourceLocation Location, string TypeName,
 public sealed record ParsedFloat(SourceLocation Location, string TypeName, double Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"{TypeName}({Value})";
@@ -133,6 +151,7 @@ public sealed record ParsedFloat(SourceLocation Location, string TypeName, doubl
 public sealed record ParsedDuration(SourceLocation Location, long Nanoseconds, string OriginalUnit)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"Duration({Nanoseconds}ns, original={OriginalUnit})";
@@ -146,6 +165,7 @@ public sealed record ParsedDuration(SourceLocation Location, long Nanoseconds, s
 public sealed record ParsedByteSize(SourceLocation Location, ulong Bytes, string OriginalUnit)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"ByteSize({Bytes}b, original={OriginalUnit})";
@@ -158,6 +178,7 @@ public sealed record ParsedByteSize(SourceLocation Location, ulong Bytes, string
 public sealed record ParsedJ32(SourceLocation Location, float Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"J32({Value}i)";
@@ -170,6 +191,7 @@ public sealed record ParsedJ32(SourceLocation Location, float Value)
 public sealed record ParsedJ64(SourceLocation Location, double Value)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"J64({Value}i)";
@@ -183,6 +205,7 @@ public sealed record ParsedJ64(SourceLocation Location, double Value)
 public sealed record ParsedJ128(SourceLocation Location, ulong Lo, ulong Hi)
     : ParsedLiteral(Location: Location)
 {
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"J128(0x{Hi:X16}{Lo:X16}i)";
@@ -200,8 +223,15 @@ public sealed record ParsedJn(
     int Exponent,
     int SignificantDigits) : ParsedLiteral(Location: Location)
 {
+    /// <summary>
+    /// Gets whether the parsed arbitrary-precision imaginary component has a negative sign.
+    /// </summary>
     public bool IsNegative => Sign < 0;
+    /// <summary>
+    /// Gets whether the parsed arbitrary-precision imaginary component represents zero.
+    /// </summary>
     public bool IsZero => Sign == 0;
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"Jn({StringValue}i, exp={Exponent})";

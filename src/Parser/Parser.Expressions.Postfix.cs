@@ -4,6 +4,9 @@ using Lexer;
 using SyntaxTree;
 using Diagnostics;
 
+/// <summary>
+/// Partial class containing postfix expression parsing.
+/// </summary>
 public partial class Parser
 {
     private Expression ParsePostfix()
@@ -273,11 +276,4 @@ public partial class Parser
         return expr;
     }
 
-    /// <summary>
-    /// Parses primary expressions (literals, identifiers, parenthesized, intrinsics).
-    /// This is the highest precedence level in the expression parser.
-    /// Handles: true, false, none, numbers, strings, characters, identifiers,
-    /// parenthesized expressions, inline conditionals, @intrinsic, @native.
-    /// </summary>
-    /// <returns>A primary expression AST node.</returns>
 }

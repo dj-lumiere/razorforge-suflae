@@ -12,6 +12,9 @@ using static TestHelpers;
 public class SuflaeTypeDeclarationTests
 {
     #region Record Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleRecord_WithMemberVariables.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleRecord_WithMemberVariables()
@@ -28,6 +31,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "Point", actual: record.Name);
         Assert.Equal(expected: 2, actual: record.Members.Count);
     }
+    /// <summary>
+    /// Tests ParseSuflae_GenericRecord.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_GenericRecord()
@@ -45,6 +51,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Single(collection: record.GenericParameters);
         Assert.Equal(expected: "T", actual: record.GenericParameters[index: 0]);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Record_WithConstraint.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Record_WithConstraint()
@@ -61,6 +70,9 @@ public class SuflaeTypeDeclarationTests
         Assert.NotNull(@object: record.GenericConstraints);
         Assert.Single(collection: record.GenericConstraints);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Record_FollowsProtocol.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Record_FollowsProtocol()
@@ -80,6 +92,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Entity Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleEntity.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleEntity()
@@ -96,6 +111,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "User", actual: entity.Name);
         Assert.Equal(expected: 2, actual: entity.Members.Count);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Entity_MixedMutability_Rejected.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Entity_MixedMutability_Rejected()
@@ -111,6 +129,9 @@ public class SuflaeTypeDeclarationTests
         (_, var parser) = ParseSuflaeWithErrors(source: source);
         Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var in entity body");
     }
+    /// <summary>
+    /// Tests ParseSuflae_GenericEntity.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_GenericEntity()
@@ -130,6 +151,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Choice Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleChoice.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleChoice()
@@ -148,6 +172,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "Direction", actual: choice.Name);
         Assert.Equal(expected: 4, actual: choice.Cases.Count);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Choice_WithValues.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Choice_WithValues()
@@ -169,6 +196,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Variant Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleVariant.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleVariant()
@@ -185,6 +215,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "NetworkEvent", actual: variant.Name);
         Assert.Equal(expected: 2, actual: variant.Members.Count);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Variant_WithNone.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Variant_WithNone()
@@ -206,6 +239,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Protocol Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleProtocol.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleProtocol()
@@ -221,6 +257,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "Displayable", actual: protocol.Name);
         Assert.Single(collection: protocol.Methods);
     }
+    /// <summary>
+    /// Tests ParseSuflae_GenericProtocol.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_GenericProtocol()
@@ -236,6 +275,9 @@ public class SuflaeTypeDeclarationTests
         Assert.NotNull(@object: protocol.GenericParameters);
         Assert.Single(collection: protocol.GenericParameters);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Protocol_Inheritance.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Protocol_Inheritance()
@@ -254,6 +296,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Routine Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleRoutine.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleRoutine()
@@ -269,6 +314,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "greet", actual: routine.Name);
         Assert.Single(collection: routine.Parameters);
     }
+    /// <summary>
+    /// Tests ParseSuflae_FailableRoutine.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_FailableRoutine()
@@ -283,6 +331,9 @@ public class SuflaeTypeDeclarationTests
 
         Assert.True(condition: routine.IsFailable);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Routine_WithThrow.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Routine_WithThrow()
@@ -299,6 +350,9 @@ public class SuflaeTypeDeclarationTests
 
         Assert.True(condition: routine.IsFailable);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Routine_WithAbsent.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Routine_WithAbsent()
@@ -319,6 +373,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Suflae-Specific Features
+    /// <summary>
+    /// Tests ParseSuflae_WhenStatement.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenStatement()
@@ -334,6 +391,9 @@ public class SuflaeTypeDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ForLoop.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ForLoop()
@@ -350,6 +410,9 @@ public class SuflaeTypeDeclarationTests
     #endregion
 
     #region Posted Record Field Tests
+    /// <summary>
+    /// Tests ParseSuflae_RecordWithPostedMemberVariable.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_RecordWithPostedMemberVariable()
@@ -365,6 +428,9 @@ public class SuflaeTypeDeclarationTests
         Assert.Equal(expected: "Percentage", actual: record.Name);
         Assert.Single(collection: record.Members);
     }
+    /// <summary>
+    /// Tests ParseSuflae_RecordWithMixedVisibilityMemberVariables.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_RecordWithMixedVisibilityMemberVariables()

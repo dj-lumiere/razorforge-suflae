@@ -4,6 +4,9 @@ using System.Text;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 
+/// <summary>
+/// Declaration code generation for LLVM types and routine signatures.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private void GenerateEntityType(EntityTypeInfo entity)
@@ -276,10 +279,4 @@ public partial class LLVMCodeGenerator
 
         EmitLine(sb: _typeDeclarations, line: sb.ToString());
     }
-
-
-    /// <summary>
-    /// Generates the LLVM function declaration (signature only).
-    /// </summary>
-    /// <param name="routine">The routine info.</param>
 }

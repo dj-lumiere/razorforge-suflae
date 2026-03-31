@@ -5,6 +5,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation for routine calls and compound assignment.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private string EmitFunctionCall(StringBuilder sb, string functionName,
@@ -1110,8 +1113,4 @@ public partial class LLVMCodeGenerator
             values: types.Select(selector: (t, i) => $"{t} {values[index: i]}"));
     }
 
-    /// <summary>
-    /// Generates code for compound assignment (e.g., x += 1).
-    /// Desugars to: x = x op value, then stores back and returns the result.
-    /// </summary>
 }

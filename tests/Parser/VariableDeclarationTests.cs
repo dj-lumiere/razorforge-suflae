@@ -12,6 +12,9 @@ using static TestHelpers;
 public class VariableDeclarationTests
 {
     #region Variable Declarations
+    /// <summary>
+    /// Tests Parse_VarWithTypeAndInitializer.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithTypeAndInitializer()
@@ -24,6 +27,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithInferredType.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithInferredType()
@@ -36,6 +42,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithComplexType.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithComplexType()
@@ -48,6 +57,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithGenericType.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithGenericType()
@@ -60,6 +72,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithMaybeType.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithMaybeType()
@@ -72,6 +87,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithFunctionCall.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithFunctionCall()
@@ -84,6 +102,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithExpression()
@@ -96,6 +117,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithMutation.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithMutation()
@@ -110,6 +134,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarWithoutInitializer.
+    /// </summary>
 
     [Fact]
     public void Parse_VarWithoutInitializer()
@@ -127,6 +154,9 @@ public class VariableDeclarationTests
     #endregion
 
     #region Multiple Declarations
+    /// <summary>
+    /// Tests Parse_MultipleVarDeclarations.
+    /// </summary>
 
     [Fact]
     public void Parse_MultipleVarDeclarations()
@@ -145,6 +175,9 @@ public class VariableDeclarationTests
     #endregion
 
     #region Destructuring Declarations
+    /// <summary>
+    /// Tests Parse_VarDestructuringTuple.
+    /// </summary>
 
     [Fact]
     public void Parse_VarDestructuringTuple()
@@ -157,6 +190,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarDestructuringRecord.
+    /// </summary>
 
     [Fact]
     public void Parse_VarDestructuringRecord()
@@ -169,6 +205,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarNestedDestructuring.
+    /// </summary>
 
     [Fact]
     public void Parse_VarNestedDestructuring()
@@ -181,6 +220,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarDestructuringWithAlias.
+    /// </summary>
 
     [Fact]
     public void Parse_VarDestructuringWithAlias()
@@ -193,6 +235,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_VarDestructuringWithWildcard.
+    /// </summary>
 
     [Fact]
     public void Parse_VarDestructuringWithWildcard()
@@ -209,6 +254,9 @@ public class VariableDeclarationTests
     #endregion
 
     #region Type Annotations
+    /// <summary>
+    /// Tests Parse_PrimitiveTypes.
+    /// </summary>
 
     [Fact]
     public void Parse_PrimitiveTypes()
@@ -231,6 +279,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_TextType.
+    /// </summary>
 
     [Fact]
     public void Parse_TextType()
@@ -243,6 +294,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ConstGenericType.
+    /// </summary>
 
     [Fact]
     public void Parse_ConstGenericType()
@@ -255,6 +309,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NestedGenericType.
+    /// </summary>
 
 
     [Fact]
@@ -272,6 +329,9 @@ public class VariableDeclarationTests
     #endregion
 
     #region Literal Initializers
+    /// <summary>
+    /// Tests Parse_IntegerLiterals.
+    /// </summary>
 
     [Fact]
     public void Parse_IntegerLiterals()
@@ -287,6 +347,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_FloatLiterals.
+    /// </summary>
 
     [Fact]
     public void Parse_FloatLiterals()
@@ -301,6 +364,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_TypedNumericLiterals.
+    /// </summary>
 
     [Fact]
     public void Parse_TypedNumericLiterals()
@@ -316,6 +382,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_StringLiterals.
+    /// </summary>
 
     [Fact]
     public void Parse_StringLiterals()
@@ -330,6 +399,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_BooleanLiterals.
+    /// </summary>
 
     [Fact]
     public void Parse_BooleanLiterals()
@@ -343,6 +415,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_NoneLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_NoneLiteral()
@@ -355,6 +430,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ListLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_ListLiteral()
@@ -367,6 +445,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_EmptyListLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_EmptyListLiteral()
@@ -379,6 +460,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LongTextEscapeLiteral.
+    /// </summary>
 
     [Fact]
     public void Parse_LongTextEscapeLiteral()
@@ -396,6 +480,9 @@ public class VariableDeclarationTests
     #endregion
 
     #region Field Declarations in Types
+    /// <summary>
+    /// Tests Parse_RecordMemberVariables.
+    /// </summary>
 
     [Fact]
     public void Parse_RecordMemberVariables()
@@ -410,6 +497,9 @@ public class VariableDeclarationTests
         RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
         Assert.Equal(expected: 2, actual: record.Members.Count);
     }
+    /// <summary>
+    /// Tests Parse_EntityVarMemberVariables_Rejected.
+    /// </summary>
 
     [Fact]
     public void Parse_EntityVarMemberVariables_Rejected()
@@ -423,6 +513,9 @@ public class VariableDeclarationTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Tests Parse_EntityMultipleVarMemberVariables_Rejected.
+    /// </summary>
 
     [Fact]
     public void Parse_EntityMultipleVarMemberVariables_Rejected()
@@ -441,6 +534,9 @@ public class VariableDeclarationTests
     #endregion
 
     #region Complex Initializers
+    /// <summary>
+    /// Tests Parse_ConstructorCall.
+    /// </summary>
 
     [Fact]
     public void Parse_ConstructorCall()
@@ -453,6 +549,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_MethodCallChain.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallChain()
@@ -465,6 +564,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_ConditionalInitializer.
+    /// </summary>
 
     [Fact]
     public void Parse_ConditionalInitializer()
@@ -477,6 +579,9 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenExpressionInitializer.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenExpressionInitializer()

@@ -12,6 +12,9 @@ using static TestHelpers;
 public class SuflaeAccessBlockTests
 {
     #region Using Block Tests (Resource Management)
+    /// <summary>
+    /// Tests ParseSuflae_SimpleUsing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleUsing()
@@ -25,6 +28,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingMultipleResources.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingMultipleResources()
@@ -38,6 +44,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NestedUsing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NestedUsing()
@@ -51,6 +60,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingWithControlFlow.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingWithControlFlow()
@@ -66,6 +78,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingWithAsync.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingWithAsync()
@@ -79,6 +94,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingWithPatternMatching.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingWithPatternMatching()
@@ -94,6 +112,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingDatabaseConnection.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingDatabaseConnection()
@@ -108,6 +129,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingWithTransaction.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingWithTransaction()
@@ -123,6 +147,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_UsingWithLock.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_UsingWithLock()
@@ -140,6 +167,9 @@ public class SuflaeAccessBlockTests
     #endregion
 
     #region Complex Resource Patterns
+    /// <summary>
+    /// Tests ParseSuflae_MultipleFilesProcessing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MultipleFilesProcessing()
@@ -155,6 +185,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NetworkResourceManagement.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NetworkResourceManagement()
@@ -168,6 +201,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_PooledResource.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_PooledResource()
@@ -185,6 +221,9 @@ public class SuflaeAccessBlockTests
     #endregion
 
     #region Thread Spawn Tests
+    /// <summary>
+    /// Tests ParseSuflae_SpawnThread.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SpawnThread()
@@ -199,6 +238,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_SpawnWithArguments.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SpawnWithArguments()
@@ -214,6 +256,9 @@ public class SuflaeAccessBlockTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_SpawnMultiple.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SpawnMultiple()

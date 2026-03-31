@@ -358,10 +358,4 @@ public partial class LLVMCodeGenerator
 
         return result;
     }
-
-
-    /// <summary>
-    /// Emits the body for a synthesized type_name() routine.
-    /// Returns the type's name as a Text constant.
-    /// </summary>
 }

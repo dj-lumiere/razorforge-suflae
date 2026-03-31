@@ -13,6 +13,9 @@ using static TestHelpers;
 public class FlagsValidationTests
 {
     #region Valid Flags (no errors expected)
+    /// <summary>
+    /// Tests Flags_SimpleDeclaration_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_SimpleDeclaration_NoErrors()
@@ -30,6 +33,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsDuplicateMember);
     }
+    /// <summary>
+    /// Tests Flags_IsTest_ValidMember_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_IsTest_ValidMember_NoErrors()
@@ -51,6 +57,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
+    /// <summary>
+    /// Tests Flags_IsNotTest_ValidMember_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_IsNotTest_ValidMember_NoErrors()
@@ -70,6 +79,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
+    /// <summary>
+    /// Tests Flags_IsOnlyWithAnd_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_IsOnlyWithAnd_NoErrors()
@@ -89,6 +101,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut);
     }
+    /// <summary>
+    /// Tests Flags_ButOperator_SameType_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_ButOperator_SameType_NoErrors()
@@ -108,6 +123,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
+    /// <summary>
+    /// Tests Flags_AndCombiner_SameType_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_AndCombiner_SameType_NoErrors()
@@ -129,6 +147,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
+    /// <summary>
+    /// Tests Flags_AndCombiner_DifferentTypes_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_AndCombiner_DifferentTypes_ReportsError()
@@ -151,6 +172,9 @@ public class FlagsValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
     }
+    /// <summary>
+    /// Tests Flags_AllOnAllOff_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Flags_AllOnAllOff_NoErrors()
@@ -175,6 +199,9 @@ public class FlagsValidationTests
     #endregion
 
     #region #127: Max 64 members
+    /// <summary>
+    /// Tests Flags_MoreThan64Members_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_MoreThan64Members_ReportsError()
@@ -189,6 +216,9 @@ public class FlagsValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTooManyMembers);
     }
+    /// <summary>
+    /// Tests Flags_Exactly64Members_NoError.
+    /// </summary>
 
     [Fact]
     public void Flags_Exactly64Members_NoError()
@@ -207,6 +237,9 @@ public class FlagsValidationTests
     #endregion
 
     #region Duplicate members
+    /// <summary>
+    /// Tests Flags_DuplicateMember_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_DuplicateMember_ReportsError()
@@ -226,6 +259,9 @@ public class FlagsValidationTests
     #endregion
 
     #region #128: or in assignment
+    /// <summary>
+    /// Tests Flags_OrInAssignment_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_OrInAssignment_ReportsError()
@@ -248,6 +284,9 @@ public class FlagsValidationTests
     #endregion
 
     #region #129: Flags when requires else
+    /// <summary>
+    /// Tests Flags_WhenExpressionWithoutElse_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_WhenExpressionWithoutElse_ReportsError()
@@ -268,6 +307,9 @@ public class FlagsValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Tests Flags_WhenExpressionWithElse_NoError.
+    /// </summary>
 
     [Fact]
     public void Flags_WhenExpressionWithElse_NoError()
@@ -296,6 +338,9 @@ public class FlagsValidationTests
     // #133 is enforced at the parser level: the isonly parser only accepts 'and' connective.
     // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' — a logical or,
     // which produces LogicalOperatorRequiresBool. No semantic check needed.
+    /// <summary>
+    /// Tests Flags_IsOnlyWithOr_ProducesParseError.
+    /// </summary>
 
     [Fact]
     public void Flags_IsOnlyWithOr_ProducesParseError()
@@ -319,6 +364,9 @@ public class FlagsValidationTests
     #endregion
 
     #region #134: No arithmetic on flags
+    /// <summary>
+    /// Tests Flags_Arithmetic_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_Arithmetic_ReportsError()
@@ -341,6 +389,9 @@ public class FlagsValidationTests
     #endregion
 
     #region #135: No custom operators on flags
+    /// <summary>
+    /// Tests Flags_CustomOperator_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_CustomOperator_ReportsError()
@@ -363,6 +414,9 @@ public class FlagsValidationTests
     #endregion
 
     #region Flag member validation
+    /// <summary>
+    /// Tests Flags_IsTest_UnknownMember_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_IsTest_UnknownMember_ReportsError()
@@ -381,6 +435,9 @@ public class FlagsValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
+    /// <summary>
+    /// Tests Flags_IsTestOnNonFlags_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_IsTestOnNonFlags_ReportsError()
@@ -396,6 +453,9 @@ public class FlagsValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownType);
     }
+    /// <summary>
+    /// Tests Flags_ButOperator_TypeMismatch_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Flags_ButOperator_TypeMismatch_ReportsError()
@@ -422,6 +482,9 @@ public class FlagsValidationTests
     #endregion
 
     #region Member Access (C98)
+    /// <summary>
+    /// Tests Flags_MemberAccess_AsValue.
+    /// </summary>
 
     [Fact]
     public void Flags_MemberAccess_AsValue()
@@ -445,6 +508,9 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
+    /// <summary>
+    /// Tests Flags_MemberAccess_InvalidMember.
+    /// </summary>
 
     [Fact]
     public void Flags_MemberAccess_InvalidMember()

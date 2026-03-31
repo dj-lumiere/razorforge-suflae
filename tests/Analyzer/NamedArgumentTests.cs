@@ -15,6 +15,9 @@ using static TestHelpers;
 public class NamedArgumentTests
 {
     #region Unknown Named Argument (#152 / S505)
+    /// <summary>
+    /// Tests Analyze_UnknownNamedArgument_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UnknownNamedArgument_ReportsError()
@@ -31,6 +34,9 @@ public class NamedArgumentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownNamedArgument);
     }
+    /// <summary>
+    /// Tests Analyze_ValidNamedArgument_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ValidNamedArgument_NoError()
@@ -47,6 +53,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownNamedArgument);
     }
+    /// <summary>
+    /// Tests Analyze_UnknownNamedArgument_MultipleParams_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UnknownNamedArgument_MultipleParams_ReportsError()
@@ -67,6 +76,9 @@ public class NamedArgumentTests
     #endregion
 
     #region Duplicate Named Argument (#153 / S506)
+    /// <summary>
+    /// Tests Analyze_DuplicateNamedArgument_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateNamedArgument_ReportsError()
@@ -83,6 +95,9 @@ public class NamedArgumentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicateNamedArgument);
     }
+    /// <summary>
+    /// Tests Analyze_PositionalThenSameNamed_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_PositionalThenSameNamed_ReportsError()
@@ -99,6 +114,9 @@ public class NamedArgumentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicateNamedArgument);
     }
+    /// <summary>
+    /// Tests Analyze_DistinctNamedArguments_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_DistinctNamedArguments_NoError()
@@ -119,6 +137,9 @@ public class NamedArgumentTests
     #endregion
 
     #region Positional After Named (#154 / S507)
+    /// <summary>
+    /// Tests Analyze_PositionalAfterNamed_S510SubsumesS507.
+    /// </summary>
 
     [Fact]
     public void Analyze_PositionalAfterNamed_S510SubsumesS507()
@@ -138,6 +159,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
     }
+    /// <summary>
+    /// Tests Analyze_AllNamed_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AllNamed_NoError()
@@ -154,6 +178,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
     }
+    /// <summary>
+    /// Tests Analyze_NamedOutOfOrder_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_NamedOutOfOrder_NoError()
@@ -178,6 +205,9 @@ public class NamedArgumentTests
     #endregion
 
     #region Named Argument Enforcement (S510)
+    /// <summary>
+    /// Tests Analyze_TwoParams_AllPositional_ReportsS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_TwoParams_AllPositional_ReportsS510()
@@ -194,6 +224,9 @@ public class NamedArgumentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_TwoParams_AllNamed_NoS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_TwoParams_AllNamed_NoS510()
@@ -210,6 +243,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_TwoParams_MixedPositionalNamed_ReportsS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_TwoParams_MixedPositionalNamed_ReportsS510()
@@ -226,6 +262,9 @@ public class NamedArgumentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_OneParam_Positional_NoS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_OneParam_Positional_NoS510()
@@ -242,6 +281,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_ZeroParams_NoS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_ZeroParams_NoS510()
@@ -258,6 +300,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_MemberRoutine_OneNonMeParam_Positional_NoS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_MemberRoutine_OneNonMeParam_Positional_NoS510()
@@ -283,6 +328,9 @@ public class NamedArgumentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_MemberRoutine_TwoNonMeParams_Positional_ReportsS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_MemberRoutine_TwoNonMeParams_Positional_ReportsS510()
@@ -305,6 +353,9 @@ public class NamedArgumentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests Analyze_TwoParams_NamedOutOfOrder_NoS510.
+    /// </summary>
 
     [Fact]
     public void Analyze_TwoParams_NamedOutOfOrder_NoS510()

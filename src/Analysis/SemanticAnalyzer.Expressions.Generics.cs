@@ -425,9 +425,4 @@ public sealed partial class SemanticAnalyzer
             location: expression.Location);
         return ErrorTypeInfo.Instance;
     }
-
-    /// <summary>
-    /// Analyzes an inserted text expression (f-string).
-    /// Validates all embedded expressions and returns Text type.
-    /// </summary>
 }

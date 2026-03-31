@@ -5,6 +5,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation for generic routine and member routine calls.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private string EmitGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic)
@@ -1211,8 +1214,4 @@ public partial class LLVMCodeGenerator
         return type;
     }
 
-    /// <summary>
-    /// Resolves the type of an identifier expression, handling generic type params
-    /// and const generic values via <see cref="_typeSubstitutions"/> key lookup.
-    /// </summary>
 }

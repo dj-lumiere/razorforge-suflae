@@ -13,6 +13,9 @@ using static TestHelpers;
 public class PatternValidationTests
 {
     #region Variable Shadowing
+    /// <summary>
+    /// Tests Analyze_TypePattern_ShadowsOuterVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_ShadowsOuterVariable_ReportsError()
@@ -30,6 +33,9 @@ public class PatternValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
+    /// <summary>
+    /// Tests Analyze_ElsePattern_ShadowsOuterVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ElsePattern_ShadowsOuterVariable_ReportsError()
@@ -47,6 +53,9 @@ public class PatternValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
+    /// <summary>
+    /// Tests Analyze_TypePattern_UniqueVariableName_NoShadowingError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_UniqueVariableName_NoShadowingError()
@@ -64,6 +73,9 @@ public class PatternValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
+    /// <summary>
+    /// Tests Analyze_TypePattern_SameNameDifferentClauses_NoShadowingError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_SameNameDifferentClauses_NoShadowingError()
@@ -85,6 +97,9 @@ public class PatternValidationTests
     #endregion
 
     #region Scope Isolation
+    /// <summary>
+    /// Tests Analyze_WhenExpression_ClauseScopesIsolated.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpression_ClauseScopesIsolated()
@@ -107,6 +122,9 @@ public class PatternValidationTests
     #endregion
 
     #region Type Compatibility
+    /// <summary>
+    /// Tests Analyze_TypePattern_CompatibleType_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_CompatibleType_NoError()
@@ -124,6 +142,9 @@ public class PatternValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
+    /// <summary>
+    /// Tests Analyze_TypePattern_IncompatibleType_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_IncompatibleType_ReportsError()

@@ -13,6 +13,9 @@ using static TestHelpers;
 public class SuflaePatternMatchingTests
 {
     #region Basic When Statement Tests
+    /// <summary>
+    /// Tests ParseSuflae_SimpleWhen.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleWhen()
@@ -34,6 +37,9 @@ public class SuflaePatternMatchingTests
                                      .First();
         Assert.NotNull(@object: whenStmt);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenWithBlock.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenWithBlock()
@@ -49,6 +55,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenAsExpression.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenAsExpression()
@@ -63,6 +72,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenWithAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenWithAssignment()
@@ -80,6 +92,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Is Type Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenIsType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenIsType()
@@ -94,6 +109,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenIsTypeWithoutBinding.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenIsTypeWithoutBinding()
@@ -108,6 +126,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenIsCustomType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenIsCustomType()
@@ -126,6 +147,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Choice Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenChoice.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenChoice()
@@ -141,6 +165,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenChoiceShorthand.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenChoiceShorthand()
@@ -160,6 +187,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Variant Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenVariant.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenVariant()
@@ -174,6 +204,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenVariantDestructuring.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenVariantDestructuring()
@@ -189,6 +222,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenVariantDestructuringWithAlias.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenVariantDestructuringWithAlias()
@@ -203,6 +239,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenNestedDestructuring.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenNestedDestructuring()
@@ -222,6 +261,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Guard Clause Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenWithGuard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenWithGuard()
@@ -236,6 +278,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenLiteralWithGuard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenLiteralWithGuard()
@@ -250,6 +295,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenTypeWithComplexGuard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenTypeWithComplexGuard()
@@ -268,6 +316,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Maybe/Result/Lookup Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenMaybe.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenMaybe()
@@ -281,6 +332,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenResult.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenResult()
@@ -294,6 +348,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenResultSpecificError.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenResultSpecificError()
@@ -309,6 +366,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenLookup.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenLookup()
@@ -323,6 +383,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenLookupSpecificErrors.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenLookupSpecificErrors()
@@ -343,6 +406,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Literal Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenLiteralInteger.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenLiteralInteger()
@@ -358,6 +424,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenLiteralText.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenLiteralText()
@@ -373,6 +442,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenLiteralBool.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenLiteralBool()
@@ -390,6 +462,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Wildcard Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenWildcard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenWildcard()
@@ -403,6 +478,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenWildcardInDestructuring.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenWildcardInDestructuring()
@@ -421,6 +499,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Else Binding Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenElseWithBinding.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenElseWithBinding()
@@ -434,6 +515,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenElseWithBlock.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenElseWithBlock()
@@ -455,6 +539,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Let Destructuring Tests
+    /// <summary>
+    /// Tests ParseSuflae_LetDestructuringRecord.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LetDestructuringRecord()
@@ -466,6 +553,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LetDestructuringWithAlias.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LetDestructuringWithAlias()
@@ -477,6 +567,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LetNestedDestructuring.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LetNestedDestructuring()
@@ -492,6 +585,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Multi-line Arm Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenMultiLineArm.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenMultiLineArm()
@@ -513,6 +609,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Complex Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_ComplexNestedPatterns.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ComplexNestedPatterns()
@@ -539,6 +638,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenWithMultipleStatements.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenWithMultipleStatements()
@@ -565,6 +667,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Comparison Pattern Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonNotEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonNotEqual()
@@ -578,6 +683,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonLessThan.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonLessThan()
@@ -592,6 +700,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonGreaterThan.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonGreaterThan()
@@ -606,6 +717,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonLessThanOrEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonLessThanOrEqual()
@@ -621,6 +735,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonGreaterThanOrEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonGreaterThanOrEqual()
@@ -636,6 +753,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonStrictEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonStrictEqual()
@@ -649,6 +769,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonStrictNotEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonStrictNotEqual()
@@ -662,6 +785,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonWithMemberAccess.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonWithMemberAccess()
@@ -677,6 +803,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonWithMethodCall()
@@ -691,6 +820,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenMixedComparisonPatterns.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenMixedComparisonPatterns()
@@ -707,6 +839,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ReturnWhenWithLessThanPattern.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ReturnWhenWithLessThanPattern()
@@ -726,6 +861,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Becomes Statement Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenBlockWithBecomes.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenBlockWithBecomes()
@@ -741,6 +879,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenMultipleBlocksWithBecomes.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenMultipleBlocksWithBecomes()
@@ -763,6 +904,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenTypePatternWithBlockAndBecomes.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenTypePatternWithBlockAndBecomes()
@@ -784,6 +928,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenBlockWithBecomesExpression.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenBlockWithBecomesExpression()
@@ -804,6 +951,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Comparison Patterns with Guards Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonWithGuard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonWithGuard()
@@ -819,6 +969,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenComparisonWithComplexGuard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenComparisonWithComplexGuard()
@@ -839,6 +992,9 @@ public class SuflaePatternMatchingTests
     #endregion
 
     #region Complex Boolean Guard Tests
+    /// <summary>
+    /// Tests ParseSuflae_WhenGuardWithAnd.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenGuardWithAnd()
@@ -852,6 +1008,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenGuardWithOr.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenGuardWithOr()
@@ -865,6 +1024,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenGuardWithAndOr.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenGuardWithAndOr()
@@ -880,6 +1042,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenGuardWithMemberVariableAccess.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenGuardWithMemberVariableAccess()
@@ -894,6 +1059,9 @@ public class SuflaePatternMatchingTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenGuardWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenGuardWithMethodCall()

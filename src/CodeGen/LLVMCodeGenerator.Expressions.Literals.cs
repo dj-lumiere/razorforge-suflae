@@ -572,8 +572,4 @@ public partial class LLVMCodeGenerator
 
         return constName;
     }
-
-    /// <summary>
-    /// Generates code for an identifier expression (variable reference).
-    /// </summary>
 }

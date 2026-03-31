@@ -8,6 +8,7 @@ using Enums;
 /// </summary>
 public sealed class IntrinsicTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Intrinsic;
 
     /// <summary>The corresponding LLVM IR type string (e.g., "i32", "float", "double").</summary>

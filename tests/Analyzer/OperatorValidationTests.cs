@@ -16,6 +16,9 @@ using static TestHelpers;
 public class OperatorValidationTests
 {
     #region #66: Index operator type-kind restriction
+    /// <summary>
+    /// Tests Analyze_IndexOperatorOnEntity_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_IndexOperatorOnEntity_NoError()
@@ -35,6 +38,9 @@ public class OperatorValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
     }
+    /// <summary>
+    /// Tests Analyze_IndexOperatorOnRecord_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_IndexOperatorOnRecord_ReportsError()
@@ -59,6 +65,9 @@ public class OperatorValidationTests
     #endregion
 
     #region #117: Fixed-width numeric type mismatch
+    /// <summary>
+    /// Tests Analyze_SameFixedWidthArithmetic_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_SameFixedWidthArithmetic_NoError()
@@ -75,6 +84,9 @@ public class OperatorValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
     }
+    /// <summary>
+    /// Tests Analyze_MixedFixedWidthArithmetic_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_MixedFixedWidthArithmetic_ReportsError()
@@ -92,6 +104,9 @@ public class OperatorValidationTests
     #endregion
 
     #region #119: BackIndex in Range restriction
+    /// <summary>
+    /// Tests Analyze_BackIndexInRange_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_BackIndexInRange_ReportsError()
@@ -106,6 +121,9 @@ public class OperatorValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
     }
+    /// <summary>
+    /// Tests Analyze_BackIndexInSlice_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_BackIndexInSlice_NoError()
@@ -124,6 +142,9 @@ public class OperatorValidationTests
     #endregion
 
     #region S201: Binary operator type mismatch
+    /// <summary>
+    /// Tests Analyze_TextPlusList_ReportsArgumentTypeMismatch.
+    /// </summary>
 
     [Fact]
     public void Analyze_TextPlusList_ReportsArgumentTypeMismatch()
@@ -137,6 +158,9 @@ public class OperatorValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
+    /// <summary>
+    /// Tests Analyze_TextPlusText_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_TextPlusText_NoError()

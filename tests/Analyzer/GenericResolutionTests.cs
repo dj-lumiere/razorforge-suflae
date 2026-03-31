@@ -11,6 +11,9 @@ using static TestHelpers;
 public class GenericResolutionTests
 {
     #region S191 — Void return on generic method calls
+    /// <summary>
+    /// Tests Analyze_GenericVoidMethod_ReturnsBlank.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericVoidMethod_ReturnsBlank()
@@ -36,6 +39,9 @@ public class GenericResolutionTests
     #endregion
 
     #region S192 — Double-generic method return type
+    /// <summary>
+    /// Tests Analyze_MethodLevelGenericReturnType_ResolvesCorrectly.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodLevelGenericReturnType_ResolvesCorrectly()
@@ -58,6 +64,9 @@ public class GenericResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_MethodLevelGenericReturnType_InfersWithoutAnnotation.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodLevelGenericReturnType_InfersWithoutAnnotation()
@@ -80,6 +89,9 @@ public class GenericResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_MethodLevelGenericDirectReturn_ResolvesCorrectly.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodLevelGenericDirectReturn_ResolvesCorrectly()
@@ -105,6 +117,9 @@ public class GenericResolutionTests
     #endregion
 
     #region S193 — $eq on generic record types
+    /// <summary>
+    /// Tests Analyze_GenericRecordMethodLookup_WorksOnResolution.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecordMethodLookup_WorksOnResolution()
@@ -131,6 +146,9 @@ public class GenericResolutionTests
     #endregion
 
     #region LookupMethod fully-resolved results
+    /// <summary>
+    /// Tests Analyze_GenericOwnerMethod_ParamTypeSubstituted.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericOwnerMethod_ParamTypeSubstituted()
@@ -154,6 +172,9 @@ public class GenericResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_GenericOwnerMethod_ReturnTypeSubstituted.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericOwnerMethod_ReturnTypeSubstituted()
@@ -175,6 +196,9 @@ public class GenericResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_GenericOwnerMethod_NestedGenericSubstitution.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericOwnerMethod_NestedGenericSubstitution()
@@ -202,6 +226,9 @@ public class GenericResolutionTests
     #endregion
 
     #region P2 — GenericDefinition preserved after type updates
+    /// <summary>
+    /// Tests Analyze_GenericRecord_PreservesDefinitionAfterMemberUpdate.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecord_PreservesDefinitionAfterMemberUpdate()
@@ -224,6 +251,9 @@ public class GenericResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_GenericEntity_PreservesDefinitionAfterMemberUpdate.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericEntity_PreservesDefinitionAfterMemberUpdate()

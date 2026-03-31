@@ -12,6 +12,9 @@ using static TestHelpers;
 /// </summary>
 public class MarkerConformanceTests
 {
+    /// <summary>
+    /// Tests Analyze_Record_HasRecordTypeConformance.
+    /// </summary>
     [Fact]
     public void Analyze_Record_HasRecordTypeConformance()
     {
@@ -32,6 +35,9 @@ public class MarkerConformanceTests
         Assert.Contains(collection: record.ImplementedProtocols,
             filter: p => p.Name == "RecordType");
     }
+    /// <summary>
+    /// Tests Analyze_Record_HasTransitiveProtocols.
+    /// </summary>
 
     [Fact]
     public void Analyze_Record_HasTransitiveProtocols()
@@ -57,6 +63,9 @@ public class MarkerConformanceTests
         Assert.Contains(collection: record.ImplementedProtocols,
             filter: p => p.Name == "Diagnosable");
     }
+    /// <summary>
+    /// Tests Analyze_Entity_HasEntityTypeConformance.
+    /// </summary>
 
     [Fact]
     public void Analyze_Entity_HasEntityTypeConformance()
@@ -79,6 +88,9 @@ public class MarkerConformanceTests
         Assert.Contains(collection: entity.ImplementedProtocols,
             filter: p => p.Name == "Identifiable");
     }
+    /// <summary>
+    /// Tests Analyze_Choice_HasChoiceTypeConformance.
+    /// </summary>
 
     [Fact]
     public void Analyze_Choice_HasChoiceTypeConformance()
@@ -103,6 +115,9 @@ public class MarkerConformanceTests
         Assert.Contains(collection: choice.ImplementedProtocols,
             filter: p => p.Name == "Hashable");
     }
+    /// <summary>
+    /// Tests Analyze_Flags_HasFlagsTypeConformance.
+    /// </summary>
 
     [Fact]
     public void Analyze_Flags_HasFlagsTypeConformance()
@@ -127,6 +142,9 @@ public class MarkerConformanceTests
         Assert.Contains(collection: flags.ImplementedProtocols,
             filter: p => p.Name == "Hashable");
     }
+    /// <summary>
+    /// Tests Analyze_Record_ImplicitConformanceDoesNotBreakExplicitObeys.
+    /// </summary>
 
     [Fact]
     public void Analyze_Record_ImplicitConformanceDoesNotBreakExplicitObeys()
@@ -150,6 +168,9 @@ public class MarkerConformanceTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests Analyze_InnateOverride_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_InnateOverride_ReportsError()

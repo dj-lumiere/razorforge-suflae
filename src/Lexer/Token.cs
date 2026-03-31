@@ -5,6 +5,7 @@ namespace Compiler.Lexer;
 /// Contains all information needed for parsing and error reporting.
 /// </summary>
 /// <param name="Type">The type of token (keyword, identifier, literal, etc.)</param>
+/// <param name="FileName">Source file name where this token was read.</param>
 /// <param name="Text">The actual text content from the source code</param>
 /// <param name="Line">1-based line number where this token appears</param>
 /// <param name="Column">1-based column number where this token starts</param>

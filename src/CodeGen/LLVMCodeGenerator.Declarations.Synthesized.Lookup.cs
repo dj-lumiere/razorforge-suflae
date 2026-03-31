@@ -4,6 +4,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Declaration code generation for synthesized equality and lookup-style routines.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private RoutineDeclaration? FindGenericAstRoutine(string genericAstName,
@@ -659,9 +662,4 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "");
     }
 
-    /// <summary>
-    /// Emits the body for a synthesized $eq routine.
-    /// For records: AND chain of field-by-field $eq calls (or icmp for primitives).
-    /// For entities: field-by-field equality via GEP load + comparison.
-    /// </summary>
 }

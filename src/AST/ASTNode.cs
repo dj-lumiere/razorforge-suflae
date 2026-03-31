@@ -39,6 +39,7 @@ public interface IAstNode
 /// <param name="Line">1-based line number in the source file</param>
 /// <param name="Column">1-based column number within the line</param>
 /// <param name="Position">0-based absolute character position in the source text</param>
+/// <param name="FileName">Source file name for the location.</param>
 /// <remarks>
 /// Location information is preserved throughout the build pipeline:
 /// <list type="bullet">

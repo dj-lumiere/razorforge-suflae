@@ -328,11 +328,4 @@ public sealed partial class SemanticAnalyzer
 
         return false;
     }
-
-    /// <summary>
-    /// Checks if a hijacking source expression would result in nested hijacking.
-    /// Nested hijacking occurs when trying to hijack a member of an already-hijacked object.
-    /// </summary>
-    /// <param name="source">The source expression for the hijacking statement.</param>
-    /// <returns>True if this would be a nested hijacking, false otherwise.</returns>
 }

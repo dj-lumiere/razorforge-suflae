@@ -13,6 +13,9 @@ using static TestHelpers;
 public class ErrorVariantGenerationTests
 {
     #region Maybe Variant (absent only)
+    /// <summary>
+    /// Tests Analyze_FailableWithAbsentOnly_GeneratesTryVariant.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithAbsentOnly_GeneratesTryVariant()
@@ -46,6 +49,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region Result Variant (throw only)
+    /// <summary>
+    /// Tests Analyze_FailableWithThrowOnly_GeneratesCheckAndTryVariants.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithThrowOnly_GeneratesCheckAndTryVariants()
@@ -85,6 +91,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region Lookup Variant (throw AND absent)
+    /// <summary>
+    /// Tests Analyze_FailableWithBothThrowAndAbsent_GeneratesLookupAndTryVariants.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithBothThrowAndAbsent_GeneratesLookupAndTryVariants()
@@ -135,6 +144,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region Variant Generation for Methods
+    /// <summary>
+    /// Tests Analyze_FailableMethod_GeneratesVariants.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableMethod_GeneratesVariants()
@@ -159,6 +171,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region No Variant Generation
+    /// <summary>
+    /// Tests Analyze_NonFailableRoutine_NoVariantsGenerated.
+    /// </summary>
 
     [Fact]
     public void Analyze_NonFailableRoutine_NoVariantsGenerated()
@@ -175,6 +190,9 @@ public class ErrorVariantGenerationTests
         Assert.Null(@object: result.Registry.GetRoutine(name: "check_add"));
         Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_add"));
     }
+    /// <summary>
+    /// Tests Analyze_FailableWithNoThrowOrAbsent_WarnsOrErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithNoThrowOrAbsent_WarnsOrErrors()
@@ -194,6 +212,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region Error Cases
+    /// <summary>
+    /// Tests Analyze_ThrowInNonFailableRoutine_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ThrowInNonFailableRoutine_ReportsError()
@@ -224,6 +245,9 @@ public class ErrorVariantGenerationTests
                 e.Message.Contains(value: "failable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_AbsentInNonFailableRoutine_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_AbsentInNonFailableRoutine_ReportsError()
@@ -243,6 +267,9 @@ public class ErrorVariantGenerationTests
                 e.Message.Contains(value: "failable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_ThrowNonCrashable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ThrowNonCrashable_ReportsError()
@@ -270,6 +297,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region Variant Naming Convention
+    /// <summary>
+    /// Tests Analyze_VariantNames_FollowConvention.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariantNames_FollowConvention()
@@ -304,6 +334,9 @@ public class ErrorVariantGenerationTests
     #endregion
 
     #region Error Handling Types Not Passable as Parameters
+    /// <summary>
+    /// Tests Analyze_ResultAsParameter_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResultAsParameter_ReportsError()
@@ -328,6 +361,9 @@ public class ErrorVariantGenerationTests
                 e.Message.Contains(value: "parameter",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_LookupAsParameter_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LookupAsParameter_ReportsError()

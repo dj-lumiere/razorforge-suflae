@@ -12,6 +12,9 @@ using static TestHelpers;
 public class PatternMatchingTests
 {
     #region Basic When Statement Tests
+    /// <summary>
+    /// Tests Parse_SimpleWhen.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleWhen()
@@ -34,6 +37,9 @@ public class PatternMatchingTests
                                      .First();
         Assert.NotNull(@object: whenStmt);
     }
+    /// <summary>
+    /// Tests Parse_WhenWithBlock.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenWithBlock()
@@ -50,6 +56,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenAsExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenAsExpression()
@@ -65,6 +74,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenWithAssignment.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenWithAssignment()
@@ -83,6 +95,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Is Type Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenIsType.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenIsType()
@@ -98,6 +113,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenIsTypeWithoutBinding.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenIsTypeWithoutBinding()
@@ -113,6 +131,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenIsCustomType.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenIsCustomType()
@@ -132,6 +153,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Choice Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenChoice.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenChoice()
@@ -148,6 +172,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenChoiceShorthand.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenChoiceShorthand()
@@ -164,6 +191,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenChoiceIsPattern.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenChoiceIsPattern()
@@ -180,6 +210,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenChoiceIsPatternQualified.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenChoiceIsPatternQualified()
@@ -200,6 +233,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Variant Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenVariant.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenVariant()
@@ -215,6 +251,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenVariantShorthand.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenVariantShorthand()
@@ -230,6 +269,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenVariantDestructuring.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenVariantDestructuring()
@@ -246,6 +288,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenVariantDestructuringWithAlias.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenVariantDestructuringWithAlias()
@@ -261,6 +306,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenNestedDestructuring.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenNestedDestructuring()
@@ -281,6 +329,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Guard Clause Tests
+    /// <summary>
+    /// Tests Parse_WhenWithGuard.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenWithGuard()
@@ -297,6 +348,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenLiteralWithGuard.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenLiteralWithGuard()
@@ -312,6 +366,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenTypeWithComplexGuard.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenTypeWithComplexGuard()
@@ -331,6 +388,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Maybe/Result/Lookup Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenMaybe.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenMaybe()
@@ -345,6 +405,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenResult.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenResult()
@@ -359,6 +422,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenResultSpecificError.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenResultSpecificError()
@@ -375,6 +441,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenLookup.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenLookup()
@@ -390,6 +459,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenLookupSpecificErrors.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenLookupSpecificErrors()
@@ -411,6 +483,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Literal Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenLiteralInteger.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenLiteralInteger()
@@ -427,6 +502,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenLiteralText.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenLiteralText()
@@ -443,6 +521,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenLiteralBool.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenLiteralBool()
@@ -461,6 +542,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Wildcard Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenWildcard.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenWildcard()
@@ -475,6 +559,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenWildcardInDestructuring.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenWildcardInDestructuring()
@@ -494,6 +581,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Else Binding Tests
+    /// <summary>
+    /// Tests Parse_WhenElseWithBinding.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenElseWithBinding()
@@ -508,6 +598,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenElseWithBlock.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenElseWithBlock()
@@ -530,6 +623,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Let Destructuring Tests
+    /// <summary>
+    /// Tests Parse_LetDestructuringRecord.
+    /// </summary>
 
     [Fact]
     public void Parse_LetDestructuringRecord()
@@ -542,6 +638,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LetDestructuringWithAlias.
+    /// </summary>
 
     [Fact]
     public void Parse_LetDestructuringWithAlias()
@@ -554,6 +653,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_LetNestedDestructuring.
+    /// </summary>
 
     [Fact]
     public void Parse_LetNestedDestructuring()
@@ -570,6 +672,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Complex Pattern Tests
+    /// <summary>
+    /// Tests Parse_ComplexNestedPatterns.
+    /// </summary>
 
     [Fact]
     public void Parse_ComplexNestedPatterns()
@@ -597,6 +702,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenWithMultipleStatements.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenWithMultipleStatements()
@@ -624,6 +732,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Comparison Pattern Tests
+    /// <summary>
+    /// Tests Parse_WhenComparisonNotEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonNotEqual()
@@ -638,6 +749,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonLessThan.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonLessThan()
@@ -653,6 +767,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonGreaterThan.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonGreaterThan()
@@ -668,6 +785,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonLessThanOrEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonLessThanOrEqual()
@@ -684,6 +804,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonGreaterThanOrEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonGreaterThanOrEqual()
@@ -700,6 +823,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonStrictEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonStrictEqual()
@@ -714,6 +840,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonStrictNotEqual.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonStrictNotEqual()
@@ -728,6 +857,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonWithMemberAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonWithMemberAccess()
@@ -744,6 +876,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonWithMethodCall()
@@ -759,6 +894,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenMixedComparisonPatterns.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenMixedComparisonPatterns()
@@ -780,6 +918,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Becomes Statement Tests
+    /// <summary>
+    /// Tests Parse_WhenBlockWithBecomes.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenBlockWithBecomes()
@@ -796,6 +937,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenMultipleBlocksWithBecomes.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenMultipleBlocksWithBecomes()
@@ -819,6 +963,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenTypePatternWithBlockAndBecomes.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenTypePatternWithBlockAndBecomes()
@@ -841,6 +988,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenBlockWithBecomesExpression.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenBlockWithBecomesExpression()
@@ -862,6 +1012,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Comparison Patterns with Guards Tests
+    /// <summary>
+    /// Tests Parse_WhenComparisonWithGuard.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonWithGuard()
@@ -878,6 +1031,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenComparisonWithComplexGuard.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenComparisonWithComplexGuard()
@@ -899,6 +1055,9 @@ public class PatternMatchingTests
     #endregion
 
     #region Complex Boolean Guard Tests
+    /// <summary>
+    /// Tests Parse_WhenGuardWithAnd.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenGuardWithAnd()
@@ -913,6 +1072,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenGuardWithOr.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenGuardWithOr()
@@ -927,6 +1089,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenGuardWithAndOr.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenGuardWithAndOr()
@@ -943,6 +1108,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenGuardWithMemberVariableAccess.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenGuardWithMemberVariableAccess()
@@ -958,6 +1126,9 @@ public class PatternMatchingTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Tests Parse_WhenGuardWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenGuardWithMethodCall()

@@ -14,6 +14,9 @@ using static TestHelpers;
 public class ChoiceValidationTests
 {
     #region Valid Choices (no errors expected)
+    /// <summary>
+    /// Tests Analyze_SimpleChoice_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_SimpleChoice_NoErrors()
@@ -32,6 +35,9 @@ public class ChoiceValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceWithExplicitValues_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceWithExplicitValues_NoErrors()
@@ -49,6 +55,9 @@ public class ChoiceValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceWithNegativeValues_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceWithNegativeValues_NoErrors()
@@ -68,6 +77,9 @@ public class ChoiceValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseValueOverflow);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceWithLargeValues_OverflowError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceWithLargeValues_OverflowError()
@@ -88,6 +100,9 @@ public class ChoiceValidationTests
     #endregion
 
     #region Mixed Values (error expected)
+    /// <summary>
+    /// Tests Analyze_ChoiceMixedValues_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceMixedValues_ReportsError()
@@ -107,6 +122,9 @@ public class ChoiceValidationTests
     #endregion
 
     #region Duplicate Values (error expected)
+    /// <summary>
+    /// Tests Analyze_ChoiceDuplicateExplicitValues_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceDuplicateExplicitValues_ReportsError()
@@ -126,6 +144,9 @@ public class ChoiceValidationTests
     #endregion
 
     #region Operator Prohibition (choices do not support any operators)
+    /// <summary>
+    /// Tests Analyze_ChoiceAddition_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceAddition_ReportsError()
@@ -145,6 +166,9 @@ public class ChoiceValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceCompoundAssignment_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceCompoundAssignment_ReportsError()
@@ -164,6 +188,9 @@ public class ChoiceValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceBitwise_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceBitwise_ReportsError()
@@ -183,6 +210,9 @@ public class ChoiceValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceComparison_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceComparison_ReportsError()
@@ -202,6 +232,9 @@ public class ChoiceValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Tests Analyze_ChoiceEquality_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceEquality_ReportsError()
@@ -225,6 +258,9 @@ public class ChoiceValidationTests
     #endregion
 
     #region Member Access (C98)
+    /// <summary>
+    /// Tests Choice_MemberAccess_AsValue.
+    /// </summary>
 
     [Fact]
     public void Choice_MemberAccess_AsValue()
@@ -246,6 +282,9 @@ public class ChoiceValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
+    /// <summary>
+    /// Tests Choice_MemberAccess_InvalidCase.
+    /// </summary>
 
     [Fact]
     public void Choice_MemberAccess_InvalidCase()
@@ -265,6 +304,9 @@ public class ChoiceValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
+    /// <summary>
+    /// Tests Choice_MemberAccess_Assignment_And_Comparison.
+    /// </summary>
 
     [Fact]
     public void Choice_MemberAccess_Assignment_And_Comparison()

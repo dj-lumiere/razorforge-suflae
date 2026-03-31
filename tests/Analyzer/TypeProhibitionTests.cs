@@ -14,6 +14,9 @@ using static TestHelpers;
 public class TypeProhibitionTests
 {
     #region Blank as Type Argument (rejected)
+    /// <summary>
+    /// Tests Analyze_BlankNullable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_BlankNullable_ReportsError()
@@ -29,6 +32,9 @@ public class TypeProhibitionTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Tests Analyze_ExplicitMaybeBlank_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ExplicitMaybeBlank_ReportsError()
@@ -47,6 +53,9 @@ public class TypeProhibitionTests
     #endregion
 
     #region Normal nullable types (allowed)
+    /// <summary>
+    /// Tests Analyze_NormalNullable_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_NormalNullable_NoErrors()
@@ -61,6 +70,9 @@ public class TypeProhibitionTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Tests Analyze_BlankDirectType_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_BlankDirectType_NoErrors()
@@ -76,6 +88,9 @@ public class TypeProhibitionTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Tests Analyze_ResultBlank_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResultBlank_NoErrors()
@@ -91,6 +106,9 @@ public class TypeProhibitionTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Tests Analyze_LookupBlank_NoErrors.
+    /// </summary>
 
     [Fact]
     public void Analyze_LookupBlank_NoErrors()
@@ -110,6 +128,9 @@ public class TypeProhibitionTests
     #endregion
 
     #region Nested Maybe Prohibition
+    /// <summary>
+    /// Tests Analyze_NestedMaybe_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedMaybe_ReportsError()
@@ -124,6 +145,9 @@ public class TypeProhibitionTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
+    /// <summary>
+    /// Tests Analyze_SingleMaybe_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_SingleMaybe_NoError()
@@ -142,6 +166,9 @@ public class TypeProhibitionTests
     #endregion
 
     #region Byte Literal ASCII Validation
+    /// <summary>
+    /// Tests Analyze_ByteLiteralNonAscii_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ByteLiteralNonAscii_ReportsError()
@@ -155,6 +182,9 @@ public class TypeProhibitionTests
 
         Assert.ThrowsAny<Compiler.Diagnostics.GrammarException>(() => Analyze(source: source));
     }
+    /// <summary>
+    /// Tests Analyze_ByteLiteralAscii_NoGrammarError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ByteLiteralAscii_NoGrammarError()

@@ -65,6 +65,10 @@ public abstract class TypeInfo
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TypeInfo"/> class.
+    /// </summary>
+    /// <param name="name">The type name.</param>
     protected TypeInfo(string name)
     {
         Name = name;

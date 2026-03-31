@@ -4,6 +4,9 @@ using System.Text;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 
+/// <summary>
+/// Declaration code generation for synthesized text conversion and hashing routines.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private void EmitSynthesizedEq(RoutineInfo routine, string funcName)
@@ -819,10 +822,4 @@ public partial class LLVMCodeGenerator
         // Delegate to EmitStringLiteral which handles UTF-32 Text constant emission
         return EmitStringLiteral(sb: _functionDefinitions, value: value);
     }
-
-    /// <summary>
-    /// Emits the body for a synthesized hash() routine.
-    /// Record: XOR chain of field.hash() calls.
-    /// Choice/Flags: value * 2654435761 (Knuth multiplicative hash).
-    /// </summary>
 }

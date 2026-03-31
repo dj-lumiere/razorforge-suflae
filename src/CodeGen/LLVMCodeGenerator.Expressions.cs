@@ -12,16 +12,11 @@ using SyntaxTree;
 public partial class LLVMCodeGenerator
 {
     /// <summary>
-    /// Generates code to allocate a new entity instance.
-    /// Entity allocation:
-    /// 1. Call rf_alloc(size) to get heap memory
-    /// 2. Initialize all member variables to zero/default values
-    /// 3. Return pointer to the entity
+    /// Emits code for any expression node.
     /// </summary>
-    /// <param name="sb">StringBuilder to emit code to.</param>
-    /// <param name="entity">The entity type to allocate.</param>
-    /// <param name="memberVariableValues">Optional field initializer values (in member variable order).</param>
-    /// <returns>The temporary variable holding the entity pointer.</returns>
+    /// <param name="sb">The builder receiving emitted LLVM IR.</param>
+    /// <param name="expr">The expression to emit.</param>
+    /// <returns>The temporary value name produced for the expression.</returns>
     private string EmitExpression(StringBuilder sb, Expression expr)
     {
         return expr switch
@@ -270,8 +265,4 @@ public partial class LLVMCodeGenerator
 
         return cast;
     }
-
-    /// <summary>
-    /// Generates code for a standalone function call.
-    /// </summary>
 }

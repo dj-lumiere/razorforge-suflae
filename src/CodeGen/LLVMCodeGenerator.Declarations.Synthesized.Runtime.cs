@@ -4,6 +4,9 @@ using System.Text;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 
+/// <summary>
+/// Declaration code generation for synthesized runtime-support routines.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private void EmitSynthesizedHash(RoutineInfo routine, string funcName)
@@ -489,12 +492,4 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: "}");
         EmitLine(sb: sb, line: "");
     }
-
-    /// <summary>
-    /// Generates forwarding stubs for protocol method calls.
-    /// When monomorphized code calls a method on a protocol-typed field (e.g., me.source.$iter()
-    /// where source: Iterable[S64]), the emitted call targets "Core.Iterable[S64].$iter".
-    /// This method generates a 'define' body that forwards to the concrete implementer
-    /// (e.g., Core.List[S64].$iter).
-    /// </summary>
 }

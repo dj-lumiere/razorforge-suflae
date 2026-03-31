@@ -9,6 +9,7 @@ using Enums;
 /// </summary>
 public sealed class FlagsTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Flags;
 
     /// <summary>The members of this flags type.</summary>

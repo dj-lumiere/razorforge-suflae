@@ -147,11 +147,28 @@ public record IsPatternExpression(
     }
 }
 
-/// <summary>Flags test kind: is (has flags), isnot (does not have flags), isonly (exact match)</summary>
-public enum FlagsTestKind { Is, IsNot, IsOnly }
+/// <summary>Flags test kind: is, isnot, or isonly.</summary>
+public enum FlagsTestKind
+{
+    /// <summary>Tests whether the subject has the specified flags.</summary>
+    Is,
 
-/// <summary>Connective for combining flag names in a flags test</summary>
-public enum FlagsTestConnective { And, Or }
+    /// <summary>Tests whether the subject does not have the specified flags.</summary>
+    IsNot,
+
+    /// <summary>Tests whether the subject matches only the specified flags.</summary>
+    IsOnly
+}
+
+/// <summary>Connective for combining flag names in a flags test.</summary>
+public enum FlagsTestConnective
+{
+    /// <summary>All named flags must match.</summary>
+    And,
+
+    /// <summary>Any named flag may match.</summary>
+    Or
+}
 
 /// <summary>
 /// Expression that tests whether a flags value has, lacks, or exactly matches specific flags.
@@ -170,6 +187,7 @@ public record FlagsTestExpression(
     List<string>? ExcludedFlags,
     SourceLocation Location) : Expression(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitFlagsTestExpression(node: this);

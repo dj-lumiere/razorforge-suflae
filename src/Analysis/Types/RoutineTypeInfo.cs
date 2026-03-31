@@ -8,6 +8,7 @@ using Enums;
 /// </summary>
 public sealed class RoutineTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Routine;
 
     /// <summary>Parameter types for this function type.</summary>

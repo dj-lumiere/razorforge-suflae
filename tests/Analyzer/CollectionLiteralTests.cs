@@ -11,6 +11,9 @@ using static TestHelpers;
 /// </summary>
 public class CollectionLiteralTests
 {
+    /// <summary>
+    /// Tests EmptyListLiteral_WithTypeAnnotation_InfersElementType.
+    /// </summary>
     [Fact]
     public void EmptyListLiteral_WithTypeAnnotation_InfersElementType()
     {
@@ -23,6 +26,9 @@ public class CollectionLiteralTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests EmptyListLiteral_WithoutTypeAnnotation_ReportsError.
+    /// </summary>
 
     [Fact]
     public void EmptyListLiteral_WithoutTypeAnnotation_ReportsError()
@@ -37,6 +43,9 @@ public class CollectionLiteralTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyListNoTypeAnnotation);
     }
+    /// <summary>
+    /// Tests EmptySetLiteral_WithTypeAnnotation_InfersElementType.
+    /// </summary>
 
     [Fact]
     public void EmptySetLiteral_WithTypeAnnotation_InfersElementType()
@@ -50,6 +59,9 @@ public class CollectionLiteralTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests EmptySetLiteral_WithoutTypeAnnotation_ReportsError.
+    /// </summary>
 
     [Fact]
     public void EmptySetLiteral_WithoutTypeAnnotation_ReportsError()
@@ -64,6 +76,9 @@ public class CollectionLiteralTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptySetNoTypeAnnotation);
     }
+    /// <summary>
+    /// Tests EmptyDictLiteral_WithTypeAnnotation_InfersKeyValueTypes.
+    /// </summary>
 
     [Fact]
     public void EmptyDictLiteral_WithTypeAnnotation_InfersKeyValueTypes()
@@ -77,6 +92,9 @@ public class CollectionLiteralTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests EmptyDictLiteral_WithoutTypeAnnotation_ReportsError.
+    /// </summary>
 
     [Fact]
     public void EmptyDictLiteral_WithoutTypeAnnotation_ReportsError()
@@ -91,6 +109,9 @@ public class CollectionLiteralTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyDictNoTypeAnnotation);
     }
+    /// <summary>
+    /// Tests NonEmptySetLiteral_InfersFromElements.
+    /// </summary>
 
     [Fact]
     public void NonEmptySetLiteral_InfersFromElements()
@@ -104,6 +125,9 @@ public class CollectionLiteralTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests NonEmptyDictLiteral_InfersFromElements.
+    /// </summary>
 
     [Fact]
     public void NonEmptyDictLiteral_InfersFromElements()

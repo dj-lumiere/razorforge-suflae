@@ -4,6 +4,9 @@ using Lexer;
 using SyntaxTree;
 using Diagnostics;
 
+/// <summary>
+/// Partial class containing operator and precedence-chain parsing.
+/// </summary>
 public partial class Parser
 {
     private Expression ParseAssignment()
@@ -548,10 +551,4 @@ public partial class Parser
 
         return expr;
     }
-
-    /// <summary>
-    /// Parses a flags test chain after the first flag name has been consumed.
-    /// Called when 'and', 'or', or 'but' follows an identifier after 'is'/'isnot'.
-    /// Examples: is READ and WRITE, is READ or WRITE, is READ and WRITE but EXECUTE
-    /// </summary>
 }

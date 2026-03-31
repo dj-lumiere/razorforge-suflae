@@ -20,8 +20,15 @@ public static class NumericLiteralParser
     [StructLayout(layoutKind: LayoutKind.Sequential)]
     public struct F128
     {
+        /// <summary>
+        /// Gets or sets the low 64 bits of the binary128 payload.
+        /// </summary>
         public ulong Lo;
+        /// <summary>
+        /// Gets or sets the high 64 bits of the binary128 payload.
+        /// </summary>
         public ulong Hi;
+        /// <inheritdoc/>
 
         public override string ToString()
         {
@@ -50,7 +57,11 @@ public static class NumericLiteralParser
     [StructLayout(layoutKind: LayoutKind.Sequential)]
     public struct D32
     {
+        /// <summary>
+        /// Gets or sets the raw decimal32 bit pattern.
+        /// </summary>
         public uint Value;
+        /// <inheritdoc/>
 
         public override string ToString()
         {
@@ -64,7 +75,11 @@ public static class NumericLiteralParser
     [StructLayout(layoutKind: LayoutKind.Sequential)]
     public struct D64
     {
+        /// <summary>
+        /// Gets or sets the raw decimal64 bit pattern.
+        /// </summary>
         public ulong Value;
+        /// <inheritdoc/>
 
         public override string ToString()
         {
@@ -79,8 +94,15 @@ public static class NumericLiteralParser
     [StructLayout(layoutKind: LayoutKind.Sequential)]
     public struct D128
     {
+        /// <summary>
+        /// Gets or sets the low 64 bits of the decimal128 payload.
+        /// </summary>
         public ulong Lo;
+        /// <summary>
+        /// Gets or sets the high 64 bits of the decimal128 payload.
+        /// </summary>
         public ulong Hi;
+        /// <inheritdoc/>
 
         public override string ToString()
         {

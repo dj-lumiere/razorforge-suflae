@@ -9,6 +9,7 @@ using Symbols;
 /// </summary>
 public sealed class EntityTypeInfo : TypeInfo
 {
+    /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Entity;
 
     /// <summary>MemberVariables declared in this entity.</summary>

@@ -14,6 +14,9 @@ using static TestHelpers;
 public class BuilderServiceApiTests
 {
     #region Per-Type Routines — Records
+    /// <summary>
+    /// Tests Record_TypeName_Available.
+    /// </summary>
 
     [Fact]
     public void Record_TypeName_Available()
@@ -31,6 +34,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_TypeKind_Available.
+    /// </summary>
 
     [Fact]
     public void Record_TypeKind_Available()
@@ -48,6 +54,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_TypeId_Available.
+    /// </summary>
 
     [Fact]
     public void Record_TypeId_Available()
@@ -65,6 +74,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_ModuleName_Available.
+    /// </summary>
 
     [Fact]
     public void Record_ModuleName_Available()
@@ -82,6 +94,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_IsGeneric_Available.
+    /// </summary>
 
     [Fact]
     public void Record_IsGeneric_Available()
@@ -99,6 +114,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_DataSize_Available.
+    /// </summary>
 
     [Fact]
     public void Record_DataSize_Available()
@@ -116,6 +134,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_MemberVariableCount_Available.
+    /// </summary>
 
     [Fact]
     public void Record_MemberVariableCount_Available()
@@ -133,6 +154,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_GenericArgs_Available.
+    /// </summary>
 
     [Fact]
     public void Record_GenericArgs_Available()
@@ -150,6 +174,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_Protocols_Available.
+    /// </summary>
 
     [Fact]
     public void Record_Protocols_Available()
@@ -167,6 +194,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_RoutineNames_Available.
+    /// </summary>
 
     [Fact]
     public void Record_RoutineNames_Available()
@@ -184,6 +214,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_Annotations_Available.
+    /// </summary>
 
     [Fact]
     public void Record_Annotations_Available()
@@ -201,6 +234,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_Dependencies_Available.
+    /// </summary>
 
     [Fact]
     public void Record_Dependencies_Available()
@@ -218,6 +254,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Record_OriginModule_Available.
+    /// </summary>
 
     [Fact]
     public void Record_OriginModule_Available()
@@ -239,6 +278,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Per-Type Routines — Entities
+    /// <summary>
+    /// Tests Entity_TypeName_Available.
+    /// </summary>
 
     [Fact]
     public void Entity_TypeName_Available()
@@ -255,6 +297,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Entity_TypeKind_Available.
+    /// </summary>
 
     [Fact]
     public void Entity_TypeKind_Available()
@@ -271,6 +316,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Entity_MemberVariableCount_Available.
+    /// </summary>
 
     [Fact]
     public void Entity_MemberVariableCount_Available()
@@ -291,6 +339,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Per-Type Routines — Choices
+    /// <summary>
+    /// Tests Choice_TypeName_Available.
+    /// </summary>
 
     [Fact]
     public void Choice_TypeName_Available()
@@ -309,6 +360,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Choice_TypeKind_Available.
+    /// </summary>
 
     [Fact]
     public void Choice_TypeKind_Available()
@@ -331,6 +385,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Per-Type Routines — Import Gating (every routine without import)
+    /// <summary>
+    /// Tests PerTypeRoutine_WithoutImport_ReportsError.
+    /// </summary>
 
     [Theory]
     [InlineData("type_name")]
@@ -363,6 +420,9 @@ public class BuilderServiceApiTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests PerTypeRoutine_WithImport_NoError.
+    /// </summary>
 
     [Theory]
     [InlineData("type_name")]
@@ -401,6 +461,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Standalone Routines — Source Location
+    /// <summary>
+    /// Tests SourceLocationRoutine_WithoutImport_ReportsError.
+    /// </summary>
 
     [Theory]
     [InlineData("source_file")]
@@ -424,6 +487,9 @@ public class BuilderServiceApiTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests SourceLocationRoutine_WithImport_NoError.
+    /// </summary>
 
     [Theory]
     [InlineData("source_file")]
@@ -453,6 +519,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Standalone Routines — Platform/Build Info
+    /// <summary>
+    /// Tests PlatformRoutine_WithoutImport_ReportsError.
+    /// </summary>
 
     [Theory]
     [InlineData("target_os")]
@@ -475,6 +544,9 @@ public class BuilderServiceApiTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests PlatformRoutine_WithImport_NoError.
+    /// </summary>
 
     [Theory]
     [InlineData("target_os")]
@@ -503,6 +575,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Wired Routines — Never Gated
+    /// <summary>
+    /// Tests WiredRoutine_WithoutImport_NoError.
+    /// </summary>
 
     [Theory]
     [InlineData("$represent", """var s = f"{p}" """)]
@@ -532,6 +607,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Multiple Routines Combined
+    /// <summary>
+    /// Tests AllPerTypeRoutines_OnRecord_Available.
+    /// </summary>
 
     [Fact]
     public void AllPerTypeRoutines_OnRecord_Available()
@@ -561,6 +639,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests AllStandaloneRoutines_Available.
+    /// </summary>
 
     [Fact]
     public void AllStandaloneRoutines_Available()
@@ -589,6 +670,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests MixedPerTypeAndStandalone_Available.
+    /// </summary>
 
     [Fact]
     public void MixedPerTypeAndStandalone_Available()
@@ -614,6 +698,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region data_size — RazorForge Only
+    /// <summary>
+    /// Tests DataSize_InSuflae_NotAvailable.
+    /// </summary>
 
     [Fact]
     public void DataSize_InSuflae_NotAvailable()
@@ -640,6 +727,9 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Per-Type Routines — On Different Type Kinds
+    /// <summary>
+    /// Tests Entity_AllMetadata_Available.
+    /// </summary>
 
     [Fact]
     public void Entity_AllMetadata_Available()
@@ -663,6 +753,9 @@ public class BuilderServiceApiTests
                          return
                        """);
     }
+    /// <summary>
+    /// Tests Choice_AllMetadata_Available.
+    /// </summary>
 
     [Fact]
     public void Choice_AllMetadata_Available()

@@ -13,6 +13,9 @@ using static TestHelpers;
 public class MutabilityTests
 {
     #region Let Immutability
+    /// <summary>
+    /// Tests Analyze_VarReassignment_NoImmutableError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarReassignment_NoImmutableError()
@@ -33,6 +36,9 @@ public class MutabilityTests
                 e.Message.Contains(value: "reassign",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_VarCompoundAssignment_NoImmutableError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarCompoundAssignment_NoImmutableError()
@@ -48,6 +54,9 @@ public class MutabilityTests
         Analyze(source: source);
         // Should not produce immutable-related errors
     }
+    /// <summary>
+    /// Tests Analyze_VarReassignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarReassignment_NoError()
@@ -62,6 +71,9 @@ public class MutabilityTests
         Analyze(source: source);
         // Should be valid
     }
+    /// <summary>
+    /// Tests Analyze_VarCompoundAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarCompoundAssignment_NoError()
@@ -79,6 +91,9 @@ public class MutabilityTests
     #endregion
 
     #region Entity Field Mutability
+    /// <summary>
+    /// Tests Analyze_VarMemberVariableMutation_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarMemberVariableMutation_NoError()
@@ -95,6 +110,9 @@ public class MutabilityTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_WritableMemberVariableMutation_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WritableMemberVariableMutation_NoError()
@@ -117,6 +135,9 @@ public class MutabilityTests
     #endregion
 
     #region Readonly vs Writable Methods
+    /// <summary>
+    /// Tests Analyze_ReadonlyMethodMutating_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReadonlyMethodMutating_ReportsError()
@@ -134,6 +155,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_ReadonlyMethodReading_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReadonlyMethodReading_NoError()
@@ -149,6 +173,9 @@ public class MutabilityTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_WritableMethodMutating_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_WritableMethodMutating_NoError()
@@ -169,6 +196,9 @@ public class MutabilityTests
     #endregion
 
     #region Record Field Mutability
+    /// <summary>
+    /// Tests Analyze_RecordMemberVariablesImmutable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordMemberVariablesImmutable_NoError()
@@ -190,6 +220,9 @@ public class MutabilityTests
     #endregion
 
     #region Parameter Mutability
+    /// <summary>
+    /// Tests Analyze_ParameterReassignment_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ParameterReassignment_ReportsError()
@@ -207,6 +240,9 @@ public class MutabilityTests
     #endregion
 
     #region Suflae Mutability
+    /// <summary>
+    /// Tests AnalyzeSuflae_VarReassignment_NoImmutableError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_VarReassignment_NoImmutableError()
@@ -221,6 +257,9 @@ public class MutabilityTests
         AnalyzeSuflae(source: source);
         // Should not produce immutable-related errors
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_VarReassignment_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_VarReassignment_NoError()
@@ -233,6 +272,9 @@ public class MutabilityTests
 
         AnalyzeSuflae(source: source);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_ReadonlyMethodMutating_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_ReadonlyMethodMutating_ReportsError()
@@ -249,6 +291,9 @@ public class MutabilityTests
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_WritableMethodMutating_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_WritableMethodMutating_NoError()
@@ -268,6 +313,9 @@ public class MutabilityTests
     #endregion
 
     #region Index Mutability
+    /// <summary>
+    /// Tests Analyze_IndexAssignmentOnVar_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_IndexAssignmentOnVar_NoError()
@@ -281,6 +329,9 @@ public class MutabilityTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_IndexAssignmentOnVar_NoImmutableError.
+    /// </summary>
 
     [Fact]
     public void Analyze_IndexAssignmentOnVar_NoImmutableError()
@@ -300,6 +351,9 @@ public class MutabilityTests
     #endregion
 
     #region Hijacking Restrictions
+    /// <summary>
+    /// Tests Analyze_NestedHijacking_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedHijacking_ReportsError()
@@ -334,6 +388,9 @@ public class MutabilityTests
     #endregion
 
     #region Entity Bare Assignment Prohibition
+    /// <summary>
+    /// Tests Analyze_EntityBareAssignment_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityBareAssignment_ReportsError()
@@ -351,6 +408,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
+    /// <summary>
+    /// Tests Analyze_EntityConstructorAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityConstructorAssignment_NoError()
@@ -368,6 +428,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
+    /// <summary>
+    /// Tests Analyze_RecordBareAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordBareAssignment_NoError()
@@ -386,6 +449,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_EntityBareAssignment_NoError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_EntityBareAssignment_NoError()
@@ -406,6 +472,9 @@ public class MutabilityTests
     #endregion
 
     #region Readonly Method Call Enforcement
+    /// <summary>
+    /// Tests Analyze_ReadonlyMethodCallsWritable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReadonlyMethodCallsWritable_ReportsError()
@@ -428,6 +497,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
     }
+    /// <summary>
+    /// Tests Analyze_ReadonlyMethodCallsReadonly_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReadonlyMethodCallsReadonly_NoError()
@@ -448,6 +520,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
     }
+    /// <summary>
+    /// Tests Analyze_ReadonlyMethodCallsOnOther_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReadonlyMethodCallsOnOther_NoError()
@@ -477,6 +552,9 @@ public class MutabilityTests
     #endregion
 
     #region Posted Member Variable Access
+    /// <summary>
+    /// Tests Analyze_PostedMemberVariableWrite_SameModule_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_PostedMemberVariableWrite_SameModule_NoError()
@@ -495,6 +573,9 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
     }
+    /// <summary>
+    /// Tests Analyze_PostedMemberVariableRead_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_PostedMemberVariableRead_NoError()

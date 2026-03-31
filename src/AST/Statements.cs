@@ -357,6 +357,9 @@ public record IfStatement(
     /// </summary>
     public Statement ThenBranch => ThenStatement;
 
+    /// <summary>
+    /// Compatibility property for tests that expect ElseBranch.
+    /// </summary>
     public Statement? ElseBranch => ElseStatement;
 }
 
@@ -367,6 +370,7 @@ public record IfStatement(
 /// <param name="Condition">Boolean expression evaluated before each iteration</param>
 /// <param name="Body">Statement to execute repeatedly while condition is true</param>
 /// <param name="Location">Source location information</param>
+/// <param name="ElseBranch">Optional else branch that runs if the loop completes without breaking.</param>
 /// <remarks>
 /// Loop behavior characteristics:
 /// <list type="bullet">
@@ -398,6 +402,8 @@ public record WhileStatement(
 /// <param name="Iterable">Expression that evaluates to an iterable collection (arrays, ranges, strings)</param>
 /// <param name="Body">Statement to execute for each iteration with the loop variable bound</param>
 /// <param name="Location">Source location information</param>
+/// <param name="VariablePattern">Optional destructuring pattern used instead of a single loop variable.</param>
+/// <param name="ElseBranch">Optional else branch that runs if the loop completes without breaking.</param>
 /// <remarks>
 /// Supports iteration over various collection types:
 /// <list type="bullet">

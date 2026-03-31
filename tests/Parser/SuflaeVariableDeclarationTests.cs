@@ -13,6 +13,9 @@ using static TestHelpers;
 public class SuflaeVariableDeclarationTests
 {
     #region Variable Declarations
+    /// <summary>
+    /// Tests ParseSuflae_VarWithTypeAndInitializer.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithTypeAndInitializer()
@@ -24,6 +27,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithInferredType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithInferredType()
@@ -35,6 +41,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithComplexType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithComplexType()
@@ -46,6 +55,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithGenericType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithGenericType()
@@ -57,6 +69,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithMaybeType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithMaybeType()
@@ -68,6 +83,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithFunctionCall.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithFunctionCall()
@@ -79,6 +97,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithExpression.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithExpression()
@@ -90,6 +111,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithMutation.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithMutation()
@@ -103,6 +127,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarWithoutInitializer.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarWithoutInitializer()
@@ -119,6 +146,9 @@ public class SuflaeVariableDeclarationTests
     #endregion
 
     #region Multiple Declarations
+    /// <summary>
+    /// Tests ParseSuflae_MultipleVarDeclarations.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MultipleVarDeclarations()
@@ -136,6 +166,9 @@ public class SuflaeVariableDeclarationTests
     #endregion
 
     #region Destructuring Declarations
+    /// <summary>
+    /// Tests ParseSuflae_VarDestructuringTuple.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarDestructuringTuple()
@@ -147,6 +180,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarDestructuringRecord.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarDestructuringRecord()
@@ -158,6 +194,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarNestedDestructuring.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarNestedDestructuring()
@@ -169,6 +208,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarDestructuringWithAlias.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarDestructuringWithAlias()
@@ -180,6 +222,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_VarDestructuringWithWildcard.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_VarDestructuringWithWildcard()
@@ -195,6 +240,9 @@ public class SuflaeVariableDeclarationTests
     #endregion
 
     #region Type Annotations
+    /// <summary>
+    /// Tests ParseSuflae_PrimitiveTypes.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_PrimitiveTypes()
@@ -215,6 +263,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_TextType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_TextType()
@@ -226,6 +277,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NestedGenericType.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NestedGenericType()
@@ -241,6 +295,9 @@ public class SuflaeVariableDeclarationTests
     #endregion
 
     #region Literal Initializers
+    /// <summary>
+    /// Tests ParseSuflae_IntegerLiterals.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_IntegerLiterals()
@@ -255,6 +312,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_FloatLiterals.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_FloatLiterals()
@@ -268,6 +328,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_StringLiterals.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_StringLiterals()
@@ -281,6 +344,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BooleanLiterals.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BooleanLiterals()
@@ -293,6 +359,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NoneLiteral.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NoneLiteral()
@@ -304,6 +373,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ListLiteral.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ListLiteral()
@@ -315,6 +387,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_EmptyListLiteral.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_EmptyListLiteral()
@@ -330,6 +405,9 @@ public class SuflaeVariableDeclarationTests
     #endregion
 
     #region Field Declarations in Types
+    /// <summary>
+    /// Tests ParseSuflae_RecordMemberVariables.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_RecordMemberVariables()
@@ -344,6 +422,9 @@ public class SuflaeVariableDeclarationTests
         RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
         Assert.Equal(expected: 2, actual: record.Members.Count);
     }
+    /// <summary>
+    /// Tests ParseSuflae_EntityVarMemberVariables_Rejected.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_EntityVarMemberVariables_Rejected()
@@ -358,6 +439,9 @@ public class SuflaeVariableDeclarationTests
         (_, var parser) = ParseSuflaeWithErrors(source: source);
         Assert.True(condition: parser.HasErrors, userMessage: "Expected parse errors for var in entity body");
     }
+    /// <summary>
+    /// Tests ParseSuflae_EntityMultipleVarMemberVariables_Rejected.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_EntityMultipleVarMemberVariables_Rejected()
@@ -377,6 +461,9 @@ public class SuflaeVariableDeclarationTests
     #endregion
 
     #region Complex Initializers
+    /// <summary>
+    /// Tests ParseSuflae_ConstructorCall.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ConstructorCall()
@@ -388,6 +475,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_MethodCallChain.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MethodCallChain()
@@ -399,6 +489,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ConditionalInitializer.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ConditionalInitializer()
@@ -410,6 +503,9 @@ public class SuflaeVariableDeclarationTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WhenExpressionInitializer.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WhenExpressionInitializer()

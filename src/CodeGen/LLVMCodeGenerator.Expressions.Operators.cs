@@ -5,6 +5,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation for unary, binary, and intrinsic operator lowering.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private string EmitCompoundAssignment(StringBuilder sb, CompoundAssignmentExpression compound)
@@ -720,12 +723,4 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
         return result;
     }
-
-
-    /// <summary>
-    /// Generates code for a generic method call expression.
-    /// Handles LLVM intrinsic routines (CallingConvention == "llvm") by emitting
-    /// LLVM IR instructions directly, and regular generic calls by resolving type
-    /// arguments and calling the mangled function.
-    /// </summary>
 }

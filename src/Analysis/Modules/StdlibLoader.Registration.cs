@@ -904,13 +904,4 @@ public sealed partial class StdlibLoader
 
         existing.Methods = methods;
     }
-
-    /// <summary>
-    /// Resolves a simple type expression.
-    /// Handles intrinsic types, direct type references, generic parameter names,
-    /// and parameterized types like List[Letter] or Dict[Text, S32].
-    /// </summary>
-    /// <param name="registry">The type registry to look up types in.</param>
-    /// <param name="typeExpr">The type expression to resolve.</param>
-    /// <param name="genericParams">Optional list of generic parameter names in scope (e.g., T, K, V).</param>
 }

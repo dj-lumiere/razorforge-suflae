@@ -15,6 +15,9 @@ public class VarargsCallTests
     // ========================================================================
     // Varargs dispatch inference (mirrors DispatchInferenceTests patterns)
     // ========================================================================
+    /// <summary>
+    /// Tests Varargs_MultipleConcreteArgs_NoDispatchError.
+    /// </summary>
 
     [Fact]
     public void Varargs_MultipleConcreteArgs_NoDispatchError()
@@ -32,6 +35,9 @@ public class VarargsCallTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TooManyArguments);
     }
+    /// <summary>
+    /// Tests Varargs_MethodWithMeParam_NoDispatchError.
+    /// </summary>
 
     [Fact]
     public void Varargs_MethodWithMeParam_NoDispatchError()
@@ -53,6 +59,9 @@ public class VarargsCallTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TooManyArguments);
     }
+    /// <summary>
+    /// Tests Varargs_LeadingNonMeParam_ReportsVarargsNotFirst.
+    /// </summary>
 
     [Fact]
     public void Varargs_LeadingNonMeParam_ReportsVarargsNotFirst()
@@ -67,6 +76,9 @@ public class VarargsCallTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VarargsNotFirst);
     }
+    /// <summary>
+    /// Tests Varargs_MixedTypes_ReportsRuntimeDispatchError.
+    /// </summary>
 
     [Fact]
     public void Varargs_MixedTypes_ReportsRuntimeDispatchError()
@@ -94,6 +106,9 @@ public class VarargsCallTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
+    /// <summary>
+    /// Tests Varargs_SameConcreteType_NoDispatchError.
+    /// </summary>
 
     [Fact]
     public void Varargs_SameConcreteType_NoDispatchError()
@@ -121,6 +136,9 @@ public class VarargsCallTests
     // ========================================================================
     // C95: $create overload resolution
     // ========================================================================
+    /// <summary>
+    /// Tests CreateOverload_SingleNamedArg_ResolvesToCreate.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_SingleNamedArg_ResolvesToCreate()
@@ -140,6 +158,9 @@ public class VarargsCallTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests CreateOverload_SinglePositionalArg_ResolvesToCreate.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_SinglePositionalArg_ResolvesToCreate()
@@ -159,6 +180,9 @@ public class VarargsCallTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests CreateOverload_AllNamedFields_WorksAsFieldConstruction.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_AllNamedFields_WorksAsFieldConstruction()
@@ -176,6 +200,9 @@ public class VarargsCallTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests CreateOverload_SingleFieldRecord_NoError.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_SingleFieldRecord_NoError()
@@ -192,6 +219,9 @@ public class VarargsCallTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests CreateOverload_NoMatchingCreate_FallsThrough.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_NoMatchingCreate_FallsThrough()
@@ -212,6 +242,9 @@ public class VarargsCallTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
+    /// <summary>
+    /// Tests CreateOverload_ZeroArgEntity_WorksWithoutCreate.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_ZeroArgEntity_WorksWithoutCreate()
@@ -227,6 +260,9 @@ public class VarargsCallTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Tests CreateOverload_RecordConversion_ResolvesToCreate.
+    /// </summary>
 
     [Fact]
     public void CreateOverload_RecordConversion_ResolvesToCreate()

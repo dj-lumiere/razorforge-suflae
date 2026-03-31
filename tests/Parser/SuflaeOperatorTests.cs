@@ -12,6 +12,9 @@ using static TestHelpers;
 public class SuflaeOperatorTests
 {
     #region Standard Arithmetic Operators
+    /// <summary>
+    /// Tests ParseSuflae_Addition.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Addition()
@@ -23,6 +26,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Subtraction.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Subtraction()
@@ -34,6 +40,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Multiplication.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Multiplication()
@@ -45,6 +54,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Division.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Division()
@@ -56,6 +68,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_FloorDivision.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_FloorDivision()
@@ -67,6 +82,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Remainder.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Remainder()
@@ -78,6 +96,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Power.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Power()
@@ -89,6 +110,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_Negation.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Negation()
@@ -100,6 +124,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ChainedArithmetic.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ChainedArithmetic()
@@ -111,6 +138,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ParenthesizedArithmetic.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ParenthesizedArithmetic()
@@ -126,6 +156,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Wrapping Arithmetic Operators
+    /// <summary>
+    /// Tests ParseSuflae_WrappingAdd.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WrappingAdd()
@@ -139,6 +172,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WrappingSubtract.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WrappingSubtract()
@@ -152,6 +188,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_WrappingMultiply.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_WrappingMultiply()
@@ -169,6 +208,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Clamping Arithmetic Operators
+    /// <summary>
+    /// Tests ParseSuflae_ClampingAdd.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ClampingAdd()
@@ -182,6 +224,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ClampingSubtract.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ClampingSubtract()
@@ -199,6 +244,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Comparison Operators
+    /// <summary>
+    /// Tests ParseSuflae_Equal.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_Equal()
@@ -210,6 +258,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NotEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NotEqual()
@@ -221,6 +272,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LessThan.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LessThan()
@@ -232,6 +286,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LessOrEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LessOrEqual()
@@ -243,6 +300,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_GreaterThan.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_GreaterThan()
@@ -254,6 +314,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_GreaterOrEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_GreaterOrEqual()
@@ -265,6 +328,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ChainedComparison.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ChainedComparison()
@@ -276,6 +342,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ChainedRangeComparison.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ChainedRangeComparison()
@@ -291,6 +360,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Identity Operators
+    /// <summary>
+    /// Tests ParseSuflae_IdentityEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_IdentityEqual()
@@ -302,6 +374,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_IdentityNotEqual.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_IdentityNotEqual()
@@ -317,6 +392,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Logical Operators
+    /// <summary>
+    /// Tests ParseSuflae_LogicalAnd.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LogicalAnd()
@@ -328,6 +406,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LogicalOr.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LogicalOr()
@@ -339,6 +420,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LogicalNot.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LogicalNot()
@@ -350,6 +434,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ChainedLogical.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ChainedLogical()
@@ -361,6 +448,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LogicalWithComparison.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LogicalWithComparison()
@@ -376,6 +466,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Bitwise Operators
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseAnd.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseAnd()
@@ -387,6 +480,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseOr.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseOr()
@@ -398,6 +494,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseXor.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseXor()
@@ -409,6 +508,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseNot.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseNot()
@@ -420,6 +522,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LeftShift.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LeftShift()
@@ -431,6 +536,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_RightShift.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_RightShift()
@@ -442,6 +550,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LogicalLeftShift.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LogicalLeftShift()
@@ -453,6 +564,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LogicalRightShift.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LogicalRightShift()
@@ -468,6 +582,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region None Coalescing Operator
+    /// <summary>
+    /// Tests ParseSuflae_NoneCoalescing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NoneCoalescing()
@@ -480,6 +597,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_ChainedNoneCoalescing.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ChainedNoneCoalescing()
@@ -494,6 +614,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_NoneCoalescingWithMethodCall.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_NoneCoalescingWithMethodCall()
@@ -509,6 +632,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Assignment Operators
+    /// <summary>
+    /// Tests ParseSuflae_SimpleAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SimpleAssignment()
@@ -521,6 +647,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_AddAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_AddAssignment()
@@ -533,6 +662,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_SubtractAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_SubtractAssignment()
@@ -545,6 +677,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_MultiplyAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MultiplyAssignment()
@@ -557,6 +692,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseAndAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseAndAssignment()
@@ -569,6 +707,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseOrAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseOrAssignment()
@@ -581,6 +722,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_LeftShiftAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_LeftShiftAssignment()
@@ -593,6 +737,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_RightShiftAssignment.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_RightShiftAssignment()
@@ -609,6 +756,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Text Operators
+    /// <summary>
+    /// Tests ParseSuflae_TextConcatenation.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_TextConcatenation()
@@ -620,6 +770,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_TextRepetition.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_TextRepetition()
@@ -635,6 +788,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Range Operators
+    /// <summary>
+    /// Tests ParseSuflae_InclusiveRange.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_InclusiveRange()
@@ -647,6 +803,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_RangeWithStep.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_RangeWithStep()
@@ -659,6 +818,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_DowntoRange.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_DowntoRange()
@@ -675,6 +837,9 @@ public class SuflaeOperatorTests
     #endregion
 
     #region Complex Operator Expressions
+    /// <summary>
+    /// Tests ParseSuflae_ComplexExpression.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_ComplexExpression()
@@ -686,6 +851,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_MixedOperatorPrecedence.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_MixedOperatorPrecedence()
@@ -697,6 +865,9 @@ public class SuflaeOperatorTests
 
         AssertParsesSuflae(source: source);
     }
+    /// <summary>
+    /// Tests ParseSuflae_BitwiseWithComparison.
+    /// </summary>
 
     [Fact]
     public void ParseSuflae_BitwiseWithComparison()

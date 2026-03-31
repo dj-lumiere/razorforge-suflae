@@ -20,6 +20,9 @@ using static TestHelpers;
 public class ErrorHandlingValidationTests
 {
     #region Throw Requires Record Type
+    /// <summary>
+    /// Tests Analyze_ThrowEntity_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ThrowEntity_ReportsError()
@@ -36,6 +39,9 @@ public class ErrorHandlingValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
     }
+    /// <summary>
+    /// Tests Analyze_ThrowRecord_NoRecordError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ThrowRecord_NoRecordError()
@@ -56,6 +62,9 @@ public class ErrorHandlingValidationTests
     #endregion
 
     #region Failable Without Throw or Absent
+    /// <summary>
+    /// Tests Analyze_FailableWithoutThrowOrAbsent_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithoutThrowOrAbsent_ReportsError()
@@ -69,6 +78,9 @@ public class ErrorHandlingValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
+    /// <summary>
+    /// Tests Analyze_FailableWithThrow_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithThrow_NoError()
@@ -85,6 +97,9 @@ public class ErrorHandlingValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
+    /// <summary>
+    /// Tests Analyze_FailableWithAbsent_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableWithAbsent_NoError()
@@ -103,6 +118,9 @@ public class ErrorHandlingValidationTests
     #endregion
 
     #region @crash_only Validation (#76)
+    /// <summary>
+    /// Tests Analyze_CrashOnlyOnNonFailable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_CrashOnlyOnNonFailable_ReportsError()
@@ -117,6 +135,9 @@ public class ErrorHandlingValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
     }
+    /// <summary>
+    /// Tests Analyze_CrashOnlyOnFailable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_CrashOnlyOnFailable_NoError()
@@ -134,6 +155,9 @@ public class ErrorHandlingValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
     }
+    /// <summary>
+    /// Tests Analyze_CrashOnlySuppressesVariantGeneration.
+    /// </summary>
 
     [Fact]
     public void Analyze_CrashOnlySuppressesVariantGeneration()
@@ -154,6 +178,9 @@ public class ErrorHandlingValidationTests
         Assert.Null(@object: result.Registry.GetRoutine(name: "check_crash_routine"));
         Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_crash_routine"));
     }
+    /// <summary>
+    /// Tests Analyze_NonCrashOnlyGeneratesVariants.
+    /// </summary>
 
     [Fact]
     public void Analyze_NonCrashOnlyGeneratesVariants()
@@ -176,6 +203,9 @@ public class ErrorHandlingValidationTests
     #endregion
 
     #region Unhandled Crashable Call (#159)
+    /// <summary>
+    /// Tests Analyze_FailableCallAsStatement_InNonFailable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableCallAsStatement_InNonFailable_ReportsError()
@@ -195,6 +225,9 @@ public class ErrorHandlingValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnhandledCrashableCall);
     }
+    /// <summary>
+    /// Tests Analyze_FailableCallAsStatement_InFailable_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableCallAsStatement_InFailable_NoError()

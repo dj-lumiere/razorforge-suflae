@@ -13,6 +13,9 @@ using static TestHelpers;
 /// </summary>
 public class FTextFormatSpecTests
 {
+    /// <summary>
+    /// Tests Analyze_FTextDiagnoseSpec_NoError.
+    /// </summary>
     [Fact]
     public void Analyze_FTextDiagnoseSpec_NoError()
     {
@@ -26,6 +29,9 @@ public class FTextFormatSpecTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidFTextFormatSpec);
     }
+    /// <summary>
+    /// Tests Analyze_FTextNameSpec_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FTextNameSpec_NoError()
@@ -40,6 +46,9 @@ public class FTextFormatSpecTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidFTextFormatSpec);
     }
+    /// <summary>
+    /// Tests Analyze_FTextNameDiagnoseSpec_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FTextNameDiagnoseSpec_NoError()
@@ -54,6 +63,9 @@ public class FTextFormatSpecTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidFTextFormatSpec);
     }
+    /// <summary>
+    /// Tests Analyze_FTextNoSpec_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FTextNoSpec_NoError()
@@ -68,6 +80,9 @@ public class FTextFormatSpecTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidFTextFormatSpec);
     }
+    /// <summary>
+    /// Tests Analyze_FTextWrongOrderSpec_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FTextWrongOrderSpec_ReportsError()
@@ -82,6 +97,9 @@ public class FTextFormatSpecTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidFTextFormatSpec);
     }
+    /// <summary>
+    /// Tests Analyze_FTextInvalidSpec_d_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FTextInvalidSpec_d_ReportsError()
@@ -96,6 +114,9 @@ public class FTextFormatSpecTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidFTextFormatSpec);
     }
+    /// <summary>
+    /// Tests Analyze_FTextInvalidSpec_Format_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_FTextInvalidSpec_Format_ReportsError()

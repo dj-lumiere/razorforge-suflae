@@ -5,6 +5,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation for conditional and flow-oriented expressions.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private string EmitConditional(StringBuilder sb, ConditionalExpression cond)
@@ -824,10 +827,4 @@ public partial class LLVMCodeGenerator
 
         return memberType;
     }
-
-
-    /// <summary>
-    /// Emits a list literal expression: [1, 2, 3]
-    /// Allocates a List entity and adds each element via add_last.
-    /// </summary>
 }

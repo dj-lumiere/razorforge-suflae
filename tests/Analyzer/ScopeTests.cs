@@ -12,6 +12,9 @@ using static TestHelpers;
 public class ScopeTests
 {
     #region Variable Resolution
+    /// <summary>
+    /// Tests Analyze_VariableInScope_Resolves.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariableInScope_Resolves()
@@ -26,6 +29,9 @@ public class ScopeTests
         Analyze(source: source);
         // Should resolve x correctly
     }
+    /// <summary>
+    /// Tests Analyze_UndefinedVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_UndefinedVariable_ReportsError()
@@ -47,6 +53,9 @@ public class ScopeTests
                 e.Message.Contains(value: "unknown",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_VariableUsedBeforeDeclaration_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariableUsedBeforeDeclaration_ReportsError()
@@ -65,6 +74,9 @@ public class ScopeTests
     #endregion
 
     #region Block Scoping
+    /// <summary>
+    /// Tests Analyze_VariableInBlockScope_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariableInBlockScope_NoError()
@@ -79,6 +91,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_VariableOutOfBlockScope_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_VariableOutOfBlockScope_ReportsError()
@@ -94,6 +109,9 @@ public class ScopeTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_NestedBlockScopes_Resolves.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedBlockScopes_Resolves()
@@ -115,6 +133,9 @@ public class ScopeTests
     #endregion
 
     #region Loop Scoping
+    /// <summary>
+    /// Tests Analyze_ForLoopVariable_InScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_ForLoopVariable_InScope()
@@ -128,6 +149,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_ForLoopVariable_OutOfScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_ForLoopVariable_OutOfScope()
@@ -143,6 +167,9 @@ public class ScopeTests
         AnalysisResult result = Analyze(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests Analyze_WhileLoopVariable_InScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhileLoopVariable_InScope()
@@ -162,6 +189,9 @@ public class ScopeTests
     #endregion
 
     #region Function Parameter Scoping
+    /// <summary>
+    /// Tests Analyze_ParameterInScope_Resolves.
+    /// </summary>
 
     [Fact]
     public void Analyze_ParameterInScope_Resolves()
@@ -174,6 +204,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_ParameterShadowsOuter_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ParameterShadowsOuter_NoError()
@@ -193,6 +226,9 @@ public class ScopeTests
     #endregion
 
     #region Variable Shadowing
+    /// <summary>
+    /// Tests Analyze_ShadowingInNestedBlock_Allowed.
+    /// </summary>
 
     [Fact]
     public void Analyze_ShadowingInNestedBlock_Allowed()
@@ -210,6 +246,9 @@ public class ScopeTests
         Analyze(source: source);
         // Shadowing in nested scope is allowed
     }
+    /// <summary>
+    /// Tests Analyze_ShadowingInSameScope_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_ShadowingInSameScope_ReportsError()
@@ -228,6 +267,9 @@ public class ScopeTests
     #endregion
 
     #region When/Pattern Scoping
+    /// <summary>
+    /// Tests Analyze_PatternBindingInWhen_InScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_PatternBindingInWhen_InScope()
@@ -246,6 +288,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_PatternBindingOutOfWhen_OutOfScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_PatternBindingOutOfWhen_OutOfScope()
@@ -270,6 +315,9 @@ public class ScopeTests
     #endregion
 
     #region Viewing/Hijacking Scoping
+    /// <summary>
+    /// Tests Analyze_ViewingBlockVariable_InScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_ViewingBlockVariable_InScope()
@@ -286,6 +334,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_ViewingBlockVariable_OutOfScope.
+    /// </summary>
 
     [Fact]
     public void Analyze_ViewingBlockVariable_OutOfScope()
@@ -308,6 +359,9 @@ public class ScopeTests
     #endregion
 
     #region Suflae Scope Tests
+    /// <summary>
+    /// Tests AnalyzeSuflae_VariableInScope_Resolves.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_VariableInScope_Resolves()
@@ -320,6 +374,9 @@ public class ScopeTests
 
         AnalyzeSuflae(source: source);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_UndefinedVariable_ReportsError.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_UndefinedVariable_ReportsError()
@@ -332,6 +389,9 @@ public class ScopeTests
         AnalysisResult result = AnalyzeSuflae(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_ForLoopVariable_InScope.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_ForLoopVariable_InScope()
@@ -344,6 +404,9 @@ public class ScopeTests
 
         AnalyzeSuflae(source: source);
     }
+    /// <summary>
+    /// Tests AnalyzeSuflae_ForLoopVariable_OutOfScope.
+    /// </summary>
 
     [Fact]
     public void AnalyzeSuflae_ForLoopVariable_OutOfScope()
@@ -362,6 +425,9 @@ public class ScopeTests
     #endregion
 
     #region Closure Scoping
+    /// <summary>
+    /// Tests Analyze_LambdaImplicitCapture_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LambdaImplicitCapture_ReportsError()
@@ -380,6 +446,9 @@ public class ScopeTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "given", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_LambdaWithGivenClause_UndefinedCapture_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LambdaWithGivenClause_UndefinedCapture_ReportsError()
@@ -399,6 +468,9 @@ public class ScopeTests
                 e.Message.Contains(value: "not defined", comparisonType: StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains(value: "unknown", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Tests Analyze_LambdaWithGivenClause_ValidCapture_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LambdaWithGivenClause_ValidCapture_NoError()
@@ -413,6 +485,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_LambdaCapturePreset_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LambdaCapturePreset_NoError()
@@ -427,6 +502,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_LambdaCaptureGlobalVar_NoError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LambdaCaptureGlobalVar_NoError()
@@ -441,6 +519,9 @@ public class ScopeTests
 
         Analyze(source: source);
     }
+    /// <summary>
+    /// Tests Analyze_LambdaCaptureNotInGiven_ReportsError.
+    /// </summary>
 
     [Fact]
     public void Analyze_LambdaCaptureNotInGiven_ReportsError()

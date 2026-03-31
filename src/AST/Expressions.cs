@@ -634,7 +634,9 @@ public record ChainedComparisonExpression(
 /// <param name="Start">Expression that evaluates to the starting value of the range</param>
 /// <param name="End">Expression that evaluates to the ending value of the range (inclusive)</param>
 /// <param name="Step">Optional expression for the step size between values (default is 1)</param>
+/// <param name="IsDescending">Whether the range counts downward.</param>
 /// <param name="Location">Source location information</param>
+/// <param name="IsExclusive">Whether the end bound is excluded.</param>
 /// <remarks>
 /// Range expression variants:
 /// <list type="bullet">
@@ -704,6 +706,7 @@ public record LambdaExpression(
 /// <param name="Type">Optional type annotation; if null, type is inferred from usage</param>
 /// <param name="DefaultValue">Optional default value expression; allows parameter to be omitted in calls</param>
 /// <param name="Location">Source location information</param>
+/// <param name="IsVariadic">Whether the parameter captures variadic arguments.</param>
 /// <remarks>
 /// Parameter flexibility supports various declaration patterns:
 /// <list type="bullet">

@@ -40,6 +40,7 @@ public record PassDeclaration(SourceLocation Location) : Declaration(Location: L
 /// <param name="ParameterName">The name of the generic type parameter (e.g., "T")</param>
 /// <param name="ConstraintType">The type of constraint (obeys, record, entity)</param>
 /// <param name="ConstraintTypes">List of types that the parameter must satisfy</param>
+/// <param name="Location">Source location information.</param>
 /// <remarks>
 /// Supports various constraint syntaxes:
 /// <list type="bullet">
@@ -68,6 +69,7 @@ public record GenericConstraintDeclaration(
 /// <param name="Initializer">Optional initial value expression</param>
 /// <param name="Visibility">Access control modifier (public, published, internal, private)</param>
 /// <param name="Location">Source location information</param>
+/// <param name="Storage">Storage class for the declared variable.</param>
 /// <remarks>
 /// Variable declarations support various patterns:
 /// <list type="bullet">
@@ -93,6 +95,7 @@ public record VariableDeclaration(
     SourceLocation Location,
     StorageClass Storage = StorageClass.None) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitVariableDeclaration(node: this);
@@ -111,6 +114,11 @@ public record VariableDeclaration(
 /// <param name="Annotations">Decorators like @inline for properties</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
+/// <param name="GenericConstraints">Optional generic constraints.</param>
+/// <param name="IsFailable">Whether the routine has a failable <c>!</c> suffix.</param>
+/// <param name="Storage">Storage class for the routine.</param>
+/// <param name="Async">Suspended, threaded, or emitting routine mode.</param>
+/// <param name="IsDangerous">Whether the routine requires a <c>danger!</c> context.</param>
 /// <remarks>
 /// Function declarations support:
 /// <list type="bullet">
@@ -137,6 +145,7 @@ public record RoutineDeclaration(
     AsyncStatus Async = AsyncStatus.None,
     bool IsDangerous = false) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitFunctionDeclaration(node: this);
@@ -157,6 +166,8 @@ public record RoutineDeclaration(
 /// <param name="Members">List of member declarations (member variables, methods, properties)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
+/// <param name="GenericConstraints">Optional generic constraints.</param>
+/// <param name="HasPassBody">Whether the declaration uses a <c>pass</c> body.</param>
 /// <remarks>
 /// Entity declarations support:
 /// <list type="bullet">
@@ -177,6 +188,7 @@ public record EntityDeclaration(
     List<GenericConstraintDeclaration>? GenericConstraints = null,
     bool HasPassBody = false) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitEntityDeclaration(node: this);
@@ -193,6 +205,9 @@ public record EntityDeclaration(
 /// <param name="Members">List of member declarations (member variables and methods)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
+/// <param name="GenericConstraints">Optional generic constraints.</param>
+/// <param name="HasPassBody">Whether the declaration uses a <c>pass</c> body.</param>
+/// <param name="Annotations">Optional record annotations.</param>
 /// <remarks>
 /// Record declarations provide:
 /// <list type="bullet">
@@ -214,6 +229,7 @@ public record RecordDeclaration(
     bool HasPassBody = false,
     List<string>? Annotations = null) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitRecordDeclaration(node: this);
@@ -245,6 +261,7 @@ public record ChoiceDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitChoiceDeclaration(node: this);
@@ -275,6 +292,7 @@ public record FlagsDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitFlagsDeclaration(node: this);
@@ -289,6 +307,7 @@ public record FlagsDeclaration(
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Members">List of variant member types</param>
 /// <param name="Location">Source location information</param>
+/// <param name="GenericConstraints">Optional generic constraints.</param>
 /// <remarks>
 /// Variant declarations enable type-safe unions:
 /// <list type="bullet">
@@ -306,6 +325,7 @@ public record VariantDeclaration(
     List<GenericConstraintDeclaration>? GenericConstraints = null)
     : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitVariantDeclaration(node: this);
@@ -322,6 +342,7 @@ public record VariantDeclaration(
 /// <param name="Methods">List of method signatures (without implementations)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
+/// <param name="GenericConstraints">Optional generic constraints.</param>
 /// <remarks>
 /// Protocol declarations enable polymorphism and code reuse:
 /// <list type="bullet">
@@ -343,6 +364,7 @@ public record ProtocolDeclaration(
     List<GenericConstraintDeclaration>? GenericConstraints = null)
     : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitProtocolDeclaration(node: this);
@@ -371,6 +393,7 @@ public record ProtocolDeclaration(
 public record ModuleDeclaration(string Path, SourceLocation Location)
     : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitModuleDeclaration(node: this);
@@ -400,6 +423,7 @@ public record ImportDeclaration(
     List<string>? SpecificImports, // [item1, item2]
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitImportDeclaration(node: this);
@@ -473,6 +497,7 @@ public record VariantMember(TypeExpression Type, SourceLocation Location);
 /// <param name="Parameters">List of parameter definitions</param>
 /// <param name="ReturnType">Optional return type; null for void methods</param>
 /// <param name="Location">Source location information</param>
+/// <param name="Annotations">Optional protocol annotations.</param>
 /// <remarks>
 /// Function signatures define the contract that implementers must fulfill:
 /// <list type="bullet">
@@ -511,6 +536,7 @@ public record RoutineSignature(
 public record DefineDeclaration(string OldName, string NewName, SourceLocation Location)
     : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitDefineDeclaration(node: this);
@@ -540,6 +566,7 @@ public record PresetDeclaration(
     Expression Value,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitPresetDeclaration(node: this);
@@ -557,6 +584,9 @@ public record PresetDeclaration(
 /// <param name="CallingConvention">Calling convention ("C", "stdcall", "fastcall", etc.)</param>
 /// <param name="IsVariadic">Whether the function accepts variable arguments (like C's printf with "...")</param>
 /// <param name="Location">Source location information</param>
+/// <param name="GenericConstraints">Optional generic constraints.</param>
+/// <param name="Annotations">Optional annotations attached to the external routine.</param>
+/// <param name="IsDangerous">Whether the external routine is marked dangerous.</param>
 /// <remarks>
 /// External declarations link RazorForge to native runtime:
 /// <list type="bullet">
@@ -579,6 +609,7 @@ public record ExternalDeclaration(
     bool IsDangerous,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitExternalDeclaration(node: this);
@@ -592,6 +623,7 @@ public record ExternalDeclaration(
 public record ExternalBlockDeclaration(List<Declaration> Declarations, SourceLocation Location)
     : Declaration(Location: Location)
 {
+    /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitExternalBlockDeclaration(node: this);

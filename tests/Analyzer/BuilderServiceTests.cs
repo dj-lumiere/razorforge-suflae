@@ -12,6 +12,9 @@ using static TestHelpers;
 public class BuilderServiceTests
 {
     #region Import Gating — Per-Type Routines
+    /// <summary>
+    /// Tests TypeName_WithoutImport_ReportsError.
+    /// </summary>
 
     [Fact]
     public void TypeName_WithoutImport_ReportsError()
@@ -31,6 +34,9 @@ public class BuilderServiceTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests TypeName_WithImport_NoError.
+    /// </summary>
 
     [Fact]
     public void TypeName_WithImport_NoError()
@@ -52,6 +58,9 @@ public class BuilderServiceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests DataSize_WithoutImport_ReportsError.
+    /// </summary>
 
     [Fact]
     public void DataSize_WithoutImport_ReportsError()
@@ -71,6 +80,9 @@ public class BuilderServiceTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests DataSize_WithImport_NoError.
+    /// </summary>
 
     [Fact]
     public void DataSize_WithImport_NoError()
@@ -96,6 +108,9 @@ public class BuilderServiceTests
     #endregion
 
     #region Import Gating — Standalone Routines
+    /// <summary>
+    /// Tests SourceFile_WithoutImport_ReportsError.
+    /// </summary>
 
     [Fact]
     public void SourceFile_WithoutImport_ReportsError()
@@ -110,6 +125,9 @@ public class BuilderServiceTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests SourceFile_WithImport_NoError.
+    /// </summary>
 
     [Fact]
     public void SourceFile_WithImport_NoError()
@@ -126,6 +144,9 @@ public class BuilderServiceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests SourceLine_WithoutImport_ReportsError.
+    /// </summary>
 
     [Fact]
     public void SourceLine_WithoutImport_ReportsError()
@@ -140,6 +161,9 @@ public class BuilderServiceTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests CallerFile_WithoutImport_ReportsError.
+    /// </summary>
 
     [Fact]
     public void CallerFile_WithoutImport_ReportsError()
@@ -158,6 +182,9 @@ public class BuilderServiceTests
     #endregion
 
     #region Wired Routines NOT Gated
+    /// <summary>
+    /// Tests WiredRepresent_WithoutImport_NoError.
+    /// </summary>
 
     [Fact]
     public void WiredRepresent_WithoutImport_NoError()
@@ -177,6 +204,9 @@ public class BuilderServiceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests WiredEq_WithoutImport_NoError.
+    /// </summary>
 
     [Fact]
     public void WiredEq_WithoutImport_NoError()
@@ -201,6 +231,9 @@ public class BuilderServiceTests
     #endregion
 
     #region Multiple Routines With Import
+    /// <summary>
+    /// Tests MultipleRoutines_WithImport_AllAvailable.
+    /// </summary>
 
     [Fact]
     public void MultipleRoutines_WithImport_AllAvailable()
@@ -228,6 +261,9 @@ public class BuilderServiceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests ListRoutines_WithImport_Available.
+    /// </summary>
 
     [Fact]
     public void ListRoutines_WithImport_Available()
@@ -253,6 +289,9 @@ public class BuilderServiceTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
+    /// <summary>
+    /// Tests StandaloneRoutines_WithImport_Available.
+    /// </summary>
 
     [Fact]
     public void StandaloneRoutines_WithImport_Available()

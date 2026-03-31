@@ -3,6 +3,9 @@ namespace Compiler.Parser;
 using Lexer;
 using Diagnostics;
 
+/// <summary>
+/// Partial class containing annotation parsing helpers for declarations.
+/// </summary>
 public partial class Parser
 {
     private List<string> ParseAnnotations()
@@ -166,11 +169,4 @@ public partial class Parser
             message: $"Expected annotation value, got {CurrentToken.Type}");
     }
 
-    /// <summary>
-    /// Parses a variable declaration.
-    /// Syntax: <c>var name: Type = value</c> or <c>preset name: Type = value</c>
-    /// </summary>
-    /// <param name="visibility">Access modifier (public, published, internal, private).</param>
-    /// <param name="storage">Storage class modifier (default: None).</param>
-    /// <returns>A <see cref="VariableDeclaration"/> AST node.</returns>
 }

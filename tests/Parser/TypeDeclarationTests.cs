@@ -11,6 +11,9 @@ using static TestHelpers;
 public class TypeDeclarationTests
 {
     #region Record Tests
+    /// <summary>
+    /// Tests Parse_SimpleRecord_WithMemberVariables.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleRecord_WithMemberVariables()
@@ -27,6 +30,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "Point", actual: record.Name);
         Assert.Equal(expected: 2, actual: record.Members.Count);
     }
+    /// <summary>
+    /// Tests Parse_GenericRecord.
+    /// </summary>
 
     [Fact]
     public void Parse_GenericRecord()
@@ -44,6 +50,9 @@ public class TypeDeclarationTests
         Assert.Single(collection: record.GenericParameters);
         Assert.Equal(expected: "T", actual: record.GenericParameters[index: 0]);
     }
+    /// <summary>
+    /// Tests Parse_Record_WithConstraint.
+    /// </summary>
 
     [Fact]
     public void Parse_Record_WithConstraint()
@@ -61,6 +70,9 @@ public class TypeDeclarationTests
         Assert.Single(collection: record.GenericConstraints);
         Assert.Equal(expected: "T", actual: record.GenericConstraints[index: 0].ParameterName);
     }
+    /// <summary>
+    /// Tests Parse_Record_FollowsProtocol.
+    /// </summary>
 
     [Fact]
     public void Parse_Record_FollowsProtocol()
@@ -76,6 +88,9 @@ public class TypeDeclarationTests
 
         Assert.Single(collection: record.Protocols);
     }
+    /// <summary>
+    /// Tests Parse_Record_MultipleTypeParameters.
+    /// </summary>
 
     [Fact]
     public void Parse_Record_MultipleTypeParameters()
@@ -98,6 +113,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Entity Tests
+    /// <summary>
+    /// Tests Parse_SimpleEntity.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleEntity()
@@ -114,6 +132,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "User", actual: entity.Name);
         Assert.Equal(expected: 2, actual: entity.Members.Count);
     }
+    /// <summary>
+    /// Tests Parse_GenericEntity.
+    /// </summary>
 
     [Fact]
     public void Parse_GenericEntity()
@@ -130,6 +151,9 @@ public class TypeDeclarationTests
         Assert.Single(collection: entity.GenericParameters);
         Assert.Equal(expected: "T", actual: entity.GenericParameters[index: 0]);
     }
+    /// <summary>
+    /// Tests Parse_Entity_MultipleConstraints.
+    /// </summary>
 
     [Fact]
     public void Parse_Entity_MultipleConstraints()
@@ -154,6 +178,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Choice Tests
+    /// <summary>
+    /// Tests Parse_SimpleChoice.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleChoice()
@@ -173,6 +200,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: 4, actual: choice.Cases.Count);
         Assert.Equal(expected: "NORTH", actual: choice.Cases[index: 0].Name);
     }
+    /// <summary>
+    /// Tests Parse_Choice_WithValues.
+    /// </summary>
 
     [Fact]
     public void Parse_Choice_WithValues()
@@ -194,6 +224,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Variant Tests
+    /// <summary>
+    /// Tests Parse_SimpleVariant.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleVariant()
@@ -210,6 +243,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "NetworkEvent", actual: variant.Name);
         Assert.Equal(expected: 2, actual: variant.Members.Count);
     }
+    /// <summary>
+    /// Tests Parse_Variant_WithTypes.
+    /// </summary>
 
     [Fact]
     public void Parse_Variant_WithTypes()
@@ -227,6 +263,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "S32", actual: variant.Members[index: 0].Type.Name);
         Assert.Equal(expected: "Text", actual: variant.Members[index: 1].Type.Name);
     }
+    /// <summary>
+    /// Tests Parse_Variant_WithNone.
+    /// </summary>
 
     [Fact]
     public void Parse_Variant_WithNone()
@@ -250,6 +289,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Protocol Tests
+    /// <summary>
+    /// Tests Parse_SimpleProtocol.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleProtocol()
@@ -266,6 +308,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "Displayable", actual: protocol.Name);
         Assert.Single(collection: protocol.Methods);
     }
+    /// <summary>
+    /// Tests Parse_Protocol_MultipleMethods.
+    /// </summary>
 
     [Fact]
     public void Parse_Protocol_MultipleMethods()
@@ -284,6 +329,9 @@ public class TypeDeclarationTests
 
         Assert.Equal(expected: 2, actual: protocol.Methods.Count);
     }
+    /// <summary>
+    /// Tests Parse_GenericProtocol.
+    /// </summary>
 
     [Fact]
     public void Parse_GenericProtocol()
@@ -301,6 +349,9 @@ public class TypeDeclarationTests
         Assert.Single(collection: protocol.GenericParameters);
         Assert.Equal(expected: "T", actual: protocol.GenericParameters[index: 0]);
     }
+    /// <summary>
+    /// Tests Parse_Protocol_Inheritance.
+    /// </summary>
 
     [Fact]
     public void Parse_Protocol_Inheritance()
@@ -320,6 +371,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Visibility Tests
+    /// <summary>
+    /// Tests Parse_SecretRecord.
+    /// </summary>
 
     [Fact]
     public void Parse_SecretRecord()
@@ -334,6 +388,9 @@ public class TypeDeclarationTests
 
         Assert.Equal(expected: VisibilityModifier.Secret, actual: record.Visibility);
     }
+    /// <summary>
+    /// Tests Parse_SecretEntity.
+    /// </summary>
 
     [Fact]
     public void Parse_SecretEntity()
@@ -352,6 +409,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Routine Tests
+    /// <summary>
+    /// Tests Parse_SimpleRoutine.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleRoutine()
@@ -367,6 +427,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "greet", actual: routine.Name);
         Assert.Single(collection: routine.Parameters);
     }
+    /// <summary>
+    /// Tests Parse_VariadicRoutine.
+    /// </summary>
 
     [Fact]
     public void Parse_VariadicRoutine()
@@ -384,6 +447,9 @@ public class TypeDeclarationTests
         Assert.True(condition: routine.Parameters[0].IsVariadic);
         Assert.Equal(expected: "values", actual: routine.Parameters[0].Name);
     }
+    /// <summary>
+    /// Tests Parse_VariadicRoutine_WithConstraint.
+    /// </summary>
 
     [Fact]
     public void Parse_VariadicRoutine_WithConstraint()
@@ -400,6 +466,9 @@ public class TypeDeclarationTests
         Assert.Single(collection: routine.Parameters);
         Assert.True(condition: routine.Parameters[0].IsVariadic);
     }
+    /// <summary>
+    /// Tests Parse_FailableRoutine.
+    /// </summary>
 
     [Fact]
     public void Parse_FailableRoutine()
@@ -419,6 +488,9 @@ public class TypeDeclarationTests
     #endregion
 
     #region Posted Record Field Tests
+    /// <summary>
+    /// Tests Parse_RecordWithPostedMemberVariable.
+    /// </summary>
 
     [Fact]
     public void Parse_RecordWithPostedMemberVariable()
@@ -434,6 +506,9 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "Percentage", actual: record.Name);
         Assert.Single(collection: record.Members);
     }
+    /// <summary>
+    /// Tests Parse_RecordWithMixedVisibilityMemberVariables.
+    /// </summary>
 
     [Fact]
     public void Parse_RecordWithMixedVisibilityMemberVariables()

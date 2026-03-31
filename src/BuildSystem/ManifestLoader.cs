@@ -2,9 +2,15 @@ using Tomlyn;
 using Tomlyn.Model;
 
 namespace Builder;
+/// <summary>
+/// Loads and validates RazorForge project manifest files.
+/// </summary>
 
 public static class ManifestLoader
 {
+    /// <summary>
+    /// Gets the canonical file name for a RazorForge project manifest.
+    /// </summary>
     public const string ManifestFileName = "razorforge.toml";
 
     /// <summary>

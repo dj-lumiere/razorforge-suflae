@@ -6,6 +6,9 @@ using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
+/// <summary>
+/// Expression code generation for entity construction and entity member operations.
+/// </summary>
 public partial class LLVMCodeGenerator
 {
     private string EmitEntityAllocation(StringBuilder sb, EntityTypeInfo entity,
@@ -690,13 +693,11 @@ public partial class LLVMCodeGenerator
 
 
     /// <summary>
-    /// Main expression dispatch - generates code for any expression type.
+    /// Refreshes entity member variables for resolved generic types that may have stale or empty members.
+    /// Tries the generic definition first, then falls back to registry lookup.
     /// </summary>
-    /// <param name="sb">StringBuilder to emit code to.</param>
-    /// <summary>
-    /// Refreshes entity member variables for resolved generic types that may have stale/empty members.
-    /// Tries GenericDefinition first, then falls back to registry lookup.
-    /// </summary>
+    /// <param name="entity">The entity type to refresh.</param>
+    /// <param name="memberVariableName">The member variable name being probed.</param>
     private EntityTypeInfo RefreshEntityMemberVariables(EntityTypeInfo entity,
         string memberVariableName)
     {
@@ -738,7 +739,4 @@ public partial class LLVMCodeGenerator
 
         return entity;
     }
-
-    /// <param name="expr">The expression to generate code for.</param>
-    /// <returns>The temporary variable holding the expression result.</returns>
 }
