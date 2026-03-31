@@ -1195,22 +1195,27 @@ public sealed partial class SemanticAnalyzer
         // Analyze the resource expression to get its type
         TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
 
-        // #142: using target validation — must be a token (.view()/.hijack()/etc.) or disposable resource
-        bool isTokenAccess = IsInlineOnlyTokenType(type: resourceType);
+        // The bound variable type defaults to the resource type, but may be overridden
+        // by $enter's return type when it returns non-void.
+        TypeSymbol boundType = resourceType;
 
-        // #32: For non-token using targets, validate $enter/$exit exist
-        if (!isTokenAccess && _registry.Language == Language.RazorForge)
+        // All using targets (tokens and resources alike) require $enter/$exit
+        if (_registry.Language == Language.RazorForge)
         {
-            bool hasEnter = _registry.LookupRoutine(fullName: $"{resourceType.Name}.$enter") != null;
-            bool hasExit = _registry.LookupRoutine(fullName: $"{resourceType.Name}.$exit") != null;
+            // LookupMethod handles generic type fallback (e.g., Viewed[Point].$enter → Viewed.$enter)
+            RoutineInfo? enterMethod = _registry.LookupMethod(type: resourceType, methodName: "$enter");
+            RoutineInfo? exitMethod = _registry.LookupMethod(type: resourceType, methodName: "$exit");
 
-            if (!hasEnter || !hasExit)
+            if (enterMethod == null || exitMethod == null)
             {
                 ReportError(
                     SemanticDiagnosticCode.UsingTargetMissingEnterExit,
-                    $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management, " +
-                    "or be a token access expression (.view(), .hijack(), .inspect!(), .seize!()).",
+                    $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management.",
                     usingStmt.Location);
+            }
+            else if (enterMethod.ReturnType != null && !enterMethod.ReturnType.IsBlank)
+            {
+                boundType = enterMethod.ReturnType;
             }
         }
 
@@ -1220,7 +1225,7 @@ public sealed partial class SemanticAnalyzer
         // Declare the binding variable in the using scope
         _registry.DeclareVariable(
             name: usingStmt.Name,
-            type: resourceType);
+            type: boundType);
 
         // Analyze the body
         AnalyzeStatement(statement: usingStmt.Body);

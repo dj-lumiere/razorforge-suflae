@@ -2255,8 +2255,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits code for a using statement.
     /// using name = resource { body }
-    /// If the resource type has $enter/$exit, calls them around the body.
-    /// Otherwise, just binds the resource to the name and emits the body (token path).
+    /// Calls $enter/$exit around the body for all using targets (tokens and resources alike).
     /// </summary>
     private void EmitUsing(StringBuilder sb, UsingStatement usingStmt)
     {
@@ -2265,12 +2264,9 @@ public partial class LLVMCodeGenerator
         TypeInfo? resourceType = GetExpressionType(usingStmt.Resource);
         string llvmType = resourceType != null ? GetLLVMType(resourceType) : "ptr";
 
-        // Check if $enter exists for this type
-        string? enterMethodName = resourceType != null
-            ? $"{resourceType.Name}.$enter"
-            : null;
-        RoutineInfo? enterMethod = enterMethodName != null
-            ? _registry.LookupRoutine(enterMethodName)
+        // Check if $enter exists for this type — LookupMethod handles generic type fallback
+        RoutineInfo? enterMethod = resourceType != null
+            ? _registry.LookupMethod(resourceType, "$enter")
             : null;
 
         string boundValue;
@@ -2300,7 +2296,7 @@ public partial class LLVMCodeGenerator
         }
         else
         {
-            // Token path: just bind the resource directly
+            // Fallback: no $enter found (should not happen for well-typed programs)
             boundValue = resourceValue;
             boundType = resourceType;
         }
@@ -2322,8 +2318,8 @@ public partial class LLVMCodeGenerator
         // Call $exit if $enter was available
         if (enterMethod != null)
         {
-            string exitMethodName = $"{resourceType!.Name}.$exit";
-            RoutineInfo? exitMethod = _registry.LookupRoutine(exitMethodName);
+            // LookupMethod handles generic type fallback (e.g., Viewed[Point].$exit → Viewed.$exit)
+            RoutineInfo? exitMethod = _registry.LookupMethod(resourceType!, "$exit");
             if (exitMethod != null)
             {
                 GenerateFunctionDeclaration(exitMethod);
