@@ -465,8 +465,10 @@ public partial class LLVMCodeGenerator
                         }
 
                         // For overloaded routines (e.g., $create), try to find the
-                        // specific overload matching this AST declaration's parameter types
-                        if (routineInfo != null && routine.Parameters.Count > 0)
+                        // specific overload matching this AST declaration's parameter types.
+                        // This includes 0-arg overloads — LookupRoutine returns an arbitrary
+                        // overload, so we must disambiguate for all param counts.
+                        if (routineInfo != null)
                         {
                             var astParamTypes = new List<TypeInfo>();
                             foreach (var param in routine.Parameters)
