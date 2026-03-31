@@ -106,24 +106,6 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // For generic instances (e.g., List[Byte].$create), try the generic definition
-        // (e.g., List[T].$create#U64) since overloads are registered on the generic definition.
-        int bracketIdx = baseName.IndexOf(value: '[');
-        if (bracketIdx >= 0)
-        {
-            int closeBracketIdx = baseName.IndexOf(value: "].", startIndex: bracketIdx);
-            if (closeBracketIdx >= 0)
-            {
-                string genericDefName = baseName[..bracketIdx] + baseName[(closeBracketIdx + 1)..];
-                string genericRegistryKey = $"{genericDefName}#{paramTypeNames}";
-                if (_routines.TryGetValue(key: genericRegistryKey,
-                        value: out RoutineInfo? genericDefOverload))
-                {
-                    return genericDefOverload;
-                }
-            }
-        }
-
         // Fall back to default lookup
         return LookupRoutine(fullName: baseName);
     }
@@ -342,17 +324,6 @@ public sealed partial class TypeRegistry
                 ProtocolTypeInfo p => p.GenericDefinition,
                 _ => null
             };
-            // Fallback: strip type arguments from name to find generic definition
-            if (genericDef == null && type.Name.Contains(value: '['))
-            {
-                string baseName = type.Name[..type.Name.IndexOf(value: '[')];
-                genericDef = LookupType(name: baseName);
-                // Try module-qualified name for non-Core types
-                if (genericDef == null && !string.IsNullOrEmpty(value: type.Module))
-                {
-                    genericDef = LookupType(name: $"{type.Module}.{baseName}");
-                }
-            }
 
             if (genericDef != null)
             {
