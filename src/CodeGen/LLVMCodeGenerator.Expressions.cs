@@ -1091,20 +1091,13 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
     {
-        // Check if this is a const generic value substituted during monomorphization
-        // After GenericAstRewriter replaces N→"4", the identifier name is a numeric literal
-        if (identifier.Name.Length > 0 && char.IsDigit(identifier.Name[0]))
+        // Const generic value: identifier retains its original param name (e.g., "N")
+        // Resolve via _typeSubstitutions to get the numeric value
+        if (_typeSubstitutions != null
+            && _typeSubstitutions.TryGetValue(identifier.Name, out var subType)
+            && subType is ConstGenericValueTypeInfo constVal)
         {
-            // Parse the numeric value from the literal text (handles "4", "8u64", etc.)
-            if (long.TryParse(identifier.Name, out _))
-                return identifier.Name;
-            // Try stripping type suffix for typed literals
-            foreach (string suffix in new[] { "u64", "s64", "u32", "s32", "u16", "s16", "u8", "s8", "u128", "s128", "addr" })
-            {
-                if (identifier.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
-                    && long.TryParse(identifier.Name[..^suffix.Length], out long val))
-                    return val.ToString();
-            }
+            return constVal.Value.ToString();
         }
 
         // Check if this is a choice case (e.g., ME_SMALL, NORTH)
@@ -3770,8 +3763,8 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Resolves the type of an identifier expression, handling const generic values
-    /// (numeric identifiers from monomorphization like "8" from N→8).
+    /// Resolves the type of an identifier expression, handling generic type params
+    /// and const generic values via <see cref="_typeSubstitutions"/> key lookup.
     /// </summary>
     private TypeInfo? ResolveIdentifierType(IdentifierExpression id)
     {
@@ -3780,15 +3773,13 @@ public partial class LLVMCodeGenerator
         var regVar = _registry.LookupVariable(id.Name);
         if (regVar != null)
             return ApplyTypeSubstitutions(regVar.Type);
-        // Const generic values after AST rewriting: "8", "4u64", etc.
-        if (id.Name.Length > 0 && char.IsDigit(id.Name[0])
-            && _typeSubstitutions != null)
+        // Generic type param or const generic — resolve via substitutions
+        if (_typeSubstitutions != null
+            && _typeSubstitutions.TryGetValue(id.Name, out var sub))
         {
-            foreach (var sub in _typeSubstitutions.Values)
-            {
-                if (sub is ConstGenericValueTypeInfo constVal && constVal.Name == id.Name)
-                    return ResolveConstGenericUnderlyingType(constVal);
-            }
+            if (sub is ConstGenericValueTypeInfo constVal)
+                return ResolveConstGenericUnderlyingType(constVal);
+            return sub;
         }
         return null;
     }
@@ -3806,12 +3797,20 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Resolves a type name that appears as a method receiver after monomorphization.
-    /// E.g., after GenericAstRewriter substitutes T→S64, "S64.data_size()" needs to resolve "S64" as a type.
-    /// Checks: registry lookup, module-qualified lookup, and type substitution values.
+    /// Resolves a type name that appears as a method receiver during monomorphization.
+    /// E.g., T.data_size() where T is still "T" — resolved via <see cref="_typeSubstitutions"/> key lookup.
+    /// Falls back to registry lookup for non-monomorphization paths.
     /// </summary>
     private TypeInfo? ResolveTypeNameAsReceiver(string name)
     {
+        // Generic type param used as receiver (e.g., T.data_size() where T is still "T")
+        if (_typeSubstitutions != null
+            && _typeSubstitutions.TryGetValue(name, out var sub)
+            && sub is not ConstGenericValueTypeInfo)
+        {
+            return sub;
+        }
+
         // Direct registry lookup (handles simple names like S64, Text, Letter)
         var type = LookupTypeInCurrentModule(name);
         if (type != null) return type;
@@ -3820,11 +3819,10 @@ public partial class LLVMCodeGenerator
         // (handles generic instances like SortedDict[S64, S64] that may not be in the registry by bare name)
         if (_typeSubstitutions != null)
         {
-            foreach (var sub in _typeSubstitutions.Values)
+            foreach (var sub2 in _typeSubstitutions.Values)
             {
-                // Skip const generic values — they are runtime values, not types for method dispatch
-                if (sub is ConstGenericValueTypeInfo) continue;
-                if (sub.Name == name) return sub;
+                if (sub2 is ConstGenericValueTypeInfo) continue;
+                if (sub2.Name == name) return sub2;
             }
         }
 
