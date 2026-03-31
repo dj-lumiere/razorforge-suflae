@@ -94,6 +94,34 @@ public class StabilizationPlanTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that protocol dispatch on nested instantiated generic types preserves the substituted owner type.
+    /// </summary>
+    [Fact]
+    public void P1_ProtocolMethodOnNestedGenericOwner_UsesConcreteNestedType()
+    {
+        string source = """
+                        protocol Clonable
+                          @readonly
+                          routine Me.clone() -> Me
+
+                        record Box[T] obeys Clonable
+                          value: T
+
+                        @readonly
+                        routine Box[T].clone() -> Box[T]
+                          return Box[T](value: me.value)
+
+                        routine test()
+                          var boxed = Box[Box[S32]](value: Box[S32](value: 7))
+                          var copy: Box[Box[S32]] = boxed.clone()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
     #endregion
 
     #region P2 — GenericDefinition preserved across all update paths
@@ -199,6 +227,36 @@ public class StabilizationPlanTests
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }
 
+    /// <summary>
+    /// Verifies that <c>using</c> binds the fully substituted nested generic type returned by <c>$enter</c>.
+    /// </summary>
+    [Fact]
+    public void P3_UsingWithNestedGenericReturn_BindsResolvedType()
+    {
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        record Guard[T]
+                          resource: T
+
+                        routine Guard[T].$enter() -> T
+                          return me.resource
+
+                        routine Guard[T].$exit()
+                          return
+
+                        routine test()
+                          var g = Guard[Box[S32]](resource: Box[S32](value: 42))
+                          using g as value_box
+                            var n: S32 = value_box.value
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
     #endregion
 
     #region P4 — Routine body matching edge cases
@@ -293,6 +351,62 @@ public class StabilizationPlanTests
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
 
+    /// <summary>
+    /// Verifies that overloaded member routines on a generic owner resolve the correct body when the arity matches.
+    /// </summary>
+    [Fact]
+    public void P4_GenericOwnerOverloads_SameArityDifferentTypes_MatchCorrectBody()
+    {
+        string source = """
+                        record Buffer[T]
+                          value: T
+                          ready: Bool
+
+                        routine Buffer[T].replace(next: T) -> Buffer[T]
+                          return Buffer[T](value: next, ready: me.ready)
+
+                        routine Buffer[T].replace(flag: Bool) -> Buffer[T]
+                          return Buffer[T](value: me.value, ready: flag)
+
+                        routine test()
+                          var b = Buffer[S32](value: 1, ready: false)
+                          var a = b.replace(next: 9)
+                          var c = b.replace(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
+    }
+
+    /// <summary>
+    /// Verifies that generic creator overload matching stays stable when one overload takes the instantiated owner type.
+    /// </summary>
+    [Fact]
+    public void P4_CreateOverload_WithOwnerTypedParameter_MatchesCorrectBody()
+    {
+        string source = """
+                        record Wrapper[T]
+                          value: T
+
+                        routine Wrapper[T].$create(from: T) -> Wrapper[T]
+                          return Wrapper[T](value: from)
+
+                        routine Wrapper[T].$create(copy: Wrapper[T]) -> Wrapper[T]
+                          return Wrapper[T](value: copy.value)
+
+                        routine test()
+                          var a = Wrapper[S32](from: 12)
+                          var b = Wrapper[S32](copy: a)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
+    }
+
     #endregion
 
     #region P5 — GenericAstRewriter no longer rewrites identifiers
@@ -346,6 +460,40 @@ public class StabilizationPlanTests
                           var outer = Wrapper[Wrapper[S32]](inner: inner)
                           var result: Wrapper[S32] = outer.unwrap()
                           var val: S32 = result.unwrap()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
+    /// Verifies that nested generic member-variable types are resolved before a member routine returns them.
+    /// </summary>
+    [Fact]
+    public void P6_NestedGenericMemberType_ReturnsResolvedInnerType()
+    {
+        string source = """
+                        record Node[T]
+                          item: T
+
+                        @readonly
+                        routine Node[T].hash() -> U64
+                          return 0u64
+
+                        record Holder[T]
+                          node: Node[T]
+
+                        @readonly
+                        routine Holder[T].hash() -> U64
+                          return 0u64
+
+                        routine Holder[T].fetch() -> Node[T]
+                          return me.node
+
+                        routine test()
+                          var h = Holder[S32](node: Node[S32](item: 4))
+                          var n: Node[S32] = h.fetch()
                           return
                         """;
 

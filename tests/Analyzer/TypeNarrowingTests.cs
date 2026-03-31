@@ -92,6 +92,26 @@ public class TypeNarrowingTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Tests Analyze_IfIsNoneWithoutExit_DoesNotNarrowAfterIf.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_IfIsNoneWithoutExit_DoesNotNarrowAfterIf()
+    {
+        // A non-exiting if branch must not narrow the remainder of the scope.
+        string source = """
+                        routine process(value: S32?) -> S32
+                          if value is None
+                            show("missing")
+                          return value
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticAnalysis.Diagnostics.SemanticDiagnosticCode.ReturnTypeMismatch);
+    }
+
     #endregion
 
     #region When Statement Narrowing
