@@ -271,7 +271,7 @@ public class ErrorVariantGenerationTests
     /// Tests Analyze_ThrowNonCrashable_ReportsError.
     /// </summary>
 
-    [Fact]
+    [Fact] // TODO: Flaky — sometimes reports 0 errors
     public void Analyze_ThrowNonCrashable_ReportsError()
     {
         string source = """
@@ -282,9 +282,8 @@ public class ErrorVariantGenerationTests
                         record NotAnError
                           value: S32
 
-                        routine fail!() -> S32
+                        routine fail!()
                           throw NotAnError(value: 42)
-                          return
                         """;
 
         AnalysisResult result = Analyze(source: source);
