@@ -35,16 +35,7 @@ public partial class LLVMCodeGenerator
             }
             if (anyResolved)
             {
-                TypeInfo? genericBase = type switch
-                {
-                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
-                    _ => null
-                };
-                genericBase ??= type.Name.Contains('[')
-                    ? _registry.LookupType(type.Name[..type.Name.IndexOf('[')])
-                    : null;
+                TypeInfo? genericBase = GetGenericBase(type);
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
             }
@@ -77,13 +68,12 @@ public partial class LLVMCodeGenerator
                 => llvmRecord.LlvmType,
 
             // Records with no fields and generic base type has @llvm annotation
-            RecordTypeInfo { MemberVariables.Count: 0 } record when record.Name.Contains('[') &&
-                _registry.LookupType(record.Name[..record.Name.IndexOf('[')]) is RecordTypeInfo { HasDirectBackendType: true } baseRecord
+            RecordTypeInfo { MemberVariables.Count: 0, GenericDefinition: { HasDirectBackendType: true } baseRecord }
                 => baseRecord.LlvmType,
 
             // Error handling records (Maybe[T], Result[T], Lookup[T]) → always anonymous { i64, ptr }
             // This ensures consistency between RecordTypeInfo and ErrorHandlingTypeInfo representations.
-            RecordTypeInfo record when record.Name.StartsWith("Maybe[") || record.Name.StartsWith("Result[") || record.Name.StartsWith("Lookup[")
+            RecordTypeInfo record when GetGenericBaseName(record) is "Maybe" or "Result" or "Lookup"
                 => "{ i64, ptr }",
 
             // Multi-member-variable records → LLVM struct type
@@ -292,12 +282,12 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
                 GetTypeSize(record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record),
-            EntityTypeInfo => 8, // Entities are heap-allocated, stored as pointers
+            EntityTypeInfo => _pointerSizeBytes, // Entities are heap-allocated, stored as pointers
             TupleTypeInfo tuple => CalculateTupleSize(tuple),
-            WrapperTypeInfo => 8, // Pointer size
+            WrapperTypeInfo => _pointerSizeBytes, // Pointer size
             ChoiceTypeInfo => 4, // i32 tag
             VariantTypeInfo variant => CalculateVariantSize(variant),
-            _ => 8 // Default to pointer size
+            _ => _pointerSizeBytes // Default to pointer size
         };
     }
 
@@ -320,15 +310,15 @@ public partial class LLVMCodeGenerator
             "@intrinsic.f32" => 4,
             "@intrinsic.f64" => 8,
             "@intrinsic.f128" => 16,
-            "@intrinsic.ptr" => 8,
-            _ => 8
+            "@intrinsic.ptr" => _pointerSizeBytes,
+            _ => _pointerSizeBytes
         };
     }
 
     /// <summary>
     /// Gets the size in bytes for an LLVM type string (from @llvm annotation).
     /// </summary>
-    private static int GetTypeSizeFromLlvmType(string llvmType)
+    private int GetTypeSizeFromLlvmType(string llvmType)
     {
         // Array types: [N x elemType]
         if (llvmType.StartsWith("[") && llvmType.Contains(" x "))
@@ -351,7 +341,7 @@ public partial class LLVMCodeGenerator
             "float" => 4,
             "double" => 8,
             "fp128" => 16,
-            "ptr" => 8,
+            "ptr" => _pointerSizeBytes,
             _ => throw new InvalidOperationException($"Unknown LLVM type for size calculation: {llvmType}")
         };
     }

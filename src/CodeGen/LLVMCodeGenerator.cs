@@ -118,6 +118,21 @@ public partial class LLVMCodeGenerator
     /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
     private readonly int _pointerBitWidth;
 
+    /// <summary>Pointer size in bytes, derived from <see cref="_pointerBitWidth"/>.</summary>
+    private readonly int _pointerSizeBytes;
+
+    /// <summary>LLVM target triple for the current platform.</summary>
+    private readonly string _targetTriple;
+
+    /// <summary>LLVM data layout string for the current platform.</summary>
+    private readonly string _dataLayout;
+
+    /// <summary>Byte size of a collection header: { ptr data, i64 count, i64 capacity }.</summary>
+    private readonly int _collectionHeaderSizeBytes;
+
+    /// <summary>Byte size of a Data entity: { i64 type_id, ptr data_ptr, i64 data_size }.</summary>
+    private readonly int _dataEntitySizeBytes;
+
     /// <summary>Alloca address for the emit slot in emitting routines (null outside emitting context).</summary>
     private string? _emitSlotAddr;
 
@@ -140,13 +155,10 @@ public partial class LLVMCodeGenerator
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    /// <param name="pointerBitWidth">Pointer bit width for the target platform (64 for x86_64, 32 for x86).</param>
+    /// <param name="pointerBitWidth">Pointer bit width for the target platform (currently only 64 is supported).</param>
     public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
+        : this([(program, program.Location.FileName, "")], registry, stdlibPrograms, pointerBitWidth)
     {
-        _userPrograms = [(program, program.Location.FileName, "")];
-        _registry = registry;
-        _stdlibPrograms = stdlibPrograms ?? [];
-        _pointerBitWidth = pointerBitWidth;
     }
 
     /// <summary>
@@ -155,13 +167,23 @@ public partial class LLVMCodeGenerator
     /// <param name="userPrograms">The user program ASTs with file paths and module names.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    /// <param name="pointerBitWidth">Pointer bit width for the target platform (64 for x86_64, 32 for x86).</param>
+    /// <param name="pointerBitWidth">Pointer bit width for the target platform (currently only 64 is supported).</param>
     public LLVMCodeGenerator(IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
     {
+        if (pointerBitWidth != 64)
+            throw new ArgumentException($"Only 64-bit targets are currently supported (got {pointerBitWidth}).", nameof(pointerBitWidth));
+
         _userPrograms = userPrograms;
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
         _pointerBitWidth = pointerBitWidth;
+        _pointerSizeBytes = pointerBitWidth / 8;
+        // Target configuration — currently x86_64 Windows only
+        _targetTriple = "x86_64-pc-windows-msvc";
+        _dataLayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
+        // Runtime object layout sizes — derived from field types, not from type definitions yet
+        _collectionHeaderSizeBytes = _pointerSizeBytes + 8 + 8; // ptr + i64 count + i64 capacity
+        _dataEntitySizeBytes = 8 + _pointerSizeBytes + 8; // i64 type_id + ptr data_ptr + i64 data_size
     }
 
     #endregion
@@ -183,6 +205,26 @@ public partial class LLVMCodeGenerator
         }
         return _registry.LookupType(name);
     }
+
+    /// <summary>
+    /// Gets the generic definition for a resolved generic type, regardless of concrete subtype.
+    /// Returns null for non-generic or non-resolved types.
+    /// </summary>
+    private static TypeInfo? GetGenericBase(TypeInfo type) => type switch
+    {
+        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+        ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
+        ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
+        VariantTypeInfo { GenericDefinition: not null } v => v.GenericDefinition,
+        _ => null
+    };
+
+    /// <summary>
+    /// Gets the generic definition's name for a resolved generic type.
+    /// Returns null for non-generic or non-resolved types.
+    /// </summary>
+    private static string? GetGenericBaseName(TypeInfo type) => GetGenericBase(type)?.Name;
 
     #endregion
 
@@ -511,8 +553,8 @@ public partial class LLVMCodeGenerator
         // Module header
         output.AppendLine("; ModuleID = 'razorforge_module'");
         output.AppendLine("source_filename = \"razorforge_module\"");
-        output.AppendLine("target datalayout = \"e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"");
-        output.AppendLine("target triple = \"x86_64-pc-windows-msvc\"");
+        output.AppendLine($"target datalayout = \"{_dataLayout}\"");
+        output.AppendLine($"target triple = \"{_targetTriple}\"");
         output.AppendLine();
 
         // Type declarations

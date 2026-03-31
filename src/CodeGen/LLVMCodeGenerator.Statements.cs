@@ -270,8 +270,8 @@ public partial class LLVMCodeGenerator
         }
         // Wrapper type forwarding: Hijacked[T], Seized[T], etc. — write through to inner entity
         else if (targetType is RecordTypeInfo wrapperRecord
-                 && wrapperRecord.Name.Contains('[')
-                 && _wrapperTypeNames.Contains(wrapperRecord.Name[..wrapperRecord.Name.IndexOf('[')])
+                 && GetGenericBaseName(wrapperRecord) is { } wrapBaseName
+                 && _wrapperTypeNames.Contains(wrapBaseName)
                  && wrapperRecord.TypeArguments is { Count: > 0 }
                  && wrapperRecord.TypeArguments[0] is EntityTypeInfo innerEntity)
         {
@@ -1009,10 +1009,8 @@ public partial class LLVMCodeGenerator
                         }
                         if (anyChanged)
                         {
-                            string baseName = resolvedReturnType.Name.Contains('[')
-                                ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
-                                : resolvedReturnType.Name;
-                            TypeInfo? genericBase = LookupTypeInCurrentModule(baseName);
+                            TypeInfo? genericBase = GetGenericBase(resolvedReturnType)
+                                ?? LookupTypeInCurrentModule(resolvedReturnType.Name);
                             if (genericBase != null)
                                 resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
                         }
@@ -1296,8 +1294,7 @@ public partial class LLVMCodeGenerator
             }
             if (anyChanged)
             {
-                string baseName = type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name;
-                var genericBase = _registry.LookupType(baseName);
+                var genericBase = GetGenericBase(type) ?? _registry.LookupType(type.Name);
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
             }

@@ -271,8 +271,8 @@ public partial class LLVMCodeGenerator
         // Wrapper type forwarding: Viewed[T], Hijacked[T], etc.
         // These are records wrapping a Snatched[T] (ptr) — forward member access to the inner entity type
         if (targetType is RecordTypeInfo wrapperRecord
-            && wrapperRecord.Name.Contains('[')
-            && _wrapperTypeNames.Contains(wrapperRecord.Name[..wrapperRecord.Name.IndexOf('[')])
+            && GetGenericBaseName(wrapperRecord) is { } wrapBaseName
+            && _wrapperTypeNames.Contains(wrapBaseName)
             && wrapperRecord.TypeArguments is { Count: > 0 }
             && wrapperRecord.TypeArguments[0] is EntityTypeInfo innerEntity
             && !wrapperRecord.MemberVariables.Any(mv => mv.Name == propertyName))
@@ -327,7 +327,7 @@ public partial class LLVMCodeGenerator
         TypeInfo? valueType = memberType switch
         {
             ErrorHandlingTypeInfo eh => eh.ValueType,
-            RecordTypeInfo r when r.Name.StartsWith("Maybe[") && r.TypeArguments is { Count: > 0 } => r.TypeArguments[0],
+            RecordTypeInfo r when GetGenericBaseName(r) == "Maybe" && r.TypeArguments is { Count: > 0 } => r.TypeArguments[0],
             _ => null
         };
 
@@ -575,7 +575,7 @@ public partial class LLVMCodeGenerator
     private static bool IsMaybeType(TypeInfo type)
     {
         return type is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe }
-            || (type is RecordTypeInfo r && r.Name.StartsWith("Maybe["));
+            || (type is RecordTypeInfo r && GetGenericBaseName(r) == "Maybe");
     }
 
     #endregion
@@ -606,7 +606,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Fallback: look up the generic definition from the registry
-        string baseName = entity.Name.Contains('[') ? entity.Name[..entity.Name.IndexOf('[')] : entity.Name;
+        string baseName = GetGenericBaseName(entity) ?? entity.Name;
         var lookupDef = LookupTypeInCurrentModule(baseName) as EntityTypeInfo;
         if (lookupDef is { IsGenericDefinition: true, MemberVariables.Count: > 0 })
         {
@@ -1685,9 +1685,8 @@ public partial class LLVMCodeGenerator
         if (method == null && member.PropertyName.EndsWith('!'))
             method = _registry.LookupRoutine($"{receiverType.Name}.{member.PropertyName}");
         // For generic type instances (e.g., List[Letter].count), try the generic base name
-        if (method == null && receiverType.Name.Contains('['))
+        if (method == null && GetGenericBaseName(receiverType) is { } baseName)
         {
-            string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
             method = _registry.LookupRoutine($"{baseName}.{methodName}")
                 ?? _registry.LookupRoutine($"{baseName}.{methodName}!");
         }
@@ -1973,15 +1972,7 @@ public partial class LLVMCodeGenerator
                 }
                 if (needsSubst)
                 {
-                    TypeInfo? retGenBase = resolvedReturnType switch
-                    {
-                        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                        _ => null
-                    };
-                    retGenBase ??= resolvedReturnType.Name.Contains('[')
-                        ? _registry.LookupType(resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')])
-                        : null;
+                    TypeInfo? retGenBase = GetGenericBase(resolvedReturnType);
                     if (retGenBase != null)
                         resolvedReturnType = _registry.GetOrCreateResolution(retGenBase, substArgs);
                 }
@@ -2119,19 +2110,7 @@ public partial class LLVMCodeGenerator
             }
             if (anyChanged)
             {
-                TypeInfo? genericBase = type switch
-                {
-                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
-                    ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
-                    _ => null
-                };
-                if (genericBase == null)
-                {
-                    string baseName = type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name;
-                    genericBase = _registry.LookupType(baseName);
-                }
+                TypeInfo? genericBase = GetGenericBase(type);
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericBase, substitutedArgs);
             }
@@ -2658,10 +2637,9 @@ public partial class LLVMCodeGenerator
         string methodFullName = $"{collectionType.Name}.{methodName}";
         RoutineInfo? method = _registry.LookupRoutine(methodFullName);
         // For generic type instances (e.g., Set[S64]), try the generic base name
-        if (method == null && collectionType.Name.Contains('['))
+        if (method == null && GetGenericBaseName(collectionType) is { } colBaseName)
         {
-            string baseName = collectionType.Name[..collectionType.Name.IndexOf('[')];
-            method = _registry.LookupRoutine($"{baseName}.{methodName}");
+            method = _registry.LookupRoutine($"{colBaseName}.{methodName}");
         }
         // Fall back to LookupMethod which handles module-qualified and protocol lookups
         method ??= _registry.LookupMethod(collectionType, methodName);
@@ -3043,10 +3021,9 @@ public partial class LLVMCodeGenerator
                               ?? _registry.LookupRoutine(generic.MethodName);
 
         // For generic type instances (e.g., Snatched[Point].obtain_as), try the generic base name
-        if (method == null && receiverType != null && receiverType.Name.Contains('['))
+        if (method == null && receiverType != null && GetGenericBaseName(receiverType) is { } genBase)
         {
-            string genericBase = receiverType.Name[..receiverType.Name.IndexOf('[')];
-            method = _registry.LookupRoutine($"{genericBase}.{generic.MethodName}");
+            method = _registry.LookupRoutine($"{genBase}.{generic.MethodName}");
         }
         if (method == null && receiverType != null)
         {
@@ -3330,20 +3307,7 @@ public partial class LLVMCodeGenerator
                 }
                 if (anySubstituted)
                 {
-                    TypeInfo? genericBase = resolvedReturnType switch
-                    {
-                        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-
-                        _ => null
-                    };
-                    if (genericBase == null)
-                    {
-                        string baseName = resolvedReturnType.Name.Contains('[')
-                            ? resolvedReturnType.Name[..resolvedReturnType.Name.IndexOf('[')]
-                            : resolvedReturnType.Name;
-                        genericBase = _registry.LookupType(baseName);
-                    }
+                    TypeInfo? genericBase = GetGenericBase(resolvedReturnType);
                     if (genericBase != null)
                         resolvedReturnType = _registry.GetOrCreateResolution(genericBase, substitutedArgs);
                 }
@@ -3505,10 +3469,9 @@ public partial class LLVMCodeGenerator
                               ?? _registry.LookupRoutine(generic.MethodName);
 
         // For generic type instances, try the generic base name
-        if (method == null && receiverType != null && receiverType.Name.Contains('['))
+        if (method == null && receiverType != null && GetGenericBaseName(receiverType) is { } genBase2)
         {
-            string genericBase = receiverType.Name[..receiverType.Name.IndexOf('[')];
-            method = _registry.LookupRoutine($"{genericBase}.{generic.MethodName}");
+            method = _registry.LookupRoutine($"{genBase2}.{generic.MethodName}");
         }
         if (method == null && receiverType != null)
         {
@@ -3612,16 +3575,7 @@ public partial class LLVMCodeGenerator
                 }
                 if (needsResolution)
                 {
-                    TypeInfo? genericBase = returnType switch
-                    {
-                        RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                        EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-
-                        _ => null
-                    };
-                    genericBase ??= returnType.Name.Contains('[')
-                        ? _registry.LookupType(returnType.Name[..returnType.Name.IndexOf('[')])
-                        : null;
+                    TypeInfo? genericBase = GetGenericBase(returnType);
                     if (genericBase != null)
                         returnType = _registry.GetOrCreateResolution(genericBase, resolvedArgs);
                 }
@@ -3698,17 +3652,7 @@ public partial class LLVMCodeGenerator
             }
             if (needsResolution)
             {
-                TypeInfo? genericBase = type switch
-                {
-                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
-                    ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
-                    _ => null
-                };
-                genericBase ??= type.Name.Contains('[')
-                    ? _registry.LookupType(type.Name[..type.Name.IndexOf('[')])
-                    : null;
+                TypeInfo? genericBase = GetGenericBase(type);
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericBase, resolvedArgs);
             }
@@ -3892,7 +3836,7 @@ public partial class LLVMCodeGenerator
             // Force-unwrap: return the value type inside the Maybe/ErrorHandling wrapper
             if (operandType is ErrorHandlingTypeInfo eh)
                 return eh.ValueType;
-            if (operandType.Name.StartsWith("Maybe[") && operandType.TypeArguments is { Count: 1 })
+            if (GetGenericBaseName(operandType) == "Maybe" && operandType.TypeArguments is { Count: 1 })
                 return operandType.TypeArguments[0];
         }
         return operandType;
@@ -3952,11 +3896,10 @@ public partial class LLVMCodeGenerator
         string typeName = targetType.Name;
         RoutineInfo? getItem = _registry.LookupRoutine($"{typeName}.$getitem")
             ?? _registry.LookupRoutine($"{typeName}.$getitem!");
-        if (getItem == null && typeName.Contains('['))
+        if (getItem == null && GetGenericBaseName(targetType) is { } idxBaseName)
         {
-            string baseName = typeName[..typeName.IndexOf('[')];
-            getItem = _registry.LookupRoutine($"{baseName}.$getitem")
-                ?? _registry.LookupRoutine($"{baseName}.$getitem!");
+            getItem = _registry.LookupRoutine($"{idxBaseName}.$getitem")
+                ?? _registry.LookupRoutine($"{idxBaseName}.$getitem!");
         }
 
         if (getItem?.ReturnType == null) return null;
@@ -3998,10 +3941,9 @@ public partial class LLVMCodeGenerator
                     string methodFullName = $"{receiverType.Name}.{member.PropertyName}";
                     var method = _registry.LookupRoutine(methodFullName);
                     // For generic resolutions (e.g., Snatched[Letter].offset), try base name
-                    if (method == null && receiverType.Name.Contains('['))
+                    if (method == null && GetGenericBaseName(receiverType) is { } propBaseName)
                     {
-                        string baseName = receiverType.Name[..receiverType.Name.IndexOf('[')];
-                        method = _registry.LookupRoutine($"{baseName}.{member.PropertyName}");
+                        method = _registry.LookupRoutine($"{propBaseName}.{member.PropertyName}");
                     }
                     // Fallback: LookupMethod handles generic-param-owner methods (e.g., T.get_address)
                     if (method == null)
@@ -4653,7 +4595,7 @@ public partial class LLVMCodeGenerator
         {
             valueType = errorType.ValueType;
         }
-        else if (operandType != null && operandType.Name.StartsWith("Maybe[") && operandType.TypeArguments is { Count: 1 })
+        else if (operandType != null && GetGenericBaseName(operandType) == "Maybe" && operandType.TypeArguments is { Count: 1 })
         {
             // Handle Maybe types that were resolved as RecordTypeInfo by the registry cache
             valueType = operandType.TypeArguments[0];
@@ -5057,10 +4999,9 @@ public partial class LLVMCodeGenerator
         string representName = $"{typeName}.$represent";
         RoutineInfo? representMethod = _registry.LookupRoutine(representName);
         // For generic resolutions (e.g., ValueBitList[8]), try the generic base name
-        if (representMethod == null && typeName.Contains('['))
+        if (representMethod == null && type != null && GetGenericBaseName(type) is { } repBaseName)
         {
-            string baseName = typeName[..typeName.IndexOf('[')];
-            representMethod = _registry.LookupRoutine($"{baseName}.$represent");
+            representMethod = _registry.LookupRoutine($"{repBaseName}.$represent");
         }
         if (representMethod != null)
             GenerateFunctionDeclaration(representMethod);
@@ -5096,10 +5037,9 @@ public partial class LLVMCodeGenerator
         string diagnoseName = $"{typeName}.$diagnose";
         RoutineInfo? diagnoseMethod = _registry.LookupRoutine(diagnoseName);
         // For generic resolutions (e.g., ValueBitList[8]), try the generic base name
-        if (diagnoseMethod == null && typeName.Contains('['))
+        if (diagnoseMethod == null && type != null && GetGenericBaseName(type) is { } diagBaseName)
         {
-            string baseName = typeName[..typeName.IndexOf('[')];
-            diagnoseMethod = _registry.LookupRoutine($"{baseName}.$diagnose");
+            diagnoseMethod = _registry.LookupRoutine($"{diagBaseName}.$diagnose");
         }
         if (diagnoseMethod != null)
             GenerateFunctionDeclaration(diagnoseMethod);
@@ -5178,10 +5118,9 @@ public partial class LLVMCodeGenerator
         }
         else
         {
-            // Fallback: allocate via rf_alloc with a reasonable default size
-            // List entity needs at least: count (i64) + capacity (i64) + data ptr
+            // Fallback: allocate collection header: { ptr data, i64 count, i64 capacity }
             listPtr = NextTemp();
-            EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
+            EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
 
             // Initialize: data = alloc(n * elem_size), count = 0, capacity = element count
             // Entity layout is { ptr (data), i64 (count), i64 (capacity) }
@@ -5463,9 +5402,9 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // Last resort: direct allocation with zeroed fields
+        // Last resort: direct allocation with collection header size
         string ptr = NextTemp();
-        EmitLine(sb, $"  {ptr} = call ptr @rf_allocate_dynamic(i64 24)");
+        EmitLine(sb, $"  {ptr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
         return ptr;
     }
 
@@ -5504,7 +5443,7 @@ public partial class LLVMCodeGenerator
     {
         string typeName = resolvedType.Name;
         // Extract base type name (e.g., "List" from "List[S64]")
-        string baseName = typeName.Contains('[') ? typeName[..typeName.IndexOf('[')] : typeName;
+        string baseName = GetGenericBaseName(resolvedType) ?? typeName;
 
         // ValueList[T, N]: inline array construction via insertvalue
         if (baseName == "ValueList")

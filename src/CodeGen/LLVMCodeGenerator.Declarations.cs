@@ -753,9 +753,7 @@ public partial class LLVMCodeGenerator
                     TypeInfo paramType = entry.GenericMethod.Parameters[0].Type;
                     // Reverse-substitute concrete types back to generic params for AST matching
                     // e.g., SortedSet[S64] → SortedSet (the base name is enough to disambiguate)
-                    firstParamGenericType = paramType.Name.Contains('[')
-                        ? paramType.Name[..paramType.Name.IndexOf('[')]
-                        : paramType.Name;
+                    firstParamGenericType = GetGenericBaseName(paramType) ?? paramType.Name;
                 }
                 RoutineDeclaration? astRoutine = FindGenericAstRoutine(entry.GenericAstName, entry.GenericMethod.Parameters.Count, firstParamGenericType);
                 if (astRoutine == null)
@@ -912,20 +910,7 @@ public partial class LLVMCodeGenerator
             }
             if (anySubstituted)
             {
-                TypeInfo? genericBase = type switch
-                {
-                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                    ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
-                    _ => null
-                };
-                if (genericBase == null)
-                {
-                    string baseName = type.Name.Contains('[')
-                        ? type.Name[..type.Name.IndexOf('[')]
-                        : type.Name;
-                    genericBase = _registry.LookupType(baseName);
-                }
+                TypeInfo? genericBase = GetGenericBase(type);
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericBase, substitutedArgs);
             }
@@ -2306,9 +2291,9 @@ public partial class LLVMCodeGenerator
         EmitLine(_functionDefinitions, $"define ptr @{funcName}({paramLlvmType} %{paramName}) {{");
         EmitLine(_functionDefinitions, "entry:");
 
-        // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
+        // Allocate Data entity: { i64 type_id, ptr data_ptr, i64 data_size }
         string dataPtr = NextTemp();
-        EmitLine(_functionDefinitions, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 24)");
+        EmitLine(_functionDefinitions, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {_dataEntitySizeBytes})");
 
         // Store type_id (compile-time FNV-1a hash)
         string tidPtr = NextTemp();
@@ -2438,7 +2423,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate list header: { ptr data, i64 count, i64 capacity }
         string listPtr = NextTemp();
-        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
 
         // Allocate data array
         string dataPtr = NextTemp();
@@ -2585,7 +2570,7 @@ public partial class LLVMCodeGenerator
             {
                 // Check if this type implements the matching protocol
                 // For generic types: List[T] obeys Iterable[T] → when T=S64, List[S64] obeys Iterable[S64]
-                string implBaseName = impl.Name.Contains('[') ? impl.Name[..impl.Name.IndexOf('[')] : impl.Name;
+                string implBaseName = GetGenericBaseName(impl) ?? impl.Name;
                 if (implBaseName != protocolBaseName) continue;
 
                 // For resolved (non-generic-definition) types, verify the protocol type arguments match exactly.
@@ -2911,11 +2896,11 @@ public partial class LLVMCodeGenerator
 
         // Allocate list header: { ptr data, i64 count, i64 capacity }
         string listPtr = NextTemp();
-        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
 
-        // Allocate data array (array of pointers, 8 bytes each)
+        // Allocate data array (array of pointers)
         string dataPtr = NextTemp();
-        EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * 8})");
+        EmitLine(sb, $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {count * _pointerSizeBytes})");
 
         // Store data pointer (field 0)
         string dataPtrSlot = NextTemp();
@@ -3048,7 +3033,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate list header: { ptr data, i64 count, i64 capacity }
         string listPtr = NextTemp();
-        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 24)");
+        EmitLine(sb, $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
 
         // Allocate data array
         string dataPtr = NextTemp();
@@ -3236,9 +3221,9 @@ public partial class LLVMCodeGenerator
             ulong fieldTypeId = ComputeTypeId(field.Type.FullName);
             long fieldDataSize = ComputeDataSize(field.Type);
 
-            // Allocate Data entity (3 fields × 8 bytes = 24 bytes)
+            // Allocate Data entity: { i64 type_id, ptr data_ptr, i64 data_size }
             string boxed = NextTemp();
-            EmitLine(sb, $"  {boxed} = call ptr @rf_allocate_dynamic(i64 24)");
+            EmitLine(sb, $"  {boxed} = call ptr @rf_allocate_dynamic(i64 {_dataEntitySizeBytes})");
 
             // Store type_id
             string tidSlot = NextTemp();
