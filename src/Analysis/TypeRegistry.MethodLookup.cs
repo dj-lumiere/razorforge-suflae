@@ -332,6 +332,11 @@ public sealed partial class TypeRegistry
                 RoutineInfo? genericMethod = LookupMethod(type: genericDef, methodName: methodName);
                 if (genericMethod != null)
                 {
+                    // Universal methods on bare type params (e.g., T.get_address(), T.snatch())
+                    // must keep their GenericParameterTypeInfo owner so codegen can record
+                    // the correct monomorphization (T → concrete receiver type).
+                    if (genericMethod.OwnerType is GenericParameterTypeInfo)
+                        return genericMethod;
                     return SubstituteMethodForOwner(genericMethod, resolvedOwner: type);
                 }
             }
