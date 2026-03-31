@@ -223,7 +223,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Field Annotation Tests
+    #region Member Variable Annotation Tests
 
     [Fact]
     public void Parse_AttributeOnField()
@@ -337,7 +337,7 @@ public class AttributeTests
 
     #endregion
 
-    #region Protocol Method Annotations
+    #region Protocol Member Routine Annotations
 
     [Fact]
     public void Parse_ProtocolMethodAttributes()

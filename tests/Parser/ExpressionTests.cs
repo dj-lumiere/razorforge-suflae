@@ -7,11 +7,11 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing expressions in RazorForge:
-/// method calls, member variable access, indexing, lambdas, closures, string interpolation.
+/// routine calls, member variable access, indexing, lambdas, closures, string interpolation.
 /// </summary>
 public class ExpressionTests
 {
-    #region Method Call Tests
+    #region Routine Call Tests
 
     [Fact]
     public void Parse_SimpleMethodCall()
@@ -99,7 +99,7 @@ public class ExpressionTests
 
     #endregion
 
-    #region Field Access Tests
+    #region Member Variable Access Tests
 
     [Fact]
     public void Parse_SimpleMemberVariableAccess()

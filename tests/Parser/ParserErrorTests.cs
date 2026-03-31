@@ -42,8 +42,8 @@ public class ParserErrorTests
     [Fact]
     public void Parse_Record_VarKeyword_ShouldBeInvalid()
     {
-        // Records are value types - fields are always immutable
-        // 'var' should not be allowed in record fields
+        // Records are value types - member variables are always immutable
+        // 'var' should not be allowed in record member variables
         string source = """
                         record Point
                           var x: F32
@@ -63,7 +63,7 @@ public class ParserErrorTests
     [Fact]
     public void Parse_Entity_MemberVariableWithoutVarOrLet_IsValid()
     {
-        // Entity fields use 'name: Type' syntax without var keyword
+        // Entity member variables use 'name: Type' syntax without var keyword
         string source = """
                         entity User
                           name: Text
@@ -165,7 +165,7 @@ public class ParserErrorTests
     [Fact]
     public void Parse_Protocol_MethodWithBody_ShouldBeInvalid()
     {
-        // Protocol methods are signatures only - no body allowed
+        // Protocol member routines are signatures only - no body allowed
         string source = """
                         protocol Displayable
                           @readonly
@@ -173,21 +173,21 @@ public class ParserErrorTests
                             return "hello"
                         """;
 
-        // Should reject method with body in protocol
+        // Should reject a member routine with a body in a protocol
         Record.Exception(testCode: () => Parse(source: source));
     }
 
     [Fact]
     public void Parse_Protocol_MissingMe_ShouldBeInvalid()
     {
-        // Protocol methods must have Me. prefix
+        // Protocol member routines must have Me. prefix
         string source = """
                         protocol Displayable
                           @readonly
                           routine display() -> Text
                         """;
 
-        // Should reject - methods need Me. prefix
+        // Should reject - member routines need Me. prefix
         Parse(source: source);
         // May parse but should be flagged semantically
     }
