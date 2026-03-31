@@ -95,14 +95,20 @@ public sealed partial class SemanticAnalyzer
             fullName = string.IsNullOrEmpty(value: module) ? routine.Name : $"{module}.{routine.Name}";
         }
 
-        // Look up the routine, trying overload disambiguation by AST parameter types.
-        // Without this, all overloaded routines (e.g., S32.$create(from: S8) vs S32.$create(from: U64))
-        // would resolve to whichever was registered first, getting wrong parameter names/types.
+        // Look up the routine, trying overload disambiguation by resolved parameter types.
+        // Use LookupType (non-error-reporting) so the overload key matches what
+        // UpdateRoutine registered (uses TypeInfo.Name, not AST TypeExpression.Name).
+        // Fall back to AST name for unresolvable types (e.g., routine-level generic params).
         RoutineInfo? routineInfo = null;
         if (routine.Parameters.Count > 0)
         {
             var paramTypeNames = routine.Parameters
-                .Select(p => p.Type?.Name ?? "")
+                .Select(p =>
+                {
+                    if (p.Type == null) return "";
+                    TypeSymbol? resolved = LookupTypeWithImports(name: p.Type.Name);
+                    return resolved?.Name ?? p.Type.Name ?? "";
+                })
                 .Where(n => !string.IsNullOrEmpty(n));
             string overloadKey = $"{fullName}#{string.Join(",", paramTypeNames)}";
             routineInfo = _registry.LookupRoutine(fullName: overloadKey);

@@ -251,6 +251,11 @@ public sealed partial class TypeRegistry
 
         _routines[key: key] = updatedRoutine;
 
+        // Register with the resolved overload key so body-matching can find it
+        string resolvedOverloadKey = GetOverloadKey(updatedRoutine);
+        if (resolvedOverloadKey != key)
+            _routines[key: resolvedOverloadKey] = updatedRoutine;
+
         // Update the module-qualified name index
         string qualifiedName = updatedRoutine.QualifiedName;
         if (qualifiedName != key)
