@@ -947,7 +947,8 @@ public partial class LLVMCodeGenerator
                 // Handle monomorphization for generic types
                 string iterMangled;
                 if (iterMethod.OwnerType != null &&
-                    (iterMethod.OwnerType.IsGenericDefinition || iterMethod.OwnerType is ProtocolTypeInfo) &&
+                    (iterMethod.OwnerType.IsGenericDefinition || iterMethod.OwnerType.IsGenericResolution
+                     || iterMethod.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo) &&
                     iterType.IsGenericResolution)
                 {
                     iterMangled = Q($"{iterType.FullName}.$iter");
@@ -1134,7 +1135,8 @@ public partial class LLVMCodeGenerator
             // Handle monomorphization for generic emitter types
             string nextMangled;
             if (nextMethod.OwnerType != null &&
-                (nextMethod.OwnerType.IsGenericDefinition || nextMethod.OwnerType is ProtocolTypeInfo) &&
+                (nextMethod.OwnerType.IsGenericDefinition || nextMethod.OwnerType.IsGenericResolution
+                 || nextMethod.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo) &&
                 emitterType != null && emitterType.IsGenericResolution)
             {
                 nextMangled = Q($"{emitterType.FullName}.$next");

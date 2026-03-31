@@ -1865,7 +1865,8 @@ public partial class LLVMCodeGenerator
             RecordMonomorphization(mangledName, method, receiverType, inferredMethodTypeArgs);
         }
         else if (method != null && receiverType.IsGenericResolution &&
-            method.OwnerType != null && method.OwnerType.IsGenericDefinition)
+            method.OwnerType != null &&
+            (method.OwnerType.IsGenericDefinition || method.OwnerType.IsGenericResolution))
         {
             mangledName = Q($"{receiverType.FullName}.{SanitizeLLVMName(method.Name)}");
             // Record for monomorphization — will compile generic AST body with type substitutions
