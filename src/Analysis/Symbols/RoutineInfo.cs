@@ -242,7 +242,7 @@ public sealed class RoutineInfo
     /// <param name="param">The parameter to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
     /// <returns>A new <see cref="ParameterInfo"/> with the substituted type.</returns>
-    private static ParameterInfo SubstituteParameterType(ParameterInfo param,
+    internal static ParameterInfo SubstituteParameterType(ParameterInfo param,
         Dictionary<string, TypeSymbol> substitution)
     {
         TypeSymbol substitutedType = SubstituteType(type: param.Type, substitution: substitution);
@@ -255,7 +255,7 @@ public sealed class RoutineInfo
     /// <param name="type">The type to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
     /// <returns>The substituted type, or the original if no substitution applies.</returns>
-    private static TypeSymbol SubstituteType(TypeSymbol type,
+    internal static TypeSymbol SubstituteType(TypeSymbol type,
         Dictionary<string, TypeSymbol> substitution)
     {
         if (substitution.TryGetValue(key: type.Name, value: out TypeSymbol? substituted))

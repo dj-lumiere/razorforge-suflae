@@ -230,12 +230,6 @@ public sealed partial class SemanticAnalyzer
                 paramType = elemType;
             }
 
-            // Substitute generic type parameters when calling methods on generic resolutions
-            // (e.g., Snatched[Point].write(value: T) → T becomes Point)
-            if (callObjectType is { IsGenericResolution: true, TypeArguments: not null })
-            {
-                paramType = SubstituteTypeParameters(type: paramType, genericType: callObjectType);
-            }
             if (callObjectType != null && routine.OwnerType is GenericParameterTypeInfo genParamOwner)
             {
                 var substitutions = new Dictionary<string, TypeSymbol>

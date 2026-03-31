@@ -1206,10 +1206,6 @@ public sealed partial class SemanticAnalyzer
                     if (paramType is ProtocolSelfTypeInfo)
                         paramType = leftType;
 
-                    // Substitute generic type parameters (e.g., List[S32].$add → T becomes S32)
-                    if (leftType is { IsGenericResolution: true, TypeArguments: not null })
-                        paramType = SubstituteTypeParameters(type: paramType, genericType: leftType);
-
                     if (!IsAssignableTo(source: rightType, target: paramType))
                     {
                         ReportError(
@@ -1223,8 +1219,6 @@ public sealed partial class SemanticAnalyzer
                     TypeSymbol returnType = method.ReturnType ?? leftType;
                     if (returnType is ProtocolSelfTypeInfo)
                         returnType = leftType;
-                    if (leftType is { IsGenericResolution: true, TypeArguments: not null })
-                        returnType = SubstituteTypeParameters(type: returnType, genericType: leftType);
                     return returnType;
                 }
             }
@@ -2259,12 +2253,8 @@ public sealed partial class SemanticAnalyzer
                 // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
-                // Return type is Blank if not specified — substitute generic type parameters
+                // Return type is Blank if not specified
                 TypeSymbol? callReturnType = method.ReturnType;
-                if (callReturnType != null && objectType is { IsGenericResolution: true, TypeArguments: not null })
-                {
-                    callReturnType = SubstituteTypeParameters(type: callReturnType, genericType: objectType);
-                }
                 if (callReturnType != null && method.OwnerType is GenericParameterTypeInfo genParamOwner)
                 {
                     var substitutions = new Dictionary<string, TypeSymbol>
@@ -2505,12 +2495,7 @@ public sealed partial class SemanticAnalyzer
             // Validate method access
             ValidateRoutineAccess(routine: method, accessLocation: member.Location);
 
-            // For generic resolutions, substitute type parameters in return type
             TypeSymbol? returnType = method.ReturnType;
-            if (returnType != null && objectType is { IsGenericResolution: true, TypeArguments: not null })
-            {
-                returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
-            }
 
             // For methods on generic type parameters (e.g., routine T.view() → Viewed[T]),
             // substitute the generic parameter with the concrete receiver type
@@ -2552,10 +2537,7 @@ public sealed partial class SemanticAnalyzer
         RoutineInfo? getItem = _registry.LookupMethod(type: objectType, methodName: "$getitem");
         if (getItem?.ReturnType != null)
         {
-            TypeSymbol itemReturnType = getItem.ReturnType;
-            if (objectType is { IsGenericResolution: true, TypeArguments: not null })
-                itemReturnType = SubstituteTypeParameters(type: itemReturnType, genericType: objectType);
-            return itemReturnType;
+            return getItem.ReturnType;
         }
 
         // For generic types like List<T>, return the element type
@@ -2577,10 +2559,7 @@ public sealed partial class SemanticAnalyzer
         RoutineInfo? getSlice = _registry.LookupMethod(type: objectType, methodName: "$getslice");
         if (getSlice?.ReturnType != null)
         {
-            TypeSymbol sliceReturnType = getSlice.ReturnType;
-            if (objectType is { IsGenericResolution: true, TypeArguments: not null })
-                sliceReturnType = SubstituteTypeParameters(type: sliceReturnType, genericType: objectType);
-            return sliceReturnType;
+            return getSlice.ReturnType;
         }
 
         // For generic types like List<T>, return the element type
@@ -3750,11 +3729,7 @@ public sealed partial class SemanticAnalyzer
 
             TypeSymbol returnType = method.ReturnType;
 
-            // Step 1: Substitute owner type's generic params (T from Snatched[T] → Snatched[Point])
-            if (objectType is { IsGenericResolution: true, TypeArguments: not null })
-                returnType = SubstituteTypeParameters(type: returnType, genericType: objectType);
-
-            // Step 2: Substitute method's own generic params (U from obtain_as[U])
+            // Substitute method's own generic params (U from obtain_as[U])
             // GenericParameters includes both owner-level (T) and method-level (U) params,
             // but typeArgs only contains method-level args from the call site.
             // Compute the offset to skip owner-level params when indexing into typeArgs.

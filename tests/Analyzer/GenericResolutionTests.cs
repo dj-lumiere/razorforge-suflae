@@ -129,4 +129,75 @@ public class GenericResolutionTests
     }
 
     #endregion
+
+    #region LookupMethod fully-resolved results
+
+    [Fact]
+    public void Analyze_GenericOwnerMethod_ParamTypeSubstituted()
+    {
+        // LookupMethod on List[S32].$add should return param type S32 (not T)
+        // After fix, no manual SubstituteTypeParameters needed at call site
+        string source = """
+                        record Pair[T]
+                          first: T
+                          second: T
+
+                        routine Pair[T].swap_first(value: T) -> T
+                          return me.first
+
+                        routine test()
+                          var p = Pair[S32](first: 1, second: 2)
+                          var old: S32 = p.swap_first(value: 3)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_GenericOwnerMethod_ReturnTypeSubstituted()
+    {
+        // LookupMethod on generic owner should substitute T in return type
+        string source = """
+                        record Container[T]
+                          item: T
+
+                        routine Container[T].get() -> T
+                          return me.item
+
+                        routine test()
+                          var c = Container[Bool](item: true)
+                          var v: Bool = c.get()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_GenericOwnerMethod_NestedGenericSubstitution()
+    {
+        // Dict[Text, List[S32]].$getitem should return List[S32], not T
+        string source = """
+                        record Mapping[K, V]
+                          key: K
+                          val: V
+
+                        routine Mapping[K, V].get_val() -> V
+                          return me.val
+
+                        routine test()
+                          var inner = Mapping[S32, Bool](key: 1, val: true)
+                          var m = Mapping[Bool, Mapping[S32, Bool]](key: false, val: inner)
+                          var result: Mapping[S32, Bool] = m.get_val()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
 }
