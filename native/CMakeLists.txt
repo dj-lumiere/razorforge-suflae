@@ -70,6 +70,18 @@ include(cmake/pcre2.cmake)
 # https://github.com/JuliaStrings/utf8proc (MIT)
 include(cmake/utf8proc.cmake)
 
+# yyjson - Fast JSON parser/writer
+# https://github.com/ibireme/yyjson (MIT)
+include(cmake/yyjson.cmake)
+
+# tomlc99 - TOML v1.0 parser
+# https://github.com/cktan/tomlc99 (MIT)
+include(cmake/tomlc99.cmake)
+
+# minicsv - Tiny CSV parser
+# https://github.com/jedisct1/minicsv (BSD)
+include(cmake/minicsv.cmake)
+
 # Boehm GC - Conservative garbage collector (Suflae runtime)
 # https://github.com/ivmai/bdwgc (MIT-style)
 include(cmake/bdwgc.cmake)
@@ -177,6 +189,24 @@ if(HAVE_UTF8PROC)
     target_link_libraries(razorforge_runtime rf_utf8proc)
 endif()
 
+# Link yyjson if available
+if(HAVE_YYJSON)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_YYJSON)
+    target_link_libraries(razorforge_runtime rf_yyjson)
+endif()
+
+# Link tomlc99 if available
+if(HAVE_TOMLC99)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_TOMLC99)
+    target_link_libraries(razorforge_runtime rf_tomlc99)
+endif()
+
+# Link minicsv if available
+if(HAVE_MINICSV)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_MINICSV)
+    target_link_libraries(razorforge_runtime rf_minicsv)
+endif()
+
 # Link Boehm GC if available
 if(HAVE_BDWGC)
     target_compile_definitions(razorforge_runtime PRIVATE HAVE_BDWGC)
@@ -258,6 +288,9 @@ message(STATUS "  libsodium (crypto):               ${HAVE_LIBSODIUM}")
 message(STATUS "  mbedTLS (TLS/crypto):             ${HAVE_MBEDTLS}")
 message(STATUS "  PCRE2 (regex):                    ${HAVE_PCRE2}")
 message(STATUS "  utf8proc (unicode):               ${HAVE_UTF8PROC}")
+message(STATUS "  yyjson (JSON):                    ${HAVE_YYJSON}")
+message(STATUS "  tomlc99 (TOML):                   ${HAVE_TOMLC99}")
+message(STATUS "  minicsv (CSV):                    ${HAVE_MINICSV}")
 message(STATUS "  Boehm GC (Suflae GC):             ${HAVE_BDWGC}")
 message(STATUS "  ── Platform ──")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
