@@ -559,10 +559,13 @@ public partial class LLVMCodeGenerator
         if (method == null && arguments.Count == 0 &&
             _registry.LookupType(name: conversionTypeName) != null)
         {
-            // For @llvm primitive types, emit inline conversion (trunc/zext/sext/fpcast)
-            // instead of a function call. e.g., val.Address() → inline zext/trunc.
+            // For @llvm primitive types where the source is also primitive,
+            // emit inline conversion (trunc/zext/sext/fpcast) instead of a function call.
+            // e.g., val.Address() → inline zext/trunc.
+            // Non-primitive sources (e.g., Text.S32!()) must go through $create.
             TypeInfo? targetType = _registry.LookupType(name: conversionTypeName);
-            if (targetType is RecordTypeInfo { HasDirectBackendType: true })
+            if (targetType is RecordTypeInfo { HasDirectBackendType: true } &&
+                receiverType is RecordTypeInfo { HasDirectBackendType: true })
             {
                 return EmitPrimitiveTypeConversion(sb: sb,
                     targetTypeName: conversionTypeName,
@@ -672,11 +675,26 @@ public partial class LLVMCodeGenerator
                 string retType3 = creator.ReturnType != null
                     ? GetLLVMType(type: creator.ReturnType)
                     : "ptr";
+                // Failable creators return Maybe[T] = { i64, ptr } at IR level
+                if (creator.IsFailable)
+                {
+                    retType3 = "{ i64, ptr }";
+                }
+
                 string receiverLlvm3 = GetLLVMType(type: receiverType);
                 string result3 = NextTemp();
                 EmitLine(sb: sb,
                     line:
                     $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiver})");
+
+                // Unwrap failable result (crash on failure in non-failable context)
+                if (creator.IsFailable && creator.ReturnType != null)
+                {
+                    return EmitEmittingCallUnwrap(sb: sb,
+                        maybeResult: result3,
+                        valueType: creator.ReturnType);
+                }
+
                 return result3;
             }
         }

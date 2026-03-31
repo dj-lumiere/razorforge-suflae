@@ -367,7 +367,10 @@ public partial class LLVMCodeGenerator
 
         // Emit stack trace push
         {
-            string routineName = routine.FullName ?? routine.Name;
+            string paramTypes = string.Join(separator: ", ",
+                values: routine.Parameters.Select(selector: p => p.Type.Name));
+            string failable = routine.IsFailable ? "!" : "";
+            string routineName = $"{routine.FullName ?? routine.Name}{failable}({paramTypes})";
             string fileName = routine.Location?.FileName ?? "<unknown>";
             int line = routine.Location?.Line ?? 0;
             int col = routine.Location?.Column ?? 0;

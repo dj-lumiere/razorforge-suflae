@@ -746,12 +746,16 @@ public sealed partial class SemanticAnalyzer
                 TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
                 if (targetType != null)
                 {
-                    // Look up the creator on the target type
-                    string creatorName = isFailable
-                        ? "$create!"
-                        : "$create";
+                    // Look up the creator on the target type, using overload resolution
+                    // to match the object type (e.g., Text → S32.$create!(from_text: Text))
+                    // Note: parser strips '!' from routine names — IsFailable is a separate flag.
+                    // Always look up "$create" and check IsFailable on the result.
+                    string creatorFullName = $"{potentialTypeName}.$create";
                     RoutineInfo? creator =
-                        _registry.LookupRoutine(fullName: $"{potentialTypeName}.{creatorName}");
+                        _registry.LookupRoutineOverload(fullName: creatorFullName,
+                            argTypes: [objectType]);
+                    // Fall back to default overload if no match by arg type
+                    creator ??= _registry.LookupRoutine(fullName: creatorFullName);
 
                     if (creator != null)
                     {
