@@ -2,7 +2,7 @@
 # Used by Dict(1:2, 3:4) and SortedDict(1:2, 3:4) literal syntax
 # Also used as the element type for Dict/SortedDict iteration
 
-module Collections
+module Core
 
 record DictEntry[K, V]
   key: K
