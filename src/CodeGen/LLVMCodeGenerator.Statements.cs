@@ -465,6 +465,7 @@ public partial class LLVMCodeGenerator
                 string v1 = NextTemp();
                 EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
 
+                EmitUsingCleanup(sb);
                 EmitEntityCleanup(sb, null);
                 EmitLine(sb, "  call void @rf_trace_pop()");
                 EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
@@ -472,12 +473,14 @@ public partial class LLVMCodeGenerator
             else if (_currentRoutineIsFailable)
             {
                 // Failable void routine: return { i64 1, ptr null } (VALID, no payload)
+                EmitUsingCleanup(sb);
                 EmitEntityCleanup(sb, null);
                 EmitLine(sb, "  call void @rf_trace_pop()");
                 EmitLine(sb, "  ret { i64, ptr } { i64 1, ptr null }");
             }
             else
             {
+                EmitUsingCleanup(sb);
                 EmitEntityCleanup(sb, null);
                 EmitLine(sb, "  call void @rf_trace_pop()");
                 EmitLine(sb, "  ret void");
@@ -498,6 +501,7 @@ public partial class LLVMCodeGenerator
             // Skip cleanup for the returned entity variable (ownership transfers to caller)
             string? returnedVarName = ret.Value is IdentifierExpression id
                 && _localEntityVars.Any(e => e.Name == id.Name) ? id.Name : null;
+            EmitUsingCleanup(sb);
             EmitEntityCleanup(sb, returnedVarName);
 
             EmitLine(sb, "  call void @rf_trace_pop()");
@@ -600,6 +604,20 @@ public partial class LLVMCodeGenerator
             string asInt = NextTemp();
             EmitLine(sb, $"  {asInt} = ptrtoint ptr {loaded} to i64");
             EmitLine(sb, $"  call void @rf_invalidate(i64 {asInt})");
+        }
+    }
+
+    /// <summary>
+    /// Emits $exit() calls for all active using scopes (innermost first).
+    /// Called before early exits (return, throw, break, continue, absent).
+    /// </summary>
+    private void EmitUsingCleanup(StringBuilder sb)
+    {
+        foreach (var (resourceValue, resourceType, exitMethod) in _usingCleanupStack)
+        {
+            string exitMangled = MangleFunctionName(exitMethod);
+            string receiverType = GetParameterLLVMType(resourceType);
+            EmitLine(sb, $"  call void @{exitMangled}({receiverType} {resourceValue})");
         }
     }
 
@@ -727,6 +745,9 @@ public partial class LLVMCodeGenerator
             EmitLine(sb, $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
         }
 
+        // Clean up active using scopes before crashing
+        EmitUsingCleanup(sb);
+
         // Call rf_crash — never returns
         EmitLine(sb, $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
         EmitLine(sb, "  unreachable");
@@ -744,6 +765,8 @@ public partial class LLVMCodeGenerator
         EmitLine(sb, $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 0, 0");
         string v1 = NextTemp();
         EmitLine(sb, $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr null, 1");
+        // Clean up active using scopes before returning absent
+        EmitUsingCleanup(sb);
         EmitLine(sb, $"  ret {{ i64, ptr }} {v1}");
     }
 
@@ -835,6 +858,12 @@ public partial class LLVMCodeGenerator
     /// Stack of loop labels for break/continue.
     /// </summary>
     private readonly Stack<(string ContinueLabel, string BreakLabel)> _loopStack = new();
+
+    /// <summary>
+    /// Stack of active using-scope cleanups. Each entry holds the info needed to call $exit()
+    /// on early exit (return, throw, break, continue, absent).
+    /// </summary>
+    private readonly Stack<(string ResourceValue, TypeInfo ResourceType, RoutineInfo ExitMethod)> _usingCleanupStack = new();
 
     /// <summary>
     /// Emits code for a while loop.
@@ -1436,6 +1465,8 @@ public partial class LLVMCodeGenerator
         }
 
         var (_, breakLabel) = _loopStack.Peek();
+        // Clean up active using scopes before breaking out of loop
+        EmitUsingCleanup(sb);
         EmitLine(sb, $"  br label %{breakLabel}");
     }
 
@@ -1450,6 +1481,8 @@ public partial class LLVMCodeGenerator
         }
 
         var (continueLabel, _) = _loopStack.Peek();
+        // Clean up active using scopes before continuing loop
+        EmitUsingCleanup(sb);
         EmitLine(sb, $"  br label %{continueLabel}");
     }
 
@@ -2312,21 +2345,28 @@ public partial class LLVMCodeGenerator
             _localVariables[usingStmt.Name] = boundType;
         }
 
+        // Look up $exit before the body so early exits can call it
+        RoutineInfo? exitMethod = enterMethod != null
+            ? _registry.LookupMethod(resourceType!, "$exit")
+            : null;
+
+        // Push cleanup so early exits (return/throw/break/continue/absent) call $exit
+        if (exitMethod != null)
+        {
+            GenerateFunctionDeclaration(exitMethod);
+            _usingCleanupStack.Push((resourceValue, resourceType!, exitMethod));
+        }
+
         // Emit the body
         EmitStatement(sb, usingStmt.Body);
 
-        // Call $exit if $enter was available
-        if (enterMethod != null)
+        // Normal exit: call $exit and pop cleanup
+        if (exitMethod != null)
         {
-            // LookupMethod handles generic type fallback (e.g., Viewed[Point].$exit → Viewed.$exit)
-            RoutineInfo? exitMethod = _registry.LookupMethod(resourceType!, "$exit");
-            if (exitMethod != null)
-            {
-                GenerateFunctionDeclaration(exitMethod);
-                string exitMangled = MangleFunctionName(exitMethod);
-                string receiverType = GetParameterLLVMType(resourceType);
-                EmitLine(sb, $"  call void @{exitMangled}({receiverType} {resourceValue})");
-            }
+            _usingCleanupStack.Pop();
+            string exitMangled = MangleFunctionName(exitMethod);
+            string receiverType = GetParameterLLVMType(resourceType);
+            EmitLine(sb, $"  call void @{exitMangled}({receiverType} {resourceValue})");
         }
     }
 
