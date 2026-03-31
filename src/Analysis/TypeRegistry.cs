@@ -337,6 +337,7 @@ public sealed partial class TypeRegistry
             GenericParameters = record.GenericParameters,
             GenericConstraints = record.GenericConstraints,
             TypeArguments = record.TypeArguments,
+            GenericDefinition = record.GenericDefinition,
             Visibility = record.Visibility,
             Location = record.Location,
             Module = record.Module,
@@ -371,6 +372,7 @@ public sealed partial class TypeRegistry
             GenericParameters = record.GenericParameters,
             GenericConstraints = record.GenericConstraints,
             TypeArguments = record.TypeArguments,
+            GenericDefinition = record.GenericDefinition,
             Visibility = record.Visibility,
             Location = record.Location,
             Module = record.Module,
@@ -404,6 +406,7 @@ public sealed partial class TypeRegistry
             GenericParameters = entity.GenericParameters,
             GenericConstraints = entity.GenericConstraints,
             TypeArguments = entity.TypeArguments,
+            GenericDefinition = entity.GenericDefinition,
             Visibility = entity.Visibility,
             Location = entity.Location,
             Module = entity.Module
@@ -436,6 +439,7 @@ public sealed partial class TypeRegistry
             GenericParameters = entity.GenericParameters,
             GenericConstraints = entity.GenericConstraints,
             TypeArguments = entity.TypeArguments,
+            GenericDefinition = entity.GenericDefinition,
             Visibility = entity.Visibility,
             Location = entity.Location,
             Module = entity.Module
@@ -527,6 +531,7 @@ public sealed partial class TypeRegistry
             GenericParameters = protocol.GenericParameters,
             GenericConstraints = protocol.GenericConstraints,
             TypeArguments = protocol.TypeArguments,
+            GenericDefinition = protocol.GenericDefinition,
             Visibility = protocol.Visibility,
             Location = protocol.Location,
             Module = protocol.Module

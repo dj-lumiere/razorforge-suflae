@@ -200,4 +200,51 @@ public class GenericResolutionTests
     }
 
     #endregion
+
+    #region P2 — GenericDefinition preserved after type updates
+
+    [Fact]
+    public void Analyze_GenericRecord_PreservesDefinitionAfterMemberUpdate()
+    {
+        // P2: After UpdateRecordMemberVariables, GenericDefinition must survive
+        // so that method lookup on the resolved type can substitute T → S32
+        string source = """
+                        record Cell[T]
+                          data: T
+
+                        routine Cell[T].extract() -> T
+                          return me.data
+
+                        routine test()
+                          var c = Cell[S32](data: 42)
+                          var v: S32 = c.extract()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_GenericEntity_PreservesDefinitionAfterMemberUpdate()
+    {
+        // P2: Same test for entity types — GenericDefinition must survive update
+        string source = """
+                        entity Node[T]
+                          value: T
+
+                        routine Node[T].get_value() -> T
+                          return me.value
+
+                        routine test()
+                          var n = Node[Bool](value: true)
+                          var v: Bool = n.get_value()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
 }
