@@ -24,7 +24,7 @@ public partial class Parser
 
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
-        // Support module-qualified names like Console.print
+        // Support slash-based module paths with a dot-qualified routine name like IO/Console.print
         while (Match(type: TokenType.Dot))
         {
             string part = ConsumeIdentifier(errorMessage: "Expected identifier after '.'");

@@ -283,7 +283,7 @@ public partial class Parser
                 continue;
             }
 
-            // Check if it's a method (routine) - no visibility modifiers allowed in choice
+            // Check if it's a member routine - no visibility modifiers allowed in choice
             if (Check(type: TokenType.Routine))
             {
                 Advance(); // consume 'routine'
@@ -561,25 +561,25 @@ public partial class Parser
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {
-                string methodName = ConsumeIdentifier(errorMessage: "Expected method name");
+                string methodName = ConsumeIdentifier(errorMessage: "Expected member routine name");
 
-                // Handle Me.methodName syntax for instance methods
-                // Protocol methods can be: "routine Me.methodName()" or "routine methodName()"
+                // Handle Me.methodName syntax for instance member routines
+                // Protocol member routines can be: "routine Me.methodName()" or "routine methodName()"
                 while (Match(type: TokenType.Dot))
                 {
                     string part =
-                        ConsumeMethodName(errorMessage: "Expected method name after '.'");
+                        ConsumeMethodName(errorMessage: "Expected member routine name after '.'");
                     methodName = methodName + "." + part;
                 }
 
-                // Support failable methods: "method!"
+                // Support failable member routines: "routine!"
                 if (Match(type: TokenType.Bang))
                 {
                     methodName += "!";
                 }
 
                 // Parameters
-                Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after method name");
+                Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after member routine name");
                 var parameters = new List<Parameter>();
 
                 if (!Check(type: TokenType.RightParen))

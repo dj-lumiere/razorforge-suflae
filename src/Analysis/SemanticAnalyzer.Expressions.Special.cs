@@ -59,7 +59,7 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Validates that an f-text embedded expression is a Level 3 expression.
-    /// Level 3: identifiers, literals, member access, method calls, indexing.
+    /// Level 3: identifiers, literals, member access, routine calls, indexing.
     /// Disallowed: assignments, control flow, binary operators (except chained member access).
     /// </summary>
     private void ValidateFTextExpression(Expression expression, SourceLocation location)
@@ -134,7 +134,7 @@ public sealed partial class SemanticAnalyzer
         // Extract base name (e.g., "List" from "List[S32]")
         string baseName = GetBaseTypeName(typeName: resolution.Name);
         TypeSymbol? def = _registry.LookupType(name: baseName);
-        // Try module-qualified name for non-Core types (e.g., "Collections.Deque")
+        // Try slash-qualified module path lookup for non-Core types (e.g., "Collections/Deque")
         if (def == null && !string.IsNullOrEmpty(value: resolution.Module))
         {
             def = _registry.LookupType(name: $"{resolution.Module}.{baseName}");
@@ -196,14 +196,14 @@ public sealed partial class SemanticAnalyzer
     /// <remarks>
     /// Stealable types:
     /// - Raw entities (direct entity references)
-    /// - Shared[T] (shared ownership handle)
-    /// - Tracked[T] (reference-counted handle)
+    /// - Shared[T] (shared-ownership wrapper)
+    /// - Tracked[T] (reference-counted wrapper)
     ///
     /// Non-stealable types (build error):
-    /// - Viewed[T] (read-only token, scope-bound)
-    /// - Hijacked[T] (exclusive token, scope-bound)
-    /// - Inspected[T] (thread-safe read token, scope-bound)
-    /// - Seized[T] (thread-safe exclusive token, scope-bound)
+    /// - Viewed[T] (read-only wrapper, scope-bound)
+    /// - Hijacked[T] (exclusive wrapper, scope-bound)
+    /// - Inspected[T] (thread-safe read wrapper, scope-bound)
+    /// - Seized[T] (thread-safe exclusive wrapper, scope-bound)
     /// - Snatched[T] (internal ownership, not for user code)
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
@@ -211,12 +211,12 @@ public sealed partial class SemanticAnalyzer
         // Analyze the operand
         TypeSymbol operandType = AnalyzeExpression(expression: steal.Operand);
 
-        // Check if the type is a memory token (cannot be stolen)
+        // Check if the type is a scope-bound wrapper (cannot be stolen)
         if (IsMemoryToken(type: operandType))
         {
             string tokenKind = GetMemoryTokenKind(type: operandType);
             ReportError(code: SemanticDiagnosticCode.StealScopeBoundToken,
-                message: $"Cannot steal '{tokenKind}' - scope-bound tokens cannot be stolen. " +
+                message: $"Cannot steal '{tokenKind}' - scope-bound wrappers cannot be stolen. " +
                          $"Only raw entities, Shared[T], and Tracked[T] can be stolen.",
                 location: steal.Location);
             return operandType;
@@ -234,7 +234,7 @@ public sealed partial class SemanticAnalyzer
         // For Shared[T] or Tracked[T], return the inner type
         if (IsStealableHandle(type: operandType))
         {
-            // Unwrap the handle to get the inner type
+            // Unwrap the wrapper to get the inner type
             if (operandType.TypeArguments is { Count: > 0 })
             {
                 return operandType.TypeArguments[index: 0];
@@ -253,8 +253,8 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is a memory token (Viewed, Hijacked, Inspected, Seized).
-    /// Memory tokens are scope-bound and cannot be stolen.
+    /// Checks if a type is a scope-bound wrapper (Viewed, Hijacked, Inspected, Seized).
+    /// Scope-bound wrappers cannot be stolen.
     /// </summary>
     private static bool IsMemoryToken(TypeSymbol type)
     {
@@ -265,7 +265,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Gets the kind of memory token for error messages.
+    /// Gets the kind of scope-bound wrapper for error messages.
     /// </summary>
     private static string GetMemoryTokenKind(TypeSymbol type)
     {
@@ -301,7 +301,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is a stealable handle (Shared[T] or Tracked[T]).
+    /// Checks if a type is a stealable wrapper (Shared[T] or Tracked[T]).
     /// </summary>
     private static bool IsStealableHandle(TypeSymbol type)
     {
@@ -350,10 +350,10 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Creates a RoutineTypeInfo from a RoutineInfo for first-class function references.
+    /// Creates a RoutineTypeInfo from a RoutineInfo for first-class routine references.
     /// </summary>
     /// <param name="routine">The routine to create a type for.</param>
-    /// <returns>The function type representing this routine's signature.</returns>
+    /// <returns>The routine type representing this routine's signature.</returns>
     private RoutineTypeInfo GetRoutineType(RoutineInfo routine)
     {
         // Extract parameter types from ParameterInfo
@@ -364,21 +364,21 @@ public sealed partial class SemanticAnalyzer
         // Get return type (null means Blank/void)
         TypeSymbol? returnType = routine.ReturnType;
 
-        // Create or retrieve the cached function type
+        // Create or retrieve the cached routine type
         return _registry.GetOrCreateRoutineType(parameterTypes: parameterTypes,
             returnType: returnType,
             isFailable: routine.IsFailable);
     }
 
     /// <summary>
-    /// Analyzes a waitfor expression (async/concurrency).
-    /// Waits for an async operation to complete, optionally with a timeout.
+    /// Analyzes a waitfor expression (suspended/threaded concurrency).
+    /// Waits for a suspended or threaded operation to complete, optionally with a timeout.
     /// </summary>
     /// <param name="waitfor">The waitfor expression to analyze.</param>
     /// <returns>The type of the awaited value.</returns>
     private TypeSymbol AnalyzeWaitforExpression(WaitforExpression waitfor)
     {
-        // Analyze the operand (the async operation to wait for)
+        // Analyze the operand (the suspended or threaded operation to wait for)
         TypeSymbol operandType = AnalyzeExpression(expression: waitfor.Operand);
 
         // Analyze optional timeout expression
@@ -403,11 +403,11 @@ public sealed partial class SemanticAnalyzer
             ReportError(code: SemanticDiagnosticCode.WaitforOutsideSuspendedRoutine,
                 message:
                 $"'waitfor' can only be used inside a 'suspended' or 'threaded' routine. " +
-                $"Routine '{_currentRoutine.Name}' is not async.",
+                $"Routine '{_currentRoutine.Name}' is neither suspended nor threaded.",
                 location: waitfor.Location);
         }
 
-        // The result type is the inner type of the async operation
+        // The result type is the inner type of the suspended or threaded operation
         // For now, return the operand type directly
         return operandType;
     }
@@ -486,7 +486,7 @@ public sealed partial class SemanticAnalyzer
             ReportError(code: SemanticDiagnosticCode.WaitforOutsideSuspendedRoutine,
                 message:
                 $"'waitfor' can only be used inside a 'suspended' or 'threaded' routine. " +
-                $"Routine '{_currentRoutine.Name}' is not async.",
+                $"Routine '{_currentRoutine.Name}' is neither suspended nor threaded.",
                 location: depWaitfor.Location);
         }
 

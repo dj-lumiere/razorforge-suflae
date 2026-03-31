@@ -79,9 +79,9 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Parses a routine (function) declaration.
+    /// Parses a routine declaration.
     /// Syntax: <c>routine name(params) -&gt; ReturnType</c> followed by indented body.
-    /// Supports generic parameters, module-qualified names, failable routines (!), and inline constraints.
+    /// Supports generic parameters, slash-based module paths, failable routines (!), and inline constraints.
     /// </summary>
     /// <remarks>
     /// Parsing phases:
@@ -92,7 +92,7 @@ public partial class Parser
     /// PHASE 2: NAME AND FAILABLE MARKER
     ///   - Parse routine name
     ///   - Parse optional type-level generic parameters
-    ///   - Parse dot-separated qualified name (for methods)
+    ///   - Parse dot-separated qualified name (for member routines)
     ///   - Check for ! suffix (failable routine)
     ///
     /// PHASE 3: PARAMETERS
@@ -111,7 +111,7 @@ public partial class Parser
     /// <param name="visibility">Access modifier for the routine.</param>
     /// <param name="annotations">List of annotations applied to the routine.</param>
     /// <param name="storage">Storage class modifier (default: None, can be Common for type-level static).</param>
-    /// <param name="asyncStatus">Async status of the routine.</param>
+    /// <param name="asyncStatus">Suspended or threaded status of the routine.</param>
     /// <param name="isDangerous">Whether the routine is marked as dangerous (RF only).</param>
     /// <returns>A <see cref="RoutineDeclaration"/> AST node.</returns>
     private RoutineDeclaration ParseRoutineDeclaration(
@@ -177,7 +177,7 @@ public partial class Parser
         }
 
         // ===============================================================================
-        // PHASE 2b: Parse dot-separated qualified name (for methods)
+        // PHASE 2b: Parse dot-separated qualified name (for member routines)
         // ===============================================================================
         // Examples:
         //   "Console.print"           -> name="Console.print"
@@ -202,13 +202,13 @@ public partial class Parser
                 name = name + "." + part;
             }
 
-            // Check for method-level generic params AFTER the method name
-            // e.g., "List[T].get[I]" - the [I] belongs to the method
+            // Check for member-routine-level generic params AFTER the routine name
+            // e.g., "List[T].get[I]" - the [I] belongs to the member routine
             if (Match(type: TokenType.LeftBracket))
             {
                 if (HasNestedBrackets())
                 {
-                    // Nested generics in method-level params
+                    // Nested generics in member-routine-level params
                     var typeArgs = new List<string>();
                     do
                     {
@@ -234,7 +234,7 @@ public partial class Parser
                     (List<string> genericParams, List<GenericConstraintDeclaration>?
                         inlineConstraints) result = ParseGenericParametersWithConstraints();
 
-                    // Merge type-level and method-level generic parameters
+                    // Merge type-level and member-routine-level generic parameters
                     if (genericParams is { Count: > 0 })
                     {
                         genericParams = new List<string>(collection: genericParams);
@@ -266,7 +266,7 @@ public partial class Parser
         // ===============================================================================
         // PHASE 2c: Parse failable marker (!)
         // ===============================================================================
-        // Support ! suffix for failable functions (can appear after qualified name)
+        // Support ! suffix for failable routines (can appear after qualified name)
         bool isFailable = Match(type: TokenType.Bang);
 
         // ConsumeMethodName may have already included '!' in the name
@@ -286,7 +286,7 @@ public partial class Parser
         {
             do
             {
-                // Handle 'me' parameter (self-reference for methods)
+                // Handle 'me' parameter (self-reference for member routines)
                 if (Check(type: TokenType.Me))
                 {
                     Token selfToken = Advance();

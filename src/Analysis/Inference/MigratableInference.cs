@@ -6,9 +6,9 @@ using SyntaxTree;
 
 /// <summary>
 /// Performs migratable inference for routines.
-/// Detects methods that can relocate container buffers (Snatched<Byte>).
+/// Detects methods that can relocate container buffers (<c>Snatched[Byte]</c>).
 ///
-/// Base case: A method is migratable if it can relocate the Snatched<Byte> buffer
+/// Base case: A method is migratable if it can relocate the <c>Snatched[Byte]</c> buffer
 /// (by changing pointer, size, or capacity in ways that trigger reallocation).
 ///
 /// Migratable operations are banned during iteration to prevent iterator invalidation.
@@ -42,13 +42,13 @@ public sealed class MigratableInference
     }
 
     /// <summary>
-    /// Phase 1: Detects methods that directly modify Snatched<U8>.
+    /// Phase 1: Detects methods that directly modify <c>Snatched&lt;U8&gt;</c>.
     /// </summary>
     /// <remarks>
     /// TODO: Implement base case detection for migratable methods.
-    /// A method is migratable if it reassigns the internal Snatched<U8> member variable of an entity.
-    /// All entity types use Snatched<U8> internally for their dynamic storage.
-    /// Detection should analyze method bodies for assignments to Snatched<U8>-typed member variables.
+    /// A method is migratable if it reassigns the internal <c>Snatched&lt;U8&gt;</c> member variable of an entity.
+    /// All entity types use <c>Snatched&lt;U8&gt;</c> internally for their dynamic storage.
+    /// Detection should analyze method bodies for assignments to <c>Snatched&lt;U8&gt;</c>-typed member variables.
     /// </remarks>
     private void DetectDirectMigrations()
     {

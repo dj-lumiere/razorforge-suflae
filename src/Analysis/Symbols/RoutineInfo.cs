@@ -5,7 +5,7 @@ using SyntaxTree;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
-/// Information about a routine (function, method, creator).
+/// Information about a routine (standalone routine, member routine, creator).
 /// </summary>
 public sealed class RoutineInfo
 {
@@ -28,14 +28,14 @@ public sealed class RoutineInfo
         }
     }
 
-    /// <summary>The module-qualified name (e.g., "Core.S8.$add", "IO/Console.show").</summary>
+    /// <summary>The module-qualified name (e.g., "Core/S8.$add", "IO/Console.show").</summary>
     public string QualifiedName
     {
         get
         {
             if (OwnerType != null)
             {
-                // Method: Module.OwnerType.Method (e.g., "Core.S8.$add")
+                // Member routine: Module/OwnerType.routine (e.g., "Core/S8.$add")
                 return $"{OwnerType.FullName}.{Name}";
             }
 
@@ -47,7 +47,7 @@ public sealed class RoutineInfo
     /// <summary>The kind of routine.</summary>
     public RoutineKind Kind { get; init; } = RoutineKind.Function;
 
-    /// <summary>The type that owns this routine (for methods/extension methods).</summary>
+    /// <summary>The type that owns this routine (for member routines and extension routines).</summary>
     public TypeSymbol? OwnerType { get; init; }
 
     /// <summary>Parameters of this routine.</summary>
@@ -65,7 +65,7 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine contains absent statements.</summary>
     public bool HasAbsent { get; set; }
 
-    /// <summary>Whether this routine calls other failable functions (propagated failability).</summary>
+    /// <summary>Whether this routine calls other failable routines (propagated failability).</summary>
     public bool HasFailableCalls { get; set; }
 
     /// <summary>The declared modification category for this routine (from source annotation).</summary>
@@ -161,16 +161,16 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>
     public bool IsSynthesized { get; init; }
 
-    /// <summary>The async status of this routine (None, Suspended, Threaded).</summary>
+    /// <summary>The suspended or threaded status of this routine (None, Suspended, Threaded).</summary>
     public AsyncStatus AsyncStatus { get; init; } = AsyncStatus.None;
 
-    /// <summary>Whether this routine is a suspended (cooperative async) routine.</summary>
+    /// <summary>Whether this routine is a suspended routine.</summary>
     public bool IsSuspended => AsyncStatus == AsyncStatus.Suspended;
 
     /// <summary>Whether this routine is a threaded (OS-thread) routine.</summary>
     public bool IsThreaded => AsyncStatus == AsyncStatus.Threaded;
 
-    /// <summary>Whether this routine is any kind of async routine.</summary>
+    /// <summary>Whether this routine is any kind of suspended or threaded routine.</summary>
     public bool IsAsync => AsyncStatus != AsyncStatus.None;
 
     /// <summary>

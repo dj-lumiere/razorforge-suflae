@@ -53,14 +53,14 @@ public sealed class WrapperTypeInfo : TypeInfo
     public static class WellKnown
     {
         /// <summary>
-        /// Read-only single-threaded token. Provides unmodifiable view of the inner value.
+        /// Read-only single-threaded wrapper. Provides unmodifiable view of the inner value.
         /// </summary>
         public static readonly WrapperTypeInfo ViewedDefinition = new(wrapperName: "Viewed",
             innerType: ErrorTypeInfo.Instance, // Placeholder, will be resolved with actual type
             isReadOnly: true) { GenericParameters = ["T"] };
 
         /// <summary>
-        /// Exclusive write single-threaded token. Provides modifiable access with exclusive ownership.
+        /// Exclusive-write single-threaded wrapper. Provides modifiable access with exclusive ownership.
         /// </summary>
         public static readonly WrapperTypeInfo HijackedDefinition = new(
             wrapperName: "Hijacked",
@@ -68,7 +68,7 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
-        /// Read-only multi-threaded token. Thread-safe unmodifiable view.
+        /// Read-only multi-threaded wrapper. Thread-safe unmodifiable view.
         /// </summary>
         public static readonly WrapperTypeInfo InspectedDefinition = new(
             wrapperName: "Inspected",
@@ -76,7 +76,7 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: true) { GenericParameters = ["T"] };
 
         /// <summary>
-        /// Exclusive write multi-threaded token. Thread-safe modifiable access with exclusive ownership.
+        /// Exclusive-write multi-threaded wrapper. Thread-safe modifiable access with exclusive ownership.
         /// </summary>
         public static readonly WrapperTypeInfo SeizedDefinition = new(
             wrapperName: "Seized",
@@ -84,7 +84,7 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
-        /// Reference-counted handle. Shared ownership with automatic cleanup.
+        /// Reference-counted wrapper. Shared ownership with automatic cleanup.
         /// </summary>
         public static readonly WrapperTypeInfo SharedDefinition = new(
             wrapperName: "Shared",
@@ -92,7 +92,7 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
-        /// Weak reference handle. Non-owning reference that can become invalid.
+        /// Weak-reference wrapper. Non-owning reference that can become invalid.
         /// </summary>
         public static readonly WrapperTypeInfo TrackedDefinition = new(
             wrapperName: "Tracked",
@@ -100,7 +100,7 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: false) { GenericParameters = ["T"] };
 
         /// <summary>
-        /// Unsafe raw pointer handle. Danger zone only.
+        /// Unsafe raw-pointer wrapper. Danger zone only.
         /// </summary>
         public static readonly WrapperTypeInfo SnatchedDefinition = new(
             wrapperName: "Snatched",

@@ -588,7 +588,7 @@ public enum TokenType
 
     #region Operators - Bitwise
 
-    /// <summary>Bitwise AND operator (&)</summary>
+    /// <summary>Bitwise AND operator (&amp;)</summary>
     Ampersand,
 
     /// <summary>Bitwise OR operator (|)</summary>

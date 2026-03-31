@@ -4,7 +4,7 @@ using SyntaxTree;
 using TypeSymbol = Types.TypeInfo;
 
 /// <summary>
-/// Information about a field in a record or entity.
+/// Information about a member variable in a record or entity.
 /// </summary>
 /// <remarks>
 /// Field visibility uses the four-level system:
@@ -17,10 +17,10 @@ using TypeSymbol = Types.TypeInfo;
 /// </remarks>
 public sealed class MemberVariableInfo
 {
-    /// <summary>The name of the field.</summary>
+    /// <summary>The name of the member variable.</summary>
     public string Name { get; }
 
-    /// <summary>The resolved type of the field.</summary>
+    /// <summary>The resolved type of the member variable.</summary>
     public TypeSymbol Type { get; }
 
     /// <summary>
@@ -29,23 +29,23 @@ public sealed class MemberVariableInfo
     /// </summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 
-    /// <summary>The index of this field within the containing type.</summary>
+    /// <summary>The index of this member variable within the containing type.</summary>
     public int Index { get; init; }
 
-    /// <summary>Whether this field has a default value.</summary>
+    /// <summary>Whether this member variable has a default value.</summary>
     public bool HasDefaultValue { get; init; }
 
-    /// <summary>Source location where this field is defined.</summary>
+    /// <summary>Source location where this member variable is defined.</summary>
     public SourceLocation? Location { get; init; }
 
-    /// <summary>The type that owns this field.</summary>
+    /// <summary>The type that owns this member variable.</summary>
     public TypeSymbol? Owner { get; init; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemberVariableInfo"/> class.
     /// </summary>
-    /// <param name="name">The name of the field.</param>
-    /// <param name="type">The resolved type of the field.</param>
+    /// <param name="name">The name of the member variable.</param>
+    /// <param name="type">The resolved type of the member variable.</param>
     public MemberVariableInfo(string name, TypeSymbol type)
     {
         Name = name;
@@ -53,7 +53,7 @@ public sealed class MemberVariableInfo
     }
 
     /// <summary>
-    /// Creates a copy of this field with the type substituted for generic resolution.
+    /// Creates a copy of this member variable with the type substituted for generic resolution.
     /// </summary>
     /// <param name="newType">The new type to substitute.</param>
     /// <returns>A new <see cref="MemberVariableInfo"/> with the substituted type.</returns>

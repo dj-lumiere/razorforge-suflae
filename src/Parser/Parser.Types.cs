@@ -35,7 +35,7 @@ public partial class Parser
     /// </summary>
     /// <remarks>
     /// Type forms in priority order:
-    /// 1. Me               - Self type in protocols/methods
+    /// 1. Me               - Self type in protocols/member routines
     /// 2. @intrinsic.xxx   - LLVM IR intrinsic types (RazorForge stdlib)
     /// 3. Name[T, U]       - Generic named type
     /// 4. Name             - Simple named type
@@ -48,7 +48,7 @@ public partial class Parser
         SourceLocation location = GetLocation();
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 1: Me - self type in protocols/methods (like Self in Rust)
+        // CASE 1: Me - self type in protocols/member routines (like Self in Rust)
         // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.MyType))
         {
@@ -143,7 +143,7 @@ public partial class Parser
                 ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
             name += "/" + part;
 
-            // Handle dot separator for type within module: razorforge/Core.Bool
+            // Dot separates the type name from the slash-based module path: razorforge/Core.Bool
             if (Match(type: TokenType.Dot))
             {
                 string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
