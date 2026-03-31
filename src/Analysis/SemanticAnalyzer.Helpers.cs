@@ -581,19 +581,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Returns the wider of two numeric types for binary expression type inference.
-    /// Because the language has no implicit numeric conversions, both operands must already
-    /// be the same type; this method simply returns the left operand's type.
-    /// </summary>
-    private TypeSymbol GetWiderNumericType(TypeSymbol left, TypeSymbol right)
-    {
-        // With no implicit conversions, types must match exactly
-        // This method is now only called as a fallback when both types are numeric
-        // Return left type since they should be the same
-        return left;
-    }
-
-    /// <summary>
     /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
     /// The type must implement the <c>Iterable</c> protocol, whose <c>$iter</c> returns a <c>Iterator[T]</c>.
     /// The element type is taken from the return type of the <c>$iter</c> method or the type's first generic argument.
@@ -1008,82 +995,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Creates or retrieves a <c>Viewed&lt;T&gt;</c> wrapper type for the given inner type.
-    /// <c>Viewed</c> is a read-only, single-threaded access token.
-    /// </summary>
-    private TypeSymbol CreateViewedType(TypeSymbol innerType)
-    {
-        TypeSymbol? viewedDef = _registry.LookupType(name: "Viewed");
-        if (viewedDef != null)
-        {
-            return _registry.GetOrCreateResolution(genericDef: viewedDef, typeArguments: [innerType]);
-        }
-
-        // Synthesize wrapper type if not defined in the program
-        return _registry.GetOrCreateWrapperType(
-            wrapperName: "Viewed",
-            innerType: innerType,
-            isReadOnly: true);
-    }
-
-    /// <summary>
-    /// Creates or retrieves a <c>Hijacked&lt;T&gt;</c> wrapper type for the given inner type.
-    /// <c>Hijacked</c> is an exclusive write, single-threaded access token.
-    /// </summary>
-    private TypeSymbol CreateHijackedType(TypeSymbol innerType)
-    {
-        TypeSymbol? hijackedDef = _registry.LookupType(name: "Hijacked");
-        if (hijackedDef != null)
-        {
-            return _registry.GetOrCreateResolution(genericDef: hijackedDef, typeArguments: [innerType]);
-        }
-
-        // Synthesize wrapper type if not defined in the program
-        return _registry.GetOrCreateWrapperType(
-            wrapperName: "Hijacked",
-            innerType: innerType,
-            isReadOnly: false);
-    }
-
-    /// <summary>
-    /// Creates or retrieves an <c>Inspected&lt;T&gt;</c> wrapper type for the given inner type.
-    /// <c>Inspected</c> is a read-only, multi-threaded (shared) access token.
-    /// </summary>
-    private TypeSymbol CreateInspectedType(TypeSymbol innerType)
-    {
-        TypeSymbol? inspectedDef = _registry.LookupType(name: "Inspected");
-        if (inspectedDef != null)
-        {
-            return _registry.GetOrCreateResolution(genericDef: inspectedDef, typeArguments: [innerType]);
-        }
-
-        // Synthesize wrapper type if not defined in the program
-        return _registry.GetOrCreateWrapperType(
-            wrapperName: "Inspected",
-            innerType: innerType,
-            isReadOnly: true);
-    }
-
-    /// <summary>
-    /// Creates or retrieves a <c>Seized&lt;T&gt;</c> wrapper type for the given inner type.
-    /// <c>Seized</c> is an exclusive write, multi-threaded access token.
-    /// </summary>
-    private TypeSymbol CreateSeizedType(TypeSymbol innerType)
-    {
-        TypeSymbol? seizedDef = _registry.LookupType(name: "Seized");
-        if (seizedDef != null)
-        {
-            return _registry.GetOrCreateResolution(genericDef: seizedDef, typeArguments: [innerType]);
-        }
-
-        // Synthesize wrapper type if not defined in the program
-        return _registry.GetOrCreateWrapperType(
-            wrapperName: "Seized",
-            innerType: innerType,
-            isReadOnly: false);
-    }
-
-    /// <summary>
     /// Checks if a hijacking source expression would result in nested hijacking.
     /// Nested hijacking occurs when trying to hijack a member of an already-hijacked object.
     /// </summary>
@@ -1322,16 +1233,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is an exclusive token type (Hijacked, Seized).
-    /// These tokens cannot be passed multiple times in the same call.
-    /// </summary>
-    private bool IsExclusiveTokenType(TypeSymbol type)
-    {
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        return ExclusiveTokenTypes.Contains(value: baseName);
-    }
-
-    /// <summary>
     /// Gets the token kind for display in error messages.
     /// </summary>
     private static string GetTokenKindDescription(TypeSymbol type)
@@ -1468,41 +1369,6 @@ public sealed partial class SemanticAnalyzer
                 location);
         }
     }
-
-    #endregion
-
-    #region Getter/Setter Visibility Validation
-
-    /// <summary>
-    /// Gets the numeric access level for visibility comparison.
-    /// Lower values are more restrictive.
-    /// </summary>
-    private static int GetVisibilityLevel(VisibilityModifier visibility)
-    {
-        return visibility switch
-        {
-            VisibilityModifier.Secret => 0,
-            VisibilityModifier.Posted => 1, // Posted has open read access
-            VisibilityModifier.Open => 1,
-            VisibilityModifier.External => 1,
-            _ => 1
-        };
-    }
-
-    /// <summary>
-    /// Validates that a member variable's setter visibility is equal to or more restrictive than its getter visibility.
-    /// The 3 valid combinations are:
-    /// 1. open (getter: open, setter: open)
-    /// 2. posted (getter: open, setter: secret)
-    /// 3. secret (read/write secret)
-    /// </summary>
-    /// <remarks>
-    /// With the simplified three-level visibility system, no validation is needed.
-    /// The visibility level directly determines both read and write access:
-    /// - open: read/write from anywhere
-    /// - posted: open read, secret write
-    /// - secret: read/write within module
-    /// </remarks>
 
     #endregion
 
@@ -1786,36 +1652,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Resolves the RoutineInfo for a call expression's callee.
-    /// Returns null if the callee cannot be resolved to a known routine.
-    /// The parser appends '!' to failable call names, so we strip it for lookup.
-    /// </summary>
-    private RoutineInfo? ResolveCalledRoutine(CallExpression call)
-    {
-        switch (call.Callee)
-        {
-            case IdentifierExpression id:
-            {
-                string name = id.Name;
-                // Parser appends '!' to failable call identifiers (e.g., "parse!")
-                // but routines are registered without it (e.g., "parse")
-                string baseName = name.EndsWith('!') ? name[..^1] : name;
-                return _registry.LookupRoutine(fullName: baseName)
-                    ?? _registry.LookupRoutine(fullName: name)
-                    ?? LookupRoutineWithImports(name: baseName)
-                    ?? LookupRoutineWithImports(name: name);
-            }
-            case MemberExpression member:
-            {
-                TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
-                return _registry.LookupRoutine(fullName: $"{objectType.Name}.{member.PropertyName}");
-            }
-            default:
-                return null;
-        }
-    }
-
-    /// <summary>
     /// Computes the narrowed type after eliminating None and/or Crashable possibilities.
     /// </summary>
     /// <returns>The narrowed type, or null if narrowing is not possible.</returns>
@@ -1909,3 +1745,8 @@ public sealed partial class SemanticAnalyzer
 
     #endregion
 }
+
+
+
+
+
