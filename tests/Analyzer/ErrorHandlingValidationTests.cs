@@ -248,6 +248,69 @@ public class ErrorHandlingValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.UnhandledCrashableCall);
     }
 
+    /// <summary>
+    /// Tests Analyze_LookupVariable_NotDismantledBeforeScopeExit_ReportsError.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_LookupVariable_NotDismantledBeforeScopeExit_ReportsError()
+    {
+        string source = """
+                        record DbError obeys Crashable
+                          message: Text
+
+                        @readonly
+                        routine DbError.crash_message() -> Text
+                          return me.message
+
+                        routine get_value!(id: U64) -> S32
+                          if id == 0
+                            throw DbError(message: "bad")
+                          unless id == 1
+                            absent
+                          return 42
+
+                        routine test()
+                          var pending = lookup_get_value(id: 1)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.LookupNotDismantled);
+    }
+
+    /// <summary>
+    /// Tests Analyze_ResultCopiedFromVariable_ReportsError.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_ResultCopiedFromVariable_ReportsError()
+    {
+        string source = """
+                        record ParseError obeys Crashable
+                          message: Text
+
+                        @readonly
+                        routine ParseError.crash_message() -> Text
+                          return me.message
+
+                        routine validate!(value: S32) -> S32
+                          if value < 0
+                            throw ParseError(message: "negative")
+                          return value
+
+                        routine test()
+                          var first = check_validate(value: 1)
+                          var second = first
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable);
+    }
+
     #endregion
 
     // NOTE: #81 (Result/Lookup storage restriction) tests require multi-module test

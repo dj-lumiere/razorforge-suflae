@@ -60,6 +60,29 @@ public class PatternOrderTests
             filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
     }
 
+    /// <summary>
+    /// Tests Analyze_WhenWildcardBeforeSpecificPattern_ReportsError.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_WhenWildcardBeforeSpecificPattern_ReportsError()
+    {
+        string source = """
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
+                        routine test(c: Color) -> S32
+                          return when c
+                            _ => 0_s32
+                            is Color.RED => 1_s32
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
+    }
+
     #endregion
 
     #region #130/#148: Duplicate pattern detection
