@@ -106,8 +106,19 @@ routine Address.$diagnose() -> Text
 
 routine Address.$create!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "Address")
   var result = 0_addr
   var i = 0u64
+  # Skip optional "0x" prefix
+  if from_text.count() > 1u64
+    if from_text[0u64] == Letter(0x0030u32)
+      if from_text[1u64] == Letter(0x0078u32)
+        i = 2u64
+      elseif from_text[1u64] == Letter(0x0058u32)
+        i = 2u64
+  if i >= from_text.count()
+    throw InvalidValueError(input: from_text, target: "Address")
   while i < from_text.count()
     var cp = from_text[i].codepoint()
     if 0x0030u32 <= cp <= 0x0039u32
@@ -116,5 +127,9 @@ routine Address.$create!(from_text: Text) -> Address
       result = result * 16_addr + Address(cp - 0x0041u32 + 10u32)
     elseif 0x0061u32 <= cp <= 0x0066u32
       result = result * 16_addr + Address(cp - 0x0061u32 + 10u32)
+    elseif cp == 0x005Fu32
+      pass
+    else
+      throw InvalidValueError(input: from_text, target: "Address")
     i = i + 1u64
   return result

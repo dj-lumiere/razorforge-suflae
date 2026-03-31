@@ -319,11 +319,15 @@ routine U128.$diagnose() -> Text
   return "U128(" + me.$represent() + ")"
 
 routine U128.$create!(from_text: Text) -> U128
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "U128")
   var result = 0u128
   var i = 0u64
   while i < from_text.count()
     var ch = from_text[i]
     if ch.is_numeric()
       result = result * 10u128 + U128(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "U128")
     i = i + 1u64
   return result

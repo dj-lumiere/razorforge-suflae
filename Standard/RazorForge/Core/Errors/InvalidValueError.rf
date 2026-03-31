@@ -1,0 +1,9 @@
+module Core
+
+# InvalidValueError - thrown when text cannot be parsed as the target type
+entity InvalidValueError obeys Crashable
+  input: Text
+  target: Text
+
+routine InvalidValueError.crash_message() -> Text
+  return f"Cannot parse \"{me.input}\" as {me.target}."

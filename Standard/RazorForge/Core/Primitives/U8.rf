@@ -341,11 +341,15 @@ routine U8.$diagnose() -> Text
   return "U8(" + me.$represent() + ")"
 
 routine U8.$create!(from_text: Text) -> U8
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "U8")
   var result = 0u32
   var i = 0u64
   while i < from_text.count()
     var ch = from_text[i]
     if ch.is_numeric()
       result = result * 10u32 + U32(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "U8")
     i = i + 1u64
   return U8(result)

@@ -239,6 +239,59 @@ routine D32.$diagnose() -> Text
   return "D32(" + me.$represent() + ")"
 
 routine D32.$create!(from_text: Text) -> D32
+  var len = from_text.count()
+  if len == 0u64
+    throw InvalidValueError(input: from_text, target: "D32")
+  var i = 0u64
+  var first = from_text[0u64]
+  if first == Letter(0x002Bu32) or first == Letter(0x002Du32)
+    i = 1u64
+    if i >= len
+      throw InvalidValueError(input: from_text, target: "D32")
+  var special = false
+  var rest = len - i
+  if rest >= 3u64
+    var c0 = from_text[i].to_lowercase()
+    var c1 = from_text[i + 1u64].to_lowercase()
+    var c2 = from_text[i + 2u64].to_lowercase()
+    if rest == 3u64 and c0 == Letter(0x006Eu32) and c1 == Letter(0x0061u32) and c2 == Letter(0x006Eu32)
+      special = true
+    if rest == 3u64 and c0 == Letter(0x0069u32) and c1 == Letter(0x006Eu32) and c2 == Letter(0x0066u32)
+      special = true
+    if not special and rest == 8u64 and c0 == Letter(0x0069u32) and c1 == Letter(0x006Eu32) and c2 == Letter(0x0066u32)
+      var c3 = from_text[i + 3u64].to_lowercase()
+      var c4 = from_text[i + 4u64].to_lowercase()
+      var c5 = from_text[i + 5u64].to_lowercase()
+      var c6 = from_text[i + 6u64].to_lowercase()
+      var c7 = from_text[i + 7u64].to_lowercase()
+      if c3 == Letter(0x0069u32) and c4 == Letter(0x006Eu32) and c5 == Letter(0x0069u32) and c6 == Letter(0x0074u32) and c7 == Letter(0x0079u32)
+        special = true
+  if not special
+    var has_digit = false
+    var has_dot = false
+    var has_exp = false
+    while i < len
+      var ch = from_text[i]
+      if ch.is_numeric()
+        has_digit = true
+      elseif ch == Letter(0x002Eu32)
+        if has_dot or has_exp
+          throw InvalidValueError(input: from_text, target: "D32")
+        has_dot = true
+      elseif ch == Letter(0x0065u32) or ch == Letter(0x0045u32)
+        if has_exp or not has_digit
+          throw InvalidValueError(input: from_text, target: "D32")
+        has_exp = true
+        has_digit = false
+        if i + 1u64 < len
+          var next_ch = from_text[i + 1u64]
+          if next_ch == Letter(0x002Bu32) or next_ch == Letter(0x002Du32)
+            i = i + 1u64
+      else
+        throw InvalidValueError(input: from_text, target: "D32")
+      i = i + 1u64
+    if not has_digit
+      throw InvalidValueError(input: from_text, target: "D32")
   var cstr_val = from_text.CStr()
   var bits = rf_D32_from_string(cstr_val)
   return bitcast[U32, D32](bits)

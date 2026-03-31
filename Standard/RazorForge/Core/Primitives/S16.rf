@@ -330,21 +330,26 @@ routine S16.$diagnose() -> Text
   return "S16(" + me.$represent() + ")"
 
 routine S16.$create!(from_text: Text) -> S16
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "S16")
   var start = 0u64
   var negative = false
-  if from_text.count() > 0u64
-    var first = from_text[0u64]
-    if first == Letter(0x002Du32)
-      negative = true
-      start = 1u64
-    elseif first == Letter(0x002Bu32)
-      start = 1u64
+  var first = from_text[0u64]
+  if first == Letter(0x002Du32)
+    negative = true
+    start = 1u64
+  elseif first == Letter(0x002Bu32)
+    start = 1u64
+  if start >= from_text.count()
+    throw InvalidValueError(input: from_text, target: "S16")
   var result = 0u32
   var i = start
   while i < from_text.count()
     var ch = from_text[i]
     if ch.is_numeric()
       result = result * 10u32 + U32(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "S16")
     i = i + 1u64
   if negative
     return S16(0u32 - result)
