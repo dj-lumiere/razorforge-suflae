@@ -500,33 +500,6 @@ public sealed partial class SemanticAnalyzer
                 location: routine.Location);
         }
 
-        // The AST already stores names without the '!' suffix
-        // (e.g., "get!" is parsed as Name="get", IsFailable=true)
-        ModificationCategory declaredModification =
-            routine.Annotations.Contains(item: "readonly") ? ModificationCategory.Readonly :
-            routine.Annotations.Contains(item: "writable") ? ModificationCategory.Writable :
-            ModificationCategory.Migratable;
-
-        var routineInfo = new RoutineInfo(name: routineName)
-        {
-            Kind = kind,
-            OwnerType = ownerType,
-            IsFailable = routine.IsFailable,
-            IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
-            AstParameterCount = routine.Parameters.Count,
-            GenericParameters = routine.GenericParameters,
-            GenericConstraints = routine.GenericConstraints,
-            Visibility = routine.Visibility,
-            Location = routine.Location,
-            Module = GetCurrentModuleName(),
-            Annotations = routine.Annotations,
-            DeclaredModification = declaredModification,
-            ModificationCategory = declaredModification,
-            IsDangerous = routine.IsDangerous,
-            Storage = routine.Storage,
-            AsyncStatus = routine.Async
-        };
-
         // #74: Validate varargs placement
         var varargParams = routine.Parameters
                                   .Where(predicate: p => p.IsVariadic)
@@ -552,21 +525,14 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        // Check for duplicate routine definitions (#150)
-        // Allow overloads: if the new routine has a different AST parameter count,
-        // it's a potential overload. True signature-level duplicates are caught
-        // after parameter types are resolved in Phase 2.5.
-        RoutineInfo? existingRoutine = _registry.LookupRoutine(fullName: routineInfo.FullName);
-        if (existingRoutine != null &&
-            existingRoutine.AstParameterCount == routine.Parameters.Count)
-        {
-            ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
-                message: $"Routine '{routineInfo.Name}' is already defined.",
-                location: routine.Location);
-            return;
-        }
-
-        _registry.RegisterRoutine(routine: routineInfo);
+        // Store for deferred resolution and registration in Phase 2.5
+        _pendingRoutines.Add(item: new PendingRoutine(
+            Declaration: routine,
+            OwnerType: ownerType,
+            Kind: kind,
+            RoutineName: routineName,
+            Module: GetCurrentModuleName(),
+            FilePath: _currentFilePath));
     }
 
     /// <summary>

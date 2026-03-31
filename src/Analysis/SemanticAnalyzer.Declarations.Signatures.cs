@@ -9,100 +9,64 @@ using TypeSymbol = Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
-    #region Phase 2.5: Routine Signature Resolution
+    #region Phase 2.5: Routine Signature Resolution and Registration
 
     /// <summary>
-    /// Resolves routine signatures including parameter types.
-    /// Performs protocol-as-type desugaring (routine foo(x: Displayable) → routine foo&lt;T obeys Displayable&gt;(x: T)).
+    /// Resolves routine signatures and registers them in the type registry.
+    /// Processes pending routines collected during Phase 1 and Phase 2.
+    /// Performs protocol-as-type desugaring and duplicate detection by full signature.
     /// </summary>
-    /// <param name="program">The program to resolve.</param>
-    private void ResolveRoutineSignatures(Program program)
+    /// <param name="filterFilePath">If set, only processes pending routines from this file.</param>
+    private void ResolveAndRegisterPendingRoutines(string? filterFilePath = null)
     {
-        foreach (IAstNode declaration in program.Declarations)
+        List<PendingRoutine> toProcess;
+        if (filterFilePath != null)
         {
-            ResolveRoutineSignature(node: declaration);
+            toProcess = _pendingRoutines
+                       .Where(predicate: p => p.FilePath == filterFilePath)
+                       .ToList();
+            _pendingRoutines.RemoveAll(match: p => p.FilePath == filterFilePath);
         }
-    }
-
-    private void ResolveRoutineSignature(IAstNode node)
-    {
-        switch (node)
+        else
         {
-            case RoutineDeclaration routine:
-                ResolveRoutineParameters(routine: routine);
-                break;
+            toProcess = _pendingRoutines.ToList();
+            _pendingRoutines.Clear();
+        }
 
-            case RecordDeclaration record:
-                foreach (Declaration member in record.Members)
-                {
-                    ResolveRoutineSignature(node: member);
-                }
-
-                break;
-
-            case EntityDeclaration entity:
-                foreach (Declaration member in entity.Members)
-                {
-                    ResolveRoutineSignature(node: member);
-                }
-
-                break;
-
-            case ExternalDeclaration externalDecl:
-                ResolveExternalParameters(externalDecl: externalDecl);
-                break;
-
-            case ExternalBlockDeclaration block:
-                foreach (Declaration decl in block.Declarations)
-                {
-                    ResolveRoutineSignature(node: decl);
-                }
-
-                break;
+        foreach (PendingRoutine pending in toProcess)
+        {
+            ResolveAndRegisterRoutine(pending: pending);
         }
     }
 
     /// <summary>
-    /// Resolves parameters for a routine declaration, performing protocol-as-type desugaring.
+    /// Resolves a single pending routine's signature and registers it.
     /// </summary>
-    private void ResolveRoutineParameters(RoutineDeclaration routine)
+    private void ResolveAndRegisterRoutine(PendingRoutine pending)
     {
-        bool isFailable = routine.Name.EndsWith(value: '!');
-        string routineName = isFailable
-            ? routine.Name[..^1]
-            : routine.Name;
+        RoutineDeclaration routine = pending.Declaration;
 
-        // For extension methods (Type.method), the routine was registered with just the method name
-        // but the FullName includes the owner type, so we can look it up either way.
-        // Module-qualified routines (e.g., "HelloWorld.divide") need module prefix for lookup.
-        RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routineName);
-        if (routineInfo == null && _currentModuleName != null)
+        ModificationCategory declaredModification =
+            routine.Annotations.Contains(item: "readonly") ? ModificationCategory.Readonly :
+            routine.Annotations.Contains(item: "writable") ? ModificationCategory.Writable :
+            ModificationCategory.Migratable;
+
+        // Create preliminary RoutineInfo for generic parameter resolution context.
+        // IsGenericParameter() checks _currentRoutine.GenericParameters to know which
+        // type names are generic params (e.g., T, U) vs real types.
+        var contextRoutine = new RoutineInfo(name: pending.RoutineName)
         {
-            routineInfo = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{routineName}");
-        }
+            Kind = pending.Kind,
+            OwnerType = pending.OwnerType,
+            GenericParameters = routine.GenericParameters,
+            GenericConstraints = routine.GenericConstraints,
+            Module = pending.Module,
+            IsFailable = routine.IsFailable,
+            Location = routine.Location
+        };
 
-        // For generic type methods (e.g., "Box[T].convert"), strip the generic params from the
-        // type name and retry (the routine was registered as "Box.convert")
-        if (routineInfo == null && routineName.Contains(value: '['))
-        {
-            int bracketStart = routineName.IndexOf(value: '[');
-            int bracketEnd = routineName.IndexOf(value: ']');
-            if (bracketEnd > bracketStart)
-            {
-                string strippedName =
-                    routineName[..bracketStart] + routineName[(bracketEnd + 1)..];
-                routineInfo = _registry.LookupRoutine(fullName: strippedName);
-            }
-        }
-
-        if (routineInfo == null)
-        {
-            return;
-        }
-
-        // Set _currentRoutine so IsGenericParameter() can find generic params like T, U
         RoutineInfo? prevRoutine = _currentRoutine;
-        _currentRoutine = routineInfo;
+        _currentRoutine = contextRoutine;
 
         var parameters = new List<ParameterInfo>();
         var implicitGenerics = new List<string>();
@@ -221,41 +185,86 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Merge implicit generics with explicit generics
-        List<string> allGenericParams = routineInfo.GenericParameters?.ToList() ?? [];
+        List<string> allGenericParams = routine.GenericParameters?.ToList() ?? [];
         allGenericParams.AddRange(collection: implicitGenerics);
 
         // Merge implicit constraints with explicit constraints
         List<GenericConstraintDeclaration> allConstraints =
-            routineInfo.GenericConstraints?.ToList() ?? [];
+            routine.GenericConstraints?.ToList() ?? [];
         allConstraints.AddRange(collection: implicitConstraints);
 
         _currentRoutine = prevRoutine;
 
-        // Update the routine info with resolved parameters
-        _registry.UpdateRoutine(routine: routineInfo,
-            parameters: parameters,
-            returnType: returnType,
-            genericParameters: allGenericParams.Count > 0
+        // Create the final RoutineInfo with fully resolved signature
+        var finalRoutine = new RoutineInfo(name: pending.RoutineName)
+        {
+            Kind = pending.Kind,
+            OwnerType = pending.OwnerType,
+            Parameters = parameters,
+            ReturnType = returnType,
+            IsFailable = routine.IsFailable,
+            IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
+            GenericParameters = allGenericParams.Count > 0
                 ? allGenericParams
                 : null,
-            genericConstraints: allConstraints.Count > 0
+            GenericConstraints = allConstraints.Count > 0
                 ? allConstraints
-                : null);
+                : null,
+            Visibility = routine.Visibility,
+            Location = routine.Location,
+            Module = pending.Module,
+            Annotations = routine.Annotations,
+            DeclaredModification = declaredModification,
+            ModificationCategory = declaredModification,
+            IsDangerous = routine.IsDangerous,
+            Storage = routine.Storage,
+            AsyncStatus = routine.Async
+        };
 
-        // Re-lookup the updated routine for validation
-        RoutineInfo? updatedRoutineInfo = _registry.LookupRoutine(fullName: routineInfo.FullName);
-        if (updatedRoutineInfo == null)
+        // Duplicate detection by full signature (RegistryKey includes param types)
+        if (_registry.HasRoutine(key: finalRoutine.RegistryKey))
         {
+            ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
+                message: $"Routine '{pending.RoutineName}' is already defined.",
+                location: routine.Location);
             return;
         }
 
-        // Validate operator protocol conformance for wired methods
-        ValidateOperatorProtocolConformance(routineInfo: updatedRoutineInfo,
-            location: routine.Location);
+        _registry.RegisterRoutine(routine: finalRoutine);
 
-        // Validate that the method matches the protocol signature if the type declares following a protocol
-        ValidateProtocolMethodSignature(routineInfo: updatedRoutineInfo,
+        // Post-registration validation
+        ValidateOperatorProtocolConformance(routineInfo: finalRoutine,
             location: routine.Location);
+        ValidateProtocolMethodSignature(routineInfo: finalRoutine,
+            location: routine.Location);
+    }
+
+    /// <summary>
+    /// Resolves external routine signatures (parameter types and return types).
+    /// Externals are registered in Phase 1 and updated here with resolved types.
+    /// </summary>
+    private void ResolveExternalSignatures(Program program)
+    {
+        foreach (IAstNode declaration in program.Declarations)
+        {
+            switch (declaration)
+            {
+                case ExternalDeclaration externalDecl:
+                    ResolveExternalParameters(externalDecl: externalDecl);
+                    break;
+
+                case ExternalBlockDeclaration block:
+                    foreach (Declaration decl in block.Declarations)
+                    {
+                        if (decl is ExternalDeclaration ext)
+                        {
+                            ResolveExternalParameters(externalDecl: ext);
+                        }
+                    }
+
+                    break;
+            }
+        }
     }
 
     /// <summary>
@@ -366,13 +375,11 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol actualType = typeMethod.Parameters[index: startIndex + i].Type;
 
             // Handle protocol self type (Me) - should match the owner type
-            // For generic types, the actual type may be parameterized (e.g., "Total[T]")
-            // while OwnerType.Name is the base name (e.g., "Total").
             if (expectedType is ProtocolSelfTypeInfo)
             {
                 if (typeMethod.OwnerType != null &&
-                    !MeTypeMatches(actualName: actualType.Name,
-                        ownerName: typeMethod.OwnerType.Name))
+                    !MeTypeMatches(actualType: actualType,
+                        ownerType: typeMethod.OwnerType))
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
@@ -396,13 +403,11 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol actualReturn = typeMethod.ReturnType;
 
             // Handle protocol self type (Me)
-            // For generic types, the actual return may be parameterized (e.g., "Buffer[T]")
-            // while OwnerType.Name is the base name (e.g., "Buffer").
             if (expectedReturn is ProtocolSelfTypeInfo)
             {
                 if (typeMethod.OwnerType != null &&
-                    !MeTypeMatches(actualName: actualReturn.Name,
-                        ownerName: typeMethod.OwnerType.Name))
+                    !MeTypeMatches(actualType: actualReturn,
+                        ownerType: typeMethod.OwnerType))
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
@@ -421,20 +426,45 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if an actual type name matches the owner type name for protocol Me type validation.
-    /// For generic types, "Total[T]" matches owner "Total" (parameterized form of the same type).
+    /// Structural comparison: checks if an actual type matches the owner type for protocol Me type validation.
+    /// Handles generic resolutions (e.g., Total[T] matches owner Total).
     /// </summary>
-    private static bool MeTypeMatches(string actualName, string ownerName)
+    private static bool MeTypeMatches(TypeSymbol actualType, TypeSymbol ownerType)
     {
-        if (actualName == ownerName)
+        // Direct match
+        if (ReferenceEquals(objA: actualType, objB: ownerType) ||
+            actualType.Name == ownerType.Name)
         {
             return true;
         }
 
-        // Accept parameterized form: "Total[T]" matches "Total"
-        return actualName.StartsWith(value: ownerName, comparisonType: StringComparison.Ordinal) &&
-               actualName.Length > ownerName.Length &&
-               actualName[ownerName.Length] == '[';
+        // Generic resolution: actual is a generic instance of the owner type definition
+        TypeSymbol? actualDef = actualType switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            ProtocolTypeInfo p => p.GenericDefinition,
+            _ => null
+        };
+
+        if (actualDef != null &&
+            (ReferenceEquals(objA: actualDef, objB: ownerType) ||
+             actualDef.Name == ownerType.Name))
+        {
+            return true;
+        }
+
+        // Parameterized with own generic params: "Total[T]" matches owner "Total"
+        if (ownerType.GenericParameters is { Count: > 0 } &&
+            actualType.Name.StartsWith(value: ownerType.Name,
+                comparisonType: StringComparison.Ordinal) &&
+            actualType.Name.Length > ownerType.Name.Length &&
+            actualType.Name[index: ownerType.Name.Length] == '[')
+        {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -458,7 +488,6 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Re-lookup the owner type to get the updated version with protocols
-        // (the RoutineInfo.OwnerType may reference an older object from Phase 1)
         TypeSymbol? currentOwnerType = _registry.LookupType(name: routineInfo.OwnerType.FullName);
         if (currentOwnerType == null)
         {

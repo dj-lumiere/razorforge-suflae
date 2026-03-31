@@ -54,7 +54,7 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Get the routine's body (stored during body analysis)
-            if (!_routineBodies.TryGetValue(key: routine.FullName, value: out Statement? body))
+            if (!_routineBodies.TryGetValue(key: routine.RegistryKey, value: out Statement? body))
             {
                 // No body found - likely an imported or abstract routine
                 continue;
@@ -115,7 +115,7 @@ public sealed partial class SemanticAnalyzer
     /// <param name="body">The routine's body statement.</param>
     private void StoreRoutineBody(RoutineInfo routine, Statement body)
     {
-        _routineBodies[key: routine.FullName] = body;
+        _routineBodies[key: routine.RegistryKey] = body;
     }
 
     #endregion

@@ -51,7 +51,7 @@ public sealed partial class SemanticAnalyzer
                     !IsAssignableTo(source: firstArgType, target: firstParamType))
                 {
                     RoutineInfo? better =
-                        _registry.LookupRoutineOverload(fullName: callName,
+                        _registry.LookupRoutineOverload(baseName: callName,
                             argTypes: [firstArgType]);
                     if (better != null && better != routine)
                     {
@@ -167,7 +167,7 @@ public sealed partial class SemanticAnalyzer
                 if (call.Arguments.Count > 0)
                 {
                     RoutineInfo? creator = _registry.LookupRoutineOverload(
-                        fullName: $"{type.Name}.$create",
+                        baseName: $"{type.Name}.$create",
                         argTypes: argTypes);
 
                     // Fall back to generic definition's $create for resolved generic types
@@ -183,7 +183,7 @@ public sealed partial class SemanticAnalyzer
                         if (genDef != null)
                         {
                             RoutineInfo? genCreator = _registry.LookupRoutineOverload(
-                                fullName: $"{genDef.Name}.$create",
+                                baseName: $"{genDef.Name}.$create",
                                 argTypes: argTypes);
                             if (genCreator != null &&
                                 genCreator.Parameters.Count == argTypes.Count)
@@ -314,7 +314,7 @@ public sealed partial class SemanticAnalyzer
                 {
                     // Try module-qualified specific overload (e.g., "IO.show#S64")
                     RoutineInfo? betterImport =
-                        _registry.LookupRoutineOverload(fullName: routine.FullName,
+                        _registry.LookupRoutineOverload(baseName: routine.BaseName,
                             argTypes: [firstArgTypeImport]);
                     if (betterImport != null && betterImport != routine)
                     {
@@ -752,7 +752,7 @@ public sealed partial class SemanticAnalyzer
                     // Always look up "$create" and check IsFailable on the result.
                     string creatorFullName = $"{potentialTypeName}.$create";
                     RoutineInfo? creator =
-                        _registry.LookupRoutineOverload(fullName: creatorFullName,
+                        _registry.LookupRoutineOverload(baseName: creatorFullName,
                             argTypes: [objectType]);
                     // Fall back to default overload if no match by arg type
                     creator ??= _registry.LookupRoutine(fullName: creatorFullName);

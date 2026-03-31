@@ -351,7 +351,7 @@ public partial class LLVMCodeGenerator
         // Look up $create on the resolved type first, then fall back to generic definition
         string createName = $"{resolvedType.Name}.$create";
         RoutineInfo? creator =
-            _registry.LookupRoutineOverload(fullName: createName, argTypes: new List<TypeInfo>());
+            _registry.LookupRoutineOverload(baseName: createName, argTypes: new List<TypeInfo>());
         if (creator != null && creator.Parameters.Count > 0)
         {
             creator = null;
@@ -369,7 +369,7 @@ public partial class LLVMCodeGenerator
             if (genericDef != null)
             {
                 string genCreateName = $"{genericDef.Name}.$create";
-                creator = _registry.LookupRoutineOverload(fullName: genCreateName,
+                creator = _registry.LookupRoutineOverload(baseName: genCreateName,
                     argTypes: new List<TypeInfo>());
                 if (creator != null && creator.Parameters.Count > 0)
                 {

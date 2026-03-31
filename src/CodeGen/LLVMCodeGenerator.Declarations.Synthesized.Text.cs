@@ -594,7 +594,7 @@ public partial class LLVMCodeGenerator
 
         // Look up the Text.$create overload for this specific parameter type
         RoutineInfo? createRoutine =
-            _registry.LookupRoutineOverload(fullName: "Text.$create", argTypes: [fieldType]) ??
+            _registry.LookupRoutineOverload(baseName: "Text.$create", argTypes: [fieldType]) ??
             _registry.LookupRoutine(fullName: "Text.$create");
         if (createRoutine != null)
         {

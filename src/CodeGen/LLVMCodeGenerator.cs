@@ -541,7 +541,7 @@ public partial class LLVMCodeGenerator
                             if (astParamTypes.Count == routine.Parameters.Count)
                             {
                                 RoutineInfo? overload = _registry.LookupRoutineOverload(
-                                    fullName: routineInfo.FullName,
+                                    baseName: routineInfo.BaseName,
                                     argTypes: astParamTypes);
                                 if (overload != null)
                                 {
@@ -980,7 +980,7 @@ public partial class LLVMCodeGenerator
             genericMethod.IsGenericDefinition)
         {
             var typeSubs3 = new Dictionary<string, TypeInfo>(dictionary: methodTypeArgs);
-            string genericAstName3 = genericMethod.FullName; // e.g., "Text.$create"
+            string genericAstName3 = genericMethod.BaseName; // e.g., "Text.$create"
             _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
                 GenericMethod: genericMethod,
                 ResolvedOwnerType: resolvedOwnerType,

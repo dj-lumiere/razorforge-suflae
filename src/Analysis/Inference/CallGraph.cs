@@ -20,13 +20,13 @@ public sealed class CallGraph
     /// <returns>The call graph node for the routine.</returns>
     public CallGraphNode GetOrCreateNode(RoutineInfo routine)
     {
-        if (_nodes.TryGetValue(key: routine.FullName, value: out CallGraphNode? node))
+        if (_nodes.TryGetValue(key: routine.RegistryKey, value: out CallGraphNode? node))
         {
             return node;
         }
 
         node = new CallGraphNode(routine: routine);
-        _nodes[key: routine.FullName] = node;
+        _nodes[key: routine.RegistryKey] = node;
 
         return node;
     }

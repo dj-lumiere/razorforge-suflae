@@ -152,7 +152,7 @@ public partial class LLVMCodeGenerator
                 if (calledType is EntityTypeInfo && arguments.Count == 0)
                 {
                     string createName = $"{calledType.Name}.$create";
-                    RoutineInfo? creator = _registry.LookupRoutineOverload(fullName: createName,
+                    RoutineInfo? creator = _registry.LookupRoutineOverload(baseName: createName,
                         argTypes: new List<TypeInfo>());
                     if (creator != null && creator.Parameters.Count == 0)
                     {
@@ -177,7 +177,7 @@ public partial class LLVMCodeGenerator
                     }
                 }
 
-                routine = _registry.LookupRoutineOverload(fullName: $"{calledType.Name}.$create",
+                routine = _registry.LookupRoutineOverload(baseName: $"{calledType.Name}.$create",
                     argTypes: semanticArgTypes);
                 if (routine != null)
                 {
@@ -576,7 +576,7 @@ public partial class LLVMCodeGenerator
             string creatorName = $"{conversionTypeName}.$create";
             var argTypes2 = new List<TypeInfo> { receiverType };
             RoutineInfo? creator =
-                _registry.LookupRoutineOverload(fullName: creatorName, argTypes: argTypes2);
+                _registry.LookupRoutineOverload(baseName: creatorName, argTypes: argTypes2);
             if (creator != null)
             {
                 // Method-level generics: infer T from argument types and monomorphize

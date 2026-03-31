@@ -11,29 +11,27 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Registers a routine in the registry.
+    /// Uses RegistryKey (BaseName + param types) as the primary key for overload-specific lookup,
+    /// and BaseName for first-overload-wins unqualified lookup.
     /// </summary>
     /// <param name="routine">The routine to register.</param>
     public void RegisterRoutine(RoutineInfo routine)
     {
-        string key = routine.FullName;
+        string registryKey = routine.RegistryKey;
+        string baseName = routine.BaseName;
 
-        if (!_routines.ContainsKey(key: key))
-        {
-            // First overload wins for unqualified lookup
-            _routines[key: key] = routine;
-        }
+        // Register under RegistryKey for exact overload matching
+        _routines[key: registryKey] = routine;
 
-        // Also register with parameter-based disambiguation for overload resolution
-        string overloadKey = GetOverloadKey(routine: routine);
-        if (overloadKey !=
-            key) // Only store if different from primary key (avoids overwriting resolved entries)
+        // Also register under base name (first overload wins for unqualified lookup)
+        if (!_routines.ContainsKey(key: baseName))
         {
-            _routines[key: overloadKey] = routine;
+            _routines[key: baseName] = routine;
         }
 
         // Index by module-qualified name for unambiguous lookup
         string qualifiedName = routine.QualifiedName;
-        if (qualifiedName != key)
+        if (qualifiedName != registryKey && qualifiedName != baseName)
         {
             _routinesByQualifiedName.TryAdd(key: qualifiedName, value: routine);
         }
@@ -53,26 +51,23 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Builds a disambiguated key for overloaded routines: "Name#ParamType1,ParamType2"
+    /// Checks if a routine with the given key is registered.
     /// </summary>
-    private static string GetOverloadKey(RoutineInfo routine)
-    {
-        string paramTypes = string.Join(separator: ",",
-            values: routine.Parameters.Select(selector: p => p.Type.Name));
-        return $"{routine.FullName}#{paramTypes}";
-    }
+    public bool HasRoutine(string key) => _routines.ContainsKey(key: key);
 
     /// <summary>
     /// Looks up a routine overload that matches the given argument types.
     /// Falls back to the default (first-registered) overload if no exact match.
     /// </summary>
-    public RoutineInfo? LookupRoutineOverload(string fullName, IReadOnlyList<TypeInfo> argTypes)
+    /// <param name="baseName">The routine's base name (e.g., "List.append", "IO.show").</param>
+    /// <param name="argTypes">The argument types to match against.</param>
+    public RoutineInfo? LookupRoutineOverload(string baseName, IReadOnlyList<TypeInfo> argTypes)
     {
-        // Try exact overload match
+        // Try exact overload match by RegistryKey format
         string paramTypeNames =
             string.Join(separator: ",", values: argTypes.Select(selector: t => t.Name));
-        string overloadKey = $"{fullName}#{paramTypeNames}";
-        if (_routines.TryGetValue(key: overloadKey, value: out RoutineInfo? overload))
+        string registryKey = $"{baseName}#{paramTypeNames}";
+        if (_routines.TryGetValue(key: registryKey, value: out RoutineInfo? overload))
         {
             return overload;
         }
@@ -101,8 +96,8 @@ public sealed partial class TypeRegistry
 
             string genericArgName =
                 $"{genericDef.Name}[{string.Join(separator: ", ", values: genericDef.GenericParameters)}]";
-            string genericOverloadKey = $"{fullName}#{genericArgName}";
-            if (_routines.TryGetValue(key: genericOverloadKey,
+            string genericRegistryKey = $"{baseName}#{genericArgName}";
+            if (_routines.TryGetValue(key: genericRegistryKey,
                     value: out RoutineInfo? genericOverload) &&
                 !genericOverload
                    .IsVariadic) // Skip variadic overloads — handled by variadic fallback
@@ -113,15 +108,15 @@ public sealed partial class TypeRegistry
 
         // For generic instances (e.g., List[Byte].$create), try the generic definition
         // (e.g., List[T].$create#U64) since overloads are registered on the generic definition.
-        int bracketIdx = fullName.IndexOf(value: '[');
+        int bracketIdx = baseName.IndexOf(value: '[');
         if (bracketIdx >= 0)
         {
-            int closeBracketIdx = fullName.IndexOf(value: "].", startIndex: bracketIdx);
+            int closeBracketIdx = baseName.IndexOf(value: "].", startIndex: bracketIdx);
             if (closeBracketIdx >= 0)
             {
-                string genericDefName = fullName[..bracketIdx] + fullName[(closeBracketIdx + 1)..];
-                string genericOverloadKey = $"{genericDefName}#{paramTypeNames}";
-                if (_routines.TryGetValue(key: genericOverloadKey,
+                string genericDefName = baseName[..bracketIdx] + baseName[(closeBracketIdx + 1)..];
+                string genericRegistryKey = $"{genericDefName}#{paramTypeNames}";
+                if (_routines.TryGetValue(key: genericRegistryKey,
                         value: out RoutineInfo? genericDefOverload))
                 {
                     return genericDefOverload;
@@ -130,7 +125,7 @@ public sealed partial class TypeRegistry
         }
 
         // Fall back to default lookup
-        return LookupRoutine(fullName: fullName);
+        return LookupRoutine(fullName: baseName);
     }
 
     /// <summary>
@@ -233,6 +228,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Updates a routine with resolved parameters and return type.
+    /// Used for external declarations that are registered in Phase 1 without params.
     /// </summary>
     /// <param name="routine">The routine to update.</param>
     /// <param name="parameters">The resolved parameters.</param>
@@ -243,8 +239,8 @@ public sealed partial class TypeRegistry
         TypeInfo? returnType, IReadOnlyList<string>? genericParameters,
         IReadOnlyList<GenericConstraintDeclaration>? genericConstraints)
     {
-        string key = routine.FullName;
-        if (!_routines.ContainsKey(key: key))
+        string baseName = routine.BaseName;
+        if (!_routines.ContainsKey(key: baseName))
         {
             return;
         }
@@ -257,7 +253,6 @@ public sealed partial class TypeRegistry
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
-            AstParameterCount = routine.AstParameterCount,
             DeclaredModification = routine.DeclaredModification,
             ModificationCategory = routine.ModificationCategory,
             GenericParameters = genericParameters,
@@ -273,18 +268,19 @@ public sealed partial class TypeRegistry
             AsyncStatus = routine.AsyncStatus
         };
 
-        _routines[key: key] = updatedRoutine;
+        // Replace base name entry
+        _routines[key: baseName] = updatedRoutine;
 
-        // Register with the resolved overload key so body-matching can find it
-        string resolvedOverloadKey = GetOverloadKey(routine: updatedRoutine);
-        if (resolvedOverloadKey != key)
+        // Register with resolved RegistryKey for overload-specific lookup
+        string registryKey = updatedRoutine.RegistryKey;
+        if (registryKey != baseName)
         {
-            _routines[key: resolvedOverloadKey] = updatedRoutine;
+            _routines[key: registryKey] = updatedRoutine;
         }
 
         // Update the module-qualified name index
         string qualifiedName = updatedRoutine.QualifiedName;
-        if (qualifiedName != key)
+        if (qualifiedName != baseName)
         {
             _routinesByQualifiedName[key: qualifiedName] = updatedRoutine;
         }
@@ -295,7 +291,7 @@ public sealed partial class TypeRegistry
             string ownerKey = routine.OwnerType.Name;
             if (_routinesByOwner.TryGetValue(key: ownerKey, value: out List<RoutineInfo>? list))
             {
-                int index = list.FindIndex(match: r => r.FullName == key);
+                int index = list.FindIndex(match: r => r.BaseName == baseName);
                 if (index >= 0)
                 {
                     list[index: index] = updatedRoutine;
@@ -589,7 +585,7 @@ public sealed partial class TypeRegistry
         IReadOnlyList<TypeInfo> typeArguments)
     {
         string name =
-            $"{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}]";
+            $"{genericDef.BaseName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}]";
 
         if (_routineResolutions.TryGetValue(key: name, value: out RoutineInfo? existing))
         {

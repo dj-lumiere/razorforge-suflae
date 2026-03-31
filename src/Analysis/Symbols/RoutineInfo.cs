@@ -12,8 +12,8 @@ public sealed class RoutineInfo
     /// <summary>The name of the routine (without type prefix).</summary>
     public string Name { get; }
 
-    /// <summary>The fully qualified name (e.g., "Circle.draw", "Math.abs").</summary>
-    public string FullName
+    /// <summary>Base name for registry lookup (e.g., "Circle.draw", "Math.abs").</summary>
+    public string BaseName
     {
         get
         {
@@ -28,6 +28,61 @@ public sealed class RoutineInfo
         }
     }
 
+    /// <summary>
+    /// Rich signature name for display and identity.
+    /// Member: "Module.OwnerType[Generics].Name(ParamTypes) -> ReturnType".
+    /// Standalone: "Module.Name[Generics](ParamTypes) -> ReturnType".
+    /// </summary>
+    public string FullName
+    {
+        get
+        {
+            string prefix;
+            if (OwnerType != null)
+            {
+                string ownerName = OwnerType.GenericParameters is { Count: > 0 }
+                    ? $"{OwnerType.Name}[{string.Join(separator: ", ", values: OwnerType.GenericParameters)}]"
+                    : OwnerType.Name;
+                prefix = string.IsNullOrEmpty(value: OwnerType.Module)
+                    ? $"{ownerName}.{Name}"
+                    : $"{OwnerType.Module}.{ownerName}.{Name}";
+            }
+            else
+            {
+                string routineName = GenericParameters is { Count: > 0 }
+                    ? $"{Name}[{string.Join(separator: ", ", values: GenericParameters)}]"
+                    : Name;
+                prefix = string.IsNullOrEmpty(value: Module)
+                    ? routineName
+                    : $"{Module}.{routineName}";
+            }
+
+            string paramPart =
+                $"({string.Join(separator: ", ", values: Parameters.Select(selector: p => p.Type.Name))})";
+
+            return ReturnType != null
+                ? $"{prefix}{paramPart} -> {ReturnType.Name}"
+                : $"{prefix}{paramPart}";
+        }
+    }
+
+    /// <summary>
+    /// Stable key for registry lookup: "BaseName#Param1,Param2".
+    /// For zero-parameter routines, equals BaseName.
+    /// </summary>
+    public string RegistryKey
+    {
+        get
+        {
+            string baseName = BaseName;
+            if (Parameters.Count == 0) return baseName;
+
+            string paramTypes = string.Join(separator: ",",
+                values: Parameters.Select(selector: p => p.Type.Name));
+            return $"{baseName}#{paramTypes}";
+        }
+    }
+
     /// <summary>The module-qualified name (e.g., "Core/S8.$add", "IO/Console.show").</summary>
     public string QualifiedName
     {
@@ -39,8 +94,8 @@ public sealed class RoutineInfo
                 return $"{OwnerType.FullName}.{Name}";
             }
 
-            // Standalone: same as FullName (already Module.Function)
-            return FullName;
+            // Standalone: Module.Name
+            return BaseName;
         }
     }
 
@@ -52,12 +107,6 @@ public sealed class RoutineInfo
 
     /// <summary>Parameters of this routine.</summary>
     public IReadOnlyList<ParameterInfo> Parameters { get; init; } = [];
-
-    /// <summary>
-    /// The number of parameters from the AST declaration (set in Phase 1, before type resolution).
-    /// Used to distinguish overloads from true duplicates before parameter types are available.
-    /// </summary>
-    public int AstParameterCount { get; init; }
 
     /// <summary>Return type, or null for void.</summary>
     public TypeSymbol? ReturnType { get; init; }

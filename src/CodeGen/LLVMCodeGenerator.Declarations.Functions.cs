@@ -200,7 +200,7 @@ public partial class LLVMCodeGenerator
                 if (astParamTypes.Count == routine.Parameters.Count)
                 {
                     RoutineInfo? overload =
-                        _registry.LookupRoutineOverload(fullName: routineInfo.FullName,
+                        _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
                             argTypes: astParamTypes);
                     if (overload != null)
                     {
@@ -370,7 +370,7 @@ public partial class LLVMCodeGenerator
             string paramTypes = string.Join(separator: ", ",
                 values: routine.Parameters.Select(selector: p => p.Type.Name));
             string failable = routine.IsFailable ? "!" : "";
-            string routineName = $"{routine.FullName ?? routine.Name}{failable}({paramTypes})";
+            string routineName = $"{routine.BaseName}{failable}({paramTypes})";
             string fileName = routine.Location?.FileName ?? "<unknown>";
             int line = routine.Location?.Line ?? 0;
             int col = routine.Location?.Column ?? 0;
@@ -499,8 +499,8 @@ public partial class LLVMCodeGenerator
         string name = SanitizeLLVMName(name: routine.Name);
         if (routine.OwnerType == null)
         {
-            // Top-level: Module.Name (FullName already handles this)
-            string fullName = SanitizeLLVMName(name: routine.FullName);
+            // Top-level: Module.Name (BaseName preserves the old FullName format)
+            string fullName = SanitizeLLVMName(name: routine.BaseName);
 
             // Generic instance: append type arguments (e.g., IO.show → IO.show#S64)
             if (routine.TypeArguments is { Count: > 0 })

@@ -61,31 +61,29 @@ public sealed partial class SemanticAnalyzer
 
     private void AnalyzeFunctionBody(RoutineDeclaration routine)
     {
-        // Construct the full name matching how CollectFunctionDeclaration registered it.
-        // Must replicate the exact same name resolution logic so the lookup succeeds.
-        string fullName;
+        // Construct the base name matching how the routine was registered.
+        string baseName;
         if (_currentType != null)
         {
             // Member routine inside type body: OwnerType.Name + "." + routine.Name
-            fullName = $"{_currentType.Name}.{routine.Name}";
+            baseName = $"{_currentType.Name}.{routine.Name}";
         }
         else if (routine.Name.Contains(value: '.'))
         {
-            // Member routine syntax (e.g., "List[T].add_last"):
+            // Extension method syntax (e.g., "List[T].add_last"):
             // Resolve OwnerType to get canonical name, then append method name
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
             string methodName = routine.Name[(dotIndex + 1)..];
 
             // Always strip generic params first (e.g., "Stack[T]" → "Stack") to look up
-            // the generic definition, not a resolution cache entry like "Stack[T]" which
-            // would produce the wrong FullName ("Stack[T].push" instead of "Stack.push").
+            // the generic definition, not a resolution cache entry.
             string lookupName = typeName.Contains(value: '[')
                 ? typeName[..typeName.IndexOf(value: '[')]
                 : typeName;
             TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
 
-            fullName = ownerType != null
+            baseName = ownerType != null
                 ? $"{ownerType.Name}.{methodName}"
                 : routine.Name;
         }
@@ -93,15 +91,13 @@ public sealed partial class SemanticAnalyzer
         {
             // Top-level function: Module.Name (if module set), else just Name
             string? module = GetCurrentModuleName();
-            fullName = string.IsNullOrEmpty(value: module)
+            baseName = string.IsNullOrEmpty(value: module)
                 ? routine.Name
                 : $"{module}.{routine.Name}";
         }
 
-        // Look up the routine, trying overload disambiguation by resolved parameter types.
-        // Use LookupType (non-error-reporting) so the overload key matches what
-        // UpdateRoutine registered (uses TypeInfo.Name, not AST TypeExpression.Name).
-        // Fall back to AST name for unresolvable types (e.g., routine-level generic params).
+        // Look up by RegistryKey (BaseName + param types) for overload disambiguation,
+        // then fall back to BaseName for the first-overload-wins entry.
         RoutineInfo? routineInfo = null;
         if (routine.Parameters.Count > 0)
         {
@@ -121,17 +117,17 @@ public sealed partial class SemanticAnalyzer
                                                          })
                                                         .Where(predicate: n =>
                                                              !string.IsNullOrEmpty(value: n));
-            string overloadKey =
-                $"{fullName}#{string.Join(separator: ",", values: paramTypeNames)}";
-            routineInfo = _registry.LookupRoutine(fullName: overloadKey);
+            string registryKey =
+                $"{baseName}#{string.Join(separator: ",", values: paramTypeNames)}";
+            routineInfo = _registry.LookupRoutine(fullName: registryKey);
         }
 
-        routineInfo ??= _registry.LookupRoutine(fullName: fullName);
+        routineInfo ??= _registry.LookupRoutine(fullName: baseName);
         if (routineInfo == null)
         {
             ReportError(code: SemanticDiagnosticCode.UnresolvedRoutineBody,
                 message:
-                $"Routine '{fullName}' body could not be matched to a registered declaration.",
+                $"Routine '{baseName}' body could not be matched to a registered declaration.",
                 location: routine.Location);
             return;
         }

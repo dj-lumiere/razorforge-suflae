@@ -110,13 +110,13 @@ public partial class LLVMCodeGenerator
                         var singleArgTypes = new List<TypeInfo> { singleArgType };
                         string createNameFull = $"{resolvedFullType.Name}.$create";
                         RoutineInfo? creator =
-                            _registry.LookupRoutineOverload(fullName: createNameFull,
+                            _registry.LookupRoutineOverload(baseName: createNameFull,
                                 argTypes: singleArgTypes);
                         // Fall back to generic definition's $create
                         if (creator == null && calledType.IsGenericDefinition)
                         {
                             string createNameBase = $"{calledType.Name}.$create";
-                            creator = _registry.LookupRoutineOverload(fullName: createNameBase,
+                            creator = _registry.LookupRoutineOverload(baseName: createNameBase,
                                 argTypes: singleArgTypes);
                         }
 
@@ -228,7 +228,7 @@ public partial class LLVMCodeGenerator
 
                     // Try to find $create() — first on resolved type, then on generic definition
                     string createName = $"{resolvedType.Name}.$create";
-                    RoutineInfo? creator = _registry.LookupRoutineOverload(fullName: createName,
+                    RoutineInfo? creator = _registry.LookupRoutineOverload(baseName: createName,
                         argTypes: new List<TypeInfo>());
                     // If we got a non-zero-arg overload, it's not what we want for zero-arg construction
                     if (creator != null && creator.Parameters.Count > 0)
@@ -240,7 +240,7 @@ public partial class LLVMCodeGenerator
                     if (creator == null)
                     {
                         string genCreateName = $"{calledType.Name}.$create";
-                        creator = _registry.LookupRoutineOverload(fullName: genCreateName,
+                        creator = _registry.LookupRoutineOverload(baseName: genCreateName,
                             argTypes: new List<TypeInfo>());
                         if (creator != null && creator.Parameters.Count > 0)
                         {

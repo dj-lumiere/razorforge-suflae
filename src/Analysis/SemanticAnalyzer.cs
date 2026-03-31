@@ -90,6 +90,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Whether the current routine is a generator (uses emit).</summary>
     private bool _currentRoutineIsGenerator;
 
+    /// <summary>Routine declarations collected in Phase 1/2, pending resolution and registration in Phase 2.5.</summary>
+    private readonly List<PendingRoutine> _pendingRoutines = [];
+
     /// <summary>Tracks lock policy per variable for lock policy validation (#19).</summary>
     private readonly Dictionary<string, string> _variableLockPolicies = [];
 
@@ -138,8 +141,9 @@ public sealed partial class SemanticAnalyzer
         // Phase 2: Resolve type bodies (member variables, method signatures)
         ResolveTypeBodies(program: program);
 
-        // Phase 2.5: Resolve routine signatures (parameter types, protocol-as-type desugaring)
-        ResolveRoutineSignatures(program: program);
+        // Phase 2.5: Resolve routine signatures and register (parameter types, protocol-as-type desugaring)
+        ResolveAndRegisterPendingRoutines();
+        ResolveExternalSignatures(program: program);
 
         // Phase 2.54: Apply implicit marker protocol conformance (record → RecordType, etc.)
         ApplyImplicitMarkerConformance();
@@ -283,7 +287,8 @@ public sealed partial class SemanticAnalyzer
                 moduleNameSnapshots: moduleNameSnapshots);
 
             ResolveTypeBodies(program: program);
-            ResolveRoutineSignatures(program: program);
+            ResolveAndRegisterPendingRoutines(filterFilePath: filePath);
+            ResolveExternalSignatures(program: program);
         }
 
         // Global passes (once, registry-only — no per-file import scoping needed)
@@ -418,6 +423,21 @@ public sealed partial class SemanticAnalyzer
             ? string.Join(separator: ".", values: namespaces)
             : _currentModuleName;
     }
+
+    #endregion
+
+    #region Pending Routine
+
+    /// <summary>
+    /// A routine declaration collected in Phase 1/2, pending resolution and registration in Phase 2.5.
+    /// </summary>
+    private sealed record PendingRoutine(
+        RoutineDeclaration Declaration,
+        TypeSymbol? OwnerType,
+        RoutineKind Kind,
+        string RoutineName,
+        string? Module,
+        string FilePath);
 
     #endregion
 }
