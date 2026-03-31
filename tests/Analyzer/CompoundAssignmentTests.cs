@@ -263,6 +263,7 @@ public class CompoundAssignmentTests
                           bits: S32
 
                         routine Flags.$ibitand(from: Flags) -> Blank
+                          pass
 
                         routine test()
                           var f = Flags(bits: 255)

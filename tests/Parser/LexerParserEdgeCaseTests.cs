@@ -1,4 +1,6 @@
 using Compiler.Lexer;
+using SemanticAnalysis.Diagnostics;
+using SemanticAnalysis.Results;
 using SyntaxTree;
 using Xunit;
 
@@ -135,5 +137,39 @@ public class LexerParserEdgeCaseTests
 
         Assert.NotNull(@object: program);
         Assert.NotEmpty(collection: program.Declarations);
+    }
+
+    /// <summary>
+    /// Tests Parse_EmptyRoutineBody_Fails.
+    /// </summary>
+    [Fact]
+    public void Parse_EmptyRoutineBody_Fails()
+    {
+        string source = """
+                        routine test()
+                        routine other()
+                          pass
+                          return
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    /// <summary>
+    /// Tests Analyze_EmptyTypeBody_ReportsError.
+    /// </summary>
+    [Fact]
+    public void Analyze_EmptyTypeBody_ReportsError()
+    {
+        string source = """
+                        record Empty
+                        record Other
+                          pass
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
 }
