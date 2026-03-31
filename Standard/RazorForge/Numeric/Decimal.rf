@@ -170,6 +170,22 @@ routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   rf_bigdec_atan(result.handle, precision, me.handle)
   return result
 
+routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+  if x.is_zero()
+    return when
+      me.is_positive() => Decimal.pi(precision).divide(Decimal(2_s64), precision)
+      me.is_negative() => -Decimal.pi(precision).divide(Decimal(2_s64), precision)
+      else => Decimal.zero()
+
+  var theta = me.divide(x, precision + 4).atan(precision)
+  if x.is_positive()
+    return theta
+
+  var pi = Decimal.pi(precision)
+  if me.is_negative()
+    return theta - pi
+  return theta + pi
+
 # Hyperbolic functions
 routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
