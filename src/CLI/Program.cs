@@ -599,6 +599,19 @@ internal class Program
     }
 
     /// <summary>
+    /// Detects the underlying linker tool name from clang's stderr output.
+    /// </summary>
+    private static string DetectLinkerFromStderr(string stderr)
+    {
+        if (stderr.Contains("lld-link:")) return "lld-link";
+        if (stderr.Contains("ld.lld:")) return "ld.lld";
+        if (stderr.Contains("collect2:")) return "collect2";
+        if (stderr.Contains("LINK :") || stderr.Contains("LINK:")) return "link.exe";
+        if (stderr.Contains("ld:")) return "ld";
+        return "clang";
+    }
+
+    /// <summary>
     /// Runs the multi-file build pipeline: BuildDriver (parse + resolve imports + topo sort)
     /// → SemanticAnalyzer.AnalyzeMultiple → LLVMCodeGenerator with multiple user programs.
     /// Returns 0 on success or 1 if any stage fails.
@@ -977,13 +990,22 @@ internal class Program
                 return 1;
             }
 
+            string clangStdout = clangProcess.StandardOutput.ReadToEnd();
             string clangStderr = clangProcess.StandardError.ReadToEnd();
             clangProcess.WaitForExit();
 
             if (clangProcess.ExitCode != 0)
             {
-                Console.Error.Write(clangStderr);
-                Console.WriteLine($"clang exited with code {clangProcess.ExitCode}");
+                // MSVC's link.exe sends detailed errors (LNK2019) to stdout,
+                // while the summary (LNK1120) goes to stderr — print both.
+                if (!string.IsNullOrWhiteSpace(clangStdout))
+                    Console.Error.Write(clangStdout);
+                if (!string.IsNullOrWhiteSpace(clangStderr))
+                    Console.Error.Write(clangStderr);
+
+                string allOutput = clangStdout + clangStderr;
+                string linker = DetectLinkerFromStderr(allOutput);
+                Console.WriteLine($"Linking failed ({linker} exited with code {clangProcess.ExitCode})");
                 return 1;
             }
         }
