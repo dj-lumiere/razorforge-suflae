@@ -173,7 +173,7 @@ public sealed partial class StdlibLoader
 
         // Pass 1d: Re-resolve protocol conformances now that all types are registered.
         // Protocol arguments may reference types not yet registered during Pass 1b
-        // (e.g., EnumerateSequence[T] obeys Iterable[Tuple[S64, T]] needs S64).
+        // (e.g., EnumerateIterator[T] obeys Iterable[Tuple[S64, T]] needs S64).
         foreach ((Program program, string _, string ns) in _corePrograms)
         {
             ResolveProgramProtocolConformances(registry: registry, program: program);

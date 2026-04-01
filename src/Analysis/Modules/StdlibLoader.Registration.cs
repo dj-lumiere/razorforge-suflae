@@ -169,7 +169,7 @@ public sealed partial class StdlibLoader
 
     /// <summary>
     /// Re-resolves protocol conformances for types whose protocol arguments contain
-    /// forward-referenced types (e.g., EnumerateSequence[T] obeys Iterable[Tuple[S64, T]]
+    /// forward-referenced types (e.g., EnumerateIterator[T] obeys Iterable[Tuple[S64, T]]
     /// where S64 wasn't registered during initial entity registration).
     /// Called after all type shells are registered.
     /// </summary>

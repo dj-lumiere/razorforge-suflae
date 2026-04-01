@@ -1,13 +1,13 @@
-# RazorForge ExtendSequence[T] - Lazy sequence concatenation
+# RazorForge ExtendIterator[T] - Lazy sequence concatenation
 # extend(with:) yields all elements from the first source, then all from the second
 
 module IterTools
 
-entity ExtendSequence[T] obeys Iterable[T]
+entity ExtendIterator[T] obeys Iterable[T]
   secret first: Iterable[T]
   secret second: Iterable[T]
 
-routine ExtendSequence[T].$iter() -> ExtendEmitter[T]
+routine ExtendIterator[T].$iter() -> ExtendEmitter[T]
   return ExtendEmitter[T](first: me.first.$iter(), second: me.second.$iter(), in_second: false)
 
 entity ExtendEmitter[T] obeys Iterator[T]
@@ -26,5 +26,5 @@ emitting routine ExtendEmitter[T].$next() -> T
   emit me.second.$next()
   return
 
-routine Iterable[T].extend(other: Iterable[T]) -> ExtendSequence[T]
-  return ExtendSequence[T](first: me, second: other)
+routine Iterable[T].extend(other: Iterable[T]) -> ExtendIterator[T]
+  return ExtendIterator[T](first: me, second: other)

@@ -1,14 +1,14 @@
-# RazorForge WhereSequence[T] - Lazy filtering
+# RazorForge WhereIterator[T] - Lazy filtering
 # where(predicate) keeps matching items, where_not(predicate) keeps non-matching
 
 module IterTools
 
-entity WhereSequence[T] obeys Iterable[T]
+entity WhereIterator[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret predicate: Routine[(T,), Bool]
   secret inverted: Bool
 
-routine WhereSequence[T].$iter() -> WhereEmitter[T]
+routine WhereIterator[T].$iter() -> WhereEmitter[T]
   return WhereEmitter[T](source: me.source.$iter(), predicate: me.predicate, inverted: me.inverted)
 
 entity WhereEmitter[T] obeys Iterator[T]
@@ -26,8 +26,8 @@ emitting routine WhereEmitter[T].$next() -> T
       emit item
       return
 
-routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
-  return WhereSequence[T](source: me, predicate: predicate, inverted: false)
+routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
+  return WhereIterator[T](source: me, predicate: predicate, inverted: false)
 
-routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereSequence[T]
-  return WhereSequence[T](source: me, predicate: predicate, inverted: true)
+routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
+  return WhereIterator[T](source: me, predicate: predicate, inverted: true)

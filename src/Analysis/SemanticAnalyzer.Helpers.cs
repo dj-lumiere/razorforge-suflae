@@ -631,7 +631,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Strategy 1: Extract element type from Iterable[X] protocol conformance.
-        // This correctly handles chained generics like EnumerateSequence[T] obeys Iterable[Tuple[S64, T]]
+        // This correctly handles chained generics like EnumerateIterator[T] obeys Iterable[Tuple[S64, T]]
         IReadOnlyList<TypeSymbol>? protocols = iterableType switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,

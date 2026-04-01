@@ -1,13 +1,13 @@
-# RazorForge SelectSequence[T, U] - Lazy projection/mapping
+# RazorForge SelectIterator[T, U] - Lazy projection/mapping
 # select(transform) applies a transform to each element
 
 module IterTools
 
-entity SelectSequence[T, U] obeys Iterable[U]
+entity SelectIterator[T, U] obeys Iterable[U]
   secret source: Iterable[T]
   secret transform: Routine[(T,), U]
 
-routine SelectSequence[T, U].$iter() -> SelectEmitter[T, U]
+routine SelectIterator[T, U].$iter() -> SelectEmitter[T, U]
   return SelectEmitter[T, U](source: me.source.$iter(), transform: me.transform)
 
 entity SelectEmitter[T, U] obeys Iterator[U]
@@ -19,5 +19,5 @@ emitting routine SelectEmitter[T, U].$next() -> U
   emit me.transform(item)
   return
 
-routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectSequence[T, U]
-  return SelectSequence[T, U](source: me, transform: transform)
+routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterator[T, U]
+  return SelectIterator[T, U](source: me, transform: transform)

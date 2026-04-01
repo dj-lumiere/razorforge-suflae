@@ -856,7 +856,7 @@ public partial class LLVMCodeGenerator
                 concreteType: receiverType);
         }
 
-        // For protocol-owned methods (Iterable[T].enumerate() → EnumerateSequence[T]),
+        // For protocol-owned methods (Iterable[T].enumerate() → EnumerateIterator[T]),
         // substitute protocol generic params using receiver's type arguments.
         // Use GenericDefinition to get the param names (resolved protocols have null GenericParameters).
         if (resolvedReturnType != null && method?.OwnerType is ProtocolTypeInfo protoOwner &&

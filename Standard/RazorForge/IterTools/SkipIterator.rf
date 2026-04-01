@@ -1,13 +1,13 @@
-# RazorForge SkipSequence[T] - Lazy skip-first-N
+# RazorForge SkipIterator[T] - Lazy skip-first-N
 # skip(count) discards count elements then yields the rest
 
 module IterTools
 
-entity SkipSequence[T] obeys Iterable[T]
+entity SkipIterator[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret count: U64
 
-routine SkipSequence[T].$iter() -> SkipEmitter[T]
+routine SkipIterator[T].$iter() -> SkipEmitter[T]
   return SkipEmitter[T](source: me.source.$iter(), remaining: me.count)
 
 entity SkipEmitter[T] obeys Iterator[T]
@@ -21,5 +21,5 @@ emitting routine SkipEmitter[T].$next() -> T
   emit me.source.$next()
   return
 
-routine Iterable[T].skip(count: U64) -> SkipSequence[T]
-  return SkipSequence[T](source: me, count: count)
+routine Iterable[T].skip(count: U64) -> SkipIterator[T]
+  return SkipIterator[T](source: me, count: count)

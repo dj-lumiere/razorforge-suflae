@@ -1,13 +1,13 @@
-# RazorForge SkipWhileSequence[T] - Lazy conditional skip
+# RazorForge SkipWhileIterator[T] - Lazy conditional skip
 # skip_while(predicate) discards elements while predicate is true, then yields the rest
 
 module IterTools
 
-entity SkipWhileSequence[T] obeys Iterable[T]
+entity SkipWhileIterator[T] obeys Iterable[T]
   secret source: Iterable[T]
   secret predicate: Routine[(T,), Bool]
 
-routine SkipWhileSequence[T].$iter() -> SkipWhileEmitter[T]
+routine SkipWhileIterator[T].$iter() -> SkipWhileEmitter[T]
   return SkipWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, skipping: true)
 
 entity SkipWhileEmitter[T] obeys Iterator[T]
@@ -26,5 +26,5 @@ emitting routine SkipWhileEmitter[T].$next() -> T
   emit me.source.$next()
   return
 
-routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileSequence[T]
-  return SkipWhileSequence[T](source: me, predicate: predicate)
+routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileIterator[T]
+  return SkipWhileIterator[T](source: me, predicate: predicate)
