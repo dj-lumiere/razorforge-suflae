@@ -82,6 +82,14 @@ include(cmake/tomlc99.cmake)
 # https://github.com/jedisct1/minicsv (BSD)
 include(cmake/minicsv.cmake)
 
+# libco - Stackful coroutine/fiber backend
+# https://github.com/rxi/libco or compatible fork (public domain / ISC-like depending on fork)
+include(cmake/libco.cmake)
+
+# libuv - Cross-platform async I/O and event loop
+# https://github.com/libuv/libuv (MIT)
+include(cmake/libuv.cmake)
+
 # Boehm GC - Conservative garbage collector (Suflae runtime)
 # https://github.com/ivmai/bdwgc (MIT-style)
 include(cmake/bdwgc.cmake)
@@ -115,6 +123,9 @@ add_library(razorforge_runtime SHARED
     runtime/text_functions.c
     runtime/csharp_interop.c
     runtime/file_functions.c
+    runtime/task_runtime.c
+    runtime/concurrency_context.c
+    runtime/async_io.c
     runtime/types.h
 )
 
@@ -207,6 +218,18 @@ if(HAVE_MINICSV)
     target_link_libraries(razorforge_runtime rf_minicsv)
 endif()
 
+# Link libco if available
+if(HAVE_LIBCO)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBCO)
+    target_link_libraries(razorforge_runtime rf_libco)
+endif()
+
+# Link libuv if available
+if(HAVE_LIBUV)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBUV)
+    target_link_libraries(razorforge_runtime uv_a)
+endif()
+
 # Link Boehm GC if available
 if(HAVE_BDWGC)
     target_compile_definitions(razorforge_runtime PRIVATE HAVE_BDWGC)
@@ -273,6 +296,10 @@ install(FILES include/razorforge_math.h
     DESTINATION include
 )
 
+install(FILES include/razorforge_runtime.h
+    DESTINATION include
+)
+
 # Print configuration summary
 message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
@@ -291,6 +318,8 @@ message(STATUS "  utf8proc (unicode):               ${HAVE_UTF8PROC}")
 message(STATUS "  yyjson (JSON):                    ${HAVE_YYJSON}")
 message(STATUS "  tomlc99 (TOML):                   ${HAVE_TOMLC99}")
 message(STATUS "  minicsv (CSV):                    ${HAVE_MINICSV}")
+message(STATUS "  libco (green-thread contexts):    ${HAVE_LIBCO}")
+message(STATUS "  libuv (async I/O loop):           ${HAVE_LIBUV}")
 message(STATUS "  Boehm GC (Suflae GC):             ${HAVE_BDWGC}")
 message(STATUS "  ── Platform ──")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")

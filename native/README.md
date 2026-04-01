@@ -1,122 +1,399 @@
-# RazorForge Native Mathematics Libraries
+# RazorForge Native Runtime
 
-This directory contains the native C/C++ libraries used by RazorForge for high-precision arithmetic operations.
+This directory contains the native C runtime and vendored libraries used by RazorForge and, later, Suflae.
 
-## Libraries Included
+It is not just a math library folder. It is the runtime substrate for:
 
-### libdfp - IEEE 754 Decimal Floating Point
+- memory allocation and crash reporting
+- text/console/file primitives
+- fixed-width numeric support that does not map cleanly to plain LLVM intrinsics
+- future stdlib wrappers over native libraries
+- task runtime, `threaded routine`, `suspended routine`, `waitfor`, `within`, and `after`
+- future actor and GC runtime work for Suflae
 
-- **Purpose**: Implements d32, d64, and d128 decimal floating point types
-- **Location**: `native/libdfp/`
-- **Usage**: Used for precise decimal arithmetic in RazorForge
-- **Integration**: Via `LibDfpInterop.cs` and `Decimal32.cs`, `Decimal64.cs`, `Decimal128.cs`
+The current design direction is reflected in:
 
-### libbf - Arbitrary Precision Arithmetic
+- [internal-wiki/FUTURE-STDLIB-TODO.md](../internal-wiki/FUTURE-STDLIB-TODO.md)
+- [internal-wiki/FUTURE-STDLIB-API.md](../internal-wiki/FUTURE-STDLIB-API.md)
 
-- **Purpose**: Provides arbitrary precision integers and rationals
-- **Location**: `native/libbf/`
-- **Usage**: Used for integer operations that may exceed standard integer ranges
-- **Integration**: Via `LibBfInterop.cs` and `BigInteger.cs`
+## Purpose
 
-### mafm - Multiple Arithmetic with Fixed Mantissa
+The native layer exists for three different reasons.
 
-- **Purpose**: Multiple precision arithmetic for decimal numbers
-- **Location**: `native/mafm/`
-- **Usage**: Used for decimal operations requiring arbitrary precision
-- **Integration**: Via `MafmInterop.cs` and `HighPrecisionDecimal.cs`
+1. Platform/runtime services
 
-## Setup Instructions
+- allocation and invalidation
+- crash reporting and trace collection
+- console I/O and file I/O
+- time, clocks, and waiting
+- OS threads, green-thread contexts, async I/O polling
 
-1. **Add your library source code**:
-   ```bash
-   # Copy your libdfp sources to:
-   native/libdfp/
-   
-   # Copy your libbf sources to:
-   native/libbf/
-   
-   # Copy your mafm sources to:
-   native/mafm/
-   ```
+2. External library wrapping
 
-2. **Build the libraries**:
-   ```bash
-   # On Windows:
-   native\build.bat
-   
-   # On Linux/macOS:
-   ./native/build.sh
-   ```
+- decimal, big integer, crypto, regex, compression, JSON/TOML/CSV, database, GC
+- only the parts the stdlib actually exposes should cross the FFI boundary
 
-3. **The build system will**:
-    - Compile all three libraries into a single `razorforge_math` shared library
-    - Copy the library to your output directories
-    - Make it available for P/Invoke calls from C#
+3. Runtime-only infrastructure
 
-## Library Structure
+- task state objects
+- scheduler backends
+- lock/refcount controllers
+- actor/GC runtime internals later
 
-```
+The rule is:
+
+- stdlib owns the language-facing API shape
+- compiler owns lowering
+- `native/` owns platform work and runtime state
+
+## Current Layout
+
+```text
 native/
-├── CMakeLists.txt          # Main build configuration
-├── build.bat              # Windows build script
-├── build.sh               # Linux/macOS build script
-├── include/               # Exported headers
-├── build/                 # Build output directory
-├── libdfp/                # IEEE 754 decimal floating point
-│   ├── CMakeLists.txt
-│   └── [your libdfp sources]
-├── libbf/                 # Arbitrary precision arithmetic
-│   ├── CMakeLists.txt
-│   └── [your libbf sources]
-├── mafm/                  # Multiple precision arithmetic
-│   ├── CMakeLists.txt
-│   └── [your mafm sources]
-└── runtime/               # RazorForge runtime support
-    ├── runtime.c
-    ├── i8.c
-    ├── i16.c
-    └── types.h
+├── CMakeLists.txt
+├── build.bat
+├── build.sh
+├── include/
+│   └── razorforge_runtime.h
+├── runtime/
+│   ├── runtime.c
+│   ├── memory.c
+│   ├── stacktrace.c
+│   ├── text_functions.c
+│   ├── file_functions.c
+│   ├── moment.c
+│   ├── task_runtime.c
+│   ├── concurrency_context.c
+│   ├── async_io.c
+│   ├── math_functions.c
+│   ├── decimal_functions.c
+│   ├── bignum_functions.c
+│   ├── f16_functions.c
+│   ├── f128_functions.c
+│   ├── csharp_interop.c
+│   └── types.h
+├── cmake/
+│   └── *.cmake
+└── <vendored libraries>/
 ```
 
-## Integration with C#
+## Runtime Layers
 
-The native libraries are integrated into the C# project through:
+The native runtime is moving toward four layers.
 
-1. **P/Invoke Interop Classes**:
-    - `LibDfpInterop.cs` - Direct FFI bindings
-    - `LibBfInterop.cs` - Direct FFI bindings
-    - `MafmInterop.cs` - Direct FFI bindings
+### 1. Core Runtime
 
-2. **High-level Wrapper Classes**:
-    - `Decimal32.cs`, `Decimal64.cs`, `Decimal128.cs` - IEEE decimal types
-    - `BigInteger.cs` - Arbitrary precision integers
-    - `HighPrecisionDecimal.cs` - Arbitrary precision decimals
+Files:
 
-3. **Automatic Build Integration**:
-    - Native libraries are automatically built before C# compilation
-    - Libraries are copied to output directories
-    - Runtime loading is handled automatically
+- [runtime.c](../native/runtime/runtime.c)
+- [memory.c](../native/runtime/memory.c)
+- [stacktrace.c](../native/runtime/stacktrace.c)
+- [text_functions.c](../native/runtime/text_functions.c)
+- [file_functions.c](../native/runtime/file_functions.c)
+- [moment.c](../native/runtime/moment.c)
 
-## Requirements
+Responsibilities:
 
-- **CMake 3.20+**
-- **C11/C++17 compatible compiler**
-- **Windows**: Visual Studio 2019+ or MinGW
-- **Linux**: GCC 7+ or Clang 6+
-- **macOS**: Xcode 10+ or Command Line Tools
+- `rf_runtime_init`
+- `rf_allocate_dynamic`, `rf_reallocate_dynamic`, `rf_invalidate`
+- `rf_crash`, `rf_trace_push`, `rf_trace_pop`
+- console and file primitives
+- clock/time primitives
+- `rf_waitfor_duration` for `waitfor 5s`
 
-## Usage in RazorForge Code
+This layer is scheduler-agnostic. It should not know whether code is running in a normal routine, a threaded routine, or
+a suspended routine.
 
-```csharp
-// Using IEEE 754 decimal types
-var d32 = new Decimal32("123.456");
-var result = d32 + new Decimal32("78.901");
+### 2. Task Runtime
 
-// Using arbitrary precision integers
-var bigInt = new BigInteger("123456789012345678901234567890");
-var doubled = bigInt * 2;
+Files:
 
-// Using high precision decimals
-var decimal = new HighPrecisionDecimal("0.123456789012345678901234567890");
-var precise = decimal * new HighPrecisionDecimal("2.5");
+- [task_runtime.c](../native/runtime/task_runtime.c)
+- [Task.rf](../Standard/RazorForge/Core/Types/Task.rf)
+
+Responsibilities:
+
+- runtime-owned `rf_task`
+- task kind: suspended vs threaded
+- task status and completion state
+- result/error payload storage
+- wait/timeout hooks
+- prerequisite/dependent bookkeeping for `after`
+
+This is the native backing store for language-level `Task[T]`.
+
+The language-facing type is intentionally thin:
+
+- `Task[T]` is an opaque pointer-shaped record
+- the real state lives in `rf_task`
+
+### 3. Execution Backends
+
+Files:
+
+- [concurrency_context.c](../native/runtime/concurrency_context.c)
+- [async_io.c](../native/runtime/async_io.c)
+
+Responsibilities:
+
+- stackful context switching backend for `suspended routine`
+- async event loop backend for timers, wakeups, and I/O readiness
+
+Current backend choices:
+
+- `libco` for stackful context switching
+- `libuv` for async I/O and event loop services
+
+The public rule is:
+
+- RazorForge code should call `rf_context_*` and `rf_async_*`
+- nothing outside `native/runtime` should call `libco` or `libuv` APIs directly
+
+Right now both wrappers are still stubs. The wrapper boundary is deliberate: it keeps the third-party library choice
+replaceable later.
+
+### 4. Numeric and External-Library Bridges
+
+Files:
+
+- [decimal_functions.c](../native/runtime/decimal_functions.c)
+- [bignum_functions.c](../native/runtime/bignum_functions.c)
+- [f16_functions.c](../native/runtime/f16_functions.c)
+- [f128_functions.c](../native/runtime/f128_functions.c)
+- [math_functions.c](../native/runtime/math_functions.c)
+
+Responsibilities:
+
+- expose C-callable bridges for stdlib numeric types
+- isolate third-party numeric/runtime dependencies behind `rf_*` entrypoints
+
+## Stdlib Relationship
+
+The native layer should follow the stdlib structure, not invent a second public API.
+
+Examples:
+
+- `Core/NativeDeclarations.rf` declares the raw FFI surface
+- `Core/Types/Task.rf` wraps task handles
+- `Core/Memory/Wrapper/Shared.rf`, `Marked.rf`, `Retained.rf`, `Tracked.rf` describe the ownership model the runtime
+  must eventually support
+
+Important split from the stdlib roadmap:
+
+- `Maybe[T]` is a real data carrier
+- `Result[T]` and `Lookup[T]` are ephemeral control-flow carriers
+- `Task[T]` is a runtime handle, not user-owned inline state
+
+That means the native runtime must prioritize:
+
+- task state and completion handling
+- waiting, timeout, and scheduler hooks
+- ownership/reference operations for RC/ARC wrappers
+
+not just generic “async utilities”.
+
+## Concurrency Direction
+
+The current concurrency model is:
+
+- `threaded routine` -> OS-thread-backed task
+- `suspended routine` -> green-thread-backed task
+- `waitfor task` -> wait for `Task[T]`
+- `waitfor duration` -> timed suspension/blocking
+- `within` -> timeout
+- `after` -> dependency graph between tasks
+
+Planned runtime split:
+
+- `task_runtime.c`
+  task state, completion, dependencies
+- `concurrency_context.c`
+  stackful green-task context backend
+- `async_io.c`
+  timer + async event backend
+- future OS thread backend
+  native thread spawn/join/wakeup
+
+The high-level rule is:
+
+- `threaded routine` and `suspended routine` share one task model
+- they differ only in execution backend and waiting behavior
+
+## Ownership / Memory Model Staging
+
+The stdlib already establishes these wrapper families:
+
+- `Retained[T]`: RC holding
+- `Tracked[T]`: RC observing
+- `Shared[T, P]`: ARC holding
+- `Marked[T, P]`: ARC observing
+- `Viewed[T]`, `Hijacked[T]`, `Inspected[T]`, `Seized[T]`: temporary access wrappers
+- `Snatched[T]`: raw unmanaged pointer escape hatch
+
+The native runtime should eventually mirror that split directly:
+
+- RC runtime
+- ARC runtime
+- lock-policy runtime
+- task/scheduler runtime
+
+It should not collapse all of that into one anonymous “heap handle” abstraction.
+
+## Vendored Libraries
+
+These directories are vendored snapshots, not separate repos the runtime should expose directly.
+
+### Core numeric/runtime support
+
+- `libbf`
+- `decNumber`
+- `libtommath`
+
+### Data and text adjacent libraries
+
+- `utf8proc`
+- `yyjson`
+- `tomlc99`
+- `minicsv`
+- `pcre2`
+
+### Compression and storage
+
+- `zlib`
+- `zstd`
+- `sqlite3`
+
+### Crypto and TLS
+
+- `libsodium`
+- `mbedtls`
+
+### Concurrency / async backends
+
+- `libco`
+- `libuv`
+
+### GC for future Suflae runtime
+
+- `bdwgc`
+
+Not every vendored library is “fully integrated”. Some are linked today, some are only staged for future stdlib modules.
+The runtime/stdlib should expose a stable `rf_*` API either way.
+
+## Build System
+
+Primary files:
+
+- [CMakeLists.txt](../native/CMakeLists.txt)
+- [build.bat](../native/build.bat)
+- [build.sh](../native/build.sh)
+- [cmake/libco.cmake](../native/cmake/libco.cmake)
+- [cmake/libuv.cmake](../native/cmake/libuv.cmake)
+
+### Build outputs
+
+- `razorforge_runtime`
+  shared runtime library used by compiled programs
+- `razorforge_math`
+  static math-focused support library
+
+### Build commands
+
+Windows:
+
+```powershell
+native\build.bat
 ```
+
+Linux/macOS:
+
+```bash
+./native/build.sh
+```
+
+Direct CMake:
+
+```powershell
+cmake -S native -B native/build
+cmake --build native/build --target razorforge_runtime --config Release
+```
+
+## Current Reality vs Planned Reality
+
+Current reality:
+
+- `rf_task` exists
+- `Task[T]` exists
+- `waitfor task` lowers through runtime calls
+- `waitfor 5s` lowers to `rf_waitfor_duration`
+- `libco` and `libuv` are vendored and wrapped
+- `concurrency_context.c` and `async_io.c` are still backend stubs
+- task waiting is still shallow and not yet a real blocking/parking scheduler
+
+Planned reality:
+
+- `threaded routine` spawns real OS-thread-backed tasks
+- `suspended routine` runs on a real scheduler backed by `libco`
+- `waitfor` parks suspended tasks instead of blocking worker threads
+- `within` uses timer-backed wakeups
+- `after` uses real dependent task activation
+- ARC/RC wrappers get native lifecycle support
+- Suflae actor and GC layers build on top of the same substrate
+
+## Design Rules
+
+When adding new native functionality, follow these rules.
+
+1. Do not expose third-party APIs directly to the compiler or stdlib.
+
+- good: `rf_async_runtime_run_once(...)`
+- bad: `uv_run(...)` in generated code or stdlib declarations
+
+2. Keep the `rf_*` boundary narrow and purposeful.
+
+- raw runtime hooks belong here
+- high-level policy belongs in stdlib/compiler
+
+3. Match stdlib semantics exactly.
+
+- if the stdlib says `Task[T]` is opaque, the runtime should not require users to reason about the underlying struct
+- if `waitfor duration` is language-level sleep, the native name should reflect that role
+
+4. Prefer one runtime-owned state object over scattering task state across ad hoc globals.
+
+5. Treat vendored libraries as replaceable backends.
+
+- especially `libco` and `libuv`
+
+## Immediate Priorities
+
+The next native work should focus on concurrency and ownership, not more one-off FFI sprawl.
+
+### Concurrency
+
+- real threaded task spawn and join
+- real suspended-task scheduling
+- timer-backed `within`
+- parked wait queues for `waitfor`
+- dependency activation for `after`
+
+### Ownership runtime
+
+- runtime support for `Retained`, `Tracked`, `Shared`, `Marked`
+- proper drop/clone hooks for record-stored wrappers
+- lock/runtime integration for `Inspected` and `Seized`
+
+### Stdlib-backed wrappers
+
+- FileSystem
+- Networking
+- Compression
+- RegularExpression via PCRE2-32
+- Json/Toml/Csv bridges where wrapping is valid
+
+## Notes
+
+- `build/` is generated output and should not be treated as source.
+- Vendored dependency directories under `native/` are intentionally plain folders, not nested repos.
+- If a feature is language-visible, prefer documenting the user-facing behavior in the wiki or stdlib docs, and document
+  the backend/runtime obligations here.
