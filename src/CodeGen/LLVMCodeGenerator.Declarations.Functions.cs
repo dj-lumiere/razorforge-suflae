@@ -398,6 +398,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
+        EmitUsingCleanup(sb: _functionDefinitions);
         EmitEntityCleanup(sb: _functionDefinitions, returnedVarName: null);
         EmitLine(sb: _functionDefinitions, line: "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)

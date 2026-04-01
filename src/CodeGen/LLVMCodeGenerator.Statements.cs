@@ -721,6 +721,26 @@ public partial class LLVMCodeGenerator
         }
     }
 
+    /// <summary>
+    /// Emits $exit() calls for using scopes pushed after <paramref name="untilDepth"/>.
+    /// Used by break/continue to clean up only scopes inside the current loop,
+    /// leaving outer scopes for their own normal-exit path.
+    /// </summary>
+    private void EmitUsingCleanup(StringBuilder sb, int untilDepth)
+    {
+        int toClean = _usingCleanupStack.Count - untilDepth;
+        int cleaned = 0;
+        foreach ((string resourceValue, TypeInfo resourceType, RoutineInfo exitMethod) in
+                 _usingCleanupStack)
+        {
+            if (cleaned >= toClean) break;
+            string exitMangled = MangleFunctionName(routine: exitMethod);
+            string receiverType = GetParameterLLVMType(type: resourceType);
+            EmitLine(sb: sb, line: $"  call void @{exitMangled}({receiverType} {resourceValue})");
+            cleaned++;
+        }
+    }
+
     #endregion
 
     #region Emit Statement

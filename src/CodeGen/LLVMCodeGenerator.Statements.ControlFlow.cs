@@ -71,7 +71,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Stack of loop labels for break/continue.
     /// </summary>
-    private readonly Stack<(string ContinueLabel, string BreakLabel)> _loopStack = new();
+    private readonly Stack<(string ContinueLabel, string BreakLabel, int UsingDepth)> _loopStack = new();
 
     /// <summary>
     /// Stack of active using-scope cleanups. Each entry holds the info needed to call $exit()
@@ -89,8 +89,8 @@ public partial class LLVMCodeGenerator
         string bodyLabel = NextLabel(prefix: "while_body");
         string endLabel = NextLabel(prefix: "while_end");
 
-        // Push loop labels for break/continue
-        _loopStack.Push(item: (condLabel, endLabel));
+        // Push loop labels for break/continue (record using-stack depth for scoped cleanup)
+        _loopStack.Push(item: (condLabel, endLabel, _usingCleanupStack.Count));
 
         // Jump to condition
         EmitLine(sb: sb, line: $"  br label %{condLabel}");
@@ -138,7 +138,7 @@ public partial class LLVMCodeGenerator
         string bodyLabel = NextLabel(prefix: "for_body");
         string endLabel = NextLabel(prefix: "for_end");
 
-        _loopStack.Push(item: (condLabel, endLabel));
+        _loopStack.Push(item: (condLabel, endLabel, _usingCleanupStack.Count));
 
         // Evaluate the iterable expression and get its type
         string iterValue = EmitExpression(sb: sb, expr: forStmt.Iterable);
@@ -618,7 +618,7 @@ public partial class LLVMCodeGenerator
         string incrLabel = NextLabel(prefix: "for_incr");
         string endLabel = NextLabel(prefix: "for_end");
 
-        _loopStack.Push(item: (incrLabel, endLabel));
+        _loopStack.Push(item: (incrLabel, endLabel, _usingCleanupStack.Count));
 
         // Infer element type from range bounds
         TypeInfo? elemType =
@@ -789,9 +789,9 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException(message: "Break statement outside of loop");
         }
 
-        (_, string breakLabel) = _loopStack.Peek();
-        // Clean up active using scopes before breaking out of loop
-        EmitUsingCleanup(sb: sb);
+        (_, string breakLabel, int usingDepth) = _loopStack.Peek();
+        // Clean up using scopes pushed inside this loop only (not outer scopes)
+        EmitUsingCleanup(sb: sb, untilDepth: usingDepth);
         EmitLine(sb: sb, line: $"  br label %{breakLabel}");
     }
 
@@ -805,9 +805,9 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException(message: "Continue statement outside of loop");
         }
 
-        (string continueLabel, _) = _loopStack.Peek();
-        // Clean up active using scopes before continuing loop
-        EmitUsingCleanup(sb: sb);
+        (string continueLabel, _, int usingDepth) = _loopStack.Peek();
+        // Clean up using scopes pushed inside this loop only (not outer scopes)
+        EmitUsingCleanup(sb: sb, untilDepth: usingDepth);
         EmitLine(sb: sb, line: $"  br label %{continueLabel}");
     }
 }
