@@ -330,6 +330,25 @@ public sealed partial class SemanticAnalyzer
     private void ValidateMethodAgainstProtocol(RoutineInfo typeMethod,
         ProtocolMethodInfo protoMethod, ProtocolTypeInfo protocol, SourceLocation? location)
     {
+        // Build substitution map for generic protocols (e.g., Supplier[S32]: T → S32)
+        Dictionary<string, string>? substitution = null;
+        if (protocol.TypeArguments is { Count: > 0 })
+        {
+            ProtocolTypeInfo genericDef = protocol.GenericDefinition ?? protocol;
+            if (genericDef.GenericParameters is { Count: > 0 })
+            {
+                substitution = new Dictionary<string, string>();
+                for (int i = 0;
+                     i < genericDef.GenericParameters.Count &&
+                     i < protocol.TypeArguments.Count;
+                     i++)
+                {
+                    substitution[key: genericDef.GenericParameters[index: i]] =
+                        protocol.TypeArguments[index: i].Name;
+                }
+            }
+        }
+
         // Check failable matches
         if (typeMethod.IsFailable != protoMethod.IsFailable)
         {
@@ -387,12 +406,20 @@ public sealed partial class SemanticAnalyzer
                         location: location);
                 }
             }
-            else if (actualType.Name != expectedType.Name)
+            else
             {
-                ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
-                    message:
-                    $"Parameter '{protoMethod.ParameterNames[index: i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{expectedType.Name}'.",
-                    location: location);
+                string expectedName = substitution != null &&
+                                      substitution.TryGetValue(key: expectedType.Name,
+                                          value: out string? substName)
+                    ? substName
+                    : expectedType.Name;
+                if (actualType.Name != expectedName)
+                {
+                    ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                        message:
+                        $"Parameter '{protoMethod.ParameterNames[index: i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{expectedName}'.",
+                        location: location);
+                }
             }
         }
 
@@ -415,12 +442,20 @@ public sealed partial class SemanticAnalyzer
                         location: location);
                 }
             }
-            else if (actualReturn.Name != expectedReturn.Name)
+            else
             {
-                ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
-                    message:
-                    $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{expectedReturn.Name}'.",
-                    location: location);
+                string expectedReturnName = substitution != null &&
+                                            substitution.TryGetValue(key: expectedReturn.Name,
+                                                value: out string? substRetName)
+                    ? substRetName
+                    : expectedReturn.Name;
+                if (actualReturn.Name != expectedReturnName)
+                {
+                    ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                        message:
+                        $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{expectedReturnName}'.",
+                        location: location);
+                }
             }
         }
     }

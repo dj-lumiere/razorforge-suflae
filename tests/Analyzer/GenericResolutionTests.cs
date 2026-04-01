@@ -1,4 +1,5 @@
 using SemanticAnalysis.Results;
+using SyntaxTree;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -225,6 +226,119 @@ public class GenericResolutionTests
 
     #endregion
 
+    #region P1 — ResolvedRoutine stored for member calls
+
+    [Fact]
+    public void Analyze_MemberCallOnGenericResolution_StoresResolvedRoutine()
+    {
+        // P1: Member call on a generic resolution should store ResolvedRoutine with substituted types
+        string source = """
+                        record Pair[T]
+                          first: T
+                          second: T
+
+                        routine Pair[T].swap_first(value: T) -> T
+                          return me.first
+
+                        routine test()
+                          var p = Pair[S32](first: 1, second: 2)
+                          var old = p.swap_first(value: 3)
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticAnalysis.SemanticAnalyzer(
+            language: SemanticAnalysis.Enums.Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+        Assert.Empty(collection: result.Errors);
+
+        // Find the 'test' routine, get its body, find the call to swap_first
+        var testRoutine = program.Declarations.OfType<RoutineDeclaration>()
+                                 .First(predicate: r => r.Name == "test");
+        var body = (BlockStatement)testRoutine.Body;
+        // Statement 1 (index 1): var old = p.swap_first(value: 3)
+        var declStmt = (DeclarationStatement)body.Statements[index: 1];
+        var varDecl = (VariableDeclaration)declStmt.Declaration;
+        var call = (CallExpression)varDecl.Initializer!;
+
+        Assert.NotNull(@object: call.ResolvedRoutine);
+        Assert.Equal(expected: "swap_first", actual: call.ResolvedRoutine!.Name);
+        // Return type should be substituted: T → S32
+        Assert.NotNull(@object: call.ResolvedRoutine.ReturnType);
+        Assert.Equal(expected: "S32", actual: call.ResolvedRoutine.ReturnType!.Name);
+    }
+
+    [Fact]
+    public void Analyze_VoidMemberCallOnGenericResolution_StoresResolvedRoutine()
+    {
+        // P1: Void method on generic resolution should still store ResolvedRoutine
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        routine Box[T].clear()
+                          return
+
+                        routine test()
+                          var b = Box[S32](value: 42)
+                          b.clear()
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticAnalysis.SemanticAnalyzer(
+            language: SemanticAnalysis.Enums.Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+        Assert.Empty(collection: result.Errors);
+
+        var testRoutine = program.Declarations.OfType<RoutineDeclaration>()
+                                 .First(predicate: r => r.Name == "test");
+        var body = (BlockStatement)testRoutine.Body;
+        // Statement 1 (index 1): b.clear()
+        var exprStmt = (ExpressionStatement)body.Statements[index: 1];
+        var call = (CallExpression)exprStmt.Expression;
+
+        Assert.NotNull(@object: call.ResolvedRoutine);
+        Assert.Equal(expected: "clear", actual: call.ResolvedRoutine!.Name);
+    }
+
+    [Fact]
+    public void Analyze_GenericMethodCall_StoresResolvedRoutine()
+    {
+        // P1: Generic method call (obj.method[U](args)) stores ResolvedRoutine
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        routine Box[T].convert[U](new_val: U) -> Box[U]
+                          return Box[U](value: new_val)
+
+                        routine test()
+                          var b = Box[S32](value: 42)
+                          var c = b.convert[Bool](true)
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticAnalysis.SemanticAnalyzer(
+            language: SemanticAnalysis.Enums.Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+        Assert.Empty(collection: result.Errors);
+
+        var testRoutine = program.Declarations.OfType<RoutineDeclaration>()
+                                 .First(predicate: r => r.Name == "test");
+        var body = (BlockStatement)testRoutine.Body;
+        // Statement 1 (index 1): var c = b.convert[Bool](true)
+        var declStmt = (DeclarationStatement)body.Statements[index: 1];
+        var varDecl = (VariableDeclaration)declStmt.Declaration;
+        var generic = (GenericMethodCallExpression)varDecl.Initializer!;
+
+        Assert.NotNull(@object: generic.ResolvedRoutine);
+        Assert.Equal(expected: "convert", actual: generic.ResolvedRoutine!.Name);
+    }
+
+    #endregion
+
     #region P2 — GenericDefinition preserved after type updates
     /// <summary>
     /// Tests Analyze_GenericRecord_PreservesDefinitionAfterMemberUpdate.
@@ -269,6 +383,166 @@ public class GenericResolutionTests
                         routine test()
                           var n = Node[Bool](value: true)
                           var v: Bool = n.get_value()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region P1 — Protocol method lookup on instantiated generic protocols
+
+    [Fact]
+    public void Analyze_GenericProtocolMethod_SubstitutesReturnType()
+    {
+        // P1: Calling a protocol method on a type that obeys a generic protocol
+        // should substitute T in the return type
+        string source = """
+                        protocol Supplier[T]
+                          @readonly
+                          routine Me.supply() -> T
+
+                        record IntSupplier obeys Supplier[S32]
+                          value: S32
+
+                        @readonly
+                        routine IntSupplier.supply() -> S32
+                          return me.value
+
+                        routine test()
+                          var s = IntSupplier(value: 42)
+                          var v: S32 = s.supply()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_GenericProtocolMethod_SubstitutesParamType()
+    {
+        // P1: Protocol method with generic parameter type should substitute correctly
+        string source = """
+                        protocol Acceptor[T]
+                          routine Me.accept(item: T) -> Blank
+
+                        record S32Acceptor obeys Acceptor[S32]
+                          count: S32
+
+                        routine S32Acceptor.accept(item: S32) -> Blank
+                          return
+
+                        routine test()
+                          var a = S32Acceptor(count: 0)
+                          a.accept(item: 42)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_GenericProtocol_MultiParam_SubstitutesCorrectly()
+    {
+        // P1: Generic protocol with multiple type parameters — both K and V
+        // should be substituted in method signatures
+        string source = """
+                        protocol Mapper[K, V]
+                          @readonly
+                          routine Me.map_value(key: K) -> V
+
+                        record IntToBoMapper obeys Mapper[S32, Bool]
+                          flag: Bool
+
+                        @readonly
+                        routine IntToBoMapper.map_value(key: S32) -> Bool
+                          return me.flag
+
+                        routine test()
+                          var m = IntToBoMapper(flag: true)
+                          var v: Bool = m.map_value(key: 1)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region P4 — Routine body matching by resolved signature
+
+    [Fact]
+    public void Analyze_OverloadedRoutines_DifferentGenericParams_MatchCorrectBodies()
+    {
+        // P4: Two overloads with different generic parameter types
+        // must each match their own body via resolved RegistryKey
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        routine process(item: Box[S32]) -> S32
+                          return item.value
+
+                        routine process(item: Box[Bool]) -> Bool
+                          return item.value
+
+                        routine test()
+                          var a = Box[S32](value: 42)
+                          var b = Box[Bool](value: true)
+                          var x: S32 = process(item: a)
+                          var y: Bool = process(item: b)
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_ExtensionRoutine_GenericOwner_MatchesBody()
+    {
+        // P4: Extension-syntax routine with generic owner resolves its body
+        string source = """
+                        record Wrapper[T]
+                          inner: T
+
+                        routine Wrapper[T].get_inner() -> T
+                          return me.inner
+
+                        routine test()
+                          var w = Wrapper[S32](inner: 10)
+                          var v: S32 = w.get_inner()
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_OverloadedRoutines_PlainVsGenericParam_MatchCorrectBodies()
+    {
+        // P4: Overloads where one takes a plain type and another takes a generic resolution
+        string source = """
+                        record Pair[T]
+                          first: T
+                          second: T
+
+                        routine describe(item: S32) -> S32
+                          return item
+
+                        routine describe(item: Pair[S32]) -> S32
+                          return item.first
+
+                        routine test()
+                          var p = Pair[S32](first: 1, second: 2)
+                          var a: S32 = describe(item: 5)
+                          var b: S32 = describe(item: p)
                           return
                         """;
 

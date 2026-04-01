@@ -262,6 +262,10 @@ public sealed partial class SemanticAnalyzer
             return;
         }
 
+        // Set current type context so generic parameters (T, U, etc.) are recognized
+        TypeSymbol? previousType = _currentType;
+        _currentType = protocolInfo;
+
         // Resolve parent protocols (protocol X obeys Y, Z)
         var parentProtocols = new List<ProtocolTypeInfo>();
         foreach (TypeExpression parentExpr in protocol.ParentProtocols)
@@ -374,6 +378,8 @@ public sealed partial class SemanticAnalyzer
 
         // Replace the protocol in the registry
         _registry.UpdateType(oldType: protocolInfo, newType: updatedProtocol);
+
+        _currentType = previousType;
     }
 
     private void ResolveVariantBody(VariantDeclaration variant)

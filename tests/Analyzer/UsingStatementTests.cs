@@ -28,13 +28,12 @@ public class UsingStatementTests
 
                         routine test(p: Point)
                           using p.view() as v
-                            show(v.x)
+                            var a: S32 = v.x
                           return
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion
@@ -61,13 +60,12 @@ public class UsingStatementTests
                         routine test()
                           var lk = Lock(id: 1)
                           using lk as l
-                            show(l.id)
+                            var a: S32 = l.id
                           return
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion
@@ -85,8 +83,8 @@ public class UsingStatementTests
                         record Handle
                           fd: S32
 
-                        record Connection
-                          name: Text
+                        entity Connection
+                          tag: S32
 
                         routine Connection.$enter() -> Handle
                           return Handle(fd: 1)
@@ -95,16 +93,15 @@ public class UsingStatementTests
                           return
 
                         routine test()
-                          var conn = Connection(name: "db")
+                          var conn = Connection(tag: 1)
                           using conn as h
-                            show(h.fd)
+                            var a: S32 = h.fd
                           return
                         """;
 
         AnalysisResult result = Analyze(source: source);
         // h should be typed as Handle (from $enter return), so h.fd should resolve
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion
@@ -125,7 +122,7 @@ public class UsingStatementTests
                         routine test()
                           var r = PlainResource(value: 42)
                           using r as res
-                            show(res.value)
+                            var a: S32 = res.value
                           return
                         """;
 
@@ -151,13 +148,47 @@ public class UsingStatementTests
                         routine test()
                           var r = HalfResource(value: 42)
                           using r as res
-                            show(res.value)
+                            var a: S32 = res.value
                           return
                         """;
 
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+    }
+
+    #endregion
+
+    #region Generic Using
+
+    [Fact]
+    public void Analyze_GenericUsing_BindsViewedType()
+    {
+        // using on a generic resolution type (e.g., Container[Point].$enter)
+        // should bind the inner type and allow member access
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+
+                        entity Container[T]
+                          item: T
+
+                        routine Container[T].$enter() -> T
+                          return me.item
+
+                        routine Container[T].$exit()
+                          return
+
+                        routine test()
+                          var c = Container[Point](item: Point(x: 1, y: 2))
+                          using c as p
+                            var a: S32 = p.x
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion
