@@ -98,6 +98,14 @@ public sealed partial class SemanticAnalyzer
 
         // Look up by RegistryKey (BaseName + param types) for overload disambiguation,
         // then fall back to BaseName for the first-overload-wins entry.
+        // Set up generic parameter context so ResolveType recognizes T, U, etc.
+        // (mirrors Phase 2.5 registration in Signatures.cs)
+        RoutineInfo? prevRoutine = _currentRoutine;
+        _currentRoutine = new RoutineInfo(name: baseName)
+        {
+            GenericParameters = routine.GenericParameters
+        };
+
         RoutineInfo? routineInfo = null;
         if (routine.Parameters.Count > 0)
         {
@@ -109,11 +117,13 @@ public sealed partial class SemanticAnalyzer
                                                                  return "";
                                                              }
 
-                                                             TypeSymbol? resolved =
-                                                                 LookupTypeWithImports(
-                                                                     name: p.Type.Name);
-                                                             return resolved?.Name ??
-                                                                 p.Type.Name ?? "";
+                                                             TypeSymbol resolved =
+                                                                 ResolveType(
+                                                                     typeExpr: p.Type);
+                                                             return resolved is
+                                                                 ErrorTypeInfo
+                                                                 ? (p.Type.Name ?? "")
+                                                                 : resolved.Name;
                                                          })
                                                         .Where(predicate: n =>
                                                              !string.IsNullOrEmpty(value: n));
@@ -121,6 +131,8 @@ public sealed partial class SemanticAnalyzer
                 $"{baseName}#{string.Join(separator: ",", values: paramTypeNames)}";
             routineInfo = _registry.LookupRoutine(fullName: registryKey);
         }
+
+        _currentRoutine = prevRoutine;
 
         routineInfo ??= _registry.LookupRoutine(fullName: baseName);
         if (routineInfo == null)
