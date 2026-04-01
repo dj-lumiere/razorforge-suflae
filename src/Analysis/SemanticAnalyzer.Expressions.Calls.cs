@@ -532,6 +532,9 @@ public sealed partial class SemanticAnalyzer
                     location: call.Location,
                     callObjectType: objectType);
 
+                // P1: Store fully resolved RoutineInfo (with owner-level generic substitution)
+                call.ResolvedRoutine = method;
+
                 // C29: Dispatch inference for varargs calls
                 call.ResolvedDispatch = InferDispatchStrategy(routine: method, call: call);
                 if (call.ResolvedDispatch == DispatchStrategy.Runtime &&

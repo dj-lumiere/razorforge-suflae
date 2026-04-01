@@ -149,7 +149,8 @@ public partial class LLVMCodeGenerator
             // Determine if this is a method call (callee is MemberExpression) or standalone function call
             MemberExpression member => EmitMethodCall(sb: sb,
                 member: member,
-                arguments: call.Arguments),
+                arguments: call.Arguments,
+                resolvedRoutine: call.ResolvedRoutine),
             IdentifierExpression id => EmitFunctionCall(sb: sb,
                 functionName: id.Name,
                 arguments: call.Arguments,

@@ -827,6 +827,12 @@ public record GenericMethodCallExpression(
     /// Codegen should emit $create() + repeated add/add_last calls instead of a normal type constructor.
     /// </summary>
     public bool IsCollectionLiteral { get; set; }
+
+    /// <summary>
+    /// The fully resolved RoutineInfo from semantic analysis (with owner-level and method-level
+    /// generic substitution applied). Set for generic method calls on objects (e.g., obj.method[U](args)).
+    /// </summary>
+    public SemanticAnalysis.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
 }
 
 /// <summary>

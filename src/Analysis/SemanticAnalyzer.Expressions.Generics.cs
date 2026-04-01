@@ -117,6 +117,9 @@ public sealed partial class SemanticAnalyzer
             ValidateExclusiveTokenUniqueness(arguments: generic.Arguments,
                 location: generic.Location);
 
+            // P1: Store fully resolved RoutineInfo for generic method calls
+            generic.ResolvedRoutine = method;
+
             if (method.ReturnType == null)
             {
                 return _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
@@ -174,14 +177,7 @@ public sealed partial class SemanticAnalyzer
 
                     if (anySubstituted)
                     {
-                        string baseName = returnType.Name;
-                        int bracketIdx = baseName.IndexOf(value: '[');
-                        if (bracketIdx > 0)
-                        {
-                            baseName = baseName[..bracketIdx];
-                        }
-
-                        TypeInfo? genericDef = _registry.LookupType(name: baseName);
+                        TypeInfo? genericDef = GetGenericDefinition(resolution: returnType);
                         if (genericDef != null)
                         {
                             return _registry.GetOrCreateResolution(genericDef: genericDef,
@@ -251,14 +247,7 @@ public sealed partial class SemanticAnalyzer
 
                     if (anySubstituted)
                     {
-                        string baseName = returnType.Name;
-                        int bracketIdx = baseName.IndexOf(value: '[');
-                        if (bracketIdx > 0)
-                        {
-                            baseName = baseName[..bracketIdx];
-                        }
-
-                        TypeInfo? genericDef = _registry.LookupType(name: baseName);
+                        TypeInfo? genericDef = GetGenericDefinition(resolution: returnType);
                         if (genericDef != null)
                         {
                             return _registry.GetOrCreateResolution(genericDef: genericDef,

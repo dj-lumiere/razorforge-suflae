@@ -474,7 +474,7 @@ public partial class LLVMCodeGenerator
     /// The object becomes the implicit 'me' parameter.
     /// </summary>
     private string EmitMethodCall(StringBuilder sb, MemberExpression member,
-        List<Expression> arguments)
+        List<Expression> arguments, RoutineInfo? resolvedRoutine = null)
     {
         // Intercept var_name() — inline the variable name from the receiver expression
         if (member.PropertyName == "var_name" && arguments.Count == 0)
@@ -516,13 +516,13 @@ public partial class LLVMCodeGenerator
                 message: "Cannot determine receiver type for method call");
         }
 
-        // Look up the method — try full name, then generic base name
+        // Look up the method — prefer resolved routine from semantic analysis (P1)
         // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
         string methodName = member.PropertyName.EndsWith(value: '!')
             ? member.PropertyName[..^1]
             : member.PropertyName;
         string methodFullName = $"{receiverType.Name}.{methodName}";
-        RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName);
+        RoutineInfo? method = resolvedRoutine ?? _registry.LookupRoutine(fullName: methodFullName);
         // Also try with '!' suffix — failable methods may be registered as "name!" (e.g., $getitem!)
         if (method == null && !member.PropertyName.EndsWith(value: '!'))
         {
