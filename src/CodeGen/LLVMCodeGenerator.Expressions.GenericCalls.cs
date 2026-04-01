@@ -346,25 +346,11 @@ public partial class LLVMCodeGenerator
         // Resolve the receiver type and look up the method
         TypeInfo? receiverType = GetExpressionType(expr: generic.Object);
 
-        // Try method lookup: "Type.MethodName" for methods, or standalone "MethodName"
-        string methodFullName = receiverType != null
-            ? $"{receiverType.Name}.{generic.MethodName}"
-            : generic.MethodName;
-
-        RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName) ??
-                              _registry.LookupRoutine(fullName: generic.MethodName);
-
-        // For generic type instances (e.g., Snatched[Point].obtain_as), try the generic base name
-        if (method == null && receiverType != null && GetGenericBaseName(type: receiverType) is
-                { } genBase)
-        {
-            method = _registry.LookupRoutine(fullName: $"{genBase}.{generic.MethodName}");
-        }
-
-        if (method == null && receiverType != null)
-        {
-            method = _registry.LookupMethod(type: receiverType, methodName: generic.MethodName);
-        }
+        // Try method lookup on receiver type, or standalone lookup for free functions
+        RoutineInfo? method = receiverType != null
+            ? _registry.LookupMethod(type: receiverType, methodName: generic.MethodName)
+            : null;
+        method ??= _registry.LookupRoutine(fullName: generic.MethodName);
 
         // If this is an LLVM intrinsic, emit directly as LLVM IR
         if (method is { CallingConvention: "llvm" })
@@ -901,24 +887,10 @@ public partial class LLVMCodeGenerator
 
         TypeInfo? receiverType = GetExpressionType(expr: generic.Object);
 
-        string methodFullName = receiverType != null
-            ? $"{receiverType.Name}.{generic.MethodName}"
-            : generic.MethodName;
-
-        RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName) ??
-                              _registry.LookupRoutine(fullName: generic.MethodName);
-
-        // For generic type instances, try the generic base name
-        if (method == null && receiverType != null && GetGenericBaseName(type: receiverType) is
-                { } genBase2)
-        {
-            method = _registry.LookupRoutine(fullName: $"{genBase2}.{generic.MethodName}");
-        }
-
-        if (method == null && receiverType != null)
-        {
-            method = _registry.LookupMethod(type: receiverType, methodName: generic.MethodName);
-        }
+        RoutineInfo? method = receiverType != null
+            ? _registry.LookupMethod(type: receiverType, methodName: generic.MethodName)
+            : null;
+        method ??= _registry.LookupRoutine(fullName: generic.MethodName);
 
         // Representable pattern: obj.TypeName[Args]() → type conversion returning the resolved generic type
         if (method == null)

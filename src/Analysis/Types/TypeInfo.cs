@@ -8,7 +8,7 @@ using SyntaxTree;
 /// </summary>
 public abstract class TypeInfo
 {
-    /// <summary>The name of the type (e.g., "s32", "List", "Point").</summary>
+    /// <summary>The name of the type (e.g., "S32", "List", "Point").</summary>
     public string Name { get; }
 
     /// <summary>The category of this type.</summary>

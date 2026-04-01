@@ -521,33 +521,8 @@ public partial class LLVMCodeGenerator
         string methodName = member.PropertyName.EndsWith(value: '!')
             ? member.PropertyName[..^1]
             : member.PropertyName;
-        string methodFullName = $"{receiverType.Name}.{methodName}";
-        RoutineInfo? method = resolvedRoutine ?? _registry.LookupRoutine(fullName: methodFullName);
-        // Also try with '!' suffix — failable methods may be registered as "name!" (e.g., $getitem!)
-        if (method == null && !member.PropertyName.EndsWith(value: '!'))
-        {
-            method = _registry.LookupRoutine(fullName: $"{receiverType.Name}.{methodName}!");
-        }
-
-        if (method == null && member.PropertyName.EndsWith(value: '!'))
-        {
-            method = _registry.LookupRoutine(
-                fullName: $"{receiverType.Name}.{member.PropertyName}");
-        }
-
-        // For generic type instances (e.g., List[Letter].count), try the generic base name
-        if (method == null && GetGenericBaseName(type: receiverType) is { } baseName)
-        {
-            method = _registry.LookupRoutine(fullName: $"{baseName}.{methodName}") ??
-                     _registry.LookupRoutine(fullName: $"{baseName}.{methodName}!");
-        }
-
-        // Fall back to LookupMethod which checks generic-parameter-owner methods (routine T.view())
-        if (method == null)
-        {
-            method = _registry.LookupMethod(type: receiverType, methodName: methodName) ??
-                     _registry.LookupMethod(type: receiverType, methodName: $"{methodName}!");
-        }
+        RoutineInfo? method = resolvedRoutine ??
+                              _registry.LookupMethod(type: receiverType, methodName: methodName);
 
         // Representable pattern: obj.Text() → Text.$create(from: obj)
         // When the method name matches a registered type and no direct method exists,

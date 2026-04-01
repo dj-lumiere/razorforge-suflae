@@ -213,6 +213,7 @@ public sealed partial class SemanticAnalyzer
             Visibility = routine.Visibility,
             Location = routine.Location,
             Module = pending.Module,
+            ModulePath = pending.Module?.Split('/'),
             Annotations = routine.Annotations,
             DeclaredModification = declaredModification,
             ModificationCategory = declaredModification,

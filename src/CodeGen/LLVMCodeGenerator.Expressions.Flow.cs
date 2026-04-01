@@ -59,26 +59,7 @@ public partial class LLVMCodeGenerator
         // If the type has a $getitem method, dispatch to it
         if (targetType != null)
         {
-            string methodFullName = $"{targetType.Name}.$getitem";
-            RoutineInfo? getItem = _registry.LookupRoutine(fullName: methodFullName) ??
-                                   _registry.LookupRoutine(
-                                       fullName: $"{targetType.Name}.$getitem!");
-
-            // For generic resolutions (e.g., List[S64]), also try the generic definition name
-            if (getItem == null && targetType.IsGenericResolution)
-            {
-                string? genDefName = targetType switch
-                {
-                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
-                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
-                    _ => null
-                };
-                if (genDefName != null)
-                {
-                    getItem = _registry.LookupRoutine(fullName: $"{genDefName}.$getitem") ??
-                              _registry.LookupRoutine(fullName: $"{genDefName}.$getitem!");
-                }
-            }
+            RoutineInfo? getItem = _registry.LookupMethod(type: targetType, methodName: "$getitem");
 
             if (getItem != null)
             {
@@ -196,8 +177,7 @@ public partial class LLVMCodeGenerator
             throw new InvalidOperationException(message: "Cannot determine type for slice target");
         }
 
-        string methodFullName = $"{targetType.Name}.$getslice";
-        RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName);
+        RoutineInfo? method = _registry.LookupMethod(type: targetType, methodName: "$getslice");
 
         var argValues = new List<string> { target, start, end };
         var argTypes = new List<string> { GetParameterLLVMType(type: targetType), "i64", "i64" };

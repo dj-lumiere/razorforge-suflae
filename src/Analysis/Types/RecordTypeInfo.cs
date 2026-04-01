@@ -72,6 +72,14 @@ public sealed class RecordTypeInfo : TypeInfo
         }
     }
 
+    /// <summary>RC wrapper base names that need retain-on-copy / release-on-drop.</summary>
+    private static readonly HashSet<string> RCWrapperBaseNames =
+        ["Retained", "Shared", "Tracked", "Marked"];
+
+    /// <summary>Whether this record has RC wrapper fields needing retain-on-copy / release-on-drop.</summary>
+    public bool HasRCFields => MemberVariables.Any(predicate: f =>
+        f.Type is WrapperTypeInfo w && RCWrapperBaseNames.Contains(item: w.Name));
+
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
     /// </summary>

@@ -324,6 +324,7 @@ public partial class LLVMCodeGenerator
         _localVarLLVMNames.Clear();
         _varNameCounts.Clear();
         _localEntityVars.Clear();
+        _localRCRecordVars.Clear();
         _currentBlock = "entry";
         _emitSlotAddr = null;
         _emitSlotType = null;
@@ -399,6 +400,7 @@ public partial class LLVMCodeGenerator
         }
 
         EmitUsingCleanup(sb: _functionDefinitions);
+        EmitRCRecordCleanup(sb: _functionDefinitions);
         EmitEntityCleanup(sb: _functionDefinitions, returnedVarName: null);
         EmitLine(sb: _functionDefinitions, line: "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)

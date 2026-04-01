@@ -193,11 +193,23 @@ public partial class LLVMCodeGenerator
             _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
         }
 
+        // Track record variables with RC wrapper fields for retain/release
+        if (varType is RecordTypeInfo { HasRCFields: true } rcRecord)
+        {
+            _localRCRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
+        }
+
         // Store initial value if present
         if (varDecl.Initializer != null)
         {
             string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
             EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
+
+            // Retain RC fields on initial copy
+            if (varType is RecordTypeInfo { HasRCFields: true } rcRecordInit)
+            {
+                EmitRCRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordInit);
+            }
         }
     }
 
@@ -248,6 +260,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a store to a local variable.
+    /// For RC record variables, releases old value's RC fields and retains new value's RC fields.
     /// </summary>
     private void EmitVariableAssignment(StringBuilder sb, string varName, string value)
     {
@@ -260,7 +273,21 @@ public partial class LLVMCodeGenerator
             ? unique
             : varName;
         string llvmType = GetLLVMType(type: varType);
-        EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr %{llvmName}.addr");
+        string varPtr = $"%{llvmName}.addr";
+
+        // Release old value's RC fields before overwrite
+        if (varType is RecordTypeInfo { HasRCFields: true } rcRecord)
+        {
+            EmitRCRecordRelease(sb: sb, llvmAddr: varPtr, recordType: rcRecord);
+        }
+
+        EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
+
+        // Retain new value's RC fields
+        if (varType is RecordTypeInfo { HasRCFields: true } rcRecordNew)
+        {
+            EmitRCRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordNew);
+        }
     }
 
     /// <summary>
@@ -475,26 +502,7 @@ public partial class LLVMCodeGenerator
             return null;
         }
 
-        RoutineInfo? setItem = _registry.LookupRoutine(fullName: $"{targetType.Name}.$setitem") ??
-                               _registry.LookupRoutine(fullName: $"{targetType.Name}.$setitem!");
-
-        // For generic resolutions (e.g., List[S64]), also try the generic definition name
-        if (setItem == null && targetType.IsGenericResolution)
-        {
-            string? genDefName = targetType switch
-            {
-                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
-                RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
-                _ => null
-            };
-            if (genDefName != null)
-            {
-                setItem = _registry.LookupRoutine(fullName: $"{genDefName}.$setitem") ??
-                          _registry.LookupRoutine(fullName: $"{genDefName}.$setitem!");
-            }
-        }
-
-        return setItem;
+        return _registry.LookupMethod(type: targetType, methodName: "$setitem");
     }
 
     #endregion
@@ -533,6 +541,7 @@ public partial class LLVMCodeGenerator
                     line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
 
                 EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
@@ -541,6 +550,7 @@ public partial class LLVMCodeGenerator
             {
                 // Failable void routine: return { i64 1, ptr null } (VALID, no payload)
                 EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 1, ptr null }");
@@ -548,6 +558,7 @@ public partial class LLVMCodeGenerator
             else
             {
                 EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: "  ret void");
@@ -573,6 +584,7 @@ public partial class LLVMCodeGenerator
                 ? id.Name
                 : null;
             EmitUsingCleanup(sb: sb);
+            EmitRCRecordCleanup(sb: sb);
             EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
 
             EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
@@ -822,13 +834,14 @@ public partial class LLVMCodeGenerator
         // Try to call crash_message() on the error to get the message Text
         string dataPtr = "null";
         string msgLen = "0";
-        string crashMethodName = $"{typeName}.crash_message";
-        RoutineInfo? crashMethod = _registry.LookupRoutine(fullName: crashMethodName);
-        if (crashMethod != null)
+        ResolvedMethod? resolvedCrash = errorType != null
+            ? ResolveMethod(receiverType: errorType, methodName: "crash_message")
+            : null;
+        if (resolvedCrash != null)
         {
             // Ensure crash_message is declared/defined
-            GenerateFunctionDeclaration(routine: crashMethod);
-            string mangledCrash = MangleFunctionName(routine: crashMethod);
+            GenerateFunctionDeclaration(routine: resolvedCrash.Routine);
+            string mangledCrash = resolvedCrash.MangledName;
 
             string llvmReceiverType = GetLLVMType(type: errorType!);
 
@@ -875,8 +888,9 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
         }
 
-        // Clean up active using scopes before crashing
+        // Clean up active scopes before crashing
         EmitUsingCleanup(sb: sb);
+        EmitRCRecordCleanup(sb: sb);
 
         // Call rf_crash — never returns
         EmitLine(sb: sb,
@@ -897,8 +911,9 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 0, 0");
         string v1 = NextTemp();
         EmitLine(sb: sb, line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr null, 1");
-        // Clean up active using scopes before returning absent
+        // Clean up active scopes before returning absent
         EmitUsingCleanup(sb: sb);
+        EmitRCRecordCleanup(sb: sb);
         EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
     }
 
@@ -912,6 +927,95 @@ public partial class LLVMCodeGenerator
         // this is equivalent to an expression statement — the value flows through
         // the block's last expression. Future: store to a when-result alloca and branch to merge.
         EmitExpression(sb: sb, expr: becomesStmt.Value);
+    }
+
+    #endregion
+
+    #region RC Record Cleanup
+
+    /// <summary>RC wrapper base names that require retain/release.</summary>
+    private static readonly HashSet<string> _rcWrapperBaseNames =
+        ["Retained", "Shared", "Tracked", "Marked"];
+
+    /// <summary>
+    /// Emits retain calls for all RC wrapper fields in a record.
+    /// Called when a record with RC fields is copied into a new variable.
+    /// </summary>
+    private void EmitRCRecordRetain(StringBuilder sb, string llvmAddr, RecordTypeInfo recordType)
+    {
+        string llvmType = GetLLVMType(type: recordType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
+
+        foreach (MemberVariableInfo field in recordType.MemberVariables)
+        {
+            if (field.Type is not WrapperTypeInfo w || !_rcWrapperBaseNames.Contains(item: w.Name))
+            {
+                continue;
+            }
+
+            string fieldVal = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
+
+            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: "retain");
+            if (retainMethod == null)
+            {
+                continue;
+            }
+
+            GenerateFunctionDeclaration(routine: retainMethod);
+            string mangled = MangleFunctionName(routine: retainMethod);
+            string fieldLlvm = GetParameterLLVMType(type: w);
+            EmitLine(sb: sb,
+                line: $"  {NextTemp()} = call {fieldLlvm} @{mangled}({fieldLlvm} {fieldVal})");
+        }
+    }
+
+    /// <summary>
+    /// Emits release calls for all RC wrapper fields in a record.
+    /// Called before overwriting a record variable or at scope exit.
+    /// </summary>
+    private void EmitRCRecordRelease(StringBuilder sb, string llvmAddr, RecordTypeInfo recordType)
+    {
+        string llvmType = GetLLVMType(type: recordType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
+
+        foreach (MemberVariableInfo field in recordType.MemberVariables)
+        {
+            if (field.Type is not WrapperTypeInfo w || !_rcWrapperBaseNames.Contains(item: w.Name))
+            {
+                continue;
+            }
+
+            string fieldVal = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
+
+            RoutineInfo? releaseMethod = _registry.LookupMethod(type: w, methodName: "release");
+            if (releaseMethod == null)
+            {
+                continue;
+            }
+
+            GenerateFunctionDeclaration(routine: releaseMethod);
+            string mangled = MangleFunctionName(routine: releaseMethod);
+            string fieldLlvm = GetParameterLLVMType(type: w);
+            EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
+        }
+    }
+
+    /// <summary>
+    /// Emits release calls for all tracked RC record variables at scope exit.
+    /// Called at return, throw, absent — after EmitUsingCleanup, before EmitEntityCleanup.
+    /// </summary>
+    private void EmitRCRecordCleanup(StringBuilder sb)
+    {
+        foreach ((string _, string llvmAddr, RecordTypeInfo recordType) in _localRCRecordVars)
+        {
+            EmitRCRecordRelease(sb: sb, llvmAddr: llvmAddr, recordType: recordType);
+        }
     }
 
     #endregion

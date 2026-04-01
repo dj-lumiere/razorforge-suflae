@@ -585,16 +585,14 @@ public partial class LLVMCodeGenerator
                 message: "Cannot determine collection type for 'in'/'notin' operator");
         }
 
-        string methodFullName = $"{collectionType.Name}.{methodName}";
-        RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName);
-        // For generic type instances (e.g., Set[S64]), try the generic base name
-        if (method == null && GetGenericBaseName(type: collectionType) is { } colBaseName)
-        {
-            method = _registry.LookupRoutine(fullName: $"{colBaseName}.{methodName}");
-        }
+        ResolvedMethod? resolved = ResolveMethod(receiverType: collectionType, methodName: methodName);
+        string mangledName = resolved?.MangledName
+            ?? Q(name: $"{collectionType.FullName}.{SanitizeLLVMName(name: methodName)}");
 
-        // Fall back to LookupMethod which handles module-qualified and protocol lookups
-        method ??= _registry.LookupMethod(type: collectionType, methodName: methodName);
+        if (resolved != null)
+        {
+            GenerateFunctionDeclaration(routine: resolved.Routine);
+        }
 
         var argValues = new List<string> { collection, element };
         var argTypes = new List<string> { GetParameterLLVMType(type: collectionType) };
@@ -603,28 +601,6 @@ public partial class LLVMCodeGenerator
         argTypes.Add(item: elemType != null
             ? GetLLVMType(type: elemType)
             : "i64");
-
-        string mangledName;
-        if (method != null && collectionType.IsGenericResolution && method.OwnerType != null &&
-            method.OwnerType.IsGenericDefinition)
-        {
-            mangledName =
-                Q(name: $"{collectionType.FullName}.{SanitizeLLVMName(name: method.Name)}");
-            RecordMonomorphization(mangledName: mangledName,
-                genericMethod: method,
-                resolvedOwnerType: collectionType);
-        }
-        else
-        {
-            mangledName = method != null
-                ? MangleFunctionName(routine: method)
-                : Q(name: $"{collectionType.FullName}.{SanitizeLLVMName(name: methodName)}");
-        }
-
-        if (method != null)
-        {
-            GenerateFunctionDeclaration(routine: method);
-        }
 
         string result = NextTemp();
         string args = BuildCallArgs(types: argTypes, values: argValues);
@@ -753,20 +729,16 @@ public partial class LLVMCodeGenerator
                 message: $"Cannot determine operand type for unary operator '{unary.Operator}'");
         }
 
-        string methodFullName = $"{operandType.Name}.{methodName}";
-        RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName);
+        ResolvedMethod? resolved = ResolveMethod(receiverType: operandType, methodName: methodName);
+        string mangledName = resolved?.MangledName
+            ?? Q(name: $"{operandType.Name}.{SanitizeLLVMName(name: methodName)}");
 
-        // Build call: receiver (me) is the only argument
+        string returnType = resolved?.Routine.ReturnType != null
+            ? GetLLVMType(type: resolved.Routine.ReturnType)
+            : GetLLVMType(type: operandType);
+
         var argValues = new List<string> { operand };
         var argTypes = new List<string> { GetParameterLLVMType(type: operandType) };
-
-        string mangledName = method != null
-            ? MangleFunctionName(routine: method)
-            : Q(name: $"{operandType.Name}.{SanitizeLLVMName(name: methodName)}");
-
-        string returnType = method?.ReturnType != null
-            ? GetLLVMType(type: method.ReturnType)
-            : GetLLVMType(type: operandType);
 
         string result = NextTemp();
         string args = BuildCallArgs(types: argTypes, values: argValues);

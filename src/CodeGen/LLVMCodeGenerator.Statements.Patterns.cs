@@ -250,7 +250,10 @@ public partial class LLVMCodeGenerator
         if (isText)
         {
             // Text comparison via Text.$eq(me, other) -> Bool (i1)
-            RoutineInfo? textEq = _registry.LookupRoutine(fullName: "Text.$eq");
+            TypeInfo? textType = _registry.LookupType(name: "Text");
+            RoutineInfo? textEq = textType != null
+                ? _registry.LookupMethod(type: textType, methodName: "$eq")
+                : null;
             string eqFuncName = textEq != null
                 ? MangleFunctionName(routine: textEq)
                 : "Text$_eq";

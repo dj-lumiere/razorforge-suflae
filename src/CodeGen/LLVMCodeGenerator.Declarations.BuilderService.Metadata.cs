@@ -933,7 +933,10 @@ public partial class LLVMCodeGenerator
         else
         {
             // Ensure Text.$eq is available for string comparison
-            RoutineInfo? textEq = _registry.LookupRoutine(fullName: "Text.$eq");
+            TypeInfo? textType = _registry.LookupType(name: "Text");
+            RoutineInfo? textEq = textType != null
+                ? _registry.LookupMethod(type: textType, methodName: "$eq")
+                : null;
             string eqFuncName = textEq != null
                 ? MangleFunctionName(routine: textEq)
                 : "Text$_eq";

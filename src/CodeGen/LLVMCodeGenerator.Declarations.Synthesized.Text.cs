@@ -579,7 +579,7 @@ public partial class LLVMCodeGenerator
         {
             // Call T.$diagnose() directly
             RoutineInfo? diagRoutine =
-                _registry.LookupRoutine(fullName: $"{fieldType.FullName}.$diagnose");
+                _registry.LookupMethod(type: fieldType, methodName: "$diagnose");
             if (diagRoutine != null)
             {
                 GenerateFunctionDeclaration(routine: diagRoutine);

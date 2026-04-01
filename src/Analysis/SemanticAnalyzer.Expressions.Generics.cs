@@ -20,13 +20,6 @@ public sealed partial class SemanticAnalyzer
             typeArgs.Add(item: ResolveType(typeExpr: typeArg));
         }
 
-        // #19: Track lock policy from lock![Policy]() on entities
-        if (generic.MethodName == "lock" && generic.IsMemoryOperation && typeArgs.Count > 0 &&
-            generic.Object is IdentifierExpression lockTarget)
-        {
-            _variableLockPolicies[key: lockTarget.Name] = typeArgs[index: 0].Name;
-        }
-
         // #19: Track lock policy from share[Policy]() on entities — stored temporarily
         // on the source variable; propagated to the declared variable in AnalyzeVariableDeclaration
         if (generic.MethodName == "share" && typeArgs.Count > 0 &&
@@ -47,6 +40,7 @@ public sealed partial class SemanticAnalyzer
 
             // Build expected element type from explicit generic type args
             TypeSymbol? expectedElemType = null;
+            // TODO: This seems hack
             bool isMapType = typeId.Name is "Dict" or "SortedDict" or "PriorityQueue";
             if (isMapType && typeArgs.Count >= 2)
             {
@@ -72,6 +66,7 @@ public sealed partial class SemanticAnalyzer
                 generic.IsCollectionLiteral = true;
 
                 // ValueList[T, N] / ValueBitList[N] — argument count must match N
+                // TODO: This is also hack
                 if (typeId.Name == "ValueList" && typeArgs.Count >= 2)
                 {
                     // N is the second type arg (a numeric constant type)
@@ -85,6 +80,7 @@ public sealed partial class SemanticAnalyzer
                             location: generic.Location);
                     }
                 }
+                // TODO: This is also hack
                 else if (typeId.Name == "ValueBitList" && typeArgs.Count >= 1)
                 {
                     string nStr = typeArgs[index: 0].Name;
@@ -314,8 +310,7 @@ public sealed partial class SemanticAnalyzer
 
                 // If the member type has a $getitem method, use its return type
                 RoutineInfo? getItem =
-                    _registry.LookupMethod(type: memberType, methodName: "$getitem") ??
-                    _registry.LookupMethod(type: memberType, methodName: "$getitem!");
+                    _registry.LookupMethod(type: memberType, methodName: "$getitem");
                 if (getItem?.ReturnType != null)
                 {
                     return getItem.ReturnType;

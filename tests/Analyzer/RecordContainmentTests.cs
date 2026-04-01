@@ -106,6 +106,69 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
+    [Fact]
+    public void Analyze_RecordWithRetainedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record Handle
+                          ref: Retained[Node]
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    [Fact]
+    public void Analyze_RecordWithSharedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record Handle
+                          ref: Shared[Node]
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    [Fact]
+    public void Analyze_RecordWithSnatchedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record RawHandle
+                          ptr: Snatched[Node]
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    [Fact]
+    public void Analyze_NestedRecordWithRetainedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record Inner
+                          ref: Retained[Node]
+                        record Outer
+                          inner: Inner
+                          count: S32
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
     #endregion
 
     #region Invalid Record MemberVariables (errors expected)
@@ -146,6 +209,40 @@ public class RecordContainmentTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
                          && e.Message.Contains("value type"));
+    }
+
+    [Fact]
+    public void Analyze_RecordWithViewedField_ReportsError()
+    {
+        // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
+        string source = """
+                        entity Node
+                          value: S32
+                        record BadRecord
+                          view: Viewed[Node]
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
+                         && e.Message.Contains("view"));
+    }
+
+    [Fact]
+    public void Analyze_RecordWithHijackedField_ReportsError()
+    {
+        // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
+        string source = """
+                        entity Node
+                          value: S32
+                        record BadRecord
+                          hijacked: Hijacked[Node]
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
+                         && e.Message.Contains("hijacked"));
     }
 
     #endregion

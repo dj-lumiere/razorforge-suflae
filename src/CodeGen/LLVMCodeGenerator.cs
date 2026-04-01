@@ -82,6 +82,10 @@ public partial class LLVMCodeGenerator
     /// <summary>List of local entity variables (name, LLVM addr name) for auto-cleanup.</summary>
     private readonly List<(string Name, string LLVMAddr)> _localEntityVars = new();
 
+    /// <summary>List of local record variables with RC wrapper fields for retain/release.</summary>
+    private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
+        _localRCRecordVars = new();
+
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedFunctionDefs = [];
 
@@ -116,6 +120,17 @@ public partial class LLVMCodeGenerator
         Dictionary<string, TypeInfo> TypeSubstitutions,
         string GenericAstName,
         Dictionary<string, TypeInfo>? MethodTypeSubstitutions = null);
+
+    /// <summary>Bundles a method lookup result with fully-resolved context for codegen emission.</summary>
+    private record ResolvedMethod(
+        RoutineInfo Routine,
+        TypeInfo OwnerType,
+        bool IsFailable,
+        IReadOnlyList<string>? ModulePath,
+        string MangledName,
+        bool IsMonomorphized,
+        Dictionary<string, TypeInfo>? MethodTypeArgs
+    );
 
     /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
     private readonly int _pointerBitWidth;
@@ -845,6 +860,84 @@ public partial class LLVMCodeGenerator
                     inferred: inferred);
             }
         }
+    }
+
+    /// <summary>
+    /// Looks up a method on a type and returns a fully-resolved bundle for codegen.
+    /// Handles mangling, monomorphization recording, and method-level generic inference.
+    /// </summary>
+    private ResolvedMethod? ResolveMethod(TypeInfo receiverType, string methodName,
+        IReadOnlyList<TypeInfo>? methodTypeArgs = null,
+        IReadOnlyList<TypeInfo>? argTypes = null)
+    {
+        RoutineInfo? method = _registry.LookupMethod(type: receiverType, methodName: methodName);
+        if (method == null) return null;
+
+        string mangledName;
+        bool isMonomorphized = false;
+        Dictionary<string, TypeInfo>? resolvedMethodTypeArgs = null;
+
+        // Infer method-level type args if not explicit
+        if (methodTypeArgs != null && methodTypeArgs.Count > 0)
+        {
+            resolvedMethodTypeArgs = BuildMethodTypeArgDict(method: method, typeArgs: methodTypeArgs);
+        }
+        else if (argTypes != null && method.IsGenericDefinition)
+        {
+            resolvedMethodTypeArgs = InferMethodTypeArgs(genericMethod: method, argTypes: argTypes);
+        }
+
+        // Determine mangled name + monomorphization
+        bool ownerIsGenericResolution = receiverType.IsGenericResolution;
+        bool methodOwnerIsGenericDef = method.OwnerType is { IsGenericDefinition: true };
+        bool hasMethodTypeArgs = resolvedMethodTypeArgs is { Count: > 0 };
+
+        if (ownerIsGenericResolution && methodOwnerIsGenericDef || hasMethodTypeArgs)
+        {
+            mangledName = Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}");
+            RecordMonomorphization(mangledName: mangledName,
+                genericMethod: method,
+                resolvedOwnerType: receiverType,
+                methodTypeArgs: resolvedMethodTypeArgs);
+            isMonomorphized = true;
+        }
+        else
+        {
+            mangledName = MangleFunctionName(routine: method);
+        }
+
+        return new ResolvedMethod(
+            Routine: method,
+            OwnerType: receiverType,
+            IsFailable: method.IsFailable,
+            ModulePath: method.ModulePath,
+            MangledName: mangledName,
+            IsMonomorphized: isMonomorphized,
+            MethodTypeArgs: resolvedMethodTypeArgs
+        );
+    }
+
+    /// <summary>
+    /// Converts positional type arguments to a named dictionary keyed by method-level generic parameter names.
+    /// </summary>
+    private static Dictionary<string, TypeInfo>? BuildMethodTypeArgDict(
+        RoutineInfo method, IReadOnlyList<TypeInfo> typeArgs)
+    {
+        if (method.GenericParameters == null) return null;
+
+        var ownerParams = method.OwnerType?.GenericParameters?.ToHashSet() ?? [];
+        var methodParams = method.GenericParameters
+            .Where(predicate: gp => !ownerParams.Contains(item: gp))
+            .ToList();
+
+        if (methodParams.Count == 0 || typeArgs.Count == 0) return null;
+
+        var dict = new Dictionary<string, TypeInfo>();
+        for (int i = 0; i < methodParams.Count && i < typeArgs.Count; i++)
+        {
+            dict[key: methodParams[index: i]] = typeArgs[index: i];
+        }
+        return dict;
     }
 
     /// <summary>

@@ -223,8 +223,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Try $getitem on the member type
-        RoutineInfo? getItem = _registry.LookupRoutine(fullName: $"{memberType.Name}.$getitem") ??
-                               _registry.LookupRoutine(fullName: $"{memberType.Name}.$getitem!");
+        RoutineInfo? getItem = _registry.LookupMethod(type: memberType, methodName: "$getitem");
         return getItem?.ReturnType;
     }
 
@@ -239,15 +238,8 @@ public partial class LLVMCodeGenerator
             return null;
         }
 
-        // Try exact name, then with ! suffix, then generic base name
-        string typeName = targetType.Name;
-        RoutineInfo? getItem = _registry.LookupRoutine(fullName: $"{typeName}.$getitem") ??
-                               _registry.LookupRoutine(fullName: $"{typeName}.$getitem!");
-        if (getItem == null && GetGenericBaseName(type: targetType) is { } idxBaseName)
-        {
-            getItem = _registry.LookupRoutine(fullName: $"{idxBaseName}.$getitem") ??
-                      _registry.LookupRoutine(fullName: $"{idxBaseName}.$getitem!");
-        }
+        // Look up $getitem on the target type (handles generics and protocols automatically)
+        RoutineInfo? getItem = _registry.LookupMethod(type: targetType, methodName: "$getitem");
 
         if (getItem?.ReturnType == null)
         {
@@ -296,22 +288,8 @@ public partial class LLVMCodeGenerator
                 TypeInfo? receiverType = GetExpressionType(expr: member.Object);
                 if (receiverType != null)
                 {
-                    string methodFullName = $"{receiverType.Name}.{member.PropertyName}";
-                    RoutineInfo? method = _registry.LookupRoutine(fullName: methodFullName);
-                    // For generic resolutions (e.g., Snatched[Letter].offset), try base name
-                    if (method == null && GetGenericBaseName(type: receiverType) is
-                            { } propBaseName)
-                    {
-                        method = _registry.LookupRoutine(
-                            fullName: $"{propBaseName}.{member.PropertyName}");
-                    }
-
-                    // Fallback: LookupMethod handles generic-param-owner methods (e.g., T.get_address)
-                    if (method == null)
-                    {
-                        method = _registry.LookupMethod(type: receiverType,
-                            methodName: member.PropertyName);
-                    }
+                    RoutineInfo? method = _registry.LookupMethod(type: receiverType,
+                        methodName: member.PropertyName);
 
                     if (method?.ReturnType != null)
                     {
@@ -490,7 +468,7 @@ public partial class LLVMCodeGenerator
                 if (calledType != null)
                 {
                     RoutineInfo? creator =
-                        _registry.LookupRoutine(fullName: $"{calledType.Name}.$create");
+                        _registry.LookupMethod(type: calledType, methodName: "$create");
                     return creator?.ReturnType ?? calledType;
                 }
 

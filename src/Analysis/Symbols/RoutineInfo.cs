@@ -155,6 +155,9 @@ public sealed class RoutineInfo
     /// <summary>The module this routine belongs to.</summary>
     public string? Module { get; init; }
 
+    /// <summary>Module path segments (e.g., ["Core", "Memory", "Wrapper"]).</summary>
+    public IReadOnlyList<string>? ModulePath { get; init; }
+
     /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
     public IReadOnlyList<string> Annotations { get; init; } = [];
 
@@ -296,6 +299,7 @@ public sealed class RoutineInfo
             Visibility = Visibility,
             Location = Location,
             Module = Module,
+            ModulePath = ModulePath,
             Annotations = Annotations,
             CallingConvention = CallingConvention,
             IsVariadic = IsVariadic,

@@ -217,6 +217,19 @@ public sealed partial class SemanticAnalyzer
     ];
 
     /// <summary>
+    /// RC handles + Snatched: allowed as record member variable types.
+    /// Scoped tokens (Viewed, Hijacked, Inspected, Seized) remain banned.
+    /// </summary>
+    private static readonly HashSet<string> StorableWrapperTypes =
+    [
+        "Snatched", // Unmanaged raw pointer handle
+        "Retained", // Reference-counted handle
+        "Shared", // Reference-counted multi-threaded handle
+        "Tracked", // Weak reference handle
+        "Marked" // Weak reference multi-threaded handle
+    ];
+
+    /// <summary>
     /// Token types that require uniqueness validation (cannot be passed twice in same call).
     /// </summary>
     private static readonly HashSet<string> ExclusiveTokenTypes =

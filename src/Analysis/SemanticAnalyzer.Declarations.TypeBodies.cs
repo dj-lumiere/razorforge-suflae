@@ -132,18 +132,19 @@ public sealed partial class SemanticAnalyzer
                     ? ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                // Records can only contain value types + Snatched<T>
-                // Entities, wrappers (Shared, Marked, Viewed, etc.), and reference tuples are not allowed
-                if (memberVariableType is TypeInfo fieldTypeInfo &&
-                    fieldTypeInfo is not ErrorTypeInfo &&
-                    fieldTypeInfo is not GenericParameterTypeInfo &&
-                    !TypeRegistry.IsValueType(type: fieldTypeInfo) &&
-                    !(fieldTypeInfo is WrapperTypeInfo { Name: "Snatched" }))
+                // Records can only contain value types + storable wrappers (Snatched, Retained, Shared, Tracked, Marked)
+                // Scoped tokens (Viewed, Hijacked, Inspected, Seized), entities, and reference tuples are not allowed
+                if (memberVariableType != null &&
+                    memberVariableType is not ErrorTypeInfo &&
+                    memberVariableType is not GenericParameterTypeInfo &&
+                    !TypeRegistry.IsValueType(type: memberVariableType) &&
+                    !(memberVariableType is WrapperTypeInfo wrapper &&
+                      StorableWrapperTypes.Contains(item: GetBaseTypeName(typeName: wrapper.Name))))
                 {
                     ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
                         $"Record member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not a value type. " +
-                        "Records can only contain value types (records, choices, variants, value tuples) and Snatched[T].",
+                        "Records can only contain value types, Snatched[T], and RC wrappers (Retained, Shared, Tracked, Marked).",
                         location: memberVariable.Location);
                 }
 

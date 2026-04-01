@@ -109,41 +109,49 @@ public partial class LLVMCodeGenerator
         }
 
         string typeName = type?.Name ?? "Data";
-        string representName = $"{typeName}.$represent";
-        RoutineInfo? representMethod = _registry.LookupRoutine(fullName: representName);
-        // For generic resolutions (e.g., ValueBitList[8]), try the generic base name
-        if (representMethod == null && type != null &&
-            GetGenericBaseName(type: type) is { } repBaseName)
+        string mangledName;
+        RoutineInfo? representMethod = null;
+
+        if (type != null)
         {
-            representMethod = _registry.LookupRoutine(fullName: $"{repBaseName}.$represent");
+            ResolvedMethod? resolved = ResolveMethod(receiverType: type, methodName: "$represent");
+            if (resolved != null)
+            {
+                representMethod = resolved.Routine;
+                mangledName = resolved.MangledName;
+
+                // For monomorphized methods on generic definitions, use the resolved type name
+                if (representMethod.IsGenericDefinition && !resolved.IsMonomorphized &&
+                    typeName != representMethod.OwnerType?.Name)
+                {
+                    string module = representMethod.OwnerType?.Module ?? representMethod.Module ?? "";
+                    string prefix = module != "" ? $"{module}." : "";
+                    mangledName = Q(name: $"{prefix}{typeName}.$represent");
+                    if (type.IsGenericResolution)
+                    {
+                        RecordMonomorphization(mangledName: mangledName,
+                            genericMethod: representMethod,
+                            resolvedOwnerType: type);
+                    }
+                }
+
+                GenerateFunctionDeclaration(routine: representMethod);
+            }
+            else
+            {
+                mangledName = Q(name: $"{typeName}.$represent");
+            }
         }
-
-        if (representMethod != null)
+        else
         {
-            GenerateFunctionDeclaration(routine: representMethod);
-        }
-
-        string mangledName = representMethod != null
-            ? MangleFunctionName(routine: representMethod)
-            : Q(name: $"{typeName}.$represent");
-
-        // For monomorphized methods, use the resolved type name in the mangled function name
-        if (representMethod != null && representMethod.IsGenericDefinition &&
-            typeName != representMethod.OwnerType?.Name)
-        {
-            string module = representMethod.OwnerType?.Module ?? representMethod.Module ?? "";
-            string prefix = module != ""
-                ? $"{module}."
-                : "";
-            mangledName = Q(name: $"{prefix}{typeName}.$represent");
-        }
-
-        // Ensure the monomorphized body is compiled for generic types
-        if (type != null && representMethod != null && type.IsGenericResolution)
-        {
-            RecordMonomorphization(mangledName: mangledName,
-                genericMethod: representMethod,
-                resolvedOwnerType: type);
+            representMethod = _registry.LookupRoutine(fullName: $"{typeName}.$represent");
+            if (representMethod != null)
+            {
+                GenerateFunctionDeclaration(routine: representMethod);
+            }
+            mangledName = representMethod != null
+                ? MangleFunctionName(routine: representMethod)
+                : Q(name: $"{typeName}.$represent");
         }
 
         string argType = type != null
@@ -160,41 +168,49 @@ public partial class LLVMCodeGenerator
     private string EmitDiagnoseCall(StringBuilder sb, string value, TypeInfo? type)
     {
         string typeName = type?.Name ?? "Data";
-        string diagnoseName = $"{typeName}.$diagnose";
-        RoutineInfo? diagnoseMethod = _registry.LookupRoutine(fullName: diagnoseName);
-        // For generic resolutions (e.g., ValueBitList[8]), try the generic base name
-        if (diagnoseMethod == null && type != null &&
-            GetGenericBaseName(type: type) is { } diagBaseName)
+        string mangledName;
+        RoutineInfo? diagnoseMethod = null;
+
+        if (type != null)
         {
-            diagnoseMethod = _registry.LookupRoutine(fullName: $"{diagBaseName}.$diagnose");
+            ResolvedMethod? resolved = ResolveMethod(receiverType: type, methodName: "$diagnose");
+            if (resolved != null)
+            {
+                diagnoseMethod = resolved.Routine;
+                mangledName = resolved.MangledName;
+
+                // For monomorphized methods on generic definitions, use the resolved type name
+                if (diagnoseMethod.IsGenericDefinition && !resolved.IsMonomorphized &&
+                    typeName != diagnoseMethod.OwnerType?.Name)
+                {
+                    string module = diagnoseMethod.OwnerType?.Module ?? diagnoseMethod.Module ?? "";
+                    string prefix = module != "" ? $"{module}." : "";
+                    mangledName = Q(name: $"{prefix}{typeName}.$diagnose");
+                    if (type.IsGenericResolution)
+                    {
+                        RecordMonomorphization(mangledName: mangledName,
+                            genericMethod: diagnoseMethod,
+                            resolvedOwnerType: type);
+                    }
+                }
+
+                GenerateFunctionDeclaration(routine: diagnoseMethod);
+            }
+            else
+            {
+                mangledName = Q(name: $"{typeName}.$diagnose");
+            }
         }
-
-        if (diagnoseMethod != null)
+        else
         {
-            GenerateFunctionDeclaration(routine: diagnoseMethod);
-        }
-
-        string mangledName = diagnoseMethod != null
-            ? MangleFunctionName(routine: diagnoseMethod)
-            : Q(name: $"{typeName}.$diagnose");
-
-        // For monomorphized methods, use the resolved type name in the mangled function name
-        if (diagnoseMethod != null && diagnoseMethod.IsGenericDefinition &&
-            typeName != diagnoseMethod.OwnerType?.Name)
-        {
-            string module = diagnoseMethod.OwnerType?.Module ?? diagnoseMethod.Module ?? "";
-            string prefix = module != ""
-                ? $"{module}."
-                : "";
-            mangledName = Q(name: $"{prefix}{typeName}.$diagnose");
-        }
-
-        // Ensure the monomorphized body is compiled for generic types
-        if (type != null && diagnoseMethod != null && type.IsGenericResolution)
-        {
-            RecordMonomorphization(mangledName: mangledName,
-                genericMethod: diagnoseMethod,
-                resolvedOwnerType: type);
+            diagnoseMethod = _registry.LookupRoutine(fullName: $"{typeName}.$diagnose");
+            if (diagnoseMethod != null)
+            {
+                GenerateFunctionDeclaration(routine: diagnoseMethod);
+            }
+            mangledName = diagnoseMethod != null
+                ? MangleFunctionName(routine: diagnoseMethod)
+                : Q(name: $"{typeName}.$diagnose");
         }
 
         string argType = type != null

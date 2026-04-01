@@ -37,8 +37,9 @@ public partial class LLVMCodeGenerator
 
         // Allocate the list via constructor or rf_alloc
         // Try to find a $create or use a fallback allocation
-        string createName = $"{listTypeName}.$create";
-        RoutineInfo? createMethod = _registry.LookupRoutine(fullName: createName);
+        RoutineInfo? createMethod = listType != null
+            ? _registry.LookupMethod(type: listType, methodName: "$create")
+            : _registry.LookupRoutine(fullName: $"{listTypeName}.$create");
         string entityTypeName = listType is EntityTypeInfo eti
             ? GetEntityTypeName(entity: eti)
             : $"%\"Entity.{listTypeName}\"";
@@ -86,8 +87,9 @@ public partial class LLVMCodeGenerator
         }
 
         // Add each element via add_last or direct store
-        string addLastName = $"{listTypeName}.add_last";
-        RoutineInfo? addLastMethod = _registry.LookupRoutine(fullName: addLastName);
+        RoutineInfo? addLastMethod = listType != null
+            ? _registry.LookupMethod(type: listType, methodName: "add_last")
+            : _registry.LookupRoutine(fullName: $"{listTypeName}.add_last");
 
         if (addLastMethod != null)
         {
@@ -147,8 +149,9 @@ public partial class LLVMCodeGenerator
                 ? GetLLVMType(type: elemType)
                 : "i64";
 
-            string addName = $"{setTypeName}.add";
-            RoutineInfo? addMethod = _registry.LookupRoutine(fullName: addName);
+            RoutineInfo? addMethod = setType != null
+                ? _registry.LookupMethod(type: setType, methodName: "add")
+                : _registry.LookupRoutine(fullName: $"{setTypeName}.add");
             if (addMethod != null)
             {
                 string mangledAdd = MangleFunctionName(routine: addMethod);
@@ -183,8 +186,9 @@ public partial class LLVMCodeGenerator
                 ? GetLLVMType(type: valueType)
                 : "i64";
 
-            string addName = $"{dictTypeName}.add";
-            RoutineInfo? addMethod = _registry.LookupRoutine(fullName: addName);
+            RoutineInfo? addMethod = dictType != null
+                ? _registry.LookupMethod(type: dictType, methodName: "add")
+                : _registry.LookupRoutine(fullName: $"{dictTypeName}.add");
             if (addMethod != null)
             {
                 string mangledAdd = MangleFunctionName(routine: addMethod);
@@ -253,27 +257,14 @@ public partial class LLVMCodeGenerator
         string listPtr =
             EmitCollectionCreate(sb: sb, resolvedType: listType, typeName: listType.Name);
 
-        // Look up add_last on List generic definition
-        RoutineInfo? addLast = _registry.LookupRoutine(fullName: $"{listType.Name}.add_last") ??
-                               _registry.LookupRoutine(fullName: "List.add_last");
-        if (addLast == null)
+        // Look up add_last on List type (handles generic resolution automatically)
+        ResolvedMethod? resolvedAddLast = ResolveMethod(receiverType: listType, methodName: "add_last");
+        if (resolvedAddLast == null)
         {
             return;
         }
 
-        // Handle monomorphization
-        string mangledAdd;
-        if (listType.IsGenericResolution)
-        {
-            mangledAdd = Q(name: $"{listType.FullName}.add_last");
-            RecordMonomorphization(mangledName: mangledAdd,
-                genericMethod: addLast,
-                resolvedOwnerType: listType);
-        }
-        else
-        {
-            mangledAdd = MangleFunctionName(routine: addLast);
-        }
+        string mangledAdd = resolvedAddLast.MangledName;
 
         // Declare add_last if needed
         string elemLlvm = GetLLVMType(type: elemType);
@@ -348,52 +339,77 @@ public partial class LLVMCodeGenerator
             return "null";
         }
 
-        // Look up $create on the resolved type first, then fall back to generic definition
-        string createName = $"{resolvedType.Name}.$create";
-        RoutineInfo? creator =
-            _registry.LookupRoutineOverload(baseName: createName, argTypes: new List<TypeInfo>());
-        if (creator != null && creator.Parameters.Count > 0)
+        // Try ResolveMethod first — handles lookup + mangle + monomorphization
+        ResolvedMethod? resolved = ResolveMethod(receiverType: resolvedType, methodName: "$create");
+
+        // ResolveMethod uses LookupMethod which may return a $create with parameters;
+        // we only want the zero-arg overload, so verify
+        if (resolved != null && resolved.Routine.Parameters.Count > 0)
         {
-            creator = null;
+            resolved = null;
         }
 
-        // Fall back to generic definition's $create
-        if (creator == null)
+        // Fall back to overload-based lookup (zero-arg $create via registry)
+        if (resolved == null)
         {
-            TypeInfo? genericDef = resolvedType switch
+            string createName = $"{resolvedType.Name}.$create";
+            RoutineInfo? creator =
+                _registry.LookupRoutineOverload(baseName: createName, argTypes: new List<TypeInfo>());
+            if (creator != null && creator.Parameters.Count > 0)
             {
-                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                _ => null
-            };
-            if (genericDef != null)
+                creator = null;
+            }
+
+            // Fall back to generic definition's $create
+            if (creator == null)
             {
-                string genCreateName = $"{genericDef.Name}.$create";
-                creator = _registry.LookupRoutineOverload(baseName: genCreateName,
-                    argTypes: new List<TypeInfo>());
-                if (creator != null && creator.Parameters.Count > 0)
+                TypeInfo? genericDef = resolvedType switch
                 {
-                    creator = null;
+                    EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+                    RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+                    _ => null
+                };
+                if (genericDef != null)
+                {
+                    string genCreateName = $"{genericDef.Name}.$create";
+                    creator = _registry.LookupRoutineOverload(baseName: genCreateName,
+                        argTypes: new List<TypeInfo>());
+                    if (creator != null && creator.Parameters.Count > 0)
+                    {
+                        creator = null;
+                    }
                 }
             }
+
+            if (creator != null)
+            {
+                string funcName;
+                if (resolvedType.IsGenericResolution)
+                {
+                    funcName = Q(name: $"{resolvedType.FullName}.$create");
+                    RecordMonomorphization(mangledName: funcName,
+                        genericMethod: creator,
+                        resolvedOwnerType: resolvedType);
+                }
+                else
+                {
+                    funcName = MangleFunctionName(routine: creator);
+                }
+
+                if (!_generatedFunctions.Contains(item: funcName))
+                {
+                    EmitLine(sb: _functionDeclarations, line: $"declare ptr @{funcName}()");
+                    _generatedFunctions.Add(item: funcName);
+                }
+
+                string result = NextTemp();
+                EmitLine(sb: sb, line: $"  {result} = call ptr @{funcName}()");
+                return result;
+            }
         }
-
-        if (creator != null)
+        else
         {
-            string funcName;
-            if (resolvedType.IsGenericResolution)
-            {
-                funcName = Q(name: $"{resolvedType.FullName}.$create");
-                RecordMonomorphization(mangledName: funcName,
-                    genericMethod: creator,
-                    resolvedOwnerType: resolvedType);
-            }
-            else
-            {
-                funcName = MangleFunctionName(routine: creator);
-            }
-
-            // Ensure declared
+            string funcName = resolved.MangledName;
             if (!_generatedFunctions.Contains(item: funcName))
             {
                 EmitLine(sb: _functionDeclarations, line: $"declare ptr @{funcName}()");
@@ -555,44 +571,15 @@ public partial class LLVMCodeGenerator
             addMethodName = "add";
         }
 
-        // Look up the add method
-        string fullAddName = $"{typeName}.{addMethodName}";
-        RoutineInfo? addMethod = _registry.LookupRoutine(fullName: fullAddName);
+        // Look up the add method (handles generic resolution automatically)
+        ResolvedMethod? resolvedAdd = ResolveMethod(receiverType: resolvedType, methodName: addMethodName);
 
-        // Fall back to generic definition
-        if (addMethod == null)
-        {
-            TypeInfo? genericDef = resolvedType switch
-            {
-                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-                _ => null
-            };
-            if (genericDef != null)
-            {
-                string genAddName = $"{genericDef.Name}.{addMethodName}";
-                addMethod = _registry.LookupRoutine(fullName: genAddName);
-            }
-        }
-
-        if (addMethod == null)
+        if (resolvedAdd == null)
         {
             return collectionPtr;
         }
 
-        // Determine mangled name and handle monomorphization
-        string mangledAdd;
-        if (resolvedType.IsGenericResolution)
-        {
-            mangledAdd = Q(name: $"{resolvedType.FullName}.{addMethodName}");
-            RecordMonomorphization(mangledName: mangledAdd,
-                genericMethod: addMethod,
-                resolvedOwnerType: resolvedType);
-        }
-        else
-        {
-            mangledAdd = MangleFunctionName(routine: addMethod);
-        }
+        string mangledAdd = resolvedAdd.MangledName;
 
         // Emit add calls for each element
         if (isMapType)
@@ -729,41 +716,15 @@ public partial class LLVMCodeGenerator
         string pqPtr =
             EmitCollectionCreate(sb: sb, resolvedType: resolvedType, typeName: typeName);
 
-        // Look up add(element, priority) method
-        string addName = $"{typeName}.add";
-        RoutineInfo? addMethod = _registry.LookupRoutine(fullName: addName);
+        // Look up add(element, priority) method (handles generic resolution automatically)
+        ResolvedMethod? resolvedAdd = ResolveMethod(receiverType: resolvedType, methodName: "add");
 
-        if (addMethod == null)
-        {
-            TypeInfo? genericDef = resolvedType switch
-            {
-                EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-                _ => null
-            };
-            if (genericDef != null)
-            {
-                string genAddName = $"{genericDef.Name}.add";
-                addMethod = _registry.LookupRoutine(fullName: genAddName);
-            }
-        }
-
-        if (addMethod == null)
+        if (resolvedAdd == null)
         {
             return pqPtr;
         }
 
-        string mangledAdd;
-        if (resolvedType.IsGenericResolution)
-        {
-            mangledAdd = Q(name: $"{resolvedType.FullName}.add");
-            RecordMonomorphization(mangledName: mangledAdd,
-                genericMethod: addMethod,
-                resolvedOwnerType: resolvedType);
-        }
-        else
-        {
-            mangledAdd = MangleFunctionName(routine: addMethod);
-        }
+        string mangledAdd = resolvedAdd.MangledName;
 
         // Resolve priority and element types from type arguments
         // PriorityQueue[TPriority, TElement] — args are (priority, element) tuples
