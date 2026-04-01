@@ -113,15 +113,6 @@ routine ask_all() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.as_utf8_text()
 
-# Read exactly n codepoints from input
-routine ask_letters(count: U64) -> Text
-  var addr = rf_console_ask_letters(count)
-  var ptr = Snatched[Byte](addr)
-  if ptr.is_none()
-    return ""
-  var bytes = Bytes(ptr: ptr)
-  return bytes.as_utf8_text()
-
 # Read all lines separated by newline
 routine ask_lines() -> List[Text]
   var all = ask_all()

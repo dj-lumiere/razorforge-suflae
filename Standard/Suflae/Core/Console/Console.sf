@@ -33,9 +33,6 @@ routine Console.ask_word() -> Text
 routine Console.ask_all() -> Text
   return RazorForge/IO.Console.ask_all()
 
-routine Console.ask_letters(count: U64) -> Text
-  return RazorForge/IO.Console.ask_letters(count)
-
 # Input: Bytes functions (opt-in)
 routine Console.ask_raw() -> Bytes
   return RazorForge/IO.Console.ask_raw()

@@ -305,7 +305,6 @@ external("C") routine rf_console_alert(ptr: Address, len: U64)
 external("C") routine rf_console_ask_line() -> Address
 external("C") routine rf_console_ask_word() -> Address
 external("C") routine rf_console_ask_all() -> Address
-external("C") routine rf_console_ask_letters(count: U64) -> Address
 external("C") routine rf_console_ask_bytes(count: U64) -> Address
 
 # Control

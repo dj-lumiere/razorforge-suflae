@@ -56,7 +56,12 @@ native/
 ├── include/
 │   └── razorforge_runtime.h
 ├── runtime/
-│   ├── runtime.c
+│   ├── runtime_init.c
+│   ├── cstring_runtime.c
+│   ├── console_runtime.c
+│   ├── duration_wait.c
+│   ├── crash_runtime.c
+│   ├── shared_locks.c
 │   ├── memory.c
 │   ├── stacktrace.c
 │   ├── text_functions.c
@@ -85,7 +90,12 @@ The native runtime is moving toward four layers.
 
 Files:
 
-- [runtime.c](../native/runtime/runtime.c)
+- [runtime_init.c](../native/runtime/runtime_init.c)
+- [cstring_runtime.c](../native/runtime/cstring_runtime.c)
+- [console_runtime.c](../native/runtime/console_runtime.c)
+- [duration_wait.c](../native/runtime/duration_wait.c)
+- [crash_runtime.c](../native/runtime/crash_runtime.c)
+- [shared_locks.c](../native/runtime/shared_locks.c)
 - [memory.c](../native/runtime/memory.c)
 - [stacktrace.c](../native/runtime/stacktrace.c)
 - [text_functions.c](../native/runtime/text_functions.c)
@@ -95,6 +105,9 @@ Files:
 Responsibilities:
 
 - `rf_runtime_init`
+- `rf_cstr_*`
+- `rf_console_*`
+- `razorforge_mutex_*` / `razorforge_rwlock_*`
 - `rf_allocate_dynamic`, `rf_reallocate_dynamic`, `rf_invalidate`
 - `rf_crash`, `rf_trace_push`, `rf_trace_pop`
 - console and file primitives

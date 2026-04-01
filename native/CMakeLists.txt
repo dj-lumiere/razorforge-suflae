@@ -112,7 +112,12 @@ endif()
 # Runtime library for memory management, error handling, and math
 # ============================================================================
 add_library(razorforge_runtime SHARED
-    runtime/runtime.c
+    runtime/runtime_init.c
+    runtime/cstring_runtime.c
+    runtime/console_runtime.c
+    runtime/duration_wait.c
+    runtime/crash_runtime.c
+    runtime/shared_locks.c
     runtime/memory.c
     runtime/stacktrace.c
     runtime/moment.c
