@@ -115,6 +115,7 @@ add_library(razorforge_runtime SHARED
     runtime/runtime.c
     runtime/memory.c
     runtime/stacktrace.c
+    runtime/moment.c
     runtime/math_functions.c
     runtime/decimal_functions.c
     runtime/bignum_functions.c

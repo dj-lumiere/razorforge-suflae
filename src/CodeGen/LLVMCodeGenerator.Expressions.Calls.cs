@@ -11,29 +11,40 @@ using SyntaxTree;
 /// </summary>
 public partial class LLVMCodeGenerator
 {
+    private static string UnquoteLlvmName(string name)
+    {
+        return name.Length >= 2 && name[0] == '"' && name[^1] == '"'
+            ? name[1..^1]
+            : name;
+    }
+
     private string EmitAsyncCompletedTask(StringBuilder sb, RoutineInfo routine, string rawResult)
     {
         int kindValue = routine.AsyncStatus == AsyncStatus.Threaded
             ? 1
             : 0;
 
+        string taskAddress = NextTemp();
+        EmitLine(sb: sb, line: $"  {taskAddress} = call i64 @rf_task_create(i32 {kindValue})");
         string task = NextTemp();
-        EmitLine(sb: sb, line: $"  {task} = call ptr @rf_task_create(i32 {kindValue})");
-        EmitLine(sb: sb, line: $"  call void @rf_task_mark_running(ptr {task})");
+        EmitLine(sb: sb, line: $"  {task} = inttoptr i64 {taskAddress} to ptr");
+        EmitLine(sb: sb, line: $"  call void @rf_task_mark_running(i64 {taskAddress})");
 
         TypeInfo? returnType = routine.ReturnType;
         TypeInfo? blankType = _registry.LookupType(name: "Blank");
 
         if (returnType == null || blankType != null && returnType.Name == blankType.Name)
         {
-            EmitLine(sb: sb, line: $"  call void @rf_task_complete_value(ptr {task}, ptr null)");
+            EmitLine(sb: sb, line: $"  call void @rf_task_complete_value(i64 {taskAddress}, i64 0)");
             return task;
         }
 
         if (returnType is EntityTypeInfo)
         {
+            string entityAddress = NextTemp();
+            EmitLine(sb: sb, line: $"  {entityAddress} = ptrtoint ptr {rawResult} to i64");
             EmitLine(sb: sb,
-                line: $"  call void @rf_task_complete_value(ptr {task}, ptr {rawResult})");
+                line: $"  call void @rf_task_complete_value(i64 {taskAddress}, i64 {entityAddress})");
             return task;
         }
 
@@ -43,8 +54,162 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb,
             line: $"  {payload} = call ptr @rf_allocate_dynamic(i64 {payloadSize})");
         EmitLine(sb: sb, line: $"  store {payloadType} {rawResult}, ptr {payload}");
+        string payloadAddress = NextTemp();
+        EmitLine(sb: sb, line: $"  {payloadAddress} = ptrtoint ptr {payload} to i64");
         EmitLine(sb: sb,
-            line: $"  call void @rf_task_complete_value(ptr {task}, ptr {payload})");
+            line: $"  call void @rf_task_complete_value(i64 {taskAddress}, i64 {payloadAddress})");
+        return task;
+    }
+
+    private void EnsureThreadedWorkerDefinition(string workerName, string calleeName,
+        RoutineInfo routine, IReadOnlyList<string> argTypes, IReadOnlyList<TypeInfo> argTypeInfos)
+    {
+        if (!_generatedThreadWorkerDefs.Add(item: workerName))
+        {
+            return;
+        }
+
+        _generatedFunctionDefs.Add(item: workerName);
+
+        EmitLine(sb: _auxFunctionDefinitions, line: $"define void @{workerName}(ptr %task, ptr %userdata) {{");
+        EmitLine(sb: _auxFunctionDefinitions, line: "entry:");
+        string taskAddress = NextTemp();
+        EmitLine(sb: _auxFunctionDefinitions, line: $"  {taskAddress} = ptrtoint ptr %task to i64");
+
+        var loadedArgs = new List<string>();
+
+        for (int i = 0; i < argTypes.Count; i++)
+        {
+            string slotPtr = NextTemp();
+            EmitLine(sb: _auxFunctionDefinitions,
+                line: $"  {slotPtr} = getelementptr ptr, ptr %userdata, i64 {i}");
+            string slotValue = NextTemp();
+            EmitLine(sb: _auxFunctionDefinitions, line: $"  {slotValue} = load ptr, ptr {slotPtr}");
+
+            if (argTypes[i] == "ptr")
+            {
+                loadedArgs.Add(item: slotValue);
+                continue;
+            }
+
+            string loaded = NextTemp();
+            EmitLine(sb: _auxFunctionDefinitions,
+                line: $"  {loaded} = load {argTypes[i]}, ptr {slotValue}");
+            string slotAddress = NextTemp();
+            EmitLine(sb: _auxFunctionDefinitions, line: $"  {slotAddress} = ptrtoint ptr {slotValue} to i64");
+            EmitLine(sb: _auxFunctionDefinitions, line: $"  call void @rf_invalidate(i64 {slotAddress})");
+            loadedArgs.Add(item: loaded);
+        }
+
+        if (argTypes.Count > 0)
+        {
+            string userdataAddress = NextTemp();
+            EmitLine(sb: _auxFunctionDefinitions, line: $"  {userdataAddress} = ptrtoint ptr %userdata to i64");
+            EmitLine(sb: _auxFunctionDefinitions, line: $"  call void @rf_invalidate(i64 {userdataAddress})");
+        }
+
+        string args = BuildCallArgs(types: argTypes.ToList(), values: loadedArgs);
+        TypeInfo? blankType = _registry.LookupType(name: "Blank");
+        TypeInfo? returnType = routine.ReturnType;
+        string rawResult;
+
+        if (returnType == null || blankType != null && returnType.Name == blankType.Name)
+        {
+            EmitLine(sb: _auxFunctionDefinitions,
+                line: $"  call void @{calleeName}({args})");
+            EmitLine(sb: _auxFunctionDefinitions,
+                line: $"  call void @rf_task_complete_value(i64 {taskAddress}, i64 0)");
+            EmitLine(sb: _auxFunctionDefinitions, line: "  ret void");
+            EmitLine(sb: _auxFunctionDefinitions, line: "}");
+            EmitLine(sb: _auxFunctionDefinitions, line: "");
+            return;
+        }
+
+        string returnLlvmType = GetLLVMType(type: returnType);
+        rawResult = NextTemp();
+        EmitLine(sb: _auxFunctionDefinitions,
+            line: $"  {rawResult} = call {returnLlvmType} @{calleeName}({args})");
+
+        if (returnType is EntityTypeInfo)
+        {
+            string resultAddress = NextTemp();
+            EmitLine(sb: _auxFunctionDefinitions, line: $"  {resultAddress} = ptrtoint ptr {rawResult} to i64");
+            EmitLine(sb: _auxFunctionDefinitions,
+                line: $"  call void @rf_task_complete_value(i64 {taskAddress}, i64 {resultAddress})");
+            EmitLine(sb: _auxFunctionDefinitions, line: "  ret void");
+            EmitLine(sb: _auxFunctionDefinitions, line: "}");
+            EmitLine(sb: _auxFunctionDefinitions, line: "");
+            return;
+        }
+
+        int payloadSize = GetTypeSize(type: returnType);
+        string payload = NextTemp();
+        EmitLine(sb: _auxFunctionDefinitions,
+            line: $"  {payload} = call ptr @rf_allocate_dynamic(i64 {payloadSize})");
+        EmitLine(sb: _auxFunctionDefinitions,
+            line: $"  store {returnLlvmType} {rawResult}, ptr {payload}");
+        string payloadAddress = NextTemp();
+        EmitLine(sb: _auxFunctionDefinitions, line: $"  {payloadAddress} = ptrtoint ptr {payload} to i64");
+        EmitLine(sb: _auxFunctionDefinitions,
+            line: $"  call void @rf_task_complete_value(i64 {taskAddress}, i64 {payloadAddress})");
+        EmitLine(sb: _auxFunctionDefinitions, line: "  ret void");
+        EmitLine(sb: _auxFunctionDefinitions, line: "}");
+        EmitLine(sb: _auxFunctionDefinitions, line: "");
+    }
+
+    private string EmitThreadedTaskSpawn(StringBuilder sb, RoutineInfo routine, string calleeName,
+        IReadOnlyList<string> argValues, IReadOnlyList<string> argTypes, IReadOnlyList<TypeInfo> argTypeInfos)
+    {
+        string taskAddress = NextTemp();
+        EmitLine(sb: sb, line: "  ; threaded routine spawn");
+        EmitLine(sb: sb, line: $"  {taskAddress} = call i64 @rf_task_create(i32 1)");
+        string task = NextTemp();
+        EmitLine(sb: sb, line: $"  {task} = inttoptr i64 {taskAddress} to ptr");
+
+        string userdata = "null";
+        string userdataAddress = "0";
+        if (argValues.Count > 0)
+        {
+            userdata = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {userdata} = call ptr @rf_allocate_dynamic(i64 {argValues.Count * _pointerSizeBytes})");
+            userdataAddress = NextTemp();
+            EmitLine(sb: sb, line: $"  {userdataAddress} = ptrtoint ptr {userdata} to i64");
+
+            for (int i = 0; i < argValues.Count; i++)
+            {
+                string slotPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {slotPtr} = getelementptr ptr, ptr {userdata}, i64 {i}");
+
+                if (argTypes[i] == "ptr")
+                {
+                    EmitLine(sb: sb, line: $"  store ptr {argValues[i]}, ptr {slotPtr}");
+                    continue;
+                }
+
+                int payloadSize = GetTypeSize(type: argTypeInfos[i]);
+                string boxed = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {boxed} = call ptr @rf_allocate_dynamic(i64 {payloadSize})");
+                EmitLine(sb: sb, line: $"  store {argTypes[i]} {argValues[i]}, ptr {boxed}");
+                EmitLine(sb: sb, line: $"  store ptr {boxed}, ptr {slotPtr}");
+            }
+        }
+
+        string workerBaseName = $"{UnquoteLlvmName(name: calleeName)}$thread_worker";
+        string workerName = Q(name: workerBaseName);
+        EnsureThreadedWorkerDefinition(workerName: workerName,
+            calleeName: calleeName,
+            routine: routine,
+            argTypes: argTypes,
+            argTypeInfos: argTypeInfos);
+
+        string workerAddress = NextTemp();
+        EmitLine(sb: sb, line: $"  {workerAddress} = ptrtoint ptr @{workerName} to i64");
+        string spawnOk = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {spawnOk} = call i32 @rf_task_spawn_threaded(i64 {taskAddress}, i64 {workerAddress}, i64 {userdataAddress})");
         return task;
     }
 
@@ -87,6 +252,8 @@ public partial class LLVMCodeGenerator
         }
 
         string taskValue = operandValue;
+        string taskAddress = NextTemp();
+        EmitLine(sb: sb, line: $"  {taskAddress} = ptrtoint ptr {taskValue} to i64");
         string completionKind = NextTemp();
         if (waitfor.Timeout != null)
         {
@@ -104,11 +271,11 @@ public partial class LLVMCodeGenerator
                 line: $"  {timeoutNanoseconds} = extractvalue {timeoutLlvmType} {timeoutValue}, 1");
             EmitLine(sb: sb,
                 line:
-                $"  {completionKind} = call i32 @rf_task_wait_within(ptr {taskValue}, i64 {timeoutSeconds}, i32 {timeoutNanoseconds})");
+                $"  {completionKind} = call i32 @rf_task_wait_within(i64 {taskAddress}, i64 {timeoutSeconds}, i32 {timeoutNanoseconds})");
         }
         else
         {
-            EmitLine(sb: sb, line: $"  {completionKind} = call i32 @rf_task_wait(ptr {taskValue})");
+            EmitLine(sb: sb, line: $"  {completionKind} = call i32 @rf_task_wait(i64 {taskAddress})");
         }
 
         string isValue = NextTemp();
@@ -125,14 +292,16 @@ public partial class LLVMCodeGenerator
 
         if (valueType.Name == "Blank")
         {
-            EmitLine(sb: sb, line: $"  call void @rf_task_mark_result_consumed(ptr {taskValue})");
+            EmitLine(sb: sb, line: $"  call void @rf_task_mark_result_consumed(i64 {taskAddress})");
             return "zeroinitializer";
         }
 
-        string payload = NextTemp();
+        string payloadAddress = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {payload} = call ptr @rf_task_result_payload(ptr {taskValue})");
-        EmitLine(sb: sb, line: $"  call void @rf_task_mark_result_consumed(ptr {taskValue})");
+            line: $"  {payloadAddress} = call i64 @rf_task_result_payload(i64 {taskAddress})");
+        EmitLine(sb: sb, line: $"  call void @rf_task_mark_result_consumed(i64 {taskAddress})");
+        string payload = NextTemp();
+        EmitLine(sb: sb, line: $"  {payload} = inttoptr i64 {payloadAddress} to ptr");
 
         if (valueType is EntityTypeInfo)
         {
@@ -339,6 +508,7 @@ public partial class LLVMCodeGenerator
         // Evaluate all arguments
         var argValues = new List<string>();
         var argTypes = new List<string>();
+        var argTypeInfos = new List<TypeInfo>();
 
         foreach (Expression arg in arguments)
         {
@@ -353,6 +523,7 @@ public partial class LLVMCodeGenerator
                     $"Cannot determine type for argument in function call to '{functionName}'");
             }
 
+            argTypeInfos.Add(item: argType);
             argTypes.Add(item: GetLLVMType(type: argType));
         }
 
@@ -366,6 +537,7 @@ public partial class LLVMCodeGenerator
                 {
                     string value = EmitExpression(sb: sb, expr: param.DefaultValue!);
                     argValues.Add(item: value);
+                    argTypeInfos.Add(item: param.Type);
                     argTypes.Add(item: GetLLVMType(type: param.Type));
                 }
             }
@@ -393,15 +565,15 @@ public partial class LLVMCodeGenerator
                 if (genericOverload?.GenericParameters is { Count: > 0 })
                 {
                     // Infer type args from ALL argument types
-                    var argTypeInfos = arguments
-                                       .Select(selector: a => GetExpressionType(expr: a))
-                                       .Where(predicate: t => t != null)
-                                       .Cast<TypeInfo>()
-                                       .ToList();
+                    var inferredArgTypeInfos = arguments
+                                               .Select(selector: a => GetExpressionType(expr: a))
+                                               .Where(predicate: t => t != null)
+                                               .Cast<TypeInfo>()
+                                               .ToList();
 
                     Dictionary<string, TypeInfo>? inferred =
                         InferMethodTypeArgs(genericMethod: genericOverload,
-                            argTypes: argTypeInfos);
+                            argTypes: inferredArgTypeInfos);
 
                     // Build type args list from inferred dict, falling back to actual arg types
                     var typeArgs = new List<TypeInfo>();
@@ -413,13 +585,13 @@ public partial class LLVMCodeGenerator
                         {
                             typeArgs.Add(item: t);
                         }
-                        else if (i < argTypeInfos.Count)
+                        else if (i < inferredArgTypeInfos.Count)
                         {
-                            typeArgs.Add(item: argTypeInfos[index: i]);
+                            typeArgs.Add(item: inferredArgTypeInfos[index: i]);
                         }
                         else
                         {
-                            typeArgs.Add(item: argTypeInfos[index: 0]); // last resort fallback
+                            typeArgs.Add(item: inferredArgTypeInfos[index: 0]); // last resort fallback
                         }
                     }
 
@@ -429,6 +601,7 @@ public partial class LLVMCodeGenerator
                     while (argValues.Count > arguments.Count)
                     {
                         argValues.RemoveAt(index: argValues.Count - 1);
+                        argTypeInfos.RemoveAt(index: argTypeInfos.Count - 1);
                         argTypes.RemoveAt(index: argTypes.Count - 1);
                     }
 
@@ -439,6 +612,7 @@ public partial class LLVMCodeGenerator
                         {
                             string value = EmitExpression(sb: sb, expr: param.DefaultValue!);
                             argValues.Add(item: value);
+                            argTypeInfos.Add(item: param.Type);
                             argTypes.Add(item: GetLLVMType(type: param.Type));
                         }
                     }
@@ -558,6 +732,16 @@ public partial class LLVMCodeGenerator
                     argTypes[index: i] = "i16";
                 }
             }
+        }
+
+        if (routine?.AsyncStatus == AsyncStatus.Threaded)
+        {
+            return EmitThreadedTaskSpawn(sb: sb,
+                routine: routine,
+                calleeName: mangledName,
+                argValues: argValues,
+                argTypes: argTypes,
+                argTypeInfos: argTypeInfos);
         }
 
         string returnType = routine?.ReturnType != null
@@ -747,6 +931,16 @@ public partial class LLVMCodeGenerator
                         EmitLine(sb: sb,
                             line:
                             $"  {result} = call {retType} @{creatorMangledName}({receiverLlvm} {receiver})");
+                        if (creator.AsyncStatus == AsyncStatus.Threaded)
+                        {
+                            return EmitThreadedTaskSpawn(sb: sb,
+                                routine: creator,
+                                calleeName: creatorMangledName,
+                                argValues: [receiver],
+                                argTypes: [receiverLlvm],
+                                argTypeInfos: [receiverType]);
+                        }
+
                         return creator.IsAsync
                             ? EmitAsyncCompletedTask(sb: sb, routine: creator, rawResult: result)
                             : result;
@@ -807,6 +1001,16 @@ public partial class LLVMCodeGenerator
                             EmitLine(sb: sb,
                                 line:
                                 $"  {result2} = call {retType2} @{resolvedFuncName}({receiverLlvm2} {receiver})");
+                            if (creator.AsyncStatus == AsyncStatus.Threaded)
+                            {
+                                return EmitThreadedTaskSpawn(sb: sb,
+                                    routine: creator,
+                                    calleeName: resolvedFuncName,
+                                    argValues: [receiver],
+                                    argTypes: [receiverLlvm2],
+                                    argTypeInfos: [receiverType]);
+                            }
+
                             return creator.IsAsync
                                 ? EmitAsyncCompletedTask(sb: sb,
                                     routine: creator,
@@ -842,6 +1046,16 @@ public partial class LLVMCodeGenerator
                         valueType: creator.ReturnType);
                 }
 
+                if (creator.AsyncStatus == AsyncStatus.Threaded)
+                {
+                    return EmitThreadedTaskSpawn(sb: sb,
+                        routine: creator,
+                        calleeName: funcName,
+                        argValues: [receiver],
+                        argTypes: [receiverLlvm3],
+                        argTypeInfos: [receiverType]);
+                }
+
                 return creator.IsAsync
                     ? EmitAsyncCompletedTask(sb: sb, routine: creator, rawResult: result3)
                     : result3;
@@ -875,6 +1089,7 @@ public partial class LLVMCodeGenerator
         // Build argument list: receiver first, then explicit arguments
         var argValues = new List<string> { receiver };
         var argTypes = new List<string> { GetParameterLLVMType(type: receiverType) };
+        var argTypeInfos = new List<TypeInfo> { receiverType };
 
         foreach (Expression arg in arguments)
         {
@@ -889,6 +1104,7 @@ public partial class LLVMCodeGenerator
                     $"Cannot determine type for argument in method call to '{member.PropertyName}'");
             }
 
+            argTypeInfos.Add(item: argType);
             argTypes.Add(item: GetLLVMType(type: argType));
         }
 
@@ -969,6 +1185,16 @@ public partial class LLVMCodeGenerator
         if (method != null && method.OwnerType is not ProtocolTypeInfo)
         {
             GenerateFunctionDeclaration(routine: method);
+        }
+
+        if (method?.AsyncStatus == AsyncStatus.Threaded)
+        {
+            return EmitThreadedTaskSpawn(sb: sb,
+                routine: method,
+                calleeName: mangledName,
+                argValues: argValues,
+                argTypes: argTypes,
+                argTypeInfos: argTypeInfos);
         }
 
         // Track protocol dispatch calls for stub generation

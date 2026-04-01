@@ -18,7 +18,7 @@ module Core
 # Record definition
 # ============================================================================
 
-record Moment obeys Ordered
+record Moment obeys Ordered, Addable, Subtractable
   secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
   secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
@@ -205,6 +205,18 @@ routine Moment.subtract_duration(duration: Duration) -> Moment
 @readonly
 routine Moment.elapsed_since(earlier: Moment) -> Duration
   return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
+
+@readonly
+routine Moment.$add(you: Duration) -> Moment
+  return me.add_duration(you)
+
+@readonly
+routine Moment.$sub(you: Duration) -> Moment
+  return me.subtract_duration(you)
+
+@readonly
+routine Moment.$sub(you: Moment) -> Duration
+  return me.elapsed_since(you)
 
 # ============================================================================
 # Comparison operators

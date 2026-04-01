@@ -46,6 +46,9 @@ public partial class LLVMCodeGenerator
     /// <summary>Output buffer for function definitions.</summary>
     private readonly StringBuilder _functionDefinitions = new();
 
+    /// <summary>Output buffer for auxiliary top-level helper function definitions.</summary>
+    private readonly StringBuilder _auxFunctionDefinitions = new();
+
     /// <summary>Counter for generating unique temporary variable names.</summary>
     private int _tempCounter;
 
@@ -88,6 +91,9 @@ public partial class LLVMCodeGenerator
 
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedFunctionDefs = [];
+
+    /// <summary>Set of generated threaded worker helper definitions.</summary>
+    private readonly HashSet<string> _generatedThreadWorkerDefs = [];
 
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentFunctionReturnType;
@@ -692,6 +698,13 @@ public partial class LLVMCodeGenerator
 
                 output.AppendLine(value: line);
             }
+        }
+
+        // Auxiliary helper definitions
+        if (_auxFunctionDefinitions.Length > 0)
+        {
+            output.AppendLine(value: "; Auxiliary function definitions");
+            output.Append(value: _auxFunctionDefinitions);
         }
 
         // Function definitions

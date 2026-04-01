@@ -29,8 +29,8 @@ rf_Moment rf_moment_now()
     GetSystemTimePreciseAsFileTime(&ft);
 
     ULARGE_INTEGER uli;
-    uli.LowPart = ft.dwLowMoment;
-    uli.HighPart = ft.dwHighMoment;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
 
     // Convert to Unix epoch (subtract offset)
     const uint64_t EPOCH_OFFSET = 116444736000000000ULL;

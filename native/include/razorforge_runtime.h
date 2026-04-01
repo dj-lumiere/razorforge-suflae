@@ -14,6 +14,7 @@ typedef struct rf_async_runtime rf_async_runtime;
 typedef struct rf_task rf_task;
 
 typedef void (*rf_context_entry_fn)(void* userdata);
+typedef void (*rf_task_entry_fn)(rf_task* task, void* userdata);
 
 typedef enum rf_task_kind {
     RF_TASK_SUSPENDED = 0,
@@ -78,6 +79,7 @@ void* rf_task_result_payload(rf_task* task);
 void* rf_task_error_payload(rf_task* task);
 rf_task_completion_kind rf_task_wait(rf_task* task);
 rf_task_completion_kind rf_task_wait_within(rf_task* task, int64_t timeout_seconds, uint32_t timeout_nanoseconds);
+int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata);
 
 void rf_task_mark_ready(rf_task* task);
 void rf_task_mark_running(rf_task* task);

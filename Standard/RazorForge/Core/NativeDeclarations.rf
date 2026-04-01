@@ -28,6 +28,7 @@ external("C") routine rf_task_result_payload(task: Address) -> Address
 external("C") routine rf_task_error_payload(task: Address) -> Address
 external("C") routine rf_task_wait(task: Address) -> S32
 external("C") routine rf_task_wait_within(task: Address, timeout_seconds: S64, timeout_nanoseconds: U32) -> S32
+external("C") routine rf_task_spawn_threaded(task: Address, entry: Address, userdata: Address) -> S32
 external("C") routine rf_task_mark_ready(task: Address)
 external("C") routine rf_task_mark_running(task: Address)
 external("C") routine rf_task_mark_parked(task: Address)
