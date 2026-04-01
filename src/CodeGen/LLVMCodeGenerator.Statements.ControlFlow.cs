@@ -540,9 +540,73 @@ public partial class LLVMCodeGenerator
                 emitterType.TypeArguments[index: i];
         }
 
-        return SubstituteTypeParams(type: elemType, substitutions: paramMap);
+        return SubstituteTypeParamsByParamMap(type: elemType, paramMap: paramMap);
     }
 
+    /// <summary>
+    /// Recursively substitutes generic type parameters in a type using the given mapping.
+    /// </summary>
+    private TypeInfo SubstituteTypeParamsByParamMap(TypeInfo type, Dictionary<string, TypeInfo> paramMap)
+    {
+        // Direct generic parameter (T → S64)
+        if (type is GenericParameterTypeInfo &&
+            paramMap.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+        {
+            return sub;
+        }
+
+        // Tuple with generic elements (Tuple[U64, T] → Tuple[U64, S64])
+        if (type is TupleTypeInfo tuple)
+        {
+            bool anyChanged = false;
+            var resolvedElems = new List<TypeInfo>();
+            foreach (TypeInfo elem in tuple.ElementTypes)
+            {
+                TypeInfo resolved = SubstituteTypeParamsByParamMap(type: elem, paramMap: paramMap);
+                if (resolved != elem)
+                {
+                    anyChanged = true;
+                }
+
+                resolvedElems.Add(item: resolved);
+            }
+
+            if (anyChanged)
+            {
+                return new TupleTypeInfo(elementTypes: resolvedElems);
+            }
+        }
+
+        // Parameterized type with generic args (List[T] → List[S64])
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool anyChanged = false;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (TypeInfo ta in type.TypeArguments)
+            {
+                TypeInfo resolved = SubstituteTypeParamsByParamMap(type: ta, paramMap: paramMap);
+                if (resolved != ta)
+                {
+                    anyChanged = true;
+                }
+
+                resolvedArgs.Add(item: resolved);
+            }
+
+            if (anyChanged)
+            {
+                TypeInfo? genericBase = GetGenericBase(type: type) ??
+                                        _registry.LookupType(name: type.Name);
+                if (genericBase != null)
+                {
+                    return _registry.GetOrCreateResolution(genericDef: genericBase,
+                        typeArguments: resolvedArgs);
+                }
+            }
+        }
+
+        return type;
+    }
 
     /// <summary>
     /// Emits a range-based for loop as a simple counter loop with start/end/step.

@@ -889,14 +889,22 @@ public partial class LLVMCodeGenerator
 
         // Determine mangled name + monomorphization
         bool ownerIsGenericResolution = receiverType.IsGenericResolution;
-        bool methodOwnerIsGenericDef = method.OwnerType is { IsGenericDefinition: true };
+        bool methodOwnerIsGeneric = method.OwnerType is { IsGenericDefinition: true }
+            or { IsGenericResolution: true };
         bool methodOwnerIsGenericParam = method.OwnerType is GenericParameterTypeInfo;
         bool hasMethodTypeArgs = resolvedMethodTypeArgs is { Count: > 0 };
 
-        if (ownerIsGenericResolution && methodOwnerIsGenericDef || hasMethodTypeArgs ||
+        if (ownerIsGenericResolution && methodOwnerIsGeneric || hasMethodTypeArgs ||
             methodOwnerIsGenericParam)
         {
-            mangledName = Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}");
+            string baseName = $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}";
+            // Disambiguate $create overloads by first parameter type (mirrors MangleFunctionName)
+            if (method.Name == "$create" && method.Parameters.Count > 0)
+            {
+                baseName = $"{baseName}#{method.Parameters[index: 0].Type.Name}";
+            }
+
+            mangledName = Q(name: baseName);
             RecordMonomorphization(mangledName: mangledName,
                 genericMethod: method,
                 resolvedOwnerType: receiverType,
