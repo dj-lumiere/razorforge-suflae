@@ -6,21 +6,21 @@ record Maybe[T]
 
 # Query
 routine Maybe[T].is_valid() -> Bool
-  return me.state == VALID
+  return me.state is VALID
 
 routine Maybe[T].is_none() -> Bool
-  return me.state == ABSENT
+  return me.state is ABSENT
 
 routine Maybe[T].state() -> DataState
   return me.state
 
 # Coalescing (?? operator)
-routine Maybe[T].$unwrap(default: T) -> T
+routine Maybe[T].$unwrap_or(default: T) -> T
   if me.is_none()
     return default
-  return me.handle.unwrap()
+  return me.handle.read()
 
-routine Maybe[T].$unwrap(or_else: Routine[Me, T]) -> T
+routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T
   if me.is_none()
     return or_else()
-  return me.handle.unwrap()
+  return me.handle.read()
