@@ -1,0 +1,28 @@
+module Core
+
+@llvm("ptr")
+record Task[T]
+  pass
+
+dangerous routine Task[T].get_address() -> Address
+  return ptrtoint[Task[T], Address](me)
+
+dangerous routine Task[T].$create(from: Address) -> Task[T]
+  return inttoptr[Address, Task[T]](from)
+
+routine task_none[T]() -> Task[T]
+  return Task[T](0_addr)
+
+routine Task[T].is_none() -> Bool
+  return icmp_eq[Task[T]](me, task_none[T]())
+
+routine Task[T].id() -> U64
+  return rf_task_id(me.get_address())
+
+@readonly
+routine Task[T].$represent() -> Text
+  return me.type_name()
+
+@readonly
+routine Task[T].$diagnose() -> Text
+  return me.full_type_name() + "(id: " + me.id().$represent() + ")"

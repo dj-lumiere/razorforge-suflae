@@ -15,6 +15,42 @@ dangerous external("C") routine rf_copy_bytes_at(dest: Address, src: Address, si
 dangerous external("C") routine rf_set_bytes_at(dest: Address, value: U8, size: U64)
 
 # ============================================================================
+# Task Runtime
+# ============================================================================
+
+external("C") routine rf_task_create(kind: S32) -> Address
+external("C") routine rf_task_destroy(task: Address)
+external("C") routine rf_task_id(task: Address) -> U64
+external("C") routine rf_task_kind_get(task: Address) -> S32
+external("C") routine rf_task_status_get(task: Address) -> S32
+external("C") routine rf_task_completion_kind_get(task: Address) -> S32
+external("C") routine rf_task_result_payload(task: Address) -> Address
+external("C") routine rf_task_error_payload(task: Address) -> Address
+external("C") routine rf_task_wait(task: Address) -> S32
+external("C") routine rf_task_wait_within(task: Address, timeout_seconds: S64, timeout_nanoseconds: U32) -> S32
+external("C") routine rf_task_mark_ready(task: Address)
+external("C") routine rf_task_mark_running(task: Address)
+external("C") routine rf_task_mark_parked(task: Address)
+external("C") routine rf_task_complete_value(task: Address, result_payload: Address)
+external("C") routine rf_task_complete_error(task: Address, error_payload: Address)
+external("C") routine rf_task_complete_cancelled(task: Address)
+external("C") routine rf_task_complete_timeout(task: Address)
+external("C") routine rf_task_request_cancel(task: Address)
+external("C") routine rf_task_is_cancel_requested(task: Address) -> Bool
+external("C") routine rf_task_mark_result_consumed(task: Address)
+external("C") routine rf_task_is_result_consumed(task: Address) -> Bool
+external("C") routine rf_task_attach_execution_backend(task: Address, backend: Address)
+external("C") routine rf_task_execution_backend(task: Address) -> Address
+external("C") routine rf_task_attach_wait_backend(task: Address, backend: Address)
+external("C") routine rf_task_wait_backend(task: Address) -> Address
+external("C") routine rf_task_add_prerequisite(task: Address)
+external("C") routine rf_task_add_dependent(task: Address, dependent: Address)
+external("C") routine rf_task_prerequisite_count(task: Address) -> U32
+external("C") routine rf_task_prerequisites_remaining(task: Address) -> U32
+external("C") routine rf_task_prerequisite_complete(task: Address, success: Bool) -> Bool
+external("C") routine rf_waitfor_duration(duration_seconds: S64, duration_nanoseconds: U32)
+
+# ============================================================================
 # D32 (Decimal32) - Intel DFP Library
 # All functions operate on U32 BID-encoded bits
 # ============================================================================
