@@ -50,9 +50,24 @@ public sealed partial class SemanticAnalyzer
                     firstArgType.FullName != firstParamType.FullName &&
                     !IsAssignableTo(source: firstArgType, target: firstParamType))
                 {
+                    // Collect all resolved arg types for better overload disambiguation
+                    var resolvedArgTypes = new List<TypeSymbol> { firstArgType };
+                    for (int i = 1; i < call.Arguments.Count; i++)
+                    {
+                        Expression actualArg =
+                            call.Arguments[index: i] is NamedArgumentExpression nai
+                                ? nai.Value
+                                : call.Arguments[index: i];
+                        TypeSymbol argType = AnalyzeExpression(expression: actualArg);
+                        if (argType != ErrorTypeInfo.Instance)
+                        {
+                            resolvedArgTypes.Add(item: argType);
+                        }
+                    }
+
                     RoutineInfo? better =
                         _registry.LookupRoutineOverload(baseName: callName,
-                            argTypes: [firstArgType]);
+                            argTypes: resolvedArgTypes);
                     if (better != null && better != routine)
                     {
                         routine = better;
@@ -312,10 +327,26 @@ public sealed partial class SemanticAnalyzer
                     firstArgTypeImport.FullName != firstParamTypeImport.FullName &&
                     !IsAssignableTo(source: firstArgTypeImport, target: firstParamTypeImport))
                 {
+                    // Collect all resolved arg types for better overload disambiguation
+                    var resolvedArgTypesImport = new List<TypeSymbol> { firstArgTypeImport };
+                    for (int i = 1; i < call.Arguments.Count; i++)
+                    {
+                        Expression actualArgImport =
+                            call.Arguments[index: i] is NamedArgumentExpression naiImport
+                                ? naiImport.Value
+                                : call.Arguments[index: i];
+                        TypeSymbol argTypeImport =
+                            AnalyzeExpression(expression: actualArgImport);
+                        if (argTypeImport != ErrorTypeInfo.Instance)
+                        {
+                            resolvedArgTypesImport.Add(item: argTypeImport);
+                        }
+                    }
+
                     // Try module-qualified specific overload (e.g., "IO.show#S64")
                     RoutineInfo? betterImport =
                         _registry.LookupRoutineOverload(baseName: routine.BaseName,
-                            argTypes: [firstArgTypeImport]);
+                            argTypes: resolvedArgTypesImport);
                     if (betterImport != null && betterImport != routine)
                     {
                         routine = betterImport;
@@ -723,15 +754,37 @@ public sealed partial class SemanticAnalyzer
 
                 // Return type is Blank if not specified
                 TypeSymbol? callReturnType = method.ReturnType;
-                if (callReturnType != null &&
-                    method.OwnerType is GenericParameterTypeInfo genParamOwner)
+                if (callReturnType != null)
                 {
-                    var substitutions = new Dictionary<string, TypeSymbol>
+                    var substitutions = new Dictionary<string, TypeSymbol>();
+
+                    // GenericParameterTypeInfo owner → map param name to receiver type
+                    if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                     {
-                        [key: genParamOwner.Name] = objectType
-                    };
-                    callReturnType = SubstituteWithMapping(type: callReturnType,
-                        substitutions: substitutions);
+                        substitutions[key: genParamOwner.Name] = objectType;
+                    }
+
+                    // Protocol owner → map protocol generic params to receiver's type args
+                    if (method.OwnerType is ProtocolTypeInfo protoOwner &&
+                        objectType is { IsGenericResolution: true, TypeArguments: not null })
+                    {
+                        ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
+                        if (protoGenDef.GenericParameters is { Count: > 0 })
+                        {
+                            for (int i = 0; i < protoGenDef.GenericParameters.Count &&
+                                            i < objectType.TypeArguments.Count; i++)
+                            {
+                                substitutions[key: protoGenDef.GenericParameters[index: i]] =
+                                    objectType.TypeArguments[index: i];
+                            }
+                        }
+                    }
+
+                    if (substitutions.Count > 0)
+                    {
+                        callReturnType = SubstituteWithMapping(type: callReturnType,
+                            substitutions: substitutions);
+                    }
                 }
 
                 return callReturnType ??

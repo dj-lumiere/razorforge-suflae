@@ -627,105 +627,12 @@ public partial class LLVMCodeGenerator
                 methodTypeArgs: methodTypeArgs);
         }
 
-        // Resolve return type — substitute both owner-level and method-level type params
+        // Use the semantic-layer-resolved return type.
+        // During monomorphization, apply _typeSubstitutions for stale AST metadata.
         TypeInfo? resolvedReturnType = method?.ReturnType;
-        if (resolvedReturnType != null && methodTypeArgs != null)
+        if (resolvedReturnType != null)
         {
-            // Direct method-level substitution (e.g., return type U → S32)
-            if (methodTypeArgs.TryGetValue(key: resolvedReturnType.Name,
-                    value: out TypeInfo? retSub))
-            {
-                resolvedReturnType = retSub;
-            }
-            // Generic resolution return type with method-level type args (e.g., Snatched[U] → Snatched[S32])
-            else if (resolvedReturnType is
-                     { IsGenericDefinition: true, GenericParameters: not null })
-            {
-                var typeArgs = resolvedReturnType.GenericParameters
-                                                 .Select(selector: gp =>
-                                                  {
-                                                      if (methodTypeArgs.TryGetValue(key: gp,
-                                                              value: out TypeInfo? s))
-                                                      {
-                                                          return s;
-                                                      }
-
-                                                      if (_typeSubstitutions != null &&
-                                                          _typeSubstitutions.TryGetValue(key: gp,
-                                                              value: out TypeInfo? s2))
-                                                      {
-                                                          return s2;
-                                                      }
-
-                                                      return _registry.LookupType(name: gp);
-                                                  })
-                                                 .Where(predicate: t => t != null)
-                                                 .ToList();
-                if (typeArgs.Count == resolvedReturnType.GenericParameters.Count)
-                {
-                    resolvedReturnType =
-                        _registry.GetOrCreateResolution(genericDef: resolvedReturnType,
-                            typeArguments: typeArgs!);
-                }
-            }
-            else if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null })
-            {
-                bool anySubstituted = false;
-                var substitutedArgs = new List<TypeInfo>();
-                foreach (TypeInfo arg in resolvedReturnType.TypeArguments)
-                {
-                    if (methodTypeArgs.TryGetValue(key: arg.Name, value: out TypeInfo? argSub))
-                    {
-                        substitutedArgs.Add(item: argSub);
-                        anySubstituted = true;
-                    }
-                    else if (_typeSubstitutions != null &&
-                             _typeSubstitutions.TryGetValue(key: arg.Name,
-                                 value: out TypeInfo? argSub2))
-                    {
-                        substitutedArgs.Add(item: argSub2);
-                        anySubstituted = true;
-                    }
-                    else
-                    {
-                        substitutedArgs.Add(item: arg);
-                    }
-                }
-
-                if (anySubstituted)
-                {
-                    TypeInfo? genericBase = GetGenericBase(type: resolvedReturnType);
-                    if (genericBase != null)
-                    {
-                        resolvedReturnType =
-                            _registry.GetOrCreateResolution(genericDef: genericBase,
-                                typeArguments: substitutedArgs);
-                    }
-                }
-            }
-        }
-
-        // Also handle owner-level substitution for return type
-        if (resolvedReturnType is GenericParameterTypeInfo && receiverType is
-                { IsGenericResolution: true, TypeArguments: not null })
-        {
-            TypeInfo? ownerGenericDef = receiverType switch
-            {
-                RecordTypeInfo r => r.GenericDefinition,
-                EntityTypeInfo e => e.GenericDefinition,
-
-                _ => null
-            };
-            if (ownerGenericDef?.GenericParameters != null)
-            {
-                int paramIndex = ownerGenericDef.GenericParameters
-                                                .ToList()
-                                                .IndexOf(item: resolvedReturnType.Name);
-                if (paramIndex >= 0 && paramIndex < receiverType.TypeArguments.Count)
-                {
-                    resolvedReturnType = receiverType.TypeArguments[index: paramIndex];
-                }
-            }
+            resolvedReturnType = ApplyTypeSubstitutions(type: resolvedReturnType);
         }
 
         string returnType = resolvedReturnType != null
@@ -1053,8 +960,19 @@ public partial class LLVMCodeGenerator
             return type;
         }
 
+        return SubstituteTypeParams(type: type, substitutions: _typeSubstitutions);
+    }
+
+    /// <summary>
+    /// Recursively substitutes generic type parameters in a type using the given substitution map.
+    /// Handles direct params (T → S64), generic resolutions (Snatched[T] → Snatched[S64]),
+    /// nested generics (BTreeListNode[T] → BTreeListNode[S64]), and bare generic definitions
+    /// (Snatched → Snatched[S64]).
+    /// </summary>
+    private TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> substitutions)
+    {
         // Direct generic parameter substitution (e.g., U → S64)
-        if (_typeSubstitutions.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+        if (substitutions.TryGetValue(key: type.Name, value: out TypeInfo? sub))
         {
             return sub;
         }
@@ -1066,7 +984,7 @@ public partial class LLVMCodeGenerator
             var resolvedArgs = new List<TypeInfo>();
             foreach (TypeInfo ta in type.TypeArguments)
             {
-                if (_typeSubstitutions.TryGetValue(key: ta.Name, value: out TypeInfo? argSub))
+                if (substitutions.TryGetValue(key: ta.Name, value: out TypeInfo? argSub))
                 {
                     resolvedArgs.Add(item: argSub);
                     needsResolution = true;
@@ -1074,7 +992,7 @@ public partial class LLVMCodeGenerator
                 else if (ta is { IsGenericResolution: true, TypeArguments: not null })
                 {
                     // Recursively resolve nested generics (e.g., BTreeListNode[T] → BTreeListNode[S64])
-                    TypeInfo innerResolved = ApplyTypeSubstitutions(type: ta);
+                    TypeInfo innerResolved = SubstituteTypeParams(type: ta, substitutions: substitutions);
                     resolvedArgs.Add(item: innerResolved);
                     if (innerResolved != ta)
                     {
@@ -1085,13 +1003,13 @@ public partial class LLVMCodeGenerator
                          and not EntityTypeInfo)
                 {
                     // Generic definition with resolvable params (e.g., DictEntry in List[DictEntry]
-                    // when _typeSubstitutions has {K: S64, V: Text} → resolve to DictEntry[S64, Text]).
+                    // when substitutions has {K: S64, V: Text} → resolve to DictEntry[S64, Text]).
                     // Skip entity types — they are always ptr and resolution is unnecessary.
                     bool canResolve = true;
                     var innerArgs = new List<TypeInfo>();
                     foreach (string param in ta.GenericParameters)
                     {
-                        if (_typeSubstitutions.TryGetValue(key: param,
+                        if (substitutions.TryGetValue(key: param,
                                 value: out TypeInfo? paramSub))
                         {
                             innerArgs.Add(item: paramSub);
@@ -1131,7 +1049,7 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Generic definition with resolvable params at top level (e.g., List when _typeSubstitutions
+        // Generic definition with resolvable params at top level (e.g., List when substitutions
         // has {T: S64} → List[S64]). This happens when the semantic analyzer assigns a bare generic
         // definition as a variable's type instead of a generic resolution (e.g., return type of
         // conversion constructor in a generic body).
@@ -1141,7 +1059,7 @@ public partial class LLVMCodeGenerator
             var resolvedArgs = new List<TypeInfo>();
             foreach (string param in type.GenericParameters)
             {
-                if (_typeSubstitutions.TryGetValue(key: param, value: out TypeInfo? paramSub))
+                if (substitutions.TryGetValue(key: param, value: out TypeInfo? paramSub))
                 {
                     resolvedArgs.Add(item: paramSub);
                 }
@@ -1162,22 +1080,20 @@ public partial class LLVMCodeGenerator
         // Tuple types with unresolved generic params in element types (e.g., Tuple[U64, T] → Tuple[U64, S64])
         if (type is TupleTypeInfo tuple)
         {
-            bool needsResolution = false;
+            bool anyChanged = false;
             var resolvedElems = new List<TypeInfo>();
             foreach (TypeInfo elem in tuple.ElementTypes)
             {
-                if (_typeSubstitutions.TryGetValue(key: elem.Name, value: out TypeInfo? elemSub))
+                TypeInfo resolved = SubstituteTypeParams(type: elem, substitutions: substitutions);
+                if (resolved != elem)
                 {
-                    resolvedElems.Add(item: elemSub);
-                    needsResolution = true;
+                    anyChanged = true;
                 }
-                else
-                {
-                    resolvedElems.Add(item: elem);
-                }
+
+                resolvedElems.Add(item: resolved);
             }
 
-            if (needsResolution)
+            if (anyChanged)
             {
                 return new TupleTypeInfo(elementTypes: resolvedElems);
             }

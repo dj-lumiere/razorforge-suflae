@@ -65,6 +65,9 @@ public sealed partial class TypeRegistry
     /// <summary>Routines indexed by owner type for fast method lookup.</summary>
     private readonly Dictionary<string, List<RoutineInfo>> _routinesByOwner = new();
 
+    /// <summary>Methods on GenericParameterTypeInfo owners, indexed by method name for O(1) universal lookup.</summary>
+    private readonly Dictionary<string, RoutineInfo> _universalMethods = new();
+
     /// <summary>Generic routine resolutions cache.</summary>
     private readonly Dictionary<string, RoutineInfo> _routineResolutions = new();
 

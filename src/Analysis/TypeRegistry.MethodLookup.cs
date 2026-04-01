@@ -39,7 +39,7 @@ public sealed partial class TypeRegistry
         // Index by owner type for fast method lookup
         if (routine.OwnerType != null)
         {
-            string ownerKey = routine.OwnerType.Name;
+            string ownerKey = routine.OwnerType.FullName;
             if (!_routinesByOwner.TryGetValue(key: ownerKey, value: out List<RoutineInfo>? list))
             {
                 list = [];
@@ -47,6 +47,12 @@ public sealed partial class TypeRegistry
             }
 
             list.Add(item: routine);
+
+            // Index universal methods (on GenericParameterTypeInfo owners) by name for O(1) lookup
+            if (routine.OwnerType is GenericParameterTypeInfo)
+            {
+                _universalMethods.TryAdd(key: routine.Name, value: routine);
+            }
         }
     }
 
@@ -271,7 +277,7 @@ public sealed partial class TypeRegistry
         // Update the routines-by-owner index if this is a method
         if (routine.OwnerType != null)
         {
-            string ownerKey = routine.OwnerType.Name;
+            string ownerKey = routine.OwnerType.FullName;
             if (_routinesByOwner.TryGetValue(key: ownerKey, value: out List<RoutineInfo>? list))
             {
                 int index = list.FindIndex(match: r => r.BaseName == baseName);
@@ -293,7 +299,7 @@ public sealed partial class TypeRegistry
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName)
     {
         // First check the type's own methods
-        if (_routinesByOwner.TryGetValue(key: type.Name, value: out List<RoutineInfo>? methods))
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
         {
             RoutineInfo? method = methods.FirstOrDefault(predicate: m => m.Name == methodName);
             if (method != null)
@@ -366,19 +372,10 @@ public sealed partial class TypeRegistry
         }
 
         // Fallback: check methods registered on generic type parameters (e.g., routine T.view())
-        // These methods are available on all types
-        foreach ((string _, List<RoutineInfo> ownerMethods) in _routinesByOwner)
+        // These methods are available on all types — O(1) lookup via _universalMethods index
+        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
         {
-            if (ownerMethods.Count > 0 &&
-                ownerMethods[index: 0].OwnerType is GenericParameterTypeInfo)
-            {
-                RoutineInfo? universalMethod =
-                    ownerMethods.FirstOrDefault(predicate: m => m.Name == methodName);
-                if (universalMethod != null)
-                {
-                    return universalMethod;
-                }
-            }
+            return universalMethod;
         }
 
         return null;
@@ -540,7 +537,7 @@ public sealed partial class TypeRegistry
     /// <returns>An enumerable of all methods for the type.</returns>
     public IEnumerable<RoutineInfo> GetMethodsForType(TypeInfo type)
     {
-        if (_routinesByOwner.TryGetValue(key: type.Name, value: out List<RoutineInfo>? methods))
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
         {
             return methods;
         }

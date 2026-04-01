@@ -704,8 +704,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Resolves generic type parameters in a member's type using the owner's type arguments.
-    /// Handles direct params (T → Letter), parameterized types (Snatched[T] → Snatched[Letter]),
-    /// and generic definitions (Snatched → Snatched[Letter]).
+    /// Builds a substitution map from the owner and delegates to SubstituteTypeParams.
     /// </summary>
     private TypeInfo ResolveGenericMemberType(TypeInfo memberType, TypeInfo ownerType)
     {
@@ -729,77 +728,11 @@ public partial class LLVMCodeGenerator
                 ownerType.TypeArguments[index: i];
         }
 
-        // Direct parameter: memberType is T → substitute to Letter
-        if (memberType is GenericParameterTypeInfo &&
-            subs.TryGetValue(key: memberType.Name, value: out TypeInfo? directSub))
+        if (subs.Count == 0)
         {
-            return directSub;
+            return memberType;
         }
 
-        // Parameterized: memberType is Snatched[T] or Maybe[BTreeListNode[T]] → recursively substitute
-        if (memberType is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            bool anySubstituted = false;
-            var substitutedArgs = new List<TypeInfo>();
-            foreach (TypeInfo ta in memberType.TypeArguments)
-            {
-                if (subs.TryGetValue(key: ta.Name, value: out TypeInfo? resolved))
-                {
-                    substitutedArgs.Add(item: resolved);
-                    anySubstituted = true;
-                }
-                else if (ta is { IsGenericResolution: true, TypeArguments: not null })
-                {
-                    // Recursively substitute nested generics (e.g., BTreeListNode[T] → BTreeListNode[S64])
-                    TypeInfo innerResolved =
-                        ResolveGenericMemberType(memberType: ta, ownerType: ownerType);
-                    substitutedArgs.Add(item: innerResolved);
-                    if (innerResolved != ta)
-                    {
-                        anySubstituted = true;
-                    }
-                }
-                else
-                {
-                    substitutedArgs.Add(item: ta);
-                }
-            }
-
-            if (anySubstituted)
-            {
-                string baseName = memberType.Name;
-                int bracketIdx = baseName.IndexOf(value: '[');
-                if (bracketIdx > 0)
-                {
-                    baseName = baseName[..bracketIdx];
-                }
-
-                TypeInfo? genericDef = _registry.LookupType(name: baseName);
-                if (genericDef != null)
-                {
-                    return _registry.GetOrCreateResolution(genericDef: genericDef,
-                        typeArguments: substitutedArgs);
-                }
-            }
-        }
-
-        // Generic definition: memberType is Snatched with GenericParameters → create resolution
-        if (memberType is { IsGenericDefinition: true, GenericParameters: not null })
-        {
-            var typeArgs = memberType.GenericParameters
-                                     .Select(selector: gp =>
-                                          subs.TryGetValue(key: gp, value: out TypeInfo? s)
-                                              ? s
-                                              : _registry.LookupType(name: gp))
-                                     .Where(predicate: t => t != null)
-                                     .ToList();
-            if (typeArgs.Count == memberType.GenericParameters.Count)
-            {
-                return _registry.GetOrCreateResolution(genericDef: memberType,
-                    typeArguments: typeArgs!);
-            }
-        }
-
-        return memberType;
+        return SubstituteTypeParams(type: memberType, substitutions: subs);
     }
 }

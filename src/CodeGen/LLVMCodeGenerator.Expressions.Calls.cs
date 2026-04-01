@@ -243,61 +243,88 @@ public partial class LLVMCodeGenerator
         if (_typeSubstitutions != null && routine != null && routine.GenericDefinition == null &&
             !routine.IsGenericDefinition && argValues.Count > 0 && routine.Parameters.Count > 0)
         {
-            string expectedLlvm = GetLLVMType(type: routine.Parameters[index: 0].Type);
-            if (argTypes[index: 0] != expectedLlvm)
+            TypeInfo? expectedType = routine.Parameters[index: 0].Type;
+            if (expectedType != null)
+            {
+                expectedType = ApplyTypeSubstitutions(type: expectedType);
+            }
+
+            TypeInfo? actualArgType = GetExpressionType(expr: arguments[index: 0]);
+
+            if (actualArgType != null && expectedType != null &&
+                actualArgType.FullName != expectedType.FullName)
             {
                 RoutineInfo? genericOverload = _registry.LookupGenericOverload(name: routine.Name);
-                if (genericOverload != null)
+                if (genericOverload?.GenericParameters is { Count: > 0 })
                 {
-                    TypeInfo? firstArgType = GetExpressionType(expr: arguments[index: 0]);
-                    if (firstArgType != null && genericOverload.GenericParameters is
-                            { Count: > 0 })
+                    // Infer type args from ALL argument types
+                    var argTypeInfos = arguments
+                                       .Select(selector: a => GetExpressionType(expr: a))
+                                       .Where(predicate: t => t != null)
+                                       .Cast<TypeInfo>()
+                                       .ToList();
+
+                    Dictionary<string, TypeInfo>? inferred =
+                        InferMethodTypeArgs(genericMethod: genericOverload,
+                            argTypes: argTypeInfos);
+
+                    // Build type args list from inferred dict, falling back to actual arg types
+                    var typeArgs = new List<TypeInfo>();
+                    for (int i = 0; i < genericOverload.GenericParameters.Count; i++)
                     {
-                        var typeArgs = new List<TypeInfo> { firstArgType };
-                        // Pad with remaining generic params if needed (use same type)
-                        for (int i = 1; i < genericOverload.GenericParameters.Count; i++)
+                        string paramName = genericOverload.GenericParameters[index: i];
+                        if (inferred != null &&
+                            inferred.TryGetValue(key: paramName, value: out TypeInfo? t))
                         {
-                            typeArgs.Add(item: firstArgType);
+                            typeArgs.Add(item: t);
+                        }
+                        else if (i < argTypeInfos.Count)
+                        {
+                            typeArgs.Add(item: argTypeInfos[index: i]);
+                        }
+                        else
+                        {
+                            typeArgs.Add(item: argTypeInfos[index: 0]); // last resort fallback
+                        }
+                    }
+
+                    routine = genericOverload.CreateInstance(typeArguments: typeArgs);
+
+                    // Re-supply default arguments for the new routine
+                    while (argValues.Count > arguments.Count)
+                    {
+                        argValues.RemoveAt(index: argValues.Count - 1);
+                        argTypes.RemoveAt(index: argTypes.Count - 1);
+                    }
+
+                    for (int i = argValues.Count; i < routine.Parameters.Count; i++)
+                    {
+                        ParameterInfo param = routine.Parameters[index: i];
+                        if (param.HasDefaultValue)
+                        {
+                            string value = EmitExpression(sb: sb, expr: param.DefaultValue!);
+                            argValues.Add(item: value);
+                            argTypes.Add(item: GetLLVMType(type: param.Type));
+                        }
+                    }
+
+                    // Record monomorphization
+                    string monoName = MangleFunctionName(routine: routine);
+                    if (!_pendingMonomorphizations.ContainsKey(key: monoName))
+                    {
+                        var typeSubs = new Dictionary<string, TypeInfo>();
+                        for (int i = 0; i < genericOverload.GenericParameters.Count; i++)
+                        {
+                            typeSubs[key: genericOverload.GenericParameters[index: i]] =
+                                (TypeInfo)routine.TypeArguments![index: i];
                         }
 
-                        routine = genericOverload.CreateInstance(typeArguments: typeArgs);
-
-                        // Re-supply default arguments for the new routine
-                        while (argValues.Count > arguments.Count)
-                        {
-                            argValues.RemoveAt(index: argValues.Count - 1);
-                            argTypes.RemoveAt(index: argTypes.Count - 1);
-                        }
-
-                        for (int i = argValues.Count; i < routine.Parameters.Count; i++)
-                        {
-                            ParameterInfo param = routine.Parameters[index: i];
-                            if (param.HasDefaultValue)
-                            {
-                                string value = EmitExpression(sb: sb, expr: param.DefaultValue!);
-                                argValues.Add(item: value);
-                                argTypes.Add(item: GetLLVMType(type: param.Type));
-                            }
-                        }
-
-                        // Record monomorphization
-                        string monoName = MangleFunctionName(routine: routine);
-                        if (!_pendingMonomorphizations.ContainsKey(key: monoName))
-                        {
-                            var typeSubs = new Dictionary<string, TypeInfo>();
-                            for (int i = 0; i < genericOverload.GenericParameters.Count; i++)
-                            {
-                                typeSubs[key: genericOverload.GenericParameters[index: i]] =
-                                    (TypeInfo)routine.TypeArguments![index: i];
-                            }
-
-                            string genericAstName = $"{genericOverload.Name}[generic]";
-                            _pendingMonomorphizations[key: monoName] = new MonomorphizationEntry(
-                                GenericMethod: genericOverload,
-                                ResolvedOwnerType: null!,
-                                TypeSubstitutions: typeSubs,
-                                GenericAstName: genericAstName);
-                        }
+                        string genericAstName = $"{genericOverload.Name}[generic]";
+                        _pendingMonomorphizations[key: monoName] = new MonomorphizationEntry(
+                            GenericMethod: genericOverload,
+                            ResolvedOwnerType: null!,
+                            TypeSubstitutions: typeSubs,
+                            GenericAstName: genericAstName);
                     }
                 }
             }
@@ -775,33 +802,18 @@ public partial class LLVMCodeGenerator
                 resolvedOwnerType: receiverType,
                 methodTypeArgs: inferredMethodTypeArgs);
         }
-        else if (method != null && receiverType.IsGenericResolution && method.OwnerType != null &&
-                 (method.OwnerType.IsGenericDefinition || method.OwnerType.IsGenericResolution))
+        else if (method != null)
         {
-            mangledName =
-                Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}");
-            // Record for monomorphization — will compile generic AST body with type substitutions
-            RecordMonomorphization(mangledName: mangledName,
-                genericMethod: method,
-                resolvedOwnerType: receiverType);
-        }
-        else if (method != null && method.OwnerType is GenericParameterTypeInfo)
-        {
-            // Generic-parameter-owner methods (e.g., routine T.view() called on Point)
-            // Monomorphize: Point.view with T=Point
-            mangledName =
-                Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}");
-            RecordMonomorphization(mangledName: mangledName,
-                genericMethod: method,
-                resolvedOwnerType: receiverType);
+            // Delegate to ResolveMethod for generic resolution, generic-param owner, and standard cases
+            ResolvedMethod? resolved = ResolveMethod(receiverType: receiverType,
+                methodName: method.Name);
+            mangledName = resolved?.MangledName ??
+                Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}");
         }
         else
         {
-            mangledName = method != null
-                ? MangleFunctionName(routine: method)
-                : Q(
-                    name:
-                    $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}");
+            mangledName =
+                Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}");
         }
 
         // Ensure the method is declared (so the multi-pass stdlib loop can compile its body)
@@ -819,105 +831,12 @@ public partial class LLVMCodeGenerator
                 value: new ProtocolDispatchInfo(Protocol: protoDispatch, MethodName: method.Name));
         }
 
-        // Resolve return type — for generic resolutions, substitute type parameters (e.g., T → U8)
+        // Use the semantic-layer-resolved return type.
+        // During monomorphization, apply _typeSubstitutions for stale AST metadata.
         TypeInfo? resolvedReturnType = method?.ReturnType;
-
-        // For generic-parameter-owner methods (T.view() → Viewed[T]), substitute T with receiver type
-        if (resolvedReturnType != null &&
-            method?.OwnerType is GenericParameterTypeInfo genParamOwner)
+        if (resolvedReturnType != null)
         {
-            resolvedReturnType = SubstituteGenericParamInType(type: resolvedReturnType,
-                paramName: genParamOwner.Name,
-                concreteType: receiverType);
-        }
-
-        // For protocol-owned methods (Iterable[T].enumerate() → EnumerateIterator[T]),
-        // substitute protocol generic params using receiver's type arguments.
-        // Use GenericDefinition to get the param names (resolved protocols have null GenericParameters).
-        if (resolvedReturnType != null && method?.OwnerType is ProtocolTypeInfo protoOwner &&
-            receiverType is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
-            if (protoGenDef.GenericParameters is { Count: > 0 })
-            {
-                for (int pi = 0;
-                     pi < protoGenDef.GenericParameters.Count &&
-                     pi < receiverType.TypeArguments.Count;
-                     pi++)
-                {
-                    resolvedReturnType = SubstituteGenericParamInType(type: resolvedReturnType,
-                        paramName: protoGenDef.GenericParameters[index: pi],
-                        concreteType: receiverType.TypeArguments[index: pi]);
-                }
-            }
-        }
-
-        if (resolvedReturnType is GenericParameterTypeInfo && receiverType is
-                { IsGenericResolution: true, TypeArguments: not null })
-        {
-            TypeInfo? ownerGenericDef = receiverType switch
-            {
-                RecordTypeInfo r => r.GenericDefinition,
-                EntityTypeInfo e => e.GenericDefinition,
-
-                _ => null
-            };
-            if (ownerGenericDef?.GenericParameters != null)
-            {
-                int paramIndex = ownerGenericDef.GenericParameters
-                                                .ToList()
-                                                .IndexOf(item: resolvedReturnType.Name);
-                if (paramIndex >= 0 && paramIndex < receiverType.TypeArguments.Count)
-                {
-                    resolvedReturnType = receiverType.TypeArguments[index: paramIndex];
-                }
-            }
-        }
-
-        // For return types that are generic resolutions with unresolved parameters
-        // (e.g., ValueBitList[N] → ValueBitList[8]), substitute from the receiver's type arguments
-        if (resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null } &&
-            receiverType is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            TypeInfo? ownerGenericDef = receiverType switch
-            {
-                RecordTypeInfo r => r.GenericDefinition,
-                EntityTypeInfo e => e.GenericDefinition,
-                _ => null
-            };
-            if (ownerGenericDef?.GenericParameters != null)
-            {
-                bool needsSubst = false;
-                var substArgs = new List<TypeInfo>();
-                foreach (TypeInfo ta in resolvedReturnType.TypeArguments)
-                {
-                    if (ta is GenericParameterTypeInfo or ConstGenericValueTypeInfo)
-                    {
-                        int pi = ownerGenericDef.GenericParameters
-                                                .ToList()
-                                                .IndexOf(item: ta.Name);
-                        if (pi >= 0 && pi < receiverType.TypeArguments.Count)
-                        {
-                            substArgs.Add(item: receiverType.TypeArguments[index: pi]);
-                            needsSubst = true;
-                            continue;
-                        }
-                    }
-
-                    substArgs.Add(item: ta);
-                }
-
-                if (needsSubst)
-                {
-                    TypeInfo? retGenBase = GetGenericBase(type: resolvedReturnType);
-                    if (retGenBase != null)
-                    {
-                        resolvedReturnType =
-                            _registry.GetOrCreateResolution(genericDef: retGenBase,
-                                typeArguments: substArgs);
-                    }
-                }
-            }
+            resolvedReturnType = ApplyTypeSubstitutions(type: resolvedReturnType);
         }
 
         // For resolved generic methods, also emit a declaration with the resolved name

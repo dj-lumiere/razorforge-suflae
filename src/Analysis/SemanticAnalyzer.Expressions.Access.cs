@@ -140,15 +140,38 @@ public sealed partial class SemanticAnalyzer
 
             TypeSymbol? returnType = method.ReturnType;
 
-            // For methods on generic type parameters (e.g., routine T.view() → Viewed[T]),
-            // substitute the generic parameter with the concrete receiver type
-            if (returnType != null && method.OwnerType is GenericParameterTypeInfo genParamOwner)
+            // Substitute return-type generic params with concrete types from the receiver
+            if (returnType != null)
             {
-                var substitutions = new Dictionary<string, TypeSymbol>
+                var substitutions = new Dictionary<string, TypeSymbol>();
+
+                // GenericParameterTypeInfo owner → map param name to receiver type
+                if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                 {
-                    [key: genParamOwner.Name] = objectType
-                };
-                returnType = SubstituteWithMapping(type: returnType, substitutions: substitutions);
+                    substitutions[key: genParamOwner.Name] = objectType;
+                }
+
+                // Protocol owner → map protocol generic params to receiver's type args
+                if (method.OwnerType is ProtocolTypeInfo protoOwner &&
+                    objectType is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
+                    if (protoGenDef.GenericParameters is { Count: > 0 })
+                    {
+                        for (int i = 0; i < protoGenDef.GenericParameters.Count &&
+                                        i < objectType.TypeArguments.Count; i++)
+                        {
+                            substitutions[key: protoGenDef.GenericParameters[index: i]] =
+                                objectType.TypeArguments[index: i];
+                        }
+                    }
+                }
+
+                if (substitutions.Count > 0)
+                {
+                    returnType = SubstituteWithMapping(type: returnType,
+                        substitutions: substitutions);
+                }
             }
 
             return returnType ?? _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;

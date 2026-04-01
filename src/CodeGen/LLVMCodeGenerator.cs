@@ -890,9 +890,11 @@ public partial class LLVMCodeGenerator
         // Determine mangled name + monomorphization
         bool ownerIsGenericResolution = receiverType.IsGenericResolution;
         bool methodOwnerIsGenericDef = method.OwnerType is { IsGenericDefinition: true };
+        bool methodOwnerIsGenericParam = method.OwnerType is GenericParameterTypeInfo;
         bool hasMethodTypeArgs = resolvedMethodTypeArgs is { Count: > 0 };
 
-        if (ownerIsGenericResolution && methodOwnerIsGenericDef || hasMethodTypeArgs)
+        if (ownerIsGenericResolution && methodOwnerIsGenericDef || hasMethodTypeArgs ||
+            methodOwnerIsGenericParam)
         {
             mangledName = Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}");
             RecordMonomorphization(mangledName: mangledName,
