@@ -368,7 +368,7 @@ public partial class LLVMCodeGenerator
         if (literalType == Lexer.TokenType.F128Literal)
         {
             NumericLiteralParser.F128 f128 =
-                SemanticAnalysis.Native.NumericLiteralParser.ParseF128(str: numericValue);
+                NumericLiteralParser.ParseF128(str: numericValue);
             // LLVM fp128 hex format: 0xL<Lo16hex><Hi16hex> (low bits first)
             return $"0xL{f128.Lo:X16}{f128.Hi:X16}";
         }
@@ -490,21 +490,19 @@ public partial class LLVMCodeGenerator
         switch (literalType)
         {
             case Lexer.TokenType.D32Literal:
-                return SemanticAnalysis.Native
-                                       .NumericLiteralParser
+                return NumericLiteralParser
                                        .ParseD32(str: numericValue)
                                        .Value
                                        .ToString();
             case Lexer.TokenType.D64Literal:
-                return SemanticAnalysis.Native
-                                       .NumericLiteralParser
+                return NumericLiteralParser
                                        .ParseD64(str: numericValue)
                                        .Value
                                        .ToString();
             case Lexer.TokenType.D128Literal:
             {
                 NumericLiteralParser.D128 d128 =
-                    SemanticAnalysis.Native.NumericLiteralParser.ParseD128(str: numericValue);
+                    NumericLiteralParser.ParseD128(str: numericValue);
                 string tmp1 = NextTemp();
                 string tmp2 = NextTemp();
                 EmitLine(sb: sb,
