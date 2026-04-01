@@ -1,7 +1,7 @@
-# RazorForge Snatched[T] - Unsafe raw pointer wrapper
+# RazorForge Snatched[T] - Unmanaged raw pointer wrapper
 #
 # Snatched[T] is created ONLY via .snatch() method inside danger! blocks.
-# It represents raw, unsafe memory access with NO safety guarantees.
+# It represents raw, unmanaged memory access with NO safety guarantees.
 #
 # Syntax:
 #   danger! {
@@ -16,7 +16,7 @@
 # - NO borrow checking - can alias freely
 # - NO reference counting - manual management required
 # - Undefined behavior if used after deallocation
-# - Use ONLY for FFI, low-level code, or unsafe optimizations
+# - Use ONLY for FFI, low-level code, or unmanaged optimizations
 #
 # This is the "escape hatch" for unsafe code - use with extreme caution!
 module Core
