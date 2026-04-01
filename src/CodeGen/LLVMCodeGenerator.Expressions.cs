@@ -46,6 +46,7 @@ public partial class LLVMCodeGenerator
             CompoundAssignmentExpression compound => EmitCompoundAssignment(sb: sb,
                 compound: compound),
             IsPatternExpression isPattern => EmitIsPattern(sb: sb, isPattern: isPattern),
+            WaitforExpression waitfor => EmitWaitforExpression(sb: sb, waitfor: waitfor),
             NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
             DictEntryLiteralExpression dictEntry => EmitDictEntryLiteral(sb: sb,
                 dictEntry: dictEntry),

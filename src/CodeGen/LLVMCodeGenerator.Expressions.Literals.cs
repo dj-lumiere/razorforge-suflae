@@ -45,6 +45,11 @@ public partial class LLVMCodeGenerator
                 return EmitByteSizeLiteral(sb: sb, text: s);
             }
 
+            if (IsDurationLiteralType(type: literal.LiteralType))
+            {
+                return EmitDurationLiteral(sb: sb, text: s, literalType: literal.LiteralType);
+            }
+
             if (literal.LiteralType == Lexer.TokenType.LetterLiteral)
             {
                 return EmitLetterLiteral(sb: sb, text: s);
@@ -120,6 +125,14 @@ public partial class LLVMCodeGenerator
             or Lexer.TokenType.GibibyteLiteral;
     }
 
+    private static bool IsDurationLiteralType(Lexer.TokenType type)
+    {
+        return type is Lexer.TokenType.WeekLiteral or Lexer.TokenType.DayLiteral
+            or Lexer.TokenType.HourLiteral or Lexer.TokenType.MinuteLiteral
+            or Lexer.TokenType.SecondLiteral or Lexer.TokenType.MillisecondLiteral
+            or Lexer.TokenType.MicrosecondLiteral or Lexer.TokenType.NanosecondLiteral;
+    }
+
     private static readonly (string suffix, ulong multiplier)[] ByteSizeSuffixes =
     [
         ("gib", 1_073_741_824UL),
@@ -167,6 +180,75 @@ public partial class LLVMCodeGenerator
         }
 
         return bytes.ToString();
+    }
+
+    private string EmitDurationLiteral(StringBuilder sb, string text, Lexer.TokenType literalType)
+    {
+        const long nsPerMicrosecond = 1_000L;
+        const long nsPerMillisecond = 1_000_000L;
+        const long nsPerSecond = 1_000_000_000L;
+        const long secondsPerMinute = 60L;
+        const long secondsPerHour = 3_600L;
+        const long secondsPerDay = 86_400L;
+        const long secondsPerWeek = 604_800L;
+
+        string numericPart = literalType switch
+        {
+            Lexer.TokenType.MillisecondLiteral => text[..^2],
+            Lexer.TokenType.MicrosecondLiteral => text[..^2],
+            Lexer.TokenType.NanosecondLiteral => text[..^2],
+            _ => text[..^1]
+        };
+
+        numericPart = numericPart.Replace(oldValue: "_", newValue: "");
+        if (!long.TryParse(s: numericPart, result: out long value))
+        {
+            value = 0;
+        }
+
+        long seconds = 0;
+        long nanoseconds = 0;
+        switch (literalType)
+        {
+            case Lexer.TokenType.WeekLiteral:
+                seconds = value * secondsPerWeek;
+                break;
+            case Lexer.TokenType.DayLiteral:
+                seconds = value * secondsPerDay;
+                break;
+            case Lexer.TokenType.HourLiteral:
+                seconds = value * secondsPerHour;
+                break;
+            case Lexer.TokenType.MinuteLiteral:
+                seconds = value * secondsPerMinute;
+                break;
+            case Lexer.TokenType.SecondLiteral:
+                seconds = value;
+                break;
+            case Lexer.TokenType.MillisecondLiteral:
+                seconds = value / 1_000L;
+                nanoseconds = (value % 1_000L) * nsPerMillisecond;
+                break;
+            case Lexer.TokenType.MicrosecondLiteral:
+                seconds = value / 1_000_000L;
+                nanoseconds = (value % 1_000_000L) * nsPerMicrosecond;
+                break;
+            case Lexer.TokenType.NanosecondLiteral:
+                seconds = value / nsPerSecond;
+                nanoseconds = value % nsPerSecond;
+                break;
+        }
+
+        TypeInfo? durationType = _registry.LookupType(name: "Duration");
+        string llvmType = durationType != null
+            ? GetLLVMType(type: durationType)
+            : "%Record.Duration";
+
+        string tmp1 = NextTemp();
+        EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} undef, i64 {seconds}, 0");
+        string tmp2 = NextTemp();
+        EmitLine(sb: sb, line: $"  {tmp2} = insertvalue {llvmType} {tmp1}, i32 {nanoseconds}, 1");
+        return tmp2;
     }
 
     /// <summary>

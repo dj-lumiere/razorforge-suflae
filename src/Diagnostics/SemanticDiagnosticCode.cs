@@ -323,6 +323,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Single-expression when branch should use '=>' syntax instead of block with 'becomes'.</summary>
     SingleExpressionBranchUsesBecomes = 308,
 
+    /// <summary>Indicates a type mismatch error encountered in a wait-for operation during semantic analysis.</summary>
+    WaitForTypeMisMatch = 309,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)

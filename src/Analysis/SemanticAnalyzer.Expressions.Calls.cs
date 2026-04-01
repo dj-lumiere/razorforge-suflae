@@ -9,6 +9,22 @@ using TypeSymbol = Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
+    private TypeSymbol WrapAsyncRoutineReturnType(RoutineInfo routine, TypeSymbol returnType)
+    {
+        if (!routine.IsAsync)
+        {
+            return returnType;
+        }
+
+        TypeSymbol? taskDef = LookupTypeWithImports(name: "Task");
+        if (taskDef is { IsGenericDefinition: true })
+        {
+            return _registry.GetOrCreateResolution(genericDef: taskDef, typeArguments: [returnType]);
+        }
+
+        return returnType;
+    }
+
     private TypeSymbol AnalyzeCallExpression(CallExpression call)
     {
         // Get the callee type/routine
@@ -161,8 +177,10 @@ public sealed partial class SemanticAnalyzer
                     location: call.Location);
 
                 // Return type is Blank if not specified (routines without explicit return type return Blank)
-                return routine.ReturnType ??
-                       _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                TypeSymbol returnType = routine.ReturnType ??
+                                        _registry.LookupType(name: "Blank") ??
+                                        ErrorTypeInfo.Instance;
+                return WrapAsyncRoutineReturnType(routine: routine, returnType: returnType);
             }
 
             // Could be a type creator
@@ -435,8 +453,10 @@ public sealed partial class SemanticAnalyzer
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                     location: call.Location);
 
-                return routine.ReturnType ??
-                       _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                TypeSymbol returnType = routine.ReturnType ??
+                                        _registry.LookupType(name: "Blank") ??
+                                        ErrorTypeInfo.Instance;
+                return WrapAsyncRoutineReturnType(routine: routine, returnType: returnType);
             }
         }
 
@@ -787,8 +807,10 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                return callReturnType ??
-                       _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                TypeSymbol returnType = callReturnType ??
+                                        _registry.LookupType(name: "Blank") ??
+                                        ErrorTypeInfo.Instance;
+                return WrapAsyncRoutineReturnType(routine: method, returnType: returnType);
             }
             else
             {

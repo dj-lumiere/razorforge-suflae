@@ -429,7 +429,10 @@ public partial class LLVMCodeGenerator
                             }
                         }
 
-                        return method.ReturnType;
+                        return method.IsAsync
+                            ? WrapAsyncReturnType(method: method,
+                                returnType: method.ReturnType)
+                            : method.ReturnType;
                     }
                 }
 
@@ -460,7 +463,9 @@ public partial class LLVMCodeGenerator
                                        _registry.LookupRoutineByName(name: callName);
                 if (routine?.ReturnType != null)
                 {
-                    return routine.ReturnType;
+                    return routine.IsAsync
+                        ? WrapAsyncReturnType(method: routine, returnType: routine.ReturnType)
+                        : routine.ReturnType;
                 }
 
                 // If name matches a type, it's a creator call — returns that type
@@ -477,6 +482,22 @@ public partial class LLVMCodeGenerator
             default:
                 return null;
         }
+    }
+
+    private TypeInfo? WrapAsyncReturnType(RoutineInfo method, TypeInfo? returnType)
+    {
+        if (!method.IsAsync || returnType == null)
+        {
+            return returnType;
+        }
+
+        TypeInfo? taskDef = LookupTypeInCurrentModule(name: "Task");
+        if (taskDef is { IsGenericDefinition: true })
+        {
+            return _registry.GetOrCreateResolution(genericDef: taskDef, typeArguments: [returnType]);
+        }
+
+        return returnType;
     }
 
     /// <summary>

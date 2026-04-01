@@ -368,6 +368,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Analyze the operand (the suspended or threaded operation to wait for)
         TypeSymbol operandType = AnalyzeExpression(expression: waitfor.Operand);
+        TypeSymbol? durationType = _registry.LookupType(name: "Duration");
 
         // Analyze optional timeout expression
         if (waitfor.Timeout != null)
@@ -375,7 +376,6 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol timeoutType = AnalyzeExpression(expression: waitfor.Timeout);
 
             // Validate that timeout is a Duration type
-            TypeSymbol? durationType = _registry.LookupType(name: "Duration");
             if (durationType != null && !IsAssignableTo(source: timeoutType, target: durationType))
             {
                 ReportError(code: SemanticDiagnosticCode.WaitforTimeoutNotDuration,
@@ -395,9 +395,22 @@ public sealed partial class SemanticAnalyzer
                 location: waitfor.Location);
         }
 
-        // The result type is the inner type of the suspended or threaded operation
-        // For now, return the operand type directly
-        return operandType;
+        if (durationType != null && IsAssignableTo(source: operandType, target: durationType))
+        {
+            return _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+        }
+
+        string baseName = GetBaseTypeName(typeName: operandType.Name);
+        if (baseName != "Task" || operandType.TypeArguments is not { Count: 1 })
+        {
+            ReportError(code: SemanticDiagnosticCode.WaitForTypeMisMatch,
+                message: $"'waitfor' requires a Task[T] or Duration operand, got '{operandType.Name}'.",
+                location: waitfor.Operand.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // The result type is the inner T of Task[T].
+        return operandType.TypeArguments[index: 0];
     }
 
     /// <summary>

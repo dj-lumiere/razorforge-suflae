@@ -1,6 +1,7 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -10,6 +11,140 @@ using SyntaxTree;
 /// </summary>
 public partial class LLVMCodeGenerator
 {
+    private string EmitAsyncCompletedTask(StringBuilder sb, RoutineInfo routine, string rawResult)
+    {
+        int kindValue = routine.AsyncStatus == AsyncStatus.Threaded
+            ? 1
+            : 0;
+
+        string task = NextTemp();
+        EmitLine(sb: sb, line: $"  {task} = call ptr @rf_task_create(i32 {kindValue})");
+        EmitLine(sb: sb, line: $"  call void @rf_task_mark_running(ptr {task})");
+
+        TypeInfo? returnType = routine.ReturnType;
+        TypeInfo? blankType = _registry.LookupType(name: "Blank");
+
+        if (returnType == null || blankType != null && returnType.Name == blankType.Name)
+        {
+            EmitLine(sb: sb, line: $"  call void @rf_task_complete_value(ptr {task}, ptr null)");
+            return task;
+        }
+
+        if (returnType is EntityTypeInfo)
+        {
+            EmitLine(sb: sb,
+                line: $"  call void @rf_task_complete_value(ptr {task}, ptr {rawResult})");
+            return task;
+        }
+
+        string payloadType = GetLLVMType(type: returnType);
+        int payloadSize = GetTypeSize(type: returnType);
+        string payload = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {payload} = call ptr @rf_allocate_dynamic(i64 {payloadSize})");
+        EmitLine(sb: sb, line: $"  store {payloadType} {rawResult}, ptr {payload}");
+        EmitLine(sb: sb,
+            line: $"  call void @rf_task_complete_value(ptr {task}, ptr {payload})");
+        return task;
+    }
+
+    private string EmitWaitforExpression(StringBuilder sb, WaitforExpression waitfor)
+    {
+        string operandValue = EmitExpression(sb: sb, expr: waitfor.Operand);
+        TypeInfo? operandType = GetExpressionType(expr: waitfor.Operand);
+        if (operandType == null)
+        {
+            return operandValue;
+        }
+
+        if (operandType.Name == "Duration")
+        {
+            string durationLlvmType = GetLLVMType(type: operandType);
+            string durationSeconds = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {durationSeconds} = extractvalue {durationLlvmType} {operandValue}, 0");
+            string durationNanoseconds = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {durationNanoseconds} = extractvalue {durationLlvmType} {operandValue}, 1");
+            EmitLine(sb: sb,
+                line:
+                $"  call void @rf_waitfor_duration(i64 {durationSeconds}, i32 {durationNanoseconds})");
+            return "zeroinitializer";
+        }
+
+        if (GetGenericBaseName(type: operandType) != "Task" ||
+            operandType.TypeArguments is not { Count: 1 })
+        {
+            return operandValue;
+        }
+
+        TypeInfo valueType = operandType.TypeArguments[index: 0];
+
+        if (_declaredNativeFunctions.Add(item: "llvm.trap"))
+        {
+            EmitLine(sb: _functionDeclarations,
+                line: "declare void @llvm.trap() noreturn nounwind");
+        }
+
+        string taskValue = operandValue;
+        string completionKind = NextTemp();
+        if (waitfor.Timeout != null)
+        {
+            string timeoutValue = EmitExpression(sb: sb, expr: waitfor.Timeout);
+            TypeInfo? timeoutType = GetExpressionType(expr: waitfor.Timeout) ??
+                                    _registry.LookupType(name: "Duration");
+            string timeoutLlvmType = timeoutType != null
+                ? GetLLVMType(type: timeoutType)
+                : "{ i64, i32 }";
+            string timeoutSeconds = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {timeoutSeconds} = extractvalue {timeoutLlvmType} {timeoutValue}, 0");
+            string timeoutNanoseconds = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {timeoutNanoseconds} = extractvalue {timeoutLlvmType} {timeoutValue}, 1");
+            EmitLine(sb: sb,
+                line:
+                $"  {completionKind} = call i32 @rf_task_wait_within(ptr {taskValue}, i64 {timeoutSeconds}, i32 {timeoutNanoseconds})");
+        }
+        else
+        {
+            EmitLine(sb: sb, line: $"  {completionKind} = call i32 @rf_task_wait(ptr {taskValue})");
+        }
+
+        string isValue = NextTemp();
+        EmitLine(sb: sb, line: $"  {isValue} = icmp eq i32 {completionKind}, 1");
+        string okLabel = NextLabel(prefix: "waitfor_ok");
+        string failLabel = NextLabel(prefix: "waitfor_fail");
+        EmitLine(sb: sb, line: $"  br i1 {isValue}, label %{okLabel}, label %{failLabel}");
+
+        EmitLine(sb: sb, line: $"{failLabel}:");
+        EmitLine(sb: sb, line: "  call void @llvm.trap()");
+        EmitLine(sb: sb, line: "  unreachable");
+
+        EmitLine(sb: sb, line: $"{okLabel}:");
+
+        if (valueType.Name == "Blank")
+        {
+            EmitLine(sb: sb, line: $"  call void @rf_task_mark_result_consumed(ptr {taskValue})");
+            return "zeroinitializer";
+        }
+
+        string payload = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {payload} = call ptr @rf_task_result_payload(ptr {taskValue})");
+        EmitLine(sb: sb, line: $"  call void @rf_task_mark_result_consumed(ptr {taskValue})");
+
+        if (valueType is EntityTypeInfo)
+        {
+            return payload;
+        }
+
+        string llvmType = GetLLVMType(type: valueType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {payload}");
+        return loaded;
+    }
+
     private string EmitFunctionCall(StringBuilder sb, string functionName,
         List<Expression> arguments, RoutineInfo? resolvedRoutine = null)
     {
@@ -462,7 +597,9 @@ public partial class LLVMCodeGenerator
             // Void return - no result
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
-            return "undef"; // No meaningful return value
+            return routine?.IsAsync == true
+                ? EmitAsyncCompletedTask(sb: sb, routine: routine, rawResult: "undef")
+                : "undef"; // No meaningful return value
         }
         else
         {
@@ -492,7 +629,9 @@ public partial class LLVMCodeGenerator
                     valueType: routine?.ReturnType);
             }
 
-            return result;
+            return routine?.IsAsync == true
+                ? EmitAsyncCompletedTask(sb: sb, routine: routine, rawResult: result)
+                : result;
         }
     }
 
@@ -608,7 +747,9 @@ public partial class LLVMCodeGenerator
                         EmitLine(sb: sb,
                             line:
                             $"  {result} = call {retType} @{creatorMangledName}({receiverLlvm} {receiver})");
-                        return result;
+                        return creator.IsAsync
+                            ? EmitAsyncCompletedTask(sb: sb, routine: creator, rawResult: result)
+                            : result;
                     }
                 }
 
@@ -666,7 +807,11 @@ public partial class LLVMCodeGenerator
                             EmitLine(sb: sb,
                                 line:
                                 $"  {result2} = call {retType2} @{resolvedFuncName}({receiverLlvm2} {receiver})");
-                            return result2;
+                            return creator.IsAsync
+                                ? EmitAsyncCompletedTask(sb: sb,
+                                    routine: creator,
+                                    rawResult: result2)
+                                : result2;
                         }
                     }
                 }
@@ -697,7 +842,9 @@ public partial class LLVMCodeGenerator
                         valueType: creator.ReturnType);
                 }
 
-                return result3;
+                return creator.IsAsync
+                    ? EmitAsyncCompletedTask(sb: sb, routine: creator, rawResult: result3)
+                    : result3;
             }
         }
 
@@ -872,7 +1019,9 @@ public partial class LLVMCodeGenerator
         {
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
-            return "undef";
+            return method?.IsAsync == true
+                ? EmitAsyncCompletedTask(sb: sb, routine: method, rawResult: "undef")
+                : "undef";
         }
         else
         {
@@ -896,7 +1045,9 @@ public partial class LLVMCodeGenerator
                     valueType: resolvedReturnType);
             }
 
-            return result;
+            return method?.IsAsync == true
+                ? EmitAsyncCompletedTask(sb: sb, routine: method, rawResult: result)
+                : result;
         }
     }
 
