@@ -31,6 +31,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="native\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="DebugUtils.CSharp" Version="1.8.0"/>
     <PackageReference Include="LLVMSharp" Version="20.1.2"/>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
