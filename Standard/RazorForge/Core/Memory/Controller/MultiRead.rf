@@ -88,7 +88,6 @@ routine MultiRead.release_write()
 # Check status (for debugging)
 routine MultiRead.reader_count() -> S32
   return me.readers.load()
-  return
 
 routine MultiRead.is_write_locked() -> Bool
   return me.writer.load()
