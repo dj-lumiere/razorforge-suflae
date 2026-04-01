@@ -168,8 +168,8 @@ public sealed partial class SemanticAnalyzer
             ThrowStatement => true,
             AbsentStatement => true,
             BecomesStatement => true,
-            BlockStatement block => block.Statements.Count > 0 &&
-                                    StatementAlwaysTerminates(statement: block.Statements[^1]),
+            BlockStatement block => block.Statements.Any(predicate: s =>
+                                        StatementAlwaysTerminates(statement: s)),
             IfStatement { ElseStatement: not null } ifStmt =>
                 StatementAlwaysTerminates(statement: ifStmt.ThenStatement) &&
                 StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
@@ -195,8 +195,8 @@ public sealed partial class SemanticAnalyzer
             AbsentStatement => true,
             BreakStatement => true,
             ContinueStatement => true,
-            BlockStatement block => block.Statements.Count > 0 &&
-                                    HasDefiniteExit(statement: block.Statements[^1]),
+            BlockStatement block => block.Statements.Any(predicate: s =>
+                                        HasDefiniteExit(statement: s)),
             IfStatement { ElseStatement: not null } ifStmt =>
                 HasDefiniteExit(statement: ifStmt.ThenStatement) &&
                 HasDefiniteExit(statement: ifStmt.ElseStatement),

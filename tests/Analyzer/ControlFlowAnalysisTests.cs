@@ -281,6 +281,102 @@ public class ControlFlowAnalysisTests
 
     #endregion
 
+    #region Throw Terminality (S215/S216)
+
+    /// <summary>
+    /// S215: throw terminates control flow — no return needed after it.
+    /// </summary>
+    [Fact]
+    public void Analyze_ThrowTerminates_NoMissingReturn()
+    {
+        string source = """
+                        routine fail!(value: S32) -> S32
+                          throw ValueError("bad value")
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "not all code paths return",
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// S215: throw in all if/else branches terminates — no return needed.
+    /// </summary>
+    [Fact]
+    public void Analyze_ThrowInAllBranches_NoMissingReturn()
+    {
+        string source = """
+                        routine validate!(value: S32) -> S32
+                          if value > 0
+                            throw ValueError("too big")
+                          else
+                            throw ValueError("too small")
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "not all code paths return",
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// S215: absent terminates control flow — no return needed after it.
+    /// </summary>
+    [Fact]
+    public void Analyze_AbsentTerminates_NoMissingReturn()
+    {
+        string source = """
+                        routine lookup!(key: S32) -> S32
+                          absent
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "not all code paths return",
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// S216: routine with only throw branches — valid, no missing return.
+    /// </summary>
+    [Fact]
+    public void Analyze_AllPathsThrow_NoMissingReturn()
+    {
+        string source = """
+                        routine always_fails!(condition: bool) -> S32
+                          if condition
+                            throw ValueError("a")
+                          else
+                            throw ValueError("b")
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "not all code paths return",
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// S215: throw followed by dead code in block — block still terminates.
+    /// </summary>
+    [Fact]
+    public void Analyze_ThrowWithDeadCode_NoMissingReturn()
+    {
+        string source = """
+                        routine fail!(value: S32) -> S32
+                          throw ValueError("error")
+                          var x = 10
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "not all code paths return",
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    #endregion
+
     #region Conditional Return Analysis
     /// <summary>
     /// Tests Analyze_IfWithoutElse_NoReturn_ReportsError.
