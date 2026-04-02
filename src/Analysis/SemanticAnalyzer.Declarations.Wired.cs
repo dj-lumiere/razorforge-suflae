@@ -81,86 +81,86 @@ public sealed partial class SemanticAnalyzer
     /// Maps operator wired methods to their required protocols.
     /// Types must follow the protocol to define the operator method.
     /// </summary>
-    private static readonly Dictionary<string, string> WiredToProtocol = new()
+    private static readonly Dictionary<string, string[]> WiredToProtocols = new()
     {
         // Arithmetic operators
-        [key: "$add"] = "Addable",
-        [key: "$sub"] = "Subtractable",
-        [key: "$mul"] = "Multiplicable",
-        [key: "$truediv"] = "Divisible",
-        [key: "$floordiv"] = "FloorDivisible",
-        [key: "$mod"] = "FloorDivisible",
-        [key: "$pow"] = "Exponentiable",
+        [key: "$add"] = ["Addable", "DurationAddable"],
+        [key: "$sub"] = ["Subtractable", "DurationSubtractable"],
+        [key: "$mul"] = ["Multiplicable", "TextRepeatable", "Scalable"],
+        [key: "$truediv"] = ["Divisible", "ScalarDivisible"],
+        [key: "$floordiv"] = ["FloorDivisible", "ScalarFloorDivisible"],
+        [key: "$mod"] = ["FloorDivisible"],
+        [key: "$pow"] = ["Exponentiable"],
 
         // Wrapping arithmetic
-        [key: "$add_wrap"] = "WrappingAddable",
-        [key: "$sub_wrap"] = "WrappingSubtractable",
-        [key: "$mul_wrap"] = "WrappingMultiplicable",
-        [key: "$pow_wrap"] = "WrappingExponentiable",
+        [key: "$add_wrap"] = ["WrappingAddable"],
+        [key: "$sub_wrap"] = ["WrappingSubtractable"],
+        [key: "$mul_wrap"] = ["WrappingMultiplicable"],
+        [key: "$pow_wrap"] = ["WrappingExponentiable"],
 
         // Clamping arithmetic
-        [key: "$add_clamp"] = "ClampingAddable",
-        [key: "$sub_clamp"] = "ClampingSubtractable",
-        [key: "$mul_clamp"] = "ClampingMultiplicable",
-        [key: "$truediv_clamp"] = "ClampingDivisible",
-        [key: "$pow_clamp"] = "ClampingExponentiable",
+        [key: "$add_clamp"] = ["ClampingAddable"],
+        [key: "$sub_clamp"] = ["ClampingSubtractable"],
+        [key: "$mul_clamp"] = ["ClampingMultiplicable"],
+        [key: "$truediv_clamp"] = ["ClampingDivisible"],
+        [key: "$pow_clamp"] = ["ClampingExponentiable"],
 
         // Comparison operators
-        [key: "$eq"] = "Equatable",
-        [key: "$ne"] = "Equatable",
-        [key: "$cmp"] = "Comparable",
-        [key: "$lt"] = "Comparable",
-        [key: "$le"] = "Comparable",
-        [key: "$gt"] = "Comparable",
-        [key: "$ge"] = "Comparable",
+        [key: "$eq"] = ["Equatable"],
+        [key: "$ne"] = ["Equatable"],
+        [key: "$cmp"] = ["Comparable"],
+        [key: "$lt"] = ["Comparable"],
+        [key: "$le"] = ["Comparable"],
+        [key: "$gt"] = ["Comparable"],
+        [key: "$ge"] = ["Comparable"],
 
         // Bitwise operators
-        [key: "$bitand"] = "Bitwiseable",
-        [key: "$bitor"] = "Bitwiseable",
-        [key: "$bitxor"] = "Bitwiseable",
+        [key: "$bitand"] = ["Bitwiseable"],
+        [key: "$bitor"] = ["Bitwiseable"],
+        [key: "$bitxor"] = ["Bitwiseable"],
 
         // Shift operators
-        [key: "$ashl"] = "Shiftable",
-        [key: "$ashr"] = "Shiftable",
-        [key: "$lshl"] = "Shiftable",
-        [key: "$lshr"] = "Shiftable",
+        [key: "$ashl"] = ["Shiftable"],
+        [key: "$ashr"] = ["Shiftable"],
+        [key: "$lshl"] = ["Shiftable"],
+        [key: "$lshr"] = ["Shiftable"],
         // Unary operators
-        [key: "$neg"] = "Negatable",
-        [key: "$bitnot"] = "Invertible",
+        [key: "$neg"] = ["Negatable"],
+        [key: "$bitnot"] = ["Invertible"],
 
         // Container operators
-        [key: "$contains"] = "Container",
-        [key: "$notcontains"] = "Container",
-        [key: "$getitem"] = "Indexable",
-        [key: "$setitem"] = "Indexable",
+        [key: "$contains"] = ["Container"],
+        [key: "$notcontains"] = ["Container"],
+        [key: "$getitem"] = ["Indexable"],
+        [key: "$setitem"] = ["Indexable"],
 
         // Sequence operators
-        [key: "$iter"] = "Iterable",
-        [key: "$next"] = "Iterator",
+        [key: "$iter"] = ["Iterable"],
+        [key: "$next"] = ["Iterator"],
 
         // In-place compound assignment operators
-        [key: "$iadd"] = "InPlaceAddable",
-        [key: "$isub"] = "InPlaceSubtractable",
-        [key: "$imul"] = "InPlaceMultiplicable",
-        [key: "$itruediv"] = "InPlaceDivisible",
-        [key: "$ifloordiv"] = "InPlaceFloorDivisible",
-        [key: "$imod"] = "InPlaceFloorDivisible",
-        [key: "$ipow"] = "InPlaceExponentiable",
-        [key: "$ibitand"] = "InPlaceBitwiseable",
-        [key: "$ibitor"] = "InPlaceBitwiseable",
-        [key: "$ibitxor"] = "InPlaceBitwiseable",
-        [key: "$iashl"] = "InPlaceShiftable",
-        [key: "$iashr"] = "InPlaceShiftable",
-        [key: "$ilshl"] = "InPlaceShiftable",
-        [key: "$ilshr"] = "InPlaceShiftable"
+        [key: "$iadd"] = ["InPlaceAddable"],
+        [key: "$isub"] = ["InPlaceSubtractable"],
+        [key: "$imul"] = ["InPlaceMultiplicable"],
+        [key: "$itruediv"] = ["InPlaceDivisible"],
+        [key: "$ifloordiv"] = ["InPlaceFloorDivisible"],
+        [key: "$imod"] = ["InPlaceFloorDivisible"],
+        [key: "$ipow"] = ["InPlaceExponentiable"],
+        [key: "$ibitand"] = ["InPlaceBitwiseable"],
+        [key: "$ibitor"] = ["InPlaceBitwiseable"],
+        [key: "$ibitxor"] = ["InPlaceBitwiseable"],
+        [key: "$iashl"] = ["InPlaceShiftable"],
+        [key: "$iashr"] = ["InPlaceShiftable"],
+        [key: "$ilshl"] = ["InPlaceShiftable"],
+        [key: "$ilshr"] = ["InPlaceShiftable"]
     };
 
     /// <summary>
     /// Gets the required protocol for a wired method, or null if no protocol is required.
     /// </summary>
-    private static string? GetRequiredProtocol(string wiredName)
+    private static IReadOnlyList<string>? GetRequiredProtocols(string wiredName)
     {
-        return WiredToProtocol.GetValueOrDefault(key: wiredName);
+        return WiredToProtocols.GetValueOrDefault(key: wiredName);
     }
 
     private void CollectExternalDeclaration(ExternalDeclaration external)

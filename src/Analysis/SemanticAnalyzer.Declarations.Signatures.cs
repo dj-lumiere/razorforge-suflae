@@ -517,8 +517,8 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Get the required protocol for this wired method
-        string? requiredProtocol = GetRequiredProtocol(wiredName: routineInfo.Name);
-        if (requiredProtocol == null)
+        IReadOnlyList<string>? requiredProtocols = GetRequiredProtocols(wiredName: routineInfo.Name);
+        if (requiredProtocols == null || requiredProtocols.Count == 0)
         {
             return; // Not an operator method or no protocol required
         }
@@ -532,12 +532,17 @@ public sealed partial class SemanticAnalyzer
 
         // Check if the owner type EXPLICITLY obeys the required protocol
         // (structural conformance doesn't count - you must declare "obeys Protocol")
-        if (!ExplicitlyFollowsProtocol(type: currentOwnerType, protocolName: requiredProtocol))
+        bool followsAny = requiredProtocols.Any(predicate: proto =>
+            ExplicitlyFollowsProtocol(type: currentOwnerType, protocolName: proto));
+        if (!followsAny)
         {
+            string protocolText = requiredProtocols.Count == 1
+                ? $"'{requiredProtocols[0]}'"
+                : string.Join(separator: " or ", values: requiredProtocols.Select(selector: p => $"'{p}'"));
             ReportError(code: SemanticDiagnosticCode.OperatorWithoutProtocol,
                 message:
-                $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow '{requiredProtocol}'. " +
-                $"Add 'obeys {requiredProtocol}' to the type declaration.",
+                $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow {protocolText}. " +
+                $"Add the matching 'obeys' protocol to the type declaration.",
                 location: location);
         }
     }
