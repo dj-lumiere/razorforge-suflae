@@ -765,7 +765,7 @@ public partial class LLVMCodeGenerator
         {
             // Allocate space for the result, pass as sret pointer, call as void, then load
             string sretPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {sretPtr} = alloca {returnType}");
+            EmitEntryAlloca(llvmName: sretPtr, llvmType: returnType);
             // Insert sret pointer as first argument
             argTypes.Insert(index: 0, item: $"ptr sret({returnType})");
             argValues.Insert(index: 0, item: sretPtr);
@@ -1286,7 +1286,7 @@ public partial class LLVMCodeGenerator
     {
         // Store Maybe { i64, ptr } to memory for field extraction
         string maybeAddr = NextTemp();
-        EmitLine(sb: sb, line: $"  {maybeAddr} = alloca {{ i64, ptr }}");
+        EmitEntryAlloca(llvmName: maybeAddr, llvmType: "{ i64, ptr }");
         EmitLine(sb: sb, line: $"  store {{ i64, ptr }} {maybeResult}, ptr {maybeAddr}");
 
         // Extract tag (field 0 = DataState)

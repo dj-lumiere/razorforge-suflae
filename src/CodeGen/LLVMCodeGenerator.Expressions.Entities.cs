@@ -414,7 +414,7 @@ public partial class LLVMCodeGenerator
 
         // Alloca and store the Maybe value using its proper LLVM type
         string allocaPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {allocaPtr} = alloca {wrapperLlvmType}");
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: wrapperLlvmType);
         EmitLine(sb: sb, line: $"  store {wrapperLlvmType} {maybeValue}, ptr {allocaPtr}");
 
         // Extract tag

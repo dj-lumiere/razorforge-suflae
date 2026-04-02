@@ -278,11 +278,14 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions,
             line: $"define {returnType} @{funcName}({parameters}) {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
+        var bodyBuilder = new StringBuilder();
 
         // Generate body — if it throws, rollback and emit a stub function
         try
         {
-            GenerateFunctionBody(body: routine.Body, routine: routineInfo);
+            GenerateFunctionBody(sb: bodyBuilder, body: routine.Body, routine: routineInfo);
+            _functionDefinitions.Append(value: _currentFunctionEntryAllocas);
+            _functionDefinitions.Append(value: bodyBuilder);
         }
         catch (Exception ex)
         {
@@ -317,7 +320,7 @@ public partial class LLVMCodeGenerator
     /// Generates code for a function body.
     /// Emits statements and ensures proper termination.
     /// </summary>
-    private void GenerateFunctionBody(Statement body, RoutineInfo routine)
+    private void GenerateFunctionBody(StringBuilder sb, Statement body, RoutineInfo routine)
     {
         // Clear local variables and emit slot for this function
         _localVariables.Clear();
@@ -326,6 +329,7 @@ public partial class LLVMCodeGenerator
         _localEntityVars.Clear();
         _localRCRecordVars.Clear();
         _currentBlock = "entry";
+        _currentFunctionEntryAllocas.Clear();
         _emitSlotAddr = null;
         _emitSlotType = null;
 
@@ -348,8 +352,8 @@ public partial class LLVMCodeGenerator
             else
             {
                 string meType = GetParameterLLVMType(type: routine.OwnerType);
-                EmitLine(sb: _functionDefinitions, line: $"  %me.addr = alloca {meType}");
-                EmitLine(sb: _functionDefinitions, line: $"  store {meType} %me, ptr %me.addr");
+                EmitEntryAlloca(llvmName: "%me.addr", llvmType: meType);
+                EmitLine(sb: sb, line: $"  store {meType} %me, ptr %me.addr");
                 _localVariables[key: "me"] = routine.OwnerType;
             }
         }
@@ -360,8 +364,8 @@ public partial class LLVMCodeGenerator
             // Parameters are passed by value, create a local copy
             string paramPtr = $"%{param.Name}.addr";
             string llvmType = GetLLVMType(type: param.Type);
-            EmitLine(sb: _functionDefinitions, line: $"  {paramPtr} = alloca {llvmType}");
-            EmitLine(sb: _functionDefinitions,
+            EmitEntryAlloca(llvmName: paramPtr, llvmType: llvmType);
+            EmitLine(sb: sb,
                 line: $"  store {llvmType} %{param.Name}, ptr {paramPtr}");
             _localVariables[key: param.Name] = param.Type;
         }
@@ -379,46 +383,46 @@ public partial class LLVMCodeGenerator
             string fileCStr = EmitCStringConstant(value: fileName);
             string routineAsInt = NextTemp();
             string fileAsInt = NextTemp();
-            EmitLine(sb: _functionDefinitions,
+            EmitLine(sb: sb,
                 line: $"  {routineAsInt} = ptrtoint ptr {routineCStr} to i64");
-            EmitLine(sb: _functionDefinitions,
+            EmitLine(sb: sb,
                 line: $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
-            EmitLine(sb: _functionDefinitions,
+            EmitLine(sb: sb,
                 line:
                 $"  call void @rf_trace_push(i64 {routineAsInt}, i64 {fileAsInt}, i32 {line}, i32 {col})");
         }
 
         // Emit the body statements
-        EmitStatement(sb: _functionDefinitions, stmt: body);
+        EmitStatement(sb: sb, stmt: body);
 
         // Ensure function is properly terminated
         // Check if the last instruction was a terminator (ret, br, etc.)
         // If not, add a default return
-        if (EndsWithTerminator(sb: _functionDefinitions))
+        if (EndsWithTerminator(sb: sb))
         {
             return;
         }
 
-        EmitUsingCleanup(sb: _functionDefinitions);
-        EmitRCRecordCleanup(sb: _functionDefinitions);
-        EmitEntityCleanup(sb: _functionDefinitions, returnedVarName: null);
-        EmitLine(sb: _functionDefinitions, line: "  call void @rf_trace_pop()");
+        EmitUsingCleanup(sb: sb);
+        EmitRCRecordCleanup(sb: sb);
+        EmitEntityCleanup(sb: sb, returnedVarName: null);
+        EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)
         {
             if (_currentRoutineIsFailable)
             {
-                EmitLine(sb: _functionDefinitions, line: "  ret { i64, ptr } { i64 0, ptr null }");
+                EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 0, ptr null }");
             }
             else
             {
-                EmitLine(sb: _functionDefinitions, line: "  ret void");
+                EmitLine(sb: sb, line: "  ret void");
             }
         }
         else
         {
             string returnType = GetLLVMType(type: routine.ReturnType);
             string zeroValue = GetZeroValue(type: routine.ReturnType);
-            EmitLine(sb: _functionDefinitions, line: $"  ret {returnType} {zeroValue}");
+            EmitLine(sb: sb, line: $"  ret {returnType} {zeroValue}");
         }
     }
 

@@ -101,6 +101,9 @@ public partial class LLVMCodeGenerator
     /// <summary>The label of the current basic block (for phi node generation).</summary>
     private string _currentBlock = "entry";
 
+    /// <summary>Function-entry alloca instructions emitted once per function.</summary>
+    private readonly StringBuilder _currentFunctionEntryAllocas = new();
+
     /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Letter).</summary>
     private Dictionary<string, TypeInfo>? _typeSubstitutions;
 
@@ -768,6 +771,15 @@ public partial class LLVMCodeGenerator
         {
             _currentBlock = line[..^1];
         }
+    }
+
+    /// <summary>
+    /// Emits a function-local stack allocation into the current function's entry block.
+    /// This avoids repeated stack growth when the source declaration appears inside loops.
+    /// </summary>
+    private void EmitEntryAlloca(string llvmName, string llvmType)
+    {
+        EmitLine(sb: _currentFunctionEntryAllocas, line: $"  {llvmName} = alloca {llvmType}");
     }
 
     /// <summary>

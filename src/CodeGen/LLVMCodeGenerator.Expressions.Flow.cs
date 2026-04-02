@@ -344,7 +344,7 @@ public partial class LLVMCodeGenerator
 
         // Alloca and store the maybe value
         string allocaPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {allocaPtr} = alloca {maybeType}");
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
         EmitLine(sb: sb, line: $"  store {maybeType} {left}, ptr {allocaPtr}");
 
         // Extract tag (field 0)
@@ -444,7 +444,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(type: operandType)
             : "{ i64, ptr }";
         string allocaPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {allocaPtr} = alloca {maybeType}");
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
         EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
 
         // Extract tag (field 0)
@@ -578,7 +578,7 @@ public partial class LLVMCodeGenerator
     {
         // Alloca and store the { i64, ptr } value
         string allocaPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {allocaPtr} = alloca {{ i64, ptr }}");
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: "{ i64, ptr }");
         EmitLine(sb: sb, line: $"  store {{ i64, ptr }} {obj}, ptr {allocaPtr}");
 
         // Extract tag

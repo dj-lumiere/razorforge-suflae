@@ -95,7 +95,7 @@ public partial class LLVMCodeGenerator
                 {
                     string elseType = GetLLVMType(type: subjectType);
                     string elseAddr = $"%{elseP.VariableName}.addr";
-                    EmitLine(sb: sb, line: $"  {elseAddr} = alloca {elseType}");
+                    EmitEntryAlloca(llvmName: elseAddr, llvmType: elseType);
                     EmitLine(sb: sb, line: $"  store {elseType} {subject}, ptr {elseAddr}");
                     _localVariables[key: elseP.VariableName] = subjectType;
                 }
@@ -296,7 +296,7 @@ public partial class LLVMCodeGenerator
             : "i64";
         string varAddr = $"%{id.Name}.addr";
 
-        EmitLine(sb: sb, line: $"  {varAddr} = alloca {llvmType}");
+        EmitEntryAlloca(llvmName: varAddr, llvmType: llvmType);
         EmitLine(sb: sb, line: $"  store {llvmType} {subject}, ptr {varAddr}");
 
         if (subjectType != null)
@@ -382,7 +382,7 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: $"{branchTarget}:");
             string bindType = GetLLVMType(type: targetType!);
             string varAddr = $"%{typePattern.VariableName}.addr";
-            EmitLine(sb: sb, line: $"  {varAddr} = alloca {bindType}");
+            EmitEntryAlloca(llvmName: varAddr, llvmType: bindType);
             EmitLine(sb: sb, line: $"  store {bindType} {subject}, ptr {varAddr}");
             _localVariables[key: typePattern.VariableName!] = targetType!;
             EmitLine(sb: sb, line: $"  br label %{matchLabel}");
@@ -433,7 +433,7 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
 
                 string varAddr = $"%{crashable.VariableName}.addr";
-                EmitLine(sb: sb, line: $"  {varAddr} = alloca ptr");
+                EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
                 EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
 
                 TypeInfo errorType = errorInfo.ErrorType ?? errorInfo;
@@ -555,7 +555,7 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb: sb, line: $"  {payloadVal} = load {payloadLlvm}, ptr {payloadPtr}");
 
                 string bindAddr = $"%{bindName}.addr";
-                EmitLine(sb: sb, line: $"  {bindAddr} = alloca {payloadLlvm}");
+                EmitEntryAlloca(llvmName: bindAddr, llvmType: payloadLlvm);
                 EmitLine(sb: sb, line: $"  store {payloadLlvm} {payloadVal}, ptr {bindAddr}");
                 _localVariables[key: bindName] = payloadType;
             }
@@ -939,7 +939,7 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: $"  {memberVal} = load {memberLlvmType}, ptr {memberPtr}");
 
             string varAddr = $"%{bindName}.addr";
-            EmitLine(sb: sb, line: $"  {varAddr} = alloca {memberLlvmType}");
+            EmitEntryAlloca(llvmName: varAddr, llvmType: memberLlvmType);
             EmitLine(sb: sb, line: $"  store {memberLlvmType} {memberVal}, ptr {varAddr}");
             _localVariables[key: bindName] = memberVar.Type;
         }

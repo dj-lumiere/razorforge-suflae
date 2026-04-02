@@ -180,7 +180,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate stack space
         string varPtr = $"%{uniqueName}.addr";
-        EmitLine(sb: sb, line: $"  {varPtr} = alloca {llvmType}");
+        EmitEntryAlloca(llvmName: varPtr, llvmType: llvmType);
 
         // Register local variable for identifier lookup
         _localVariables[key: varDecl.Name] = varType;
@@ -794,7 +794,7 @@ public partial class LLVMCodeGenerator
         {
             _emitSlotAddr = "%emit.slot.addr";
             _emitSlotType = llvmType;
-            EmitLine(sb: sb, line: $"  {_emitSlotAddr} = alloca {llvmType}");
+            EmitEntryAlloca(llvmName: _emitSlotAddr, llvmType: llvmType);
         }
 
         // Store the emitted value

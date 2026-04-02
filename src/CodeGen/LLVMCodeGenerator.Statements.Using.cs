@@ -63,7 +63,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(type: boundType)
             : llvmType;
         string varAddr = $"%{usingStmt.Name}.addr";
-        EmitLine(sb: sb, line: $"  {varAddr} = alloca {bindLlvmType}");
+        EmitEntryAlloca(llvmName: varAddr, llvmType: bindLlvmType);
         EmitLine(sb: sb, line: $"  store {bindLlvmType} {boundValue}, ptr {varAddr}");
 
         if (boundType != null)

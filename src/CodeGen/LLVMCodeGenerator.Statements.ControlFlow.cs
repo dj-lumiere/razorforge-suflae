@@ -295,7 +295,7 @@ public partial class LLVMCodeGenerator
             : "ptr";
         string emitterAddr = NextTemp()
            .Replace(oldValue: "%", newValue: "%emitter.");
-        EmitLine(sb: sb, line: $"  {emitterAddr} = alloca {emitterLlvmType}");
+        EmitEntryAlloca(llvmName: emitterAddr, llvmType: emitterLlvmType);
         EmitLine(sb: sb, line: $"  store {emitterLlvmType} {emitterValue}, ptr {emitterAddr}");
 
         // Determine element type from $next() return type (preferred) or emitter type arguments (fallback).
@@ -353,7 +353,7 @@ public partial class LLVMCodeGenerator
 
                 MemberVariableInfo memberVar = tupleElemType.MemberVariables[index: i];
                 string memberLlvmType = GetLLVMType(type: memberVar.Type);
-                EmitLine(sb: sb, line: $"  %{bindName}.addr = alloca {memberLlvmType}");
+                EmitEntryAlloca(llvmName: $"%{bindName}.addr", llvmType: memberLlvmType);
                 _localVariables[key: bindName] = memberVar.Type;
             }
         }
@@ -361,7 +361,7 @@ public partial class LLVMCodeGenerator
         {
             string varName = forStmt.Variable ?? "_iter";
             varAddr = $"%{varName}.addr";
-            EmitLine(sb: sb, line: $"  {varAddr} = alloca {elemLlvmType}");
+            EmitEntryAlloca(llvmName: varAddr, llvmType: elemLlvmType);
 
             if (elemType != null)
             {
@@ -437,7 +437,7 @@ public partial class LLVMCodeGenerator
 
         // Extract tag from Maybe result (field 0 = DataState i64)
         string maybeTagPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {maybeTagPtr} = alloca {{ i64, ptr }}");
+        EmitEntryAlloca(llvmName: maybeTagPtr, llvmType: "{ i64, ptr }");
         EmitLine(sb: sb, line: $"  store {{ i64, ptr }} {maybeResult}, ptr {maybeTagPtr}");
         string tagFieldPtr = NextTemp();
         string tagVal = NextTemp();
@@ -650,7 +650,7 @@ public partial class LLVMCodeGenerator
 
         _localVarLLVMNames[key: varName] = uniqueVarName;
         string varAddr = $"%{uniqueVarName}.addr";
-        EmitLine(sb: sb, line: $"  {varAddr} = alloca {elemLlvmType}");
+        EmitEntryAlloca(llvmName: varAddr, llvmType: elemLlvmType);
         EmitLine(sb: sb, line: $"  store {elemLlvmType} {start}, ptr {varAddr}");
 
         // Register loop variable type

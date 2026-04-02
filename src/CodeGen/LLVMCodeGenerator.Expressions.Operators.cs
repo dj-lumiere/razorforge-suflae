@@ -307,7 +307,7 @@ public partial class LLVMCodeGenerator
                 : "{ i64, ptr }";
 
             string allocaPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {allocaPtr} = alloca {maybeType}");
+            EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
             EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
 
             string tagPtr = NextTemp();
