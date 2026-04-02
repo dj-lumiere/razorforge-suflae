@@ -147,20 +147,20 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Tries to parse a letter literal (letter8, letter16, letter, or byte letter).
+    /// Tries to parse a character literal.
     /// </summary>
-    private bool TryParseLetterLiteral(SourceLocation location, out Expression? result)
+    private bool TryParseCharacterLiteral(SourceLocation location, out Expression? result)
     {
         result = null;
 
-        if (!Match(TokenType.LetterLiteral, TokenType.ByteLetterLiteral))
+        if (!Match(TokenType.CharacterLiteral, TokenType.ByteLetterLiteral))
         {
             return false;
         }
 
         Token token = PeekToken(offset: -1);
-        string parsedLetter = ParseLetterContent(value: token.Text);
-        result = new LiteralExpression(Value: parsedLetter,
+        string parseCharacter = ParseCharacterContent(value: token.Text);
+        result = new LiteralExpression(Value: parseCharacter,
             LiteralType: token.Type,
             Location: location);
         return true;
@@ -222,9 +222,9 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Parses the content of a letter literal, handling escape sequences.
+    /// Parses the content of a character literal, handling escape sequences.
     /// </summary>
-    private static string ParseLetterContent(string value)
+    private static string ParseCharacterContent(string value)
     {
         // Determine the actual character content — strip quotes if present
         string charContent;

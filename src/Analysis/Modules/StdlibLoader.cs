@@ -518,7 +518,7 @@ public sealed partial class StdlibLoader
             return new GenericParameterTypeInfo(name: typeName);
         }
 
-        // Parameterized type like List[Letter], Dict[Text, S32]
+        // Parameterized type like List[Character], Dict[Text, S32]
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
             // Tuple types are not registered as generic definitions — handle specially

@@ -75,7 +75,7 @@ public partial class LLVMCodeGenerator
                     arguments: new List<Expression> { index.Index });
             }
 
-            // For entity types with a list-like first field (e.g., Text has letters: List[Letter]),
+            // For entity types with a list-like first field (e.g., Text has characters: List[Character]),
             // inline $getitem as: load list ptr → GEP data → load element
             if (getItem != null && targetType is EntityTypeInfo entity &&
                 entity.MemberVariables.Count > 0)

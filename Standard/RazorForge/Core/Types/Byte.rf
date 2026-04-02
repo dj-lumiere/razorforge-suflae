@@ -9,7 +9,7 @@
 # - Interfacing with C libraries
 # - Any raw byte data
 #
-# For text processing, use Letter (Unicode codepoint) and Text types.
+# For text processing, use Character (Unicode codepoint) and Text types.
 module Core
 
 @llvm("i8")
@@ -34,7 +34,7 @@ preset BYTE_TAB: Byte = Byte(0x09u8)
 # Comparison operations
 # ============================================================================
 
-routine Letter.byte_value() -> U8
+routine Character.byte_value() -> U8
   return U8(U32(me))
 
 routine Byte.codepoint() -> U32
@@ -88,20 +88,20 @@ routine Byte.hex_value!() -> U8
 # ============================================================================
 
 routine Byte.$represent() -> Text
-  var digits = List[Letter]()
-  digits.add_last(Letter(0x005Cu32))  # \
-  digits.add_last(Letter(0x0078u32))  # x
+  var digits = List[Character]()
+  digits.add_last(Character(0x005Cu32))  # \
+  digits.add_last(Character(0x0078u32))  # x
   var v = U32(U8(me))
   var high = (v >> 4u32) & 0x0Fu32
   var low = v & 0x0Fu32
   if high < 10u32
-    digits.add_last(Letter(0x0030u32 + high))
+    digits.add_last(Character(0x0030u32 + high))
   else
-    digits.add_last(Letter(0x0041u32 + high - 10u32))
+    digits.add_last(Character(0x0041u32 + high - 10u32))
   if low < 10u32
-    digits.add_last(Letter(0x0030u32 + low))
+    digits.add_last(Character(0x0030u32 + low))
   else
-    digits.add_last(Letter(0x0041u32 + low - 10u32))
+    digits.add_last(Character(0x0041u32 + low - 10u32))
   return Text(from_list: digits)
 
 routine Byte.$diagnose() -> Text

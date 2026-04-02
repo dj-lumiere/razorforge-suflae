@@ -1,4 +1,4 @@
-﻿using SemanticAnalysis.Symbols;
+using SemanticAnalysis.Symbols;
 
 namespace Compiler.CodeGen;
 
@@ -851,7 +851,7 @@ public partial class LLVMCodeGenerator
                 line: $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
 
             // Text entity = { ptr letters_list }
-            // List[Letter] entity = { ptr data, i64 count, i64 capacity }
+            // List[Character] entity = { ptr data, i64 count, i64 capacity }
             string lettersPtr = NextTemp();
             EmitLine(sb: sb, line: $"  {lettersPtr} = load ptr, ptr {textPtr}");
             string dataField = NextTemp();

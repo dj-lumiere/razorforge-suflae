@@ -1,4 +1,4 @@
-# RazorForge Letter - Unicode codepoint (UTF-32 code unit)
+# RazorForge Character - Unicode codepoint (UTF-32 code unit)
 #
 # Represents a full Unicode codepoint (U+0000 to U+10FFFF).
 # In UTF-32, every character is exactly 4 bytes, providing O(1) indexing.
@@ -13,45 +13,45 @@
 module Core
 
 @llvm("i32")
-record Letter obeys ConstCompatible
+record Character obeys ConstCompatible
   pass
 
 # Creators
 
-routine Letter.$create(from: Letter) -> Letter
+routine Character.$create(from: Character) -> Character
   return from
 
-routine Letter.$create(from: U32) -> Letter
-  return bitcast[Letter](from)
+routine Character.$create(from: U32) -> Character
+  return bitcast[Character](from)
 
 # Unicode constants
-preset LETTER_NULL: Letter = Letter(0x0000u32)
-preset LETTER_SPACE: Letter = Letter(0x0020u32)
-preset LETTER_NEWLINE: Letter = Letter(0x000Au32)
-preset LETTER_TAB: Letter = Letter(0x0009u32)
-preset LETTER_REPLACEMENT: Letter = Letter(0xFFFDu32)
-preset LETTER_MAX_UNICODE: Letter = Letter(0x10FFFFu32)
+preset CHARACTER_NULL: Character = Character(0x0000u32)
+preset CHARACTER_SPACE: Character = Character(0x0020u32)
+preset CHARACTER_NEWLINE: Character = Character(0x000Au32)
+preset CHARACTER_TAB: Character = Character(0x0009u32)
+preset CHARACTER_REPLACEMENT: Character = Character(0xFFFDu32)
+preset CHARACTER_MAX_UNICODE: Character = Character(0x10FFFFu32)
 
 # Surrogate range (invalid for standalone codepoints)
-preset LETTER_SURROGATE_START: U32 = 0xD800
-preset LETTER_SURROGATE_END: U32 = 0xDFFF
+preset CHARACTER_SURROGATE_START: U32 = 0xD800
+preset CHARACTER_SURROGATE_END: U32 = 0xDFFF
 
 # ============================================================================
-# Letter protocol implementation
+# Character protocol implementation
 # ============================================================================
 
-routine Letter.codepoint() -> U32
+routine Character.codepoint() -> U32
   return U32(me)
 
-routine Letter.is_valid() -> Bool
+routine Character.is_valid() -> Bool
   var cp = U32(me)
   # Valid if within Unicode range and not a surrogate
-  return cp <= 0x10FFFFu32 and not (LETTER_SURROGATE_START <= cp <= LETTER_SURROGATE_END)
+  return cp <= 0x10FFFFu32 and not (CHARACTER_SURROGATE_START <= cp <= CHARACTER_SURROGATE_END)
 
-routine Letter.is_ascii() -> Bool
+routine Character.is_ascii() -> Bool
   return U32(me) <= 0x007Fu32
 
-routine Letter.is_alphabetic() -> Bool
+routine Character.is_alphabetic() -> Bool
   var v = U32(me)
   var is_ascii_upper = 0x0041u32 <= v <= 0x005Au32
   var is_ascii_lower = 0x0061u32 <= v <= 0x007Au32
@@ -60,22 +60,22 @@ routine Letter.is_alphabetic() -> Bool
   var is_latin_ext_b = 0x0180u32 <= v <= 0x024Fu32
   return is_ascii_upper or is_ascii_lower or is_latin_ext or is_latin_ext_a or is_latin_ext_b
 
-routine Letter.is_numeric() -> Bool
+routine Character.is_numeric() -> Bool
   var v = U32(me)
   return 0x0030u32 <= v <= 0x0039u32  # 0-9
 
-routine Letter.is_alphanumeric() -> Bool
+routine Character.is_alphanumeric() -> Bool
   return me.is_alphabetic() or me.is_numeric()
 
-routine Letter.is_uppercase() -> Bool
+routine Character.is_uppercase() -> Bool
   var v = U32(me)
   return 0x0041u32 <= v <= 0x005Au32  # A-Z (ASCII only)
 
-routine Letter.is_lowercase() -> Bool
+routine Character.is_lowercase() -> Bool
   var v = U32(me)
   return 0x0061u32 <= v <= 0x007Au32  # a-z (ASCII only)
 
-routine Letter.is_whitespace() -> Bool
+routine Character.is_whitespace() -> Bool
   var v = U32(me)
   var is_space = v == 0x0020u32
   var is_tab = v == 0x0009u32
@@ -89,80 +89,80 @@ routine Letter.is_whitespace() -> Bool
   var is_em_space = v == 0x2003u32
   return is_space or is_tab or is_lf or is_cr or is_ff or is_nbsp or is_en_quad or is_em_quad or is_en_space or is_em_space
 
-routine Letter.is_control() -> Bool
+routine Character.is_control() -> Bool
   var v = U32(me)
   return (v <= 0x001Fu32) or (0x007Fu32 <= v <= 0x009Fu32)
 
-routine Letter.to_uppercase() -> Letter
+routine Character.to_uppercase() -> Character
   if me.is_lowercase()
-    return Letter(U32(me) - 32u32)
+    return Character(U32(me) - 32u32)
   return me
 
-routine Letter.to_lowercase() -> Letter
+routine Character.to_lowercase() -> Character
   if me.is_uppercase()
-    return Letter(U32(me) + 32u32)
+    return Character(U32(me) + 32u32)
   return me
 
 # ============================================================================
 # Comparison operations
 # ============================================================================
 
-routine Letter.$eq(other: Letter) -> Bool
+routine Character.$eq(other: Character) -> Bool
   return U32(me) == U32(other)
 
-routine Letter.$cmp(other: Letter) -> ComparisonSign
+routine Character.$cmp(other: Character) -> ComparisonSign
   return U32(me) <=> U32(other)
 
 # ============================================================================
 # Type conversions
 # ============================================================================
 
-routine Letter.codepoint() -> U32
+routine Character.codepoint() -> U32
   return U32(me)
 
-routine Letter.to_byte() -> Byte
+routine Character.to_byte() -> Byte
   # Only valid for ASCII range - truncates
   return Byte(U8(U32(me) & 0x7Fu32))
 
 # ============================================================================
-# Display — shows the letter itself
+# Display — shows the character itself
 # ============================================================================
 
-routine Letter.$represent() -> Text
-  var list = List[Letter]()
+routine Character.$represent() -> Text
+  var list = List[Character]()
   list.add_last(me)
   return Text(from_list: list)
 
-routine Letter.$diagnose() -> Text
-  return "Letter(" + me.$represent() + ", " + U32(me).$represent() + ")"
+routine Character.$diagnose() -> Text
+  return "Character(" + me.$represent() + ", " + U32(me).$represent() + ")"
 
 # ============================================================================
 # Utility methods
 # ============================================================================
 
-routine Letter.is_digit() -> Bool
+routine Character.is_digit() -> Bool
   return me.is_numeric()
 
-routine Letter.is_letter() -> Bool
+routine Character.is_letter() -> Bool
   return me.is_alphabetic()
 
-routine Letter.digit_value() -> S32
+routine Character.digit_value() -> S32
   if me.is_numeric()
     return S32(U32(me) - 0x0030u32)
   return -1s32
 
-routine Letter.is_printable() -> Bool
+routine Character.is_printable() -> Bool
   return me.is_valid() and not me.is_control()
 
-routine Letter.is_bmp() -> Bool
+routine Character.is_bmp() -> Bool
   # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
-  return U32(me) <= 0xFFFFu32 and not (LETTER_SURROGATE_START <= U32(me) <= LETTER_SURROGATE_END)
+  return U32(me) <= 0xFFFFu32 and not (CHARACTER_SURROGATE_START <= U32(me) <= CHARACTER_SURROGATE_END)
 
-routine Letter.is_supplementary() -> Bool
+routine Character.is_supplementary() -> Bool
   # Supplementary planes: U+10000 to U+10FFFF
   return 0x10000u32 <= U32(me) <= 0x10FFFFu32
 
-routine Letter.is_cjk() -> Bool
+routine Character.is_cjk() -> Bool
   var v = U32(me)
   var is_unified = 0x4E00u32 <= v <= 0x9FFFu32
   var is_ext_a = 0x3400u32 <= v <= 0x4DBFu32
@@ -170,7 +170,7 @@ routine Letter.is_cjk() -> Bool
   var is_ext_c = 0x2A700u32 <= v <= 0x2B73Fu32
   return is_unified or is_ext_a or is_ext_b or is_ext_c
 
-routine Letter.is_latin() -> Bool
+routine Character.is_latin() -> Bool
   var v = U32(me)
   var is_basic = 0x0000u32 <= v <= 0x007Fu32
   var is_supplement = 0x0080u32 <= v <= 0x00FFu32
@@ -178,7 +178,7 @@ routine Letter.is_latin() -> Bool
   var is_ext_b = 0x0180u32 <= v <= 0x024Fu32
   return is_basic or is_supplement or is_ext_a or is_ext_b
 
-routine Letter.is_emoji() -> Bool
+routine Character.is_emoji() -> Bool
   var v = U32(me)
   var is_emoticons = 0x1F600u32 <= v <= 0x1F64Fu32
   var is_misc = 0x1F300u32 <= v <= 0x1F5FFu32
@@ -190,6 +190,6 @@ routine Letter.is_emoji() -> Bool
 # Codepoint offset
 # ============================================================================
 
-routine Letter.offset![I obeys Integral](delta: I) -> Letter
+routine Character.offset![I obeys Integral](delta: I) -> Character
   var new_value = S64(U32(me)) + delta.to_s64()
-  return Letter(U32(new_value))
+  return Character(U32(new_value))

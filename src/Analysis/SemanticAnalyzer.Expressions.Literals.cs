@@ -62,7 +62,7 @@ public sealed partial class SemanticAnalyzer
             TokenType.BytesLiteral => "Bytes",
             TokenType.BytesRawLiteral => "Bytes",
             TokenType.ByteLetterLiteral => "Byte",
-            TokenType.LetterLiteral => "Letter",
+            TokenType.CharacterLiteral => "Character",
 
             // byte size literals (all map to ByteSize type)
             TokenType.ByteLiteral or TokenType.KilobyteLiteral or TokenType.KibibyteLiteral

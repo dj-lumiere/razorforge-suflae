@@ -557,7 +557,7 @@ public partial class LLVMCodeGenerator
     private void MonomorphizeGenericMethods()
     {
         // Multi-pass: compiling one generic method may reference other generic methods
-        // (e.g., List[Letter].add_last calls List[Letter].reserve)
+        // (e.g., List[Character].add_last calls List[Character].reserve)
         int prevDefCount;
         do
         {

@@ -5,20 +5,20 @@ module Core
 # ============================================================================
 
 entity Bytes
-  secret letters: List[Byte]
+  secret bytes: List[Byte]
 
 # Creators
 
 routine Bytes.$create() -> Bytes
-  return Bytes(letters: List[Byte]())
+  return Bytes(bytes: List[Byte]())
 
 routine Bytes.$create(from_list: List[Byte]) -> Bytes
-  return Bytes(letters: from_list)
+  return Bytes(bytes: from_list)
 
 routine Bytes.$create(from_byte: Byte) -> Bytes
   var list = List[Byte]()
   list.add_last(from_byte)
-  return Bytes(letters: list)
+  return Bytes(bytes: list)
 
 routine Bytes.$create(ptr: Snatched[Byte]) -> Bytes
   var len: U64 = 0u64
@@ -33,7 +33,7 @@ routine Bytes.$create(ptr: Snatched[Byte]) -> Bytes
       break
     list.add_last(ptr.offset(i).read())
     i += 1u64
-  return Bytes(letters: list)
+  return Bytes(bytes: list)
 
 routine Bytes.$create(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
@@ -65,25 +65,25 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
 # Core operations
 
 routine Bytes.count() -> U64
-  return me.letters.count()
+  return me.bytes.count()
 
 routine Bytes.is_empty() -> Bool
-  return me.letters.is_empty()
+  return me.bytes.is_empty()
 
 # Indexing
 
 routine Bytes.$getitem[I obeys Integral](index: I) -> Byte
-  return me.letters[index]
+  return me.bytes[index]
 
 routine Bytes.$getitem[I obeys Integral](index: BackIndex[I]) -> Byte
-  return me.letters[index]
+  return me.bytes[index]
 
 routine Bytes.$getslice[I obeys Integral](start: I, end: I) -> Bytes
-  var sliced_list = me.letters[start til end]
+  var sliced_list = me.bytes[start til end]
   return Bytes(from_list: sliced_list)
 
 routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Bytes
-  var sliced_list = me.letters[start til end]
+  var sliced_list = me.bytes[start til end]
   return Bytes(from_list: sliced_list)
 
 # String operations
@@ -185,7 +185,7 @@ routine Bytes.repeat(times: U64) -> Bytes
 # Conversion to modifiable list
 
 routine List[Byte].$create(from: Bytes) -> List[Byte]
-  return from.letters
+  return from.bytes
 
 # Iteration
 
@@ -208,7 +208,7 @@ routine BytesIterator.$next!() -> Byte
 # ============================================================================
 
 routine Bytes.$represent() -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   var i: U64 = 0u64
   loop
     if i >= me.count()
@@ -256,7 +256,7 @@ routine Text.encode_as_utf8() -> Bytes
 
 # Bytes (UTF-8) -> Text (UTF-32)
 routine Bytes.as_utf8_text() -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   var len = me.count()
   var i: U64 = 0u64
   loop
@@ -298,7 +298,7 @@ routine Bytes.as_utf8_text() -> Text
       else =>
         codepoint = 0xFFFDu32
         i += 1u64
-    result.add_last(Letter(codepoint))
+    result.add_last(Character(codepoint))
   return Text(from_list: result)
 
 # ============================================================================
@@ -347,7 +347,7 @@ routine Text.encode_as_utf16() -> List[U16]
 
 # List[U16] (UTF-16) -> Text (UTF-32)
 routine List[U16].decode_as_utf16() -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   var len = me.count()
   var i: U64 = 0u64
   loop
@@ -355,18 +355,18 @@ routine List[U16].decode_as_utf16() -> Text
       break
     var w1 = U32(me[i])
     if w1 < 0xD800u32 or w1 > 0xDFFFu32
-      result.add_last(Letter(w1))
+      result.add_last(Character(w1))
       i += 1u64
     elseif 0xD800u32 <= w1 <= 0xDBFFu32 and i + 1u64 < len
       var w2 = U32(me[i + 1u64])
       if 0xDC00u32 <= w2 <= 0xDFFFu32
         var codepoint = ((w1 - 0xD800u32) << 10u32) + (w2 - 0xDC00u32) + 0x10000u32
-        result.add_last(Letter(codepoint))
+        result.add_last(Character(codepoint))
         i += 2u64
       else
-        result.add_last(Letter(0xFFFDu32))
+        result.add_last(Character(0xFFFDu32))
         i += 1u64
     else
-      result.add_last(Letter(0xFFFDu32))
+      result.add_last(Character(0xFFFDu32))
       i += 1u64
   return Text(from_list: result)

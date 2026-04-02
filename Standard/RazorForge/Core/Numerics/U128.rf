@@ -307,12 +307,12 @@ routine U128.low64() -> U64
 routine U128.$represent() -> Text
   if me == 0u128
     return "0"
-  var digits = List[Letter]()
+  var digits = List[Character]()
   var remaining = me
   while remaining > 0u128
     var digit = U8(remaining % 10u128)
     remaining = remaining // 10u128
-    digits.add_first(Letter(0x0030u32 + U32(digit)))
+    digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 
 routine U128.$diagnose() -> Text

@@ -18,7 +18,7 @@ module Core
 # Record definition
 # ============================================================================
 
-record Moment obeys Ordered, Addable, Subtractable, DurationAddable, DurationSubtractable
+record Moment obeys Ordered, DurationAddable, DurationSubtractable
   secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
   secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 

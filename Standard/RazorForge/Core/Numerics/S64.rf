@@ -352,10 +352,10 @@ routine S64.$create!(from_text: Text) -> S64
   var start = 0u64
   var negative = false
   var first = from_text[0u64]
-  if first == Letter(0x002Du32)
+  if first == Character(0x002Du32)
     negative = true
     start = 1u64
-  elseif first == Letter(0x002Bu32)
+  elseif first == Character(0x002Bu32)
     start = 1u64
   if start >= from_text.count()
     throw InvalidValueError(input: from_text, target: "S64")

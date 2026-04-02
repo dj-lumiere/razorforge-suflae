@@ -455,7 +455,7 @@ public partial class Tokenizer
                     ScanString();
                     break;
                 case '\'':
-                    ScanLetter();
+                    ScanCharacter();
                     break;
                 default:
                     if (char.IsDigit(c: c))
@@ -535,9 +535,9 @@ public partial class Tokenizer
     /// <summary>
     /// Scans a basic character literal (single-quoted).
     /// </summary>
-    private void ScanLetter()
+    private void ScanCharacter()
     {
-        ScanLetterLiteral(tokenType: TokenType.LetterLiteral, bitWidth: 32);
+        ScanCharacterLiteral(tokenType: TokenType.CharacterLiteral, bitWidth: 32);
     }
 
     /// <summary>
@@ -552,25 +552,26 @@ public partial class Tokenizer
         }
 
         Advance(); // consume opening quote
-        ScanLetterLiteral(tokenType: TokenType.ByteLetterLiteral, bitWidth: 8);
+        ScanCharacterLiteral(tokenType: TokenType.ByteLetterLiteral, bitWidth: 8);
         return true;
     }
 
     /// <summary>
     /// Scans a character literal with the specified token type and bit width.
     /// </summary>
-    private void ScanLetterLiteral(TokenType tokenType, int bitWidth = 32)
+    private void ScanCharacterLiteral(TokenType tokenType, int bitWidth = 32)
     {
         if (Peek() == '\\')
         {
             Advance(); // consume backslash
 
-            // \x is byte-only, \u is letter-only
+            // \x is byte-only, \u is character-only
             if (bitWidth != 8 && Peek() == 'x')
             {
                 throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
                     message:
-                    "Hex escape \\x is not valid in letter literals. Use \\u for Unicode codepoints.",
+                    "Hex escape \\x is not valid in character literals. Use \\u for Unicode " +
+                    "codepoints.",
                     fileName: _fileName,
                     line: _line,
                     column: _column,
@@ -594,7 +595,7 @@ public partial class Tokenizer
             }
 
             Advance(); // consume the character
-            // Handle UTF-16 surrogate pairs for non-BMP codepoints (Letter is UTF-32)
+            // Handle UTF-16 surrogate pairs for non-BMP codepoints (Character is UTF-32)
             if (bitWidth != 8 && char.IsHighSurrogate(c: c) && !IsAtEnd() &&
                 char.IsLowSurrogate(c: Peek()))
             {

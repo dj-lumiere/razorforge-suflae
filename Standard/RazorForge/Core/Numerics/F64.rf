@@ -209,7 +209,7 @@ routine F64.$create!(from_text: Text) -> F64
     throw InvalidValueError(input: from_text, target: "F64")
   var i = 0u64
   var first = from_text[0u64]
-  if first == Letter(0x002Bu32) or first == Letter(0x002Du32)
+  if first == Character(0x002Bu32) or first == Character(0x002Du32)
     i = 1u64
     if i >= len
       throw InvalidValueError(input: from_text, target: "F64")
@@ -219,17 +219,17 @@ routine F64.$create!(from_text: Text) -> F64
     var c0 = from_text[i].to_lowercase()
     var c1 = from_text[i + 1u64].to_lowercase()
     var c2 = from_text[i + 2u64].to_lowercase()
-    if rest == 3u64 and c0 == Letter(0x006Eu32) and c1 == Letter(0x0061u32) and c2 == Letter(0x006Eu32)
+    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
       special = true
-    if rest == 3u64 and c0 == Letter(0x0069u32) and c1 == Letter(0x006Eu32) and c2 == Letter(0x0066u32)
+    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
       special = true
-    if not special and rest == 8u64 and c0 == Letter(0x0069u32) and c1 == Letter(0x006Eu32) and c2 == Letter(0x0066u32)
+    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
       var c3 = from_text[i + 3u64].to_lowercase()
       var c4 = from_text[i + 4u64].to_lowercase()
       var c5 = from_text[i + 5u64].to_lowercase()
       var c6 = from_text[i + 6u64].to_lowercase()
       var c7 = from_text[i + 7u64].to_lowercase()
-      if c3 == Letter(0x0069u32) and c4 == Letter(0x006Eu32) and c5 == Letter(0x0069u32) and c6 == Letter(0x0074u32) and c7 == Letter(0x0079u32)
+      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
         special = true
   if not special
     var has_digit = false
@@ -239,18 +239,18 @@ routine F64.$create!(from_text: Text) -> F64
       var ch = from_text[i]
       if ch.is_numeric()
         has_digit = true
-      elseif ch == Letter(0x002Eu32)
+      elseif ch == Character(0x002Eu32)
         if has_dot or has_exp
           throw InvalidValueError(input: from_text, target: "F64")
         has_dot = true
-      elseif ch == Letter(0x0065u32) or ch == Letter(0x0045u32)
+      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
         if has_exp or not has_digit
           throw InvalidValueError(input: from_text, target: "F64")
         has_exp = true
         has_digit = false
         if i + 1u64 < len
           var next_ch = from_text[i + 1u64]
-          if next_ch == Letter(0x002Bu32) or next_ch == Letter(0x002Du32)
+          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
             i = i + 1u64
       else
         throw InvalidValueError(input: from_text, target: "F64")

@@ -490,7 +490,7 @@ public partial class LLVMCodeGenerator
                 else
                 {
                     // For single-field records where arg name doesn't match field name
-                    // (e.g., Letter(codepoint: val) where field is 'value')
+                    // (e.g., Character(codepoint: val) where field is 'value')
                     if (calledType is RecordTypeInfo singleRecord &&
                         singleRecord.MemberVariables.Count == 1 && arguments.Count == 1 &&
                         arguments[index: 0] is NamedArgumentExpression)
@@ -1140,7 +1140,7 @@ public partial class LLVMCodeGenerator
                 InferMethodTypeArgs(genericMethod: method, argTypes: concreteArgTypes);
         }
 
-        // Build the call — for resolved generic types (e.g., List[Letter].add_last),
+        // Build the call — for resolved generic types (e.g., List[Character].add_last),
         // use the resolved type name even if the method was found via the base type
         string mangledName;
         if (method != null && inferredMethodTypeArgs != null)

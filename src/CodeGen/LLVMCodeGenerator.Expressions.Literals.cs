@@ -17,7 +17,7 @@ public partial class LLVMCodeGenerator
         // Check LiteralType first to handle them as numbers, not string constants.
         if (literal.Value is char ch)
         {
-            return EmitLetterLiteral(sb: sb, text: ch.ToString());
+            return EmitCharacterLiteral(sb: sb, text: ch.ToString());
         }
 
         if (literal.Value is string s)
@@ -50,9 +50,9 @@ public partial class LLVMCodeGenerator
                 return EmitDurationLiteral(sb: sb, text: s, literalType: literal.LiteralType);
             }
 
-            if (literal.LiteralType == Lexer.TokenType.LetterLiteral)
+            if (literal.LiteralType == Lexer.TokenType.CharacterLiteral)
             {
-                return EmitLetterLiteral(sb: sb, text: s);
+                return EmitCharacterLiteral(sb: sb, text: s);
             }
 
             if (literal.LiteralType == Lexer.TokenType.ByteLetterLiteral)
@@ -252,18 +252,18 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits a Letter literal as a %Record.Letter aggregate with the Unicode codepoint.
+    /// Emits a Character literal as a %Record.Character aggregate with the Unicode codepoint.
     /// </summary>
-    private string EmitLetterLiteral(StringBuilder sb, string text)
+    private string EmitCharacterLiteral(StringBuilder sb, string text)
     {
         int codepoint = text.Length > 0
             ? char.ConvertToUtf32(s: text, index: 0)
             : 0;
 
-        TypeInfo? letterType = _registry.LookupType(name: "Letter");
+        TypeInfo? letterType = _registry.LookupType(name: "Character");
         string llvmType = letterType != null
             ? GetLLVMType(type: letterType)
-            : "%\"Record.Letter\"";
+            : "%\"Record.Character\"";
 
         if (llvmType.StartsWith(value: "%"))
         {
@@ -300,7 +300,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits a Bytes literal (b"...") as a constant Bytes entity.
-    /// Bytes is entity { letters: List[Byte] } where List is entity { data: ptr, count: U64, capacity: U64 }
+    /// Bytes is entity { bytes: List[Byte] } where List is entity { data: ptr, count: U64, capacity: U64 }
     /// and Byte is an i8. Returns a pointer to the Bytes struct.
     /// </summary>
     private string EmitBytesLiteral(StringBuilder sb, string value)
@@ -338,7 +338,7 @@ public partial class LLVMCodeGenerator
             line:
             $"{listName} = private unnamed_addr constant {{ ptr, i64, i64 }} {{ ptr {dataName}, i64 {count}, i64 {count} }}");
 
-        // Layer 3: Bytes entity struct { ptr letters }
+        // Layer 3: Bytes entity struct { ptr bytes }
         EmitLine(sb: _globalDeclarations,
             line: $"{constName} = private unnamed_addr constant {{ ptr }} {{ ptr {listName} }}");
 
@@ -601,8 +601,8 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates code for a string literal.
     /// Emits a Text string literal as a UTF-32 constant.
-    /// Text is entity { letters: List[Letter] } where List is entity { data: ptr, count: U64, capacity: U64 }
-    /// and Letter is a U32 codepoint. Returns a pointer to the Text struct.
+    /// Text is entity { characters: List[Character] } where List is entity { data: ptr, count: U64, capacity: U64 }
+    /// and Character is a U32 codepoint. Returns a pointer to the Text struct.
     /// </summary>
     private string EmitStringLiteral(StringBuilder sb, string value)
     {
@@ -640,13 +640,13 @@ public partial class LLVMCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i32] zeroinitializer");
         }
 
-        // Layer 2: List[Letter] struct { ptr data, i64 count, i64 capacity }
+        // Layer 2: List[Character] struct { ptr data, i64 count, i64 capacity }
         string listName = $"@.str.list.{idx}";
         EmitLine(sb: _globalDeclarations,
             line:
             $"{listName} = private unnamed_addr constant {{ ptr, i64, i64 }} {{ ptr {dataName}, i64 {count}, i64 {count} }}");
 
-        // Layer 3: Text struct { ptr letters }
+        // Layer 3: Text struct { ptr characters }
         EmitLine(sb: _globalDeclarations,
             line: $"{constName} = private unnamed_addr constant {{ ptr }} {{ ptr {listName} }}");
 

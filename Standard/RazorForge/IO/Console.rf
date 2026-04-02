@@ -117,7 +117,7 @@ routine ask_all() -> Text
 routine ask_lines() -> List[Text]
   var all = ask_all()
   var normalized = all.replace("\r\n", "\n")
-  return normalized.split(LETTER_NEWLINE)
+  return normalized.split(CHARACTER_NEWLINE)
 
 # Read all words separated by whitespace
 routine ask_words() -> List[Text]

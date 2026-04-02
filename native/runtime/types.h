@@ -28,7 +28,7 @@ typedef intptr_t rf_SAddr;   // Signed Pointer-Sized
 typedef uintptr_t rf_address;  // Unsigned Pointer-Sized
 
 typedef uint8_t rf_Byte;      // 'Byte' is raw 8-bit data
-typedef uint32_t rf_Letter;   // 'Letter' is 32-bit Unicode codepoint
+typedef uint32_t rf_Character;   // 'Character' is 32-bit Unicode codepoint
 
 typedef bool rf_Bool;         // Standard boolean
 

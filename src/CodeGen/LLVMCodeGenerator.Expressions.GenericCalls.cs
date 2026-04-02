@@ -31,7 +31,7 @@ public partial class LLVMCodeGenerator
                     }
                 }
 
-                // Resolve the full generic type (e.g., List + [Letter] → List[Letter])
+                // Resolve the full generic type (e.g., List + [Character] → List[Character])
                 TypeInfo resolvedFullType = calledType;
                 if (calledType.IsGenericDefinition &&
                     resolvedTypeArgs.Count == calledType.GenericParameters!.Count)
@@ -678,7 +678,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string ResolveTypeExpressionToLLVM(TypeExpression typeExpr)
     {
-        // Apply type substitutions first (e.g., T → Letter during monomorphization)
+        // Apply type substitutions first (e.g., T → Character during monomorphization)
         if (_typeSubstitutions != null &&
             _typeSubstitutions.TryGetValue(key: typeExpr.Name, value: out TypeInfo? sub))
         {
@@ -767,7 +767,7 @@ public partial class LLVMCodeGenerator
             TypeInfo? calledType = LookupTypeInCurrentModule(name: id.Name);
             if (calledType != null)
             {
-                // Resolve generic type arguments to get the concrete type (e.g., List[Letter])
+                // Resolve generic type arguments to get the concrete type (e.g., List[Character])
                 if (calledType.IsGenericDefinition && generic.TypeArguments.Count > 0)
                 {
                     var typeArgs = new List<TypeInfo>();

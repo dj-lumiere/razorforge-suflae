@@ -1,4 +1,4 @@
-﻿using SemanticAnalysis.Types;
+using SemanticAnalysis.Types;
 using Compiler.Lexer;
 
 namespace SyntaxTree;
@@ -50,7 +50,7 @@ public abstract record Expression(SourceLocation Location) : AstNode(Location: L
 /// <item>Integers: S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, Address</item>
 /// <item>Floats: F16, F32, F64, F128</item>
 /// <item>Decimals: D32, D64, D128</item>
-/// <item>Text and characters: Letter, Byte, Text, Bytes</item>
+/// <item>Text and characters: Character, Byte, Text, Bytes</item>
 /// <item>Booleans: true, false</item>
 /// <item>Duration: w, d, h, m, s, ms, us, ns</item>
 /// <item>ByteSize: b, kb, kib, mb, mib, gb, gib</item>

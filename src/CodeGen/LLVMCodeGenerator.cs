@@ -104,7 +104,7 @@ public partial class LLVMCodeGenerator
     /// <summary>Function-entry alloca instructions emitted once per function.</summary>
     private readonly StringBuilder _currentFunctionEntryAllocas = new();
 
-    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Letter).</summary>
+    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Character).</summary>
     private Dictionary<string, TypeInfo>? _typeSubstitutions;
 
     /// <summary>
@@ -978,7 +978,7 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Records a pending monomorphization for a resolved generic method call.
     /// Called from EmitMethodCall/EmitGenericMethodCall when a call targets a method on
-    /// a resolved generic type (e.g., List[Letter].add_last).
+    /// a resolved generic type (e.g., List[Character].add_last).
     /// </summary>
     private void RecordMonomorphization(string mangledName, RoutineInfo genericMethod,
         TypeInfo resolvedOwnerType, Dictionary<string, TypeInfo>? methodTypeArgs = null)
@@ -1065,7 +1065,7 @@ public partial class LLVMCodeGenerator
 
         if (genericDef != null && genericDef.GenericParameters != null)
         {
-            // Build type substitution map: e.g., { "T" → Letter }
+            // Build type substitution map: e.g., { "T" → Character }
             var typeSubs2 = new Dictionary<string, TypeInfo>();
             if (resolvedOwnerType.TypeArguments != null)
             {

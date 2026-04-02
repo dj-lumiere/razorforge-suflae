@@ -56,7 +56,7 @@ public partial class Tokenizer
                 ScanString();
                 break;
             case '\'':
-                ScanLetter();
+                ScanCharacter();
                 break;
 
             // Potential prefixed literals or identifiers

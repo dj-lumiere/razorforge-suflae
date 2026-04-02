@@ -15,7 +15,7 @@ routine Text.is_empty() -> Bool
   return me.value.is_empty()
 
 # Indexing
-routine Text.$getitem!(index: Integer) -> Letter
+routine Text.$getitem!(index: Integer) -> Character
   return me.value.$getitem!(index.value)
 
 # String operations
@@ -75,5 +75,5 @@ routine Text.lines() -> List[Text]
 routine Text.to_bytes() -> Bytes
   return Bytes(value: me.value.to_bytes())
 
-routine Text.List() -> List[Letter]
+routine Text.List() -> List[Character]
   return me.value.List()

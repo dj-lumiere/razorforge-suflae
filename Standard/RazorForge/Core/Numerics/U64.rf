@@ -314,12 +314,12 @@ routine U64.is_odd() -> Bool
 routine U64.$represent() -> Text
   if me == 0u64
     return "0"
-  var digits = List[Letter]()
+  var digits = List[Character]()
   var remaining = me
   while remaining > 0u64
     var digit = U8(remaining % 10u64)
     remaining = remaining // 10u64
-    digits.add_first(Letter(0x0030u32 + U32(digit)))
+    digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 
 routine U64.$diagnose() -> Text

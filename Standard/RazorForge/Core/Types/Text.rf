@@ -2,7 +2,7 @@ module Core
 
 # RazorForge Text and Bytes - Unmodifiable text types
 #
-# Text  - UTF-32 encoded, uses `Letter` (32-bit codepoints)
+# Text  - UTF-32 encoded, uses `Character` (32-bit codepoints)
 #       - O(1) indexing, ideal for text manipulation
 #       - Use for in-memory text editing
 #
@@ -10,29 +10,27 @@ module Core
 #       - Compact storage, ideal for I/O
 #       - Use for file/network operations
 #
-# Both are unmodifiable - use List[Letter]/List[Byte] for modifiable building
-
-import Collections.List
+# Both are unmodifiable - use List[Character]/List[Byte] for modifiable building
 
 # ============================================================================
 # Text - UTF-32 unmodifiable text
 # ============================================================================
 
 entity Text obeys Addable, Ordered, TextRepeatable
-  secret letters: List[Letter]
+  secret characters: List[Character]
 
 # Creators
 
 routine Text.$create() -> Text
-  return Text(letters: List[Letter]())
+  return Text(characters: List[Character]())
 
-routine Text.$create(from_list: List[Letter]) -> Text
-  return Text(letters: from_list)
+routine Text.$create(from_list: List[Character]) -> Text
+  return Text(characters: from_list)
 
-routine Text.$create(from_letter: Letter) -> Text
-  var list = List[Letter]()
-  list.add_last(from_letter)
-  return Text(letters: list)
+routine Text.$create(from_character: Character) -> Text
+  var list = List[Character]()
+  list.add_last(from_character)
+  return Text(characters: list)
 
 routine Text.$create(from: CStr) -> Text
   if from.is_null()
@@ -42,7 +40,7 @@ routine Text.$create(from: CStr) -> Text
     if len == 0u64
       return Text()
 
-    var list = List[Letter]()
+    var list = List[Character]()
     var i: U64 = 0u64
     loop
       if i >= len
@@ -51,20 +49,20 @@ routine Text.$create(from: CStr) -> Text
 
       if b0 <= 0x7Fu8
         # ASCII: single byte
-        list.add_last(Letter(U32(b0)))
+        list.add_last(Character(U32(b0)))
         i = i + 1u64
       elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1u64 < len
         # 2-byte sequence
         var b1 = from[i + 1u64]
         var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
-        list.add_last(Letter(cp))
+        list.add_last(Character(cp))
         i = i + 2u64
       elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2u64 < len
         # 3-byte sequence
         var b1 = from[i + 1u64]
         var b2 = from[i + 2u64]
         var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
-        list.add_last(Letter(cp))
+        list.add_last(Character(cp))
         i = i + 3u64
       elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3u64 < len
         # 4-byte sequence
@@ -72,11 +70,11 @@ routine Text.$create(from: CStr) -> Text
         var b2 = from[i + 2u64]
         var b3 = from[i + 3u64]
         var cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
-        list.add_last(Letter(cp))
+        list.add_last(Character(cp))
         i = i + 4u64
       else
         # Invalid byte — replacement character
-        list.add_last(Letter(0xFFFDu32))
+        list.add_last(Character(0xFFFDu32))
         i = i + 1u64
     return Text(from_list: list)
 
@@ -88,7 +86,7 @@ routine Text.$create(from: CWStr) -> Text
     if len == 0u64
       return Text()
 
-    var list = List[Letter]()
+    var list = List[Character]()
     var i: U64 = 0u64
     loop
       if i >= len
@@ -104,50 +102,50 @@ routine Text.$create(from: CWStr) -> Text
           var high_bits = (U32(high) - 0xD800u32) << 10u32
           var low_bits = U32(low) - 0xDC00u32
           var codepoint = high_bits | low_bits + 0x10000u32
-          list.add_last(Letter(codepoint))
+          list.add_last(Character(codepoint))
           i = i + 2u64
         else
           # Invalid low surrogate - use replacement character
-          list.add_last(Letter(0xFFFDu32))
+          list.add_last(Character(0xFFFDu32))
           i = i + 1u64
       elseif high >= 0xDC00u16 and high <= 0xDFFFu16
         # Orphan low surrogate - use replacement character
-        list.add_last(Letter(0xFFFDu32))
+        list.add_last(Character(0xFFFDu32))
         i = i + 1u64
       else
         # BMP character (not a surrogate)
-        list.add_last(Letter(U32(high)))
+        list.add_last(Character(U32(high)))
         i = i + 1u64
     return Text(from_list: list)
 
 # Core operations
 
 routine Text.count() -> U64
-  return me.letters.count()
+  return me.characters.count()
 
 routine Text.is_empty() -> Bool
-  return me.letters.is_empty()
+  return me.characters.is_empty()
 
 # Indexing
 
-routine Text.$getitem![I obeys Integral](index: I) -> Letter
-  return me.letters[index]
+routine Text.$getitem![I obeys Integral](index: I) -> Character
+  return me.characters[index]
 
-routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Letter
-  return me.letters[index]
+routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Character
+  return me.characters[index]
 
 routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
-  var sliced_list = me.letters[start til end]
+  var sliced_list = me.characters[start til end]
   return Text(from_list: sliced_list)
 
 routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
-  var sliced_list = me.letters[start til end]
+  var sliced_list = me.characters[start til end]
   return Text(from_list: sliced_list)
 
 # String operations
 
 routine Text.concat(other: Text) -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   var i: U64 = 0u64
   loop
     if i >= me.count()
@@ -167,7 +165,7 @@ routine Text.$add(other: Text) -> Text
 
 routine Text.$mul[I obeys Integral](count: I) -> Text
   var times = U64(count)
-  var result = List[Letter]()
+  var result = List[Character]()
 
   for _ in 0 til times
     for i in 0 til me.count()
@@ -206,9 +204,9 @@ routine Text.$cmp(other: Text) -> ComparisonSign
 
 # Search
 
-routine Text.contains(letter: Letter) -> Bool
+routine Text.contains(character: Character) -> Bool
   for i in 0 til me.count()
-    if me[i] == letter
+    if me[i] == character
       return true
   return false
 
@@ -245,7 +243,7 @@ routine Text.ends_with(suffix: Text) -> Bool
       return false
   return true
 
-routine Text.find!(letter: Letter) -> U64
+routine Text.find!(letter: Character) -> U64
   for i in 0 til me.count()
     if me[i] == letter
       return i
@@ -267,7 +265,7 @@ routine Text.find!(other: Text) -> U64
       return i
   absent
 
-routine Text.count(letter: Letter) -> U64
+routine Text.count(letter: Character) -> U64
   var result: U64 = 0u64
   for i in 0 til me.count()
     if me[i] == letter
@@ -277,13 +275,13 @@ routine Text.count(letter: Letter) -> U64
 # Transform
 
 routine Text.to_uppercase() -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   for i in 0 til me.count()
     result.add_last(me[i].to_uppercase())
   return Text(from_list: result)
 
 routine Text.to_lowercase() -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   for i in 0 til me.count()
     result.add_last(me[i].to_lowercase())
   return Text(from_list: result)
@@ -330,7 +328,7 @@ routine Text.trim_end() -> Text
 routine Text.replace(old: Text, new: Text) -> Text
   if old.is_empty()
     return me
-  var result = List[Letter]()
+  var result = List[Character]()
   var i: U64 = 0u64
   loop
     if i >= me.count()
@@ -364,14 +362,14 @@ routine Text.remove_suffix(suffix: Text) -> Text
 routine Text.repeat(times: U64) -> Text
   if times == 0u64
     return Text()
-  var result = List[Letter]()
+  var result = List[Character]()
   for t in 0 til times
     for i in 0 til me.count()
       result.add_last(me[i])
   return Text(from_list: result)
 
 routine Text.reverse() -> Text
-  var result = List[Letter]()
+  var result = List[Character]()
   var i = me.count()
   loop
     if i == 0u64
@@ -380,10 +378,10 @@ routine Text.reverse() -> Text
     result.add_last(me[i])
   return Text(from_list: result)
 
-routine Text.pad_start(width: U64, fill: Letter) -> Text
+routine Text.pad_start(width: U64, fill: Character) -> Text
   if me.count() >= width
     return me
-  var result = List[Letter]()
+  var result = List[Character]()
   var pad_count = width - me.count()
   for p in 0 til pad_count
     result.add_last(fill)
@@ -391,10 +389,10 @@ routine Text.pad_start(width: U64, fill: Letter) -> Text
     result.add_last(me[i])
   return Text(from_list: result)
 
-routine Text.pad_end(width: U64, fill: Letter) -> Text
+routine Text.pad_end(width: U64, fill: Character) -> Text
   if me.count() >= width
     return me
-  var result = List[Letter]()
+  var result = List[Character]()
   for i in 0 til me.count()
     result.add_last(me[i])
   var pad_count = width - me.count()
@@ -404,13 +402,13 @@ routine Text.pad_end(width: U64, fill: Letter) -> Text
 
 # Split/Join
 
-routine Text.split(separator: Letter) -> List[Text]
+routine Text.split(separator: Character) -> List[Text]
   var parts = List[Text]()
-  var current = List[Letter]()
+  var current = List[Character]()
   for i in 0 til me.count()
     if me[i] == separator
       parts.add_last(Text(from_list: current))
-      current = List[Letter]()
+      current = List[Character]()
     else
       current.add_last(me[i])
   parts.add_last(Text(from_list: current))
@@ -420,7 +418,7 @@ routine Text.split(separator: Text) -> List[Text]
   if separator.is_empty()
     var parts = List[Text]()
     for i in 0 til me.count()
-      parts.add_last(Text(from_letter: me[i]))
+      parts.add_last(Text(from_character: me[i]))
     return parts
   var parts = List[Text]()
   var start: U64 = 0u64
@@ -445,7 +443,7 @@ routine Text.split(separator: Text) -> List[Text]
 routine Text.join(parts: List[Text]) -> Text
   if parts.is_empty()
     return Text()
-  var result = List[Letter]()
+  var result = List[Character]()
   var first = true
   for part in parts
     if not first
@@ -458,16 +456,16 @@ routine Text.join(parts: List[Text]) -> Text
 
 routine Text.lines() -> List[Text]
   var normalized = me.replace("\r\n", "\n")
-  return normalized.split(LETTER_NEWLINE)
+  return normalized.split(CHARACTER_NEWLINE)
 
 routine Text.words() -> List[Text]
   var parts = List[Text]()
-  var current = List[Letter]()
+  var current = List[Character]()
   for i in 0 til me.count()
     if me[i].is_whitespace()
       if not current.is_empty()
         parts.add_last(Text(from_list: current))
-        current = List[Letter]()
+        current = List[Character]()
     else
       current.add_last(me[i])
   if not current.is_empty()
@@ -476,8 +474,8 @@ routine Text.words() -> List[Text]
 
 # Conversion to modifiable list
 
-routine List[Letter].$create(from: Text) -> List[Letter]
-  return from.letters
+routine List[Character].$create(from: Text) -> List[Character]
+  return from.characters
 
 # Iteration
 
@@ -494,7 +492,7 @@ entity TextIterator
 routine Text.$iter() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 
-routine TextIterator.$next!() -> Letter
+routine TextIterator.$next!() -> Character
   if me.index >= me.text.count()
     absent
   var value = me.text[me.index]

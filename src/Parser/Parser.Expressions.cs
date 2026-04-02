@@ -79,8 +79,8 @@ public partial class Parser
             return textExpr!;
         }
 
-        // Letter literals
-        if (TryParseLetterLiteral(location: location, result: out Expression? letterExpr))
+        // Character literals
+        if (TryParseCharacterLiteral(location: location, result: out Expression? letterExpr))
         {
             return letterExpr!;
         }

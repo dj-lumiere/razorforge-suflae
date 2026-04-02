@@ -1,0 +1,90 @@
+# Suflae Character - Unicode character type
+
+module Core
+
+import RazorForge/Text.Character
+
+record Character
+  secret value: RazorForge/Text.Character
+
+# Codepoint access
+routine Character.codepoint() -> U32
+  return me.value.codepoint()
+
+# Validation
+routine Character.is_valid() -> Bool
+  return me.value.is_valid()
+
+routine Character.is_ascii() -> Bool
+  return me.value.is_ascii()
+
+# Classification
+routine Character.is_alphabetic() -> Bool
+  return me.value.is_alphabetic()
+
+routine Character.is_numeric() -> Bool
+  return me.value.is_numeric()
+
+routine Character.is_alphanumeric() -> Bool
+  return me.value.is_alphanumeric()
+
+routine Character.is_uppercase() -> Bool
+  return me.value.is_uppercase()
+
+routine Character.is_lowercase() -> Bool
+  return me.value.is_lowercase()
+
+routine Character.is_whitespace() -> Bool
+  return me.value.is_whitespace()
+
+routine Character.is_control() -> Bool
+  return me.value.is_control()
+
+routine Character.is_digit() -> Bool
+  return me.value.is_digit()
+
+routine Character.is_letter() -> Bool
+  return me.value.is_letter()
+
+routine Character.is_printable() -> Bool
+  return me.value.is_printable()
+
+routine Character.is_bmp() -> Bool
+  return me.value.is_bmp()
+
+routine Character.is_supplementary() -> Bool
+  return me.value.is_supplementary()
+
+routine Character.is_cjk() -> Bool
+  return me.value.is_cjk()
+
+routine Character.is_latin() -> Bool
+  return me.value.is_latin()
+
+routine Character.is_emoji() -> Bool
+  return me.value.is_emoji()
+
+# Case conversion
+routine Character.to_uppercase() -> Character
+  return Character(me.value.to_uppercase())
+
+routine Character.to_lowercase() -> Character
+  return Character(me.value.to_lowercase())
+
+# Comparison
+routine Character.$eq(other: Character) -> Bool
+  return me.value.$eq(other.value)
+
+routine Character.$cmp(other: Character) -> ComparisonSign
+  return me.value.$cmp(other.value)
+
+# Type conversions
+routine Character.to_byte() -> Byte
+  return Byte(me.value.to_byte())
+
+routine Character.digit_value() -> S32
+  return me.value.digit_value()
+
+# Utility
+routine Character.offset![I obeys Integral](delta: I) -> Character
+  return Character(me.value.offset!(delta))

@@ -83,9 +83,9 @@ double rf_parse_F64(const char* str)
 /**
  * Concatenates two Text entities, returning a new Text entity.
  *
- * Text layout:   { ptr letters }          — pointer to List[Letter]
+ * Text layout:   { ptr characters }       — pointer to List[Character]
  * List layout:   { ptr data, i64 count, i64 capacity }
- * Letter:        i32 (UTF-32 codepoint)
+ * Character:        i32 (UTF-32 codepoint)
  */
 
 // Forward declaration from memory.c
@@ -98,7 +98,7 @@ typedef struct {
 } rf_List;
 
 typedef struct {
-    rf_List* letters;
+    rf_List* characters;
 } rf_Text;
 
 /**
@@ -137,7 +137,7 @@ void* rf_format_address(void* ptr)
     list->capacity = len;
 
     rf_Text* text = (rf_Text*)rf_allocate_dynamic(sizeof(rf_Text));
-    text->letters = list;
+    text->characters = list;
 
     return text;
 }
@@ -147,18 +147,18 @@ void* rf_text_concat(void* text_a, void* text_b)
     rf_Text* a = (rf_Text*)text_a;
     rf_Text* b = (rf_Text*)text_b;
 
-    int64_t count_a = a->letters->count;
-    int64_t count_b = b->letters->count;
+    int64_t count_a = a->characters->count;
+    int64_t count_b = b->characters->count;
     int64_t total = count_a + count_b;
 
     // Allocate new data array (i32 per codepoint)
     int32_t* new_data = (int32_t*)rf_allocate_dynamic((uint64_t)total * sizeof(int32_t));
     if (count_a > 0)
-        memcpy(new_data, a->letters->data, (size_t)count_a * sizeof(int32_t));
+        memcpy(new_data, a->characters->data, (size_t)count_a * sizeof(int32_t));
     if (count_b > 0)
-        memcpy(new_data + count_a, b->letters->data, (size_t)count_b * sizeof(int32_t));
+        memcpy(new_data + count_a, b->characters->data, (size_t)count_b * sizeof(int32_t));
 
-    // Allocate new List[Letter] struct
+    // Allocate new List[Character] struct
     rf_List* new_list = (rf_List*)rf_allocate_dynamic(sizeof(rf_List));
     new_list->data = new_data;
     new_list->count = total;
@@ -166,7 +166,7 @@ void* rf_text_concat(void* text_a, void* text_b)
 
     // Allocate new Text wrapper
     rf_Text* new_text = (rf_Text*)rf_allocate_dynamic(sizeof(rf_Text));
-    new_text->letters = new_list;
+    new_text->characters = new_list;
 
     return new_text;
 }

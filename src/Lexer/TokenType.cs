@@ -36,7 +36,7 @@ public enum TokenType
     ByteLetterLiteral,
 
     /// <summary>Single character literal - default for plain quotes ('a', '\n')</summary>
-    LetterLiteral,
+    CharacterLiteral,
 
     #endregion
 

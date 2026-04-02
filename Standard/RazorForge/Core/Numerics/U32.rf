@@ -304,12 +304,12 @@ routine U32.is_odd() -> Bool
 routine U32.$represent() -> Text
   if me == 0u32
     return "0"
-  var digits = List[Letter]()
+  var digits = List[Character]()
   var remaining = me
   while remaining > 0u32
     var digit = U8(remaining % 10u32)
     remaining = remaining // 10u32
-    digits.add_first(Letter(0x0030u32 + U32(digit)))
+    digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 
 routine U32.$diagnose() -> Text

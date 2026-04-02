@@ -67,7 +67,7 @@ public partial class LLVMCodeGenerator
             return sub;
         }
 
-        // Direct registry lookup (handles simple names like S64, Text, Letter)
+        // Direct registry lookup (handles simple names like S64, Text, Character)
         TypeInfo? type = LookupTypeInCurrentModule(name: name);
         if (type != null)
         {
@@ -293,7 +293,7 @@ public partial class LLVMCodeGenerator
 
                     if (method?.ReturnType != null)
                     {
-                        // Substitute generic type params in return type (e.g., T → Letter)
+                        // Substitute generic type params in return type (e.g., T → Character)
                         if (_typeSubstitutions != null &&
                             _typeSubstitutions.TryGetValue(key: method.ReturnType.Name,
                                 value: out TypeInfo? sub))
@@ -329,7 +329,7 @@ public partial class LLVMCodeGenerator
                             }
                         }
 
-                        // For parameterized return types (e.g., Snatched[T] → Snatched[Letter]),
+                        // For parameterized return types (e.g., Snatched[T] → Snatched[Character]),
                         // resolve through receiver's type arguments even without _typeSubstitutions
                         if (receiverType is
                                 { IsGenericResolution: true, TypeArguments: not null } &&
@@ -526,7 +526,7 @@ public partial class LLVMCodeGenerator
             Lexer.TokenType.D128Literal => "D128",
             Lexer.TokenType.True or Lexer.TokenType.False => "Bool",
             Lexer.TokenType.TextLiteral => "Text",
-            Lexer.TokenType.LetterLiteral => "Letter",
+            Lexer.TokenType.CharacterLiteral => "Character",
             Lexer.TokenType.ByteLetterLiteral => "Byte",
             _ => null
         };
